@@ -2792,11 +2792,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
-                            args, symbol::AssignBracket);
             if (isObject(vec)) {
+                Rf_begincontext(&assignContext, CTXT_RETURN, call, env,
+                                ENCLOS(env), args, symbol::AssignBracket);
                 res = dispatchApply(call, vec, args, symbol::AssignBracket, env,
                                     ctx);
+                Rf_endcontext(&assignContext);
             }
             if (!res) {
                 res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
@@ -2804,7 +2805,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // following
                 SET_NAMED(res, 0);
             }
-            Rf_endcontext(&assignContext);
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -2831,11 +2831,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
-                            args, symbol::AssignBracket);
             if (isObject(mtx)) {
+                Rf_begincontext(&assignContext, CTXT_RETURN, call, env,
+                                ENCLOS(env), args, symbol::AssignBracket);
                 res = dispatchApply(call, mtx, args, symbol::AssignBracket, env,
                                     ctx);
+                Rf_endcontext(&assignContext);
             }
 
             if (!res) {
@@ -2844,7 +2845,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // following
                 SET_NAMED(res, 0);
             }
-            Rf_endcontext(&assignContext);
             ostack_popn(ctx, 4);
             UNPROTECT(1);
 
@@ -2922,11 +2922,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP call = getSrcForCall(c, pc - 1, ctx);
 
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
-                            args, symbol::AssignDoubleBracket);
             if (isObject(vec)) {
+                Rf_begincontext(&assignContext, CTXT_RETURN, call, env,
+                                ENCLOS(env), args, symbol::AssignDoubleBracket);
                 res = dispatchApply(call, vec, args,
                                     symbol::AssignDoubleBracket, env, ctx);
+                Rf_endcontext(&assignContext);
             }
 
             if (!res) {
@@ -2936,7 +2937,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // following
                 SET_NAMED(res, 0);
             }
-            Rf_endcontext(&assignContext);
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -3030,11 +3030,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
-                            args, symbol::AssignDoubleBracket);
             if (isObject(mtx)) {
+                Rf_begincontext(&assignContext, CTXT_RETURN, call, env,
+                                ENCLOS(env), args, symbol::AssignDoubleBracket);
                 res = dispatchApply(call, mtx, args,
                                     symbol::AssignDoubleBracket, env, ctx);
+                Rf_endcontext(&assignContext);
             }
 
             if (!res) {
@@ -3044,7 +3045,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // following
                 SET_NAMED(res, 0);
             }
-            Rf_endcontext(&assignContext);
             ostack_popn(ctx, 4);
             UNPROTECT(1);
 
