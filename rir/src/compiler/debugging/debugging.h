@@ -66,7 +66,8 @@ struct DebugOptions {
         return flags.intersects(otherFlags);
     }
 
-    explicit DebugOptions(unsigned long long flags) : flags(flags) {}
+    explicit DebugOptions(unsigned long long flags)
+        : flags(flags), style(DebugStyle::Standard) {}
     DebugOptions(const DebugFlags& flags, const std::regex& filter,
                  const std::regex& functionFilter, DebugStyle style)
         : flags(flags), passFilter(filter), functionFilter(functionFilter),
