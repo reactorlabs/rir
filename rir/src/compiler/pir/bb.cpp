@@ -1,3 +1,4 @@
+#include "../../utils/escape_string.h"
 #include "../util/visitor.h"
 #include "pir_impl.h"
 
@@ -31,6 +32,37 @@ void BB::print(std::ostream& out, bool tty) {
     if (isJmp()) {
         out << "  goto BB" << next0->id << "\n";
     }
+}
+
+void BB::printGraph(std::ostream& out, bool tty) {
+    out << "BB" << id << " [shape=\"box\", fontname=\"monospace\", xlabel=\"BB"
+        << id << "\", label=\"\\\n";
+    for (auto i : instrs) {
+        std::stringstream buf;
+        i->printGraph(buf);
+        out << escapeString(buf.str()) << "\\l\\\n";
+    }
+    out << "\"];\n";
+    if (!instrs.empty() && last()->branches()) {
+        last()->printGraphBranches(out, id);
+    }
+    if (isJmp()) {
+        out << "BB" << id << " -> "
+            << "BB" << next0->id << ";\n";
+    }
+    out << "\n";
+}
+
+void BB::printBBGraph(std::ostream& out) {
+    out << "BB" << id << " [shape=\"circle\", label=\"BB" << id << "\"];\n";
+    if (!instrs.empty() && last()->branches()) {
+        last()->printGraphBranches(out, id);
+    }
+    if (isJmp()) {
+        out << "BB" << id << " -> "
+            << "BB" << next0->id << ";\n";
+    }
+    out << "\n";
 }
 
 BB::~BB() {

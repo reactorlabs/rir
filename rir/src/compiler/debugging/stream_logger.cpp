@@ -68,7 +68,19 @@ void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
         std::regex_match(name.begin(), name.end(), options.functionFilter)) {
         preparePrint();
         section("PIR Version After Optimizations");
-        closure->print(out, tty());
+        switch (options.style) {
+        case DebugStyle::Standard:
+            closure->print(out, tty());
+            break;
+        case DebugStyle::GraphViz:
+            closure->printGraph(out, tty());
+            break;
+        case DebugStyle::GraphVizBB:
+            closure->printBBGraph(out, tty());
+            break;
+        default:
+            assert(false);
+        }
         out << "\n";
     }
 }

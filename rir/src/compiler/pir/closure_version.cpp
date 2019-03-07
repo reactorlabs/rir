@@ -18,6 +18,24 @@ void ClosureVersion::print(std::ostream& out, bool tty) const {
     }
 }
 
+void ClosureVersion::printGraph(std::ostream& out, bool tty) const {
+    out << *this << "\n";
+    printGraphCode(out, tty);
+    for (auto p : promises_) {
+        if (p)
+            p->print(out, tty);
+    }
+}
+
+void ClosureVersion::printBBGraph(std::ostream& out, bool tty) const {
+    out << *this << "\n";
+    printBBGraphCode(out);
+    for (auto p : promises_) {
+        if (p)
+            p->print(out, tty);
+    }
+}
+
 Promise* ClosureVersion::createProm(unsigned srcPoolIdx) {
     Promise* p = new Promise(this, promises_.size(), srcPoolIdx);
     promises_.push_back(p);

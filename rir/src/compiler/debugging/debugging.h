@@ -29,6 +29,11 @@ namespace pir {
     V(PrintIntoStdout)                                                         \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
 
+#define LIST_OF_DEBUG_STYLES(V)                                                \
+    V(Standard)                                                                \
+    V(GraphViz)                                                                \
+    V(GraphVizBB)
+
 enum class DebugFlag {
 #define V(n) n,
     LIST_OF_PIR_DEBUGGING_FLAGS(V)
@@ -38,14 +43,21 @@ enum class DebugFlag {
     LAST = PrintFinalRir
 };
 
+enum class DebugStyle {
+#define V(style) style,
+    LIST_OF_DEBUG_STYLES(V)
+#undef V
+};
+
 struct DebugOptions {
     typedef EnumSet<DebugFlag, int> DebugFlags;
     DebugFlags flags;
     const std::regex passFilter;
     const std::regex functionFilter;
+    DebugStyle style;
 
     DebugOptions operator|(const DebugFlags& f) const {
-        return {flags | f, passFilter, functionFilter};
+        return {flags | f, passFilter, functionFilter, style};
     }
     bool includes(const DebugFlags& otherFlags) const {
         return flags.includes(otherFlags);
@@ -56,8 +68,9 @@ struct DebugOptions {
 
     explicit DebugOptions(unsigned long long flags) : flags(flags) {}
     DebugOptions(const DebugFlags& flags, const std::regex& filter,
-                 const std::regex& functionFilter)
-        : flags(flags), passFilter(filter), functionFilter(functionFilter) {}
+                 const std::regex& functionFilter, DebugStyle style)
+        : flags(flags), passFilter(filter), functionFilter(functionFilter),
+          style(style) {}
     DebugOptions() {}
 };
 

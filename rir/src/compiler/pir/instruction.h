@@ -181,7 +181,10 @@ class Instruction : public Value {
 
     virtual void printEnv(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
+    virtual void printGraphArgs(std::ostream& out, bool tty) const;
+    virtual void printGraphBranches(std::ostream& out, int bbId) const;
     virtual void print(std::ostream& out, bool tty = false) const;
+    void printGraph(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
     void print() const { print(std::cerr, true); }
 
@@ -692,6 +695,8 @@ class Branch
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
     }
     void printArgs(std::ostream& out, bool tty) const override;
+    void printGraphArgs(std::ostream& out, bool tty) const override;
+    void printGraphBranches(std::ostream& out, int bbId) const override;
 };
 
 class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::Order,
@@ -1420,6 +1425,8 @@ class Checkpoint
   public:
     Checkpoint() : FixedLenInstruction(NativeType::checkpoint) {}
     void printArgs(std::ostream& out, bool tty) const override;
+    void printGraphArgs(std::ostream& out, bool tty) const override;
+    void printGraphBranches(std::ostream& out, int bbId) const override;
     BB* deoptBranch();
 };
 

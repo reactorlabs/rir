@@ -12,7 +12,8 @@ extern int R_ENABLE_JIT;
 
 REXPORT SEXP rir_invocation_count(SEXP what);
 REXPORT SEXP rir_eval(SEXP exp, SEXP env);
-REXPORT SEXP pir_compile(SEXP closure, SEXP name, SEXP sebugFlags);
+REXPORT SEXP pir_compile(SEXP closure, SEXP name, SEXP debugFlags,
+                         SEXP debugStyle);
 REXPORT SEXP rir_compile(SEXP what, SEXP env);
 SEXP pirCompile(SEXP closure, const rir::Assumptions& assumptions,
                 const std::string& name, const rir::pir::DebugOptions);
