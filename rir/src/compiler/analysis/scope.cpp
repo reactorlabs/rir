@@ -1,6 +1,7 @@
 #include "scope.h"
 #include "../pir/pir_impl.h"
 #include "query.h"
+#include "../util/safe_builtins_list.h"
 
 namespace rir {
 namespace pir {
@@ -244,7 +245,12 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||
                     NamedCall::Cast(i)) &&
                    "New call instruction not handled?");
-            if (!CallSafeBuiltin::Cast(i)) {
+            auto safe = false;
+            if (auto builtin = CallBuiltin::Cast(i)) {
+                if (SafeBuiltinsList::nonObject(builtin->blt))
+                    safe = true;
+            }
+            if (!CallSafeBuiltin::Cast(i) && !safe) {
                 state.mayUseReflection = true;
                 effect.lostPrecision();
             } else {
@@ -330,5 +336,5 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
     return effect;
 }
 
-}
-}
+} // namespace pir
+} // namespace rir

@@ -295,7 +295,7 @@ class InstructionImplementation : public Instruction {
         return EFFECT >= Effect::Force;
     }
     bool mayUseReflection() const override final {
-        return EFFECT > Effect::Reflection;
+        return hasEnv() && EFFECT >= Effect::Reflection;
     }
     bool mayAccessEnv() const override final { return mayAccessEnv_; }
     bool readsEnv() const override final { return hasEnv() && mayReadEnv_; }
