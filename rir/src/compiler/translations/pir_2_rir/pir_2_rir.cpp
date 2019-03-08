@@ -1232,88 +1232,84 @@ void Pir2Rir::lower(Code* code) {
                         return;
                     done = false;
 
-                    // Gather all the basic blocks currently in the phi
-                    // inputs, these are then used to stop a backward search
-                    std::unordered_set<BB*> inputBBs;
-                    phi->eachArg(
-                        [&](BB* inputBB, Value*) { inputBBs.insert(inputBB); });
+                    // Accumulate new arguments and inputs for the phi
+                    std::vector<std::pair<Value*, BB*>> update;
 
-                    // dir maps basic blocks to blocks that are immediate
-                    // predecessors of the given phi, ie. the blocks we want
-                    // the phi to have as inputs
-                    std::unordered_map<BB*, BB*> dir;
-                    // Initialize with the actual immediate predecessors
-                    for (auto pred : cfg.immediatePredecessors(phi->bb()))
-                        dir[pred] = pred;
+                    // The idea here is to change the semantics of phi functions
+                    // from the one in PIR to the more common one. In PIR, phi
+                    // input blocks are not necessarily immediate predecessors.
+                    // The phi means, take the value associated with the last
+                    // visited bb from all the phi's input blocks. What we want
+                    // is, take the value associated with the immediate
+                    // predecessor block that we just came from. There is a
+                    // subtle difference when loops are in play...
 
-                    // src maps immediate predecessors of the phi to sets of
-                    // arguments that come from that path
-                    std::unordered_map<BB*, std::unordered_set<Value*>> src;
-                    phi->eachArg([&](BB* inputBB, Value* val) {
-                        // Do a bfs search for a block that is listed as a
-                        // phi input block. If we find it, the dir map tells
-                        // us which immediate predecessor this translates to
-                        // and we are done. If we hit a block that is a
-                        // different phi input block than the one we look
-                        // for, we stop. Otherwise, propagate the dir info
-                        // to immediate predecessors and continue
+                    // We go backward breadth first from the phi's immediate
+                    // predecessors. The idea is, to every path we propagate all
+                    // the phi input values. If we find a block that creates one
+                    // of the inputs, we just update the input block for that
+                    // input. If we find a phi that has as argument one of the
+                    // inputs, we replace that argument with this phi. If we
+                    // find a merge block (ie. more than one immediate
+                    // predecessor), we insert a new phi that has as inputs the
+                    // inputs of the current one, and we update the current phi
+                    // to have the new phi as input.
+                    for (auto pred : cfg.immediatePredecessors(phi->bb())) {
                         BreadthFirstVisitor::checkBackward(
-                            phi->bb(), cfg, [&](BB* bb) {
-                                if (bb == inputBB) {
-                                    src[dir[bb]].insert(val);
+                            pred, cfg, [&](BB* bb) {
+                                // Check if block is the origin of one of the
+                                // phi args
+                                bool done = false;
+                                phi->eachArg([&](BB*, Value* val) {
+                                    assert(val->isInstruction());
+                                    if (Instruction::Cast(val)->bb() == bb) {
+                                        assert(!done);
+                                        update.emplace_back(val, pred);
+                                        done = true;
+                                    }
+                                });
+                                if (done)
                                     return false;
+                                // Check if some phi in this block has some arg
+                                // same
+                                for (auto i : VisitorHelpers::reverse(*bb)) {
+                                    if (auto p = Phi::Cast(i)) {
+                                        bool stop = false;
+                                        p->eachArg([&](BB*, Value* v1) {
+                                            phi->eachArg([&](BB*, Value* v2) {
+                                                if (v1 == v2)
+                                                    stop = true;
+                                            });
+                                        });
+                                        if (stop) {
+                                            update.emplace_back(p, pred);
+                                            return false;
+                                        }
+                                    }
                                 }
-                                if (inputBBs.count(bb) == 0) {
-                                    for (auto pred :
-                                         cfg.immediatePredecessors(bb))
-                                        if (dir.count(pred) == 0)
-                                            dir[pred] = dir[bb];
+                                // Insert a new phi into a merge block
+                                if (cfg.immediatePredecessors(bb).size() > 1) {
+                                    auto newPhi = new Phi;
+                                    phi->eachArg([&](BB* b, Value* v) {
+                                        assert(v->isInstruction());
+                                        if (cfg.isPredecessor(
+                                                Instruction::Cast(v)->bb(), bb))
+                                            newPhi->addInput(
+                                                Instruction::Cast(v)->bb(), v);
+                                    });
+                                    bb->insert(bb->begin(), newPhi);
+                                    update.emplace_back(newPhi, pred);
+                                    return false;
                                 }
                                 return true;
                             });
-                    });
-
-                    // Modify the phi so that it obtains the desired
-                    // property
-                    for (auto s : src) {
-                        // For each immediate predecessor get a set of
-                        // values that come through it, to be removed from
-                        // the phi
-                        std::unordered_set<BB*> toRemove;
-                        phi->eachArg([&](BB* inputBB, Value* val) {
-                            if (s.second.count(val))
-                                toRemove.insert(inputBB);
-                        });
-                        // Add a new single argument to the phi for the
-                        // given predecessor that will either be a single
-                        // existing value, or a newly created phi merge of
-                        // the set of values from that ppredecessor
-                        if (s.second.size() == 1) {
-                            phi->removeInputs(toRemove);
-                            phi->addInput(s.first, *(s.second.begin()));
-                            phi->updateType();
-                        } else {
-                            assert(s.second.size() > 1);
-                            Phi* newPhi = new Phi;
-                            for (auto input : s.second) {
-                                phi->eachArg([&](BB* inputBB, Value* val) {
-                                    if (val == input)
-                                        newPhi->addInput(inputBB, val);
-                                });
-                            }
-                            phi->removeInputs(toRemove);
-                            phi->addInput(s.first, newPhi);
-                            newPhi->updateType();
-                            phi->updateType();
-                            // Insert the new phi at the beginning of the
-                            // predecessor block
-                            s.first->insert(s.first->begin(), newPhi);
-                            // If we created a one argument phi, remove it
-                            if (phi->nargs() == 1) {
-                                phi->replaceUsesWith(phi->arg(0).val());
-                                phi->bb()->remove(phi);
-                            }
-                        }
+                    }
+                    // Replace the current phi's args and inputs
+                    std::unordered_set<BB*> remove;
+                    phi->eachArg([&](BB* bb, Value*) { remove.insert(bb); });
+                    phi->removeInputs(remove);
+                    for (auto u : update) {
+                        phi->addInput(u.second, u.first);
                     }
                 }
             });
