@@ -317,6 +317,10 @@ static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
                                          SEXP env, SEXP arglist,
                                          InterpreterInstance* ctx) {
+    assert(TYPEOF(env) == ENVSXP ||
+           fun->signature().envCreation ==
+               FunctionSignature::Environment::CalleeCreated);
+
     RCNTXT cntxt;
 
     // This code needs to be protected, because its slot in the dispatch table
@@ -1992,11 +1996,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             advanceImmediate();
 
-            ArgsLazyData lazyArgs(&call, ctx);
-            fun->registerInvocation();
-            supplyMissingArgs(call, fun);
-            res = rirCallTrampoline(call, fun, symbol::delayedEnv,
-                                    (SEXP)&lazyArgs, ctx);
+            if (fun->signature().envCreation ==
+                FunctionSignature::Environment::CallerProvided) {
+                res = doCall(call, ctx);
+            } else {
+                ArgsLazyData lazyArgs(&call, ctx);
+                fun->registerInvocation();
+                supplyMissingArgs(call, fun);
+                res = rirCallTrampoline(call, fun, symbol::delayedEnv,
+                                        (SEXP)&lazyArgs, ctx);
+            }
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 
