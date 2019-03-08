@@ -260,6 +260,12 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
     if (!handled) {
         if (i->hasEnv()) {
             bool envIsNeeded = i->hasEnv();
+
+            if (auto mk = MkEnv::Cast(i->env())) {
+                if (mk->stub)
+                    envIsNeeded = false;
+            }
+
             // Already exclude the case where an operation needs an env only for
             // object arguments, but we know that none of the args are objects.
             if (envIsNeeded && i->envOnlyForObj()) {
