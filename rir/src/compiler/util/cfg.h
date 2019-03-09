@@ -23,6 +23,7 @@ class CFG {
     bool isMergeBlock(BB* a) const;
     const BBList& immediatePredecessors(BB* a) const;
     const BBList& exits() const { return exits_; }
+    size_t size() const { return predecessors_.size(); }
 };
 
 class DominanceGraph {
@@ -40,7 +41,6 @@ class DominanceGraph {
     std::vector<DomTree> dominating;
 
   public:
-
     size_t size() const { return dominating.size(); }
     explicit DominanceGraph(Code*);
 
@@ -63,7 +63,7 @@ class DominanceFrontier {
     DominanceFrontier(Code* code, const CFG&, const DominanceGraph&);
     const BBList& at(BB* bb) const;
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

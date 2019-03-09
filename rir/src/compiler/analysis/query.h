@@ -18,6 +18,7 @@ class Query {
     static bool noEnv(Code* c);
     static bool noEnvSpec(Code* c);
     static bool noDeopt(Code* c);
+    static bool lookupOutOfLoopEnv(Code* c);
     static std::unordered_set<Value*> returned(Code* c);
 };
 } // namespace pir

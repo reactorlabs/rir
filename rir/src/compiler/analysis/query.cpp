@@ -15,6 +15,17 @@ bool Query::noEnv(Code* c) {
                           [](Instruction* i) { return !MkEnv::Cast(i); });
 }
 
+bool Query::lookupOutOfLoopEnv(Code* c) {
+    // TODO: After stabilizing an API out of the loop indentification
+    // functionality we should improve this query
+    for (auto instruction : *c->entry) {
+        if (LdFun::Cast(instruction)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Query::noEnvSpec(Code* c) {
     return Visitor::check(c->entry, [](Instruction* i) {
         if (MkEnv::Cast(i) && !MkEnv::Cast(i)->stub) {

@@ -232,6 +232,14 @@ bool testCondition(const std::string& input,
     return t;
 }
 
+bool lookupOutOfLoop(const std::string& input) {
+    auto t = true;
+    auto condition = [&](pir::ClosureVersion* f) {
+        t = t && Query::lookupOutOfLoopEnv(f);
+    };
+    return testCondition(input, condition) && t;
+}
+
 bool canRemoveEnvironment(const std::string& input) {
     auto t = true;
     auto condition = [&t](pir::ClosureVersion* f) { t = t && Query::noEnv(f); };
@@ -815,8 +823,17 @@ static Test tests[] = {
                            " f(x,y(),z)}");
          }),
     Test("Test dead store analysis", &testDeadStore),
+    Test("hoistLdFun",
+         []() {
+             return lookupOutOfLoop("f <- function(){\n"
+                                    "j <- 0\n"
+                                    "while (j < 2) {\n"
+                                    "c(j)\n"
+                                    "j <- j + 1\n"
+                                    "}\n"
+                                    "}");
+         }),
 };
-
 } // namespace
 
 namespace rir {

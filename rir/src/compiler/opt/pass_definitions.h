@@ -125,6 +125,13 @@ class PASS(OptimizeContexts);
 
 class PASS(DeadStoreRemoval);
 
+/*
+ * At this point, loop code invariant mainly tries to hoist ldFun operations
+ * outside the loop in case it can prove that the loop body will not change
+ * the binding
+ */
+class PASS(LoopInvariant);
+
 class PhaseMarker : public PirTranslator {
   public:
     explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}

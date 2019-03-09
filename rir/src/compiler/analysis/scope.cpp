@@ -1,5 +1,6 @@
 #include "scope.h"
 #include "../pir/pir_impl.h"
+#include "../util/safe_builtins_list.h"
 #include "query.h"
 #include "../util/safe_builtins_list.h"
 

@@ -109,6 +109,7 @@ void Configurations::defaultOptimizations() {
     // Our backend really does not like unused checkpoints, so be sure to remove
     // all of them here already.
     optimizations.push_back(new pir::CleanupCheckpoints());
+    optimizations.push_back(new pir::LoopInvariant());
 
     phasemarker("Phase 4: finished");
 }
