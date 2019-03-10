@@ -1489,6 +1489,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             int contextPos = readSignedImmediate();
             advanceImmediate();
             SEXP parent = ostack_pop(ctx);
+            PROTECT(parent);
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
             SEXP arglist = R_NilValue;
@@ -1512,6 +1513,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             ostack_push(ctx, res);
+            UNPROTECT(1);
             NEXT();
         }
 
