@@ -67,7 +67,8 @@ function run_test {
   echo "sys.source('${ROOT_DIR}/rir/R/rir.R')" >> $TEST
   grep -v 'require("rir")' ${test} | grep -v 'require(rir)'  >> $TEST
   
-  $R $VALGRIND --no-init-file -f $TEST &> /dev/null
+  LOG=$(mktemp /tmp/r-test.XXXXXX)
+  $R $VALGRIND --no-init-file -f $TEST &> $LOG
   res=$?
 
   ps -p $PARENT &> /dev/null
@@ -77,10 +78,22 @@ function run_test {
   fi
 
   if [ $res -ne 0 ]; then
-      echo -e "\nfailed test $name:\n   $R $VALGRIND -f $TEST"
+      echo -e "\n*************************************************************************************"
+      echo "*************************************************************************************"
+      echo "***  failed test $name:"
+      echo "***   $R $VALGRIND -f $TEST"
+      echo "***  log:"
+      echo "*************************************************************************************"
+      cat $LOG
+      echo "*************************************************************************************"
+      echo "***  end log $name"
+      echo "*************************************************************************************"
+      echo "*************************************************************************************"
+      rm $LOG
       exit 255
   fi
   rm $TEST
+  rm $LOG
   echo $name >> $STATUS
 
   status
