@@ -71,7 +71,7 @@ class SSAAllocator {
     void computeStackAllocation() {
 
         static auto toStack = [](Instruction* i) -> bool {
-            return i->numberOfUses() < 2;
+            return Phi::Cast(i) || !MkEnv::Cast(i);
         };
 
         std::unordered_set<Value*> phis;
@@ -1270,8 +1270,11 @@ void Pir2Rir::lower(Code* code) {
                                 });
                                 if (done)
                                     return false;
-                                // Check if some phi in this block has some arg
-                                // same
+                                // Check if there is a phi in this block that
+                                // has one of the args the same as an arg to
+                                // the phi we are dealing with. If so, this phi
+                                // is the source of our phi input
+                                // (pretty much the case above but for phis)
                                 for (auto i : VisitorHelpers::reverse(*bb)) {
                                     if (auto p = Phi::Cast(i)) {
                                         bool stop = false;
