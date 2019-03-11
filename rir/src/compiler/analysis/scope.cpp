@@ -245,12 +245,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||
                     NamedCall::Cast(i)) &&
                    "New call instruction not handled?");
-            auto safe = false;
-            if (auto builtin = CallBuiltin::Cast(i)) {
-                if (SafeBuiltinsList::nonObject(builtin->blt))
-                    safe = true;
-            }
-            if (!CallSafeBuiltin::Cast(i) && !safe) {
+            if (!CallSafeBuiltin::Cast(i)) {
                 state.mayUseReflection = true;
                 effect.lostPrecision();
             } else {
