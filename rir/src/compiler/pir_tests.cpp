@@ -256,6 +256,59 @@ bool canRemoveEnvironmentIfNonTypeFeedback(const std::string& input) {
     return t;
 }
 
+bool testDeadStore() {
+    auto hasAssign = [](pir::ClosureVersion* f) {
+        size_t count = 0;
+        Visitor::run(f->entry, [&](Instruction* i) {
+            if (StVar::Cast(i))
+                count++;
+        });
+        return count;
+    };
+    {
+        pir::Module m;
+        auto res = compile("", "f <- function(x) {y <- 2}", &m);
+        auto f = res["f"];
+        CHECK(!hasAssign(f));
+    }
+    {
+        // Scope analysis promotes "y" to ssa variable. Thus the stores are not
+        // needed anymore.
+        pir::Module m;
+        auto res =
+            compile("", "f <- function(x) {if (x) y <- 1 else y <- 2; y}", &m);
+        auto f = res["f"];
+        CHECK(!hasAssign(f));
+    }
+    {
+        // Both updates to "y" happen before the first leak. therefore they are
+        // both folded into mkenv
+        pir::Module m;
+        auto res = compile("", "f <- function(x) {y <- 1; y <- 2; leak()}", &m);
+        auto f = res["f"];
+        CHECK(hasAssign(f) == 0);
+    }
+    {
+        // both updates to "y" happen between observations. Only when we
+        // return, the env could be observed again. Thus the first store can
+        // be removed
+        pir::Module m;
+        auto res = compile("", "f <- function(x) {leak(); y <- 1; y <- 2}", &m);
+        auto f = res["f"];
+        CHECK(hasAssign(f) == 1);
+    }
+    {
+        // Both updates to "y" are observable. The first by foo, the second by
+        // anything that happens after exit.
+        pir::Module m;
+        auto res =
+            compile("", "f <- function(x) {leak(); y <- 1; foo(); y <- 2}", &m);
+        auto f = res["f"];
+        CHECK(hasAssign(f) == 2);
+    }
+    return true;
+}
+
 bool testSuperAssign() {
     auto hasAssign = [](pir::ClosureVersion* f) {
         return !Visitor::check(f->entry, [](Instruction* i) {
@@ -595,6 +648,7 @@ static Test tests[] = {
                            " f <- function(a,b,c) if (a() == (b+c)) 42L;"
                            " f(x,y(),z)}");
          }),
+    Test("Test dead store analysis", &testDeadStore),
 };
 
 } // namespace

@@ -26,4 +26,12 @@ inline size_t hash_combine(size_t seed, const T& v) {
     return hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
+struct pairhash {
+  public:
+    template <typename T, typename U>
+    std::size_t operator()(const std::pair<T, U>& x) const {
+        return hash_combine(hash_combine(0, x.first), x.second);
+    }
+};
+
 #endif
