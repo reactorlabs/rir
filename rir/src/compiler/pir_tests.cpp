@@ -52,7 +52,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::StreamLogger logger({pir::DebugOptions::DebugFlags() |
                                   // pir::DebugFlag::PrintIntoStdout |
                                   // pir::DebugFlag::PrintEarlyRir |
-                                  // pir::DebugFlag::PrintOptimizationPasses |
+                                  pir::DebugFlag::PrintOptimizationPasses |
                                   pir::DebugFlag::PrintFinalPir,
                               std::regex(".*"), std::regex(".*")});
     pir::Rir2PirCompiler cmp(m, logger);

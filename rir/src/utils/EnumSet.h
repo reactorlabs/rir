@@ -28,7 +28,17 @@ class EnumSet {
     }
 
   public:
-    EnumSet() {}
+    typedef Store StoreType;
+    typedef Element ElementType;
+
+    static constexpr EnumSet None() { return EnumSet(); }
+
+    static constexpr EnumSet Any() {
+        return ((1 << ((StoreType)(Element::LAST) + 1)) - 1) &
+               ~((1 << (StoreType)Element::FIRST) - 1);
+    }
+
+    constexpr EnumSet() {}
     EnumSet(const EnumSet& other) noexcept = default;
 
     constexpr EnumSet(Element e) : set_(1UL << static_cast<size_t>(e)) {
@@ -49,6 +59,8 @@ class EnumSet {
         set_ |= 1UL << static_cast<size_t>(e);
     }
 
+    RIR_INLINE void reset() { set_ = 0; }
+
     RIR_INLINE void reset(const Element& e) {
         assert(boundscheck(e));
         set_ &= ~(1UL << static_cast<size_t>(e));
@@ -63,7 +75,7 @@ class EnumSet {
     }
 
     RIR_INLINE bool operator==(const Element& t) const {
-        return EnumSet(t) == set_;
+        return EnumSet(t).set_ == set_;
     }
 
     RIR_INLINE bool operator==(const EnumSet& s) const {
@@ -91,6 +103,8 @@ class EnumSet {
     }
 
     RIR_INLINE Store to_i() const { return set_; }
+
+    constexpr operator StoreType() const { return set_; }
 
     RIR_INLINE bool empty() const { return set_ == 0; }
 

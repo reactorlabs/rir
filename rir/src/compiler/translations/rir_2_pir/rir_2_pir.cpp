@@ -1050,7 +1050,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
 
             if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->hasEffectIgnoreVisibility()) {
+                insert.getCurrentBB()->last()->isDeoptBarrier()) {
                 addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
         }
