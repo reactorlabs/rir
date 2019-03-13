@@ -9,7 +9,23 @@
 namespace rir {
 namespace pir {
 
-void ClosureVersion::print(std::ostream& out, bool tty) const {
+void ClosureVersion::print(DebugStyle style, std::ostream& out, bool tty) const {
+    switch (style) {
+    case DebugStyle::Standard:
+        closure->print(out, tty);
+        break;
+    case DebugStyle::GraphViz:
+        closure->printGraph(out, tty);
+        break;
+    case DebugStyle::GraphVizBB:
+        closure->printBBGraph(out, tty);
+        break;
+    default:
+        assert(false);
+    }
+}
+    
+void ClosureVersion::printStandard(std::ostream& out, bool tty) const {
     out << *this << "\n";
     printCode(out, tty);
     for (auto p : promises_) {
