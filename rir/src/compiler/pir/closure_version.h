@@ -68,6 +68,8 @@ class ClosureVersion : public Code {
     const std::string& nameSuffix() const { return nameSuffix_; }
 
     void print(std::ostream& out, bool tty) const;
+    void printGraph(std::ostream& out, bool tty) const;
+    void printBBGraph(std::ostream& out, bool tty) const;
 
     Promise* createProm(unsigned srcPoolIdx);
 

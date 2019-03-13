@@ -77,10 +77,25 @@ void Instruction::printArgs(std::ostream& out, bool tty) const {
         out << ", ";
 }
 
+void Instruction::printGraphArgs(std::ostream& out, bool tty) const {
+    printArgs(out, tty);
+}
+
+void Instruction::printGraphBranches(std::ostream& out, int bbId) const {
+    assert(false);
+}
+
 void Instruction::print(std::ostream& out, bool tty) const {
     printPaddedTypeAndRef(out, this);
     printPaddedInstructionName(out, name());
     printArgs(out, tty);
+    printEnv(out, tty);
+}
+
+void Instruction::printGraph(std::ostream& out, bool tty) const {
+    printPaddedTypeAndRef(out, this);
+    printPaddedInstructionName(out, name());
+    printGraphArgs(out, tty);
     printEnv(out, tty);
 }
 
@@ -270,6 +285,16 @@ void Branch::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
     out << " -> BB" << bb()->trueBranch()->id << " (if true) | BB"
         << bb()->falseBranch()->id << " (if false)";
+}
+
+void Branch::printGraphArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+}
+
+void Branch::printGraphBranches(std::ostream& out, int bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->id
+        << " [color=green];\n  BB" << bbId << " -> BB"
+        << bb()->falseBranch()->id << " [color=red];\n";
 }
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
@@ -654,6 +679,15 @@ void Checkpoint::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
     out << " -> BB" << bb()->trueBranch()->id << " (default) | BB"
         << bb()->falseBranch()->id << " (if assume failed)";
+}
+
+void Checkpoint::printGraphArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+}
+
+void Checkpoint::printGraphBranches(std::ostream& out, int bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->id << ";\n  BB"
+        << bbId << " -> BB" << bb()->falseBranch()->id << " [color=red];\n";
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
