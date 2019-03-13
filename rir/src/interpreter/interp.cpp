@@ -1495,11 +1495,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP arglist = R_NilValue;
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
+            bool hasMissing = false;
             for (long i = n - 1; i >= 0; --i) {
                 SEXP val = ostack_pop(ctx);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
+                hasMissing = hasMissing || val == R_MissingArg;
                 SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
             }
             res = Rf_NewEnvironment(R_NilValue, arglist, parent);
@@ -1507,8 +1509,30 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (contextPos > 0) {
                 if (auto cptr = getFunctionContext(contextPos - 1)) {
                     cptr->cloenv = res;
-                    if (cptr->promargs == symbol::delayedArglist)
-                        cptr->promargs = arglist;
+                    if (cptr->promargs == symbol::delayedArglist) {
+                        auto promargs = arglist;
+                        if (hasMissing) {
+                            // For the promargs we need to strip missing
+                            // arguments from the list, otherwise nargs()
+                            // reports the wrong value.
+                            promargs = Rf_shallow_duplicate(arglist);
+                            // Need to test for R_MissingArg because
+                            // shallowDuplicate does not copy the missing flag.
+                            while (CAR(promargs) == R_MissingArg &&
+                                   promargs != R_NilValue) {
+                                promargs = CDR(promargs);
+                            }
+                            auto p = promargs;
+                            auto prev = p;
+                            while (p != R_NilValue) {
+                                if (CAR(p) == R_MissingArg)
+                                    SETCDR(prev, CDR(p));
+                                prev = p;
+                                p = CDR(p);
+                            }
+                        }
+                        cptr->promargs = promargs;
+                    }
                 }
             }
 
