@@ -2,7 +2,7 @@
 #define COMPILER_CLOSURE_VERSION_H
 
 #include "../../runtime/Function.h"
-#include "../util/debugging.h"
+#include "../debugging/debugging.h"
 #include "code.h"
 #include "optimization_context.h"
 #include "pir.h"
