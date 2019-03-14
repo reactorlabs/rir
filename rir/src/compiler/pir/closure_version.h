@@ -68,6 +68,7 @@ class ClosureVersion : public Code {
     const std::string& name() const { return name_; }
     const std::string& nameSuffix() const { return nameSuffix_; }
 
+    void print(std::ostream& out, bool tty) const;
     void print(DebugStyle style, std::ostream& out, bool tty) const;
     void printStandard(std::ostream& out, bool tty) const;
     void printGraph(std::ostream& out, bool tty) const;
