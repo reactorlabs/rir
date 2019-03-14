@@ -8,6 +8,10 @@
 
 namespace rir {
 namespace pir {
+    
+void ClosureVersion::print(std::ostream& out, bool tty) const {
+    print(DebugStyle::Standard, out, tty);
+}
 
 void ClosureVersion::print(DebugStyle style, std::ostream& out, bool tty) const {
     switch (style) {
