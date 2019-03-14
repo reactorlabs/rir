@@ -16,13 +16,13 @@ void ClosureVersion::print(std::ostream& out, bool tty) const {
 void ClosureVersion::print(DebugStyle style, std::ostream& out, bool tty) const {
     switch (style) {
     case DebugStyle::Standard:
-        closure->print(out, tty);
+        printStandard(out, tty);
         break;
     case DebugStyle::GraphViz:
-        closure->printGraph(out, tty);
+        printGraph(out, tty);
         break;
     case DebugStyle::GraphVizBB:
-        closure->printBBGraph(out, tty);
+        printBBGraph(out, tty);
         break;
     default:
         assert(false);
