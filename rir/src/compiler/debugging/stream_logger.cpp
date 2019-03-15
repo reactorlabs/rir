@@ -58,7 +58,7 @@ void LogStream::compilationEarlyPir(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         preparePrint();
         section("Compiled to PIR Version");
-        closure->print(out, tty());
+        closure->print(options.style, out, tty());
     }
 }
 
@@ -68,19 +68,7 @@ void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
         std::regex_match(name.begin(), name.end(), options.functionFilter)) {
         preparePrint();
         section("PIR Version After Optimizations");
-        switch (options.style) {
-        case DebugStyle::Standard:
-            closure->print(out, tty());
-            break;
-        case DebugStyle::GraphViz:
-            closure->printGraph(out, tty());
-            break;
-        case DebugStyle::GraphVizBB:
-            closure->printBBGraph(out, tty());
-            break;
-        default:
-            assert(false);
-        }
+        closure->print(options.style, out, tty());
         out << "\n";
     }
 }
@@ -119,7 +107,7 @@ void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
 void LogStream::pirOptimizations(ClosureVersion* closure,
                                  const PirTranslator* pass) {
     if (shouldLog(closure, pass, options)) {
-        closure->print(out, tty());
+        closure->print(options.style, out, tty());
     }
 }
 
@@ -156,7 +144,7 @@ void LogStream::finalPIR(ClosureVersion* code) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         preparePrint();
         section("Final PIR Version");
-        code->print(out, tty());
+        code->print(options.style, out, tty());
         out << "\n";
     }
 }
