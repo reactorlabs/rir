@@ -159,16 +159,17 @@ class Instruction : public Value {
         return leaksEnv() || effects.includes(Effect::LeakArg);
     }
 
-    void maskEffectsOnNonObjects() {
+    void maskEffectsOnNonObjects(Effects mask = Effects(Effect::Error) |
+                                                Effect::Warn |
+                                                Effect::Visibility) {
         bool maybeObj = false;
         eachArg([&](Value* v) {
             if (v->type.maybeObj())
                 maybeObj = true;
         });
         if (!maybeObj) {
-            effects =
-                Effects(Effect::Error) | Effect::Warn | Effect::Visibility;
-        };
+            effects = effects & mask;
+        }
     }
 
     virtual bool readsEnv() const = 0;

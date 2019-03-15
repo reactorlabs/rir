@@ -29,13 +29,12 @@ class EnumSet {
 
   public:
     typedef Store StoreType;
-    typedef Element ElementType;
 
     static constexpr EnumSet None() { return EnumSet(); }
 
     static constexpr EnumSet Any() {
-        return ((1 << ((StoreType)(Element::LAST) + 1)) - 1) &
-               ~((1 << (StoreType)Element::FIRST) - 1);
+        return ((1 << ((Store)(Element::LAST) + 1)) - 1) &
+               ~((1 << (Store)Element::FIRST) - 1);
     }
 
     constexpr EnumSet() {}
@@ -104,7 +103,7 @@ class EnumSet {
 
     RIR_INLINE Store to_i() const { return set_; }
 
-    constexpr operator StoreType() const { return set_; }
+    constexpr operator Store() const { return set_; }
 
     RIR_INLINE bool empty() const { return set_ == 0; }
 
