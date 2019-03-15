@@ -2234,6 +2234,24 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         ? NA_REAL
                         : *REAL(lhs) / *REAL(rhs);
                 STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                double real_res;
+                int r = *INTEGER(rhs);
+                if (*REAL(lhs) == NA_REAL || r == NA_INTEGER)
+                    real_res = NA_REAL;
+                else
+                    real_res = *REAL(lhs) / (double)r;
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                double real_res;
+                int l = *INTEGER(lhs);
+                if (l == NA_INTEGER || *REAL(rhs) == NA_REAL)
+                    real_res = NA_REAL;
+                else
+                    real_res = (double)l / *REAL(rhs);
+                STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
                 double real_res;
@@ -2259,6 +2277,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
                 IS_SIMPLE_SCALAR(rhs, REALSXP)) {
                 double real_res = myfloor(*REAL(lhs), *REAL(rhs));
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                double real_res = myfloor(*REAL(lhs), (double)*INTEGER(rhs));
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                double real_res = myfloor((double)*INTEGER(lhs), *REAL(rhs));
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
@@ -2287,6 +2313,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
                 IS_SIMPLE_SCALAR(rhs, REALSXP)) {
                 double real_res = myfmod(*REAL(lhs), *REAL(rhs));
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                double real_res = myfmod(*REAL(lhs), (double)*INTEGER(rhs));
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                double real_res = myfmod((double)*INTEGER(lhs), *REAL(rhs));
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
