@@ -544,35 +544,43 @@ R_bcstack_t tryFastBuiltinCall(const CallContext& call,
 
     case 678: { // "bitwiseAnd"
         if (nargs != 2)
-            return nullptr;
-        return bitwiseOp(std::bit_and<int>(), args[0], args[1], false);
+            return nullStackObj;
+        return sexpToStackObj(bitwiseOp(std::bit_and<int>(),
+                                        stackObjToSexp(args[0]),
+                                        stackObjToSexp(args[1]), false));
     }
 
     case 680: { // "bitwiseOr"
         if (nargs != 2)
-            return nullptr;
-        return bitwiseOp(std::bit_or<int>(), args[0], args[1], false);
+            return nullStackObj;
+        return sexpToStackObj(bitwiseOp(std::bit_or<int>(),
+                                        stackObjToSexp(args[0]),
+                                        stackObjToSexp(args[1]), false));
     }
 
     case 681: { // "bitwiseXor"
         if (nargs != 2)
-            return nullptr;
-        return bitwiseOp(std::bit_xor<int>(), args[0], args[1], false);
+            return nullStackObj;
+        return sexpToStackObj(bitwiseOp(std::bit_xor<int>(),
+                                        stackObjToSexp(args[0]),
+                                        stackObjToSexp(args[1]), false));
     }
 
     case 682: { // "bitwiseShiftL"
         if (nargs != 2)
-            return nullptr;
-        return bitwiseOp(bitShiftL(), args[0], args[1], false);
+            return nullStackObj;
+        return sexpToStackObj(bitwiseOp(bitShiftL(), stackObjToSexp(args[0]),
+                                        stackObjToSexp(args[1]), false));
     }
 
     case 683: { // "bitwiseShiftL"
         if (nargs != 2)
-            return nullptr;
-        return bitwiseOp(bitShiftR(), args[0], args[1], false);
+            return nullStackObj;
+        return sexpToStackObj(bitwiseOp(bitShiftR(), stackObjToSexp(args[0]),
+                                        stackObjToSexp(args[1]), false));
     }
     }
-    return nullptr;
+    return nullStackObj;
 }
 
 } // namespace rir
