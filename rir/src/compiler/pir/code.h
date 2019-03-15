@@ -20,6 +20,8 @@ class Code {
 
     Code() {}
     void printCode(std::ostream&, bool tty) const;
+    void printGraphCode(std::ostream&, bool tty) const;
+    void printBBGraphCode(std::ostream&) const;
     virtual ~Code();
 
     virtual size_t size() const;

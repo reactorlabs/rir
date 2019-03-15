@@ -198,16 +198,28 @@ class TheInliner {
                             i->env() == inlineeCls->closureEnv()) {
                             i->env(staticEnv);
                         }
+
+                        // If we inline without context, then we need to update
+                        // the mkEnv instructions in the inlinee, such that
+                        // they do not update the (non-existing) context.
+                        if (allowInline != SafeToInline::NeedsContext) {
+                            if (auto mk = MkEnv::Cast(i)) {
+                                mk->context--;
+                            }
+                        }
+
                         if (ld) {
                             Value* a = arguments[ld->id];
                             if (auto mk = MkArg::Cast(a)) {
                                 // We need to cast from a promise to a lazy
                                 // value
-                                auto cast = new CastType(
-                                    a, RType::prom,
-                                    mk->isEager()
-                                        ? mk->eagerArg()->type.forced()
-                                        : ld->type);
+                                auto cast =
+                                    new CastType(a, RType::prom,
+                                                 mk->isEager()
+                                                     ? mk->eagerArg()
+                                                           ->type.forced()
+                                                           .promiseWrappedVal()
+                                                     : ld->type);
                                 ip = bb->insert(ip + 1, cast);
                                 ip--;
                                 a = cast;

@@ -8,10 +8,48 @@
 
 namespace rir {
 namespace pir {
-
+    
 void ClosureVersion::print(std::ostream& out, bool tty) const {
+    print(DebugStyle::Standard, out, tty);
+}
+
+void ClosureVersion::print(DebugStyle style, std::ostream& out, bool tty) const {
+    switch (style) {
+    case DebugStyle::Standard:
+        printStandard(out, tty);
+        break;
+    case DebugStyle::GraphViz:
+        printGraph(out, tty);
+        break;
+    case DebugStyle::GraphVizBB:
+        printBBGraph(out, tty);
+        break;
+    default:
+        assert(false);
+    }
+}
+    
+void ClosureVersion::printStandard(std::ostream& out, bool tty) const {
     out << *this << "\n";
     printCode(out, tty);
+    for (auto p : promises_) {
+        if (p)
+            p->print(out, tty);
+    }
+}
+
+void ClosureVersion::printGraph(std::ostream& out, bool tty) const {
+    out << *this << "\n";
+    printGraphCode(out, tty);
+    for (auto p : promises_) {
+        if (p)
+            p->print(out, tty);
+    }
+}
+
+void ClosureVersion::printBBGraph(std::ostream& out, bool tty) const {
+    out << *this << "\n";
+    printBBGraphCode(out);
     for (auto p : promises_) {
         if (p)
             p->print(out, tty);

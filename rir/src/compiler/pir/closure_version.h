@@ -2,6 +2,7 @@
 #define COMPILER_CLOSURE_VERSION_H
 
 #include "../../runtime/Function.h"
+#include "../debugging/debugging.h"
 #include "code.h"
 #include "optimization_context.h"
 #include "pir.h"
@@ -68,6 +69,10 @@ class ClosureVersion : public Code {
     const std::string& nameSuffix() const { return nameSuffix_; }
 
     void print(std::ostream& out, bool tty) const;
+    void print(DebugStyle style, std::ostream& out, bool tty) const;
+    void printStandard(std::ostream& out, bool tty) const;
+    void printGraph(std::ostream& out, bool tty) const;
+    void printBBGraph(std::ostream& out, bool tty) const;
 
     Promise* createProm(unsigned srcPoolIdx);
 

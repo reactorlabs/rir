@@ -113,6 +113,7 @@ class BC {
     };
     struct MkEnvFixedArgs {
         NumArgs nargs;
+        SignedImmediate context;
     };
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
@@ -299,7 +300,7 @@ class BC {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (1 + nargs) * sizeof(Immediate);
+            return 1 + (2 + nargs) * sizeof(Immediate);
         }
         default: {}
         }
@@ -372,7 +373,8 @@ BC_NOARGS(V, _)
                                 SEXP targetVersion, const Assumptions& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
 
-    inline static BC mkEnv(const std::vector<SEXP>& names, bool stub);
+    inline static BC mkEnv(const std::vector<SEXP>& names,
+                           SignedImmediate contextPos, bool stub);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;

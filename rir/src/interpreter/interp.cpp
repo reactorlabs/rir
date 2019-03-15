@@ -1297,29 +1297,16 @@ static void cachedSetVar(R_bcstack_t val, SEXP env, Immediate idx,
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
-RCNTXT* nextFunctionContext(RCNTXT* cptr = R_GlobalContext) {
+RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
     while (cptr->nextcontext != NULL) {
         if (cptr->callflag & CTXT_FUNCTION) {
-            return cptr;
+            if (pos == 0)
+                return cptr;
+            pos--;
         }
         cptr = cptr->nextcontext;
     }
     assert(false);
-}
-
-RCNTXT* firstFunctionContextWithDelayedEnv() {
-    auto cptr = R_GlobalContext;
-    RCNTXT* candidate = nullptr;
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION) {
-            if (cptr->cloenv == symbol::delayedEnv)
-                candidate = cptr;
-            else
-                break;
-        }
-        cptr = cptr->nextcontext;
-    }
-    return candidate;
 }
 
 RCNTXT* findFunctionContextFor(SEXP e) {
@@ -1365,6 +1352,10 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                "Frame with context after frame without context");
         cntxt = originalCntxt;
     } else {
+        // NOTE: this assert triggers if we can't find the context of the
+        // current function. Usually the reason is that a wrong environment is
+        // stored in the context.
+        assert(!outermostFrame && "Cannot find outermost function context");
         // If the inlinee had no context, we need to synthesize one
         // TODO: need to add ast and closure to the deopt metadata to create a
         // complete context
@@ -1377,7 +1368,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         deoptEnv = stub->create();
         cntxt->cloenv = deoptEnv;
     }
-    SLOWASSERT(TYPEOF(deoptEnv) == ENVSXP);
+    assert(TYPEOF(deoptEnv) == ENVSXP);
 
     auto frameBaseSize = ostackLength(ctx) - excessStack;
     auto trampoline = [&]() {
@@ -1429,19 +1420,15 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     };
 
     R_bcstack_t res = trampoline();
-    SLOWASSERT((size_t)ostackLength(ctx) == frameBaseSize);
+    assert((size_t)ostackLength(ctx) == frameBaseSize);
 
-    // Dont end the outermost context (unless it was a fake one) to be able to
-    // jump out below
-    if (!outermostFrame || !originalCntxt) {
-        res = sexpToStackObj(stackObjToSexp(res));
-        endClosureContext(cntxt, res.u.sxpval);
-    }
-
-    if (outermostFrame) {
+    if (!outermostFrame) {
+        endClosureContext(cntxt, stackObjToSexp(res));
+    } else {
+        assert(findFunctionContextFor(deoptEnv) == cntxt);
         // long-jump out of all the inlined contexts
-        Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
-                       nextFunctionContext()->cloenv, stackObjToSexp(res));
+        Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv,
+                       stackObjToSexp(res));
         assert(false);
     }
 
@@ -1538,13 +1525,16 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
             advanceImmediate();
+            int contextPos = readSignedImmediate();
+            advanceImmediate();
             R_bcstack_t parent = ostackPop(ctx);
-            SLOWASSERT(stackObjSexpType(parent) == ENVSXP &&
-                       "Non-environment used as environment parent.");
+            assert(stackObjSexpType(parent) == ENVSXP &&
+                   "Non-environment used as environment parent.");
             SEXP arglist = R_NilValue;
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             PROTECT(parent.u.sxpval);
+            bool hasMissing = false;
             for (long i = n - 1; i >= 0; --i) {
                 PROTECT(arglist);
                 SEXP val = ostackPopSexp(ctx);
@@ -1552,15 +1542,40 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
+                hasMissing = hasMissing || val == R_MissingArg;
                 SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
             }
             UNPROTECT(1);
             SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent.u.sxpval);
 
-            if (auto cptr = firstFunctionContextWithDelayedEnv()) {
-                cptr->cloenv = res;
-                if (cptr->promargs == symbol::delayedArglist)
-                    cptr->promargs = arglist;
+            if (contextPos > 0) {
+                if (auto cptr = getFunctionContext(contextPos - 1)) {
+                    cptr->cloenv = res;
+                    if (cptr->promargs == symbol::delayedArglist) {
+                        auto promargs = arglist;
+                        if (hasMissing) {
+                            // For the promargs we need to strip missing
+                            // arguments from the list, otherwise nargs()
+                            // reports the wrong value.
+                            promargs = Rf_shallow_duplicate(arglist);
+                            // Need to test for R_MissingArg because
+                            // shallowDuplicate does not copy the missing flag.
+                            while (CAR(promargs) == R_MissingArg &&
+                                   promargs != R_NilValue) {
+                                promargs = CDR(promargs);
+                            }
+                            auto p = promargs;
+                            auto prev = p;
+                            while (p != R_NilValue) {
+                                if (CAR(p) == R_MissingArg)
+                                    SETCDR(prev, CDR(p));
+                                prev = p;
+                                p = CDR(p);
+                            }
+                        }
+                        cptr->promargs = promargs;
+                    }
+                }
             }
 
             ostackPushSexp(ctx, res);
@@ -1573,6 +1588,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // option becase R_Preserve is slow. We must find a simple story so
             // that the gc trace rir wrappers.
             size_t n = readImmediate();
+            advanceImmediate();
+            int contextPos = readSignedImmediate();
             advanceImmediate();
             // Do we need to preserve parent and the arg vals?
             SEXP parent = ostackPopSexp(ctx);
@@ -1588,8 +1605,10 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             envStubs.push_back(envStub);
             SEXP res = (SEXP)envStub;
 
-            if (auto cptr = firstFunctionContextWithDelayedEnv())
-                cptr->cloenv = res;
+            if (contextPos > 0) {
+                if (auto cptr = getFunctionContext(contextPos - 1))
+                    cptr->cloenv = res;
+            }
 
             ostackPushSexp(ctx, res);
             NEXT();

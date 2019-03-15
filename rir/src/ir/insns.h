@@ -21,12 +21,12 @@ DEF_INSTR(pop_context_, 0, 1, 0, 0)
  * make_env_:: create a new environment with the parent and all locals taken
  * from stack and the argument names as immediates.
  */
-DEF_INSTR(mk_env_, 1, -1, 1, 1)
+DEF_INSTR(mk_env_, 2, -1, 1, 0)
 
 /**
  * make_stub_env_:: create a fake environment for speculative purposes
  */
-DEF_INSTR(mk_stub_env_, 1, -1, 1, 1)
+DEF_INSTR(mk_stub_env_, 2, -1, 1, 1)
 
 /**
  * parent_env_:: push lexically outer env to tos

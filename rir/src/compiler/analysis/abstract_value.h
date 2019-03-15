@@ -320,9 +320,7 @@ class AbstractUnique {
         val = nullptr;
     }
 
-    Kind* get() {
-        return val;
-    }
+    Kind* get() const { return val; }
 
     AbstractResult merge(const AbstractUnique& other) {
         if (val && val != other.val) {

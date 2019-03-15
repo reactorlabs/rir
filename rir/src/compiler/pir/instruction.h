@@ -177,11 +177,14 @@ class Instruction : public Value {
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();
 
-    virtual void updateType(){};
+    virtual void updateType() {};
 
     virtual void printEnv(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
+    virtual void printGraphArgs(std::ostream& out, bool tty) const;
+    virtual void printGraphBranches(std::ostream& out, int bbId) const;
     virtual void print(std::ostream& out, bool tty = false) const;
+    void printGraph(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
     void print() const { print(std::cerr, true); }
 
@@ -692,6 +695,8 @@ class Branch
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
     }
     void printArgs(std::ostream& out, bool tty) const override;
+    void printGraphArgs(std::ostream& out, bool tty) const override;
+    void printGraphBranches(std::ostream& out, int bbId) const override;
 };
 
 class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::Order,
@@ -794,7 +799,7 @@ class FLI(AsLogical, 1, Effect::Warn, EnvAccess::None) {
 class FLI(AsTest, 1, Effect::Error, EnvAccess::None) {
   public:
     explicit AsTest(Value* in)
-        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{in}}) {}
+        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}) {}
 };
 
 class FLIE(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {
@@ -1301,6 +1306,7 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
   public:
     std::vector<SEXP> varName;
     bool stub = false;
+    int context = 1;
 
     typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
     typedef std::function<void(SEXP name, InstrArg&)> MutableLocalVarIt;
@@ -1419,6 +1425,8 @@ class Checkpoint
   public:
     Checkpoint() : FixedLenInstruction(NativeType::checkpoint) {}
     void printArgs(std::ostream& out, bool tty) const override;
+    void printGraphArgs(std::ostream& out, bool tty) const override;
+    void printGraphBranches(std::ostream& out, int bbId) const override;
     BB* deoptBranch();
 };
 

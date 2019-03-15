@@ -1,7 +1,66 @@
 #include "builtins.h"
 #include "interp.h"
+#include <algorithm>
 
 namespace rir {
+
+struct bitShiftL {
+    int operator()(int lhs, int rhs) const { return lhs << rhs; }
+};
+
+struct bitShiftR {
+    int operator()(int lhs, int rhs) const { return lhs >> rhs; }
+};
+
+static RIR_INLINE int checkBitOpCompatibility(SEXP* lhs, SEXP* rhs) {
+    int protects = 0;
+    if (isReal(*lhs)) {
+        *lhs = PROTECT(coerceVector(*lhs, INTSXP));
+        protects++;
+    }
+    if (isReal(*rhs)) {
+        *rhs = PROTECT(coerceVector(*rhs, INTSXP));
+        protects++;
+    }
+    if ((TYPEOF(*lhs) != TYPEOF(*rhs)) || TYPEOF(*lhs) != INTSXP)
+        return -1;
+
+    return protects;
+}
+
+template <class Func>
+static RIR_INLINE SEXP bitwiseOp(Func operation, SEXP lhs, SEXP rhs,
+                                 bool testLimits) {
+    int protects = checkBitOpCompatibility(&lhs, &rhs);
+    if (protects < 0)
+        return nullptr;
+
+    R_xlen_t lhsLength = XLENGTH(lhs), rhsLength = XLENGTH(rhs);
+    R_xlen_t resultLength;
+    if (lhsLength && rhsLength)
+        resultLength = (lhsLength >= rhsLength) ? lhsLength : rhsLength;
+    else
+        resultLength = 0;
+    SEXP res = allocVector(INTSXP, resultLength);
+    int* resValues = INTEGER(res);
+    const int *lhsValues = INTEGER_RO(lhs), *rhsValues = INTEGER_RO(rhs);
+    R_xlen_t iLhs = 0, iRhs = 0;
+    for (R_xlen_t i = 0; i < resultLength;
+         iLhs = (++iLhs == lhsLength) ? 0 : iLhs,
+                  iRhs = (++iRhs == rhsLength) ? 0 : iRhs, ++i) {
+        int currentValLeft = lhsValues[iLhs];
+        int currentValRight = rhsValues[iRhs];
+        bool guard =
+            currentValLeft == NA_INTEGER || currentValRight == NA_INTEGER;
+        if (testLimits)
+            guard = guard || currentValLeft < 0 || currentValRight > 31;
+        resValues[i] =
+            guard ? NA_INTEGER : operation(currentValLeft, currentValRight);
+    }
+    if (protects)
+        UNPROTECT(protects);
+    return res;
+}
 
 R_xlen_t asVecSize(R_bcstack_t x) {
     switch (x.tag) {
@@ -482,8 +541,38 @@ R_bcstack_t tryFastBuiltinCall(const CallContext& call,
             return nullStackObj;
         }
     }
+
+    case 678: { // "bitwiseAnd"
+        if (nargs != 2)
+            return nullptr;
+        return bitwiseOp(std::bit_and<int>(), args[0], args[1], false);
     }
 
-    return nullStackObj;
+    case 680: { // "bitwiseOr"
+        if (nargs != 2)
+            return nullptr;
+        return bitwiseOp(std::bit_or<int>(), args[0], args[1], false);
+    }
+
+    case 681: { // "bitwiseXor"
+        if (nargs != 2)
+            return nullptr;
+        return bitwiseOp(std::bit_xor<int>(), args[0], args[1], false);
+    }
+
+    case 682: { // "bitwiseShiftL"
+        if (nargs != 2)
+            return nullptr;
+        return bitwiseOp(bitShiftL(), args[0], args[1], false);
+    }
+
+    case 683: { // "bitwiseShiftL"
+        if (nargs != 2)
+            return nullptr;
+        return bitwiseOp(bitShiftR(), args[0], args[1], false);
+    }
+    }
+    return nullptr;
 }
+
 } // namespace rir

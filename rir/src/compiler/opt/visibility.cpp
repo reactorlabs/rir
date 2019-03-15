@@ -24,11 +24,11 @@ void OptimizeVisibility::apply(RirCompiler&, ClosureVersion* function,
             auto instr = *ip;
 
             if (auto vis = Visible::Cast(instr)) {
-                if (visible.at(vis) == CurrentVisibility::Visible) {
+                if (!visible.observed(vis)) {
                     next = bb->remove(ip);
                 }
             } else if (auto vis = Invisible::Cast(instr)) {
-                if (visible.at(vis) == CurrentVisibility::Invisible) {
+                if (!visible.observed(vis)) {
                     next = bb->remove(ip);
                 }
             }
