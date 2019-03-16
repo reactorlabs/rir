@@ -267,7 +267,7 @@ bool Instruction::envOnlyForObj() {
 LdConst::LdConst(SEXP c, PirType t)
     : FixedLenInstruction(t), idx(Pool::insert(c)) {}
 LdConst::LdConst(SEXP c)
-    : FixedLenInstruction(PirType(c)), idx(Pool::insert(c)) {}
+    : FixedLenInstruction(PirType(c).nonLazy()), idx(Pool::insert(c)) {}
 
 SEXP LdConst::c() const { return Pool::get(idx); }
 
@@ -511,8 +511,9 @@ void ScheduledDeopt::printArgs(std::ostream& out, bool tty) const {
 }
 
 MkFunCls::MkFunCls(Closure* cls, DispatchTable* originalBody, Value* lexicalEnv)
-    : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), cls(cls),
-      originalBody(originalBody) {}
+    : FixedLenInstructionWithEnvSlot(PirType(RType::closure).nonLazy(),
+                                     lexicalEnv),
+      cls(cls), originalBody(originalBody) {}
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) const {
     out << *cls;
@@ -639,7 +640,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<BC::PoolIdx>& names_, unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
-    pushArg(fun, RType::closure);
+    pushArg(fun, PirType(RType::closure).nonLazy());
     for (unsigned i = 0; i < args.size(); ++i) {
         pushArg(args[i], PirType(RType::prom) | RType::missing);
         auto name = Pool::get(names_[i]);

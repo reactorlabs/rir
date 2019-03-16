@@ -60,7 +60,9 @@ class UnboundValue : public SingletonValue<UnboundValue> {
 
   private:
     friend class SingletonValue;
-    UnboundValue() : SingletonValue(RType::unbound, Tag::UnboundValue) {}
+    UnboundValue()
+        : SingletonValue(PirType(RType::unbound).nonLazy(), Tag::UnboundValue) {
+    }
 };
 
 class True : public SingletonValue<True> {
@@ -97,7 +99,7 @@ class Tombstone : public Value {
             assert(false);
     }
     static Tombstone* closure() {
-        static Tombstone cls(RType::closure);
+        static Tombstone cls(PirType(RType::closure).nonLazy());
         return &cls;
     }
     static Tombstone* framestate() {
@@ -111,7 +113,7 @@ class Tombstone : public Value {
   private:
     explicit Tombstone(PirType t) : Value(t, Tag::Tombstone) {}
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

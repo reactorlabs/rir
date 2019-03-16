@@ -27,6 +27,8 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                     if (!envIsNeeded) {
                         i->elideEnv();
                         i->type.setNotObject();
+                        i->type.setNonLazy();
+                        i->effects.reset(Effect::Reflection);
                     }
                 }
 

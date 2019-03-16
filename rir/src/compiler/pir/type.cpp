@@ -83,8 +83,16 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     }
 
     if (PirType::vecs().isSuper(*this)) {
-        if (Rf_length(e) == 1)
+        if (Rf_length(e) == 1) {
             flags_.set(TypeFlags::isScalar);
+            flags_.reset(TypeFlags::lazy);
+            flags_.reset(TypeFlags::promiseWrapped);
+        }
+    }
+
+    if (TYPEOF(e) != PROMSXP) {
+        flags_.reset(TypeFlags::lazy);
+        flags_.reset(TypeFlags::promiseWrapped);
     }
 }
 
@@ -102,5 +110,5 @@ void PirType::merge(const ObservedValues& other) {
         merge(record.sexptype);
     }
 }
-}
-}
+} // namespace pir
+} // namespace rir

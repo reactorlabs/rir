@@ -9,10 +9,11 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t, Value* env) {
     if (v->type.maybePromiseWrapped() && !t.maybePromiseWrapped()) {
         return new pir::Force(v, env);
     }
-    if (v->type == RType::logical && t == NativeType::test) {
+    if (v->type == PirType(RType::logical).nonLazy() && t == NativeType::test) {
         return new pir::AsTest(v);
     }
-    if (!v->type.isA(RType::closure) && t == RType::closure) {
+    if (!v->type.isA(PirType(RType::closure).nonLazy()) &&
+        t == PirType(RType::closure).nonLazy()) {
         return new pir::ChkClosure(v);
     }
 

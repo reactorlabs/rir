@@ -238,7 +238,7 @@ class Instruction : public Value {
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();
 
-    virtual void updateType() {};
+    virtual void updateType(){};
 
     virtual void printEnv(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
@@ -580,11 +580,13 @@ class FLIE(LdFun, 2, Effects::Any()) {
     SEXP hint = nullptr;
 
     LdFun(const char* name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(PirType(RType::closure).nonLazy(),
+                                         {{PirType::any()}},
                                          {{Tombstone::closure()}}, env),
           varName(Rf_install(name)) {}
     LdFun(SEXP name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(PirType(RType::closure).nonLazy(),
+                                         {{PirType::any()}},
                                          {{Tombstone::closure()}}, env),
           varName(name) {
         assert(TYPEOF(name) == SYMSXP);
@@ -638,7 +640,7 @@ class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
   public:
     SEXP varName;
     explicit Missing(SEXP varName, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::logical, env),
+        : FixedLenInstructionWithEnvSlot(PirType(RType::logical).scalar(), env),
           varName(varName) {}
     void printArgs(std::ostream& out, bool tty) const override;
 };
@@ -653,7 +655,8 @@ class FLI(ChkMissing, 1, Effect::Warn) {
 class FLI(ChkClosure, 1, Effect::Warn) {
   public:
     explicit ChkClosure(Value* in)
-        : FixedLenInstruction(RType::closure, {{PirType::val()}}, {{in}}) {}
+        : FixedLenInstruction(PirType(RType::closure).nonLazy(),
+                              {{PirType::val()}}, {{in}}) {}
 };
 
 class FLIE(StVarSuper, 2, Effects() | Effect::ReadsEnv | Effect::WritesEnv) {
@@ -744,14 +747,14 @@ class FLIE(MkArg, 2, Effects::None()) {
 
   public:
     MkArg(Promise* prom, Value* v, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
-                                         env),
+        : FixedLenInstructionWithEnvSlot(PirType(RType::prom).nonLazy(),
+                                         {{PirType::val()}}, {{v}}, env),
           prom_(prom) {
         assert(eagerArg() == v);
     }
     MkArg(Value* v, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
-                                         env),
+        : FixedLenInstructionWithEnvSlot(PirType(RType::prom).nonLazy(),
+                                         {{PirType::val()}}, {{v}}, env),
           prom_(nullptr) {
         assert(eagerArg() == v);
     }
@@ -783,7 +786,9 @@ class FLIE(MkCls, 4, Effects::None()) {
   public:
     MkCls(Value* fml, Value* code, Value* src, Value* lexicalEnv)
         : FixedLenInstructionWithEnvSlot(
-              RType::closure, {{PirType::list(), RType::code, PirType::any()}},
+              PirType(RType::closure).nonLazy(),
+              {{PirType::list(), PirType(RType::code).nonLazy(),
+                PirType::any()}},
               {{fml, code, src}}, lexicalEnv) {}
 
     Value* lexicalEnv() const { return env(); }
@@ -807,12 +812,12 @@ class FLIE(Force, 2, Effects::Any()) {
     // Set to true if we are sure that the promise will be forced here
     bool strict = false;
     Force(Value* in, Value* env)
-        : FixedLenInstructionWithEnvSlot(in->type.forced(), {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(in->type.nonLazy(), {{PirType::any()}},
                                          {{in}}, env) {}
     Value* input() const { return arg(0).val(); }
     const char* name() const override { return strict ? "Force!" : "Force"; }
     void updateType() override final {
-        type = arg<0>().val()->type.forced();
+        type = arg<0>().val()->type.nonLazy();
         if (!input()->type.maybeLazy()) {
             effects.reset();
         }
@@ -828,8 +833,8 @@ class FLI(CastType, 1, Effects::None()) {
 class FLI(AsLogical, 1, Effect::Warn) {
   public:
     AsLogical(Value* in, unsigned srcIdx)
-        : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}},
-                              srcIdx) {}
+        : FixedLenInstruction(PirType(RType::logical).nonLazy(),
+                              {{PirType::val()}}, {{in}}, srcIdx) {}
 };
 
 class FLI(AsTest, 1, Effect::Error) {
@@ -959,7 +964,7 @@ class FLI(Is, 1, Effects::None()) {
 
 class FLI(LdFunctionEnv, 0, Effects::None()) {
   public:
-    LdFunctionEnv() : FixedLenInstruction(RType::env) {}
+    LdFunctionEnv() : FixedLenInstruction(PirType(RType::env).nonLazy()) {}
 };
 
 class FLI(EnsureNamed, 1, Effects::None()) {
@@ -1025,14 +1030,14 @@ SIMPLE_INSTRUCTIONS(V, _)
         void updateType() override final { maskEffectsOnNonObjects(); }        \
     }
 
-BINOP(Mul, PirType::val());
-BINOP(Div, PirType::val());
-BINOP(IDiv, PirType::val());
-BINOP(Mod, PirType::val());
-BINOP(Add, PirType::val());
-BINOP(Colon, PirType::val());
-BINOP(Pow, PirType::val());
-BINOP(Sub, PirType::val());
+BINOP(Mul, PirType::valOrLazy());
+BINOP(Div, PirType::valOrLazy());
+BINOP(IDiv, PirType::valOrLazy());
+BINOP(Mod, PirType::valOrLazy());
+BINOP(Add, PirType::valOrLazy());
+BINOP(Colon, PirType::valOrLazy());
+BINOP(Pow, PirType::valOrLazy());
+BINOP(Sub, PirType::valOrLazy());
 BINOP(Gte, RType::logical);
 BINOP(Lte, RType::logical);
 BINOP(Gt, RType::logical);
@@ -1050,8 +1055,8 @@ BINOP(Eq, RType::logical);
                                   {{lhs, rhs}}) {}                             \
     }
 
-BINOP_NOENV(LAnd, RType::logical);
-BINOP_NOENV(LOr, RType::logical);
+BINOP_NOENV(LAnd, PirType(RType::logical).scalar());
+BINOP_NOENV(LOr, PirType(RType::logical).scalar());
 
 #undef BINOP_NOENV
 
@@ -1188,7 +1193,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
                                        srcIdx) {
         assert(fs);
         pushArg(fs, NativeType::frameState);
-        pushArg(fun, RType::closure);
+        pushArg(fun, PirType(RType::closure).nonLazy());
         for (unsigned i = 0; i < args.size(); ++i)
             pushArg(args[i], PirType(RType::prom) | RType::missing);
     }
@@ -1374,7 +1379,9 @@ class VLIE(MkEnv, Effects::None()) {
     }
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args)
-        : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names) {
+        : VarLenInstructionWithEnvSlot(PirType(RType::env).nonLazy(),
+                                       lexicalEnv),
+          varName(names) {
         for (unsigned i = 0; i < varName.size(); ++i)
             pushArg(args[i], PirType::any());
     }

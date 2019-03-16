@@ -125,8 +125,10 @@ struct PirType {
     Type t_;
 
     static FlagSet defaultRTypeFlags() {
-        return FlagSet() | TypeFlags::rtype | TypeFlags::maybeObject;
+        return FlagSet() | TypeFlags::rtype | TypeFlags::maybeObject |
+               TypeFlags::lazy | TypeFlags::promiseWrapped;
     }
+
     static FlagSet optimisticRTypeFlags() {
         return FlagSet() | TypeFlags::rtype | TypeFlags::isScalar;
     }
@@ -174,7 +176,8 @@ struct PirType {
     static PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
-                       RType::missing | RType::unbound | RType::ast);
+                       RType::missing | RType::unbound | RType::ast)
+            .nonLazy();
     }
     static PirType vecs() { return num() | RType::str | RType::vec; }
     static PirType closure() { return RType::closure; }
@@ -224,6 +227,8 @@ struct PirType {
         assert(isRType());
         PirType t = *this;
         t.flags_.set(TypeFlags::isScalar);
+        t.flags_.reset(TypeFlags::lazy);
+        t.flags_.reset(TypeFlags::promiseWrapped);
         return t;
     }
 
@@ -242,7 +247,7 @@ struct PirType {
         return t;
     }
 
-    PirType forced() const {
+    PirType nonLazy() const {
         assert(isRType());
         PirType t = *this;
         t.flags_.reset(TypeFlags::promiseWrapped);
@@ -252,12 +257,13 @@ struct PirType {
 
     RIR_INLINE PirType baseType() const {
         assert(isRType());
-        return PirType(t_.r);
+        return PirType(t_.r).nonLazy();
     }
 
     RIR_INLINE void setNotMissing() { *this = notMissing(); }
     RIR_INLINE void setNotObject() { *this = notObject(); }
     RIR_INLINE void setScalar() { *this = scalar(); }
+    RIR_INLINE void setNonLazy() { *this = nonLazy(); }
 
     static const PirType voyd() { return NativeTypeSet(); }
     static const PirType bottom() { return PirType(RTypeSet()); }

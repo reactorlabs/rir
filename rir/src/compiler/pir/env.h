@@ -19,7 +19,8 @@ class Instruction;
  */
 class Env : public Value {
     Env(SEXP rho, Env* parent)
-        : Value(RType::env, Tag::Env), rho(rho), parent(parent) {}
+        : Value(PirType(RType::env).nonLazy(), Tag::Env), rho(rho),
+          parent(parent) {}
     friend class Module;
 
   public:
@@ -56,7 +57,7 @@ class Env : public Value {
 
     virtual ~Env() {}
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif
