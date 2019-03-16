@@ -199,7 +199,7 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
 }
 
 SEXP pirCompile(SEXP what, const Assumptions& assumptions,
-                const std::string& name, pir::DebugOptions debug) {
+                const std::string& name, const pir::DebugOptions& debug) {
 
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
