@@ -41,8 +41,10 @@ class TheScopeResolution {
                 // reflection
                 if (i->hasEnv() &&
                     (CallInstruction::CastCall(i) || Force::Cast(i)) &&
-                    after.noReflection())
+                    after.noReflection()) {
                     i->elideEnv();
+                    i->effects.reset(Effect::Reflection);
+                }
 
                 // Dead store to non-escaping environment can be removed
                 if (auto st = StVar::Cast(i)) {

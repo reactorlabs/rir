@@ -12,7 +12,7 @@ struct AvailableCheckpointsApply {
     static AbstractResult apply(AbstractUnique<Checkpoint>& state,
                                 Instruction* i) {
         if (state.get()) {
-            if (i->hasEffectIgnoreVisibility()) {
+            if (i->isDeoptBarrier()) {
                 state.clear();
                 return AbstractResult::Updated;
             }
