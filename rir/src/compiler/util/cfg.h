@@ -30,7 +30,14 @@ class DominanceGraph {
     typedef std::vector<BB*> BBList;
 
   private:
-    std::vector<BBList> dominating;
+    class DomTree {
+      public:
+        std::vector<BB*> container;
+        bool seen = false;
+        bool merge(const DomTree& other);
+        void push_back(BB* bb) { container.push_back(bb); }
+    };
+    std::vector<DomTree> dominating;
 
   public:
 

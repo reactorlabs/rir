@@ -65,31 +65,20 @@ const CFG::BBList& CFG::immediatePredecessors(BB* a) const {
     return predecessors_[a->id];
 }
 
-class DomTree : public std::vector<BB*> {
-  public:
-    bool seen = false;
-    bool merge(DomTree& other) {
-        if (*this == other)
-            return false;
-        bool changed = false;
-        auto it = begin();
-        while (it != end()) {
-            if (std::find(other.begin(), other.end(), *it) == other.end()) {
-                it = erase(it);
-                changed = true;
-            } else {
-                it++;
-            }
-        }
-        return changed;
-    }
-    void insert(const DomTree& other) {
-        for (const auto& bb : other) {
-            if (std::find(begin(), end(), bb) == end())
-                push_back(bb);
+bool DominanceGraph::DomTree::merge(const DomTree& other) {
+    bool changed = false;
+    auto it = container.begin();
+    while (it != container.end()) {
+        if (std::find(other.container.begin(), other.container.end(), *it) ==
+            other.container.end()) {
+            it = container.erase(it);
+            changed = true;
+        } else {
+            it++;
         }
     }
-};
+    return changed;
+        }
 
 DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
     // Static Analysis computes the set of all dominating bb's, for every bb
@@ -98,12 +87,11 @@ DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
     std::stack<BB*> todo;
     todo.push(start->entry);
 
-    std::vector<DomTree> dom(start->nextBBId);
-
     while (!todo.empty()) {
         BB* cur = todo.top();
-        auto front = dom[cur->id];
-        front.push_back(cur);
+        DomTree curState = dominating[cur->id];
+        curState.push_back(cur);
+        curState.seen = true;
 
         todo.pop();
 
@@ -111,44 +99,40 @@ DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
             if (!bb)
                 return;
 
-            auto& d = dom[bb->id];
-            if (!dom[bb->id].seen) {
-                d.seen = true;
-                d.insert(front);
+            auto& d = dominating[bb->id];
+            if (!d.seen) {
+                d = curState;
                 todo.push(bb);
                 return;
             }
 
-            if (d.merge(front))
+            if (d.merge(curState))
                 todo.push(bb);
         };
         apply(cur->trueBranch());
         apply(cur->falseBranch());
     }
-
-    for (size_t i = 0; i < start->nextBBId; ++i)
-        dominating[i] = std::move(dom[i]);
 }
 
 bool DominanceGraph::dominates(BB* a, BB* b) const {
-    const auto& doms = dominating[b->id];
+    const auto& doms = dominating[b->id].container;
     return std::find(doms.begin(), doms.end(), a) != doms.end();
 }
 
 bool DominanceGraph::immediatelyDominates(BB* a, BB* b) const {
-    const auto& doms = dominating[b->id];
+    const auto& doms = dominating[b->id].container;
     if (doms.empty())
         return false;
     return doms[doms.size() - 1] == a;
 }
 
 BB* DominanceGraph::immediateDominator(BB* bb) const {
-    const auto& doms = dominating[bb->id];
+    const auto& doms = dominating[bb->id].container;
     return doms[doms.size() - 1];
 }
 
 const DominanceGraph::BBList& DominanceGraph::dominators(BB* bb) const {
-    return dominating[bb->id];
+    return dominating[bb->id].container;
 }
 
 void DominanceGraph::dominatorTreeNext(
