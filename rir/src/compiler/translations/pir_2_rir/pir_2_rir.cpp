@@ -875,16 +875,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 EMPTY(PirCopy);
 #undef EMPTY
 
-            case Tag::IsObject: {
-                cs << BC::isobj();
-                break;
-            }
-
-            case Tag::IsEnvStub: {
-                cs << BC::isstubenv();
-                break;
-            }
-
 #define SIMPLE(Name, Factory)                                                  \
     case Tag::Name: {                                                          \
         cs << BC::Factory();                                                   \
@@ -894,6 +884,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Visible, visible);
                 SIMPLE(Invisible, invisible);
                 SIMPLE(Identical, identicalNoforce);
+                SIMPLE(IsObject, isobj);
+                SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
@@ -1030,12 +1022,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-                bool stub;
-                if (mkenv->stub)
-                    stub = true;
-                else
-                    stub = false;
-                cs << BC::mkEnv(mkenv->varName, mkenv->context, stub);
+                cs << BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub);
                 break;
             }
 
