@@ -2,7 +2,7 @@
 #define PIR_CFG_H
 
 #include "../pir/pir.h"
-#include <unordered_set>
+#include "utils/Set.h"
 #include <vector>
 
 namespace rir {
@@ -26,7 +26,10 @@ class CFG {
 };
 
 class DominanceGraph {
-    typedef std::unordered_set<BB*> BBList;
+  public:
+    typedef std::vector<BB*> BBList;
+
+  private:
     std::vector<BBList> dominating;
 
   public:
@@ -35,6 +38,23 @@ class DominanceGraph {
     explicit DominanceGraph(Code*);
 
     bool dominates(BB* a, BB* b) const;
+    bool immediatelyDominates(BB* a, BB* b) const;
+
+    BB* immediateDominator(BB*) const;
+    const BBList& dominators(BB*) const;
+    void dominatorTreeNext(BB* bb, const std::function<void(BB*)>&) const;
+};
+
+class DominanceFrontier {
+  public:
+    typedef SmallSet<BB*> BBList;
+
+  private:
+    std::vector<BBList> frontier;
+
+  public:
+    DominanceFrontier(Code* code, const CFG&, const DominanceGraph&);
+    const BBList& at(BB* bb) const;
 };
 }
 }

@@ -253,7 +253,7 @@ class TheCleanup {
             DominanceGraph dom(code);
             code->nextBBId = 0;
             DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
-                code, [&](BB* bb) {
+                code->entry, [&](BB* bb) {
                     bb->unsafeSetId(code->nextBBId++);
                     bb->gc();
                 });

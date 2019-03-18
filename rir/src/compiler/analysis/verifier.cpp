@@ -177,9 +177,19 @@ class TheVerifier {
                    "Only last instruction of BB can have controlflow");
 
         if (auto phi = Phi::Cast(i)) {
-            size_t directInputs = 0;
             phi->eachArg([&](BB* input, Value* v) {
                 if (auto iv = Instruction::Cast(v)) {
+                    if (iv == phi) {
+                        // Note: can happen in a one-block loop, but only if it
+                        // is not edge-split
+                        std::cerr << "Error at instruction '";
+                        i->print(std::cerr);
+                        std::cerr << "': input '";
+                        iv->printRef(std::cerr);
+                        std::cerr << "' phi has itself as input\n";
+                        ok = false;
+                    }
+
                     if (input == phi->bb()) {
                         // Note: can happen in a one-block loop, but only if it
                         // is not edge-split
@@ -194,9 +204,6 @@ class TheVerifier {
                     }
 
                     if (slow) {
-                        if (cfg(bb->owner).isImmediatePredecessor(input, bb))
-                            directInputs++;
-
                         if ((!cfg(bb->owner).isPredecessor(iv->bb(), i->bb()) ||
                              // A block can be it's own predecessor (loop). But
                              // then the input must come after the phi!
@@ -214,55 +221,30 @@ class TheVerifier {
                 }
             });
             if (slow) {
-                if (directInputs ==
-                    cfg(bb->owner).immediatePredecessors(bb).size()) {
-                    if (directInputs != phi->nargs()) {
-                        std::cout << "digraph { ";
-                        Visitor::run(f->entry, [&](BB* bb) {
-                            //                          std::cout << "BB" <<
-                            //                          bb->id << "
-                            //                          [shape=\"box\"
-                            //                          label=\"BB" << bb->id <<
-                            //                          "\"]; ";
-                            if (bb->next0)
-                                std::cout << "BB" << bb->id << " -> BB"
-                                          << bb->next0->id << "; ";
-                            if (bb->next1 && !Checkpoint::Cast(bb->last()))
-                                std::cout << "BB" << bb->id << " -> BB"
-                                          << bb->next1->id << "; ";
-                        });
-                        std::cout << "}\n";
-
+                std::unordered_set<BB*> inp;
+                for (auto in : cfg(bb->owner).immediatePredecessors(bb))
+                    inp.insert(in);
+                phi->eachArg([&](BB* bb, Value*) {
+                    auto pos = inp.find(bb);
+                    if (pos == inp.end()) {
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
-                        std::cerr << "'\nI have inputs from all my immediate "
-                                  << " predecessors but "
-                                  << phi->nargs() - directInputs
-                                  << " more arguments than immediate preds.\n";
-                        std::cerr << "This Means we created this kind of "
-                                     "graph, where a3 is in BB3 instead of\n"
-                                     "BB0. This will be impossible to convert "
-                                     "back to CSSA.\n"
-                                     "  .-----.                             \n"
-                                     "  | BB1 |         .-----.             \n"
-                                     "  |-----|----.----| BB0 |             \n"
-                                     "  | a1= |    |    '-----'             \n"
-                                     "  '-----'    v                        \n"
-                                     "          .-----.                     \n"
-                                     "          | BB3 |                     \n"
-                                     "          |-----|                     \n"
-                                     "          | a3= |                     \n"
-                                     "          '-----'                     \n"
-                                     "             |                        \n"
-                                     "             v                        \n"
-                                     "  .---------------------.             \n"
-                                     "  |         BB4         |             \n"
-                                     "  |---------------------|             \n"
-                                     "  | phi(BB1:a1, BB3:a3) |             \n"
-                                     "  '---------------------'             \n";
+                        std::cerr << " input BB" << bb->id
+                                  << " is not a predecessor\n";
                         ok = false;
-                        assert(false);
+                    } else {
+                        inp.erase(pos);
                     }
+                });
+                if (!inp.empty()) {
+                    std::cerr << "Error at instruction '";
+                    i->print(std::cerr);
+                    std::cerr << " the following predecessor blocks are not "
+                                 "handled in phi: ";
+                    for (auto& in : inp)
+                        std::cerr << in->id << " ";
+                    std::cerr << "\n";
+                    ok = false;
                 }
             }
         }

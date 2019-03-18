@@ -4,6 +4,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "compiler/analysis/verifier.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -138,7 +139,7 @@ class SSAAllocator {
         // Traverse the dominance graph in preorder and eagerly assign slots.
         // We assume that no critical paths exist, ie. we preprocessed the graph
         // such that every phi input is only used exactly once (by the phi).
-        DominatorTreeVisitor<>(dom).run(code, [&](BB* bb) {
+        DominatorTreeVisitor<>(dom).run(code->entry, [&](BB* bb) {
             auto findFreeSlot = [&](Instruction* i) {
                 SlotNumber slot = unassignedSlot;
                 for (;;) {
@@ -504,6 +505,9 @@ class Pir2Rir {
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     lower(code);
     toCSSA(code);
+#ifdef ENABLE_SLOWASSERT
+    Verify::apply(cls, true);
+#endif
     log.CSSA(code);
 
     SSAAllocator alloc(code, cls, log);
@@ -1212,112 +1216,6 @@ void Pir2Rir::lower(Code* code) {
             it = next;
         }
     });
-
-    // Lower phi functions - transform into a cfg where all input blocks of
-    // all phi functions are their immediate predecessors
-    {
-        bool done;
-        CFG cfg(code);
-        do {
-            done = true;
-            BreadthFirstVisitor::run(code->entry, [&](Instruction* i, BB* bb) {
-                // Check if this phi has the desired property
-                if (auto phi = Phi::Cast(i)) {
-                    bool ok = true;
-                    phi->eachArg([&](BB* inputBB, Value*) {
-                        if (!cfg.isImmediatePredecessor(inputBB, phi->bb()))
-                            ok = false;
-                    });
-                    if (ok)
-                        return;
-                    done = false;
-
-                    // Accumulate new arguments and inputs for the phi
-                    std::vector<std::pair<Value*, BB*>> update;
-
-                    // The idea here is to change the semantics of phi functions
-                    // from the one in PIR to the more common one. In PIR, phi
-                    // input blocks are not necessarily immediate predecessors.
-                    // The phi means, take the value associated with the last
-                    // visited bb from all the phi's input blocks. What we want
-                    // is, take the value associated with the immediate
-                    // predecessor block that we just came from. There is a
-                    // subtle difference when loops are in play...
-
-                    // We go backward breadth first from the phi's immediate
-                    // predecessors. The idea is, to every path we propagate all
-                    // the phi input values. If we find a block that creates one
-                    // of the inputs, we just update the input block for that
-                    // input. If we find a phi that has as argument one of the
-                    // inputs, we replace that argument with this phi. If we
-                    // find a merge block (ie. more than one immediate
-                    // predecessor), we insert a new phi that has as inputs the
-                    // inputs of the current one, and we update the current phi
-                    // to have the new phi as input.
-                    for (auto pred : cfg.immediatePredecessors(phi->bb())) {
-                        BreadthFirstVisitor::checkBackward(
-                            pred, cfg, [&](BB* bb) {
-                                // Check if block is the origin of one of the
-                                // phi args
-                                bool done = false;
-                                phi->eachArg([&](BB*, Value* val) {
-                                    assert(val->isInstruction());
-                                    if (Instruction::Cast(val)->bb() == bb) {
-                                        assert(!done);
-                                        update.emplace_back(val, pred);
-                                        done = true;
-                                    }
-                                });
-                                if (done)
-                                    return false;
-                                // Check if there is a phi in this block that
-                                // has one of the args the same as an arg to
-                                // the phi we are dealing with. If so, this phi
-                                // is the source of our phi input
-                                // (pretty much the case above but for phis)
-                                for (auto i : VisitorHelpers::reverse(*bb)) {
-                                    if (auto p = Phi::Cast(i)) {
-                                        bool stop = false;
-                                        p->eachArg([&](BB*, Value* v1) {
-                                            phi->eachArg([&](BB*, Value* v2) {
-                                                if (v1 == v2)
-                                                    stop = true;
-                                            });
-                                        });
-                                        if (stop) {
-                                            update.emplace_back(p, pred);
-                                            return false;
-                                        }
-                                    }
-                                }
-                                // Insert a new phi into a merge block
-                                if (cfg.immediatePredecessors(bb).size() > 1) {
-                                    auto newPhi = new Phi;
-                                    phi->eachArg([&](BB* b, Value* v) {
-                                        assert(v->isInstruction());
-                                        if (cfg.isPredecessor(
-                                                Instruction::Cast(v)->bb(), bb))
-                                            newPhi->addInput(
-                                                Instruction::Cast(v)->bb(), v);
-                                    });
-                                    bb->insert(bb->begin(), newPhi);
-                                    update.emplace_back(newPhi, pred);
-                                    return false;
-                                }
-                                return true;
-                            });
-                    }
-                    // Replace the current phi's args and inputs
-                    std::unordered_set<BB*> remove;
-                    phi->eachArg([&](BB* bb, Value*) { remove.insert(bb); });
-                    phi->removeInputs(remove);
-                    for (auto u : update) {
-                        phi->addInput(u.second, u.first);
-                    }
-                }
-            });
-        } while (!done);
-    }
 
     // Insert Nop into all empty blocks to make life easier
     Visitor::run(code->entry, [&](BB* bb) {

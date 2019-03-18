@@ -351,40 +351,19 @@ class DominatorTreeVisitor {
   public:
     explicit DominatorTreeVisitor(const DominanceGraph& dom) : dom(dom) {}
 
-    void run(Code* code, BBAction action) {
+    void run(BB* entry, BBAction action) const {
         Marker done;
-
         std::stack<BB*> todo;
-        std::stack<BB*> delayedTodo;
+        todo.push(entry);
 
-        todo.push(code->entry);
-        done.set(code->entry);
-
-        BB* cur;
-        while (!todo.empty() || !delayedTodo.empty()) {
-            if (!todo.empty()) {
-                cur = todo.top();
-                todo.pop();
-            } else {
-                cur = delayedTodo.top();
-                delayedTodo.pop();
+        while (!todo.empty()) {
+            BB* cur = todo.top();
+            todo.pop();
+            if (!done.check(cur)) {
+                done.set(cur);
+                dom.dominatorTreeNext(cur, [&](BB* bb) { todo.push(bb); });
+                action(cur);
             }
-
-            auto apply = [&](BB* next) {
-                if (!next || done.check(next))
-                    return;
-                if (dom.dominates(cur, next)) {
-                    todo.push(next);
-                } else {
-                    delayedTodo.push(next);
-                }
-                done.set(next);
-            };
-
-            apply(cur->next0);
-            apply(cur->next1);
-
-            action(cur);
         }
     }
 };
