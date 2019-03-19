@@ -1181,8 +1181,6 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
-
 #define BINDING_CACHE_SIZE 5
 typedef struct {
     SEXP loc;
@@ -1722,29 +1720,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
-
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
-
-            ostack_push(ctx, res);
-            NEXT();
-        }
-
-        INSTRUCTION(ldlval_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            res = cachedGetBindingCell(env, id, ctx, bindingCache);
-            assert(res);
-            res = CAR(res);
-            assert(res != R_UnboundValue);
-
-            R_Visible = TRUE;
-
-            if (TYPEOF(res) == PROMSXP)
-                res = PRVALUE(res);
-
-            assert(res != R_UnboundValue);
-            assert(res != R_MissingArg);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);

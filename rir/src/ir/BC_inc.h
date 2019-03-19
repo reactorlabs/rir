@@ -335,7 +335,6 @@ BC_NOARGS(V, _)
     inline static BC ldvarNoForce(SEXP sym);
     inline static BC ldvarSuper(SEXP sym);
     inline static BC ldvarNoForceSuper(SEXP sym);
-    inline static BC ldlval(SEXP sym);
     inline static BC ldddvar(SEXP sym);
     inline static BC ldarg(uint32_t offset);
     inline static BC ldloc(uint32_t offset);
@@ -596,7 +595,6 @@ BC_NOARGS(V, _)
         case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldvar_noforce_super_:
-        case Opcode::ldlval_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
         case Opcode::starg_:
