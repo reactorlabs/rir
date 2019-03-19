@@ -1181,9 +1181,7 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
-
-#define BINDING_CACHE_SIZE 5
+#define BINDING_CACHE_SIZE 29
 typedef struct {
     SEXP loc;
     Immediate idx;
