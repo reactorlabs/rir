@@ -1181,7 +1181,7 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-#define BINDING_CACHE_SIZE 5
+#define BINDING_CACHE_SIZE 29
 typedef struct {
     SEXP loc;
     Immediate idx;
@@ -1760,6 +1760,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache);
 
             NEXT();
@@ -1770,6 +1772,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache, true);
 
             NEXT();

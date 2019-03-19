@@ -354,42 +354,7 @@ class DominatorTreeVisitor {
   public:
     explicit DominatorTreeVisitor(const DominanceGraph& dom) : dom(dom) {}
 
-    void run(Code* code, BBAction action) {
-        Marker done;
-
-        std::stack<BB*> todo;
-        std::stack<BB*> delayedTodo;
-
-        todo.push(code->entry);
-        done.set(code->entry);
-
-        BB* cur;
-        while (!todo.empty() || !delayedTodo.empty()) {
-            if (!todo.empty()) {
-                cur = todo.top();
-                todo.pop();
-            } else {
-                cur = delayedTodo.top();
-                delayedTodo.pop();
-            }
-
-            auto apply = [&](BB* next) {
-                if (!next || done.check(next))
-                    return;
-                if (dom.dominates(cur, next)) {
-                    todo.push(next);
-                } else {
-                    delayedTodo.push(next);
-                }
-                done.set(next);
-            };
-
-            apply(cur->next0);
-            apply(cur->next1);
-
-            action(cur);
-        }
-    }
+    void run(BB* entry, BBAction action) const;
 };
 
 } // namespace pir
