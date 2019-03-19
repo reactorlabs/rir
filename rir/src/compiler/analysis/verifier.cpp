@@ -249,6 +249,15 @@ class TheVerifier {
             }
         }
 
+        if (auto fs = FrameState::Cast(i)) {
+            if (fs->env() == Env::elided()) {
+                std::cerr << "Error at instruction '";
+                i->print(std::cerr);
+                std::cerr << " framestate env cannot be elided\n";
+                ok = false;
+            }
+        }
+
         if (auto cast = CastType::Cast(i)) {
             auto arg = cast->arg<0>().val();
             // assertion is:

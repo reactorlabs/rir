@@ -198,24 +198,28 @@ class VisitorImplementation {
      *
      */
     static void run(BB* bb, const BBAction& action) {
-        forwardGenericRun<false>(bb, action);
+        forwardGenericRun<false>(bb, nullptr, action);
+    }
+
+    static void run(BB* bb, BB* stop, const BBAction& action) {
+        forwardGenericRun<false>(bb, stop, action);
     }
 
     static void runPostChange(BB* bb, const BBAction& action) {
-        forwardGenericRun<true>(bb, action);
+        forwardGenericRun<true>(bb, nullptr, action);
     }
 
     static bool check(BB* bb, const BBActionPredicate& action) {
-        return forwardGenericRun<false>(bb, action);
+        return forwardGenericRun<false>(bb, nullptr, action);
     }
 
     static void runBackward(BB* bb, CFG const& cfg, const BBAction& action) {
-        backwardGenericRun<false>(bb, cfg, action);
+        backwardGenericRun<false>(bb, nullptr, cfg, action);
     }
 
     static bool checkBackward(BB* bb, CFG const& cfg,
                               const BBActionPredicate& action) {
-        return backwardGenericRun<false>(bb, cfg, action);
+        return backwardGenericRun<false>(bb, nullptr, cfg, action);
     }
 
   protected:
@@ -223,7 +227,7 @@ class VisitorImplementation {
     typedef std::function<void(Schedule, BB*)> ScheduleNext;
 
     template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool forwardGenericRun(BB* bb, const ActionKind& action) {
+    static bool forwardGenericRun(BB* bb, BB* stop, const ActionKind& action) {
         struct Scheduler {
             RIR_INLINE std::array<BB*, 2> operator()(BB* cur) const {
                 if (ORDER == Order::Lowering) {
@@ -236,11 +240,11 @@ class VisitorImplementation {
             }
         };
         const Scheduler scheduler;
-        return genericRun<PROCESS_NEW_NODES>(bb, scheduler, action);
+        return genericRun<PROCESS_NEW_NODES>(bb, stop, scheduler, action);
     }
 
     template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool backwardGenericRun(BB* bb, CFG const& cfg,
+    static bool backwardGenericRun(BB* bb, BB* stop, CFG const& cfg,
                                    const ActionKind& action) {
         struct Scheduler {
             const CFG& cfg;
@@ -249,11 +253,11 @@ class VisitorImplementation {
             }
         };
         const Scheduler scheduler = {cfg};
-        return genericRun<PROCESS_NEW_NODES>(bb, scheduler, action);
+        return genericRun<PROCESS_NEW_NODES>(bb, stop, scheduler, action);
     }
 
     template <bool PROCESS_NEW_NODES, typename Scheduler, typename ActionKind>
-    static bool RIR_INLINE genericRun(BB* bb, Scheduler& scheduleNext,
+    static bool RIR_INLINE genericRun(BB* bb, BB* stop, Scheduler& scheduleNext,
                                       const ActionKind& action) {
         typedef VisitorHelpers::PredicateWrapper<ActionKind> PredicateWrapper;
         const PredicateWrapper predicate = {action};
@@ -267,8 +271,8 @@ class VisitorImplementation {
 
         while (cur) {
             next = nullptr;
-            auto schedule = [&next, &done, &delayed, &todo](BB* bb) {
-                if (!bb || done.check(bb))
+            auto schedule = [&](BB* bb) {
+                if (!bb || done.check(bb) || cur == stop)
                     return;
                 bool deoptBranch =
                     !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());

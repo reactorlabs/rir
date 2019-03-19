@@ -12,6 +12,10 @@ class LastVisibilityUpdate {
     std::unordered_set<Instruction*> observable;
     Instruction* last;
 
+    AbstractResult mergeExit(const LastVisibilityUpdate& other) {
+        return merge(other);
+    }
+
     AbstractResult merge(const LastVisibilityUpdate& other) {
         AbstractResult res;
         for (auto& v : other.observable) {

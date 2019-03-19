@@ -233,7 +233,8 @@ class Instruction : public Value {
     void replaceUsesWith(Value* val);
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
-    void replaceUsesIn(Value* val, BB* target);
+    void replaceUsesWithLimits(Value* val, BB* start,
+                               Instruction* stop = nullptr);
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();

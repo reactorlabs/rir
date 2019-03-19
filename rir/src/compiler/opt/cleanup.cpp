@@ -91,8 +91,7 @@ class TheCleanup {
                         next = bb->remove(ip);
                     }
                 } else if (auto env = MkEnv::Cast(i)) {
-                    static std::unordered_set<Tag> tags{Tag::FrameState,
-                                                        Tag::IsEnvStub};
+                    static std::unordered_set<Tag> tags{Tag::IsEnvStub};
                     if (env->stub && env->usesAreOnly(function->entry, tags)) {
                         env->replaceUsesWith(Env::elided());
                         removed = true;
