@@ -29,8 +29,8 @@ class TheCleanup {
                 Instruction* i = *ip;
                 auto next = ip + 1;
                 bool removed = false;
-                if (!i->hasEffect() && !i->changesEnv() && i->unused() &&
-                    !i->branchOrExit()) {
+                if (!i->branchOrExit() && !i->hasObservableEffects() &&
+                    i->unused()) {
                     removed = true;
                     next = bb->remove(ip);
                 } else if (auto force = Force::Cast(i)) {

@@ -109,8 +109,6 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             // If our analysis give us an environment approximation for the
             // ldfun, then we can at least contain the tainted environments.
             state.envs[ld.env].leaked = true;
-            for (auto env : state.envs.potentialParents(ld.env))
-                state.allStoresObserved.insert(env);
             state.envs[ld.env].taint();
             effect.taint();
             handled = true;
@@ -124,10 +122,6 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         if (superEnv != AbstractREnvironment::UnknownParent) {
             auto binding = state.envs.superGet(ss->env(), ss->varName);
             if (!binding.result.isUnknown()) {
-                // Make sure the super env stores are not prematurely removed
-                binding.result.eachSource([&](const ValOrig& src) {
-                    state.observedStores.insert(src.origin);
-                });
                 state.envs[superEnv].set(ss->varName, ss->val(), ss, depth);
                 handled = true;
                 effect.update();
@@ -136,8 +130,6 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
     } else if (auto missing = Missing::Cast(i)) {
         auto res = load(state, missing->varName, missing->env());
         if (!res.result.isUnknown()) {
-            res.result.eachSource(
-                [&](auto orig) { state.observedStores.insert(orig.origin); });
             handled = true;
         }
     } else if (Force::Cast(i)) {
@@ -284,12 +276,6 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 });
             }
 
-            if (envIsNeeded && i->readsEnv()) {
-                for (auto env : state.envs.potentialParents(i->env()))
-                    state.allStoresObserved.insert(env);
-                effect.update();
-            }
-
             if (envIsNeeded && i->leaksEnv()) {
                 state.envs[i->env()].leaked = true;
                 effect.update();
@@ -309,30 +295,6 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         }
     }
 
-    if (i->hasEnv()) {
-        // For dead store elimination remember what loads do. This lambda will
-        // be called in case of a load. If we know where exactly we load from,
-        // then we mark the stores as observed. If we do not know where we load
-        // from, then we need to mark all stores in the affected environment(s)
-        // as potentially observed.
-        lookup(state, i, [&](AbstractLoad load) {
-            if (load.result.isUnknown()) {
-                for (auto env : state.envs.potentialParents(i->env())) {
-                    if (!state.allStoresObserved.count(env)) {
-                        effect.lostPrecision();
-                        state.allStoresObserved.insert(env);
-                    }
-                }
-            } else {
-                load.result.eachSource([&](const ValOrig& src) {
-                    if (!state.observedStores.count(src.origin)) {
-                        state.observedStores.insert(src.origin);
-                        effect.update();
-                    }
-                });
-            }
-        });
-    }
     return effect;
 }
 

@@ -44,20 +44,14 @@ class TheScopeResolution {
                 // Force and callees can only see our env only through
                 // reflection
                 if (i->hasEnv() &&
-                    (CallInstruction::CastCall(i) || Force::Cast(i)) &&
-                    after.noReflection()) {
-                    i->elideEnv();
-                    i->effects.reset(Effect::Reflection);
-                }
-
-                // Dead store to non-escaping environment can be removed
-                if (auto st = StVar::Cast(i)) {
-                    if (finalState.envNotEscaped(st->env()) &&
-                        finalState.deadStore(st)) {
-                        next = bb->remove(ip);
+                    (CallInstruction::CastCall(i) || Force::Cast(i))) {
+                    if (after.noReflection()) {
+                        i->elideEnv();
+                        i->effects.reset(Effect::Reflection);
                     }
-                    ip = next;
-                    continue;
+                    if (after.envNotEscaped(i->env())) {
+                        i->effects.reset(Effect::LeaksEnv);
+                    }
                 }
 
                 // StVarSuper where the parent environment is known and

@@ -24,8 +24,6 @@ class ScopeAnalysisState {
     AbstractREnvironmentHierarchy envs;
     std::unordered_map<Instruction*, AbstractPirValue> returnValues;
     AbstractPirValue returnValue;
-    std::set<Instruction*> observedStores;
-    std::set<Value*> allStoresObserved;
 
     bool mayUseReflection = false;
 
@@ -39,21 +37,6 @@ class ScopeAnalysisState {
         if (!mayUseReflection && other.mayUseReflection) {
             mayUseReflection = true;
             res.lostPrecision();
-        }
-
-        allStoresObserved.insert(other.allStoresObserved.begin(),
-                                 other.allStoresObserved.end());
-        for (auto s : other.observedStores) {
-            if (!observedStores.count(s)) {
-                observedStores.insert(s);
-                res.update();
-            }
-        }
-        for (auto s : other.allStoresObserved) {
-            if (!allStoresObserved.count(s)) {
-                allStoresObserved.insert(s);
-                res.update();
-            }
         }
 
         return res.max(envs.merge(other.envs));
@@ -76,10 +59,6 @@ class ScopeAnalysisState {
 
     bool envNotEscaped(Value* v) const {
         return envs.known(v) && !envs.at(v).leaked;
-    }
-
-    bool deadStore(Instruction* i) const {
-        return !allStoresObserved.count(i->env()) && !observedStores.count(i);
     }
 
     bool noReflection() const { return !mayUseReflection; };

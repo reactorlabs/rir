@@ -1790,6 +1790,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache);
 
             NEXT();
@@ -1800,6 +1802,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache, true);
 
             NEXT();
