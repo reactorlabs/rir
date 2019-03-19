@@ -38,7 +38,7 @@ class TheVerifier {
             }
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
-                p->print(std::cerr, true);
+                p->print(std::cerr, true, false);
                 return;
             }
         });

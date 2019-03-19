@@ -27,6 +27,7 @@ namespace pir {
     V(DryRun)                                                                  \
     V(PrintIntoFiles)                                                          \
     V(PrintIntoStdout)                                                         \
+    V(OmitDeoptBranches)                                                       \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
 
 #define LIST_OF_DEBUG_STYLES(V)                                                \

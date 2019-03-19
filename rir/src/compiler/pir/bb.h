@@ -76,9 +76,9 @@ class BB {
 
     void swapWithNext(Instrs::iterator);
 
-    void print(std::ostream& = std::cout, bool tty = false);
-    void printGraph(std::ostream& = std::cout, bool tty = false);
-    void printBBGraph(std::ostream& = std::cout);
+    void print(std::ostream&, bool tty);
+    void printGraph(std::ostream&, bool omitDeoptBranches);
+    void printBBGraph(std::ostream&, bool omitDeoptBranches);
 
     Instrs::iterator begin() { return instrs.begin(); }
     Instrs::iterator end() { return instrs.end(); }
@@ -92,7 +92,7 @@ class BB {
     void gc();
 
     bool isExit() const { return !next0 && !next1; }
-
+    bool isDeopt() const;
     bool isBranch() const { return next0 && next1; }
 
     void setBranch(BB* trueBranch, BB* falseBranch) {
