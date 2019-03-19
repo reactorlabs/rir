@@ -34,7 +34,7 @@ void BB::print(std::ostream& out, bool tty) {
     }
 }
 
-void BB::printGraph(std::ostream& out, bool tty) {
+void BB::printGraph(std::ostream& out, bool omitDeoptBranches) {
     out << "BB" << uid()
         << " [shape=\"box\", fontname=\"monospace\", xlabel=\"BB" << id
         << "\", label=\"\\\n";
@@ -44,26 +44,41 @@ void BB::printGraph(std::ostream& out, bool tty) {
         out << escapeString(buf.str()) << "\\l\\\n";
     }
     out << "\"];\n";
+
+    bool printDeoptOnlyDefault =
+        omitDeoptBranches && !isEmpty() && Checkpoint::Cast(last());
     if (!instrs.empty() && last()->branches()) {
-        last()->printGraphBranches(out, uid());
+        if (!printDeoptOnlyDefault)
+            last()->printGraphBranches(out, uid());
     }
-    if (isJmp()) {
+    if (isJmp() || printDeoptOnlyDefault) {
         out << "BB" << uid() << " -> "
             << "BB" << next0->uid() << ";\n";
     }
+    if (printDeoptOnlyDefault)
+        out << "BB" << uid() << " -> d" << next1->id << " [color=red];\n";
     out << "\n";
 }
 
-void BB::printBBGraph(std::ostream& out) {
+void BB::printBBGraph(std::ostream& out, bool omitDeoptBranches) {
     out << "BB" << uid() << " [shape=\"circle\", label=\"BB" << id << "\"];\n";
+    bool printDeoptOnlyDefault =
+        omitDeoptBranches && !isEmpty() && Checkpoint::Cast(last());
     if (!instrs.empty() && last()->branches()) {
-        last()->printGraphBranches(out, uid());
+        if (!printDeoptOnlyDefault)
+            last()->printGraphBranches(out, uid());
     }
-    if (isJmp()) {
+    if (isJmp() || printDeoptOnlyDefault) {
         out << "BB" << uid() << " -> "
             << "BB" << next0->uid() << ";\n";
     }
+    if (printDeoptOnlyDefault)
+        out << "BB" << uid() << " -> d" << next1->id << " [color=red];\n";
     out << "\n";
+}
+
+bool BB::isDeopt() const {
+    return !isEmpty() && (Deopt::Cast(last()) || ScheduledDeopt::Cast(last()));
 }
 
 BB::~BB() {

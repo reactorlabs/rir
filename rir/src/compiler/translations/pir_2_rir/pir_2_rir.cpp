@@ -1184,7 +1184,7 @@ void Pir2Rir::lower(Code* code) {
                     debugMessage += dump.str();
                     debugMessage += " failed in\n";
                     dump.str("");
-                    code->printCode(dump, true);
+                    code->printCode(dump, false, false);
                     debugMessage += dump.str();
                 }
                 BBTransform::lowerExpect(

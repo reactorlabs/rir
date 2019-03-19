@@ -62,7 +62,8 @@ void LogStream::compilationEarlyPir(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         preparePrint();
         section("Compiled to PIR Version");
-        closure->print(options.style, out, tty());
+        closure->print(options.style, out, tty(),
+                       options.includes(DebugFlag::OmitDeoptBranches));
     }
 }
 
@@ -72,7 +73,8 @@ void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
         std::regex_match(name.begin(), name.end(), options.functionFilter)) {
         preparePrint();
         section("PIR Version After Optimizations");
-        closure->print(options.style, out, tty());
+        closure->print(options.style, out, tty(),
+                       options.includes(DebugFlag::OmitDeoptBranches));
         out << "\n";
     }
 }
@@ -111,7 +113,8 @@ void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
 void LogStream::pirOptimizations(ClosureVersion* closure,
                                  const PirTranslator* pass) {
     if (shouldLog(closure, pass, options)) {
-        closure->print(options.style, out, tty());
+        closure->print(options.style, out, tty(),
+                       options.includes(DebugFlag::OmitDeoptBranches));
     }
 }
 
@@ -129,7 +132,8 @@ void LogStream::afterAllocator(Code* code,
     if (options.includes(DebugFlag::PrintAllocator)) {
         preparePrint();
         section("PIR SSA allocator");
-        code->printCode(out, tty());
+        code->printCode(out, tty(),
+                        options.includes(DebugFlag::OmitDeoptBranches));
         out << "\n";
         allocDebug(out);
     }
@@ -139,7 +143,8 @@ void LogStream::CSSA(Code* code) {
     if (options.includes(DebugFlag::PrintCSSA)) {
         preparePrint();
         section("CSSA Version");
-        code->printCode(out, tty());
+        code->printCode(out, tty(),
+                        options.includes(DebugFlag::OmitDeoptBranches));
         out << "\n";
     }
 }
@@ -148,7 +153,8 @@ void LogStream::finalPIR(ClosureVersion* code) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         preparePrint();
         section("Final PIR Version");
-        code->print(options.style, out, tty());
+        code->print(options.style, out, tty(),
+                    options.includes(DebugFlag::OmitDeoptBranches));
         out << "\n";
     }
 }
