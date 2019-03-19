@@ -196,15 +196,25 @@ class TheCleanup {
                 toDel[d] = nullptr;
             }
         });
-        Visitor::run(function->entry, [&](BB* bb) {
-            // Remove empty jump-through blocks
-            if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
-                cfg.hasSinglePred(bb->next0->next0) &&
-                usedBB.find(bb->next0) == usedBB.end()) {
-                toDel[bb->next0] = bb->next0->next0;
+        // Merge blocks
+        Visitor::runPostChange(function->entry, [&](BB* bb) {
+            if (bb->isJmp() && cfg.hasSinglePred(bb) &&
+                usedBB.find(bb->next0) == usedBB.end() &&
+                cfg.hasSinglePred(bb->next0)) {
+                BB* d = bb->next0;
+                while (!d->isEmpty()) {
+                    d->moveToEnd(d->begin(), bb);
+                }
+                bb->next0 = d->next0;
+                bb->next1 = d->next1;
+                d->next0 = nullptr;
+                d->next1 = nullptr;
+                fixupPhiInput(d, bb);
+                toDel[d] = nullptr;
             }
         });
-        Visitor::run(function->entry, [&](BB* bb) {
+
+        Visitor::runPostChange(function->entry, [&](BB* bb) {
             // Remove empty branches
             if (bb->next0 && bb->next1) {
                 if (bb->next0->isEmpty() && bb->next1->isEmpty() &&
@@ -218,10 +228,6 @@ class TheCleanup {
                 }
             }
         });
-        // if (function->entry->isJmp() && function->entry->empty()) {
-        //     toDel[function->entry] = function->entry->next0;
-        //     function->entry = function->entry->next0;
-        // }
         if (function->entry->isJmp() &&
             cfg.hasSinglePred(function->entry->next0)) {
             BB* bb = function->entry;
