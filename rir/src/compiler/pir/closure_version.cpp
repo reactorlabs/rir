@@ -8,7 +8,7 @@
 
 namespace rir {
 namespace pir {
-    
+
 void ClosureVersion::print(std::ostream& out, bool tty) const {
     print(DebugStyle::Standard, out, tty);
 }
@@ -19,41 +19,53 @@ void ClosureVersion::print(DebugStyle style, std::ostream& out, bool tty) const 
         printStandard(out, tty);
         break;
     case DebugStyle::GraphViz:
-        printGraph(out, tty);
+        printGraph(out);
         break;
     case DebugStyle::GraphVizBB:
-        printBBGraph(out, tty);
+        printBBGraph(out);
         break;
     default:
         assert(false);
     }
 }
-    
+
 void ClosureVersion::printStandard(std::ostream& out, bool tty) const {
     out << *this << "\n";
     printCode(out, tty);
     for (auto p : promises_) {
         if (p)
-            p->print(out, tty);
+            p->printCode(out, tty);
     }
 }
 
-void ClosureVersion::printGraph(std::ostream& out, bool tty) const {
-    out << *this << "\n";
-    printGraphCode(out, tty);
+void ClosureVersion::printGraph(std::ostream& out) const {
+    out << "digraph {\n";
+    out << "label=\"" << *this << "\";\n";
+    printGraphCode(out);
     for (auto p : promises_) {
-        if (p)
-            p->print(out, tty);
+        if (p) {
+            out << "subgraph p" << p->id << "{\n";
+            out << "label = \"Promise " << p->id << "\";\n";
+            p->printGraphCode(out);
+            out << "}\n";
+        }
     }
+    out << "}\n";
 }
 
-void ClosureVersion::printBBGraph(std::ostream& out, bool tty) const {
-    out << *this << "\n";
+void ClosureVersion::printBBGraph(std::ostream& out) const {
+    out << "digraph {\n";
+    out << "label=\"" << *this << "\";\n";
     printBBGraphCode(out);
     for (auto p : promises_) {
-        if (p)
-            p->print(out, tty);
+        if (p) {
+            out << "subgraph {\n";
+            out << "label=\"Promise " << p->id << "\";\n";
+            p->printBBGraphCode(out);
+            out << "}\n";
+        }
     }
+    out << "}\n";
 }
 
 Promise* ClosureVersion::createProm(unsigned srcPoolIdx) {

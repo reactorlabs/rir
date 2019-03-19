@@ -20,7 +20,7 @@ class Code {
 
     Code() {}
     void printCode(std::ostream&, bool tty) const;
-    void printGraphCode(std::ostream&, bool tty) const;
+    void printGraphCode(std::ostream&) const;
     void printBBGraphCode(std::ostream&) const;
     virtual ~Code();
 

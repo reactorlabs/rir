@@ -115,6 +115,7 @@ class BB {
         assert(next0 && !next1);
         return next0;
     }
+    size_t uid() { return (size_t)this; }
 
     // don't use them directly unless you know what you are doing
     // We don't want to make them private, since we are all adults. But there

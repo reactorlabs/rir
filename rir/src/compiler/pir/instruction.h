@@ -221,7 +221,7 @@ class Instruction : public Value {
     virtual void printEnv(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
     virtual void printGraphArgs(std::ostream& out, bool tty) const;
-    virtual void printGraphBranches(std::ostream& out, int bbId) const;
+    virtual void printGraphBranches(std::ostream& out, size_t bbId) const;
     virtual void print(std::ostream& out, bool tty = false) const;
     void printGraph(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
@@ -714,7 +714,7 @@ class Branch
     }
     void printArgs(std::ostream& out, bool tty) const override;
     void printGraphArgs(std::ostream& out, bool tty) const override;
-    void printGraphBranches(std::ostream& out, int bbId) const override;
+    void printGraphBranches(std::ostream& out, size_t bbId) const override;
 };
 
 class Return
@@ -1459,7 +1459,7 @@ class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
     Checkpoint() : FixedLenInstruction(NativeType::checkpoint) {}
     void printArgs(std::ostream& out, bool tty) const override;
     void printGraphArgs(std::ostream& out, bool tty) const override;
-    void printGraphBranches(std::ostream& out, int bbId) const override;
+    void printGraphBranches(std::ostream& out, size_t bbId) const override;
     BB* deoptBranch();
 };
 

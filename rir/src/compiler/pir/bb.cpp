@@ -35,8 +35,9 @@ void BB::print(std::ostream& out, bool tty) {
 }
 
 void BB::printGraph(std::ostream& out, bool tty) {
-    out << "BB" << id << " [shape=\"box\", fontname=\"monospace\", xlabel=\"BB"
-        << id << "\", label=\"\\\n";
+    out << "BB" << uid()
+        << " [shape=\"box\", fontname=\"monospace\", xlabel=\"BB" << id
+        << "\", label=\"\\\n";
     for (auto i : instrs) {
         std::stringstream buf;
         i->printGraph(buf);
@@ -44,23 +45,23 @@ void BB::printGraph(std::ostream& out, bool tty) {
     }
     out << "\"];\n";
     if (!instrs.empty() && last()->branches()) {
-        last()->printGraphBranches(out, id);
+        last()->printGraphBranches(out, uid());
     }
     if (isJmp()) {
-        out << "BB" << id << " -> "
-            << "BB" << next0->id << ";\n";
+        out << "BB" << uid() << " -> "
+            << "BB" << next0->uid() << ";\n";
     }
     out << "\n";
 }
 
 void BB::printBBGraph(std::ostream& out) {
-    out << "BB" << id << " [shape=\"circle\", label=\"BB" << id << "\"];\n";
+    out << "BB" << uid() << " [shape=\"circle\", label=\"BB" << id << "\"];\n";
     if (!instrs.empty() && last()->branches()) {
-        last()->printGraphBranches(out, id);
+        last()->printGraphBranches(out, uid());
     }
     if (isJmp()) {
-        out << "BB" << id << " -> "
-            << "BB" << next0->id << ";\n";
+        out << "BB" << uid() << " -> "
+            << "BB" << next0->uid() << ";\n";
     }
     out << "\n";
 }

@@ -71,8 +71,8 @@ class ClosureVersion : public Code {
     void print(std::ostream& out, bool tty) const;
     void print(DebugStyle style, std::ostream& out, bool tty) const;
     void printStandard(std::ostream& out, bool tty) const;
-    void printGraph(std::ostream& out, bool tty) const;
-    void printBBGraph(std::ostream& out, bool tty) const;
+    void printGraph(std::ostream& out) const;
+    void printBBGraph(std::ostream& out) const;
 
     Promise* createProm(unsigned srcPoolIdx);
 

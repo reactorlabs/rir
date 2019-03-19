@@ -81,7 +81,7 @@ void Instruction::printGraphArgs(std::ostream& out, bool tty) const {
     printArgs(out, tty);
 }
 
-void Instruction::printGraphBranches(std::ostream& out, int bbId) const {
+void Instruction::printGraphBranches(std::ostream& out, size_t bbId) const {
     assert(false);
 }
 
@@ -291,10 +291,10 @@ void Branch::printGraphArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
 }
 
-void Branch::printGraphBranches(std::ostream& out, int bbId) const {
-    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->id
+void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid()
         << " [color=green];\n  BB" << bbId << " -> BB"
-        << bb()->falseBranch()->id << " [color=red];\n";
+        << bb()->falseBranch()->uid() << " [color=red];\n";
 }
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
@@ -685,9 +685,9 @@ void Checkpoint::printGraphArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
 }
 
-void Checkpoint::printGraphBranches(std::ostream& out, int bbId) const {
-    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->id << ";\n  BB"
-        << bbId << " -> BB" << bb()->falseBranch()->id << " [color=red];\n";
+void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid() << ";\n  BB"
+        << bbId << " -> BB" << bb()->falseBranch()->uid() << " [color=red];\n";
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
