@@ -593,6 +593,7 @@ class FLIE(LdFun, 2, Effects::Any(), EnvAccess::Write) {
 class FLIE(LdVar, 1, Effect::Error, EnvAccess::Read) {
   public:
     SEXP varName;
+    bool fusedWithForce = false;
 
     LdVar(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::any(), env),

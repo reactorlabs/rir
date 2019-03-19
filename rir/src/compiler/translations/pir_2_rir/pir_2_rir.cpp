@@ -782,7 +782,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
-                cs << BC::ldvarNoForce(ldvar->varName);
+                cs << (ldvar->fusedWithForce
+                           ? BC::ldvar(ldvar->varName)
+                           : BC::ldvarNoForce(ldvar->varName));
                 break;
             }
 
@@ -1195,6 +1197,26 @@ void Pir2Rir::lower(Code* code) {
                 bb->next1 = nullptr;
             } else if (MkArg::Cast(*it) && (*it)->unused()) {
                 next = bb->remove(it);
+            }
+            it = next;
+        }
+    });
+
+    // Fuse together pairs of loads and forces - in rir we have
+    // an instruction that does the force implicitly
+    Visitor::run(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (auto ldvar = LdVar::Cast(*it)) {
+                auto use = ldvar->hasSingleUse();
+                if (use && Force::Cast(use) && next != bb->end() &&
+                    use == *next) {
+                    ldvar->fusedWithForce = true;
+                    ldvar->type = ldvar->type.forced();
+                    use->replaceUsesWith(ldvar);
+                    next = bb->remove(next);
+                }
             }
             it = next;
         }
