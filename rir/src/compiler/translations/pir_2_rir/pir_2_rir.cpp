@@ -525,6 +525,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     LastEnv lastEnv(cls, code, log);
     std::unordered_map<Value*, BC::Label> pushContexts;
 
+    std::deque<unsigned> order;
+    LoweringVisitor::run(code->entry, [&](BB* bb) {
+        if (!isJumpThrough(bb))
+            order.push_back(bb->id);
+    });
+
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
             return;
@@ -537,6 +543,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             return bb;
         };
 
+        order.pop_front();
         cs << bbLabels[bb];
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
@@ -827,12 +834,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Branch: {
                 auto trueBranch = jumpThroughEmpty(bb->trueBranch());
                 auto falseBranch = jumpThroughEmpty(bb->falseBranch());
-                // cs << BC::brtrue(bbLabels[trueBranch])
-                //    << BC::br(bbLabels[falseBranch]);
-                // this version looks better on a microbenchmark.. need to
-                // investigate
-                cs << BC::brfalse(bbLabels[falseBranch])
-                   << BC::br(bbLabels[trueBranch]);
+                if (trueBranch->id == order.front()) {
+                    cs << BC::brfalse(bbLabels[falseBranch])
+                       << BC::br(bbLabels[trueBranch]);
+                } else {
+                    cs << BC::brtrue(bbLabels[trueBranch])
+                       << BC::br(bbLabels[falseBranch]);
+                }
 
                 // This is the end of this BB
                 return;

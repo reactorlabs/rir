@@ -226,13 +226,7 @@ class VisitorImplementation {
     static bool forwardGenericRun(BB* bb, const ActionKind& action) {
         struct Scheduler {
             RIR_INLINE std::array<BB*, 2> operator()(BB* cur) const {
-                if (ORDER == Order::Lowering) {
-                    // Curently we emit only brtrue in pir2rir, therefore we
-                    // always want next1 to be the fallthrough case.
-                    return {{cur->next1, cur->next0}};
-                } else {
-                    return {{cur->next0, cur->next1}};
-                }
+                return {{cur->next0, cur->next1}};
             }
         };
         const Scheduler scheduler;
@@ -270,14 +264,24 @@ class VisitorImplementation {
             auto schedule = [&next, &done, &delayed, &todo](BB* bb) {
                 if (!bb || done.check(bb))
                     return;
-                bool deoptBranch =
-                    !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());
-                if (ORDER == Order::Lowering && deoptBranch) {
-                    delayed.push_back(bb);
-                } else if (!next && todo.empty()) {
-                    next = bb;
+                if (ORDER == Order::Lowering) {
+                    bool deoptBranch =
+                        !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());
+                    bool returnBranch =
+                        !bb->isEmpty() && Return::Cast(bb->last());
+                    if (deoptBranch) {
+                        delayed.push_back(bb);
+                    } else if (returnBranch) {
+                        delayed.push_front(bb);
+                    } else {
+                        enqueue(todo, bb);
+                    }
                 } else {
-                    enqueue(todo, bb);
+                    if (!next && todo.empty()) {
+                        next = bb;
+                    } else {
+                        enqueue(todo, bb);
+                    }
                 }
                 done.set(bb);
             };
@@ -321,8 +325,7 @@ class VisitorImplementation {
 
     static void enqueue(std::deque<BB*>& todo, BB* bb) {
         // For analysis random search is faster
-        if (ORDER == Order::Breadth || ORDER == Order::Lowering ||
-            (ORDER == Order::Random && coinFlip()))
+        if (ORDER == Order::Breadth || (ORDER == Order::Random && coinFlip()))
             todo.push_back(bb);
         else
             todo.push_front(bb);
