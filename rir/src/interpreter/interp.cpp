@@ -1623,7 +1623,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             res = cachedGetVar(env, id, ctx, bindingCache);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1649,7 +1648,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             res = cachedGetVar(env, id, ctx, bindingCache);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1671,7 +1669,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, ENCLOS(env));
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1695,7 +1692,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, ENCLOS(env));
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1715,7 +1711,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_ddfindVar(sym, env);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -2689,7 +2684,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostack_popn(ctx, 3);
 
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }
@@ -2714,7 +2708,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostack_popn(ctx, 4);
 
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }
@@ -2781,7 +2774,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 goto fallback;
             }
 
-            R_Visible = TRUE;
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -2803,7 +2795,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             ostack_popn(ctx, 3);
 
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }
@@ -2830,7 +2821,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             ostack_popn(ctx, 4);
 
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }

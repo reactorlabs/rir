@@ -559,6 +559,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::extract1_1();
         }
         cs.addSrc(ast);
+        cs << BC::visible();
         return true;
     }
 
@@ -873,6 +874,7 @@ void compileGetvar(CodeStream& cs, SEXP name) {
     } else {
         cs << BC::ldvar(name);
     }
+    cs << BC::visible();
 }
 
 // Constant
