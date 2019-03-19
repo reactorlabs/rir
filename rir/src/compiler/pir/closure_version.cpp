@@ -63,8 +63,10 @@ Promise* ClosureVersion::createProm(unsigned srcPoolIdx) {
 }
 
 ClosureVersion::~ClosureVersion() {
-    for (auto p : promises_)
-        delete p;
+    for (auto p : promises_) {
+        if (p)
+            delete p;
+    }
 }
 
 ClosureVersion* ClosureVersion::clone(const Assumptions& newAssumptions) {

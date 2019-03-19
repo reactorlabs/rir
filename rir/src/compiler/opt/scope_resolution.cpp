@@ -17,9 +17,13 @@ class TheScopeResolution {
   public:
     ClosureVersion* function;
     CFG cfg;
+    DominanceGraph dom;
+    DominanceFrontier dfront;
+    ;
     LogStream& log;
     explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
-        : function(function), cfg(function), log(log) {}
+        : function(function), cfg(function), dom(function),
+          dfront(function, cfg, dom), log(log) {}
 
     void operator()() {
         ScopeAnalysis analysis(function, log);
@@ -155,30 +159,86 @@ class TheScopeResolution {
                         });
 
                         if (onlyLocalVals && !res.isUnknown()) {
-                            std::vector<BB*> inputs;
+                            std::unordered_map<BB*, Value*> inputs;
+                            bool fail = false;
                             res.eachSource([&](ValOrig v) {
-                                if (auto i = Instruction::Cast(v.val))
-                                    inputs.push_back(i->bb());
-                            });
-                            if (auto phiBlock =
-                                    PhiPlacement::find(cfg, bb, inputs)) {
-                                // Insert a new phi
-                                auto phi = new Phi;
-                                res.eachSource([&](const ValOrig& src) {
-                                    phi->addInput(src.origin->bb(), src.val);
-                                });
-                                phi->updateType();
-                                if (!phi->type.isA(res.type))
-                                    i->type = res.type;
-                                i->replaceUsesWith(phi);
-                                if (phiBlock == bb) {
-                                    bb->replace(ip, phi);
-                                } else {
-                                    phiBlock->insert(phiBlock->begin(), phi);
-                                    next = bb->remove(ip);
+                                auto i = Instruction::Cast(v.val);
+                                if (fail || !i || inputs.count(i->bb())) {
+                                    fail = true;
                                 }
+                                inputs[i->bb()] = i;
+                            });
+                            if (!fail) {
+                                auto placement = PhiPlacement::compute(
+                                    function, inputs, cfg, dom, dfront);
+                                auto dominators = dom.dominators(bb);
+                                int maxDom = 0;
+                                BB* resPhiPos = nullptr;
+                                for (auto& phi : placement) {
+                                    if (phi.first == bb) {
+                                        resPhiPos = bb;
+                                    } else {
+                                        auto pos = std::find(dominators.begin(),
+                                                             dominators.end(),
+                                                             phi.first);
+                                        if (pos != dominators.end()) {
+                                            if (pos - dominators.begin() >
+                                                maxDom)
+                                                maxDom =
+                                                    pos - dominators.begin();
+                                        }
+                                    }
+                                }
+                                if (!resPhiPos)
+                                    resPhiPos = dominators[maxDom];
 
-                                return;
+                                if (placement.size() > 0) {
+                                    std::unordered_map<BB*, Phi*> created;
+                                    for (auto& phi : placement) {
+                                        created[phi.first] = new Phi;
+                                    }
+
+                                    bool replaced = false;
+                                    for (auto& computed : placement) {
+                                        auto& pos = computed.first;
+                                        auto& phi = created.at(pos);
+
+                                        assert(computed.second.size() > 1);
+                                        for (auto& p : computed.second) {
+                                            if (p.aValue) {
+                                                phi->addInput(p.inputBlock,
+                                                              p.aValue);
+                                            } else {
+                                                phi->addInput(
+                                                    p.inputBlock,
+                                                    created.at(p.otherPhi));
+                                            }
+                                        };
+
+                                        if (pos == bb) {
+                                            replaced = true;
+                                            bb->replace(ip, phi);
+                                        } else {
+                                            pos->insert(pos->begin(), phi);
+                                        }
+                                    }
+
+                                    for (auto& phi : created)
+                                        phi.second->updateType();
+                                    for (auto& phi : created) {
+                                        if (!phi.second->type.isA(res.type))
+                                            phi.second->type = res.type;
+                                    }
+                                    for (auto& phi : created)
+                                        phi.second->updateType();
+
+                                    if (!replaced)
+                                        next = bb->remove(ip);
+
+                                    auto resPhi = created.at(resPhiPos);
+                                    i->replaceUsesWith(resPhi);
+                                    return;
+                                }
                             }
                         }
                     }
