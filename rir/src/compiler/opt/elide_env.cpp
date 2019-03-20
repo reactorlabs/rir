@@ -27,7 +27,7 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                         i->elideEnv();
                         i->type.setNotObject();
                         i->effects.reset(Effect::Reflection);
-                        i->type = i->type->forced();
+                        i->type = i->type.forced();
                     }
                 }
 
