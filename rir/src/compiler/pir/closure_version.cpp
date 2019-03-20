@@ -35,8 +35,10 @@ void ClosureVersion::printStandard(std::ostream& out, bool tty,
     out << *this << "\n";
     printCode(out, tty, omitDeoptBranches);
     for (auto p : promises_) {
-        if (p)
+        if (p) {
+            out << "Prom " << p->id << ":\n";
             p->printCode(out, tty, omitDeoptBranches);
+        }
     }
 }
 
