@@ -166,6 +166,8 @@ class TheCleanup {
                     if (phi->inputAt(i) == old)
                         phi->updateInputAt(i, n);
             }
+            usedBB[n].insert(usedBB[old].begin(), usedBB[old].end());
+            usedBB.erase(usedBB.find(old));
         };
 
         CFG cfg(function);
@@ -195,10 +197,10 @@ class TheCleanup {
                 toDel[d] = nullptr;
             }
         });
+
         // Merge blocks
         Visitor::runPostChange(function->entry, [&](BB* bb) {
             if (bb->isJmp() && cfg.hasSinglePred(bb) &&
-                usedBB.find(bb->next0) == usedBB.end() &&
                 cfg.hasSinglePred(bb->next0)) {
                 BB* d = bb->next0;
                 while (!d->isEmpty()) {
@@ -227,6 +229,7 @@ class TheCleanup {
                 }
             }
         });
+
         if (function->entry->isJmp() &&
             cfg.hasSinglePred(function->entry->next0)) {
             BB* bb = function->entry;
