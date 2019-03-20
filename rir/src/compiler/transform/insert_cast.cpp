@@ -40,7 +40,7 @@ void InsertCast::apply(BB* bb) {
             while (!arg.type().isSuper(arg.val()->type)) {
                 auto c = cast(arg.val(), arg.type(), env);
                 if (!c) {
-                    bb->print(std::cerr);
+                    bb->print(std::cerr, true);
                     assert(false);
                 }
                 c->bb_ = bb;

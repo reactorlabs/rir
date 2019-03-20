@@ -529,6 +529,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     LastEnv lastEnv(cls, code, log);
     std::unordered_map<Value*, BC::Label> pushContexts;
 
+    std::deque<unsigned> order;
+    LoweringVisitor::run(code->entry, [&](BB* bb) {
+        if (!isJumpThrough(bb))
+            order.push_back(bb->id);
+    });
+
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
             return;
@@ -541,6 +547,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             return bb;
         };
 
+        order.pop_front();
         cs << bbLabels[bb];
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
@@ -786,7 +793,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
-                cs << BC::ldvarNoForce(ldvar->varName);
+                cs << (ldvar->fusedWithForce
+                           ? BC::ldvar(ldvar->varName)
+                           : BC::ldvarNoForce(ldvar->varName));
                 break;
             }
 
@@ -829,12 +838,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Branch: {
                 auto trueBranch = jumpThroughEmpty(bb->trueBranch());
                 auto falseBranch = jumpThroughEmpty(bb->falseBranch());
-                // cs << BC::brtrue(bbLabels[trueBranch])
-                //    << BC::br(bbLabels[falseBranch]);
-                // this version looks better on a microbenchmark.. need to
-                // investigate
-                cs << BC::brfalse(bbLabels[falseBranch])
-                   << BC::br(bbLabels[trueBranch]);
+                if (trueBranch->id == order.front()) {
+                    cs << BC::brfalse(bbLabels[falseBranch])
+                       << BC::br(bbLabels[trueBranch]);
+                } else {
+                    cs << BC::brtrue(bbLabels[trueBranch])
+                       << BC::br(bbLabels[falseBranch]);
+                }
 
                 // This is the end of this BB
                 return;
@@ -879,16 +889,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 EMPTY(PirCopy);
 #undef EMPTY
 
-            case Tag::IsObject: {
-                cs << BC::isobj();
-                break;
-            }
-
-            case Tag::IsEnvStub: {
-                cs << BC::isstubenv();
-                break;
-            }
-
 #define SIMPLE(Name, Factory)                                                  \
     case Tag::Name: {                                                          \
         cs << BC::Factory();                                                   \
@@ -898,6 +898,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Visible, visible);
                 SIMPLE(Invisible, invisible);
                 SIMPLE(Identical, identicalNoforce);
+                SIMPLE(IsObject, isobj);
+                SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
@@ -1034,12 +1036,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-                bool stub;
-                if (mkenv->stub)
-                    stub = true;
-                else
-                    stub = false;
-                cs << BC::mkEnv(mkenv->varName, mkenv->context, stub);
+                cs << BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub);
                 break;
             }
 
@@ -1184,7 +1181,7 @@ void Pir2Rir::lower(Code* code) {
                     debugMessage += dump.str();
                     debugMessage += " failed in\n";
                     dump.str("");
-                    code->printCode(dump, true);
+                    code->printCode(dump, false, false);
                     debugMessage += dump.str();
                 }
                 BBTransform::lowerExpect(
@@ -1212,6 +1209,26 @@ void Pir2Rir::lower(Code* code) {
                 bb->next1 = nullptr;
             } else if (MkArg::Cast(*it) && (*it)->unused()) {
                 next = bb->remove(it);
+            }
+            it = next;
+        }
+    });
+
+    // Fuse together pairs of loads and forces - in rir we have
+    // an instruction that does the force implicitly
+    Visitor::run(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (auto ldvar = LdVar::Cast(*it)) {
+                auto use = ldvar->hasSingleUse();
+                if (use && Force::Cast(use) && next != bb->end() &&
+                    use == *next) {
+                    ldvar->fusedWithForce = true;
+                    ldvar->type = ldvar->type.forced();
+                    use->replaceUsesWith(ldvar);
+                    next = bb->remove(next);
+                }
             }
             it = next;
         }

@@ -38,7 +38,7 @@ class TheVerifier {
             }
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
-                p->print(std::cerr, true);
+                p->print(std::cerr, true, false);
                 return;
             }
         });
@@ -246,6 +246,15 @@ class TheVerifier {
                     std::cerr << "\n";
                     ok = false;
                 }
+            }
+        }
+
+        if (auto fs = FrameState::Cast(i)) {
+            if (fs->env() == Env::elided()) {
+                std::cerr << "Error at instruction '";
+                i->print(std::cerr);
+                std::cerr << " framestate env cannot be elided\n";
+                ok = false;
             }
         }
 

@@ -16,6 +16,7 @@ class DeadStoreAnalysis {
       public:
         typedef std::unordered_set<Value*> Envs;
         Envs envs;
+        AbstractResult mergeExit(const EnvSet& other) { return merge(other); }
         AbstractResult merge(const EnvSet& other) {
             AbstractResult res;
             for (const auto& f : other.envs) {
@@ -77,6 +78,9 @@ class DeadStoreAnalysis {
         std::unordered_set<Variable, pairhash> partiallyObserved;
         std::unordered_set<Variable, pairhash> ignoreStore;
 
+        AbstractResult mergeExit(const ObservedStores& other) {
+            return merge(other);
+        }
         AbstractResult merge(const ObservedStores& other) {
             AbstractResult res;
             for (const auto& f : other.completelyObserved) {

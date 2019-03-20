@@ -172,28 +172,75 @@ Instruction* Instruction::hasSingleUse() {
 
 void Instruction::eraseAndRemove() { bb()->remove(this); }
 
-void Instruction::replaceUsesIn(Value* replace, BB* target) {
-    if (replace->type.isRType() != type.isRType() ||
-        (replace->type.maybePromiseWrapped() && !type.maybePromiseWrapped())) {
+static void checkReplace(Instruction* origin, Value* replace) {
+    if (replace->type.isRType() != origin->type.isRType() ||
+        (replace->type.maybePromiseWrapped() &&
+         !origin->type.maybePromiseWrapped())) {
         std::cerr << "Trying to replace a ";
-        type.print(std::cerr);
+        origin->type.print(std::cerr);
         std::cerr << " with a ";
         replace->type.print(std::cerr);
         std::cerr << "\n";
         printBacktrace();
         assert(false);
     }
+}
 
-    Visitor::run(target, [&](Instruction* i) {
-        i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this)
-                arg.val() = replace;
+void Instruction::replaceUsesWithLimits(Value* replace, BB* start,
+                                        Instruction* stop) {
+    checkReplace(this, replace);
+
+    auto apply = [&](BB* start) {
+        Visitor::run(start, stop ? stop->bb() : nullptr, [&](BB* bb) {
+            for (auto& i : *bb) {
+                if (i == stop)
+                    return;
+                i->eachArg([&](InstrArg& arg) {
+                    if (arg.val() == this)
+                        arg.val() = replace;
+                });
+            }
         });
-    });
+    };
+
+    // Since stop might also be in start (before the instruction to be
+    // replaced), we need to deal with start specially and only start after the
+    // instruction to be replaced (ignoring stop in that search).
+    if (start == bb()) {
+        bool found = false;
+        for (auto& i : *start) {
+            if (found) {
+                i->eachArg([&](InstrArg& arg) {
+                    if (arg.val() == this)
+                        arg.val() = replace;
+                });
+            }
+            if (!found && i == this)
+                found = true;
+            else if (found && i == stop)
+                return;
+        }
+    } else {
+        apply(start);
+    }
+
+
+    if (start->next0)
+        apply(start->next0);
+    if (start->next1)
+        apply(start->next1);
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
-    replaceUsesIn(replace, bb());
+    checkReplace(this, replace);
+    Visitor::run(bb(), [&](BB* bb) {
+        for (auto& i : *bb) {
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val() == this)
+                    arg.val() = replace;
+            });
+        }
+    });
 }
 
 void Instruction::replaceUsesAndSwapWith(

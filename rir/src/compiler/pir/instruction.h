@@ -233,7 +233,8 @@ class Instruction : public Value {
     void replaceUsesWith(Value* val);
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
-    void replaceUsesIn(Value* val, BB* target);
+    void replaceUsesWithLimits(Value* val, BB* start,
+                               Instruction* stop = nullptr);
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();
@@ -608,6 +609,7 @@ class FLIE(LdFun, 2, Effects::Any()) {
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
   public:
     SEXP varName;
+    bool fusedWithForce = false;
 
     LdVar(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::any(), env),

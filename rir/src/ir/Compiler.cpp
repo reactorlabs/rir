@@ -404,7 +404,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::dup() << BC::ensureNamed();
 
         // Now load index and target
-        // cs << BC::ldvar(target);
         cs << (superAssign ? BC::ldvarSuper(target) : BC::ldvar(target));
         compileExpr(ctx, *idx);
         if (is2d) {
@@ -559,6 +558,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::extract1_1();
         }
         cs.addSrc(ast);
+        cs << BC::visible();
         return true;
     }
 
@@ -873,6 +873,7 @@ void compileGetvar(CodeStream& cs, SEXP name) {
     } else {
         cs << BC::ldvar(name);
     }
+    cs << BC::visible();
 }
 
 // Constant

@@ -17,12 +17,6 @@ AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
     switch (i->tag) {
     case Tag::Invisible:
     case Tag::Visible:
-    case Tag::LdVar:
-    case Tag::LdVarSuper:
-    case Tag::Extract1_1D:
-    case Tag::Extract2_1D:
-    case Tag::Extract1_2D:
-    case Tag::Extract2_2D:
         isVisibilityChanging();
         break;
     case Tag::CallBuiltin:

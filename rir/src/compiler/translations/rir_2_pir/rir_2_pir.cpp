@@ -797,7 +797,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
-    case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::beginloop_:
     case Opcode::endloop_:

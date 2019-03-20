@@ -43,7 +43,7 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
             state.set(p);
             state.affected.clear();
             return AbstractResult::Updated;
-        } else if (CallInstruction::CastCall(i) || CallBuiltin::Cast(i)) {
+        } else if (CallInstruction::CastCall(i) && !CallSafeBuiltin::Cast(i)) {
             // Contexts are needed for non-local returns and reflection. On
             // deoptimization we can synthesize them, thus none needed for
             // checkpoints.
