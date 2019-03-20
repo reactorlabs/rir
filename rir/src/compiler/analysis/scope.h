@@ -57,6 +57,10 @@ class ScopeAnalysisState {
         return res.max(mergeGeneric(other));
     }
 
+    AbstractResult mergeExit(const ScopeAnalysisState& other) {
+        return mergeGeneric(other);
+    }
+
     bool envNotEscaped(Value* v) const {
         return envs.known(v) && !envs.at(v).leaked;
     }
