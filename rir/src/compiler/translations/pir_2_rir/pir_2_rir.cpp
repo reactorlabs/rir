@@ -1225,7 +1225,7 @@ void Pir2Rir::lower(Code* code) {
                 if (use && Force::Cast(use) && next != bb->end() &&
                     use == *next) {
                     ldvar->fusedWithForce = true;
-                    ldvar->type = ldvar->type.forced();
+                    ldvar->type = ldvar->type.nonLazy();
                     use->replaceUsesWith(ldvar);
                     next = bb->remove(next);
                 }
