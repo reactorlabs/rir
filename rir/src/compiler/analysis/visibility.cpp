@@ -4,30 +4,20 @@
 namespace rir {
 namespace pir {
 
-AbstractResult VisibilityAnalysis::apply(CurrentVisibility& vis,
+AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
                                          Instruction* i) const {
-    // Default: visible
-    if (!code->entry->isEmpty() && i == *code->entry->begin())
-        vis.state = CurrentVisibility::Visible;
-
+    AbstractResult res;
+    auto isVisibilityChanging = [&]() {
+        if (vis.last != i) {
+            vis.last = i;
+            vis.observable.clear();
+            res.update();
+        }
+    };
     switch (i->tag) {
     case Tag::Invisible:
-        if (vis.state != CurrentVisibility::Invisible) {
-            vis.state = CurrentVisibility::Invisible;
-            return AbstractResult::Updated;
-        }
-        break;
     case Tag::Visible:
-    case Tag::LdVar:
-    case Tag::LdVarSuper:
-    case Tag::Extract1_1D:
-    case Tag::Extract2_1D:
-    case Tag::Extract1_2D:
-    case Tag::Extract2_2D:
-        if (vis.state != CurrentVisibility::Visible) {
-            vis.state = CurrentVisibility::Visible;
-            return AbstractResult::Updated;
-        }
+        isVisibilityChanging();
         break;
     case Tag::CallBuiltin:
     case Tag::CallSafeBuiltin:
@@ -39,26 +29,16 @@ AbstractResult VisibilityAnalysis::apply(CurrentVisibility& vis,
         }
 
         if (builtinUpdatesVisibility(builtinId)) {
-            bool visible = builtinVisibility(builtinId);
-            if (visible && vis.state != CurrentVisibility::Visible) {
-                vis.state = CurrentVisibility::Visible;
-                return AbstractResult::Updated;
-            }
-            if (!visible && vis.state != CurrentVisibility::Invisible) {
-                vis.state = CurrentVisibility::Invisible;
-                return AbstractResult::Updated;
-            }
+            isVisibilityChanging();
         }
         break;
     default:
-        if (i->mightChangeVisibility()) {
-            if (vis.state != CurrentVisibility::Unknown) {
-                vis.state = CurrentVisibility::Unknown;
-                return AbstractResult::Updated;
-            }
+        if (i->exits() && vis.last) {
+            vis.observable.insert(vis.last);
+            res.update();
         }
     }
-    return AbstractResult::None;
+    return res;
 };
 
 } // namespace rir

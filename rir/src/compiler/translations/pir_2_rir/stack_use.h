@@ -35,6 +35,9 @@ struct StackUseAnalysisState {
     bool isDead;
 
     AbstractResult merge(const StackUseAnalysisState& other);
+    AbstractResult mergeExit(const StackUseAnalysisState& other) {
+        return merge(other);
+    }
     void print(std::ostream& out, bool tty) const;
 };
 
@@ -58,10 +61,11 @@ class StackUseAnalysis
                          Instruction* i) const override;
 
     StackUseAnalysisState::AbstractStack stackAfter(Instruction* i) const {
-        static StackUseAnalysisState::AbstractStack empty;
-        if (!i)
-            return empty;
         return at<PositioningStyle::AfterInstruction>(i).stack;
+    }
+
+    StackUseAnalysisState::AbstractStack stackBefore(Instruction* i) const {
+        return at<PositioningStyle::BeforeInstruction>(i).stack;
     }
 
     std::vector<Value*> toDrop(Instruction* i) const {

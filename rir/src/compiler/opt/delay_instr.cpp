@@ -8,8 +8,6 @@ namespace pir {
 
 void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const {
-    std::vector<MkEnv*> envs;
-
     Visitor::run(function->entry, [&](BB* bb) {
         Checkpoint* checkpoint =
             bb->isEmpty() ? nullptr : Checkpoint::Cast(bb->last());

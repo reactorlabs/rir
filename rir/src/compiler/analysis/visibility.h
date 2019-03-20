@@ -7,49 +7,60 @@
 namespace rir {
 namespace pir {
 
-class CurrentVisibility {
+class LastVisibilityUpdate {
   public:
-    enum State { Visible, Invisible, Unknown };
+    std::unordered_set<Instruction*> observable;
+    Instruction* last;
 
-    State state = Unknown;
+    AbstractResult mergeExit(const LastVisibilityUpdate& other) {
+        return merge(other);
+    }
 
-    CurrentVisibility() {}
-
-    AbstractResult merge(const CurrentVisibility& other) {
-        if (state != Unknown && state != other.state) {
-            state = Unknown;
-            return AbstractResult::Updated;
+    AbstractResult merge(const LastVisibilityUpdate& other) {
+        AbstractResult res;
+        for (auto& v : other.observable) {
+            if (!observable.count(v)) {
+                observable.insert(v);
+                res.update();
+            }
         }
-        return AbstractResult::None;
+        if (last != other.last) {
+            if (last && !observable.count(last)) {
+                observable.insert(last);
+                res.update();
+            }
+            if (other.last && !observable.count(other.last)) {
+                observable.insert(other.last);
+                res.update();
+            }
+        }
+        return res;
     }
 
     void print(std::ostream& out, bool tty) const {
-        switch (state) {
-        case Unknown:
-            out << "?";
-            break;
-        case Visible:
-            out << "visible";
-            break;
-        case Invisible:
-            out << "invisible";
-            break;
+        if (last) {
+            out << "Last Update : ";
+            last->printRef(std::cout);
+            out << "\n";
+        }
+        out << "Observable: ";
+        for (auto& o : observable) {
+            o->printRef(out);
+            out << " ";
         }
         out << "\n";
     };
 };
 
-class VisibilityAnalysis : public StaticAnalysis<CurrentVisibility> {
+class VisibilityAnalysis : public StaticAnalysis<LastVisibilityUpdate> {
   public:
     VisibilityAnalysis(ClosureVersion* cls, LogStream& log)
         : StaticAnalysis("VisibilityAnalysis", cls, cls, log) {}
 
-    AbstractResult apply(CurrentVisibility& vis,
+    AbstractResult apply(LastVisibilityUpdate& vis,
                          Instruction* i) const override final;
 
-    CurrentVisibility::State at(Instruction* i) {
-        return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).state;
-    }
+    bool observed(Instruction* i) { return result().observable.count(i); }
 };
 
 } // namespace pir

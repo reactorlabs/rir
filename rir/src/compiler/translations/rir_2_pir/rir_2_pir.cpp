@@ -804,7 +804,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
-    case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::beginloop_:
     case Opcode::endloop_:
@@ -1057,7 +1056,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
 
             if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->hasEffectIgnoreVisibility()) {
+                insert.getCurrentBB()->last()->isDeoptBarrier()) {
                 addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
         }

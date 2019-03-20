@@ -58,13 +58,6 @@ BC BC::ldddvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
 }
-BC BC::ldlval(SEXP sym) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateArguments i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::ldlval_, i);
-}
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -294,9 +287,11 @@ BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     return BC(Opcode::call_builtin_, im);
 }
 
-BC BC::mkEnv(const std::vector<SEXP>& names, bool stub) {
+BC BC::mkEnv(const std::vector<SEXP>& names, SignedImmediate contextPos,
+             bool stub) {
     ImmediateArguments im;
     im.mkEnvFixedArgs.nargs = names.size();
+    im.mkEnvFixedArgs.context = contextPos;
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));

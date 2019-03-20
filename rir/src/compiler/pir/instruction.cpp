@@ -77,10 +77,25 @@ void Instruction::printArgs(std::ostream& out, bool tty) const {
         out << ", ";
 }
 
+void Instruction::printGraphArgs(std::ostream& out, bool tty) const {
+    printArgs(out, tty);
+}
+
+void Instruction::printGraphBranches(std::ostream& out, size_t bbId) const {
+    assert(false);
+}
+
 void Instruction::print(std::ostream& out, bool tty) const {
     printPaddedTypeAndRef(out, this);
     printPaddedInstructionName(out, name());
     printArgs(out, tty);
+    printEnv(out, tty);
+}
+
+void Instruction::printGraph(std::ostream& out, bool tty) const {
+    printPaddedTypeAndRef(out, this);
+    printPaddedInstructionName(out, name());
+    printGraphArgs(out, tty);
     printEnv(out, tty);
 }
 
@@ -157,28 +172,74 @@ Instruction* Instruction::hasSingleUse() {
 
 void Instruction::eraseAndRemove() { bb()->remove(this); }
 
-void Instruction::replaceUsesIn(Value* replace, BB* target) {
-    if (replace->type.isRType() != type.isRType() ||
-        (replace->type.maybePromiseWrapped() && !type.maybePromiseWrapped())) {
+static void checkReplace(Instruction* origin, Value* replace) {
+    if (replace->type.isRType() != origin->type.isRType() ||
+        (replace->type.maybePromiseWrapped() &&
+         !origin->type.maybePromiseWrapped())) {
         std::cerr << "Trying to replace a ";
-        type.print(std::cerr);
+        origin->type.print(std::cerr);
         std::cerr << " with a ";
         replace->type.print(std::cerr);
         std::cerr << "\n";
         printBacktrace();
         assert(false);
     }
+}
 
-    Visitor::run(target, [&](Instruction* i) {
-        i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this)
-                arg.val() = replace;
+void Instruction::replaceUsesWithLimits(Value* replace, BB* start,
+                                        Instruction* stop) {
+    checkReplace(this, replace);
+
+    auto apply = [&](BB* start) {
+        Visitor::run(start, stop ? stop->bb() : nullptr, [&](BB* bb) {
+            for (auto& i : *bb) {
+                if (i == stop)
+                    return;
+                i->eachArg([&](InstrArg& arg) {
+                    if (arg.val() == this)
+                        arg.val() = replace;
+                });
+            }
         });
-    });
+    };
+
+    // Since stop might also be in start (before the instruction to be
+    // replaced), we need to deal with start specially and only start after the
+    // instruction to be replaced (ignoring stop in that search).
+    if (start == bb()) {
+        bool found = false;
+        for (auto& i : *start) {
+            if (found) {
+                i->eachArg([&](InstrArg& arg) {
+                    if (arg.val() == this)
+                        arg.val() = replace;
+                });
+            }
+            if (!found && i == this)
+                found = true;
+            else if (found && i == stop)
+                return;
+        }
+    } else {
+        apply(start);
+    }
+
+    if (start->next0)
+        apply(start->next0);
+    if (start->next1)
+        apply(start->next1);
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
-    replaceUsesIn(replace, bb());
+    checkReplace(this, replace);
+    Visitor::run(bb(), [&](BB* bb) {
+        for (auto& i : *bb) {
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val() == this)
+                    arg.val() = replace;
+            });
+        }
+    });
 }
 
 void Instruction::replaceUsesAndSwapWith(
@@ -276,6 +337,16 @@ void Branch::printArgs(std::ostream& out, bool tty) const {
         << bb()->falseBranch()->id << " (if false)";
 }
 
+void Branch::printGraphArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+}
+
+void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid()
+        << " [color=green];\n  BB" << bbId << " -> BB"
+        << bb()->falseBranch()->uid() << " [color=red];\n";
+}
+
 void MkArg::printArgs(std::ostream& out, bool tty) const {
     eagerArg()->printRef(out);
     out << ", " << *prom() << ", ";
@@ -330,6 +401,7 @@ void MkEnv::printArgs(std::ostream& out, bool tty) const {
     });
     out << "parent=";
     Instruction::printEnv(out, tty);
+    out << ", context " << context;
 }
 
 void Is::printArgs(std::ostream& out, bool tty) const {
@@ -556,7 +628,7 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls,
     assert(fs);
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
-        pushArg(args[i], PirType::val() | RType::prom);
+        pushArg(args[i], RType::prom);
     assert(tryDispatch());
 }
 
@@ -657,6 +729,15 @@ void Checkpoint::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
     out << " -> BB" << bb()->trueBranch()->id << " (default) | BB"
         << bb()->falseBranch()->id << " (if assume failed)";
+}
+
+void Checkpoint::printGraphArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+}
+
+void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid() << ";\n  BB"
+        << bbId << " -> BB" << bb()->falseBranch()->uid() << " [color=red];\n";
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }

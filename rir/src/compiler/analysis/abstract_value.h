@@ -122,6 +122,9 @@ struct AbstractPirValue {
     }
 
     AbstractResult merge(const AbstractPirValue& other);
+    AbstractResult mergeExit(const AbstractPirValue& other) {
+        return merge(other);
+    }
 
     void print(std::ostream& out, bool tty = false) const;
 };
@@ -171,6 +174,10 @@ struct AbstractREnvironment {
     }
 
     const bool absent(SEXP e) const { return !tainted && !entries.count(e); }
+
+    AbstractResult mergeExit(const AbstractREnvironment& other) {
+        return merge(other);
+    }
 
     AbstractResult merge(const AbstractREnvironment& other) {
         AbstractResult res;
@@ -259,6 +266,10 @@ class AbstractREnvironmentHierarchy {
 
     std::unordered_map<Value*, Value*> aliases;
 
+    AbstractResult mergeExit(const AbstractREnvironmentHierarchy& other) {
+        return merge(other);
+    }
+
     AbstractResult merge(const AbstractREnvironmentHierarchy& other) {
         AbstractResult res;
 
@@ -320,10 +331,11 @@ class AbstractUnique {
         val = nullptr;
     }
 
-    Kind* get() {
-        return val;
-    }
+    Kind* get() const { return val; }
 
+    AbstractResult mergeExit(const AbstractUnique& other) {
+        return merge(other);
+    }
     AbstractResult merge(const AbstractUnique& other) {
         if (val && val != other.val) {
             val = nullptr;

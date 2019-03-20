@@ -85,6 +85,11 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                 if (next->hasEnv() && next->env() == envInstr)
                     break;
 
+                if (PushContext::Cast(next))
+                    envInstr->context++;
+                if (PopContext::Cast(next))
+                    envInstr->context--;
+
                 bb->swapWithNext(it);
                 it++;
             }
@@ -99,7 +104,7 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                                               BB* fastPathBranch) {
                 auto newEnvInstr = envInstr->clone();
                 deoptBranch->insert(deoptBranch->begin(), newEnvInstr);
-                envInstr->replaceUsesIn(newEnvInstr, deoptBranch);
+                envInstr->replaceUsesWithLimits(newEnvInstr, deoptBranch);
                 it = bb->moveToBegin(it, fastPathBranch);
             };
 

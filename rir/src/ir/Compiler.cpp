@@ -86,7 +86,6 @@ class CompilerContext {
     FunctionWriter& fun;
     Preserve& preserve;
 
-
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
@@ -542,7 +541,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::dup() << BC::ensureNamed();
 
         // Now load index and target
-        // cs << BC::ldvar(target);
         cs << (superAssign ? BC::ldvarSuper(target) : BC::ldvar(target));
         compileExpr(ctx, *idx);
         if (is2d) {
@@ -697,6 +695,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::extract1_1();
         }
         cs.addSrc(ast);
+        cs << BC::visible();
         return true;
     }
 
@@ -992,6 +991,7 @@ void compileGetvar(CodeStream& cs, SEXP name) {
     } else {
         cs << BC::ldvar(name);
     }
+    cs << BC::visible();
 }
 
 // Constant
@@ -1079,8 +1079,8 @@ SEXP Compiler::finalize() {
     return function.function()->container();
 }
 
-bool Compiler::profile = !(getenv("RIR_PROFILING") &&
-                    std::string(getenv("RIR_PROFILING")).compare("off") == 0);
-
+bool Compiler::profile =
+    !(getenv("RIR_PROFILING") &&
+      std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 }  // namespace rir

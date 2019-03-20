@@ -29,7 +29,7 @@ rir.compile <- function(what) {
 }
 
 # optimizes given rir compiled closure
-pir.compile <- function(what, debugFlags, P_EARLY=FALSE, P_FINAL=FALSE, P_OPT=FALSE, WARN=FALSE) {
+pir.compile <- function(what, debugFlags, debugStyle, P_EARLY=FALSE, P_FINAL=FALSE, P_OPT=FALSE, WARN=FALSE) {
     debugFlags <-
         if (missing(debugFlags)) {
             if (P_EARLY)
@@ -43,11 +43,18 @@ pir.compile <- function(what, debugFlags, P_EARLY=FALSE, P_FINAL=FALSE, P_OPT=FA
         } else {
             debugFlags
         }
+    debugStyle <-
+      if (missing(debugStyle)) {
+        NULL
+      } else {
+        as.name(as.character(substitute(debugStyle)))
+      }
 
     .Call("pir_compile",
           what,
           as.name(as.character(substitute(what))),
-          debugFlags)
+          debugFlags,
+          debugStyle)
 }
 
 pir.tests <- function() {
@@ -59,6 +66,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            DryRun = FALSE,
                            PrintIntoFiles = FALSE,
                            PrintIntoStdout = FALSE,
+                           OmitDeoptBranches = FALSE,
                            PrintEarlyRir = FALSE,
                            PrintEarlyPir = FALSE,
                            PrintOptimizationPasses = FALSE,
@@ -71,7 +79,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
     .Call("pir_debugFlags", ShowWarnings, DryRun,
-          PrintIntoFiles, PrintIntoStdout, PrintEarlyRir, PrintEarlyPir,
+          PrintIntoFiles, PrintIntoStdout, OmitDeoptBranches, PrintEarlyRir, PrintEarlyPir,
           PrintOptimizationPasses, PrintOptimizationPhases, PrintPirAfterOpt, PrintCSSA, PrintAllocator, PrintFinalPir,
           PrintFinalRir,
           # wants a dummy parameter at the end for technical reasons

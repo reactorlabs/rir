@@ -4,6 +4,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "compiler/analysis/verifier.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -70,7 +71,6 @@ class SSAAllocator {
 
     void computeStackAllocation() {
 
-        // For now, just flip a coin on where to put it
         static auto toStack = [](Instruction* i) -> bool {
             return Phi::Cast(i) || !MkEnv::Cast(i);
         };
@@ -139,7 +139,7 @@ class SSAAllocator {
         // Traverse the dominance graph in preorder and eagerly assign slots.
         // We assume that no critical paths exist, ie. we preprocessed the graph
         // such that every phi input is only used exactly once (by the phi).
-        DominatorTreeVisitor<>(dom).run(code, [&](BB* bb) {
+        DominatorTreeVisitor<>(dom).run(code->entry, [&](BB* bb) {
             auto findFreeSlot = [&](Instruction* i) {
                 SlotNumber slot = unassignedSlot;
                 for (;;) {
@@ -408,19 +408,15 @@ class SSAAllocator {
 
     bool hasSlot(Value* v) const { return allocation.count(v); }
 
-    size_t getStackOffset(Instruction* afterInstruction,
-                          std::vector<bool>& used, Value* what,
-                          bool remove) const {
+    size_t getStackOffset(Instruction* instr, std::vector<bool>& used,
+                          Value* what, bool remove) const {
 
-        assert(afterInstruction);
-
-        auto stack = sa.stackAfter(afterInstruction);
+        auto stack = sa.stackBefore(instr);
         assert(stack.size() == used.size());
 
         size_t offset = 0;
-
-        auto i = stack.rbegin();
         size_t usedIdx = used.size() - 1;
+        auto i = stack.rbegin();
         while (i != stack.rend()) {
             if (*i == what) {
                 if (remove) {
@@ -438,9 +434,8 @@ class SSAAllocator {
         return -1;
     }
 
-    size_t stackPhiOffset(Instruction* executed, Phi* phi) const {
-        assert(executed);
-        auto stack = sa.stackAfter(executed);
+    size_t stackPhiOffset(Instruction* instr, Phi* phi) const {
+        auto stack = sa.stackBefore(instr);
         size_t offset = 0;
         for (auto i = stack.rbegin(); i != stack.rend(); ++i) {
             if (*i == phi || phi->anyArg([&](Value* v) { return *i == v; }))
@@ -452,17 +447,16 @@ class SSAAllocator {
         return -1;
     }
 
-    // Check if v is needed after argument argNumber of instruction executed
-    bool lastUse(Instruction* executed, size_t argNumber) const {
-        assert(executed);
-        assert(argNumber < executed->nargs());
-        Value* v = executed->arg(argNumber).val();
-        auto stack = sa.stackAfter(executed);
+    // Check if v is needed after argument argNumber of instr
+    bool lastUse(Instruction* instr, size_t argNumber) const {
+        assert(argNumber < instr->nargs());
+        Value* v = instr->arg(argNumber).val();
+        auto stack = sa.stackAfter(instr);
         for (auto i = stack.begin(); i != stack.end(); ++i)
             if (*i == v)
                 return false;
-        for (size_t i = argNumber + 1; i < executed->nargs(); ++i)
-            if (executed->arg(i).val() == v)
+        for (size_t i = argNumber + 1; i < instr->nargs(); ++i)
+            if (instr->arg(i).val() == v)
                 return false;
         return true;
     }
@@ -511,6 +505,9 @@ class Pir2Rir {
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     lower(code);
     toCSSA(code);
+#ifdef ENABLE_SLOWASSERT
+    Verify::apply(cls, true);
+#endif
     log.CSSA(code);
 
     SSAAllocator alloc(code, cls, log);
@@ -529,11 +526,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             bbLabels[bb] = ctx.cs().mkLabel();
     });
 
-    // TODO:
-    // - how to pick lastInstr at the beginning of a merge block?
-
     LastEnv lastEnv(cls, code, log);
     std::unordered_map<Value*, BC::Label> pushContexts;
+
+    std::deque<unsigned> order;
+    LoweringVisitor::run(code->entry, [&](BB* bb) {
+        if (!isJumpThrough(bb))
+            order.push_back(bb->id);
+    });
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
@@ -547,23 +547,17 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             return bb;
         };
 
+        order.pop_front();
         cs << bbLabels[bb];
-
-        Instruction* lastInstr =
-            alloc.cfg.immediatePredecessors(bb).size()
-                ? alloc.cfg.immediatePredecessors(bb).front()->last()
-                : nullptr;
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
-
-            bool hasResult = instr->producesRirResult();
 
             // Prepare stack and araguments
             {
 
                 std::vector<bool> removedStackValues(
-                    alloc.sa.stackAfter(lastInstr).size(), false);
+                    alloc.sa.stackBefore(instr).size(), false);
                 size_t pushedStackValues = 0;
 
                 // Put args to buffer first so that we don't have to clean up
@@ -636,8 +630,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto getFromStack = [&](Value* what, size_t argNumber) {
                     auto lastUse = alloc.lastUse(instr, argNumber);
                     auto offset =
-                        alloc.getStackOffset(lastInstr, removedStackValues,
-                                             what, lastUse) +
+                        alloc.getStackOffset(instr, removedStackValues, what,
+                                             lastUse) +
                         pushedStackValues;
                     if (lastUse)
                         moveToTOS(offset);
@@ -712,7 +706,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         assert(false);
                     }
                     if (alloc.onStack(phi)) {
-                        auto offset = alloc.stackPhiOffset(lastInstr, phi);
+                        auto offset = alloc.stackPhiOffset(instr, phi);
                         moveToTOS(offset);
                     } else {
                         buffer.emplace_back(BC::ldloc(alloc[phi]));
@@ -727,7 +721,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         continue;
 
                     auto offset = alloc.getStackOffset(
-                        lastInstr, removedStackValues, val, true);
+                        instr, removedStackValues, val, true);
                     moveToTOS(offset);
                     buffer.emplace_back(BC::pop());
                 }
@@ -758,8 +752,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                         alloc.lastUse(instr, argNumber)) {
                                         auto offset =
                                             alloc.getStackOffset(
-                                                lastInstr, removedStackValues,
-                                                env, true) +
+                                                instr, removedStackValues, env,
+                                                true) +
                                             pushedStackValues;
                                         moveToTOS(offset);
                                         buffer.emplace_back(BC::pop());
@@ -799,7 +793,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
-                cs << BC::ldvarNoForce(ldvar->varName);
+                cs << (ldvar->fusedWithForce
+                           ? BC::ldvar(ldvar->varName)
+                           : BC::ldvarNoForce(ldvar->varName));
                 break;
             }
 
@@ -842,12 +838,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Branch: {
                 auto trueBranch = jumpThroughEmpty(bb->trueBranch());
                 auto falseBranch = jumpThroughEmpty(bb->falseBranch());
-                // cs << BC::brtrue(bbLabels[trueBranch])
-                //    << BC::br(bbLabels[falseBranch]);
-                // this version looks better on a microbenchmark.. need to
-                // investigate
-                cs << BC::brfalse(bbLabels[falseBranch])
-                   << BC::br(bbLabels[trueBranch]);
+                if (trueBranch->id == order.front()) {
+                    cs << BC::brfalse(bbLabels[falseBranch])
+                       << BC::br(bbLabels[trueBranch]);
+                } else {
+                    cs << BC::brtrue(bbLabels[trueBranch])
+                       << BC::br(bbLabels[falseBranch]);
+                }
 
                 // This is the end of this BB
                 return;
@@ -898,16 +895,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 EMPTY(PirCopy);
 #undef EMPTY
 
-            case Tag::IsObject: {
-                cs << BC::isobj();
-                break;
-            }
-
-            case Tag::IsEnvStub: {
-                cs << BC::isstubenv();
-                break;
-            }
-
 #define SIMPLE(Name, Factory)                                                  \
     case Tag::Name: {                                                          \
         cs << BC::Factory();                                                   \
@@ -917,6 +904,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Visible, visible);
                 SIMPLE(Invisible, invisible);
                 SIMPLE(Identical, identicalNoforce);
+                SIMPLE(IsObject, isobj);
+                SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
@@ -1054,12 +1043,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-                bool stub;
-                if (mkenv->stub)
-                    stub = true;
-                else
-                    stub = false;
-                cs << BC::mkEnv(mkenv->varName, stub);
+                cs << BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub);
                 break;
             }
 
@@ -1136,15 +1120,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             // Store the result
             if (alloc.sa.dead(instr)) {
                 cs << BC::pop();
-            } else if (hasResult) {
+            } else if (instr->producesRirResult()) {
                 if (!alloc.hasSlot(instr)) {
                     cs << BC::pop();
                 } else if (!alloc.onStack(instr)) {
                     cs << BC::stloc(alloc[instr]);
                 }
             }
-
-            lastInstr = instr;
         }
 
         // This BB has exactly one successor, trueBranch().
@@ -1206,7 +1188,7 @@ void Pir2Rir::lower(Code* code) {
                     debugMessage += dump.str();
                     debugMessage += " failed in\n";
                     dump.str("");
-                    code->printCode(dump, true);
+                    code->printCode(dump, false, false);
                     debugMessage += dump.str();
                 }
                 BBTransform::lowerExpect(
@@ -1239,112 +1221,25 @@ void Pir2Rir::lower(Code* code) {
         }
     });
 
-    // Lower phi functions - transform into a cfg where all input blocks of
-    // all phi functions are their immediate predecessors
-    {
-        bool done;
-        CFG cfg(code);
-        do {
-            done = true;
-            BreadthFirstVisitor::run(code->entry, [&](Instruction* i, BB* bb) {
-                // Check if this phi has the desired property
-                if (auto phi = Phi::Cast(i)) {
-                    bool ok = true;
-                    phi->eachArg([&](BB* inputBB, Value*) {
-                        if (!cfg.isImmediatePredecessor(inputBB, phi->bb()))
-                            ok = false;
-                    });
-                    if (ok)
-                        return;
-                    done = false;
-
-                    // Gather all the basic blocks currently in the phi
-                    // inputs, these are then used to stop a backward search
-                    std::unordered_set<BB*> inputBBs;
-                    phi->eachArg(
-                        [&](BB* inputBB, Value*) { inputBBs.insert(inputBB); });
-
-                    // dir maps basic blocks to blocks that are immediate
-                    // predecessors of the given phi, ie. the blocks we want
-                    // the phi to have as inputs
-                    std::unordered_map<BB*, BB*> dir;
-                    // Initialize with the actual immediate predecessors
-                    for (auto pred : cfg.immediatePredecessors(phi->bb()))
-                        dir[pred] = pred;
-
-                    // src maps immediate predecessors of the phi to sets of
-                    // arguments that come from that path
-                    std::unordered_map<BB*, std::unordered_set<Value*>> src;
-                    phi->eachArg([&](BB* inputBB, Value* val) {
-                        // Do a bfs search for a block that is listed as a
-                        // phi input block. If we find it, the dir map tells
-                        // us which immediate predecessor this translates to
-                        // and we are done. If we hit a block that is a
-                        // different phi input block than the one we look
-                        // for, we stop. Otherwise, propagate the dir info
-                        // to immediate predecessors and continue
-                        BreadthFirstVisitor::checkBackward(
-                            phi->bb(), cfg, [&](BB* bb) {
-                                if (bb == inputBB) {
-                                    src[dir[bb]].insert(val);
-                                    return false;
-                                }
-                                if (inputBBs.count(bb) == 0) {
-                                    for (auto pred :
-                                         cfg.immediatePredecessors(bb))
-                                        if (dir.count(pred) == 0)
-                                            dir[pred] = dir[bb];
-                                }
-                                return true;
-                            });
-                    });
-
-                    // Modify the phi so that it obtains the desired
-                    // property
-                    for (auto s : src) {
-                        // For each immediate predecessor get a set of
-                        // values that come through it, to be removed from
-                        // the phi
-                        std::unordered_set<BB*> toRemove;
-                        phi->eachArg([&](BB* inputBB, Value* val) {
-                            if (s.second.count(val))
-                                toRemove.insert(inputBB);
-                        });
-                        // Add a new single argument to the phi for the
-                        // given predecessor that will either be a single
-                        // existing value, or a newly created phi merge of
-                        // the set of values from that ppredecessor
-                        if (s.second.size() == 1) {
-                            phi->removeInputs(toRemove);
-                            phi->addInput(s.first, *(s.second.begin()));
-                            phi->updateType();
-                        } else {
-                            assert(s.second.size() > 1);
-                            Phi* newPhi = new Phi;
-                            for (auto input : s.second) {
-                                phi->eachArg([&](BB* inputBB, Value* val) {
-                                    if (val == input)
-                                        newPhi->addInput(inputBB, val);
-                                });
-                            }
-                            phi->removeInputs(toRemove);
-                            phi->addInput(s.first, newPhi);
-                            newPhi->updateType();
-                            phi->updateType();
-                            // Insert the new phi at the beginning of the
-                            // predecessor block
-                            s.first->insert(s.first->begin(), newPhi);
-                            // If we created a one argument phi, remove it
-                            if (phi->nargs() == 1) {
-                                phi->replaceUsesWith(phi->arg(0).val());
-                                phi->bb()->remove(phi);
-                            }
-                        }
-                    }
+    // Fuse together pairs of loads and forces - in rir we have
+    // an instruction that does the force implicitly
+    Visitor::run(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (auto ldvar = LdVar::Cast(*it)) {
+                auto use = ldvar->hasSingleUse();
+                if (use && Force::Cast(use) && next != bb->end() &&
+                    use == *next) {
+                    ldvar->fusedWithForce = true;
+                    ldvar->type = ldvar->type.forced();
+                    use->replaceUsesWith(ldvar);
+                    next = bb->remove(next);
                 }
-            });
-        } while (!done);
-    }
+            }
+            it = next;
+        }
+    });
 
     // Insert Nop into all empty blocks to make life easier
     Visitor::run(code->entry, [&](BB* bb) {

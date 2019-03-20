@@ -1181,9 +1181,7 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
-
-#define BINDING_CACHE_SIZE 5
+#define BINDING_CACHE_SIZE 29
 typedef struct {
     SEXP loc;
     Immediate idx;
@@ -1258,29 +1256,16 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx,
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
-RCNTXT* nextFunctionContext(RCNTXT* cptr = R_GlobalContext) {
+RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
     while (cptr->nextcontext != NULL) {
         if (cptr->callflag & CTXT_FUNCTION) {
-            return cptr;
+            if (pos == 0)
+                return cptr;
+            pos--;
         }
         cptr = cptr->nextcontext;
     }
     assert(false);
-}
-
-RCNTXT* firstFunctionContextWithDelayedEnv() {
-    auto cptr = R_GlobalContext;
-    RCNTXT* candidate = nullptr;
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION) {
-            if (cptr->cloenv == symbol::delayedEnv)
-                candidate = cptr;
-            else
-                break;
-        }
-        cptr = cptr->nextcontext;
-    }
-    return candidate;
 }
 
 RCNTXT* findFunctionContextFor(SEXP e) {
@@ -1326,6 +1311,10 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                "Frame with context after frame without context");
         cntxt = originalCntxt;
     } else {
+        // NOTE: this assert triggers if we can't find the context of the
+        // current function. Usually the reason is that a wrong environment is
+        // stored in the context.
+        assert(!outermostFrame && "Cannot find outermost function context");
         // If the inlinee had no context, we need to synthesize one
         // TODO: need to add ast and closure to the deopt metadata to create a
         // complete context
@@ -1392,16 +1381,12 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     SEXP res = trampoline();
     assert((size_t)ostack_length(ctx) == frameBaseSize);
 
-    // Dont end the outermost context (unless it was a fake one) to be able to
-    // jump out below
-    if (!outermostFrame || !originalCntxt) {
+    if (!outermostFrame) {
         endClosureContext(cntxt, res);
-    }
-
-    if (outermostFrame) {
+    } else {
+        assert(findFunctionContextFor(deoptEnv) == cntxt);
         // long-jump out of all the inlined contexts
-        Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
-                       nextFunctionContext()->cloenv, res);
+        Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv, res);
         assert(false);
     }
 
@@ -1499,28 +1484,58 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
             advanceImmediate();
+            int contextPos = readSignedImmediate();
+            advanceImmediate();
             SEXP parent = ostack_pop(ctx);
+            PROTECT(parent);
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
             SEXP arglist = R_NilValue;
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
+            bool hasMissing = false;
             for (long i = n - 1; i >= 0; --i) {
                 SEXP val = ostack_pop(ctx);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
+                hasMissing = hasMissing || val == R_MissingArg;
                 SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
             }
             res = Rf_NewEnvironment(R_NilValue, arglist, parent);
 
-            if (auto cptr = firstFunctionContextWithDelayedEnv()) {
-                cptr->cloenv = res;
-                if (cptr->promargs == symbol::delayedArglist)
-                    cptr->promargs = arglist;
+            if (contextPos > 0) {
+                if (auto cptr = getFunctionContext(contextPos - 1)) {
+                    cptr->cloenv = res;
+                    if (cptr->promargs == symbol::delayedArglist) {
+                        auto promargs = arglist;
+                        if (hasMissing) {
+                            // For the promargs we need to strip missing
+                            // arguments from the list, otherwise nargs()
+                            // reports the wrong value.
+                            promargs = Rf_shallow_duplicate(arglist);
+                            // Need to test for R_MissingArg because
+                            // shallowDuplicate does not copy the missing flag.
+                            while (CAR(promargs) == R_MissingArg &&
+                                   promargs != R_NilValue) {
+                                promargs = CDR(promargs);
+                            }
+                            auto p = promargs;
+                            auto prev = p;
+                            while (p != R_NilValue) {
+                                if (CAR(p) == R_MissingArg)
+                                    SETCDR(prev, CDR(p));
+                                prev = p;
+                                p = CDR(p);
+                            }
+                        }
+                        cptr->promargs = promargs;
+                    }
+                }
             }
 
             ostack_push(ctx, res);
+            UNPROTECT(1);
             NEXT();
         }
 
@@ -1530,6 +1545,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // option becase R_Preserve is slow. We must find a simple story so
             // that the gc trace rir wrappers.
             size_t n = readImmediate();
+            advanceImmediate();
+            int contextPos = readSignedImmediate();
             advanceImmediate();
             // Do we need to preserve parent and the arg vals?
             SEXP parent = ostack_pop(ctx);
@@ -1545,8 +1562,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             envStubs.push_back(envStub);
             res = (SEXP)envStub;
 
-            if (auto cptr = firstFunctionContextWithDelayedEnv())
-                cptr->cloenv = res;
+            if (contextPos > 0) {
+                if (auto cptr = getFunctionContext(contextPos - 1))
+                    cptr->cloenv = res;
+            }
 
             ostack_push(ctx, res);
             NEXT();
@@ -1602,7 +1621,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             res = cachedGetVar(env, id, ctx, bindingCache);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1628,7 +1646,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             res = cachedGetVar(env, id, ctx, bindingCache);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1650,7 +1667,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, ENCLOS(env));
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1674,7 +1690,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, ENCLOS(env));
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1694,7 +1709,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_ddfindVar(sym, env);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1706,29 +1720,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
-
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
-
-            ostack_push(ctx, res);
-            NEXT();
-        }
-
-        INSTRUCTION(ldlval_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            res = cachedGetBindingCell(env, id, ctx, bindingCache);
-            assert(res);
-            res = CAR(res);
-            assert(res != R_UnboundValue);
-
-            R_Visible = TRUE;
-
-            if (TYPEOF(res) == PROMSXP)
-                res = PRVALUE(res);
-
-            assert(res != R_UnboundValue);
-            assert(res != R_MissingArg);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -1769,6 +1760,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache);
 
             NEXT();
@@ -1779,6 +1772,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache, true);
 
             NEXT();
@@ -2228,6 +2223,24 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         ? NA_REAL
                         : *REAL(lhs) / *REAL(rhs);
                 STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                double real_res;
+                int r = *INTEGER(rhs);
+                if (*REAL(lhs) == NA_REAL || r == NA_INTEGER)
+                    real_res = NA_REAL;
+                else
+                    real_res = *REAL(lhs) / (double)r;
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                double real_res;
+                int l = *INTEGER(lhs);
+                if (l == NA_INTEGER || *REAL(rhs) == NA_REAL)
+                    real_res = NA_REAL;
+                else
+                    real_res = (double)l / *REAL(rhs);
+                STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
                 double real_res;
@@ -2253,6 +2266,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
                 IS_SIMPLE_SCALAR(rhs, REALSXP)) {
                 double real_res = myfloor(*REAL(lhs), *REAL(rhs));
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                double real_res = myfloor(*REAL(lhs), (double)*INTEGER(rhs));
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                double real_res = myfloor((double)*INTEGER(lhs), *REAL(rhs));
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
@@ -2281,6 +2302,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
                 IS_SIMPLE_SCALAR(rhs, REALSXP)) {
                 double real_res = myfmod(*REAL(lhs), *REAL(rhs));
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                double real_res = myfmod(*REAL(lhs), (double)*INTEGER(rhs));
+                STORE_BINOP(REALSXP, 0, real_res);
+            } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
+                       IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                double real_res = myfmod((double)*INTEGER(lhs), *REAL(rhs));
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
@@ -2724,7 +2753,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostack_popn(ctx, 3);
 
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }
@@ -2749,7 +2777,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostack_popn(ctx, 4);
 
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }
@@ -2816,7 +2843,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 goto fallback;
             }
 
-            R_Visible = TRUE;
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -2838,7 +2864,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             ostack_popn(ctx, 3);
 
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }
@@ -2865,7 +2890,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             ostack_popn(ctx, 4);
 
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }

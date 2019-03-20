@@ -39,6 +39,10 @@ completely disables the PIR optimizer. As follows are the different Options avai
         regex      only show functions matching regex
                    (might need .*, sometimes names are missing)
 
+    PIR_DEBUG_STYLE=
+        Standard   print pir in human-readable format, to view directly in console
+        GraphViz   print pir in GraphViz, displaying all instructions within BBs
+        GraphVizBB print pir in GraphViz, displaying only BB names and connections
     PIR_MEASURE_COMPILER=
         1          print overal time spend in different passes on shutdown
 

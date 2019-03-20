@@ -18,6 +18,19 @@
 
 using namespace rir;
 
+bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
+#define V(style)                                                               \
+    if (strcmp(str, #style) == 0) {                                            \
+        s = pir::DebugStyle::style;                                            \
+        return true;                                                           \
+    } else
+    LIST_OF_DEBUG_STYLES(V)
+#undef V
+    {
+        return false;
+    }
+}
+
 REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     if (!what || TYPEOF(what) != CLOSXP)
         Rf_error("Not a rir compiled code");
@@ -156,9 +169,26 @@ static std::regex getInitialDebugFunctionFilter() {
     return std::regex(".*");
 }
 
-static pir::DebugOptions PirDebug = {getInitialDebugFlags(),
-                                     getInitialDebugPassFilter(),
-                                     getInitialDebugFunctionFilter()};
+static pir::DebugStyle getInitialDebugStyle() {
+    auto styleStr = getenv("PIR_DEBUG_STYLE");
+    if (!styleStr) {
+        return pir::DebugStyle::Standard;
+    }
+    pir::DebugStyle style;
+    if (!parseDebugStyle(styleStr, style)) {
+        std::cerr << "Unknown PIR debug print style " << styleStr << "\n"
+                  << "Valid styles are:\n";
+#define V(style) std::cerr << "- " << #style << "\n";
+        LIST_OF_DEBUG_STYLES(V)
+#undef V
+        exit(1);
+    }
+    return style;
+}
+
+static pir::DebugOptions PirDebug = {
+    getInitialDebugFlags(), getInitialDebugPassFilter(),
+    getInitialDebugFunctionFilter(), getInitialDebugStyle()};
 
 REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
@@ -227,17 +257,28 @@ REXPORT SEXP rir_invocation_count(SEXP what) {
     return res;
 }
 
-REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags) {
+REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags,
+                         SEXP debugStyle) {
     if (debugFlags != R_NilValue &&
-        (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1))
-        Rf_error("pir_compile expects an integer vector as second parameter");
+        (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) != 1))
+        Rf_error("pir_compile expects an integer scalar as second parameter");
+    if (debugStyle != R_NilValue && TYPEOF(debugStyle) != SYMSXP)
+        Rf_error("pir_compile expects a symbol as third parameter");
     std::string n;
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
+    pir::DebugOptions opts = PirDebug;
+
+    if (debugFlags != R_NilValue) {
+        opts.flags = *INTEGER(debugFlags);
+    }
+    if (debugStyle != R_NilValue) {
+        if (!parseDebugStyle(CHAR(PRINTNAME(debugStyle)), opts.style)) {
+            Rf_error("pir_compile - given unknown debug style");
+        }
+    }
     return pirCompile(what, rir::pir::Rir2PirCompiler::defaultAssumptions, n,
-                      debugFlags == R_NilValue
-                          ? PirDebug
-                          : pir::DebugOptions(INTEGER(debugFlags)[0]));
+                      opts);
 }
 
 REXPORT SEXP pir_tests() {

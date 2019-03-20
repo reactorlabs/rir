@@ -24,6 +24,10 @@ void OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
                 if (unnecessary.canRemove(pop)) {
                     toRemove.insert(pop->push());
                     toRemove.insert(pop);
+                    auto affected = unnecessary.affectedEnvs(pop);
+                    for (auto& mk : affected) {
+                        mk->context--;
+                    }
                 }
             }
         }

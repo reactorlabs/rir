@@ -109,6 +109,8 @@ class StaticAnalysis {
     }
 
     const AbstractState& result() const {
+        if (!done)
+            const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
         return exitpoint;
     }
@@ -303,7 +305,7 @@ class StaticAnalysis {
                 if (bb->isExit()) {
                     logExit(state);
                     if (reachedExit) {
-                        exitpoint.merge(state);
+                        exitpoint.mergeExit(state);
                     } else {
                         exitpoint = state;
                         reachedExit = true;
@@ -323,7 +325,7 @@ class StaticAnalysis {
                     auto& extra = snapshots[bb].extra;
                     const auto& entry = extra.find(rec.second);
                     if (entry != extra.end()) {
-                        auto mres = entry->second.merge(exitpoint);
+                        auto mres = entry->second.mergeExit(exitpoint);
                         if (mres > AbstractResult::None) {
                             logChange(entry->second, mres, rec.second);
                             changed[bb] = true;
@@ -659,7 +661,7 @@ class BackwardStaticAnalysis {
                     if (bb == code->entry) {
                         logExit(state);
                         if (reachedExit) {
-                            exitpoint.merge(state);
+                            exitpoint.mergeExit(state);
                         } else {
                             exitpoint = state;
                             reachedExit = true;
@@ -679,7 +681,7 @@ class BackwardStaticAnalysis {
                         auto& extra = snapshots[bb].extra;
                         const auto& entry = extra.find(rec.second);
                         if (entry != extra.end()) {
-                            auto mres = entry->second.merge(exitpoint);
+                            auto mres = entry->second.mergeExit(exitpoint);
                             if (mres > AbstractResult::None) {
                                 logChange(entry->second, mres, rec.second);
                                 changed[bb] = true;

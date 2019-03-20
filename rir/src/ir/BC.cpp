@@ -42,7 +42,6 @@ BC_NOARGS(V, _)
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
-    case Opcode::ldlval_:
     case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
@@ -220,7 +219,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::mk_env_: {
         auto args = immediate.mkEnvFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        out << nargs << " ";
+        out << nargs << ", c" << args.context << "  ";
         printNames(out, mkEnvExtra().names);
         break;
     }
@@ -237,7 +236,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
-    case Opcode::ldlval_:
     case Opcode::ldddvar_:
     case Opcode::starg_:
     case Opcode::stvar_:
