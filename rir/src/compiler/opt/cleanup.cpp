@@ -20,7 +20,6 @@ class TheCleanup {
     void operator()() {
         std::unordered_set<size_t> used_p;
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
-        std::unordered_map<Instruction*, int> isShared;
         std::deque<Promise*> todo;
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -75,14 +74,6 @@ class TheCleanup {
                         used_p.insert(arg->prom()->id);
                         todo.push_back(arg->prom());
                     }
-                } else if (SetShared::Cast(i) || EnsureNamed::Cast(i)) {
-                    if (i->unused()) {
-                        removed = true;
-                        next = bb->remove(ip);
-                    } else {
-                        if (!isShared.count(i))
-                            isShared[i] = 0;
-                    }
                 } else if (auto lgl = AsLogical::Cast(i)) {
                     auto arg = lgl->arg<0>().val();
                     if (arg->type.isA(RType::logical)) {
@@ -106,40 +97,11 @@ class TheCleanup {
                 }
 
                 if (!removed) {
-                    if (!Phi::Cast(i)) {
-                        i->eachArg([&](Value* arg) {
-                            auto argi = Instruction::Cast(arg);
-                            if (argi && (SetShared::Cast(argi) ||
-                                         EnsureNamed::Cast(argi))) {
-                                // Count how many times a shared value is used.
-                                isShared[argi]++;
-                                // If it leaks, it really needs to be marked
-                                // shared.
-                                if (i->leaksArg(argi))
-                                    isShared[argi]++;
-                                // if a value is created before and used in a
-                                // loop, then this represents of course also
-                                // multiple uses.
-                                // For now we are very conservative and only
-                                // support use and creation in the same BB.
-                                // TODO: make a real static named count pass!
-                                if (argi->bb() != bb)
-                                    isShared[argi]++;
-                            }
-                        });
-                    }
                     i->updateType();
                 }
                 ip = next;
             }
         });
-
-        // SetShared instructions with only one use, do not need to be set to
-        // shared
-        for (auto shared : isShared) {
-            if (shared.second <= 1)
-                shared.first->replaceUsesWith(shared.first->arg(0).val());
-        }
 
         while (!todo.empty()) {
             Promise* p = todo.back();
