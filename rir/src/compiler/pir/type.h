@@ -127,6 +127,11 @@ struct PirType {
     static FlagSet defaultRTypeFlags() {
         return FlagSet() | TypeFlags::rtype | TypeFlags::maybeObject;
     }
+
+    static FlagSet defaultLazyRTypeFlags() {
+        return defaultRTypeFlags() | TypeFlags::lazy |
+               TypeFlags::promiseWrapped;
+    }
     static FlagSet optimisticRTypeFlags() {
         return FlagSet() | TypeFlags::rtype | TypeFlags::isScalar;
     }
@@ -143,7 +148,7 @@ struct PirType {
     // cppcheck-suppress noExplicitConstructor
     PirType(const NativeType& t) : t_(t) {}
     // cppcheck-suppress noExplicitConstructor
-    PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    PirType(const RTypeSet& t) : flags_(defaultLazyRTypeFlags()), t_(t) {}
     // cppcheck-suppress noExplicitConstructor
     PirType(const NativeTypeSet& t) : t_(t) {}
     explicit PirType(SEXP);
@@ -413,7 +418,7 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
     }
 
     // If the base type is at least a value, then it's a value
-    if (t.isRType() && PirType::val() == t.baseType()) {
+    if (t.isRType() && PirType::val() == t.baseType().forced()) {
         out << "val?";
     } else if (t.isRType() && PirType::val().notMissing() == t.baseType()) {
         out << "val";
