@@ -842,12 +842,12 @@ class FLI(AsTest, 1, Effect::Error) {
 
 class FLI(AsInt, 1, Effect::Error) {
   public:
-    const bool ceil;
+    bool ceil;
 
-    explicit AsInt(Value* in, bool ceil)
+    explicit AsInt(Value* in, bool ceil_)
         : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
                               {{PirType::any()}}, {{in}}),
-          ceil(ceil) {}
+          ceil(ceil_) {}
 };
 
 class FLIE(Subassign1_1D, 4, Effects::Any()) {
