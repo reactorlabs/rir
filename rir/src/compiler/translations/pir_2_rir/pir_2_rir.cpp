@@ -1000,7 +1000,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         call->nCallArgs(), Pool::get(call->srcIdx),
                         originalClosure, dt->baseline()->container(),
                         call->inferAvailableAssumptions());
-                    assert(false);
                 }
                 break;
             }
