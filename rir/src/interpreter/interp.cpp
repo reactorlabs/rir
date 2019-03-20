@@ -2166,14 +2166,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_top(ctx);
             assert(TYPEOF(val) == INTSXP);
             int i = INTEGER(val)[0];
-            // if (MAYBE_SHARED(val)) {
-            ostack_pop(ctx);
-            SEXP n = Rf_allocVector(INTSXP, 1);
-            INTEGER(n)[0] = i + 1;
-            ostack_push(ctx, n);
-            //} else {
-            //    INTEGER(val)[0]++;
-            //}
+            if (MAYBE_SHARED(val)) {
+                ostack_pop(ctx);
+                SEXP n = Rf_allocVector(INTSXP, 1);
+                INTEGER(n)[0] = i + 1;
+                ostack_push(ctx, n);
+            } else {
+                INTEGER(val)[0]++;
+            }
             NEXT();
         }
 
@@ -2181,14 +2181,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_top(ctx);
             assert(TYPEOF(val) == INTSXP);
             int i = INTEGER(val)[0];
-            // if (MAYBE_SHARED(val)) {
-            ostack_pop(ctx);
-            SEXP n = Rf_allocVector(INTSXP, 1);
-            INTEGER(n)[0] = i - 1;
-            ostack_push(ctx, n);
-            //} else {
-            //    INTEGER(val)[0]--;
-            //}
+            if (MAYBE_SHARED(val)) {
+                ostack_pop(ctx);
+                SEXP n = Rf_allocVector(INTSXP, 1);
+                INTEGER(n)[0] = i - 1;
+                ostack_push(ctx, n);
+            } else {
+                INTEGER(val)[0]--;
+            }
             NEXT();
         }
 
