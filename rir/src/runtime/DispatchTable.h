@@ -80,7 +80,7 @@ struct DispatchTable
         SLOWASSERT(contains(fun->signature().assumptions));
     }
 
-    static DispatchTable* create(size_t capacity = 12) {
+    static DispatchTable* create(size_t capacity = 10) {
         size_t size =
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
         SEXP s = Rf_allocVector(EXTERNALSXP, size);
