@@ -195,6 +195,7 @@ class TheCleanup {
                 toDel[d] = nullptr;
             }
         });
+
         // Merge blocks
         Visitor::runPostChange(function->entry, [&](BB* bb) {
             if (bb->isJmp() && cfg.hasSinglePred(bb) &&
@@ -214,6 +215,15 @@ class TheCleanup {
         });
 
         Visitor::runPostChange(function->entry, [&](BB* bb) {
+            // Remove empty jump-through blocks
+            if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
+                cfg.hasSinglePred(bb->next0->next0) &&
+                usedBB.find(bb->next0) == usedBB.end()) {
+                toDel[bb->next0] = bb->next0->next0;
+            }
+        });
+
+        Visitor::runPostChange(function->entry, [&](BB* bb) {
             // Remove empty branches
             if (bb->next0 && bb->next1) {
                 if (bb->next0->isEmpty() && bb->next1->isEmpty() &&
@@ -227,6 +237,7 @@ class TheCleanup {
                 }
             }
         });
+
         if (function->entry->isJmp() &&
             cfg.hasSinglePred(function->entry->next0)) {
             BB* bb = function->entry;
