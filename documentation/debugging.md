@@ -26,8 +26,8 @@ completely disables the PIR optimizer. As follows are the different Options avai
         help                       list all available flags
         PrintIntoStdout            print without buffering (useful for crashes during compilation)
         PrintEarlyRir              print after initial rir2pir translation
-        PrintOptimizationPhases    print before/after every phase of the compiler
         PrintOptimizationPasses    print after every pass
+        PrintOptimizationPhases    print before/after every phase of the compiler
         PrintPirAfterOpt           print the fully optimized pir
         PrintFinalPir              print pir after lowering and CSSA conversion
         PrintFinalRir              print rir produced by pir backend
