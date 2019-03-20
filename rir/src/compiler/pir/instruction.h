@@ -982,13 +982,6 @@ class FLI(LdFunctionEnv, 0, Effects::None()) {
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
 };
 
-class FLI(EnsureNamed, 1, Effects::None()) {
-  public:
-    explicit EnsureNamed(Value* v)
-        : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
-    void updateType() override final { type = arg<0>().val()->type; }
-};
-
 class FLI(SetShared, 1, Effects::None()) {
   public:
     explicit SetShared(Value* v)

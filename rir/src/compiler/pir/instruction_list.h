@@ -86,7 +86,6 @@
     V(Force)                                                                   \
     V(CastType)                                                                \
     V(SetShared)                                                               \
-    V(EnsureNamed)                                                             \
     V(Missing)                                                                 \
     V(Visible)                                                                 \
     V(Invisible)                                                               \
