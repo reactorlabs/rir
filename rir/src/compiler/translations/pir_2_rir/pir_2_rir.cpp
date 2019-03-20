@@ -536,14 +536,44 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     });
 
     std::unordered_map<Instruction*, size_t> numberOfUses;
-    Visitor::run(code->entry, [&](Instruction* i) {
-        i->eachArg([&](Value* v) {
-            if (auto j = Instruction::Cast(v->followCastsAndForce())) {
-                if (!MkEnv::Cast(j) && !MkArg::Cast(j))
-                    numberOfUses[j]++;
+    {
+        std::function<void(Value*)> count;
+
+        // Increases the counts on every value input of a phi cluster
+        auto countPhiInputs = [&](Phi* p) {
+            std::vector<bool> countedPhis(cls->nextBBId, false);
+            std::function<void(Phi*)> doCountPhis = [&](Phi* p) {
+                if (countedPhis[p->bb()->id])
+                    return;
+                countedPhis[p->bb()->id] = true;
+                p->eachArg([&](BB*, Value* v) {
+                    if (auto p = Phi::Cast(v))
+                        doCountPhis(p);
+                    else
+                        count(v);
+                });
+            };
+            doCountPhis(p);
+        };
+
+        count = [&](Value* v) {
+            if (auto j = Instruction::Cast(v)) {
+                if (!j->type.isRType())
+                    return;
+                if (SetShared::Cast(j) || LdConst::Cast(j) || MkEnv::Cast(j) ||
+                    MkArg::Cast(j))
+                    return;
+                if (auto p = Phi::Cast(j))
+                    return countPhiInputs(p);
+                numberOfUses[j]++;
             }
+        };
+
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (!Phi::Cast(i))
+                i->eachArg([&](Value* v) { count(v); });
         });
-    });
+    }
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
