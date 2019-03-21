@@ -68,3 +68,15 @@ stopifnot(h()==3)
 stopifnot(h()==3)
 stopifnot(h()==3)
 stopifnot(h()==3)
+
+f <- pir.compile(rir.compile(function(a,b,c) a))
+g <- rir.compile(function() {
+  f()
+  f(1)
+  f(1,2)
+  f(1,2,3)
+})
+
+rir.disassemble(f)
+stopifnot(g()==1)
+
