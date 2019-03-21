@@ -7,6 +7,7 @@
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
+#include "utils/Set.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -20,7 +21,6 @@ class TheScopeResolution {
     CFG cfg;
     DominanceGraph dom;
     DominanceFrontier dfront;
-    ;
     LogStream& log;
     explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
         : function(function), cfg(function), dom(function),
@@ -32,6 +32,93 @@ class TheScopeResolution {
         auto& finalState = analysis.result();
         if (finalState.noReflection())
             function->properties.set(ClosureVersion::Property::NoReflection);
+
+        std::unordered_map<Value*, Value*> alreadyReplaced;
+
+        auto tryInsertPhis = [&](AbstractPirValue res, BB* bb,
+                                 BB::Instrs::iterator& iter) -> Instruction* {
+            if (res.isUnknown())
+                return nullptr;
+
+            auto iterPos = *iter;
+            bool onlyLocalVals = true;
+            res.eachSource([&](const ValOrig& src) {
+                if (src.recursionLevel > 0)
+                    onlyLocalVals = false;
+            });
+            if (!onlyLocalVals)
+                return nullptr;
+
+            std::unordered_map<BB*, Value*> inputs;
+            bool fail = false;
+            res.eachSource([&](ValOrig v) {
+                auto i = Instruction::Cast(v.val);
+                if (fail || !i || inputs.count(i->bb())) {
+                    fail = true;
+                }
+                inputs[i->bb()] = i;
+            });
+            if (fail)
+                return nullptr;
+
+            auto placement =
+                PhiPlacement::compute(function, inputs, cfg, dom, dfront);
+            auto dominators = dom.dominators(bb);
+            int maxDom = 0;
+            BB* resPhiPos = nullptr;
+            for (auto& phi : placement) {
+                if (phi.first == bb) {
+                    resPhiPos = bb;
+                } else {
+                    auto pos = std::find(dominators.begin(), dominators.end(),
+                                         phi.first);
+                    if (pos != dominators.end()) {
+                        if (pos - dominators.begin() > maxDom)
+                            maxDom = pos - dominators.begin();
+                    }
+                }
+            }
+            if (!resPhiPos)
+                resPhiPos = dominators[maxDom];
+
+            if (placement.size() == 0)
+                return nullptr;
+
+            std::unordered_map<BB*, Phi*> thePhis;
+            for (auto& phi : placement)
+                thePhis[phi.first] = new Phi;
+
+            for (auto& computed : placement) {
+                auto& pos = computed.first;
+                auto& phi = thePhis.at(pos);
+
+                assert(computed.second.size() > 1);
+                for (auto& p : computed.second) {
+                    if (p.aValue) {
+                        auto val = p.aValue;
+                        if (alreadyReplaced.count(val))
+                            val = alreadyReplaced.at(val);
+                        phi->addInput(p.inputBlock, val);
+                    } else {
+                        phi->addInput(p.inputBlock, thePhis.at(p.otherPhi));
+                    }
+                };
+
+                pos->insert(pos->begin(), phi);
+                // If the insert changed the current bb, we need to keep the
+                // iterator updated
+                if (pos == bb)
+                    iter = bb->atPosition(iterPos);
+
+                if (!phi->type.isA(res.type))
+                    phi->type = res.type;
+            }
+
+            for (auto& phi : thePhis)
+                phi.second->updateType();
+
+            return thePhis.at(resPhiPos);
+        };
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -67,6 +154,7 @@ class TheScopeResolution {
                         auto r = new StVar(sts->varName, sts->val(), aLoad.env);
                         bb->replace(ip, r);
                         sts->replaceUsesWith(r);
+                        alreadyReplaced[sts] = r;
                     }
                     ip = next;
                     continue;
@@ -119,7 +207,11 @@ class TheScopeResolution {
                         auto value = res.singleValue();
                         if (value.val->type.isA(i->type) &&
                             value.recursionLevel == 0) {
-                            i->replaceUsesWith(value.val);
+                            auto val = value.val;
+                            if (alreadyReplaced.count(val))
+                                val = alreadyReplaced.at(val);
+                            alreadyReplaced[i] = val;
+                            i->replaceUsesWith(val);
                             next = bb->remove(ip);
                             return;
                         }
@@ -146,95 +238,11 @@ class TheScopeResolution {
                     bool isActualLoad =
                         LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
                     if (!res.isUnknown() && isActualLoad) {
-
-                        bool onlyLocalVals = true;
-                        res.eachSource([&](const ValOrig& src) {
-                            if (src.recursionLevel > 0)
-                                onlyLocalVals = false;
-                        });
-
-                        if (onlyLocalVals && !res.isUnknown()) {
-                            std::unordered_map<BB*, Value*> inputs;
-                            bool fail = false;
-                            res.eachSource([&](ValOrig v) {
-                                auto i = Instruction::Cast(v.val);
-                                if (fail || !i || inputs.count(i->bb())) {
-                                    fail = true;
-                                }
-                                inputs[i->bb()] = i;
-                            });
-                            if (!fail) {
-                                auto placement = PhiPlacement::compute(
-                                    function, inputs, cfg, dom, dfront);
-                                auto dominators = dom.dominators(bb);
-                                int maxDom = 0;
-                                BB* resPhiPos = nullptr;
-                                for (auto& phi : placement) {
-                                    if (phi.first == bb) {
-                                        resPhiPos = bb;
-                                    } else {
-                                        auto pos = std::find(dominators.begin(),
-                                                             dominators.end(),
-                                                             phi.first);
-                                        if (pos != dominators.end()) {
-                                            if (pos - dominators.begin() >
-                                                maxDom)
-                                                maxDom =
-                                                    pos - dominators.begin();
-                                        }
-                                    }
-                                }
-                                if (!resPhiPos)
-                                    resPhiPos = dominators[maxDom];
-
-                                if (placement.size() > 0) {
-                                    std::unordered_map<BB*, Phi*> created;
-                                    for (auto& phi : placement) {
-                                        created[phi.first] = new Phi;
-                                    }
-
-                                    bool replaced = false;
-                                    for (auto& computed : placement) {
-                                        auto& pos = computed.first;
-                                        auto& phi = created.at(pos);
-
-                                        assert(computed.second.size() > 1);
-                                        for (auto& p : computed.second) {
-                                            if (p.aValue) {
-                                                phi->addInput(p.inputBlock,
-                                                              p.aValue);
-                                            } else {
-                                                phi->addInput(
-                                                    p.inputBlock,
-                                                    created.at(p.otherPhi));
-                                            }
-                                        };
-
-                                        if (pos == bb) {
-                                            replaced = true;
-                                            bb->replace(ip, phi);
-                                        } else {
-                                            pos->insert(pos->begin(), phi);
-                                        }
-                                    }
-
-                                    for (auto& phi : created)
-                                        phi.second->updateType();
-                                    for (auto& phi : created) {
-                                        if (!phi.second->type.isA(res.type))
-                                            phi.second->type = res.type;
-                                    }
-                                    for (auto& phi : created)
-                                        phi.second->updateType();
-
-                                    if (!replaced)
-                                        next = bb->remove(ip);
-
-                                    auto resPhi = created.at(resPhiPos);
-                                    i->replaceUsesWith(resPhi);
-                                    return;
-                                }
-                            }
+                        if (auto resPhi = tryInsertPhis(res, bb, ip)) {
+                            i->replaceUsesWith(resPhi);
+                            alreadyReplaced[i] = resPhi;
+                            next = bb->remove(ip);
+                            return;
                         }
                     }
 
@@ -246,6 +254,7 @@ class TheScopeResolution {
                             auto r = new LdVar(lds->varName, e);
                             bb->replace(ip, r);
                             lds->replaceUsesWith(r);
+                            alreadyReplaced[lds] = r;
                         }
                         return;
                     }

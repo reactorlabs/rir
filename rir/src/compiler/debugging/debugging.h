@@ -14,8 +14,8 @@ namespace pir {
 #define LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)                                   \
     V(PrintEarlyRir)                                                           \
     V(PrintEarlyPir)                                                           \
-    V(PrintOptimizationPhases)                                                 \
     V(PrintOptimizationPasses)                                                 \
+    V(PrintOptimizationPhases)                                                 \
     V(PrintPirAfterOpt)                                                        \
     V(PrintCSSA)                                                               \
     V(PrintAllocator)                                                          \
