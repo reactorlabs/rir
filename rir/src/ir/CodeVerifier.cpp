@@ -234,6 +234,8 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
     code->stackLength = max.ostack;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
     assert(TYPEOF(sexp) == EXTERNALSXP and "Invalid SEXPTYPE");
     Function* f = Function::unpack(sexp);
@@ -356,5 +358,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
         }
     }
 }
+#pragma GCC diagnostic pop
 
 } // namespace rir

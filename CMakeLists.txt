@@ -11,7 +11,7 @@ set(R_INCLUDE_DIR ${R_HOME}/include)
 set(R_COMMAND ${R_HOME}/bin/R)
 
 add_definitions(-g3)
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS "-Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wctor-dtor-privacy -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions")
