@@ -77,6 +77,7 @@ g <- rir.compile(function() {
   f(1,2,3)
 })
 
-rir.disassemble(f)
+stopifnot(g()==1)
+pir.compile(g)
 stopifnot(g()==1)
 
