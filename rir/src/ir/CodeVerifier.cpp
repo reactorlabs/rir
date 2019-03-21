@@ -236,8 +236,6 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
-#pragma GCC diagnostic ignored "-Wunknown-warning-option"
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
     assert(TYPEOF(sexp) == EXTERNALSXP and "Invalid SEXPTYPE");
     Function* f = Function::unpack(sexp);
@@ -254,7 +252,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
 
     // check that the call instruction has proper arguments and number of
     // instructions is valid
-    bool sawReturnOrBackjump = false;
     while (!objs.empty()) {
         auto c = objs.back();
         objs.pop_back();
@@ -347,19 +344,14 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                 }
             }
 
-            if ((cur.isJmp() && cur.immediate.offset < 0) || cur.isExit())
-                sawReturnOrBackjump = true;
-            else if (cur.bc != Opcode::nop_)
-                sawReturnOrBackjump = false;
-
             cptr += cur.size();
             if (cptr == start + c->codeSize) {
-                assert(sawReturnOrBackjump);
+                assert(((cur.isJmp() && cur.immediate.offset < 0) ||
+                        cur.isExit()));
                 break;
             }
         }
     }
 }
 #pragma GCC diagnostic pop
-
 } // namespace rir
