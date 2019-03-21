@@ -11,11 +11,6 @@ class Promise : public Code {
     const unsigned id;
     ClosureVersion* owner;
 
-    void print(std::ostream& out, bool tty, bool omitDeoptBranches) const {
-        out << "Prom " << id << ":\n";
-        printCode(out, tty, omitDeoptBranches);
-    }
-
     friend std::ostream& operator<<(std::ostream& out, const Promise& p) {
         out << "Prom(" << p.id << ")";
         return out;

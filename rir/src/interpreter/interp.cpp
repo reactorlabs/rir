@@ -1181,7 +1181,7 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-#define BINDING_CACHE_SIZE 29
+#define BINDING_CACHE_SIZE 5
 typedef struct {
     SEXP loc;
     Immediate idx;
