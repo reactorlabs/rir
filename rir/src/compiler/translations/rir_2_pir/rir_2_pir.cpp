@@ -376,18 +376,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto arg = tryCreateArg(promiseCode, insert, eager);
                     if (!arg)
                         return false;
-                    if (auto mk = MkArg::Cast(arg)) {
-                        if (mk->isEager()) {
-                            auto eager = mk->eagerArg();
-                            if (eager == MissingArg::instance())
-                                given.remove(
-                                    Assumption::NoExplicitlyMissingArgs);
-                            if (!eager->type.maybeLazy())
-                                given.setEager(i);
-                            if (!eager->type.maybeObj())
-                                given.setNotObj(i);
-                        }
+
+                    auto mk = MkArg::Cast(arg);
+                    if (mk && mk->isEager()) {
+                        given.setEager(i);
+                        if (mk->eagerArg() == MissingArg::instance())
+                            given.remove(Assumption::NoExplicitlyMissingArgs);
                     }
+                    Value* value = arg->followCastsAndForce();
+                    if (!MkArg::Cast(value) && !value->type.maybeObj())
+                        given.setNotObj(i);
+
                     args.push_back(arg);
                 }
                 i++;

@@ -55,6 +55,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     });
                     next = ip + 1;
                     i->type.setNotObject();
+                    i->effects.reset(Effect::Reflection);
+                    i->type = i->type.forced();
                 }
 
                 // Speculatively elide envs on forces that only require them in
