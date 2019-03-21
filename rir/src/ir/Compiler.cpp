@@ -229,7 +229,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
             cs << BC::brfalse(fwdBranch);
             // {
             // n' <- ceil(n') - 1
-            cs << BC::asint(true) << BC::dec() << BC::ensureNamed();
+            cs << BC::asint(true) << BC::dec() << BC::setShared();
             // while
             compileWhile(ctx,
                          [&cs]() {
@@ -251,7 +251,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
             // } else {
             cs << BC::br(endBranch) << fwdBranch;
             // n' <- floor(n') + 1
-            cs << BC::asint(false) << BC::inc();
+            cs << BC::asint(false) << BC::inc() << BC::setShared();
             // while
             compileWhile(ctx,
                          [&cs]() {

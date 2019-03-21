@@ -1156,8 +1156,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
-            if (numberOfUses[instr] > 0)
-                cs << BC::setShared();
+            if (numberOfUses[instr] > 1)
+                cs << BC::ensureNamed();
 
             // Store the result
             if (alloc.sa.dead(instr)) {
