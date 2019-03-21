@@ -142,13 +142,13 @@ struct PirType {
         return t;
     }
 
-    PirType() : PirType(RTypeSet()) {}
+    PirType() : flags_(defaultLazyRTypeFlags()), t_(RTypeSet()) {}
     // cppcheck-suppress noExplicitConstructor
     PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
     // cppcheck-suppress noExplicitConstructor
     PirType(const NativeType& t) : t_(t) {}
     // cppcheck-suppress noExplicitConstructor
-    PirType(const RTypeSet& t) : flags_(defaultLazyRTypeFlags()), t_(t) {}
+    PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
     // cppcheck-suppress noExplicitConstructor
     PirType(const NativeTypeSet& t) : t_(t) {}
     explicit PirType(SEXP);
