@@ -342,6 +342,7 @@ class TheScopeResolution {
                             new CallSafeBuiltin(b->blt, args, b->srcIdx);
                         b->replaceUsesWith(safe);
                         bb->replace(ip, safe);
+                        alreadyReplaced[b] = safe;
                     }
                 }
 
