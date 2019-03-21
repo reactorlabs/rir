@@ -37,7 +37,10 @@ void BB::print(std::ostream& out, bool tty) {
 void BB::printGraph(std::ostream& out, bool omitDeoptBranches) {
     out << "BB" << uid()
         << " [shape=\"box\", fontname=\"monospace\", xlabel=\"BB" << id
-        << "\", label=\"\\\n";
+        << "\", ";
+    if (isDeopt())
+        out << "bgcolor=\"gray\", style=\"filled\", ";
+    out << "label=\"\\\n";
     for (auto i : instrs) {
         std::stringstream buf;
         i->printGraph(buf);

@@ -51,7 +51,7 @@ typedef std::unordered_map<std::string, pir::ClosureVersion*> closuresByName;
 closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::StreamLogger logger({pir::DebugOptions::DebugFlags() |
                                   // pir::DebugFlag::PrintIntoStdout |
-                                  // pir::DebugFlag::PrintEarlyRir |
+                                  // pir::DebugFlag::PrintEarlyPir |
                                   // pir::DebugFlag::PrintOptimizationPasses |
                                   pir::DebugFlag::PrintFinalPir,
                               std::regex(".*"), std::regex(".*"),

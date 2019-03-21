@@ -726,7 +726,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::ensure_named_:
-        push(insert(new EnsureNamed(pop())));
+        // Recomputed automatically in the backend
         break;
 
     case Opcode::set_shared_:
