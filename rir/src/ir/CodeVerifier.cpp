@@ -236,6 +236,7 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wunknown-warning-option"
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
     assert(TYPEOF(sexp) == EXTERNALSXP and "Invalid SEXPTYPE");
