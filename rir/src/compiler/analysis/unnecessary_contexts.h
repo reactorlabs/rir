@@ -49,9 +49,9 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
             // checkpoints.
             state.needed = true;
             return AbstractResult::Updated;
-        } else if (auto p = PopContext::Cast(i)) {
+        } else if (PopContext::Cast(i)) {
             if (state.get()) {
-                assert(state.get() == p->push());
+                assert(state.get() == PopContext::Cast(i)->push());
                 state.clear();
                 state.affected.clear();
                 return AbstractResult::Updated;

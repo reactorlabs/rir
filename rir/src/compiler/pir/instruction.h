@@ -299,6 +299,7 @@ class Instruction : public Value {
     virtual Value* env() const {
         assert(!mayHaveEnv() && "subclass must override env() if it uses env");
         assert(false && "this instruction has no env");
+        return nullptr;
     }
     virtual void env(Value* env) {
         assert(!mayHaveEnv() && "subclass must override env() if it uses env");
@@ -309,6 +310,7 @@ class Instruction : public Value {
         assert(!mayHaveEnv() &&
                "subclass must override envSlot() if it uses env");
         assert(false && "this instruction has no env");
+        return -1;
     }
 };
 
