@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cassert>
 #include <iomanip>
+#include <set>
 #include <sstream>
 
 extern "C" SEXP deparse1line(SEXP call, Rboolean abbrev);

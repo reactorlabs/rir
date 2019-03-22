@@ -3,6 +3,7 @@
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
+#include <set>
 
 namespace rir {
 namespace pir {
@@ -11,8 +12,9 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
 
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<size_t, Value*> firstValue;
+    DominanceGraph dom(cls);
     {
-        std::unordered_map<size_t, SmallSet<size_t>> classes;
+        std::unordered_map<size_t, std::vector<size_t>> classes;
         std::unordered_map<Value*, size_t> number;
         std::unordered_map<SEXP, size_t> constants;
 
@@ -23,7 +25,8 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
             if (number.count(v))
                 return;
 
-            auto storeNumber = [&](Value* v, size_t n, SmallSet<size_t> klass) {
+            auto storeNumber = [&](Value* v, size_t n,
+                                   std::vector<size_t> klass) {
                 assert(!number.count(v));
                 assert(!firstValue.count(n));
                 number[v] = n;
@@ -42,25 +45,58 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
             if (!i)
                 return assignNumber(v);
 
+            if (!i->producesRirResult())
+                return;
+
             auto computeNumber = [&](Instruction* i) {
-                size_t klassNumber = (size_t)i->tag;
+                size_t klassNumber = i->gvnBase();
+
                 bool success = true;
-                i->eachArg([&](Value* a) {
-                    if (success && number.count(a))
-                        klassNumber = hash_combine(klassNumber, number.at(a));
-                    else
-                        success = false;
-                });
+                std::vector<size_t> args;
+                if (auto phi = Phi::Cast(i)) {
+                    // Special case phi: instruction is commutative, but we
+                    // additionally need to associate input block ids with
+                    // input values to avoid confusing (BB1:a, BB2:b) with
+                    // (BB2:a, BB1:b).
+                    klassNumber = hash_combine(klassNumber, phi->bb()->id);
+                    std::set<size_t> sortedArgs;
+                    phi->eachArg([&](BB* bb, Value* a) {
+                        if (success) {
+                            if (number.count(a))
+                                sortedArgs.insert(
+                                    hash_combine(number.at(a), bb->id));
+                            else if (auto p = Phi::Cast(a))
+                                sortedArgs.insert(
+                                    hash_combine(p->gvnBase(), bb->id));
+                            else
+                                success = false;
+                        }
+                    });
+                    if (success) {
+                        for (auto& n : sortedArgs) {
+                            klassNumber = hash_combine(klassNumber, n);
+                            args.push_back(n);
+                        }
+                    }
+                } else {
+                    i->eachArg([&](Value* a) {
+                        if (success && number.count(a))
+                            klassNumber =
+                                hash_combine(klassNumber, number.at(a));
+                        else
+                            success = false;
+                    });
+                    if (success)
+                        i->eachArg(
+                            [&](Value* a) { args.push_back(number.at(a)); });
+                }
 
                 if (success) {
-                    SmallSet<size_t> klass;
-                    i->eachArg([&](Value* a) { klass.insert(number.at(a)); });
-
                     if (!classes.count(klassNumber) ||
-                        classes.at(klassNumber) != klass) {
+                        classes.at(klassNumber) != args) {
                         while (classes.count(klassNumber))
                             klassNumber++;
-                        storeNumber(i, klassNumber, klass);
+                        storeNumber(i, klassNumber, args);
                     } else {
                         number[i] = klassNumber;
                     }
@@ -68,9 +104,8 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 }
             };
 
-            switch (i->tag) {
-            case Tag::LdConst: {
-                SEXP constant = LdConst::Cast(i)->c();
+            if (auto ld = LdConst::Cast(i)) {
+                SEXP constant = ld->c();
                 for (auto& c : constants) {
                     if (R_compute_identical(c.first, constant, 0)) {
                         number[i] = c.second;
@@ -82,54 +117,29 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                     nextNumber++;
                 constants[constant] = nextNumber;
                 storeNumber(i, nextNumber, {nextNumber});
-                break;
-            }
-            case Tag::Mul:
-            case Tag::Div:
-            case Tag::IDiv:
-            case Tag::Mod:
-            case Tag::Add:
-            case Tag::Colon:
-            case Tag::Pow:
-            case Tag::Sub:
-            case Tag::Gte:
-            case Tag::Lte:
-            case Tag::Gt:
-            case Tag::Lt:
-            case Tag::Neq:
-            case Tag::Eq:
-            case Tag::LAnd:
-            case Tag::LOr:
-            case Tag::Not:
-            case Tag::Plus:
-            case Tag::Minus:
-            case Tag::Length:
-            case Tag::AsTest:
-            case Tag::Identical:
-            case Tag::IsObject: {
-                if (i->effects.includes(Effect::ExecuteCode))
-                    assignNumber(i);
-                else
+            } else {
+                // We allow instructions with those effects to be deduplicated.
+                auto effects =
+                    i->effects & (~(Effects(Effect::Error) | Effect::Warn |
+                                    Effect::Visibility | Effect::Force));
+                if (effects.empty())
                     computeNumber(i);
-                break;
+                else
+                    assignNumber(i);
             }
-            case Tag::Phi:
-                computeNumber(i);
-                break;
-            default:
-                assignNumber(i);
-                break;
-            };
         };
 
         while (changed) {
             changed = false;
-            BreadthFirstVisitor::run(cls->entry,
-                                     [&](Instruction* i) { computeGN(i); });
+            DominatorTreeVisitor<>(dom).run(cls->entry, [&](BB* bb) {
+                for (auto i : *bb)
+                    computeGN(i);
+            });
         }
 
-        for (auto& g : number)
+        for (auto& g : number) {
             reverseNumber[g.second].insert(g.first);
+        }
 
         for (auto it = reverseNumber.begin(); it != reverseNumber.end();) {
             if (it->second.size() < 2)
@@ -142,8 +152,6 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
     }
 
     {
-        DominanceGraph dom(cls);
-
         std::unordered_map<Value*, Value*> replacements;
 
         for (auto& g : reverseNumber) {
@@ -166,6 +174,14 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                                 continue;
                         }
                     }
+                    std::cout << " * ";
+                    i->print(std::cout, true);
+                    std::cout << " replaced with ";
+                    if (firstInstr)
+                        firstInstr->print(std::cout, true);
+                    else
+                        first->printRef(std::cout);
+                    std::cout << "\n";
                     i->replaceUsesWith(first);
                     // Make sure this instruction really gets removed
                     i->effects.reset();

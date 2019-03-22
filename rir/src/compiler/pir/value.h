@@ -43,7 +43,8 @@ class Value {
     virtual SEXP asRValue() const { assert(false && "Not a singleton"); }
 
     bool producesRirResult() const {
-        return type != PirType::voyd() && type != NativeType::context;
+        return type != PirType::voyd() &&
+               (type.isRType() || type == NativeType::test);
     }
 };
 
