@@ -50,7 +50,6 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::EagerCalls());
         optimizations.push_back(new pir::Constantfold());
         optimizations.push_back(new pir::Cleanup());
-        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::DelayInstr());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
@@ -59,6 +58,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::OptimizeContexts());
         optimizations.push_back(new pir::LoadElision());
         optimizations.push_back(new pir::GVN());
+        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::Cleanup());
     };
 

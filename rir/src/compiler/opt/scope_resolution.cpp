@@ -206,9 +206,6 @@ class TheScopeResolution {
                     }
                 }
 
-                // TODO: this is disabled on purpose. I believe it does
-                // currently not speed up anything. But I would like to land the
-                // rest of the changes and continue work on that part.
                 if (bb->isDeopt()) {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {

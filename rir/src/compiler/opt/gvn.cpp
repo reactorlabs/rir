@@ -21,6 +21,37 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
         bool changed = true;
         size_t nextNumber = 0;
 
+        // Adhoc phi numbering to account for recursive phis
+        // exploits commutative nature of inputs
+        // TODO: is there a more standard way??
+        auto computePhiNr = [&](Phi* phi, bool& success) -> size_t {
+            SmallSet<BB*> seen;
+            success = true;
+            std::function<size_t(Phi*)> doComputePhiNr =
+                [&](Phi* phi) -> size_t {
+                if (!success || seen.includes(phi->bb()))
+                    return 0;
+                seen.insert(phi->bb());
+
+                std::set<size_t> inputs;
+                phi->eachArg([&](BB* bb, Value* a) {
+                    if (number.count(a))
+                        inputs.insert(hash_combine(number.at(a), bb));
+                    else if (auto phi = Phi::Cast(a))
+                        inputs.insert(hash_combine(doComputePhiNr(phi), bb));
+                    else
+                        success = false;
+                });
+
+                auto h = phi->gvnBase();
+                for (auto n : inputs)
+                    h = hash_combine(h, n);
+                return h;
+            };
+            auto res = doComputePhiNr(phi);
+            return res;
+        };
+
         std::function<void(Value*)> computeGN = [&](Value* v) -> void {
             if (number.count(v))
                 return;
@@ -39,11 +70,14 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 while (classes.count(nextNumber))
                     nextNumber++;
                 storeNumber(v, nextNumber, {nextNumber});
+                return nextNumber;
             };
 
             auto i = Instruction::Cast(v);
-            if (!i)
-                return assignNumber(v);
+            if (!i) {
+                assignNumber(v);
+                return;
+            }
 
             if (!i->producesRirResult())
                 return;
@@ -51,47 +85,29 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
             auto computeNumber = [&](Instruction* i) {
                 size_t klassNumber = i->gvnBase();
 
-                bool success = true;
                 std::vector<size_t> args;
                 if (auto phi = Phi::Cast(i)) {
-                    // Special case phi: instruction is commutative, but we
-                    // additionally need to associate input block ids with
-                    // input values to avoid confusing (BB1:a, BB2:b) with
-                    // (BB2:a, BB1:b).
-                    klassNumber = hash_combine(klassNumber, phi->bb()->id);
-                    std::set<size_t> sortedArgs;
-                    phi->eachArg([&](BB* bb, Value* a) {
-                        if (success) {
-                            if (number.count(a))
-                                sortedArgs.insert(
-                                    hash_combine(number.at(a), bb->id));
-                            else if (auto p = Phi::Cast(a))
-                                sortedArgs.insert(
-                                    hash_combine(p->gvnBase(), bb->id));
-                            else
-                                success = false;
-                        }
-                    });
+                    bool success = false;
+                    auto res = computePhiNr(phi, success);
                     if (success) {
-                        for (auto& n : sortedArgs) {
-                            klassNumber = hash_combine(klassNumber, n);
-                            args.push_back(n);
-                        }
+                        changed = true;
+                        number[phi] = res;
+                        if (!firstValue.count(res))
+                            firstValue[res] = phi;
                     }
-                } else {
-                    i->eachArg([&](Value* a) {
-                        if (success && number.count(a))
-                            klassNumber =
-                                hash_combine(klassNumber, number.at(a));
-                        else
-                            success = false;
-                    });
-                    if (success)
-                        i->eachArg(
-                            [&](Value* a) { args.push_back(number.at(a)); });
+                    return;
                 }
 
+                bool success = true;
+                i->eachArg([&](Value* a) {
+                    if (success && number.count(a))
+                        klassNumber = hash_combine(klassNumber, number.at(a));
+                    else
+                        success = false;
+                });
                 if (success) {
+                    i->eachArg([&](Value* a) { args.push_back(number.at(a)); });
+
                     if (!classes.count(klassNumber) ||
                         classes.at(klassNumber) != args) {
                         while (classes.count(klassNumber))
