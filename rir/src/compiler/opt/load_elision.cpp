@@ -14,7 +14,9 @@ namespace rir {
 namespace pir {
 
 struct ALoad {
+    // cppcheck-suppress noExplicitConstructor
     ALoad(LdVar* ld) : origin(ld), env(ld->env()), name(ld->varName) {}
+    // cppcheck-suppress noExplicitConstructor
     ALoad(LdFun* ld) : origin(ld), env(ld->env()), name(ld->varName) {}
     Instruction* origin;
     Value* env;

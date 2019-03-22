@@ -33,9 +33,8 @@ struct UnnecessaryContextsState : public AbstractUnique<PushContext> {
 
 class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
   public:
-    ClosureVersion* code;
     UnnecessaryContexts(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("UnnecessaryContexts", cls, cls, log), code(cls) {}
+        : StaticAnalysis("UnnecessaryContexts", cls, cls, log) {}
 
     AbstractResult apply(UnnecessaryContextsState& state,
                          Instruction* i) const override {

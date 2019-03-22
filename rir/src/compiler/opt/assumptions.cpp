@@ -14,6 +14,7 @@ namespace rir {
 namespace pir {
 
 struct AAssumption {
+    // cppcheck-suppress noExplicitConstructor
     AAssumption(Assume* a) : yesNo(a->assumeTrue), assumption(a->condition()) {}
     bool yesNo;
     Value* assumption;

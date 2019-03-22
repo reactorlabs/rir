@@ -115,7 +115,7 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 }
                 while (classes.count(nextNumber))
                     nextNumber++;
-                constants[constant] = nextNumber;
+                constants.emplace(constant, nextNumber);
                 storeNumber(i, nextNumber, {nextNumber});
             } else {
                 // We allow instructions with those effects to be deduplicated.
