@@ -631,7 +631,7 @@ class Pir2Rir {
 
         void add(BC&& bc, SEXP src) {
             Src s;
-            s.tag = Src::Sexp;
+            s.tag = src ? Src::Sexp : Src::None;
             s.u.sexp = src;
             emplace_back(std::move(bc), s);
         }
