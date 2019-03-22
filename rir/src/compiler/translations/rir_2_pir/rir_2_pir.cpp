@@ -376,18 +376,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto arg = tryCreateArg(promiseCode, insert, eager);
                     if (!arg)
                         return false;
-                    if (auto mk = MkArg::Cast(arg)) {
-                        if (mk->isEager()) {
-                            auto eager = mk->eagerArg();
-                            if (eager == MissingArg::instance())
-                                given.remove(
-                                    Assumption::NoExplicitlyMissingArgs);
-                            if (!eager->type.maybeLazy())
-                                given.setEager(i);
-                            if (!eager->type.maybeObj())
-                                given.setNotObj(i);
-                        }
+
+                    auto mk = MkArg::Cast(arg);
+                    if (mk && mk->isEager()) {
+                        given.setEager(i);
+                        if (mk->eagerArg() == MissingArg::instance())
+                            given.remove(Assumption::NoExplicitlyMissingArgs);
                     }
+                    Value* value = arg->followCastsAndForce();
+                    if (!MkArg::Cast(value) && !value->type.maybeObj())
+                        given.setNotObj(i);
+
                     args.push_back(arg);
                 }
                 i++;
@@ -726,7 +725,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::ensure_named_:
-        push(insert(new EnsureNamed(pop())));
+        // Recomputed automatically in the backend
         break;
 
     case Opcode::set_shared_:
@@ -797,7 +796,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
-    case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::beginloop_:
     case Opcode::endloop_:
@@ -1050,7 +1048,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
 
             if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->hasEffectIgnoreVisibility()) {
+                insert.getCurrentBB()->last()->isDeoptBarrier()) {
                 addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
         }

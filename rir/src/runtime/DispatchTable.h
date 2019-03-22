@@ -101,6 +101,6 @@ struct DispatchTable
     size_t size_ = 0;
 };
 #pragma pack(pop)
-}
+} // namespace rir
 
 #endif

@@ -76,11 +76,6 @@ DEF_INSTR(ldvar_noforce_super_, 1, 0, 1, 1)
 DEF_INSTR(ldddvar_, 1, 0, 1, 0)
 
 /**
- * ldlval_:: take immediate CP index of symbol, load value from local frame.
- */
-DEF_INSTR(ldlval_, 1, 0, 1, 1)
-
-/**
  * ldarg_:: load argument
  */
 DEF_INSTR(ldarg_, 1, 0, 1, 0)

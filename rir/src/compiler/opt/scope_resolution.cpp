@@ -3,9 +3,11 @@
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
 #include "../util/phi_placement.h"
+#include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
+#include "utils/Set.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -17,9 +19,12 @@ class TheScopeResolution {
   public:
     ClosureVersion* function;
     CFG cfg;
+    DominanceGraph dom;
+    DominanceFrontier dfront;
     LogStream& log;
     explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
-        : function(function), cfg(function), log(log) {}
+        : function(function), cfg(function), dom(function),
+          dfront(function, cfg, dom), log(log) {}
 
     void operator()() {
         ScopeAnalysis analysis(function, log);
@@ -27,6 +32,93 @@ class TheScopeResolution {
         auto& finalState = analysis.result();
         if (finalState.noReflection())
             function->properties.set(ClosureVersion::Property::NoReflection);
+
+        std::unordered_map<Value*, Value*> alreadyReplaced;
+
+        auto tryInsertPhis = [&](AbstractPirValue res, BB* bb,
+                                 BB::Instrs::iterator& iter) -> Instruction* {
+            if (res.isUnknown())
+                return nullptr;
+
+            auto iterPos = *iter;
+            bool onlyLocalVals = true;
+            res.eachSource([&](const ValOrig& src) {
+                if (src.recursionLevel > 0)
+                    onlyLocalVals = false;
+            });
+            if (!onlyLocalVals)
+                return nullptr;
+
+            std::unordered_map<BB*, Value*> inputs;
+            bool fail = false;
+            res.eachSource([&](ValOrig v) {
+                auto i = Instruction::Cast(v.val);
+                if (fail || !i || inputs.count(i->bb())) {
+                    fail = true;
+                }
+                inputs[i->bb()] = i;
+            });
+            if (fail)
+                return nullptr;
+
+            auto placement =
+                PhiPlacement::compute(function, inputs, cfg, dom, dfront);
+            auto dominators = dom.dominators(bb);
+            int maxDom = 0;
+            BB* resPhiPos = nullptr;
+            for (auto& phi : placement) {
+                if (phi.first == bb) {
+                    resPhiPos = bb;
+                } else {
+                    auto pos = std::find(dominators.begin(), dominators.end(),
+                                         phi.first);
+                    if (pos != dominators.end()) {
+                        if (pos - dominators.begin() > maxDom)
+                            maxDom = pos - dominators.begin();
+                    }
+                }
+            }
+            if (!resPhiPos)
+                resPhiPos = dominators[maxDom];
+
+            if (placement.size() == 0)
+                return nullptr;
+
+            std::unordered_map<BB*, Phi*> thePhis;
+            for (auto& phi : placement)
+                thePhis[phi.first] = new Phi;
+
+            for (auto& computed : placement) {
+                auto& pos = computed.first;
+                auto& phi = thePhis.at(pos);
+
+                assert(computed.second.size() > 1);
+                for (auto& p : computed.second) {
+                    if (p.aValue) {
+                        auto val = p.aValue;
+                        if (alreadyReplaced.count(val))
+                            val = alreadyReplaced.at(val);
+                        phi->addInput(p.inputBlock, val);
+                    } else {
+                        phi->addInput(p.inputBlock, thePhis.at(p.otherPhi));
+                    }
+                };
+
+                pos->insert(pos->begin(), phi);
+                // If the insert changed the current bb, we need to keep the
+                // iterator updated
+                if (pos == bb)
+                    iter = bb->atPosition(iterPos);
+
+                if (!phi->type.isA(res.type))
+                    phi->type = res.type;
+            }
+
+            for (auto& phi : thePhis)
+                phi.second->updateType();
+
+            return thePhis.at(resPhiPos);
+        };
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -40,18 +132,14 @@ class TheScopeResolution {
                 // Force and callees can only see our env only through
                 // reflection
                 if (i->hasEnv() &&
-                    (CallInstruction::CastCall(i) || Force::Cast(i)) &&
-                    after.noReflection())
-                    i->elideEnv();
-
-                // Dead store to non-escaping environment can be removed
-                if (auto st = StVar::Cast(i)) {
-                    if (finalState.envNotEscaped(st->env()) &&
-                        finalState.deadStore(st)) {
-                        next = bb->remove(ip);
+                    (CallInstruction::CastCall(i) || Force::Cast(i))) {
+                    if (after.noReflection()) {
+                        i->elideEnv();
+                        i->effects.reset(Effect::Reflection);
                     }
-                    ip = next;
-                    continue;
+                    if (after.envNotEscaped(i->env())) {
+                        i->effects.reset(Effect::LeaksEnv);
+                    }
                 }
 
                 // StVarSuper where the parent environment is known and
@@ -66,6 +154,7 @@ class TheScopeResolution {
                         auto r = new StVar(sts->varName, sts->val(), aLoad.env);
                         bb->replace(ip, r);
                         sts->replaceUsesWith(r);
+                        alreadyReplaced[sts] = r;
                     }
                     ip = next;
                     continue;
@@ -118,7 +207,11 @@ class TheScopeResolution {
                         auto value = res.singleValue();
                         if (value.val->type.isA(i->type) &&
                             value.recursionLevel == 0) {
-                            i->replaceUsesWith(value.val);
+                            auto val = value.val;
+                            if (alreadyReplaced.count(val))
+                                val = alreadyReplaced.at(val);
+                            alreadyReplaced[i] = val;
+                            i->replaceUsesWith(val);
                             next = bb->remove(ip);
                             return;
                         }
@@ -145,39 +238,11 @@ class TheScopeResolution {
                     bool isActualLoad =
                         LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
                     if (!res.isUnknown() && isActualLoad) {
-
-                        bool onlyLocalVals = true;
-                        res.eachSource([&](const ValOrig& src) {
-                            if (src.recursionLevel > 0)
-                                onlyLocalVals = false;
-                        });
-
-                        if (onlyLocalVals && !res.isUnknown()) {
-                            std::vector<BB*> inputs;
-                            res.eachSource([&](ValOrig v) {
-                                if (auto i = Instruction::Cast(v.val))
-                                    inputs.push_back(i->bb());
-                            });
-                            if (auto phiBlock =
-                                    PhiPlacement::find(cfg, bb, inputs)) {
-                                // Insert a new phi
-                                auto phi = new Phi;
-                                res.eachSource([&](const ValOrig& src) {
-                                    phi->addInput(src.origin->bb(), src.val);
-                                });
-                                phi->updateType();
-                                if (!phi->type.isA(res.type))
-                                    i->type = res.type;
-                                i->replaceUsesWith(phi);
-                                if (phiBlock == bb) {
-                                    bb->replace(ip, phi);
-                                } else {
-                                    phiBlock->insert(phiBlock->begin(), phi);
-                                    next = bb->remove(ip);
-                                }
-
-                                return;
-                            }
+                        if (auto resPhi = tryInsertPhis(res, bb, ip)) {
+                            i->replaceUsesWith(resPhi);
+                            alreadyReplaced[i] = resPhi;
+                            next = bb->remove(ip);
+                            return;
                         }
                     }
 
@@ -189,6 +254,7 @@ class TheScopeResolution {
                             auto r = new LdVar(lds->varName, e);
                             bb->replace(ip, r);
                             lds->replaceUsesWith(r);
+                            alreadyReplaced[lds] = r;
                         }
                         return;
                     }
@@ -251,6 +317,34 @@ class TheScopeResolution {
                         aLoad.env != AbstractREnvironment::UnknownParent)
                         i->env(aLoad.env);
                 });
+
+                if (auto b = CallBuiltin::Cast(i)) {
+                    bool noObjects = true;
+                    i->eachArg([&](Value* v) {
+                        if (v != i->env())
+                            if (v->cFollowCastsAndForce()->type.maybeObj())
+                                noObjects = false;
+                    });
+
+                    if (noObjects &&
+                        SafeBuiltinsList::nonObject(b->builtinId)) {
+                        std::vector<Value*> args;
+                        i->eachArg([&](Value* v) {
+                            if (v != i->env()) {
+                                auto mk = MkArg::Cast(v);
+                                if (mk && mk->isEager())
+                                    args.push_back(mk->eagerArg());
+                                else
+                                    args.push_back(v);
+                            }
+                        });
+                        auto safe =
+                            new CallSafeBuiltin(b->blt, args, b->srcIdx);
+                        b->replaceUsesWith(safe);
+                        bb->replace(ip, safe);
+                        alreadyReplaced[b] = safe;
+                    }
+                }
 
                 ip = next;
             }

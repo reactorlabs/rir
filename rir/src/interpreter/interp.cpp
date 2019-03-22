@@ -14,7 +14,7 @@
 #include <set>
 
 #define NOT_IMPLEMENTED assert(false)
-
+#define USE_TYPED_STACK
 #undef eval
 
 extern "C" {
@@ -320,6 +320,10 @@ static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
                                          SEXP env, SEXP arglist,
                                          InterpreterInstance* ctx) {
+    assert(TYPEOF(env) == ENVSXP ||
+           fun->signature().envCreation ==
+               FunctionSignature::Environment::CalleeCreated);
+
     RCNTXT cntxt;
 
     // This code needs to be protected, because its slot in the dispatch table
@@ -574,7 +578,8 @@ static void addDynamicAssumptionsFromContext(CallContext& call,
                 }
             } else if (arg.tag == STACK_OBJ_SEXP && isObject(arg.u.sxpval)) {
                 notObj = false;
-            } else if (arg.tag == STACK_OBJ_SEXP && arg.u.sxpval == R_MissingArg) {
+            } else if (arg.tag == STACK_OBJ_SEXP &&
+                       arg.u.sxpval == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
             }
             if (isEager)
@@ -1200,8 +1205,6 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
-
 #define BINDING_CACHE_SIZE 5
 typedef struct {
     SEXP loc;
@@ -1463,7 +1466,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         memset(R_BCNodeStackTop, 0, sizeof(*R_BCNodeStackTop) * c->localsCount);
 #endif
         localsBase = R_BCNodeStackTop;
-
     }
     Locals locals(localsBase, c->localsCount, existingLocals);
 
@@ -1518,9 +1520,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(pop_context_) {
-            return ostackPop(ctx);
-        }
+        INSTRUCTION(pop_context_) { return ostackPop(ctx); }
 
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
@@ -1663,7 +1663,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP res = cachedGetVar(env, id, ctx, bindingCache);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1689,7 +1688,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP res = cachedGetVar(env, id, ctx, bindingCache);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1711,7 +1709,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SEXP res = Rf_findVar(sym, ENCLOS(env));
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1735,7 +1732,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SEXP res = Rf_findVar(sym, ENCLOS(env));
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1755,7 +1751,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SEXP res = Rf_ddfindVar(sym, env);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1767,29 +1762,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
-
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
-
-            ostackPushSexp(ctx, res);
-            NEXT();
-        }
-
-        INSTRUCTION(ldlval_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            SEXP res = cachedGetBindingCell(env, id, ctx, bindingCache);
-            SLOWASSERT(res);
-            res = CAR(res);
-            SLOWASSERT(res != R_UnboundValue);
-
-            R_Visible = TRUE;
-
-            if (TYPEOF(res) == PROMSXP)
-                res = PRVALUE(res);
-
-            SLOWASSERT(res != R_UnboundValue);
-            SLOWASSERT(res != R_MissingArg);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -1831,6 +1803,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             R_bcstack_t val = ostackPop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache);
 
             NEXT();
@@ -1841,6 +1815,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             R_bcstack_t val = ostackPop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache, true);
 
             NEXT();
@@ -2058,13 +2034,18 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             advanceImmediate();
 
-            ArgsLazyData lazyArgs(&call, ctx);
-            fun->registerInvocation();
-            supplyMissingArgs(call, fun);
-            res = rirCallTrampoline(call, fun, symbol::delayedEnv,
-                                    (SEXP)&lazyArgs, ctx);
-            ostackPopn(ctx, call.passedArgs);
-            ostackPushSexp(ctx, res);
+            if (fun->signature().envCreation ==
+                FunctionSignature::Environment::CallerProvided) {
+                res = stackObjToSexp(doCall(call, ctx));
+            } else {
+                ArgsLazyData lazyArgs(&call, ctx);
+                fun->registerInvocation();
+                supplyMissingArgs(call, fun);
+                res = rirCallTrampoline(call, fun, symbol::delayedEnv,
+                                        (SEXP)&lazyArgs, ctx);
+                ostackPopn(ctx, call.passedArgs);
+                ostackPushSexp(ctx, res);
+            }
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs + 1 ==
@@ -2707,7 +2688,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostackPopn(ctx, 3);
 
-            R_Visible = TRUE;
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -2736,7 +2716,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostackPopn(ctx, 4);
 
-            R_Visible = TRUE;
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -2795,7 +2774,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 goto fallback;
             }
 
-            R_Visible = TRUE;
             ostackPopn(ctx, 2);
             ostackPush(ctx, res);
             NEXT();
@@ -2822,7 +2800,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             ostackPopn(ctx, 3);
 
-            R_Visible = TRUE;
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -2854,7 +2831,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             ostackPopn(ctx, 4);
-            R_Visible = TRUE;
             ostackPushSexp(ctx, res);
             NEXT();
         }

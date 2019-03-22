@@ -104,7 +104,7 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                                               BB* fastPathBranch) {
                 auto newEnvInstr = envInstr->clone();
                 deoptBranch->insert(deoptBranch->begin(), newEnvInstr);
-                envInstr->replaceUsesIn(newEnvInstr, deoptBranch);
+                envInstr->replaceUsesWithLimits(newEnvInstr, deoptBranch);
                 it = bb->moveToBegin(it, fastPathBranch);
             };
 

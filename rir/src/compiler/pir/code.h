@@ -19,9 +19,9 @@ class Code {
     size_t nextBBId = 0;
 
     Code() {}
-    void printCode(std::ostream&, bool tty) const;
-    void printGraphCode(std::ostream&, bool tty) const;
-    void printBBGraphCode(std::ostream&) const;
+    void printCode(std::ostream&, bool tty, bool omitDeoptBranches) const;
+    void printGraphCode(std::ostream&, bool omitDeoptBranches) const;
+    void printBBGraphCode(std::ostream&, bool omitDeoptBranches) const;
     virtual ~Code();
 
     virtual size_t size() const;

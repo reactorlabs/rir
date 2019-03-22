@@ -75,7 +75,7 @@ add_custom_target(dependencies
 
 add_custom_target(default-gnur
     DEPENDS dependencies
-    COMMAND cd ${CMAKE_SOURCE_DIR}/external/custom-r && make -j 8
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh custom-r
 )
 
 add_custom_target(dependencies-vanilla
@@ -84,7 +84,7 @@ add_custom_target(dependencies-vanilla
 
 add_custom_target(vanilla-gnur
     DEPENDS dependencies-vanilla
-    COMMAND cd ${CMAKE_SOURCE_DIR}/external/vanilla-r && make -j 8
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh vanilla-r
 )
 
 add_custom_target(setup
