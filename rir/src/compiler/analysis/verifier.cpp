@@ -23,8 +23,6 @@ class TheVerifier {
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
             f->print(std::cerr, true);
-            Rf_error("");
-            return;
         }
 
         f->eachPromise([&](Promise* p) {
@@ -39,9 +37,12 @@ class TheVerifier {
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
                 p->printCode(std::cerr, true, false);
-                return;
             }
         });
+
+        if (!ok) {
+            Rf_error("");
+        }
     }
 
     const CFG& cfg(Code* c) {
@@ -162,8 +163,11 @@ class TheVerifier {
 
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
-            if (p->owner->promise(p->id) != p)
-                Rf_error("PIR Verifier: Promise code out of current closure");
+            if (p->owner->promise(p->id) != p) {
+                std::cerr
+                    << "PIR Verifier: Promise code out of current closure";
+                ok = false;
+            }
             if (p->owner != f) {
                 mk->printRef(std::cerr);
                 std::cerr << " is referencing a promise from another function "
@@ -173,9 +177,12 @@ class TheVerifier {
         }
 
         if (i->branchOrExit())
-            if (i != bb->last())
-                Rf_error("PIR Verifier: Only last instruction of BB can have "
-                         "controlflow");
+            if (i != bb->last()) {
+                std::cerr
+                    << "PIR Verifier: Only last instruction of BB can have "
+                       "controlflow";
+                ok = false;
+            }
 
         if (auto phi = Phi::Cast(i)) {
             phi->eachArg([&](BB* input, Value* v) {
@@ -320,10 +327,9 @@ class TheVerifier {
 namespace rir {
 namespace pir {
 
-bool Verify::apply(ClosureVersion* f, bool slow) {
+void Verify::apply(ClosureVersion* f, bool slow) {
     TheVerifier v(f, slow);
     v();
-    return v.ok;
 }
 } // namespace pir
 } // namespace rir

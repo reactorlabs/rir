@@ -131,16 +131,11 @@ class NullBuffer : public std::ostream, std::streambuf {
 };
 
 bool verify(Module* m) {
-    bool success = true;
-    m->eachPirClosureVersion([&success](ClosureVersion* v) {
-        if (!Verify::apply(v))
-            success = false;
-    });
+    m->eachPirClosureVersion([](ClosureVersion* v) { Verify::apply(v); });
     // TODO: find fix for osx
     NullBuffer nb;
     m->print(nb);
     // m->print(std::cout);
-
     return true;
 }
 

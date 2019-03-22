@@ -8,9 +8,9 @@ namespace pir {
 
 class Verify {
   public:
-    static bool apply(ClosureVersion*, bool slow = false);
+    static void apply(ClosureVersion*, bool slow = false);
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif
