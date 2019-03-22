@@ -298,15 +298,11 @@ static RIR_INLINE SEXP createLegacyArgsList(const CallContext& call,
     }
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
 SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
                  R_bcstack_t* = nullptr);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
-    int trampIn = ostack_length(ctx);
     if ((SETJMP(cntxt.cjmpbuf))) {
-        assert(trampIn == ostack_length(ctx));
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
@@ -317,7 +313,6 @@ static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
     }
     return evalRirCode(code, ctx, env, &call);
 }
-#pragma GCC diagnostic pop
 
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
                                          SEXP env, SEXP arglist,

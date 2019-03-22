@@ -23,7 +23,7 @@ class TheVerifier {
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
             f->print(std::cerr, true);
-            assert(false);
+            Rf_error("");
             return;
         }
 
@@ -123,7 +123,6 @@ class TheVerifier {
                     ok = false;
                 }
             } else {
-                assert(!last->branchOrExit());
                 if (bb->falseBranch()) {
                     std::cerr << "bb" << bb->id
                               << " has false branch but no branch instr\n";
@@ -163,7 +162,8 @@ class TheVerifier {
 
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
-            assert(p->owner->promise(p->id) == p);
+            if (p->owner->promise(p->id) != p)
+                Rf_error("PIR Verifier: Promise code out of current closure");
             if (p->owner != f) {
                 mk->printRef(std::cerr);
                 std::cerr << " is referencing a promise from another function "
@@ -173,8 +173,9 @@ class TheVerifier {
         }
 
         if (i->branchOrExit())
-            assert(i == bb->last() &&
-                   "Only last instruction of BB can have controlflow");
+            if (i != bb->last())
+                Rf_error("PIR Verifier: Only last instruction of BB can have "
+                         "controlflow");
 
         if (auto phi = Phi::Cast(i)) {
             phi->eachArg([&](BB* input, Value* v) {
