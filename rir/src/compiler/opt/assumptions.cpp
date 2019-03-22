@@ -77,9 +77,6 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
 
             if (auto assume = Assume::Cast(instr)) {
                 if (assumptions.at(instr).includes(assume)) {
-                    std::cout << " ----- removed ";
-                    instr->print(std::cout);
-                    std::cout << "\n";
                     next = bb->remove(ip);
                 } else {
                     // We are trying to group multiple assumes into the same

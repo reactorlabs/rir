@@ -174,14 +174,6 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                                 continue;
                         }
                     }
-                    std::cout << " * ";
-                    i->print(std::cout, true);
-                    std::cout << " replaced with ";
-                    if (firstInstr)
-                        firstInstr->print(std::cout, true);
-                    else
-                        first->printRef(std::cout);
-                    std::cout << "\n";
                     i->replaceUsesWith(first);
                     // Make sure this instruction really gets removed
                     i->effects.reset();

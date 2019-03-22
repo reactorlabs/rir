@@ -80,9 +80,6 @@ void LoadElision::apply(RirCompiler&, ClosureVersion* function,
 
             if (LdVar::Cast(instr) || LdFun::Cast(instr)) {
                 if (auto domld = loads.get(instr)) {
-                    std::cout << " ----- removed ";
-                    instr->print(std::cout);
-                    std::cout << "\n";
                     instr->replaceUsesWith(domld);
                     next = bb->remove(ip);
                 }
