@@ -266,8 +266,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
                              cs << BC::pull(1) << BC::setShared()
                                 << BC::stvar(sym);
                              // i' <- i' + 1
-                             cs << BC::swap() << BC::setShared() << BC::inc()
-                                << BC::swap();
+                             cs << BC::swap() << BC::inc() << BC::swap();
                              // ...
                              compileExpr(ctx, body);
                              // }
