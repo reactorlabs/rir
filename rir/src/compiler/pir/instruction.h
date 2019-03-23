@@ -1524,6 +1524,47 @@ class ScheduledDeopt
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
+#ifdef ENABLE_SLOWASSERT
+class FLI(TmpGet, 0, Effects::None()) {
+  public:
+    const DebugPoolIdx idx = (DebugPoolIdx)-1;
+
+    explicit TmpGet(DebugPoolIdx idx_)
+        : FixedLenInstruction(PirType::bottom(), {{}}, {{}}), idx(idx_) {}
+
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
+class FLI(TmpSet, 1, Effects::None()) {
+  public:
+    const DebugPoolIdx idx = (DebugPoolIdx)-1;
+
+    explicit TmpSet(DebugPoolIdx idx_, Value* val)
+        : FixedLenInstruction(PirType::voyd(), {{PirType::any()}}, {{val}}),
+          idx(idx_) {}
+
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
+class FLI(Print, 1, Effects::None()) {
+  public:
+    const DebugPoolIdx idx = (DebugPoolIdx)-1;
+
+    explicit Print(DebugPoolIdx idx_, Value* val)
+        : FixedLenInstruction(PirType::voyd(), {{PirType::any()}}, {{val}}),
+          idx(idx_) {}
+
+    const char* prefix() const { return DebugPool::prefixAt(idx); }
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
+class FLI(Assert, 1, Effects::None()) {
+  public:
+    explicit Assert(Value* val)
+        : FixedLenInstruction(PirType::voyd(), {{PirType::any()}}, {{val}}) {}
+};
+#endif
+
 #undef FLI
 #undef VLI
 #undef FLIE

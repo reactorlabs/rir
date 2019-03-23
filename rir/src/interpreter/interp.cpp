@@ -3360,6 +3360,40 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+#ifdef SLOWASSERT
+        INSTRUCTION(tmp_get_) {
+            DebugPoolIdx idx = (DebugPoolIdx)readImmediate();
+            advanceImmediate();
+            ostack_push(ctx, DebugPool::tmpAt(idx));
+            NEXT();
+        }
+
+        INSTRUCTION(tmp_set_) {
+            DebugPoolIdx idx = (DebugPoolIdx)readImmediate();
+            advanceImmediate();
+            DebugPool::tmpAt(idx) = ostack_pop(ctx);
+            NEXT();
+        }
+
+        INSTRUCTION(print_) {
+            DebugPoolIdx idx = (DebugPoolIdx)readImmediate();
+            advanceImmediate();
+            std::cout << "[Debug] " << DebugPool::prefixAt(idx) << ": ";
+            Rf_PrintValue(ostack_pop(ctx));
+            NEXT();
+        }
+
+        INSTRUCTION(assert_) {
+            SEXP test = ostack_pop(ctx);
+            if (!IS_SIMPLE_SCALAR(test, LGLSXP) || *LOGICAL(test) != 1) {
+                std::cerr << "Bytecode assertion failed: ";
+                Rf_PrintValue(test);
+                assert(false);
+            }
+            NEXT();
+        }
+#endif
+
         LASTOP;
     }
 

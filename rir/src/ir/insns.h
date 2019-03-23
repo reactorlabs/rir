@@ -480,4 +480,28 @@ DEF_INSTR(record_binop_, 2, 2, 2, 0)
 DEF_INSTR(int3_, 0, 0, 0, 0)
 DEF_INSTR(printInvocation_, 0, 0, 0, 0)
 
+// The following instructions are used for debugging. They will not exist in
+// release builds.
+
+/**
+ * tmp_get_ :: reads an SEXP at the associated index, pushes.
+ */
+IFDBG(DEF_INSTR(tmp_get_, 1, 0, 1, 0))
+
+/**
+ * tmp_set_ :: writes an SEXP to the associated index, pops.
+ */
+IFDBG(DEF_INSTR(tmp_set_, 1, 1, 0, 0))
+
+/**
+ * print_ :: reads index of c-string from opcode, pops, prints the string
+ * followed by the value.
+ */
+IFDBG(DEF_INSTR(print_, 1, 1, 0, 0))
+
+/**
+ * assert_ :: pops, crashes if not R_TrueValue.
+ */
+IFDBG(DEF_INSTR(assert_, 0, 1, 0, 0))
+
 #undef DEF_INSTR

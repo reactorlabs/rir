@@ -66,7 +66,8 @@
     V(NESTED, swap, swap)                                                      \
     V(NESTED, isobj, isobj)                                                    \
     V(NESTED, isstubenv, isstubenv)                                            \
-    V(NESTED, return_, return )
+    V(NESTED, return_, return )                                                \
+    IFDBG(V(NESTED, assert_, assert))
 
 #undef V_SIMPLE_INSTRUCTION
 

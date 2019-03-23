@@ -15,6 +15,7 @@
 
 #include "ir/RuntimeFeedback.h"
 #include "runtime/Assumptions.h"
+#include "utils/DebugPool.h"
 
 #include "BC_noarg_list.h"
 
@@ -139,6 +140,7 @@ class BC {
         LocalsCopy loc_cpy;
         ObservedCallees callFeedback;
         ObservedValues binopFeedback[2];
+        DebugPoolIdx debugIdx;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
@@ -374,6 +376,13 @@ BC_NOARGS(V, _)
 
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
+
+#ifdef ENABLE_SLOWASSERT
+    inline static BC tmpGet(DebugPoolIdx idx);
+    inline static BC tmpSet(DebugPoolIdx idx);
+    inline static BC print(DebugPoolIdx idx);
+    inline static BC print(const char* prefix);
+#endif
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -663,6 +672,13 @@ BC_NOARGS(V, _)
 BC_NOARGS(V, _)
 #undef V
             break;
+#ifdef ENABLE_SLOWASSERT
+        case Opcode::tmp_get_:
+        case Opcode::tmp_set_:
+        case Opcode::print_:
+            memcpy(&immediate.debugIdx, pc, sizeof(DebugPoolIdx));
+            break;
+#endif
         case Opcode::invalid_:
         case Opcode::num_of:
             assert(false);

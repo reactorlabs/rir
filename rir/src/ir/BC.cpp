@@ -127,6 +127,14 @@ BC_NOARGS(V, _)
         cs.insert(immediate.loc_cpy);
         return;
 
+#ifdef ENABLE_SLOWASSERT
+    case Opcode::tmp_get_:
+    case Opcode::tmp_set_:
+    case Opcode::print_:
+        cs.insert(immediate.debugIdx);
+        return;
+#endif
+
     case Opcode::invalid_:
     case Opcode::num_of:
         assert(false);
@@ -326,6 +334,17 @@ BC_NOARGS(V, _)
     case Opcode::br_:
         out << immediate.offset;
         break;
+#ifdef ENABLE_SLOWASSERT
+    case Opcode::tmp_get_:
+    case Opcode::tmp_set_:
+        out << immediate.debugIdx;
+        break;
+    case Opcode::print_:
+        out << DebugPool::prefixAt(immediate.debugIdx);
+        break;
+#endif
+    default:
+        assert(false);
     }
     out << "\n";
 }

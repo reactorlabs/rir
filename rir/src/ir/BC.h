@@ -305,6 +305,30 @@ BC BC::deopt(SEXP deoptMetadata) {
     return BC(Opcode::deopt_, i);
 }
 
+#ifdef ENABLE_SLOWASSERT
+BC BC::tmpGet(DebugPoolIdx idx) {
+    ImmediateArguments i;
+    i.debugIdx = idx;
+    return BC(Opcode::tmp_get_, i);
+}
+
+BC BC::tmpSet(DebugPoolIdx idx) {
+    ImmediateArguments i;
+    i.debugIdx = idx;
+    return BC(Opcode::tmp_set_, i);
+}
+
+BC BC::print(DebugPoolIdx idx) {
+    ImmediateArguments i;
+    i.debugIdx = idx;
+    return BC(Opcode::print_, i);
+}
+
+BC BC::print(const char* prefix) {
+    return BC::print(DebugPool::prefixIdx(prefix));
+}
+#endif
+
 } // namespace rir
 
 #endif

@@ -7,6 +7,7 @@
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
 #include "utils/capture_out.h"
+#include "utils/escape_string.h"
 
 #include <algorithm>
 #include <cassert>
@@ -736,6 +737,23 @@ void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
+
+#ifdef ENABLE_SLOWASSERT
+void TmpGet::printArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+    out << " [" << idx << "]";
+}
+
+void TmpSet::printArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+    out << " [" << idx << "]";
+}
+
+void Print::printArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+    out << " \"" << escapeString(prefix()) << "\"";
+}
+#endif
 
 } // namespace pir
 } // namespace rir

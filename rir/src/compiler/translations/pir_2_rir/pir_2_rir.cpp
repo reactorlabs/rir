@@ -951,6 +951,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
                 SIMPLE(SetShared, setShared);
+                IFDBG(SIMPLE(Assert, assert_));
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
@@ -1131,6 +1132,24 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // deopt is exit, return
                 return;
             }
+
+#ifdef ENABLE_SLOWASSERT
+            case Tag::TmpGet: {
+                auto tmpGet = TmpGet::Cast(instr);
+                cs << BC::tmpGet(tmpGet->idx);
+                break;
+            }
+            case Tag::TmpSet: {
+                auto tmpSet = TmpSet::Cast(instr);
+                cs << BC::tmpSet(tmpSet->idx);
+                break;
+            }
+            case Tag::Print: {
+                auto print = Print::Cast(instr);
+                cs << BC::print(print->idx);
+                break;
+            }
+#endif
 
             // Values, not instructions
             case Tag::Tombstone:

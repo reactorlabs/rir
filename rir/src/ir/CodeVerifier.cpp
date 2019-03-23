@@ -173,7 +173,13 @@ static Sources hasSources(Opcode bc) {
     case Opcode::deopt_:
     case Opcode::pop_context_:
     case Opcode::push_context_:
+#ifdef ENABLE_SLOWASSERT
+    case Opcode::tmp_get_:
+    case Opcode::tmp_set_:
+    case Opcode::print_:
+    case Opcode::assert_:
         return Sources::NotNeeded;
+#endif
 
     case Opcode::ldloc_:
     case Opcode::aslogical_:

@@ -1,6 +1,7 @@
 #ifndef COMPILER_INSTRUCTION_LIST_H
 #define COMPILER_INSTRUCTION_LIST_H
 
+#include "../../common.h"
 #include "../../simple_instruction_list.h"
 
 // Please keep in sync with implementation of instructions in instruction.h
@@ -88,6 +89,10 @@
     V(Visible)                                                                 \
     V(Invisible)                                                               \
     V(PirCopy)                                                                 \
-    V(Nop)
+    V(Nop)                                                                     \
+    IFDBG(V(TmpGet))                                                           \
+    IFDBG(V(TmpSet))                                                           \
+    IFDBG(V(Print))                                                            \
+    IFDBG(V(Assert))
 
 #endif

@@ -13,9 +13,11 @@ extern void printBacktrace();
 
 #ifdef ENABLE_SLOWASSERT
 #define SLOWASSERT(what) assert(what)
+#define IFDBG(what) what
 #else
 #define SLOWASSERT(what)                                                       \
     {}
+#define IFDBG(what)
 #endif
 
 // from boost

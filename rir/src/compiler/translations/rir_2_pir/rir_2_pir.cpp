@@ -740,6 +740,21 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         break;
 
+#ifdef ENABLE_SLOWASSERT
+    case Opcode::tmp_get_:
+        push(insert(new TmpGet(bc.immediate.debugIdx)));
+        break;
+    case Opcode::tmp_set_:
+        insert(new TmpSet(bc.immediate.debugIdx, pop()));
+        break;
+    case Opcode::print_:
+        insert(new Print(bc.immediate.debugIdx, pop()));
+        break;
+    case Opcode::assert_:
+        insert(new Assert(pop()));
+        break;
+#endif
+
 #define V(_, name, Name)                                                       \
     case Opcode::name##_:                                                      \
         insert(new Name());                                                    \
