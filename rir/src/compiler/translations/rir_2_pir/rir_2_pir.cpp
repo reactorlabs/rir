@@ -740,7 +740,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         break;
 
-#ifdef ENABLE_SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
     case Opcode::tmp_get_:
         push(insert(new TmpGet(bc.immediate.debugIdx)));
         break;

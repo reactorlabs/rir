@@ -127,7 +127,7 @@ BC_NOARGS(V, _)
         cs.insert(immediate.loc_cpy);
         return;
 
-#ifdef ENABLE_SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
     case Opcode::tmp_get_:
     case Opcode::tmp_set_:
     case Opcode::print_:
@@ -334,7 +334,7 @@ BC_NOARGS(V, _)
     case Opcode::br_:
         out << immediate.offset;
         break;
-#ifdef ENABLE_SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
     case Opcode::tmp_get_:
     case Opcode::tmp_set_:
         out << immediate.debugIdx;

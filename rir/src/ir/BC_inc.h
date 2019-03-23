@@ -377,7 +377,7 @@ BC_NOARGS(V, _)
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
 
-#ifdef ENABLE_SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
     inline static BC tmpGet(DebugPoolIdx idx);
     inline static BC tmpSet(DebugPoolIdx idx);
     inline static BC print(DebugPoolIdx idx);
@@ -672,7 +672,7 @@ BC_NOARGS(V, _)
 BC_NOARGS(V, _)
 #undef V
             break;
-#ifdef ENABLE_SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
         case Opcode::tmp_get_:
         case Opcode::tmp_set_:
         case Opcode::print_:

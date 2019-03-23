@@ -1133,7 +1133,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 return;
             }
 
-#ifdef ENABLE_SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
             case Tag::TmpGet: {
                 auto tmpGet = TmpGet::Cast(instr);
                 cs << BC::tmpGet(tmpGet->idx);

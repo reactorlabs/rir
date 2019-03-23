@@ -1524,7 +1524,7 @@ class ScheduledDeopt
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-#ifdef ENABLE_SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
 class FLI(TmpGet, 0, Effects::None()) {
   public:
     const DebugPoolIdx idx = (DebugPoolIdx)-1;

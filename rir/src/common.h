@@ -13,10 +13,15 @@ extern void printBacktrace();
 
 #ifdef ENABLE_SLOWASSERT
 #define SLOWASSERT(what) assert(what)
-#define IFDBG(what) what
+#define ENABLE_DEBUGOPS
 #else
 #define SLOWASSERT(what)                                                       \
     {}
+#endif
+
+#ifdef ENABLE_DEBUGOPS
+#define IFDBG(what) what
+#else
 #define IFDBG(what)
 #endif
 

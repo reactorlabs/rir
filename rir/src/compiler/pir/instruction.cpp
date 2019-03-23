@@ -738,7 +738,7 @@ void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
 
-#ifdef ENABLE_SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
 void TmpGet::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
     out << " [" << idx << "]";

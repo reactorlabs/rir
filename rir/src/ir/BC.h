@@ -305,7 +305,7 @@ BC BC::deopt(SEXP deoptMetadata) {
     return BC(Opcode::deopt_, i);
 }
 
-#ifdef ENABLE_SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
 BC BC::tmpGet(DebugPoolIdx idx) {
     ImmediateArguments i;
     i.debugIdx = idx;

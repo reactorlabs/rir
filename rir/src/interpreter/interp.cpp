@@ -3360,7 +3360,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-#ifdef SLOWASSERT
+#ifdef ENABLE_DEBUGOPS
         INSTRUCTION(tmp_get_) {
             DebugPoolIdx idx = (DebugPoolIdx)readImmediate();
             advanceImmediate();
