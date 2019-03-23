@@ -271,6 +271,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         pop();
         break;
 
+    case Opcode::popn_: {
+        for (int i = bc.immediate.i; i > 0; --i)
+            pop();
+        break;
+    }
+
     case Opcode::record_binop_: {
         at(0)->typeFeedback.merge(bc.immediate.binopFeedback[0]);
         at(1)->typeFeedback.merge(bc.immediate.binopFeedback[1]);

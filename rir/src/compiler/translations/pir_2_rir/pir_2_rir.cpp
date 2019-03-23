@@ -594,6 +594,28 @@ class Pir2Rir {
                         next = plus(code.erase(it), 1);
                         next = code.erase(next, plus(next, 2));
                         changed = true;
+                    } else if (bc.is(rir::Opcode::ldvar_noforce_) &&
+                               next != code.end() &&
+                               next->first.is(rir::Opcode::force_)) {
+                        auto arg = Pool::get(bc.immediate.pool);
+                        next = code.erase(it, plus(next, 1));
+                        next = code.emplace(next, BC::ldvar(arg), noSource);
+                        changed = true;
+                    } else if (bc.is(rir::Opcode::pop_)) {
+                        unsigned n = 1;
+                        auto last = next;
+                        for (; last != code.end(); last++) {
+                            auto& bc = last->first;
+                            if (bc.is(rir::Opcode::pop_))
+                                n++;
+                            else
+                                break;
+                        }
+                        if (n > 1 && last != code.end()) {
+                            next = code.erase(it, last);
+                            next = code.emplace(next, BC::popn(n), noSource);
+                            changed = true;
+                        }
                     }
 
                     it = next;
@@ -861,7 +883,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 };
 
                 // Remove values from the stack that are dead here
-                for (auto val : alloc.sa.toDrop(instr)) {
+                auto toDrop = alloc.sa.toDrop(instr);
+                for (auto val : VisitorHelpers::reverse(toDrop)) {
                     // If not actually allocated on stack, do nothing
                     if (!alloc.onStack(val))
                         continue;
@@ -929,9 +952,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
-                cb.add(ldvar->fusedWithForce
-                           ? BC::ldvar(ldvar->varName)
-                           : BC::ldvarNoForce(ldvar->varName));
+                cb.add(BC::ldvarNoForce(ldvar->varName));
                 break;
             }
 
@@ -1348,26 +1369,6 @@ void Pir2Rir::lower(Code* code) {
                 bb->next1 = nullptr;
             } else if (MkArg::Cast(*it) && (*it)->unused()) {
                 next = bb->remove(it);
-            }
-            it = next;
-        }
-    });
-
-    // Fuse together pairs of loads and forces - in rir we have
-    // an instruction that does the force implicitly
-    Visitor::run(code->entry, [&](BB* bb) {
-        auto it = bb->begin();
-        while (it != bb->end()) {
-            auto next = it + 1;
-            if (auto ldvar = LdVar::Cast(*it)) {
-                auto use = ldvar->hasSingleUse();
-                if (use && Force::Cast(use) && next != bb->end() &&
-                    use == *next) {
-                    ldvar->fusedWithForce = true;
-                    ldvar->type = ldvar->type.forced();
-                    use->replaceUsesWith(ldvar);
-                    next = bb->remove(next);
-                }
             }
             it = next;
         }

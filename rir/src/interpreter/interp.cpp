@@ -2102,6 +2102,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(popn_) {
+            Immediate i = readImmediate();
+            advanceImmediate();
+            ostack_popn(ctx, i);
+            NEXT();
+        }
+
         INSTRUCTION(swap_) {
             SEXP lhs = ostack_pop(ctx);
             SEXP rhs = ostack_pop(ctx);
