@@ -3388,6 +3388,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(set_shared_) {
             SEXP val = ostack_top(ctx);
+            ENSURE_NAMED(val);
             INCREMENT_NAMED(val);
             NEXT();
         }
