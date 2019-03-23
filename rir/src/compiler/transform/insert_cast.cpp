@@ -31,10 +31,7 @@ void InsertCast::apply(BB* bb) {
     auto ip = bb->begin();
     while (ip != bb->end()) {
         Instruction* instr = *ip;
-        Phi* p = nullptr;
-        if ((p = Phi::Cast(instr))) {
-            p->updateType();
-        }
+        instr->updateType();
         instr->eachArg([&](InstrArg& arg) {
             while (!arg.type().isSuper(arg.val()->type)) {
                 auto c = cast(arg.val(), arg.type(), env);

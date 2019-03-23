@@ -191,3 +191,15 @@ f <- rir.compile(function(depth) {
     }
 })
 stopifnot(f(4) == 64)
+
+f <- rir.compile(function() {
+    a <- 0
+    for (i in 1:1) {
+      a <- i
+    }
+    a
+})
+stopifnot(f() == 1)
+pir.compile(f)
+print(f())
+stopifnot(f() == 1)
