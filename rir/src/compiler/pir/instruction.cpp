@@ -7,7 +7,6 @@
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
 #include "utils/capture_out.h"
-#include "utils/escape_string.h"
 
 #include <algorithm>
 #include <cassert>
@@ -751,7 +750,8 @@ void TmpSet::printArgs(std::ostream& out, bool tty) const {
 
 void Print::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
-    out << " \"" << escapeString(prefix()) << "\"";
+    // TODO: Could import and use escapeString if necessary
+    out << " \"" << prefix() << "\"";
 }
 #endif
 
