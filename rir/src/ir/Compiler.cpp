@@ -229,7 +229,8 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
             cs << BC::brfalse(fwdBranch);
             // {
             // n' <- ceil(n') - 1
-            cs << BC::asint(true) << BC::dec() << BC::setShared();
+            cs << BC::asint(true) << BC::setShared() << BC::dec()
+               << BC::setShared();
             // while
             compileWhile(ctx,
                          [&cs]() {

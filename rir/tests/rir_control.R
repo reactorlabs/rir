@@ -200,6 +200,7 @@ f <- rir.compile(function() {
     a
 })
 stopifnot(f() == 1)
+print(f())
 pir.compile(f)
 print(f())
 stopifnot(f() == 1)

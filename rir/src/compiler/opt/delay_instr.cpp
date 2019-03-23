@@ -17,7 +17,12 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
 
             if (!i->hasEnv() && !i->hasEffect() && !Phi::Cast(i) &&
-                !i->branchOrExit()) {
+                !i->branchOrExit() &&
+                // TODO: Find out why moving these instructions breaks simple
+                // ranges (seems to mess up the SSA allocator).
+                // For now, these are only used by compiled specials, and never
+                // get optimized by being delayed anyways
+                !Inc::Cast(i) && !Dec::Cast(i) && !SetShared::Cast(i)) {
                 Instruction* usage = i->hasSingleUse();
                 if (usage && usage->bb() != bb) {
                     auto phi = Phi::Cast(usage);
