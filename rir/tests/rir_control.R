@@ -178,29 +178,3 @@ f <- rir.compile(function(x) {
 })
 stopifnot(f(-1.1) == -5)
 stopifnot(f(-1.0) == -6)
-
-f <- rir.compile(function(depth) {
-    if (depth == 1) {
-      1
-    } else {
-        x <- 0
-        for (i in 1:4) {
-            x <- x + f(depth - 1)
-        }
-        x
-    }
-})
-stopifnot(f(4) == 64)
-
-f <- rir.compile(function() {
-    a <- 0
-    for (i in 1:1) {
-      a <- i
-    }
-    a
-})
-stopifnot(f() == 1)
-print(f())
-pir.compile(f)
-print(f())
-stopifnot(f() == 1)
