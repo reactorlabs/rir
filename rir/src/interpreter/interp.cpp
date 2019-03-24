@@ -2533,8 +2533,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (IS_SIMPLE_SCALAR(val, INTSXP)) {
                 NEXT();
             }
-            int x;
-            bool isNaOrNan;
+            int x = -20;
+            bool isNaOrNan = false;
             if (TYPEOF(val) == INTSXP || TYPEOF(val) == REALSXP ||
                 TYPEOF(val) == LGLSXP) {
                 if (XLENGTH(val) == 0) {
