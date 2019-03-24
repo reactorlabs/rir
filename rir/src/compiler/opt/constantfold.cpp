@@ -126,8 +126,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             });
 
             FOLD_UNARY(AsInt, [&](SEXP arg) {
-                // TODO: Is this right?
                 if (IS_SIMPLE_SCALAR(arg, INTSXP)) {
+                    i->replaceUsesWith(i->arg(0).val());
                     next = bb->remove(ip);
                 }
             });
