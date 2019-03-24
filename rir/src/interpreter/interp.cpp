@@ -6,8 +6,6 @@
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
 #include "runtime.h"
-#include <signal.h>
-
 #include <assert.h>
 #include <deque>
 
@@ -118,19 +116,12 @@ RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
 #define INSTRUCTION(name)                                                      \
     op_##name: /* debug(c, pc, #name, ostack_length(ctx) - bp, ctx); */
 #define NEXT()                                                                 \
-    (__extension__({                                                         \
-        if (interrupt) {                                                       \
-            goto eval_done;                                                    \
-        }                                                                      \
+    (__extension__({                                                           \
         goto* opAddr[static_cast<uint8_t>(advanceOpcode())]; }))
 #define LASTOP                                                                 \
     {}
 #else
 #define BEGIN_MACHINE                                                          \
-    loop:                                                                      \
-    if (interrupt) {                                                           \
-        goto eval_done;                                                        \
-    }                                                                          \
     switch (advanceOpcode())
 #define INSTRUCTION(name)                                                      \
     case Opcode::name:                                                         \
@@ -386,6 +377,17 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     return rirCallTrampoline(call, fun, env, arglist, nullptr, ctx);
 }
 
+int count = 0;
+
+// Interrupt Signal Checker - Allows for Ctrl - C functionality to exit out
+// of infinite loops
+void checkuserinterrupt() {
+    if (++count > 1000) {
+        R_CheckUserInterrupt();
+        count = 0;
+    }
+}
+
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 SEXP evalRirCode(Code*, Context*, SEXP*, const CallContext*, Opcode*,
                  R_bcstack_t*);
@@ -393,7 +395,6 @@ static void loopTrampoline(Code* c, Context* ctx, SEXP* env,
                            const CallContext* callCtxt, Opcode* pc,
                            R_bcstack_t* localsBase) {
     assert(*env);
-
     RCNTXT cntxt;
     Rf_begincontext(&cntxt, CTXT_LOOP, R_NilValue, *env, R_BaseEnv, R_NilValue,
                     R_NilValue);
@@ -1138,24 +1139,6 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     UNPROTECT(1);
 }
 
-bool interrupt = false;
-    
-static void interruptHandler(int signal) {
-    interrupt = true;
-}
-
-void checkUserInterrupt() {
-    struct sigaction sa;
-    struct sigaction old_action;
-
-
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = interruptHandler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, &old_action);
-}
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
@@ -1206,7 +1189,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         return *env;
     };
 
-    checkUserInterrupt();
+    checkuserinterrupt();
 
     // main loop
     BEGIN_MACHINE {
@@ -2161,8 +2144,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(brobj_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();
-            if (isObject(ostack_top(ctx)))
+            if (isObject(ostack_top(ctx))) {
+                checkuserinterrupt();
                 pc += offset;
+            }
             PC_BOUNDSCHECK(pc, c);
             NEXT();
         }
@@ -2171,6 +2156,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_TrueValue) {
+                checkuserinterrupt();
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2181,6 +2167,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_FalseValue) {
+                checkuserinterrupt();
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2190,6 +2177,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(br_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();
+            checkuserinterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
             NEXT();
@@ -2734,6 +2722,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceJump();
             loopTrampoline(c, ctx, env, callCtxt, pc, localsBase);
             pc += offset;
+            checkuserinterrupt();
             assert(*pc == Opcode::endloop_);
             advanceOpcode();
             NEXT();
