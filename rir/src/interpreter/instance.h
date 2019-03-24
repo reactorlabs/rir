@@ -188,24 +188,25 @@ RIR_INLINE R_bcstack_t logicalStackObj(int x) {
 RIR_INLINE R_bcstack_t sexpToStackObj(SEXP x) {
     R_bcstack_t res;
     bool tryUnbox = x != loopTrampolineMarker && MAYBE_SHARED(x);
-    if (tryUnbox && IS_SIMPLE_SCALAR(x, INTSXP)) {
+    if (tryUnbox && IS_SCALAR(x, INTSXP)) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("int stack object created from sexp");
 #endif
         res.tag = STACK_OBJ_INT;
         res.u.ival = *INTEGER(x);
-    } else if (tryUnbox && IS_SIMPLE_SCALAR(x, REALSXP)) {
+    } else if (tryUnbox && IS_SCALAR(x, REALSXP)) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("real stack object created from sexp");
 #endif
         res.tag = STACK_OBJ_REAL;
         res.u.dval = *REAL(x);
-    } else if (tryUnbox && IS_SIMPLE_SCALAR(x, LGLSXP)) {
+    } else if (tryUnbox && IS_SCALAR(x, LGLSXP)) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("logical stack object created from sexp");
 #endif
         res.tag = STACK_OBJ_LOGICAL;
         res.u.ival = *LOGICAL(x);
+
     } else {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("sexp stack object created from sexp");
@@ -280,7 +281,7 @@ RIR_INLINE bool stackObjIsInteger(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("type test boxed");
 #endif
-        return IS_SIMPLE_SCALAR(x.u.sxpval, INTSXP);
+        return IS_SCALAR(x.u.sxpval, INTSXP);
     default:
         assert(false);
     }
@@ -301,7 +302,7 @@ RIR_INLINE int tryStackObjToInteger(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        if (IS_SIMPLE_SCALAR(x.u.sxpval, INTSXP)) {
+        if (IS_SCALAR(x.u.sxpval, INTSXP)) {
             return *INTEGER(x.u.sxpval);
         } else {
             return NA_INTEGER;
@@ -326,7 +327,7 @@ RIR_INLINE bool stackObjIsReal(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("type test boxed");
 #endif
-        return IS_SIMPLE_SCALAR(x.u.sxpval, REALSXP);
+        return IS_SCALAR(x.u.sxpval, REALSXP);
     default:
         assert(false);
     }
@@ -347,7 +348,7 @@ RIR_INLINE double tryStackObjToReal(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        if (IS_SIMPLE_SCALAR(x.u.sxpval, REALSXP)) {
+        if (IS_SCALAR(x.u.sxpval, REALSXP)) {
             return *REAL(x.u.sxpval);
         } else {
             return NA_REAL;
@@ -371,7 +372,7 @@ RIR_INLINE bool stackObjIsLogical(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("type test boxed");
 #endif
-        return IS_SIMPLE_SCALAR(x.u.sxpval, LGLSXP);
+        return IS_SCALAR(x.u.sxpval, LGLSXP);
     default:
         assert(false);
     }
@@ -392,7 +393,7 @@ RIR_INLINE int tryStackObjToLogical(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        if (IS_SIMPLE_SCALAR(x.u.sxpval, LGLSXP)) {
+        if (IS_SCALAR(x.u.sxpval, LGLSXP)) {
             return *LOGICAL(x.u.sxpval);
         } else {
             return NA_LOGICAL;
@@ -490,7 +491,7 @@ RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        return IS_SIMPLE_SCALAR(x.u.sxpval, type);
+        return IS_SCALAR(x.u.sxpval, type);
     default:
         assert(false);
     }
