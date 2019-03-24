@@ -11,11 +11,14 @@ namespace pir {
 class RirCompiler;
 class PirTranslator {
   public:
-    PirTranslator(const std::string& name) : name(name) {}
+    explicit PirTranslator(const std::string& name) : name(name) {}
 
-    virtual void apply(RirCompiler&, Closure* function, LogStream&) const = 0;
+    virtual void apply(RirCompiler&, ClosureVersion* function,
+                       LogStream&) const = 0;
     std::string getName() const { return this->name; }
     virtual ~PirTranslator() {}
+
+    virtual bool isPhaseMarker() const { return false; }
 
   protected:
     std::string name;

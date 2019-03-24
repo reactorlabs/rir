@@ -21,7 +21,19 @@ namespace rir {
 
 namespace {
 
-class Context {
+static bool isConstant(SEXP exp) {
+    // Dispatch on the current type of AST node
+    switch (TYPEOF(exp)) {
+    case LANGSXP:
+    case SYMSXP:
+    case PROMSXP:
+        return false;
+    default:
+        return true;
+    }
+}
+
+class CompilerContext {
   public:
     class LoopContext {
       public:
@@ -86,10 +98,10 @@ class Context {
     FunctionWriter& fun;
     Preserve& preserve;
 
-    Context(FunctionWriter& fun, Preserve& preserve)
+    CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
-    ~Context() { assert(code.empty()); }
+    ~CompilerContext() { assert(code.empty()); }
 
     bool inLoop() const { return code.top()->inLoop(); }
 
@@ -122,26 +134,31 @@ class Context {
     void pushPromiseContext(SEXP ast) { code.push(new PromiseContext(ast, fun, code.empty() ? nullptr : code.top())); }
 
     Code* pop() {
-        auto res = cs().finalize(0);
+        Code* res = cs().finalize(0);
         delete code.top();
         code.pop();
         return res;
     }
 };
 
-Code* compilePromise(Context& ctx, SEXP exp);
-void compileExpr(Context& ctx, SEXP exp);
-void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
+Code* compilePromise(CompilerContext& ctx, SEXP exp);
+void compileExpr(CompilerContext& ctx, SEXP exp);
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args);
 
 // Inline some specials
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
-bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
+bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
+    // `true` if an argument isn't missing, labeled, or `...`.
+    auto isRegularArg = [](RListIter& arg) {
+        return *arg != R_DotsSymbol && *arg != R_MissingArg && !arg.hasTag();
+    };
+
     RList args(args_);
     CodeStream& cs = ctx.cs();
 
     if (fun == symbol::Function && args.length() == 3) {
-        auto fun = Compiler::compileFunction(args[1], args[0]);
+        SEXP fun = Compiler::compileFunction(args[1], args[0]);
         assert(TYPEOF(fun) == EXTERNALSXP);
         cs << BC::push(args[0]) << BC::push(fun) << BC::push(args[2])
            << BC::close();
@@ -155,7 +172,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     //     cs << BC::guardName(fun, seqFun);
 
-    //     for (auto a = args.begin(); a != args.end(); ++a)
+    //     for (RListIter a = args.begin(); a != args.end(); ++a)
     //         if (a.hasTag())
     //             return false;
 
@@ -196,7 +213,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, args[0]);
         compileExpr(ctx, args[1]);
 
-        cs << BC::recordBinop();
+        if (Compiler::profile) {
+            cs << BC::recordBinop();
+        }
         if (fun == symbol::Add)
             cs << BC::add();
         else if (fun == symbol::Sub)
@@ -304,8 +323,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         bool superAssign = fun == symbol::SuperAssign;
 
-        auto lhs = args[0];
-        auto rhs = args[1];
+        SEXP lhs = args[0];
+        SEXP rhs = args[1];
 
         // 1) Verify lhs is valid
         SEXP l = lhs;
@@ -333,8 +352,10 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Case(SYMSXP) {
                 cs << BC::guardNamePrimitive(fun);
                 compileExpr(ctx, rhs);
-                cs << BC::setShared() << BC::dup()
-                   << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs))
+                cs << BC::dup();
+                if (!isConstant(rhs))
+                    cs << BC::ensureNamed();
+                cs << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;
             }
@@ -368,53 +389,67 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             }
         }
 
-        // TODO: There is some issue with supper assing and probably [[, needs
-        // to investigate more...
-        if (superAssign)
-            return false;
-
         // 3) Special case [ and [[
-        if (lhsParts.size() == 2) {
-            RList g(lhsParts[0]);
-            if (g.length() == 3) {
-                SEXP fun2 = *g.begin();
-                auto idx = g.begin() + 2;
-                if (*idx != R_DotsSymbol && *idx != R_MissingArg &&
-                    !idx.hasTag()) {
-                    if (fun2 == symbol::DoubleBracket ||
-                        fun2 == symbol::Bracket) {
 
-                        cs << BC::guardNamePrimitive(fun);
-
-                        // First rhs (assign is right-associative)
-                        compileExpr(ctx, rhs);
-                        // Keep a copy of rhs since its the result of this
-                        // expression
-                        cs << BC::dup() << BC::ensureNamed();
-
-                        // Now load index and target
-                        cs << BC::ldvar(target);
-                        compileExpr(ctx, *idx);
-
-                        // do the thing
-                        cs << BC::recordBinop();
-                        if (fun2 == symbol::DoubleBracket)
-                            cs << BC::subassign2();
-                        else
-                            cs << BC::subassign1();
-                        cs.addSrc(ast);
-
-                        // store the result as "target"
-                        cs << BC::stvar(target);
-
-                        cs << BC::invisible();
-                        return true;
-                    }
-                }
-            }
+        if (lhsParts.size() != 2) {
+            return false;
         }
 
-        return false;
+        RList g(lhsParts[0]);
+        if (g.length() != 3 && g.length() != 4) {
+            return false;
+        }
+
+        bool is2d = g.length() == 4;
+        SEXP fun2 = *g.begin();
+        RListIter idx = g.begin() + 2;
+        RListIter idx2 = is2d ? (g.begin() + 3) : idx;
+        if ((fun2 != symbol::Bracket && fun2 != symbol::DoubleBracket) ||
+            !isRegularArg(idx) || (is2d && !isRegularArg(idx2))) {
+            return false;
+        }
+
+        cs << BC::guardNamePrimitive(fun);
+
+        // First rhs (assign is right-associative)
+        compileExpr(ctx, rhs);
+        // Keep a copy of rhs since it's the result of this
+        // expression
+        cs << BC::dup();
+        if (!isConstant(rhs))
+            cs << BC::ensureNamed();
+
+        // Now load index and target
+        cs << (superAssign ? BC::ldvarSuper(target) : BC::ldvar(target));
+        compileExpr(ctx, *idx);
+        if (is2d) {
+            compileExpr(ctx, *idx2);
+        }
+
+        // do the thing
+        if (Compiler::profile) {
+            cs << BC::recordBinop();
+        }
+        if (is2d) {
+            if (fun2 == symbol::DoubleBracket) {
+                cs << BC::subassign2_2();
+            } else {
+                cs << BC::subassign1_2();
+            }
+        } else {
+            if (fun2 == symbol::DoubleBracket) {
+                cs << BC::subassign2_1();
+            } else {
+                cs << BC::subassign1_1();
+            }
+        }
+        cs.addSrc(ast);
+
+        // store the result as "target"
+        cs << (superAssign ? BC::stvarSuper(target) : BC::stvar(target));
+
+        cs << BC::invisible();
+        return true;
     }
 
     if (fun == symbol::Block) {
@@ -425,7 +460,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             return true;
         }
 
-        for (auto e = args.begin(); e != args.end(); ++e) {
+        for (RListIter e = args.begin(); e != args.end(); ++e) {
             compileExpr(ctx, *e);
             if (e + 1 != args.end())
                 cs << BC::pop();
@@ -504,48 +539,57 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     }
 
     if (fun == symbol::DoubleBracket || fun == symbol::Bracket) {
-        if (args.length() == 2 || args.length() == 3) {
-            auto lhs = *args.begin();
-            auto idx = args.begin() + 1;
-
-            if (*idx == R_DotsSymbol || idx.hasTag() ||
-                *(idx + 1) == R_DotsSymbol || (idx + 1).hasTag())
-                return false;
-
-            cs << BC::guardNamePrimitive(fun);
-            compileExpr(ctx, lhs);
-
-            compileExpr(ctx, *idx);
-            if (args.length() == 2) {
-                cs << BC::recordBinop();
-                if (fun == symbol::DoubleBracket)
-                    cs << BC::extract2_1();
-                else
-                    cs << BC::extract1_1();
-            } else {
-                compileExpr(ctx, *(idx + 1));
-                cs << BC::recordBinop();
-                if (fun == symbol::DoubleBracket)
-                    cs << BC::extract2_2();
-                else
-                    cs << BC::extract1_2();
-            }
-            cs.addSrc(ast);
-            return true;
+        if (args.length() != 2 && args.length() != 3) {
+            return false;
         }
+
+        bool is2d = args.length() == 3;
+        SEXP lhs = *args.begin();
+        RListIter idx = args.begin() + 1;
+        RListIter idx2 = args.begin() + 2;
+
+        if (!isRegularArg(idx) || (is2d && !isRegularArg(idx2)))
+            return false;
+
+        cs << BC::guardNamePrimitive(fun);
+        compileExpr(ctx, lhs);
+
+        compileExpr(ctx, *idx);
+        if (is2d) {
+            compileExpr(ctx, *(idx + 1));
+            if (Compiler::profile) {
+                cs << BC::recordBinop();
+            }
+            if (fun == symbol::DoubleBracket)
+                cs << BC::extract2_2();
+            else
+                cs << BC::extract1_2();
+        } else {
+            if (Compiler::profile) {
+                cs << BC::recordBinop();
+            }
+            if (fun == symbol::DoubleBracket)
+                cs << BC::extract2_1();
+            else
+                cs << BC::extract1_1();
+        }
+        cs.addSrc(ast);
+        cs << BC::visible();
+        return true;
     }
 
     if (fun == symbol::Missing && args.length() == 1 &&
         TYPEOF(args[0]) == SYMSXP && !DDVAL(args[0])) {
-        cs << BC::guardNamePrimitive(fun) << BC::missing(args[0]);
+        cs << BC::guardNamePrimitive(fun) << BC::missing(args[0])
+           << BC::visible();
         return true;
     }
 
     if (fun == symbol::While) {
         assert(args.length() == 2);
 
-        auto cond = args[0];
-        auto body = args[1];
+        SEXP cond = args[0];
+        SEXP body = args[1];
 
         cs << BC::guardNamePrimitive(fun);
 
@@ -585,7 +629,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (fun == symbol::Repeat) {
         assert(args.length() == 1);
 
-        auto body = args[0];
+        SEXP body = args[0];
 
         cs << BC::guardNamePrimitive(fun);
 
@@ -622,9 +666,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         // TODO: if the seq is not a vector, we need to throw an error!
         assert(args.length() == 3);
 
-        auto sym = args[0];
-        auto seq = args[1];
-        auto body = args[2];
+        SEXP sym = args[0];
+        SEXP seq = args[1];
+        SEXP body = args[2];
 
         assert(TYPEOF(sym) == SYMSXP);
 
@@ -637,9 +681,11 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         ctx.pushLoop(loopBranch, breakBranch);
 
         compileExpr(ctx, seq);
-        cs << BC::setShared() << BC::forSeqSize() << BC::push((int)0);
+        if (!isConstant(seq))
+            cs << BC::setShared();
+        cs << BC::forSeqSize() << BC::push((int)0);
 
-        auto beginLoopPos = cs.currentPos();
+        unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch)
            << loopBranch;
 
@@ -718,7 +764,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         SEXP fun = CAR(inAst);
 
         if (TYPEOF(fun) == SYMSXP) {
-            for (auto a = args.begin(); a != args.end(); ++a)
+            for (RListIter a = args.begin(); a != args.end(); ++a)
                 if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
                     return false;
 
@@ -728,9 +774,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             // If the .Internal call goes to a builtin, then we call eagerly
             if (R_FunTab[i].eval % 10 == 1) {
                 cs << BC::guardNamePrimitive(symbol::Internal);
-                for (auto a : args)
+                for (SEXP a : args)
                     compileExpr(ctx, a);
-                cs << BC::staticCall(args.length(), inAst, internal);
+                cs << BC::callBuiltin(args.length(), inAst, internal);
 
                 return true;
             }
@@ -744,7 +790,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     //
     // SEXP builtin = fun->u.symsxp.value;
     // if (TYPEOF(builtin) == BUILTINSXP) {
-    //     for (auto a = args.begin(); a != args.end(); ++a)
+    //     for (RListIter a = args.begin(); a != args.end(); ++a)
     //         if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
     //             return false;
 
@@ -754,7 +800,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     //     cs << BC::guardNamePrimitive(fun);
 
-    //     for (auto a : args)
+    //     for (SEXP a : args)
     //         compileExpr(ctx, a);
     //     cs << BC::staticCall(args.length(), ast, builtin);
 
@@ -774,7 +820,7 @@ SIMPLE_INSTRUCTIONS(V, _)
 }
 
 // function application
-void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args) {
     CodeStream& cs = ctx.cs();
 
     // application has the form:
@@ -800,7 +846,7 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     std::vector<SEXP> names;
 
     bool hasNames = false;
-    for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
+    for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg) {
         if (*arg == R_DotsSymbol) {
             callArgs.push_back(DOTS_ARG_IDX);
             names.push_back(R_NilValue);
@@ -815,7 +861,7 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
         // (1) Arguments are wrapped as Promises:
         //     create a new Code object for the promise
         Code* prom = compilePromise(ctx, *arg);
-        auto idx = cs.addPromise(prom);
+        size_t idx = cs.addPromise(prom);
         callArgs.push_back(idx);
 
         // (2) remember if the argument had a name associated
@@ -825,11 +871,14 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
-    cs << BC::recordCall();
+    if (Compiler::profile) {
+        cs << BC::recordCall();
+    }
     if (hasNames) {
-        cs << BC::callImplicit(callArgs, names, ast);
+        cs << BC::callImplicit(callArgs, names, ast, {});
     } else {
-        cs << BC::callImplicit(callArgs, ast);
+        cs << BC::callImplicit(
+            callArgs, ast, Assumptions(Assumption::CorrectOrderOfArguments));
     }
 }
 
@@ -842,15 +891,16 @@ void compileGetvar(CodeStream& cs, SEXP name) {
     } else {
         cs << BC::ldvar(name);
     }
+    cs << BC::visible();
 }
 
 // Constant
 void compileConst(CodeStream& cs, SEXP constant) {
     SET_NAMED(constant, 2);
-    cs << BC::push(constant);
+    cs << BC::push(constant) << BC::visible();
 }
 
-void compileExpr(Context& ctx, SEXP exp) {
+void compileExpr(CompilerContext& ctx, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
@@ -888,7 +938,7 @@ void compileExpr(Context& ctx, SEXP exp) {
     }
 }
 
-Code* compilePromise(Context& ctx, SEXP exp) {
+Code* compilePromise(CompilerContext& ctx, SEXP exp) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
@@ -899,17 +949,17 @@ Code* compilePromise(Context& ctx, SEXP exp) {
 
 SEXP Compiler::finalize() {
     FunctionWriter function;
-    Context ctx(function, preserve);
+    CompilerContext ctx(function, preserve);
 
     FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
                                 FunctionSignature::OptimizationLevel::Baseline);
 
     // Compile formals (if any) and create signature
-    for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
+    for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         if (*arg == R_MissingArg) {
             function.addArgWithoutDefault();
         } else {
-            auto compiled = compilePromise(ctx, *arg);
+            Code* compiled = compilePromise(ctx, *arg);
             function.addDefaultArg(compiled);
         }
         signature.pushDefaultArgument();
@@ -918,7 +968,7 @@ SEXP Compiler::finalize() {
     ctx.push(exp, closureEnv);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
-    auto body = ctx.pop();
+    Code* body = ctx.pop();
     function.finalize(body, signature);
 
 #ifdef ENABLE_SLOWASSERT
@@ -928,5 +978,9 @@ SEXP Compiler::finalize() {
 
     return function.function()->container();
 }
+
+bool Compiler::profile =
+    !(getenv("RIR_PROFILING") &&
+      std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 }  // namespace rir

@@ -1,12 +1,15 @@
-#ifndef COMPILER_FUNCTION_H
-#define COMPILER_FUNCTION_H
+#ifndef COMPILER_CLOSURE_H
+#define COMPILER_CLOSURE_H
 
 #include "../../runtime/Function.h"
 #include "code.h"
+#include "optimization_context.h"
 #include "pir.h"
 #include <functional>
+#include <map>
 #include <sstream>
-#include <unordered_map>
+
+#include "utils/FormalArgs.h"
 
 namespace rir {
 namespace pir {
@@ -19,63 +22,69 @@ namespace pir {
  * (referred to by `LdArg`).
  *
  */
-class Closure : public Code {
+class Closure {
   private:
     friend class Module;
 
-    static std::string uniqueName(const Closure* c, const std::string& name) {
-        std::stringstream id;
-        id << name << "[" << c << "]";
-        return id.str();
-    }
+    Closure(const std::string& name, rir::Function* function, SEXP formals,
+            SEXP srcRef);
+    Closure(const std::string& name, SEXP closure, rir::Function* function,
+            Env* env);
 
-    Closure(const std::string& name, std::initializer_list<SEXP> a, Env* env,
-            rir::Function* function, const Assumptions& assumptions)
-        : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a), assumptions(assumptions) {}
-    Closure(const std::string& name, const std::vector<SEXP>& a, Env* env,
-            rir::Function* function, const Assumptions& assumptions)
-        : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a), assumptions(assumptions) {}
+    void invariant() const;
 
-    Env* env;
+    SEXP origin_;
     rir::Function* function;
+    Env* env;
+    SEXP srcRef_;
+    const std::string name_;
+    const FormalArgs formals_;
+
+    std::map<const OptimizationContext, ClosureVersion*> versions;
 
   public:
-    const std::string name;
+    SEXP rirClosure() const {
+        assert(origin_ && "Inner function does not have a source rir closure");
+        return origin_;
+    }
 
+    rir::Function* rirFunction() const { return function; }
+    SEXP srcRef() { return srcRef_; }
     Env* closureEnv() const { return env; }
-    rir::Function* rirVersion() { return function; }
-
-    std::vector<SEXP> argNames;
-    std::vector<Promise*> promises;
-
-    Assumptions assumptions;
-
-    size_t nargs() const { return argNames.size(); }
+    const std::string& name() const { return name_; }
+    size_t nargs() const { return formals_.nargs(); }
+    const FormalArgs& formals() const { return formals_; }
 
     void print(std::ostream& out, bool tty) const;
 
-    Promise* createProm(unsigned srcPoolIdx);
-
     friend std::ostream& operator<<(std::ostream& out, const Closure& e) {
-        out << e.name;
+        out << e.name();
         return out;
     }
 
-    Closure* clone();
+    ClosureVersion* declareVersion(const OptimizationContext&);
+    void erase(const OptimizationContext& ctx) { versions.erase(ctx); }
 
-    ~Closure();
+    bool existsVersion(const OptimizationContext& ctx) {
+        return versions.count(ctx);
+    }
+    ClosureVersion* getVersion(const OptimizationContext& ctx) {
+        return versions.at(ctx);
+    }
+    ClosureVersion* findCompatibleVersion(const OptimizationContext& ctx) const;
 
-    typedef std::function<void(Promise*)> PromiseIterator;
+    typedef std::function<void(ClosureVersion*)> MaybeClsVersion;
+    ClosureVersion* cloneWithAssumptions(ClosureVersion* cls,
+                                         const Assumptions& asmpt,
+                                         const MaybeClsVersion& change);
 
-    void eachPromise(PromiseIterator it) const {
-        for (auto p : promises)
-            if (p)
-                it(p);
+    typedef std::function<void(pir::ClosureVersion*)> ClosureVersionIterator;
+    void eachVersion(ClosureVersionIterator it) const {
+        for (auto& v : versions)
+            it(v.second);
     }
 
-    size_t size() const override final;
+    ~Closure();
 };
 
 } // namespace pir

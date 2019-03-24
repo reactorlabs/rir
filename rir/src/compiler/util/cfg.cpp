@@ -5,31 +5,6 @@
 #include <algorithm>
 #include <set>
 #include <stack>
-#include <unordered_map>
-
-namespace {
-using namespace rir::pir;
-
-class BBInterSet : public std::unordered_set<BB*> {
-  public:
-    bool seen = false;
-    bool merge(BBInterSet& other) {
-        if (*this == other)
-            return false;
-        bool changed = false;
-        auto it = begin();
-        while (it != end()) {
-            if (other.find(*it) == other.end()) {
-                it = erase(it);
-                changed = true;
-            } else {
-                it++;
-            }
-        }
-        return changed;
-    }
-};
-}
 
 namespace rir {
 namespace pir {
@@ -90,6 +65,21 @@ const CFG::BBList& CFG::immediatePredecessors(BB* a) const {
     return predecessors_[a->id];
 }
 
+bool DominanceGraph::DomTree::merge(const DomTree& other) {
+    bool changed = false;
+    auto it = container.begin();
+    while (it != container.end()) {
+        if (std::find(other.container.begin(), other.container.end(), *it) ==
+            other.container.end()) {
+            it = container.erase(it);
+            changed = true;
+        } else {
+            it++;
+        }
+    }
+    return changed;
+        }
+
 DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
     // Static Analysis computes the set of all dominating bb's, for every bb
     // reachable from start. Runs until none of the sets grow anymore.
@@ -97,12 +87,11 @@ DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
     std::stack<BB*> todo;
     todo.push(start->entry);
 
-    std::vector<BBInterSet> dom(start->nextBBId);
-
     while (!todo.empty()) {
         BB* cur = todo.top();
-        auto front = dom[cur->id];
-        front.insert(cur);
+        DomTree curState = dominating[cur->id];
+        curState.push_back(cur);
+        curState.seen = true;
 
         todo.pop();
 
@@ -110,28 +99,66 @@ DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
             if (!bb)
                 return;
 
-            auto& d = dom[bb->id];
-            if (!dom[bb->id].seen) {
-                d.seen = true;
-                d.insert(front.begin(), front.end());
+            auto& d = dominating[bb->id];
+            if (!d.seen) {
+                d = curState;
                 todo.push(bb);
                 return;
             }
 
-            if (d.merge(front))
+            if (d.merge(curState))
                 todo.push(bb);
         };
         apply(cur->trueBranch());
         apply(cur->falseBranch());
     }
-
-    for (size_t i = 0; i < start->nextBBId; ++i) {
-        dominating[i].insert(dom[i].begin(), dom[i].end());
-    }
 }
 
 bool DominanceGraph::dominates(BB* a, BB* b) const {
-    return dominating[b->id].find(a) != dominating[b->id].end();
+    const auto& doms = dominating[b->id].container;
+    return std::find(doms.begin(), doms.end(), a) != doms.end();
+}
+
+bool DominanceGraph::immediatelyDominates(BB* a, BB* b) const {
+    const auto& doms = dominating[b->id].container;
+    if (doms.empty())
+        return false;
+    return doms[doms.size() - 1] == a;
+}
+
+BB* DominanceGraph::immediateDominator(BB* bb) const {
+    const auto& doms = dominating[bb->id].container;
+    return doms[doms.size() - 1];
+}
+
+const DominanceGraph::BBList& DominanceGraph::dominators(BB* bb) const {
+    return dominating[bb->id].container;
+}
+
+void DominanceGraph::dominatorTreeNext(
+    BB* bb, const std::function<void(BB*)>& apply) const {
+    Visitor::run(bb, [&](BB* b) {
+        if (immediatelyDominates(bb, b))
+            apply(b);
+    });
+};
+
+const DominanceFrontier::BBList& DominanceFrontier::at(BB* bb) const {
+    return frontier[bb->id];
+}
+
+DominanceFrontier::DominanceFrontier(Code* code, const CFG& cfg,
+                                     const DominanceGraph& dom) {
+    frontier.resize(code->nextBBId);
+    Visitor::run(code->entry, [&](BB* n) {
+        for (const auto& p : cfg.immediatePredecessors(n)) {
+            auto r = p;
+            while (r != dom.immediateDominator(n)) {
+                frontier[r->id].insert(n);
+                r = dom.immediateDominator(r);
+            }
+        }
+    });
 }
 }
 }

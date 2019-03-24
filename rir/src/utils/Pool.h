@@ -12,7 +12,7 @@
 
 #include <unordered_map>
 
-#include "interpreter/runtime.h"
+#include "interpreter/instance.h"
 
 namespace rir {
 
@@ -30,6 +30,19 @@ class Pool {
         size_t i = cp_pool_add(globalContext(), e);
         contents[e] = i;
         return i;
+    }
+
+    static BC::PoolIdx makeSpace() {
+        size_t i = cp_pool_add(globalContext(), R_NilValue);
+        return i;
+    }
+
+    static void patch(BC::PoolIdx idx, SEXP e) {
+        assert(get(idx) == R_NilValue || get(idx) == e);
+        SET_NAMED(e, 2);
+        cp_pool_set(globalContext(), idx, e);
+        if (!contents.count(e))
+            contents[e] = idx;
     }
 
     static BC::PoolIdx getNum(double n);

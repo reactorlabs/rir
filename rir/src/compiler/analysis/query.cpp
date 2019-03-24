@@ -15,10 +15,28 @@ bool Query::noEnv(Code* c) {
                           [](Instruction* i) { return !MkEnv::Cast(i); });
 }
 
-bool Query::pure(Code* c) {
+bool Query::noEnvSpec(Code* c) {
     return Visitor::check(c->entry, [](Instruction* i) {
-        return !i->hasEffect() && !i->changesEnv();
+        if (MkEnv::Cast(i) && !MkEnv::Cast(i)->stub) {
+            auto env = MkEnv::Cast(i);
+            if (!env->hasSingleUse())
+                return false;
+            auto it = i->bb()->begin();
+            while (it != i->bb()->end()) {
+                if (auto fs = FrameState::Cast(*it))
+                    if (fs->env() == env)
+                        return true;
+                it++;
+            }
+            return false;
+        }
+        return true;
     });
+}
+
+bool Query::pure(Code* c) {
+    return Visitor::check(
+        c->entry, [&](Instruction* i) { return !i->hasImpureEffects(); });
 }
 
 std::unordered_set<Value*> Query::returned(Code* c) {
@@ -29,5 +47,6 @@ std::unordered_set<Value*> Query::returned(Code* c) {
     });
     return returned;
 }
+
 } // namespace pir
 } // namespace rir

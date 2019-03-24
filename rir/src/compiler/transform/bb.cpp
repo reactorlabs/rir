@@ -9,7 +9,7 @@
 namespace rir {
 namespace pir {
 
-BB* BBTransform::clone(BB* src, Code* target, Closure* targetClosure) {
+BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
     std::vector<BB*> bbs;
 
     // Copy instructions and remember old -> new instruction map.
@@ -39,8 +39,8 @@ BB* BBTransform::clone(BB* src, Code* target, Closure* targetClosure) {
     Visitor::run(newEntry, [&](Instruction* i) {
         auto phi = Phi::Cast(i);
         if (phi) {
-            for (size_t j = 0; j < phi->input.size(); ++j)
-                phi->input[j] = bbs[phi->input[j]->id];
+            for (size_t j = 0; j < phi->nargs(); ++j)
+                phi->updateInputAt(j, bbs[phi->inputAt(j)->id]);
         }
         i->eachArg([&](InstrArg& arg) {
             if (arg.val()->isInstruction()) {
@@ -50,7 +50,7 @@ BB* BBTransform::clone(BB* src, Code* target, Closure* targetClosure) {
         });
         if (auto mk = MkArg::Cast(i)) {
             Promise* p = mk->prom();
-            if (p->fun != targetClosure) {
+            if (p->owner != targetClosure) {
                 if (promMap.count(p)) {
                     mk->updatePromise(promMap.at(p));
                 } else {
@@ -63,6 +63,28 @@ BB* BBTransform::clone(BB* src, Code* target, Closure* targetClosure) {
     });
 
     return newEntry;
+}
+
+BB* BBTransform::splitEdge(size_t next_id, BB* from, BB* to, Code* target) {
+    BB* split = new BB(target, next_id);
+
+    split->next0 = to;
+    split->next1 = nullptr;
+
+    if (from->next0 == to)
+        from->next0 = split;
+    else
+        from->next1 = split;
+
+    Visitor::run(split, [&](Instruction* i) {
+        if (auto phi = Phi::Cast(i)) {
+            for (size_t j = 0; j < phi->nargs(); ++j)
+                if (phi->inputAt(j) == from)
+                    phi->updateInputAt(j, split);
+        }
+    });
+
+    return split;
 }
 
 BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
@@ -78,16 +100,17 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
     Visitor::run(split, [&](Instruction* i) {
         auto phi = Phi::Cast(i);
         if (phi) {
-            for (size_t j = 0; j < phi->input.size(); ++j)
-                if (phi->input[j] == src)
-                    phi->input[j] = split;
+            for (size_t j = 0; j < phi->nargs(); ++j)
+                if (phi->inputAt(j) == src)
+                    phi->updateInputAt(j, split);
         }
     });
     return split;
 }
 
-Value* BBTransform::forInline(BB* inlinee, BB* splice) {
+std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
     Value* found = nullptr;
+    Return* ret;
     Visitor::run(inlinee, [&](BB* bb) {
         if (bb->next0 != nullptr)
             return;
@@ -96,7 +119,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
         if (Deopt::Cast(bb->last()))
             return;
 
-        Return* ret = Return::Cast(bb->last());
+        ret = Return::Cast(bb->last());
         assert(ret);
 
         // This transformation assumes that we have just one reachable return.
@@ -108,7 +131,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
         bb->remove(bb->end() - 1);
     });
     assert(found);
-    return found;
+    return {found, ret->bb()};
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
@@ -139,22 +162,28 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         src->next0 = deoptBlock;
         src->next1 = split;
     }
+
+    splitEdge(code->nextBBId++, src, deoptBlock, code);
+
     return split;
 }
 
-void BBTransform::removeBBs(Code* code,
-                            const std::unordered_set<BB*>& toDelete) {
-    // Dead code can still appear as phi inputs in live blocks
-    Visitor::run(code->entry, [&](BB* bb) {
-        for (auto i : *bb) {
-            if (auto phi = Phi::Cast(i)) {
-                phi->removeInputs(toDelete);
-            }
-        }
-    });
-    for (auto bb : toDelete) {
-        delete bb;
-    }
+void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
+                               BB::Instrs::iterator& position,
+                               bool assumePositive) {
+    position = bb->insert(position, (Instruction*)condition);
+    auto assume = new Assume(condition, cp);
+    if (!assumePositive)
+        assume->Not();
+    position = bb->insert(position + 1, assume);
+    position++;
+};
+
+void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
+                               bool assumePositive) {
+    auto contBB = cp->bb()->trueBranch();
+    auto contBegin = contBB->begin();
+    insertAssume(condition, cp, contBB, contBegin, assumePositive);
 }
 
 } // namespace pir

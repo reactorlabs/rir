@@ -1,8 +1,7 @@
 #ifndef RIR_FUNCTION_HANDLE_H
 #define RIR_FUNCTION_HANDLE_H
 
-#include "interpreter/interp.h"
-#include "interpreter/runtime.h"
+#include "interpreter/instance.h"
 #include "ir/BC_inc.h"
 
 #include "R/Preserve.h"
@@ -11,6 +10,7 @@
 #include "utils/Pool.h"
 
 #include <iostream>
+#include <map>
 #include <vector>
 
 namespace rir {

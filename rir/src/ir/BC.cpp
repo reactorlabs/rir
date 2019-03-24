@@ -42,7 +42,7 @@ BC_NOARGS(V, _)
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
-    case Opcode::ldlval_:
+    case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
@@ -81,14 +81,26 @@ BC_NOARGS(V, _)
         cs.insert(immediate.staticCallFixedArgs);
         break;
 
+    case Opcode::call_builtin_:
+        cs.insert(immediate.callBuiltinFixedArgs);
+        break;
+
     case Opcode::promise_:
     case Opcode::push_code_:
         cs.insert(immediate.fun);
         return;
 
+    case Opcode::mk_stub_env_:
+    case Opcode::mk_env_:
+        cs.insert(immediate.mkEnvFixedArgs);
+        for (PoolIdx name : mkEnvExtra().names)
+            cs.insert(name);
+        break;
+
     case Opcode::br_:
     case Opcode::brtrue_:
     case Opcode::beginloop_:
+    case Opcode::push_context_:
     case Opcode::brobj_:
     case Opcode::brfalse_:
         cs.patchpoint(immediate.offset);
@@ -137,9 +149,10 @@ void BC::printImmediateArgs(std::ostream& out) const {
     out << " ]";
 }
 
-void BC::printNames(std::ostream& out) const {
+void BC::printNames(std::ostream& out,
+                    const std::vector<PoolIdx>& names) const {
     out << "[";
-    for (auto name : callExtra().callArgumentNames) {
+    for (auto name : names) {
         SEXP n = Pool::get(name);
         out << " "
             << (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n)));
@@ -166,7 +179,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::named_call_implicit_: {
         printImmediateArgs(out);
         out << " ";
-        printNames(out);
+        printNames(out, callExtra().callArgumentNames);
         break;
     }
     case Opcode::call_: {
@@ -180,14 +193,33 @@ void BC::print(std::ostream& out) const {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
         out << nargs << " ";
-        printNames(out);
+        printNames(out, callExtra().callArgumentNames);
+        break;
+    }
+    case Opcode::call_builtin_: {
+        auto args = immediate.callBuiltinFixedArgs;
+        BC::NumArgs nargs = args.nargs;
+        auto target = Pool::get(args.builtin);
+        out << nargs << " : " << dumpSexp(target).c_str();
         break;
     }
     case Opcode::static_call_: {
         auto args = immediate.staticCallFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        auto target = Pool::get(args.target);
-        out << nargs << " : " << dumpSexp(target).c_str();
+        auto target = Pool::get(args.targetClosure);
+        auto targetV = Pool::get(args.versionHint);
+        out << nargs << " : ";
+        if (targetV != R_NilValue)
+            out << "(" << Function::unpack(targetV) << ") ";
+        out << dumpSexp(target).c_str();
+        break;
+    }
+    case Opcode::mk_stub_env_:
+    case Opcode::mk_env_: {
+        auto args = immediate.mkEnvFixedArgs;
+        BC::NumArgs nargs = args.nargs;
+        out << nargs << ", c" << args.context << "  ";
+        printNames(out, mkEnvExtra().names);
         break;
     }
     case Opcode::deopt_: {
@@ -203,8 +235,8 @@ void BC::print(std::ostream& out) const {
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
-    case Opcode::ldlval_:
     case Opcode::ldddvar_:
+    case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
@@ -287,6 +319,7 @@ BC_NOARGS(V, _)
         out << std::hex << immediate.fun << std::dec;
         break;
     case Opcode::beginloop_:
+    case Opcode::push_context_:
     case Opcode::brtrue_:
     case Opcode::brobj_:
     case Opcode::brfalse_:

@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-void DelayEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
+void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
     Visitor::run(function->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
         MkEnv* envInstr;
@@ -41,30 +41,54 @@ void DelayEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
 
                 auto consumeStVar = [&](StVar* st) {
                     bool exists = false;
+                    bool aMissingArg = false;
                     envInstr->eachLocalVar([&](SEXP name, InstrArg& arg) {
                         if (name == st->varName) {
-                            exists = true;
-                            arg.val() = st->val();
+                            if (arg.val() == MissingArg::instance() ||
+                                st->isStArg) {
+                                // TODO: currently we cannot elide if the
+                                // original entry is missing, or if the stvar
+                                // should preserve missingness. Because
+                                // otherwise we break the missing flag on the
+                                // binding. We need to add a missingness bitset
+                                // to the mkenv instruction to fix this!
+                                aMissingArg = true;
+                            } else {
+                                exists = true;
+                                arg.val() = st->val();
+                            }
                         }
                     });
+                    if (aMissingArg)
+                        return false;
+
                     if (!exists) {
                         envInstr->pushArg(st->val(), PirType::any());
                         envInstr->varName.push_back(st->varName);
                     }
+                    return true;
                 };
 
                 {
                     auto st = StVar::Cast(next);
                     if (st && st->env() == envInstr) {
-                        consumeStVar(st);
-                        it = bb->remove(it + 1);
-                        it--;
-                        continue;
+                        if (consumeStVar(st)) {
+                            it = bb->remove(it + 1);
+                            it--;
+                            continue;
+                        } else {
+                            break;
+                        }
                     }
                 }
 
                 if (next->hasEnv() && next->env() == envInstr)
                     break;
+
+                if (PushContext::Cast(next))
+                    envInstr->context++;
+                if (PopContext::Cast(next))
+                    envInstr->context--;
 
                 bb->swapWithNext(it);
                 it++;
@@ -80,7 +104,7 @@ void DelayEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
                                               BB* fastPathBranch) {
                 auto newEnvInstr = envInstr->clone();
                 deoptBranch->insert(deoptBranch->begin(), newEnvInstr);
-                envInstr->replaceUsesIn(newEnvInstr, deoptBranch);
+                envInstr->replaceUsesWithLimits(newEnvInstr, deoptBranch);
                 it = bb->moveToBegin(it, fastPathBranch);
             };
 

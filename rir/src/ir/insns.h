@@ -2,8 +2,6 @@
 #error "DEF_INSTR must be defined before including insns.h"
 #endif
 
-#include "simple_instruction_list.h"
-
 // DEF_INSTR(name, imm, pop, push, pure)
 
 /**
@@ -16,10 +14,19 @@ DEF_INSTR(invalid_, 0, 0, 0, 0)
  */
 DEF_INSTR(nop_, 0, 0, 0, 1)
 
+DEF_INSTR(push_context_, 1, 2, 0, 0)
+DEF_INSTR(pop_context_, 0, 1, 0, 0)
+
 /**
- * make_env_:: create a new empty environment with the parent taken from TOS
+ * make_env_:: create a new environment with the parent and all locals taken
+ * from stack and the argument names as immediates.
  */
-DEF_INSTR(make_env_, 0, 1, 1, 1)
+DEF_INSTR(mk_env_, 2, -1, 1, 0)
+
+/**
+ * make_stub_env_:: create a fake environment for speculative purposes
+ */
+DEF_INSTR(mk_stub_env_, 2, -1, 1, 1)
 
 /**
  * parent_env_:: push lexically outer env to tos
@@ -69,11 +76,6 @@ DEF_INSTR(ldvar_noforce_super_, 1, 0, 1, 1)
 DEF_INSTR(ldddvar_, 1, 0, 1, 0)
 
 /**
- * ldlval_:: take immediate CP index of symbol, load value from local frame.
- */
-DEF_INSTR(ldlval_, 1, 0, 1, 1)
-
-/**
  * ldarg_:: load argument
  */
 DEF_INSTR(ldarg_, 1, 0, 1, 0)
@@ -82,6 +84,11 @@ DEF_INSTR(ldarg_, 1, 0, 1, 0)
  * ldloc_:: push local variable on stack
  */
 DEF_INSTR(ldloc_, 1, 0, 1, 1)
+
+/**
+ * stvar_:: assign tos to the immediate symbol
+ */
+DEF_INSTR(starg_, 1, 1, 0, 0)
 
 /**
  * stvar_:: assign tos to the immediate symbol
@@ -112,37 +119,42 @@ DEF_INSTR(movloc_, 2, 0, 0, 1)
  *                  code objects are passed as immediate arguments
  *
  *                  THIS IS A VARIABLE LENGTH INSTRUCTION
- *                  the actual number of immediates is 2 + nargs
+ *                  the actual number of immediates is 3 + nargs
  */
-DEF_INSTR(call_implicit_, 2, 1, 1, 0)
+DEF_INSTR(call_implicit_, 3, 1, 1, 0)
 /*
  * Same as above, but with names for the arguments as immediates
  *
  *                  THIS IS A VARIABLE LENGTH INSTRUCTION
- *                  the actual number of immediates is 2 + 2 * nargs
+ *                  the actual number of immediates is 3 + 2 * nargs
  */
-DEF_INSTR(named_call_implicit_, 2, 1, 1, 0)
+DEF_INSTR(named_call_implicit_, 3, 1, 1, 0)
 
 /**
  * call_:: Like call_implicit_, but expects arguments on stack
  *         on top of the callee; these arguments can be both
  *         values and promises (even preseeded w/ a value)
  */
-DEF_INSTR(call_, 2, -1, 1, 0)
+DEF_INSTR(call_, 3, -1, 1, 0)
 
 /*
  * Same as above, but with names for the arguments as immediates
  *
  *                  THIS IS A VARIABLE LENGTH INSTRUCTION
- *                  the actual number of immediates is 2 + nargs
+ *                  the actual number of immediates is 3 + nargs
  */
-DEF_INSTR(named_call_, 2, -1, 1, 0)
+DEF_INSTR(named_call_, 3, -1, 1, 0)
 
 /**
  * static_call_:: Like call_, but the callee is statically known
  *                and is accessed via the immediate callsite
  */
-DEF_INSTR(static_call_, 3, -1, 1, 0)
+DEF_INSTR(static_call_, 5, -1, 1, 0)
+
+/**
+ * call_builtin_:: Like static call, but calls a builtin
+ */
+DEF_INSTR(call_builtin_, 3, -1, 1, 0)
 
 /**
  * close_:: pop body and argument list, create closure, and push on object stack
@@ -292,6 +304,11 @@ DEF_INSTR(is_, 1, 1, 1, 1)
 DEF_INSTR(isobj_, 0, 1, 1, 1)
 
 /**
+ * isstubenv_:: check if TOS is an env stub, push T/F
+ */
+DEF_INSTR(isstubenv_, 0, 1, 1, 1)
+
+/**
  * missing_ :: check if symb is missing
  */
 DEF_INSTR(missing_, 1, 0, 1, 1)
@@ -332,9 +349,14 @@ DEF_INSTR(extract1_1_, 0, 2, 1, 1)
 DEF_INSTR(extract1_2_, 0, 3, 1, 1)
 
 /**
- * subassign_ :: [<-(a,b,c)
+ * subassign1_1_ :: a[b] <- c
  */
-DEF_INSTR(subassign1_, 0, 3, 1, 1)
+DEF_INSTR(subassign1_1_, 0, 3, 1, 1)
+
+/**
+ * subassign1_2_ :: a[b,c] <- d
+ */
+DEF_INSTR(subassign1_2_, 0, 4, 1, 1)
 
 /**
  * extract2_1_:: do a[[b]], where a and b are on the stack and a is no obj
@@ -347,9 +369,14 @@ DEF_INSTR(extract2_1_, 0, 2, 1, 1)
 DEF_INSTR(extract2_2_, 0, 3, 1, 1)
 
 /**
- * subassign2_ :: [[<-(a,b,c)
+ * subassign2_1 :: a[[b]] <- c
  */
-DEF_INSTR(subassign2_, 0, 3, 1, 1)
+DEF_INSTR(subassign2_1_, 0, 3, 1, 1)
+
+/**
+ * subassign2_2_ :: a[[b,c]] <- d
+ */
+DEF_INSTR(subassign2_2_, 0, 4, 1, 1)
 
 /**
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target
@@ -419,7 +446,7 @@ DEF_INSTR(make_unique_, 0, 1, 1, 1)
 /**
  * beginloop_:: begins loop context, break and continue target immediate (this is the target for break and next long jumps)
  */
-DEF_INSTR(beginloop_, 1, 0, 0, 1)
+DEF_INSTR(beginloop_, 1, 0, 0, 0)
 
 /**
  * endloop_:: end marker for a loop with context
@@ -437,11 +464,6 @@ DEF_INSTR(return_, 0, 1, 0, 0)
  */
 DEF_INSTR(ret_, 0, 1, 0, 1)
 
-#define V(NESTED, name, Name)\
-DEF_INSTR(name ## _, 0, 0, 0, 1)
-SIMPLE_INSTRUCTIONS(V, _)
-#undef V
-
 /**
  * deopt_ :: jumps to the immediate bc location
  */
@@ -454,5 +476,8 @@ DEF_INSTR(deopt_, 1, -1, 0, 0)
  */
 DEF_INSTR(record_call_, 4, 1, 1, 0)
 DEF_INSTR(record_binop_, 2, 2, 2, 0)
+
+DEF_INSTR(int3_, 0, 0, 0, 0)
+DEF_INSTR(printInvocation_, 0, 0, 0, 0)
 
 #undef DEF_INSTR

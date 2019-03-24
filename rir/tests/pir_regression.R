@@ -8,9 +8,6 @@ g <- pir.compile(rir.compile(function(y) y))
 h <- pir.compile(rir.compile(function() g(f(2))))
 h()  # aborts if g's environment got elided
 
-
-
-
 {
   f <- pir.compile(rir.compile(function(gpars) {
     numnotnull <- function(gparname) {
@@ -26,9 +23,6 @@ h()  # aborts if g's environment got elided
   fc()
 }
 
-
-
-
 {
   validGP <- pir.compile(rir.compile(function(gpars) {
     check.length <- function(gparname) {
@@ -37,11 +31,11 @@ h()  # aborts if g's environment got elided
     numnotnull <- function(gparname) {
       if (match(gparname, names(gpars))) {
           check.length(gparname)
-      }   
+      }
     }
     numnotnull('a')
   }))
-  
+
   rir.compile(function() {
      validGP(list(a=1))
   })()
@@ -57,43 +51,59 @@ rir.compile(function(){
 
 
 # inlined frameStates:
-f <- rir.compile(function(x) g(x))
-g <- rir.compile(function(x) h(x))
-h <- rir.compile(function(x) 1+i(x))
-i <- rir.compile(function(x) 40-x)
 
-stopifnot(f(-1) == 42)
-
-hc1 = .Call("rir_invocation_count", h)
-ic1 = .Call("rir_invocation_count", i)
-g <- pir.compile(g)
-stopifnot(f(-1) == 42)
-
-## Assert we are really inlined (ie. h and i are not called)
-hc2 = .Call("rir_invocation_count", h)
-ic2 = .Call("rir_invocation_count", i)
-stopifnot(hc1 == hc2)
-stopifnot(ic1 == ic2)
-
-## Assert we deopt (ie. base version of h and i are invoked)
-stopifnot(f(structure(-1, class="asdf")) == 42)
-hc3 = .Call("rir_invocation_count", h)
-ic3 = .Call("rir_invocation_count", i)
-stopifnot(hc3 == hc2+1)
-stopifnot(ic3 == ic2+1)
+if (Sys.getenv("PIR_DEOPT_CHAOS") != "1") {
+    f <- pir.compile(rir.compile(function(x) g(x)))
+    g <- rir.compile(function(x) h(x))
+    h <- rir.compile(function(x) 1+i(x))
+    i <- rir.compile(function(x) 40-x)
+    
+    stopifnot(f(-1) == 42)
+    
+    hc1 = .Call("rir_invocation_count", h)
+    ic1 = .Call("rir_invocation_count", i)
+    g <- pir.compile(g)
+    stopifnot(f(-1) == 42)
+    
+    ## Assert we are really inlined (ie. h and i are not called)
+    hc2 = .Call("rir_invocation_count", h)
+    ic2 = .Call("rir_invocation_count", i)
+    stopifnot(hc1 == hc2)
+    stopifnot(ic1 == ic2)
+    
+    ## Assert we deopt (ie. base version of h and i are invoked)
+    stopifnot(f(structure(-1, class="asdf")) == 42)
+    hc3 = .Call("rir_invocation_count", h)
+    ic3 = .Call("rir_invocation_count", i)
+    stopifnot(hc3 == hc2+1)
+    stopifnot(ic3 == ic2+1)
+}
 
 # When subsequently calling the g inner function we must ensure
 # that val is properly bind. This means that we must activate a
 # the differnt SEXP everytime because val is bind to its enclosing
 # environment (the environemnt of the current activation of f).
-# This tests ensures that if an optimization tries to optimize 
-# this polymorphicness, the semantics are preserved 
+# This tests ensures that if an optimization tries to optimize
+# this polymorphicness, the semantics are preserved
 f <- function(val) {
-    g <- function() val 
-    g() 
+    g <- function() val
+    g()
 }
 h <- rir.compile(function(x) f(x))
 stopifnot(h(1) == 1)
 stopifnot(h(2) == 2)
 h <- pir.compile(h)
 stopifnot(h(3) == 3)
+
+
+if (Sys.getenv("PIR_ENABLE") == "") {
+  require(compiler)
+  old <- compiler::enableJIT(3)
+  # test that we generate multiple versions
+  p <- function(a=1,b=2) a+b
+  for (i in 1:100) pir.compile(function() p())()
+  for (i in 1:100) pir.compile(function() p(1))()
+  for (i in 1:100) pir.compile(function() p(1,2))()
+  stopifnot(length(.Call("rir_invocation_count", p)) > 3)
+  compiler::enableJIT(old)
+}

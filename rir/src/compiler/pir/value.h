@@ -26,15 +26,31 @@ class Value {
     PirType typeFeedback = PirType::optimistic();
     Tag tag;
     Value(PirType type, Tag tag) : type(type), tag(tag) {}
-    virtual void printRef(std::ostream& out) = 0;
-    void printRef() { printRef(std::cerr); }
+    virtual void printRef(std::ostream& out) const = 0;
+    void printRef() const { printRef(std::cerr); }
     virtual bool isInstruction() { return false; }
-    virtual Value* followCasts() { return this; }
-    virtual Value* followCastsAndForce() { return this; }
+    virtual const Value* cFollowCasts() const { return this; }
+    virtual const Value* cFollowCastsAndForce() const { return this; }
+    Value* followCasts() {
+        return const_cast<Value*>(
+            const_cast<const Value*>(this)->cFollowCasts());
+    }
+    Value* followCastsAndForce() {
+        return const_cast<Value*>(
+            const_cast<const Value*>(this)->cFollowCastsAndForce());
+    }
     virtual bool validIn(Code* code) const { return true; }
+    virtual SEXP asRValue() const {
+        assert(false && "Not a singleton");
+        return nullptr;
+    }
+
+    bool producesRirResult() const {
+        return type != PirType::voyd() && type != NativeType::context;
+    }
 };
 
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

@@ -15,14 +15,21 @@ namespace pir {
 struct ValOrig {
     Value* val;
     Instruction* origin;
-    ValOrig(Value* v, Instruction* o) : val(v), origin(o) {}
+    unsigned recursionLevel;
+
+    ValOrig(Value* v, Instruction* o, unsigned recursionLevel)
+        : val(v), origin(o), recursionLevel(recursionLevel) {}
+
     bool operator<(const ValOrig& other) const {
-        if (origin == other.origin)
+        if (origin == other.origin && recursionLevel == other.recursionLevel)
             return val < other.val;
+        if (origin == other.origin)
+            return recursionLevel < other.recursionLevel;
         return origin < other.origin;
     }
     bool operator==(const ValOrig& other) const {
-        return val == other.val && origin == other.origin;
+        return val == other.val && origin == other.origin &&
+               recursionLevel == other.recursionLevel;
     }
 };
 }
@@ -60,7 +67,8 @@ struct AbstractPirValue {
     PirType type = PirType::bottom();
 
     AbstractPirValue();
-    AbstractPirValue(Value* v, Instruction* origin);
+
+    AbstractPirValue(Value* v, Instruction* origin, unsigned recursionLevel);
 
     static AbstractPirValue tainted() {
         AbstractPirValue v;
@@ -88,8 +96,8 @@ struct AbstractPirValue {
     }
 
     typedef std::function<void(Value*)> ValMaybe;
-    typedef std::function<void(ValOrig&)> ValOrigMaybe;
-    typedef std::function<bool(ValOrig&)> ValOrigMaybePredicate;
+    typedef std::function<void(const ValOrig&)> ValOrigMaybe;
+    typedef std::function<bool(const ValOrig&)> ValOrigMaybePredicate;
 
     void ifSingleValue(ValMaybe known) {
         if (!unknown && vals.size() == 1)
@@ -97,22 +105,26 @@ struct AbstractPirValue {
     }
 
     void eachSource(const ValOrigMaybe& apply) const {
-        for (auto v : vals)
+        for (auto& v : vals)
             apply(v);
     }
 
     bool checkEachSource(const ValOrigMaybePredicate& apply) const {
-        for (auto v : vals)
+        for (auto& v : vals)
             if (!apply(v))
                 return false;
         return true;
     }
 
     AbstractResult merge(const ValOrig& other) {
-        return merge(AbstractPirValue(other.val, other.origin));
+        return merge(
+            AbstractPirValue(other.val, other.origin, other.recursionLevel));
     }
 
     AbstractResult merge(const AbstractPirValue& other);
+    AbstractResult mergeExit(const AbstractPirValue& other) {
+        return merge(other);
+    }
 
     void print(std::ostream& out, bool tty = false) const;
 };
@@ -136,6 +148,8 @@ struct AbstractREnvironment {
 
     std::unordered_map<SEXP, AbstractPirValue> entries;
 
+    AbstractREnvironment() {}
+
     bool leaked = false;
     bool tainted = false;
 
@@ -146,8 +160,8 @@ struct AbstractREnvironment {
         }
     }
 
-    void set(SEXP n, Value* v, Instruction* origin) {
-        entries[n] = AbstractPirValue(v, origin);
+    void set(SEXP n, Value* v, Instruction* origin, unsigned recursionLevel) {
+        entries[n] = AbstractPirValue(v, origin, recursionLevel);
     }
 
     void print(std::ostream& out, bool tty = false) const;
@@ -161,6 +175,10 @@ struct AbstractREnvironment {
 
     const bool absent(SEXP e) const { return !tainted && !entries.count(e); }
 
+    AbstractResult mergeExit(const AbstractREnvironment& other) {
+        return merge(other);
+    }
+
     AbstractResult merge(const AbstractREnvironment& other) {
         AbstractResult res;
 
@@ -173,7 +191,7 @@ struct AbstractREnvironment {
             res.taint();
         }
 
-        for (auto entry : other.entries) {
+        for (auto& entry : other.entries) {
             auto name = entry.first;
             if (!entries.count(name)) {
                 entries[name].taint();
@@ -182,7 +200,7 @@ struct AbstractREnvironment {
                 res.max(entries[name].merge(other.get(name)));
             }
         }
-        for (auto entry : entries) {
+        for (auto& entry : entries) {
             auto name = entry.first;
             if (!other.entries.count(name) && !entries.at(name).isUnknown()) {
                 entries.at(name).taint();
@@ -244,16 +262,22 @@ class AbstractREnvironmentHierarchy {
     std::unordered_map<Value*, AbstractREnvironment> envs;
 
   public:
+    AbstractREnvironmentHierarchy() {}
+
     std::unordered_map<Value*, Value*> aliases;
+
+    AbstractResult mergeExit(const AbstractREnvironmentHierarchy& other) {
+        return merge(other);
+    }
 
     AbstractResult merge(const AbstractREnvironmentHierarchy& other) {
         AbstractResult res;
 
-        for (auto e : other.envs)
+        for (auto& e : other.envs)
             if (envs.count(e.first))
                 res.max(envs.at(e.first).merge(e.second));
             else
-                envs[e.first] = e.second;
+                envs.emplace(e);
 
         for (auto& entry : other.aliases) {
             if (!aliases.count(entry.first)) {
@@ -289,6 +313,44 @@ class AbstractREnvironmentHierarchy {
     AbstractLoad superGet(Value* env, SEXP e) const;
 
     std::unordered_set<Value*> potentialParents(Value* env) const;
+};
+
+template <typename Kind>
+class AbstractUnique {
+    Kind* val = nullptr;
+
+  public:
+    AbstractUnique() {}
+
+    void set(Kind* val_) {
+        assert(val_);
+        val = val_;
+    }
+
+    void clear() {
+        val = nullptr;
+    }
+
+    Kind* get() const { return val; }
+
+    AbstractResult mergeExit(const AbstractUnique& other) {
+        return merge(other);
+    }
+    AbstractResult merge(const AbstractUnique& other) {
+        if (val && val != other.val) {
+            val = nullptr;
+            return AbstractResult::Updated;
+        }
+        return AbstractResult::None;
+    }
+
+    void print(std::ostream& out, bool tty) const {
+        if (val)
+            val->printRef(out);
+        else
+            out << "?";
+        out << "\n";
+    };
 };
 }
 }

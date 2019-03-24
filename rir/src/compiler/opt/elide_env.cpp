@@ -1,6 +1,5 @@
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
-#include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -10,7 +9,7 @@
 namespace rir {
 namespace pir {
 
-void ElideEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
+void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
     std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
@@ -27,29 +26,8 @@ void ElideEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
                     if (!envIsNeeded) {
                         i->elideEnv();
                         i->type.setNotObject();
-                    }
-                }
-
-                if (auto b = CallBuiltin::Cast(i)) {
-                    bool noObjects = true;
-                    i->eachArg([&](Value* v) {
-                        if (v != i->env())
-                            if (v->type.maybeObj())
-                                noObjects = false;
-                    });
-
-                    if (noObjects &&
-                        SafeBuiltinsList::nonObject(b->builtinId)) {
-                        std::vector<Value*> args;
-                        i->eachArg([&](Value* v) {
-                            if (v != i->env())
-                                args.push_back(v);
-                        });
-                        auto safe =
-                            new CallSafeBuiltin(b->blt, args, b->srcIdx);
-                        b->replaceUsesWith(safe);
-                        bb->replace(ip, safe);
-                        envIsNeeded = false;
+                        i->effects.reset(Effect::Reflection);
+                        i->type = i->type.forced();
                     }
                 }
 
@@ -58,6 +36,11 @@ void ElideEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
                         envNeeded.insert(i->env());
                     if (!Env::isPirEnv(i))
                         envDependency[i] = i->env();
+                }
+
+                if (auto force = Force::Cast(i)) {
+                    if (!force->input()->type.maybeLazy())
+                        force->elideEnv();
                 }
             }
         }

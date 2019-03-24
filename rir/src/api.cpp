@@ -7,10 +7,9 @@
 #include "api.h"
 
 #include "compiler/pir_tests.h"
-#include "compiler/translations/pir_2_rir.h"
+#include "compiler/translations/pir_2_rir/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
-#include "interpreter/interp.h"
-#include "interpreter/interp_context.h"
+#include "interpreter/interp_incl.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 
@@ -18,6 +17,19 @@
 #include <string>
 
 using namespace rir;
+
+bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
+#define V(style)                                                               \
+    if (strcmp(str, #style) == 0) {                                            \
+        s = pir::DebugStyle::style;                                            \
+        return true;                                                           \
+    } else
+    LIST_OF_DEBUG_STYLES(V)
+#undef V
+    {
+        return false;
+    }
+}
 
 REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     if (!what || TYPEOF(what) != CLOSXP)
@@ -76,9 +88,8 @@ REXPORT SEXP rir_markOptimize(SEXP what) {
 }
 
 REXPORT SEXP rir_eval(SEXP what, SEXP env) {
-    SEXP lenv;
     if (Function* f = Function::check(what))
-        return evalRirCodeExtCaller(f->body(), globalContext(), &lenv);
+        return evalRirCodeExtCaller(f->body(), globalContext(), env);
 
     if (isValidClosureSEXP(what))
         return rirEval_f(BODY(what), env);
@@ -101,22 +112,22 @@ REXPORT SEXP pir_debugFlags(
 
 #define V(n)                                                                   \
     if (Rf_asLogical(n))                                                       \
-        opts.set(pir::DebugFlag::n);
+        opts.flags.set(pir::DebugFlag::n);
     LIST_OF_PIR_DEBUGGING_FLAGS(V)
 #undef V
 
     SEXP res = Rf_allocVector(INTSXP, 1);
-    INTEGER(res)[0] = (int)opts.to_ulong();
+    INTEGER(res)[0] = (int)opts.flags.to_i();
     return res;
 }
 
-static long getInitialDebugOptions() {
+static pir::DebugOptions::DebugFlags getInitialDebugFlags() {
     auto verb = getenv("PIR_DEBUG");
     if (!verb)
-        return 0;
+        return pir::DebugOptions::DebugFlags();
     std::istringstream in(verb);
 
-    pir::DebugOptions flags;
+    pir::DebugOptions::DebugFlags flags;
     while (!in.fail()) {
         std::string opt;
         std::getline(in, opt, ',');
@@ -141,20 +152,54 @@ static long getInitialDebugOptions() {
             exit(1);
         }
     }
-    return flags.to_ulong();
+    return flags;
 }
 
-static pir::DebugOptions PirDebug(getInitialDebugOptions());
+static std::regex getInitialDebugPassFilter() {
+    auto filter = getenv("PIR_DEBUG_PASS_FILTER");
+    if (filter)
+        return std::regex(filter);
+    return std::regex(".*");
+}
+
+static std::regex getInitialDebugFunctionFilter() {
+    auto filter = getenv("PIR_DEBUG_FUNCTION_FILTER");
+    if (filter)
+        return std::regex(filter);
+    return std::regex(".*");
+}
+
+static pir::DebugStyle getInitialDebugStyle() {
+    auto styleStr = getenv("PIR_DEBUG_STYLE");
+    if (!styleStr) {
+        return pir::DebugStyle::Standard;
+    }
+    pir::DebugStyle style;
+    if (!parseDebugStyle(styleStr, style)) {
+        std::cerr << "Unknown PIR debug print style " << styleStr << "\n"
+                  << "Valid styles are:\n";
+#define V(style) std::cerr << "- " << #style << "\n";
+        LIST_OF_DEBUG_STYLES(V)
+#undef V
+        exit(1);
+    }
+    return style;
+}
+
+static pir::DebugOptions PirDebug = {
+    getInitialDebugFlags(), getInitialDebugPassFilter(),
+    getInitialDebugFunctionFilter(), getInitialDebugStyle()};
 
 REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
         Rf_error(
             "pir_setDebugFlags expects an integer vector as second parameter");
-    PirDebug = pir::DebugOptions(INTEGER(debugFlags)[0]);
+    PirDebug.flags = pir::DebugOptions::DebugFlags(INTEGER(debugFlags)[0]);
     return R_NilValue;
 }
 
-SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
+SEXP pirCompile(SEXP what, const Assumptions& assumptions,
+                const std::string& name, const pir::DebugOptions& debug) {
 
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
@@ -162,8 +207,6 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     if (!DispatchTable::check(BODY(what))) {
         Rf_error("Cannot optimize compiled expression, only closure");
     }
-    if (DispatchTable::unpack(BODY(what))->size() > 1)
-        return what;
 
     PROTECT(what);
 
@@ -173,14 +216,14 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Rir2PirCompiler cmp(m, logger);
-    cmp.compileClosure(what, name, {},
-                       [&](pir::Closure* c) {
+    cmp.compileClosure(what, name, assumptions,
+                       [&](pir::ClosureVersion* c) {
                            logger.flush();
                            cmp.optimizeModule();
 
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);
-                           auto fun = p2r.compile(c, what, dryRun);
+                           auto fun = p2r.compile(c, dryRun);
 
                            // Install
                            if (dryRun)
@@ -214,17 +257,28 @@ REXPORT SEXP rir_invocation_count(SEXP what) {
     return res;
 }
 
-REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags) {
+REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags,
+                         SEXP debugStyle) {
     if (debugFlags != R_NilValue &&
-        (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1))
-        Rf_error("pir_compile expects an integer vector as second parameter");
+        (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) != 1))
+        Rf_error("pir_compile expects an integer scalar as second parameter");
+    if (debugStyle != R_NilValue && TYPEOF(debugStyle) != SYMSXP)
+        Rf_error("pir_compile expects a symbol as third parameter");
     std::string n;
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
-    return pirCompile(what, n,
-                      debugFlags == R_NilValue
-                          ? PirDebug
-                          : pir::DebugOptions(INTEGER(debugFlags)[0]));
+    pir::DebugOptions opts = PirDebug;
+
+    if (debugFlags != R_NilValue) {
+        opts.flags = *INTEGER(debugFlags);
+    }
+    if (debugStyle != R_NilValue) {
+        if (!parseDebugStyle(CHAR(PRINTNAME(debugStyle)), opts.style)) {
+            Rf_error("pir_compile - given unknown debug style");
+        }
+    }
+    return pirCompile(what, rir::pir::Rir2PirCompiler::defaultAssumptions, n,
+                      opts);
 }
 
 REXPORT SEXP pir_tests() {
@@ -232,24 +286,27 @@ REXPORT SEXP pir_tests() {
     return R_NilValue;
 }
 
-SEXP pirOptDefaultOpts(SEXP closure, SEXP name) {
+SEXP rirOptDefaultOpts(SEXP closure, const Assumptions& assumptions,
+                       SEXP name) {
     std::string n = "";
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(closure))
-        return pirCompile(closure, n, PirDebug);
+        return pirCompile(closure, assumptions, n, PirDebug);
     else
         return closure;
 }
 
-SEXP pirOptDefaultOptsDryrun(SEXP closure, SEXP name) {
+SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
+                             SEXP name) {
     std::string n = "";
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(closure))
-        return pirCompile(closure, n, PirDebug | pir::DebugFlag::DryRun);
+        return pirCompile(closure, assumptions, n,
+                          PirDebug | pir::DebugFlag::DryRun);
     else
         return closure;
 }

@@ -2,6 +2,8 @@
 #define PIR_SCOPE_ANALYSIS_H
 
 #include "../analysis/generic_static_analysis.h"
+#include "../pir/closure.h"
+#include "../pir/closure_version.h"
 #include "../pir/pir.h"
 #include "abstract_value.h"
 
@@ -22,8 +24,6 @@ class ScopeAnalysisState {
     AbstractREnvironmentHierarchy envs;
     std::unordered_map<Instruction*, AbstractPirValue> returnValues;
     AbstractPirValue returnValue;
-    std::set<Instruction*> observedStores;
-    std::set<Value*> allStoresObserved;
 
     bool mayUseReflection = false;
 
@@ -37,21 +37,6 @@ class ScopeAnalysisState {
         if (!mayUseReflection && other.mayUseReflection) {
             mayUseReflection = true;
             res.lostPrecision();
-        }
-
-        allStoresObserved.insert(other.allStoresObserved.begin(),
-                                 other.allStoresObserved.end());
-        for (auto s : other.observedStores) {
-            if (!observedStores.count(s)) {
-                observedStores.insert(s);
-                res.update();
-            }
-        }
-        for (auto s : other.allStoresObserved) {
-            if (!allStoresObserved.count(s)) {
-                allStoresObserved.insert(s);
-                res.update();
-            }
         }
 
         return res.max(envs.merge(other.envs));
@@ -72,12 +57,12 @@ class ScopeAnalysisState {
         return res.max(mergeGeneric(other));
     }
 
-    bool envNotEscaped(Value* v) const {
-        return envs.known(v) && !envs.at(v).leaked;
+    AbstractResult mergeExit(const ScopeAnalysisState& other) {
+        return mergeGeneric(other);
     }
 
-    bool deadStore(Instruction* i) const {
-        return !allStoresObserved.count(i->env()) && !observedStores.count(i);
+    bool envNotEscaped(Value* v) const {
+        return envs.known(v) && !envs.at(v).leaked;
     }
 
     bool noReflection() const { return !mayUseReflection; };
@@ -102,12 +87,13 @@ class ScopeAnalysisState {
     }
 };
 
-class ScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
+class ScopeAnalysis : public StaticAnalysis<
+                          ScopeAnalysisState /*, AnalysisDebugLevel::Taint */> {
   private:
-    const std::vector<SEXP> argNames;
     const std::vector<Value*> args;
 
     static constexpr size_t MAX_DEPTH = 2;
+    static constexpr size_t MAX_SIZE = 200;
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
     using StaticAnalysis::PositioningStyle;
@@ -118,23 +104,21 @@ class ScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
 
   public:
     // Default
-    ScopeAnalysis(Closure* cls, LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, log), argNames(cls->argNames),
-          depth(0) {}
+    ScopeAnalysis(ClosureVersion* cls, LogStream& log)
+        : StaticAnalysis("Scope", cls, cls, log), depth(0) {}
 
     // For interprocedural analysis of a function
-    ScopeAnalysis(Closure* cls, const std::vector<Value*>& args,
+    ScopeAnalysis(ClosureVersion* cls, const std::vector<Value*>& args,
                   Value* staticClosureEnv,
                   const ScopeAnalysisState& initialState, size_t depth,
                   LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, initialState, log),
-          argNames(cls->argNames), args(args), depth(depth),
+        : StaticAnalysis("Scope", cls, cls, initialState, log), depth(depth),
           staticClosureEnv(staticClosureEnv) {
-        assert(args.size() == argNames.size());
+        assert(args.size() == cls->nargs());
     }
 
     // For interprocedural analysis of a promise
-    ScopeAnalysis(Closure* cls, Promise* prom, Value* promEnv,
+    ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
                   const ScopeAnalysisState& initialState, size_t depth,
                   LogStream& log);
 
@@ -183,7 +167,7 @@ class ScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
         return aLoad;
     }
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

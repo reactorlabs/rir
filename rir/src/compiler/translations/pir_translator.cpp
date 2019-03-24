@@ -5,4 +5,4 @@ namespace rir {
 namespace pir {
 
 }
-}    
+} // namespace rir

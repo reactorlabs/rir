@@ -1,17 +1,15 @@
 #include "safe_builtins_list.h"
 
 #include "R/Funtab.h"
+#include "R/Symbols.h"
+
+#include <string>
 
 namespace rir {
 namespace pir {
 
 bool SafeBuiltinsList::always(int builtin) {
     static int safeBuiltins[] = {
-        findBuiltin("vector"),
-        findBuiltin("vector"),
-        findBuiltin("complex"),
-        findBuiltin("matrix"),
-        findBuiltin("array"),
         findBuiltin("diag"),
         findBuiltin("backsolve"),
         findBuiltin("max.col"),
@@ -75,6 +73,14 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         return true;
 
     static int safeBuiltins[] = {
+        // Those are not always safe, due to coerceVector, which can be
+        // overwritten by objects
+        findBuiltin("vector"),
+        findBuiltin("complex"),
+        findBuiltin("matrix"),
+        findBuiltin("array"),
+        findBuiltin("new.env"),
+
         findBuiltin("c"),
         findBuiltin("["),
         findBuiltin("[["),
@@ -276,6 +282,51 @@ bool SafeBuiltinsList::nonObject(int builtin) {
 
 bool SafeBuiltinsList::nonObject(SEXP builtin) {
     return nonObject(getBuiltinNr(builtin));
+}
+
+#define UNSAFE_BUILTINS_FOR_INLINE(V)                                          \
+    V(exists)                                                                  \
+    V(parent.env)                                                              \
+    V(sys.nframe)                                                              \
+    V(lockBinding)                                                             \
+    V(lockEnvironment)                                                         \
+    V(unlockBinding)                                                           \
+    V(as.environment)                                                          \
+    V(on.exit)                                                                 \
+    V(environment)                                                             \
+    V(nargs)                                                                   \
+    V(sys.parent)                                                              \
+    V(sys.function)                                                            \
+    V(sys.frame)                                                               \
+    V(sys.call)                                                                \
+    V(parent.frame)                                                            \
+    V(UseMethod)                                                               \
+    V(standardGeneric)
+
+bool SafeBuiltinsList::forInline(int builtin) {
+    static int unsafeBuiltins[] = {
+#define V(name) findBuiltin(#name),
+        UNSAFE_BUILTINS_FOR_INLINE(V)
+#undef V
+    };
+
+    for (auto i : unsafeBuiltins)
+        if (i == builtin)
+            return false;
+    return true;
+}
+
+bool SafeBuiltinsList::forInlineByName(SEXP name) {
+    SEXP unsafeBuiltins[] = {
+#define V(name) Rf_install(#name),
+        UNSAFE_BUILTINS_FOR_INLINE(V)
+#undef V
+    };
+
+    for (auto i : unsafeBuiltins)
+        if (i == name)
+            return false;
+    return true;
 }
 
 } // namespace pir

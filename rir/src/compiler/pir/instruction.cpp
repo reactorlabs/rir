@@ -47,7 +47,7 @@ void printPaddedInstructionName(std::ostream& out, const std::string& name) {
     out << std::left << std::setw(maxInstructionNameLength + 1) << name << " ";
 }
 
-void printPaddedTypeAndRef(std::ostream& out, Instruction* i) {
+void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
     std::ostringstream buf;
     buf << i->type;
     out << std::left << std::setw(7) << buf.str() << " ";
@@ -62,7 +62,7 @@ void printPaddedTypeAndRef(std::ostream& out, Instruction* i) {
 
 bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
 
-void Instruction::printArgs(std::ostream& out, bool tty) {
+void Instruction::printArgs(std::ostream& out, bool tty) const {
     size_t n = nargs();
     size_t env = hasEnv() ? envSlot() : n + 1;
 
@@ -77,10 +77,25 @@ void Instruction::printArgs(std::ostream& out, bool tty) {
         out << ", ";
 }
 
-void Instruction::print(std::ostream& out, bool tty) {
+void Instruction::printGraphArgs(std::ostream& out, bool tty) const {
+    printArgs(out, tty);
+}
+
+void Instruction::printGraphBranches(std::ostream& out, size_t bbId) const {
+    assert(false);
+}
+
+void Instruction::print(std::ostream& out, bool tty) const {
     printPaddedTypeAndRef(out, this);
     printPaddedInstructionName(out, name());
     printArgs(out, tty);
+    printEnv(out, tty);
+}
+
+void Instruction::printGraph(std::ostream& out, bool tty) const {
+    printPaddedTypeAndRef(out, this);
+    printPaddedInstructionName(out, name());
+    printGraphArgs(out, tty);
     printEnv(out, tty);
 }
 
@@ -99,7 +114,7 @@ void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
     assert(bbIter == input.end());
 }
 
-void Instruction::printEnv(std::ostream& out, bool tty) {
+void Instruction::printEnv(std::ostream& out, bool tty) const {
     if (hasEnv()) {
         if (tty) {
             if (leaksEnv())
@@ -117,14 +132,14 @@ void Instruction::printEnv(std::ostream& out, bool tty) {
     }
 }
 
-void Instruction::printRef(std::ostream& out) {
+void Instruction::printRef(std::ostream& out) const {
     if (type == RType::env)
         out << "e" << id();
     else
         out << "%" << id();
 };
 
-Instruction::InstructionUID Instruction::id() {
+Instruction::InstructionUID Instruction::id() const {
     return InstructionUID(bb()->id, bb()->indexOf(this));
 }
 
@@ -157,17 +172,75 @@ Instruction* Instruction::hasSingleUse() {
 
 void Instruction::eraseAndRemove() { bb()->remove(this); }
 
-void Instruction::replaceUsesIn(Value* replace, BB* target) {
-    Visitor::run(target, [&](Instruction* i) {
-        i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this)
-                arg.val() = replace;
+static void checkReplace(Instruction* origin, Value* replace) {
+    if (replace->type.isRType() != origin->type.isRType() ||
+        (replace->type.maybePromiseWrapped() &&
+         !origin->type.maybePromiseWrapped())) {
+        std::cerr << "Trying to replace a ";
+        origin->type.print(std::cerr);
+        std::cerr << " with a ";
+        replace->type.print(std::cerr);
+        std::cerr << "\n";
+        printBacktrace();
+        assert(false);
+    }
+}
+
+void Instruction::replaceUsesWithLimits(Value* replace, BB* start,
+                                        Instruction* stop) {
+    checkReplace(this, replace);
+
+    auto apply = [&](BB* start) {
+        Visitor::run(start, stop ? stop->bb() : nullptr, [&](BB* bb) {
+            for (auto& i : *bb) {
+                if (i == stop)
+                    return;
+                i->eachArg([&](InstrArg& arg) {
+                    if (arg.val() == this)
+                        arg.val() = replace;
+                });
+            }
         });
-    });
+    };
+
+    // Since stop might also be in start (before the instruction to be
+    // replaced), we need to deal with start specially and only start after the
+    // instruction to be replaced (ignoring stop in that search).
+    if (start == bb()) {
+        bool found = false;
+        for (auto& i : *start) {
+            if (found) {
+                i->eachArg([&](InstrArg& arg) {
+                    if (arg.val() == this)
+                        arg.val() = replace;
+                });
+            }
+            if (!found && i == this)
+                found = true;
+            else if (found && i == stop)
+                return;
+        }
+    } else {
+        apply(start);
+    }
+
+
+    if (start->next0)
+        apply(start->next0);
+    if (start->next1)
+        apply(start->next1);
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
-    replaceUsesIn(replace, bb());
+    checkReplace(this, replace);
+    Visitor::run(bb(), [&](BB* bb) {
+        for (auto& i : *bb) {
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val() == this)
+                    arg.val() = replace;
+            });
+        }
+    });
 }
 
 void Instruction::replaceUsesAndSwapWith(
@@ -176,7 +249,33 @@ void Instruction::replaceUsesAndSwapWith(
     bb()->replace(it, replace);
 }
 
-Value* Instruction::followCasts() {
+bool Instruction::usesAreOnly(BB* target, std::unordered_set<Tag> tags) {
+    bool answer = true;
+    Visitor::run(target, [&](Instruction* i) {
+        i->eachArg([&](InstrArg& arg) {
+            if (arg.val() == this && !tags.count(i->tag)) {
+                answer = false;
+                return;
+            }
+        });
+    });
+    return answer;
+}
+
+bool Instruction::usesDoNotInclude(BB* target, std::unordered_set<Tag> tags) {
+    bool answer = true;
+    Visitor::run(target, [&](Instruction* i) {
+        i->eachArg([&](InstrArg& arg) {
+            if (arg.val() == this && tags.find(i->tag) != tags.end()) {
+                answer = false;
+                return;
+            }
+        });
+    });
+    return answer;
+}
+
+const Value* Instruction::cFollowCasts() const {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCasts();
     if (auto shared = SetShared::Cast(this))
@@ -186,14 +285,14 @@ Value* Instruction::followCasts() {
     return this;
 }
 
-Value* Instruction::followCastsAndForce() {
+const Value* Instruction::cFollowCastsAndForce() const {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCastsAndForce();
     if (auto force = Force::Cast(this))
         return force->input()->followCastsAndForce();
     if (auto mkarg = MkArg::Cast(this))
-        if (mkarg->eagerArg() != Missing::instance())
-            return mkarg->eagerArg();
+        if (mkarg->isEager())
+            return mkarg->eagerArg()->followCastsAndForce();
     if (auto shared = SetShared::Cast(this))
         return shared->arg<0>().val()->followCastsAndForce();
     if (auto chk = ChkClosure::Cast(this))
@@ -212,60 +311,86 @@ bool Instruction::envOnlyForObj() {
     return false;
 }
 
-void LdConst::printArgs(std::ostream& out, bool tty) {
+LdConst::LdConst(SEXP c, PirType t)
+    : FixedLenInstruction(t), idx(Pool::insert(c)) {}
+LdConst::LdConst(SEXP c)
+    : FixedLenInstruction(PirType(c)), idx(Pool::insert(c)) {}
+
+SEXP LdConst::c() const { return Pool::get(idx); }
+
+void LdConst::printArgs(std::ostream& out, bool tty) const {
     std::string val;
     {
         CaptureOut rec;
-        Rf_PrintValue(c);
+        Rf_PrintValue(Pool::get(idx));
         val = rec.oneline(40);
     }
     out << val;
 }
 
-void Branch::printArgs(std::ostream& out, bool tty) {
+void Branch::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
     out << " -> BB" << bb()->trueBranch()->id << " (if true) | BB"
         << bb()->falseBranch()->id << " (if false)";
 }
 
-void MkArg::printArgs(std::ostream& out, bool tty) {
+void Branch::printGraphArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+}
+
+void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid()
+        << " [color=green];\n  BB" << bbId << " -> BB"
+        << bb()->falseBranch()->uid() << " [color=red];\n";
+}
+
+void MkArg::printArgs(std::ostream& out, bool tty) const {
     eagerArg()->printRef(out);
     out << ", " << *prom() << ", ";
 }
 
-void LdVar::printArgs(std::ostream& out, bool tty) {
+void Missing::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName)) << ", ";
 }
 
-void LdFun::printArgs(std::ostream& out, bool tty) {
+void LdVar::printArgs(std::ostream& out, bool tty) const {
+    out << CHAR(PRINTNAME(varName)) << ", ";
+}
+
+void LdFun::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName)) << ", ";
     if (guessedBinding()) {
         out << "<";
         guessedBinding()->printRef(out);
         out << ">, ";
     }
+    if (hint) {
+        out << "<" << hint << ">, ";
+    }
 }
 
-void LdArg::printArgs(std::ostream& out, bool tty) { out << id; }
+void LdArg::printArgs(std::ostream& out, bool tty) const { out << id; }
 
-void StVar::printArgs(std::ostream& out, bool tty) {
+void StVar::printArgs(std::ostream& out, bool tty) const {
+    if (isStArg)
+        out << "(StArg) ";
     out << CHAR(PRINTNAME(varName)) << ", ";
     val()->printRef(out);
     out << ", ";
 }
 
-void StVarSuper::printArgs(std::ostream& out, bool tty) {
+void StVarSuper::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName)) << ", ";
     val()->printRef(out);
     out << ", ";
 }
 
-void LdVarSuper::printArgs(std::ostream& out, bool tty) {
+void LdVarSuper::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName));
     out << ", ";
 }
 
-void MkEnv::printArgs(std::ostream& out, bool tty) {
+void MkEnv::printArgs(std::ostream& out, bool tty) const {
     eachLocalVar([&](SEXP name, Value* v) {
         out << CHAR(PRINTNAME(name)) << "=";
         v->printRef(out);
@@ -273,9 +398,10 @@ void MkEnv::printArgs(std::ostream& out, bool tty) {
     });
     out << "parent=";
     Instruction::printEnv(out, tty);
+    out << ", context " << context;
 }
 
-void Is::printArgs(std::ostream& out, bool tty) {
+void Is::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
     out << ", " << Rf_type2char(sexpTag);
 }
@@ -285,7 +411,7 @@ void Phi::updateType() {
     eachArg([&](BB*, Value* v) -> void { type = type | v->type; });
 }
 
-void Phi::printArgs(std::ostream& out, bool tty) {
+void Phi::printArgs(std::ostream& out, bool tty) const {
     if (nargs() > 0) {
         for (size_t i = 0; i < nargs(); ++i) {
             arg(i).val()->printRef(out);
@@ -296,7 +422,7 @@ void Phi::printArgs(std::ostream& out, bool tty) {
     }
 }
 
-void PirCopy::print(std::ostream& out, bool tty) {
+void PirCopy::print(std::ostream& out, bool tty) const {
     printPaddedTypeAndRef(out, this);
     arg(0).val()->printRef(out);
 }
@@ -320,13 +446,27 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
 Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
                                      const std::vector<Value*>& args,
                                      unsigned srcIdx) {
-    if (SafeBuiltinsList::always(builtin))
+    bool noObj = true;
+    for (auto a : args) {
+        if (auto mk = MkArg::Cast(a)) {
+            if (mk->isEager()) {
+                if (mk->eagerArg()->type.maybeObj())
+                    noObj = false;
+                continue;
+            }
+        }
+        if (a->type.maybeObj())
+            noObj = false;
+    }
+
+    if (SafeBuiltinsList::always(builtin) ||
+        (noObj && SafeBuiltinsList::nonObject(builtin)))
         return new CallSafeBuiltin(builtin, args, srcIdx);
     else
         return new CallBuiltin(callerEnv, builtin, args, srcIdx);
 }
 
-static void printCallArgs(std::ostream& out, CallInstruction* call) {
+static void printCallArgs(std::ostream& out, const CallInstruction* call) {
     out << "(";
 
     size_t i = 0;
@@ -340,17 +480,17 @@ static void printCallArgs(std::ostream& out, CallInstruction* call) {
     out << ") ";
 }
 
-void CallBuiltin::printArgs(std::ostream& out, bool tty) {
+void CallBuiltin::printArgs(std::ostream& out, bool tty) const {
     out << getBuiltinName(builtinId);
     printCallArgs(out, this);
 }
 
-void CallSafeBuiltin::printArgs(std::ostream& out, bool tty) {
+void CallSafeBuiltin::printArgs(std::ostream& out, bool tty) const {
     out << getBuiltinName(builtinId);
     printCallArgs(out, this);
 }
 
-void FrameState::printArgs(std::ostream& out, bool tty) {
+void FrameState::printArgs(std::ostream& out, bool tty) const {
     out << code << "+" << pc - code->code();
     out << ": [";
     long s = stackSize;
@@ -388,7 +528,7 @@ void ScheduledDeopt::consumeFrameStates(Deopt* deopt) {
     }
 }
 
-void ScheduledDeopt::printArgs(std::ostream& out, bool tty) {
+void ScheduledDeopt::printArgs(std::ostream& out, bool tty) const {
     size_t n = 0;
     for (auto& f : frames)
         n += f.stackSize + 1;
@@ -417,19 +557,25 @@ void ScheduledDeopt::printArgs(std::ostream& out, bool tty) {
     }
 }
 
-MkFunCls::MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code,
-                   SEXP src)
-    : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), fun(fun),
-      fml(fml), code(code), src(src) {
-}
+MkFunCls::MkFunCls(Closure* cls, DispatchTable* originalBody, Value* lexicalEnv)
+    : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), cls(cls),
+      originalBody(originalBody) {}
 
-void MkFunCls::printArgs(std::ostream& out, bool tty) {
-    out << *fun;
+void MkFunCls::printArgs(std::ostream& out, bool tty) const {
+    out << *cls;
     Instruction::printArgs(out, tty);
 }
 
-void StaticCall::printArgs(std::ostream& out, bool tty) {
-    out << *cls_;
+void StaticCall::printArgs(std::ostream& out, bool tty) const {
+    if (auto trg = tryDispatch()) {
+        out << trg->name();
+    } else {
+        out << cls()->name();
+    }
+    if (auto hint = tryOptimisticDispatch()) {
+        if (hint != tryDispatch())
+            out << "<hint: " << hint->nameSuffix() << ">";
+    }
     printCallArgs(out, this);
     if (frameState()) {
         frameState()->printRef(out);
@@ -437,16 +583,50 @@ void StaticCall::printArgs(std::ostream& out, bool tty) {
     }
 }
 
+ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
+    auto res = cls->findCompatibleVersion(
+        OptimizationContext(inferAvailableAssumptions()));
+#ifdef WARN_DISPATCH_FAIL
+    if (!res) {
+        std::cout << "DISPATCH FAILED! Available versions: \n";
+        cls->eachVersion([&](ClosureVersion* v) {
+            std::cout << "* " << v->assumptions() << "\n";
+        });
+        std::cout << "Available assumptions at callsite: \n ";
+        std::cout << inferAvailableAssumptions() << "\n";
+    }
+#endif
+    return res;
+}
+
+ClosureVersion* StaticCall::tryDispatch() const {
+    return CallInstruction::tryDispatch(cls());
+}
+
+ClosureVersion* StaticCall::tryOptimisticDispatch() const {
+    auto dispatch = CallInstruction::tryDispatch(cls());
+    if (!hint)
+        return dispatch;
+
+    if (!dispatch)
+        return nullptr;
+
+    return (hint->optimizationContext() < dispatch->optimizationContext())
+               ? dispatch
+               : hint;
+}
+
 StaticCall::StaticCall(Value* callerEnv, Closure* cls,
-                       const std::vector<Value*>& args, SEXP origin,
-                       FrameState* fs, unsigned srcIdx)
-    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
-      cls_(cls), origin_(origin) {
-    assert(cls->argNames.size() == args.size());
+                       const std::vector<Value*>& args, FrameState* fs,
+                       unsigned srcIdx)
+    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
+      cls_(cls) {
+    assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
         pushArg(args[i], RType::prom);
+    assert(tryDispatch());
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -466,6 +646,39 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
     return nullptr;
 }
 
+Assumptions CallInstruction::inferAvailableAssumptions() const {
+    Assumptions given;
+    if (!hasNamedArgs())
+        given.add(Assumption::CorrectOrderOfArguments);
+    if (auto cls = tryGetCls()) {
+        if (cls->nargs() >= nCallArgs()) {
+            given.add(Assumption::NotTooManyArguments);
+            auto missing = cls->nargs() - nCallArgs();
+            given.numMissing(missing);
+            given.add(Assumption::NotTooFewArguments);
+        }
+    }
+    given.add(Assumption::NotTooManyArguments);
+
+    // Make some optimistic assumptions, they might be reset below...
+    given.add(Assumption::NoExplicitlyMissingArgs);
+
+    size_t i = 0;
+    eachCallArg([&](Value* arg) {
+        auto mk = MkArg::Cast(arg);
+        if (mk && mk->isEager()) {
+            given.setEager(i);
+            if (mk->eagerArg() == MissingArg::instance())
+                given.remove(Assumption::NoExplicitlyMissingArgs);
+        }
+        Value* value = arg->followCastsAndForce();
+        if (!MkArg::Cast(value) && !value->type.maybeObj())
+            given.setNotObj(i);
+        ++i;
+    });
+    return given;
+}
+
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
                      const std::vector<BC::PoolIdx>& names_, unsigned srcIdx)
@@ -473,14 +686,14 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
     for (unsigned i = 0; i < args.size(); ++i) {
-        pushArg(args[i], RType::prom);
+        pushArg(args[i], PirType(RType::prom) | RType::missing);
         auto name = Pool::get(names_[i]);
         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
         names.push_back(name);
     }
 }
 
-void Call::printArgs(std::ostream& out, bool tty) {
+void Call::printArgs(std::ostream& out, bool tty) const {
     cls()->printRef(out);
     printCallArgs(out, this);
     if (frameState()) {
@@ -489,7 +702,7 @@ void Call::printArgs(std::ostream& out, bool tty) {
     }
 }
 
-void NamedCall::printArgs(std::ostream& out, bool tty) {
+void NamedCall::printArgs(std::ostream& out, bool tty) const {
     cls()->printRef(out);
     size_t nargs = nCallArgs();
     size_t i = 0;
@@ -505,39 +718,21 @@ void NamedCall::printArgs(std::ostream& out, bool tty) {
     out << ") ";
 }
 
-CallImplicit::CallImplicit(Value* callerEnv, Value* fun,
-                           const std::vector<Promise*>& args,
-                           const std::vector<SEXP>& names_, unsigned srcIdx)
-    : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
-                                     {{PirType::closure()}}, {{fun}}, callerEnv,
-                                     srcIdx),
-      promises(args), names(names_) {}
-
-void CallImplicit::eachArg(const std::function<void(Promise*)>& action) const {
-    for (auto prom : promises) {
-        action(prom);
-    }
-}
-
-void CallImplicit::printArgs(std::ostream& out, bool tty) {
-    cls()->printRef(out);
-    out << "(";
-    for (size_t i = 0; i < promises.size(); ++i) {
-        if (i < names.size() && names[i] != R_NilValue)
-            out << CHAR(PRINTNAME(names[i])) << "=";
-        out << "Prom(" << promises[i]->id << ")";
-        if (i < promises.size() - 1)
-            out << ", ";
-    }
-    out << ") ";
-}
-
 FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
 
-void Checkpoint::printArgs(std::ostream& out, bool tty) {
+void Checkpoint::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
     out << " -> BB" << bb()->trueBranch()->id << " (default) | BB"
         << bb()->falseBranch()->id << " (if assume failed)";
+}
+
+void Checkpoint::printGraphArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+}
+
+void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid() << ";\n  BB"
+        << bbId << " -> BB" << bb()->falseBranch()->uid() << " [color=red];\n";
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }

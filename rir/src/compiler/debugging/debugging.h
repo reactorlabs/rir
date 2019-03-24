@@ -3,6 +3,8 @@
 
 #include "utils/EnumSet.h"
 
+#include <regex>
+
 namespace rir {
 namespace pir {
 
@@ -13,6 +15,7 @@ namespace pir {
     V(PrintEarlyRir)                                                           \
     V(PrintEarlyPir)                                                           \
     V(PrintOptimizationPasses)                                                 \
+    V(PrintOptimizationPhases)                                                 \
     V(PrintPirAfterOpt)                                                        \
     V(PrintCSSA)                                                               \
     V(PrintAllocator)                                                          \
@@ -24,7 +27,13 @@ namespace pir {
     V(DryRun)                                                                  \
     V(PrintIntoFiles)                                                          \
     V(PrintIntoStdout)                                                         \
+    V(OmitDeoptBranches)                                                       \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
+
+#define LIST_OF_DEBUG_STYLES(V)                                                \
+    V(Standard)                                                                \
+    V(GraphViz)                                                                \
+    V(GraphVizBB)
 
 enum class DebugFlag {
 #define V(n) n,
@@ -35,13 +44,45 @@ enum class DebugFlag {
     LAST = PrintFinalRir
 };
 
-typedef EnumSet<DebugFlag> DebugOptions;
-const static DebugOptions PrintDebugPasses =
-    DebugOptions() |
+enum class DebugStyle {
+#define V(style) style,
+    LIST_OF_DEBUG_STYLES(V)
+#undef V
+};
+
+struct DebugOptions {
+    typedef EnumSet<DebugFlag, int> DebugFlags;
+    DebugFlags flags;
+    const std::regex passFilter;
+    const std::regex functionFilter;
+    DebugStyle style;
+
+    DebugOptions operator|(const DebugFlags& f) const {
+        return {flags | f, passFilter, functionFilter, style};
+    }
+    bool includes(const DebugFlags& otherFlags) const {
+        return flags.includes(otherFlags);
+    }
+    bool intersects(const DebugFlags& otherFlags) const {
+        return flags.intersects(otherFlags);
+    }
+
+    explicit DebugOptions(unsigned long long flags)
+        : flags(flags), passFilter(".*"), functionFilter(".*"),
+          style(DebugStyle::Standard) {}
+    DebugOptions(const DebugFlags& flags, const std::regex& filter,
+                 const std::regex& functionFilter, DebugStyle style)
+        : flags(flags), passFilter(filter), functionFilter(functionFilter),
+          style(style) {}
+    DebugOptions() {}
+};
+
+const static DebugOptions::DebugFlags PrintDebugPasses =
+    DebugOptions::DebugFlags() |
 #define V(n) DebugFlag::n |
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
 #undef V
-        DebugOptions();
+        DebugOptions::DebugFlags();
 
 } // namespace pir
 } // namespace rir

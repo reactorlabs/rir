@@ -16,7 +16,11 @@ rir.disassemble <- function(what, verbose = FALSE) {
 
 # prints how many times the (optimized) rir function was called
 rir.printInvocation <- function(what) {
-    invisible(.Call("rir_printInvocation", what))
+    slot <- 0
+    for (count in .Call("rir_invocation_count", what)) {
+      cat(paste("slot ", slot, " called   ", count, "\ttimes\n"))
+      slot <- slot+1
+    }
 }
 
 # compiles given closure, or expression and returns the compiled version.
@@ -25,7 +29,7 @@ rir.compile <- function(what) {
 }
 
 # optimizes given rir compiled closure
-pir.compile <- function(what, debugFlags, P_EARLY=FALSE, P_FINAL=FALSE, P_OPT=FALSE, WARN=FALSE) {
+pir.compile <- function(what, debugFlags, debugStyle, P_EARLY=FALSE, P_FINAL=FALSE, P_OPT=FALSE, WARN=FALSE) {
     debugFlags <-
         if (missing(debugFlags)) {
             if (P_EARLY)
@@ -39,11 +43,18 @@ pir.compile <- function(what, debugFlags, P_EARLY=FALSE, P_FINAL=FALSE, P_OPT=FA
         } else {
             debugFlags
         }
+    debugStyle <-
+      if (missing(debugStyle)) {
+        NULL
+      } else {
+        as.name(as.character(substitute(debugStyle)))
+      }
 
     .Call("pir_compile",
           what,
           as.name(as.character(substitute(what))),
-          debugFlags)
+          debugFlags,
+          debugStyle)
 }
 
 pir.tests <- function() {
@@ -55,9 +66,11 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            DryRun = FALSE,
                            PrintIntoFiles = FALSE,
                            PrintIntoStdout = FALSE,
+                           OmitDeoptBranches = FALSE,
                            PrintEarlyRir = FALSE,
                            PrintEarlyPir = FALSE,
                            PrintOptimizationPasses = FALSE,
+                           PrintOptimizationPhases = FALSE,
                            PrintPirAfterOpt = FALSE,
                            PrintCSSA = FALSE,
                            PrintAllocator = FALSE,
@@ -66,8 +79,8 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
     .Call("pir_debugFlags", ShowWarnings, DryRun,
-          PrintIntoFiles, PrintIntoStdout, PrintEarlyRir, PrintEarlyPir,
-          PrintOptimizationPasses, PrintPirAfterOpt, PrintCSSA, PrintAllocator, PrintFinalPir,
+          PrintIntoFiles, PrintIntoStdout, OmitDeoptBranches, PrintEarlyRir, PrintEarlyPir,
+          PrintOptimizationPasses, PrintOptimizationPhases, PrintPirAfterOpt, PrintCSSA, PrintAllocator, PrintFinalPir,
           PrintFinalRir,
           # wants a dummy parameter at the end for technical reasons
           NULL)

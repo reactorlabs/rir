@@ -6,9 +6,8 @@
 namespace rir {
 namespace pir {
 
-void DelayInstr::apply(RirCompiler&, Closure* function, LogStream&) const {
-    std::vector<MkEnv*> envs;
-
+void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
+                       LogStream&) const {
     Visitor::run(function->entry, [&](BB* bb) {
         Checkpoint* checkpoint =
             bb->isEmpty() ? nullptr : Checkpoint::Cast(bb->last());
@@ -28,8 +27,8 @@ void DelayInstr::apply(RirCompiler&, Closure* function, LogStream&) const {
                         // actually needed.
                         for (size_t j = 0; j < phi->nargs(); ++j) {
                             if (phi->arg(j).val() == i) {
-                                if (phi->input[j] != bb) {
-                                    next = bb->moveToEnd(ip, phi->input[j]);
+                                if (phi->inputAt(j) != bb) {
+                                    next = bb->moveToEnd(ip, phi->inputAt(j));
                                 }
                                 break;
                             }

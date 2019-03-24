@@ -17,4 +17,3 @@ c = bquote(function(a)1)
 stopifnot(identical(rir.compile(function() bquote(a == a))(), a))
 stopifnot(identical(rir.compile(function() bquote(function(a=1)1))(), b))
 stopifnot(identical(rir.compile(function() bquote(function(a)1))(), c))
-

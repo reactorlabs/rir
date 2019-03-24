@@ -36,7 +36,7 @@ struct DispatchTable
             size_++;
     }
 
-    bool contains(const pir::Assumptions& assumptions) {
+    bool contains(const Assumptions& assumptions) {
         for (size_t i = 1; i < size(); ++i)
             if (get(i)->signature().assumptions == assumptions)
                 return true;
@@ -57,14 +57,27 @@ struct DispatchTable
                 setEntry(i, fun->container());
                 return;
             }
-            if (!assumptions.includes(get(i)->signature().assumptions))
+            if (!(assumptions < get(i)->signature().assumptions)) {
                 break;
+            }
         }
+        SLOWASSERT(!contains(fun->signature().assumptions));
         size_++;
         for (size_t j = size() - 1; j > i; --j) {
             setEntry(j, getEntry(j - 1));
         }
         setEntry(i, fun->container());
+
+#ifdef DEBUG_DISPATCH
+        std::cout << "Added version to DT, new order is: \n";
+        for (size_t i = 0; i < size(); ++i) {
+            auto e = getEntry(i);
+            std::cout << "* " << Function::unpack(e)->signature().assumptions
+                      << "\n";
+        }
+        std::cout << "\n";
+#endif
+        SLOWASSERT(contains(fun->signature().assumptions));
     }
 
     static DispatchTable* create(size_t capacity = 10) {
@@ -88,6 +101,6 @@ struct DispatchTable
     size_t size_ = 0;
 };
 #pragma pack(pop)
-}
+} // namespace rir
 
 #endif

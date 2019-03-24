@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "ir/RuntimeFeedback.h"
+#include "runtime/Assumptions.h"
 
 #include "BC_noarg_list.h"
 
@@ -86,11 +87,19 @@ class BC {
     struct CallFixedArgs {
         NumArgs nargs;
         Immediate ast;
+        Assumptions given;
     };
     struct StaticCallFixedArgs {
         NumArgs nargs;
         Immediate ast;
-        Immediate target;
+        Assumptions given;
+        Immediate targetClosure;
+        Immediate versionHint;
+    };
+    struct CallBuiltinFixedArgs {
+        NumArgs nargs;
+        Immediate ast;
+        Immediate builtin;
     };
     struct GuardFunArgs {
         Immediate name;
@@ -102,6 +111,10 @@ class BC {
         Immediate target;
         Immediate source;
     };
+    struct MkEnvFixedArgs {
+        NumArgs nargs;
+        SignedImmediate context;
+    };
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
@@ -112,8 +125,10 @@ class BC {
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
     union ImmediateArguments {
+        MkEnvFixedArgs mkEnvFixedArgs;
         StaticCallFixedArgs staticCallFixedArgs;
         CallFixedArgs callFixedArgs;
+        CallBuiltinFixedArgs callBuiltinFixedArgs;
         GuardFunArgs guard_fun_args;
         PoolIdx pool;
         FunIdx fun;
@@ -152,7 +167,7 @@ class BC {
         return *this;
     }
 
-    bool is(Opcode aBc) { return bc == aBc; }
+    bool is(Opcode aBc) const { return bc == aBc; }
 
     inline size_t size() const {
         // Those are the 3 variable length BC we have
@@ -169,6 +184,10 @@ class BC {
             return immediate.callFixedArgs.nargs * 2 * sizeof(FunIdx) +
                    fixedSize(bc);
 
+        if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
+            return immediate.mkEnvFixedArgs.nargs * sizeof(FunIdx) +
+                   fixedSize(bc);
+
         // the others have no variable length part
         return fixedSize(bc);
     }
@@ -180,6 +199,10 @@ class BC {
             return immediate.callFixedArgs.nargs + 1;
         if (bc == Opcode::static_call_)
             return immediate.staticCallFixedArgs.nargs;
+        if (bc == Opcode::call_builtin_)
+            return immediate.callBuiltinFixedArgs.nargs;
+        if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
+            return immediate.mkEnvFixedArgs.nargs + 1;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -190,7 +213,7 @@ class BC {
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;
     void printImmediateArgs(std::ostream& out) const;
-    void printNames(std::ostream& out) const;
+    void printNames(std::ostream& out, const std::vector<PoolIdx>&) const;
     void printProfile(std::ostream& out) const;
     void printOpcode(std::ostream& out) const;
 
@@ -206,7 +229,8 @@ class BC {
     bool isCall() const {
         return bc == Opcode::call_implicit_ || bc == Opcode::call_ ||
                bc == Opcode::named_call_ ||
-               bc == Opcode::named_call_implicit_ || bc == Opcode::static_call_;
+               bc == Opcode::named_call_implicit_ ||
+               bc == Opcode::static_call_ || bc == Opcode::call_builtin_;
     }
 
     bool hasPromargs() const {
@@ -263,13 +287,20 @@ class BC {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (2 + nargs) * sizeof(Immediate);
+            return 1 + (3 + nargs) * sizeof(Immediate);
         }
         case Opcode::named_call_implicit_: {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (2 + 2 * nargs) * sizeof(Immediate);
+            return 1 + (3 + 2 * nargs) * sizeof(Immediate);
+        }
+        case Opcode::mk_stub_env_:
+        case Opcode::mk_env_: {
+            pc++;
+            Immediate nargs;
+            memcpy(&nargs, pc, sizeof(Immediate));
+            return 1 + (2 + nargs) * sizeof(Immediate);
         }
         default: {}
         }
@@ -297,13 +328,13 @@ BC_NOARGS(V, _)
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
+    inline static BC push_from_pool(PoolIdx idx);
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
     inline static BC ldvarNoForce(SEXP sym);
     inline static BC ldvarSuper(SEXP sym);
     inline static BC ldvarNoForceSuper(SEXP sym);
-    inline static BC ldlval(SEXP sym);
     inline static BC ldddvar(SEXP sym);
     inline static BC ldarg(uint32_t offset);
     inline static BC ldloc(uint32_t offset);
@@ -311,9 +342,11 @@ BC_NOARGS(V, _)
     inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC promise(FunIdx prom);
     inline static BC stvar(SEXP sym);
+    inline static BC starg(SEXP sym);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
+    inline static BC pushContext(Jmp);
     inline static BC beginloop(Jmp);
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
@@ -327,13 +360,20 @@ BC_NOARGS(V, _)
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
     inline static BC deopt(SEXP);
-    inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast);
+    inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast,
+                                  const Assumptions& given);
     inline static BC callImplicit(const std::vector<FunIdx>& args,
-                                  const std::vector<SEXP>& names, SEXP ast);
-    inline static BC call(size_t nargs, SEXP ast);
+                                  const std::vector<SEXP>& names, SEXP ast,
+                                  const Assumptions& given);
+    inline static BC call(size_t nargs, SEXP ast, const Assumptions& given);
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
-                          SEXP ast);
-    inline static BC staticCall(size_t nargs, SEXP ast, SEXP target);
+                          SEXP ast, const Assumptions& given);
+    inline static BC staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
+                                SEXP targetVersion, const Assumptions& given);
+    inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
+
+    inline static BC mkEnv(const std::vector<SEXP>& names,
+                           SignedImmediate contextPos, bool stub);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -362,9 +402,20 @@ BC_NOARGS(V, _)
     struct CallFeedbackExtraInformation : public ExtraInformation {
         std::vector<SEXP> targets;
     };
+    struct MkEnvExtraInformation : public ExtraInformation {
+        std::vector<BC::PoolIdx> names;
+    };
     std::unique_ptr<ExtraInformation> extraInformation = nullptr;
 
   public:
+    MkEnvExtraInformation& mkEnvExtra() const {
+        assert((bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_) &&
+               "Not a varlen call instruction");
+        assert(extraInformation.get() &&
+               "missing extra information. created through decodeShallow?");
+        return *static_cast<MkEnvExtraInformation*>(extraInformation.get());
+    }
+
     CallInstructionExtraInformation& callExtra() const {
         switch (bc) {
         case Opcode::call_implicit_:
@@ -407,6 +458,11 @@ BC_NOARGS(V, _)
             extraInformation.reset(new CallFeedbackExtraInformation);
             break;
         }
+        case Opcode::mk_stub_env_:
+        case Opcode::mk_env_: {
+            extraInformation.reset(new MkEnvExtraInformation);
+            break;
+        }
         default: {}
         }
     }
@@ -437,6 +493,14 @@ BC_NOARGS(V, _)
 
             break;
         }
+        case Opcode::mk_stub_env_:
+        case Opcode::mk_env_: {
+            pc += sizeof(MkEnvFixedArgs);
+            for (size_t i = 0; i < immediate.mkEnvFixedArgs.nargs; ++i)
+                mkEnvExtra().names.push_back(readImmediate(&pc));
+            break;
+        }
+
         case Opcode::record_call_: {
             // Read call target feedback from the extra pool
             for (size_t i = 0; i < immediate.callFeedback.numTargets; ++i)
@@ -531,9 +595,9 @@ BC_NOARGS(V, _)
         case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldvar_noforce_super_:
-        case Opcode::ldlval_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
+        case Opcode::starg_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
@@ -542,7 +606,16 @@ BC_NOARGS(V, _)
         case Opcode::named_call_implicit_:
         case Opcode::call_:
         case Opcode::named_call_:
-            memcpy(&immediate.callFixedArgs, pc, sizeof(CallFixedArgs));
+            memcpy(&immediate.callFixedArgs,
+                   reinterpret_cast<CallFixedArgs*>(pc), sizeof(CallFixedArgs));
+            break;
+        case Opcode::mk_stub_env_:
+        case Opcode::mk_env_:
+            memcpy(&immediate.mkEnvFixedArgs, pc, sizeof(MkEnvFixedArgs));
+            break;
+        case Opcode::call_builtin_:
+            memcpy(&immediate.callBuiltinFixedArgs, pc,
+                   sizeof(CallBuiltinFixedArgs));
             break;
         case Opcode::static_call_:
             memcpy(&immediate.staticCallFixedArgs, pc,
@@ -560,6 +633,7 @@ BC_NOARGS(V, _)
         case Opcode::brobj_:
         case Opcode::brfalse_:
         case Opcode::beginloop_:
+        case Opcode::push_context_:
             memcpy(&immediate.offset, pc, sizeof(Jmp));
             break;
         case Opcode::pick_:

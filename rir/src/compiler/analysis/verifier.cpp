@@ -8,27 +8,26 @@ using namespace rir::pir;
 
 class TheVerifier {
   public:
-    Closure* f;
+    ClosureVersion* f;
 
-    explicit TheVerifier(Closure* f) : f(f) {}
+    explicit TheVerifier(ClosureVersion* f, bool slow) : f(f), slow(slow) {}
 
     bool ok = true;
+    bool slow = false;
+    std::unordered_map<Code*, DominanceGraph> doms;
+    std::unordered_map<Code*, CFG> cfgs;
 
     void operator()() {
-        DominanceGraph dom(f);
-        CFG cfg(f);
-        Visitor::run(f->entry, [&](BB* bb) { return verify(bb, dom, cfg); });
+        Visitor::run(f->entry, [&](BB* bb) { return verify(bb, false); });
 
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
             f->print(std::cerr, true);
-            assert(false);
-            return;
         }
 
-        for (auto p : f->promises) {
+        f->eachPromise([&](Promise* p) {
             if (p) {
-                if (p != f->promises[p->id]) {
+                if (p != f->promise(p->id)) {
                     std::cerr << "Promise with id " << p->id
                               << " is in the wrong slot\n";
                     ok = false;
@@ -37,52 +36,79 @@ class TheVerifier {
             }
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
-                p->print(std::cerr, true);
-                return;
+                p->printCode(std::cerr, true, false);
             }
+        });
+
+        if (!ok) {
+            Rf_error("");
         }
     }
 
-    void verify(BB* bb, const DominanceGraph& dom, const CFG& cfg) {
-        for (auto i : *bb)
-            verify(i, bb, dom, cfg);
+    const CFG& cfg(Code* c) {
+        if (!cfgs.count(c))
+            cfgs.emplace(c, c);
+        return cfgs.at(c);
+    }
+
+    const DominanceGraph& dom(Code* c) {
+        if (!doms.count(c))
+            doms.emplace(c, c);
+        return doms.at(c);
+    }
+
+    void verify(BB* bb, bool inPromise) {
+        for (auto i : *bb) {
+            if (FrameState::Cast(i) && inPromise) {
+                std::cerr << "Framestate in promise!\n";
+                ok = false;
+            }
+            verify(i, bb);
+        }
+        /* This check verifies that our graph is in edge-split format.
+            Currently we do not rely on this property, however we should
+            make it a conscious decision if we want to violate it.
+            This basically rules out graphs of the following form:
+
+               A      B
+                \   /   \
+                  C      D
+
+            or
+                _
+            | / \
+            A __/
+            |
+
+            The nice property about edge-split graphs is, that merge-points
+            are always dominated by *both* inputs, therefore local code
+            motion can push instructions to both input blocks.
+
+            In the above example, we can't push an instruction from C to A
+            and B, without worrying about D.
+        */
+        if (slow && cfg(bb->owner).isMergeBlock(bb)) {
+            for (auto in : cfg(bb->owner).immediatePredecessors(bb)) {
+                if (in->isBranch()) {
+                    unsigned other = (in->trueBranch()->id == bb->id)
+                                         ? in->falseBranch()->id
+                                         : in->trueBranch()->id;
+                    std::cerr << "BB" << bb->id << " is a merge node, but "
+                              << "predecessor BB" << in->id << " has two "
+                              << "successors (BB" << in->trueBranch()->id
+                              << " and BB" << in->falseBranch()->id << "):\n"
+                              << " n      " << in->id << "\n"
+                              << "  \\   /   \\\n"
+                              << "    " << bb->id << "      " << other << "\n";
+                    ok = false;
+                }
+            }
+        }
+
         if (bb->isEmpty()) {
             if (bb->isExit()) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
                 ok = false;
-            }
-            /* This check verifies that our graph is in edge-split format.
-               Currently we do not rely on this property, however we should
-               make it a conscious decision if we want to violate it.
-               This basically rules out graphs of the following form:
-
-                 A       B
-                   \   /   \
-                     C       D
-
-               or
-                   _
-                | / \
-                A __/
-                |
-
-               The nice property about edge-split graphs is, that merge-points
-               are always dominated by *both* inputs, therefore local code
-               motion can push instructions to both input blocks.
-
-               In the above example, we can't push an instruction from C to A
-               and B, without worrying about D.
-            */
-            if (cfg.isMergeBlock(bb)) {
-                for (auto in : cfg.immediatePredecessors(bb)) {
-                    if (in->falseBranch()) {
-                        std::cerr << "BB " << in->id << " merges into "
-                                  << bb->id << " and branches into "
-                                  << in->falseBranch()->id
-                                  << " at the same time.\n";
-                        ok = false;
-                    }
-                }
             }
         } else {
             Instruction* last = bb->last();
@@ -98,7 +124,6 @@ class TheVerifier {
                     ok = false;
                 }
             } else {
-                assert(!last->branchOrExit());
                 if (bb->falseBranch()) {
                     std::cerr << "bb" << bb->id
                               << " has false branch but no branch instr\n";
@@ -113,13 +138,10 @@ class TheVerifier {
     }
 
     void verify(Promise* p) {
-        DominanceGraph dom(p);
-        CFG cfg(p);
-        Visitor::run(p->entry, [&](BB* bb) { verify(bb, dom, cfg); });
+        Visitor::run(p->entry, [&](BB* bb) { verify(bb, true); });
     }
 
-    void verify(Instruction* i, BB* bb, const DominanceGraph& dom,
-                const CFG& cfg) {
+    void verify(Instruction* i, BB* bb) {
         if (i->bb() != bb) {
             std::cerr << "Error: instruction '";
             i->print(std::cerr);
@@ -128,46 +150,154 @@ class TheVerifier {
             ok = false;
         }
 
+        if (auto call = StaticCall::Cast(i)) {
+            if (call->hint && call->tryDispatch() &&
+                call->hint->owner() != call->tryDispatch()->owner()) {
+                std::cerr << "Error: instruction '";
+                i->print(std::cerr);
+                std::cerr << "' has broken hint (hint must be a version of the "
+                             "same closure)\n";
+                ok = false;
+            }
+        }
+
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
-            assert(p->fun->promises[p->id] == p);
-            if (p->fun != f) {
+            if (p->owner->promise(p->id) != p) {
+                std::cerr
+                    << "PIR Verifier: Promise code out of current closure";
+                ok = false;
+            }
+            if (p->owner != f) {
                 mk->printRef(std::cerr);
                 std::cerr << " is referencing a promise from another function "
-                          << p->fun->name << "\n";
+                          << p->owner->name() << "\n";
                 ok = false;
             }
         }
 
         if (i->branchOrExit())
-            assert(i == bb->last() &&
-                   "Only last instruction of BB can have controlflow");
+            if (i != bb->last()) {
+                std::cerr
+                    << "PIR Verifier: Only last instruction of BB can have "
+                       "controlflow";
+                ok = false;
+            }
 
-        Phi* phi = Phi::Cast(i);
-        i->eachArg([&](const InstrArg& a) -> void {
-            auto v = a.val();
-            auto t = a.type();
-            if (auto iv = Instruction::Cast(v)) {
-                if (phi) {
-                    if (!cfg.isPredecessor(iv->bb(), i->bb())) {
+        if (auto phi = Phi::Cast(i)) {
+            phi->eachArg([&](BB* input, Value* v) {
+                if (auto iv = Instruction::Cast(v)) {
+                    if (iv == phi) {
+                        // Note: can happen in a one-block loop, but only if it
+                        // is not edge-split
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
                         std::cerr << "': input '";
                         iv->printRef(std::cerr);
-                        std::cerr << "' does not come from a predecessor.\n";
+                        std::cerr << "' phi has itself as input\n";
                         ok = false;
                     }
-                } else if ((iv->bb() == i->bb() &&
-                            bb->indexOf(iv) > bb->indexOf(i)) ||
-                           (iv->bb() != i->bb() &&
-                            !dom.dominates(iv->bb(), bb))) {
+
+                    if (input == phi->bb()) {
+                        // Note: can happen in a one-block loop, but only if it
+                        // is not edge-split
+                        std::cerr << "Error at instruction '";
+                        i->print(std::cerr);
+                        std::cerr << "': input '";
+                        iv->printRef(std::cerr);
+                        std::cerr << "' one of the phi inputs is equal to the "
+                                  << "BB this phi is located at. This is not "
+                                  << "possible and makes no sense!\n";
+                        ok = false;
+                    }
+
+                    if (slow) {
+                        if ((!cfg(bb->owner).isPredecessor(iv->bb(), i->bb()) ||
+                             // A block can be it's own predecessor (loop). But
+                             // then the input must come after the phi!
+                             (iv->bb() == i->bb() &&
+                              i->bb()->indexOf(iv) < i->bb()->indexOf(i)))) {
+                            std::cerr << "Error at instruction '";
+                            i->print(std::cerr);
+                            std::cerr << "': input '";
+                            iv->printRef(std::cerr);
+                            std::cerr
+                                << "' does not come from a predecessor.\n";
+                            ok = false;
+                        }
+                    }
+                }
+            });
+            if (slow) {
+                std::unordered_set<BB*> inp;
+                for (auto in : cfg(bb->owner).immediatePredecessors(bb))
+                    inp.insert(in);
+                phi->eachArg([&](BB* bb, Value*) {
+                    auto pos = inp.find(bb);
+                    if (pos == inp.end()) {
+                        std::cerr << "Error at instruction '";
+                        i->print(std::cerr);
+                        std::cerr << " input BB" << bb->id
+                                  << " is not a predecessor\n";
+                        ok = false;
+                    } else {
+                        inp.erase(pos);
+                    }
+                });
+                if (!inp.empty()) {
                     std::cerr << "Error at instruction '";
                     i->print(std::cerr);
-                    std::cerr << "': input '";
-                    iv->printRef(std::cerr);
-                    std::cerr << "' used before definition.\n";
+                    std::cerr << " the following predecessor blocks are not "
+                                 "handled in phi: ";
+                    for (auto& in : inp)
+                        std::cerr << in->id << " ";
+                    std::cerr << "\n";
                     ok = false;
                 }
+            }
+        }
+
+        if (auto fs = FrameState::Cast(i)) {
+            if (fs->env() == Env::elided()) {
+                std::cerr << "Error at instruction '";
+                i->print(std::cerr);
+                std::cerr << " framestate env cannot be elided\n";
+                ok = false;
+            }
+        }
+
+        if (auto cast = CastType::Cast(i)) {
+            auto arg = cast->arg<0>().val();
+            // assertion is:
+            // "input is a promise => output is a promise"
+            // to remove a promise wrapper -- even for eager args -- a force
+            // instruction is needed!
+            if (arg->type.maybePromiseWrapped() &&
+                !cast->type.maybePromiseWrapped()) {
+                std::cerr << "Error at instruction '";
+                i->print(std::cerr);
+                std::cerr
+                    << "': Cannot cast away promise wrapper. need to use Force";
+                ok = false;
+            }
+        }
+
+        i->eachArg([&](const InstrArg& a) -> void {
+            auto v = a.val();
+            auto t = a.type();
+            if (auto iv = Instruction::Cast(v)) {
+                if (!Phi::Cast(i))
+                    if ((iv->bb() == i->bb() &&
+                         bb->indexOf(iv) > bb->indexOf(i)) ||
+                        (iv->bb() != i->bb() && slow &&
+                         !dom(bb->owner).dominates(iv->bb(), bb))) {
+                        std::cerr << "Error at instruction '";
+                        i->print(std::cerr);
+                        std::cerr << "': input '";
+                        iv->printRef(std::cerr);
+                        std::cerr << "' used before definition.\n";
+                        ok = false;
+                    }
 
                 if (iv->bb()->owner != i->bb()->owner) {
                     std::cerr << "Error at instruction '";
@@ -197,10 +327,9 @@ class TheVerifier {
 namespace rir {
 namespace pir {
 
-bool Verify::apply(Closure* f) {
-    TheVerifier v(f);
+void Verify::apply(ClosureVersion* f, bool slow) {
+    TheVerifier v(f, slow);
     v();
-    return v.ok;
 }
 } // namespace pir
 } // namespace rir

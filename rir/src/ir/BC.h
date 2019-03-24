@@ -5,16 +5,14 @@
 #include <cstdint>
 #include <map>
 
-#include "R/r.h"
-#include "utils/Pool.h"
-
 #include "BC_inc.h"
-
 #include "R/Protect.h"
-
-#include "interpreter/runtime.h"
-
+#include "R/r.h"
+#include "interpreter/instance.h"
 #include "ir/Deoptimization.h"
+#include "runtime/Code.h"
+#include "runtime/Function.h"
+#include "utils/Pool.h"
 
 namespace rir {
 
@@ -43,6 +41,12 @@ BC BC::push(int constant) {
     i.pool = Pool::getInt(constant);
     return BC(Opcode::push_, i);
 }
+BC BC::push_from_pool(PoolIdx idx) {
+    ImmediateArguments i;
+    i.pool = idx;
+    return BC(Opcode::push_, i);
+}
+
 BC BC::ldfun(SEXP sym) {
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
@@ -53,13 +57,6 @@ BC BC::ldddvar(SEXP sym) {
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
-}
-BC BC::ldlval(SEXP sym) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateArguments i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::ldlval_, i);
 }
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
@@ -141,6 +138,13 @@ BC BC::missing(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
+BC BC::starg(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::starg_, i);
+}
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -169,6 +173,11 @@ BC BC::brobj(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
     return BC(Opcode::brobj_, i);
+}
+BC BC::pushContext(Jmp j) {
+    ImmediateArguments i;
+    i.offset = j;
+    return BC(Opcode::push_context_, i);
 }
 BC BC::beginloop(Jmp j) {
     ImmediateArguments i;
@@ -205,19 +214,23 @@ BC BC::put(uint32_t i) {
     im.i = i;
     return BC(Opcode::put_, im);
 }
-BC BC::callImplicit(const std::vector<FunIdx>& args, SEXP ast) {
+BC BC::callImplicit(const std::vector<FunIdx>& args, SEXP ast,
+                    const Assumptions& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = args.size();
     im.callFixedArgs.ast = Pool::insert(ast);
+    im.callFixedArgs.given = given;
     BC cur(Opcode::call_implicit_, im);
     cur.callExtra().immediateCallArguments = args;
     return cur;
 }
 BC BC::callImplicit(const std::vector<FunIdx>& args,
-                    const std::vector<SEXP>& names, SEXP ast) {
+                    const std::vector<SEXP>& names, SEXP ast,
+                    const Assumptions& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = args.size();
     im.callFixedArgs.ast = Pool::insert(ast);
+    im.callFixedArgs.given = given;
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
@@ -226,16 +239,19 @@ BC BC::callImplicit(const std::vector<FunIdx>& args,
     cur.callExtra().callArgumentNames = nameIdxs;
     return cur;
 }
-BC BC::call(size_t nargs, SEXP ast) {
+BC BC::call(size_t nargs, SEXP ast, const Assumptions& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = nargs;
     im.callFixedArgs.ast = Pool::insert(ast);
+    im.callFixedArgs.given = given;
     return BC(Opcode::call_, im);
 }
-BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast) {
+BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
+            const Assumptions& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = nargs;
     im.callFixedArgs.ast = Pool::insert(ast);
+    im.callFixedArgs.given = given;
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
@@ -243,19 +259,52 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast) {
     cur.callExtra().callArgumentNames = nameIdxs;
     return cur;
 }
-BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
+BC BC::staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
+                  SEXP targetVersion, const Assumptions& given) {
+    assert(!targetVersion || Function::unpack(targetVersion));
+    assert(TYPEOF(targetClosure) == CLOSXP);
+    auto target =
+        targetVersion ? Pool::insert(targetVersion) : Pool::makeSpace();
     ImmediateArguments im;
     im.staticCallFixedArgs.nargs = nargs;
     im.staticCallFixedArgs.ast = Pool::insert(ast);
-    im.staticCallFixedArgs.target = Pool::insert(target);
+    im.staticCallFixedArgs.targetClosure = Pool::insert(targetClosure);
+    im.staticCallFixedArgs.versionHint = target;
+    im.staticCallFixedArgs.given = given;
     return BC(Opcode::static_call_, im);
 }
+BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
+    assert(TYPEOF(builtin) == BUILTINSXP);
+    ImmediateArguments im;
+    im.callBuiltinFixedArgs.nargs = nargs;
+    im.callBuiltinFixedArgs.ast = Pool::insert(ast);
+    im.callBuiltinFixedArgs.builtin = Pool::insert(builtin);
+    return BC(Opcode::call_builtin_, im);
+}
+
+BC BC::mkEnv(const std::vector<SEXP>& names, SignedImmediate contextPos,
+             bool stub) {
+    ImmediateArguments im;
+    im.mkEnvFixedArgs.nargs = names.size();
+    im.mkEnvFixedArgs.context = contextPos;
+    std::vector<PoolIdx> nameIdxs;
+    for (auto n : names)
+        nameIdxs.push_back(Pool::insert(n));
+    BC cur;
+    if (stub)
+        cur = BC(Opcode::mk_stub_env_, im);
+    else
+        cur = BC(Opcode::mk_env_, im);
+    cur.mkEnvExtra().names = nameIdxs;
+    return cur;
+}
+
 BC BC::deopt(SEXP deoptMetadata) {
     ImmediateArguments i;
     i.pool = Pool::insert(deoptMetadata);
     return BC(Opcode::deopt_, i);
 }
 
-} // rir
+} // namespace rir
 
 #endif

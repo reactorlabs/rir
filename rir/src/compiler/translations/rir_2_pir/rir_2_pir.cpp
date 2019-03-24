@@ -9,6 +9,7 @@
 #include "../../util/visitor.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
+#include "R/Symbols.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 #include "simple_instruction_list.h"
@@ -142,6 +143,34 @@ Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
     return insert.emitCheckpoint(srcCode, pos, stack);
 }
 
+Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
+                             bool eager) const {
+    Promise* prom = insert.function->createProm(promiseCode->src);
+    {
+        Builder promiseBuilder(insert.function, prom);
+        if (!tryCompilePromise(promiseCode, promiseBuilder)) {
+            log.warn("Failed to compile a promise for call");
+            return nullptr;
+        }
+    }
+    Value* eagerVal = UnboundValue::instance();
+    Value* theArg = nullptr;
+    if (eager || Query::pure(prom)) {
+        auto inlineProm = tryTranslatePromise(promiseCode, insert);
+        if (!inlineProm) {
+            log.warn("Failed to inline a promise");
+            return nullptr;
+        }
+        eagerVal = inlineProm;
+        if (eager)
+            theArg = eagerVal;
+    }
+    if (!theArg) {
+        theArg = insert(new MkArg(prom, eagerVal, insert.env));
+    }
+    return theArg;
+}
+
 bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         rir::Code* srcCode, RirStack& stack, Builder& insert,
                         CallTargetFeedback& callTargetFeedback) const {
@@ -159,8 +188,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     auto top = [&stack]() { return stack.at(0); };
     auto set = [&stack](unsigned i, Value* v) { stack.at(i) = v; };
 
-    auto forceIfLazy = [&](unsigned i) {
-        if (stack.at(i)->type.maybeLazy()) {
+    auto forceIfPromised = [&](unsigned i) {
+        if (stack.at(i)->type.maybePromiseWrapped()) {
             stack.at(i) = insert(new Force(at(i), env));
         }
     };
@@ -174,6 +203,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_:
         v = insert(new LdVar(bc.immediateConst(), env));
         push(insert(new Force(v, env)));
+        break;
+
+    case Opcode::starg_:
+        v = pop();
+        insert(new StArg(bc.immediateConst(), v, env));
         break;
 
     case Opcode::stvar_:
@@ -254,13 +288,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* callee = top();
         SEXP monomorphic = nullptr;
 
-        // TODO: Support missing args and ...
+        // TODO: Support ...
         for (auto argi : bc.callExtra().immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
                 log.warn("Cannot compile call with ... arguments");
-                return false;
-            } else if (argi == MISSING_ARG_IDX) {
-                log.warn("Cannot compile call with explicit missing arguments");
                 return false;
             }
         }
@@ -268,7 +299,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // See if the call feedback suggests a monomorphic target
         // TODO: Deopts in promises are not supported by the promise inliner. So
         // currently it does not pay off to put any deopts in there.
-        if (!inPromise() && callTargetFeedback.count(callee)) {
+        if (callTargetFeedback.count(callee)) {
             auto& feedback = callTargetFeedback.at(callee);
             if (feedback.numTargets == 1)
                 monomorphic = feedback.getTarget(srcCode, 0);
@@ -288,16 +319,39 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (arity != -1 && arity != nargs)
                 monomorphicBuiltin = false;
         }
+        if (monomorphicClosure) {
+            if (DispatchTable::unpack(BODY(monomorphic))
+                    ->baseline()
+                    ->unoptimizable)
+                monomorphicClosure = false;
+        }
+
+        auto ldfun = LdFun::Cast(callee);
+        if (inPromise()) {
+            if (ldfun) {
+                ldfun->hint =
+                    monomorphic ? monomorphic : symbol::ambiguousCallTarget;
+            }
+            monomorphicBuiltin = monomorphicClosure = false;
+            monomorphic = nullptr;
+        }
 
         Assume* assumption = nullptr;
         // Insert a guard if we want to speculate
-        auto ldfun = LdFun::Cast(callee);
         if (monomorphicBuiltin || monomorphicClosure) {
             Value* expected = insert(new LdConst(monomorphic));
             Value* given = callee;
-            // This change here potentially allows the delay_instr pass
-            // to move the ldfun into the deopt branch
-            if (ldfun)
+            // We use ldvar instead of ldfun for the guard. The reason is that
+            // ldfun can force promises, which is a pain for our optimizer to
+            // deal with. If we use a ldvar here, the actual ldfun will be
+            // delayed into the deopt branch. Note that ldvar is conservative.
+            // If we find a non-function binding with the same name, we will
+            // deopt unneccessarily. In the case of `c` this is guaranteed to
+            // cause problems, since many variables are called "c". Therefore we
+            // keep the ldfun in this case.
+            // TODO: Implement this with a dependency on the binding cell
+            // instead of an eager check.
+            if (ldfun && ldfun->varName != symbol::c)
                 given = insert(new LdVar(ldfun->varName, ldfun->env()));
             Value* t = insert(new Identical(given, expected));
             auto cp = addCheckpoint(srcCode, pos, stack, insert);
@@ -306,49 +360,59 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         // Compile the arguments (eager for builltins)
         std::vector<Value*> args;
-        for (auto argi : bc.callExtra().immediateCallArguments) {
-            rir::Code* promiseCode = srcCode->getPromise(argi);
-            Promise* prom = insert.function->createProm(promiseCode->src);
-            {
-                Builder promiseBuilder(insert.function, prom);
-                if (!tryCompilePromise(promiseCode, promiseBuilder)) {
-                    log.warn("Failed to compile a promise for call");
-                    return false;
+
+        Assumptions given;
+        // Make some optimistic assumptions, they might be reset below...
+        given.add(Assumption::NoExplicitlyMissingArgs);
+        {
+            size_t i = 0;
+            for (auto argi : bc.callExtra().immediateCallArguments) {
+                if (argi == MISSING_ARG_IDX) {
+                    args.push_back(MissingArg::instance());
+                    given.remove(Assumption::NoExplicitlyMissingArgs);
+                } else {
+                    rir::Code* promiseCode = srcCode->getPromise(argi);
+                    bool eager = monomorphicBuiltin;
+                    auto arg = tryCreateArg(promiseCode, insert, eager);
+                    if (!arg)
+                        return false;
+
+                    auto mk = MkArg::Cast(arg);
+                    if (mk && mk->isEager()) {
+                        given.setEager(i);
+                        if (mk->eagerArg() == MissingArg::instance())
+                            given.remove(Assumption::NoExplicitlyMissingArgs);
+                    }
+                    Value* value = arg->followCastsAndForce();
+                    if (!MkArg::Cast(value) && !value->type.maybeObj())
+                        given.setNotObj(i);
+
+                    args.push_back(arg);
                 }
+                i++;
             }
-            Value* eagerVal = Missing::instance();
-            Value* theArg = nullptr;
-            if (monomorphicBuiltin || Query::pure(prom)) {
-                auto inlineProm = tryTranslatePromise(promiseCode, insert);
-                if (!inlineProm) {
-                    log.warn("Failed to inline a promise");
-                    return false;
-                }
-                eagerVal = inlineProm;
-                // Builtins take the actual argument, not a promise
-                if (monomorphicBuiltin)
-                    theArg = eagerVal;
-            }
-            if (!theArg)
-                theArg = insert(new MkArg(prom, eagerVal, env));
-            args.push_back(theArg);
         }
 
+        size_t missingArgs = 0;
         // Static argument name matching
+        // Currently we only match callsites with the correct number of
+        // arguments passed. Thus, we set those given assumptions below.
         if (monomorphicClosure) {
-            bool correctOrder =
-                (bc.bc == Opcode::named_call_implicit_)
-                    ? ArgumentMatcher::reorder(FORMALS(monomorphic),
-                                               bc.callExtra().callArgumentNames,
-                                               args)
-                    : RList(FORMALS(monomorphic)).length() == args.size();
+            bool correctOrder = (bc.bc != Opcode::named_call_implicit_) ||
+                                ArgumentMatcher::reorder(
+                                    FORMALS(monomorphic),
+                                    bc.callExtra().callArgumentNames, args);
 
-            if (!correctOrder) {
+            size_t needed = RList(FORMALS(monomorphic)).length();
+
+            if (!correctOrder || needed < args.size()) {
                 monomorphicClosure = false;
                 assert(assumption);
                 // Kill unnecessary speculation
                 assumption->arg<0>().val() = True::instance();
             }
+
+            missingArgs = needed - args.size();
         }
 
         // Emit the actual call
@@ -360,7 +424,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                           ast)));
             } else {
                 auto callee = pop();
-                auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+                Value* fs = nullptr;
+                if (inPromise())
+                    fs = Tombstone::framestate();
+                else
+                    fs = insert.registerFrameState(srcCode, nextPos, stack);
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
@@ -368,16 +436,18 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
-            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
-            asmpt.set(Assumption::CorrectNumberOfArguments);
+            given.numMissing(missingArgs);
+            given.add(Assumption::NotTooFewArguments);
+            given.add(Assumption::NotTooManyArguments);
+            given.add(Assumption::CorrectOrderOfArguments);
             compiler.compileClosure(
-                monomorphic, name, asmpt,
-                [&](Closure* f) {
+                monomorphic, name, given,
+                [&](ClosureVersion* f) {
                     pop();
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(insert.env, f, args, monomorphic,
-                                               fs, ast)));
+                    push(insert(
+                        new StaticCall(insert.env, f->owner(), args, fs, ast)));
                 },
                 insertGenericCall);
         } else if (monomorphicBuiltin) {
@@ -418,45 +488,28 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                       bc.callExtra().callArgumentNames,
                                       bc.immediate.callFixedArgs.ast)));
         } else {
-            auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+            Value* fs = nullptr;
+            if (inPromise())
+                fs = Tombstone::framestate();
+            else
+                fs = insert.registerFrameState(srcCode, nextPos, stack);
             push(insert(new Call(env, target, args, fs,
                                  bc.immediate.callFixedArgs.ast)));
         }
         break;
     }
 
-    case Opcode::static_call_: {
-        unsigned n = bc.immediate.staticCallFixedArgs.nargs;
-        auto ast = bc.immediate.staticCallFixedArgs.ast;
-        SEXP target = rir::Pool::get(bc.immediate.staticCallFixedArgs.target);
+    case Opcode::call_builtin_: {
+        unsigned n = bc.immediate.callBuiltinFixedArgs.nargs;
+        auto ast = bc.immediate.callBuiltinFixedArgs.ast;
+        SEXP target = rir::Pool::get(bc.immediate.callBuiltinFixedArgs.builtin);
 
         std::vector<Value*> args(n);
         for (size_t i = 0; i < n; ++i)
             args[n - i - 1] = pop();
 
-        if (TYPEOF(target) == BUILTINSXP) {
-            push(insert(BuiltinCallFactory::New(env, target, args, ast)));
-        } else {
-            assert(TYPEOF(target) == CLOSXP);
-            if (!isValidClosureSEXP(target)) {
-                Compiler::compileClosure(target);
-            }
-            bool failed = false;
-            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
-            asmpt.set(Assumption::CorrectNumberOfArguments);
-            compiler.compileClosure(
-                target, "", asmpt,
-                [&](Closure* f) {
-                    auto fs =
-                        insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(env, f, args, target, fs, ast)));
-                },
-                [&]() { failed = true; });
-            if (failed) {
-                log.warn("Failed to compile the target of a static call");
-                return false;
-            }
-        }
+        assert(TYPEOF(target) == BUILTINSXP);
+        push(insert(BuiltinCallFactory::New(env, target, args, ast)));
         break;
     }
 
@@ -474,9 +527,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract1_1_: {
         if (!inPromise()) {
-            forceIfLazy(
-                1); // <- ensure forced version are captured in framestate
-            forceIfLazy(0);
+            forceIfPromised(1); // <- ensure forced captured in framestate
+            forceIfPromised(0);
             addCheckpoint(srcCode, pos, stack, insert);
         }
         Value* idx = pop();
@@ -487,9 +539,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract2_1_: {
         if (!inPromise()) {
-            forceIfLazy(
+            forceIfPromised(
                 1); // <- ensure forced version are captured in framestate
-            forceIfLazy(0);
+            forceIfPromised(0);
             addCheckpoint(srcCode, pos, stack, insert);
         }
         Value* idx = pop();
@@ -532,7 +584,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::subassign1_: {
+    case Opcode::subassign1_1_: {
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -540,11 +592,29 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::subassign2_: {
+    case Opcode::subassign2_1_: {
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
         push(insert(new Subassign2_1D(val, vec, idx, env, srcIdx)));
+        break;
+    }
+
+    case Opcode::subassign1_2_: {
+        Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
+        Value* val = pop();
+        push(insert(new Subassign1_2D(val, vec, idx1, idx2, env, srcIdx)));
+        break;
+    }
+
+    case Opcode::subassign2_2_: {
+        Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
+        Value* val = pop();
+        push(insert(new Subassign2_2D(val, vec, idx1, idx2, env, srcIdx)));
         break;
     }
 
@@ -568,8 +638,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 #define BINOP(Name, Op)                                                        \
     case Opcode::Op: {                                                         \
         if (!inPromise()) {                                                    \
-            forceIfLazy(1);                                                    \
-            forceIfLazy(0);                                                    \
+            forceIfPromised(1);                                                \
+            forceIfPromised(0);                                                \
             addCheckpoint(srcCode, pos, stack, insert);                        \
         }                                                                      \
         auto lhs = at(1);                                                      \
@@ -624,6 +694,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         UNOP_NOENV(Inc, inc_);
 #undef UNOP_NOENV
 
+    case Opcode::missing_:
+        push(insert(new Missing(Pool::get(bc.immediate.pool), env)));
+        break;
+
     case Opcode::is_:
         push(insert(new Is(bc.immediate.i, pop())));
         break;
@@ -651,24 +725,30 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::ensure_named_:
-        push(insert(new EnsureNamed(pop())));
+        // Recomputed automatically in the backend
         break;
 
     case Opcode::set_shared_:
         push(insert(new SetShared(pop())));
         break;
 
-#define V(_, name, Name)\
-    case Opcode::name ## _:\
-        insert(new Name());\
+    case Opcode::invisible_:
+        insert(new Invisible());
         break;
-SIMPLE_INSTRUCTIONS(V, _)
+
+    case Opcode::visible_:
+        insert(new Visible());
+        break;
+
+#define V(_, name, Name)                                                       \
+    case Opcode::name##_:                                                      \
+        insert(new Name());                                                    \
+        break;
+        SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
     // TODO implement!
     // (silently ignored)
-    case Opcode::invisible_:
-    case Opcode::visible_:
     case Opcode::isfun_:
         break;
 
@@ -695,7 +775,8 @@ SIMPLE_INSTRUCTIONS(V, _)
     // Opcodes that only come from PIR
     case Opcode::deopt_:
     case Opcode::force_:
-    case Opcode::make_env_:
+    case Opcode::mk_stub_env_:
+    case Opcode::mk_env_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:
@@ -706,14 +787,16 @@ SIMPLE_INSTRUCTIONS(V, _)
     case Opcode::stloc_:
     case Opcode::movloc_:
     case Opcode::isobj_:
+    case Opcode::isstubenv_:
     case Opcode::check_missing_:
+    case Opcode::static_call_:
+    case Opcode::pop_context_:
+    case Opcode::push_context_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
-    case Opcode::ldlval_:
     case Opcode::asast_:
-    case Opcode::missing_:
     case Opcode::beginloop_:
     case Opcode::endloop_:
     case Opcode::ldddvar_:
@@ -894,11 +977,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             BC ldsrc = BC::advance(&pc, srcCode);
             pc = BC::next(pc); // close
 
-            SEXP fmls = ldfmls.immediateConst();
+            SEXP formals = ldfmls.immediateConst();
             SEXP code = ldcode.immediateConst();
-            SEXP src = ldsrc.immediateConst();
-
-            FormalArgs formals(fmls);
+            SEXP srcRef = ldsrc.immediateConst();
 
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->baseline();
@@ -921,7 +1002,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             inner << "@";
             if (srcCode != srcFunction->body()) {
                 size_t i = 0;
-                for (auto c : insert.function->promises) {
+                for (auto c : insert.function->promises()) {
                     if (c == insert.code) {
                         inner << "Prom(" << i << ")";
                         break;
@@ -931,21 +1012,21 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
             inner << (pos - srcCode->code());
 
-            compiler.compileFunction(
-                function, inner.str(), formals, {},
-                [&](Closure* innerF) {
-                    cur.stack.push(insert(
-                        new MkFunCls(innerF, insert.env, fmls, code, src)));
+            compiler.compileFunction(function, inner.str(), formals, srcRef,
+                                     [&](ClosureVersion* innerF) {
+                                         cur.stack.push(insert(new MkFunCls(
+                                             innerF->owner(), dt, insert.env)));
 
-                    // Skip those instructions
-                    finger = pc;
-                    skip = true;
-                },
-                []() {
-                    // If the closure does not compile, we can still call the
-                    // unoptimized version (which is what happens on
-                    // `tryRunCurrentBC` below)
-                });
+                                         // Skip those instructions
+                                         finger = pc;
+                                         skip = true;
+                                     },
+                                     []() {
+                                         // If the closure does not compile, we
+                                         // can still call the unoptimized
+                                         // version (which is what happens on
+                                         // `tryRunCurrentBC` below)
+                                     });
         });
 
         if (!skip) {
@@ -964,6 +1045,11 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                           << size << " to " << cur.stack.size() << "\n";
                 assert(false);
                 return nullptr;
+            }
+
+            if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
+                insert.getCurrentBB()->last()->isDeoptBarrier()) {
+                addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
         }
     }
@@ -1046,6 +1132,8 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
         });
     }
 
+    // Return in promise can lead to non-local return, which currently needs env
+    // to find the context to return to.
     insert(new Return(ret));
 
     InsertCast c(insert.code->entry, insert.env);

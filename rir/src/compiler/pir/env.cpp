@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-void Env::printRef(std::ostream& out) {
+void Env::printRef(std::ostream& out) const {
     if (this == notClosed()) {
         out << "?";
         return;

@@ -1,11 +1,11 @@
 #include "promise.h"
-#include "interpreter/runtime.h"
+#include "interpreter/instance.h"
 
 namespace rir {
 namespace pir {
 
-Promise::Promise(Closure* fun, unsigned id, unsigned src)
-    : id(id), fun(fun), srcPoolIdx_(src) {
+Promise::Promise(ClosureVersion* owner, unsigned id, unsigned src)
+    : id(id), owner(owner), srcPoolIdx_(src) {
     assert(src_pool_at(globalContext(), srcPoolIdx_));
 }
 

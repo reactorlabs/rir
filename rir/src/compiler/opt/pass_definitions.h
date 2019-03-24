@@ -9,13 +9,13 @@ namespace pir {
 
 class Closure;
 
-#define PASS(name, desc)                                                       \
+#define PASS(name)                                                             \
     name:                                                                      \
   public                                                                       \
     PirTranslator {                                                            \
       public:                                                                  \
-        name() : PirTranslator(desc){};                                        \
-        void apply(RirCompiler&, Closure* function, LogStream& log)            \
+        name() : PirTranslator(#name){};                                       \
+        void apply(RirCompiler&, ClosureVersion* function, LogStream& log)     \
             const final override;                                              \
     };
 
@@ -26,7 +26,7 @@ class Closure;
  * environment, to pir SSA variables.
  *
  */
-class PASS(ScopeResolution, "Scope resolution");
+class PASS(ScopeResolution);
 
 /*
  * ElideEnv removes envrionments which are not needed. It looks at all uses of
@@ -36,7 +36,7 @@ class PASS(ScopeResolution, "Scope resolution");
  *
  */
 
-class PASS(ElideEnv, "Elide environments not needed");
+class PASS(ElideEnv);
 
 /*
  * This pass searches for dominating force instructions.
@@ -46,13 +46,13 @@ class PASS(ElideEnv, "Elide environments not needed");
  * dominating force, and replaces all subsequent forces with its result.
  *
  */
-class PASS(ForceDominance, "Inline Promises");
+class PASS(ForceDominance);
 
 /*
  * DelayInstr tries to schedule instructions right before they are needed.
  *
  */
-class PASS(DelayInstr, "Delay instructions");
+class PASS(DelayInstr);
 
 /*
  * The DelayEnv pass tries to delay the scheduling of `MkEnv` instructions as
@@ -60,7 +60,7 @@ class PASS(DelayInstr, "Delay instructions");
  * the goal is to move it out of the others.
  *
  */
-class PASS(DelayEnv, "Move environment creation as far as possible");
+class PASS(DelayEnv);
 
 /*
  * Inlines a closure. Intentionally stupid. It does not resolve inner
@@ -68,7 +68,7 @@ class PASS(DelayEnv, "Move environment creation as far as possible");
  * with multiple environments. Later scope resolution and force dominance
  * passes will do the smart parts.
  */
-class PASS(Inline, "Inline closures");
+class PASS(Inline);
 
 /*
  * Goes through every operation that for the general case needs an environment
@@ -76,25 +76,31 @@ class PASS(Inline, "Inline closures");
  * information of the inputs and if all the observed values are compatible with
  * the version operation without an environment, it avoids creating the
  * environment and add the corresponding guard to deoptimize in case an
- * incompatible input appears at run time.
+ * incompatible input appears at run time. It also goes through every force
+ * instruction for which we could not prove it does not access the parent
+ * environment reflectively and speculate it will not.
  */
-class PASS(ElideEnvSpec, "Speculate on values to elide environments");
+class PASS(ElideEnvSpec);
+
+/*
+ *
+ */
 
 /*
  * Constantfolding and dead branch removal.
  */
-class PASS(Constantfold, "Constant folding");
+class PASS(Constantfold);
 
 /*
  * Generic instruction and controlflow cleanup pass.
  */
-class PASS(Cleanup, "Cleanup redundant operations");
+class PASS(Cleanup);
 
 /*
  * Checkpoints keep values alive. Thus it makes sense to remove them if they
  * are unused after a while.
  */
-class PASS(CleanupCheckpoints, "Cleanup unused checkpoints");
+class PASS(CleanupCheckpoints);
 
 /*
  * Unused framestate instructions usually get removed automatically. Except
@@ -103,13 +109,29 @@ class PASS(CleanupCheckpoints, "Cleanup unused checkpoints");
  * that they can be removed later, if they are not actually used by any
  * checkpoint/deopt.
  */
-class PASS(CleanupFramestate, "Cleanup framestates unused by checkpoints");
+class PASS(CleanupFramestate);
 
 /*
  * Trying to group assumptions, by pushing them up. This well lead to fewer
  * checkpoints being used overall.
  */
-class PASS(OptimizeAssumptions, "Optimize Assumptions and checkpoints");
+class PASS(OptimizeAssumptions);
+
+class PASS(EagerCalls);
+
+class PASS(OptimizeVisibility);
+
+class PASS(OptimizeContexts);
+
+class PASS(DeadStoreRemoval);
+
+class PhaseMarker : public PirTranslator {
+  public:
+    explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}
+    void apply(RirCompiler&, ClosureVersion*, LogStream&) const final override {
+    }
+    bool isPhaseMarker() const final override { return true; }
+};
 
 } // namespace pir
 } // namespace rir

@@ -43,7 +43,7 @@ class BB {
 
     void unsafeSetId(unsigned newId) { *const_cast<unsigned*>(&id) = newId; }
 
-    unsigned indexOf(Instruction* i) {
+    unsigned indexOf(const Instruction* i) {
         unsigned p = 0;
         for (auto j : instrs) {
             if (i == j)
@@ -69,13 +69,16 @@ class BB {
 
     void remove(Instruction* i);
 
+    Instrs::iterator atPosition(Instruction* i);
     Instrs::iterator remove(Instrs::iterator it);
     Instrs::iterator moveToEnd(Instrs::iterator it, BB* other);
     Instrs::iterator moveToBegin(Instrs::iterator it, BB* other);
 
     void swapWithNext(Instrs::iterator);
 
-    void print(std::ostream& = std::cout, bool tty = false);
+    void print(std::ostream&, bool tty);
+    void printGraph(std::ostream&, bool omitDeoptBranches);
+    void printBBGraph(std::ostream&, bool omitDeoptBranches);
 
     Instrs::iterator begin() { return instrs.begin(); }
     Instrs::iterator end() { return instrs.end(); }
@@ -89,6 +92,8 @@ class BB {
     void gc();
 
     bool isExit() const { return !next0 && !next1; }
+    bool isDeopt() const;
+    bool isBranch() const { return next0 && next1; }
 
     void setBranch(BB* trueBranch, BB* falseBranch) {
         assert(!next0 && !next1);
@@ -110,6 +115,7 @@ class BB {
         assert(next0 && !next1);
         return next0;
     }
+    size_t uid() { return (size_t)this; }
 
     // don't use them directly unless you know what you are doing
     // We don't want to make them private, since we are all adults. But there

@@ -21,15 +21,17 @@
     V(Sub)                                                                     \
     V(Mul)                                                                     \
     V(Neq)                                                                     \
-    V(Eq)                                                                      \
-    V(Extract1_1D)                                                             \
-    V(Extract2_1D)
+    V(Eq)
 
 #define VECTOR_RW_INSTRUCTIONS(V)                                              \
+    V(Extract1_1D)                                                             \
+    V(Extract2_1D)                                                             \
     V(Extract2_2D)                                                             \
     V(Extract1_2D)                                                             \
     V(Subassign1_1D)                                                           \
-    V(Subassign2_1D)
+    V(Subassign2_1D)                                                           \
+    V(Subassign1_2D)                                                           \
+    V(Subassign2_2D)
 
 #define COMPILER_INSTRUCTIONS(V)                                               \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_COMPILER_INSTRUCTIONS, V)      \
@@ -48,6 +50,7 @@
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
     V(IsObject)                                                                \
+    V(IsEnvStub)                                                               \
     V(Return)                                                                  \
     V(MkArg)                                                                   \
     V(MkFunCls)                                                                \
@@ -59,8 +62,9 @@
     V(StaticCall)                                                              \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
-    V(CallImplicit)                                                            \
     V(MkEnv)                                                                   \
+    V(PushContext)                                                             \
+    V(PopContext)                                                              \
     V(LdFunctionEnv)                                                           \
     V(LAnd)                                                                    \
     V(LOr)                                                                     \
@@ -80,7 +84,10 @@
     V(Force)                                                                   \
     V(CastType)                                                                \
     V(SetShared)                                                               \
-    V(EnsureNamed)                                                             \
-    V(PirCopy)
+    V(Missing)                                                                 \
+    V(Visible)                                                                 \
+    V(Invisible)                                                               \
+    V(PirCopy)                                                                 \
+    V(Nop)
 
 #endif

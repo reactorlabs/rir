@@ -1,3 +1,4 @@
+#include "../../utils/escape_string.h"
 #include "../util/visitor.h"
 #include "pir_impl.h"
 
@@ -31,6 +32,56 @@ void BB::print(std::ostream& out, bool tty) {
     if (isJmp()) {
         out << "  goto BB" << next0->id << "\n";
     }
+}
+
+void BB::printGraph(std::ostream& out, bool omitDeoptBranches) {
+    out << "BB" << uid()
+        << " [shape=\"box\", fontname=\"monospace\", xlabel=\"BB" << id
+        << "\", ";
+    if (isDeopt())
+        out << "bgcolor=\"gray\", style=\"filled\", ";
+    out << "label=\"\\\n";
+    for (auto i : instrs) {
+        std::stringstream buf;
+        i->printGraph(buf);
+        out << escapeString(buf.str()) << "\\l\\\n";
+    }
+    out << "\"];\n";
+
+    bool printDeoptOnlyDefault =
+        omitDeoptBranches && !isEmpty() && Checkpoint::Cast(last());
+    if (!instrs.empty() && last()->branches()) {
+        if (!printDeoptOnlyDefault)
+            last()->printGraphBranches(out, uid());
+    }
+    if (isJmp() || printDeoptOnlyDefault) {
+        out << "BB" << uid() << " -> "
+            << "BB" << next0->uid() << ";\n";
+    }
+    if (printDeoptOnlyDefault)
+        out << "BB" << uid() << " -> d" << next1->id << " [color=red];\n";
+    out << "\n";
+}
+
+void BB::printBBGraph(std::ostream& out, bool omitDeoptBranches) {
+    out << "BB" << uid() << " [shape=\"circle\", label=\"BB" << id << "\"];\n";
+    bool printDeoptOnlyDefault =
+        omitDeoptBranches && !isEmpty() && Checkpoint::Cast(last());
+    if (!instrs.empty() && last()->branches()) {
+        if (!printDeoptOnlyDefault)
+            last()->printGraphBranches(out, uid());
+    }
+    if (isJmp() || printDeoptOnlyDefault) {
+        out << "BB" << uid() << " -> "
+            << "BB" << next0->uid() << ";\n";
+    }
+    if (printDeoptOnlyDefault)
+        out << "BB" << uid() << " -> d" << next1->id << " [color=red];\n";
+    out << "\n";
+}
+
+bool BB::isDeopt() const {
+    return !isEmpty() && (Deopt::Cast(last()) || ScheduledDeopt::Cast(last()));
 }
 
 BB::~BB() {
@@ -91,6 +142,13 @@ BB::Instrs::iterator BB::insert(Instrs::iterator it, Instruction* i) {
     auto itup = instrs.insert(it, i);
     i->bb_ = this;
     return itup;
+}
+
+BB::Instrs::iterator BB::atPosition(Instruction* i) {
+    auto position = instrs.begin();
+    while (*position != i)
+        position++;
+    return position;
 }
 
 void BB::gc() {

@@ -48,17 +48,31 @@ struct ForcedBy {
     std::unordered_set<Value*> inScope;
     std::unordered_set<Value*> escaped;
 
+    std::vector<size_t> argumentForceOrder;
+    bool ambiguousForceOrder = false;
+
     static Force* ambiguous() {
         static Force f(Nil::instance(), Env::nil());
         return &f;
     }
 
     bool declare(Value* arg) {
+        bool changed = false;
         if (!inScope.count(arg)) {
             inScope.insert(arg);
-            return true;
+            changed = true;
         }
-        return false;
+        auto f = forcedBy.find(arg);
+        if (f != forcedBy.end()) {
+            forcedBy.erase(f);
+            changed = true;
+        }
+        auto e = escaped.find(arg);
+        if (e != escaped.end()) {
+            escaped.erase(e);
+            changed = true;
+        }
+        return changed;
     }
 
     bool sideeffect() {
@@ -90,7 +104,7 @@ struct ForcedBy {
         return false;
     }
 
-    AbstractResult merge(const ForcedBy& other) {
+    AbstractResult mergeExit(const ForcedBy& other) {
         AbstractResult res;
 
         for (auto& e : forcedBy) {
@@ -103,18 +117,13 @@ struct ForcedBy {
                         res.lostPrecision();
                     }
                 }
-            } else if (other.inScope.count(v)) {
-                if (e.second != ambiguous()) {
-                    e.second = ambiguous();
-                    res.lostPrecision();
-                }
             }
         }
         for (auto& e : other.forcedBy) {
             if (!forcedBy.count(e.first)) {
                 if (inScope.count(e.first)) {
-                    forcedBy[e.first] = ambiguous();
-                    res.lostPrecision();
+                    forcedBy.emplace(e);
+                    res.update();
                 } else {
                     inScope.insert(e.first);
                     forcedBy[e.first] = e.second;
@@ -128,7 +137,88 @@ struct ForcedBy {
                 res.update();
             }
         }
+
+        if (!ambiguousForceOrder && other.ambiguousForceOrder) {
+            ambiguousForceOrder = true;
+            res.update();
+        }
+
+        if (argumentForceOrder != other.argumentForceOrder) {
+            auto mySize = argumentForceOrder.size();
+            auto otherSize = other.argumentForceOrder.size();
+            auto common = mySize;
+
+            if (mySize > otherSize) {
+                argumentForceOrder.resize(otherSize);
+                ambiguousForceOrder = true;
+                common = otherSize;
+                res.update();
+            } else if (!ambiguousForceOrder && otherSize > mySize) {
+                ambiguousForceOrder = true;
+                res.update();
+            }
+
+            for (size_t i = 0; i < common; ++i) {
+                if (argumentForceOrder[i] != other.argumentForceOrder[i]) {
+                    argumentForceOrder.resize(i);
+                    ambiguousForceOrder = true;
+                    res.update();
+                    break;
+                }
+            }
+        }
+
         return res;
+    }
+
+    AbstractResult merge(const ForcedBy& other) {
+        AbstractResult res;
+
+        // Those are the cases where we merge two branches where one branch has
+        // the promise evaluated and the other not. For exits we don't care
+        // about this case.
+        for (auto& e : forcedBy) {
+            auto v = e.first;
+            if (!other.forcedBy.count(v)) {
+                if (other.inScope.count(v)) {
+                    if (e.second != ambiguous()) {
+                        e.second = ambiguous();
+                        res.lostPrecision();
+                    }
+                }
+            }
+        }
+        for (auto& e : other.forcedBy) {
+            if (!forcedBy.count(e.first)) {
+                if (inScope.count(e.first)) {
+                    forcedBy[e.first] = ambiguous();
+                    res.lostPrecision();
+                }
+            }
+        }
+
+        res.max(mergeExit(other));
+
+        return res;
+    }
+
+    bool maybeForced(size_t i) const {
+        // Scan the list of unambiguously forced arguments to see if we know if
+        // this one was forced
+        for (auto f : argumentForceOrder) {
+            if (f == i)
+                return true;
+        }
+        return ambiguousForceOrder;
+    }
+
+    bool eagerLikeFunction(ClosureVersion* fun) const {
+        if (ambiguousForceOrder || argumentForceOrder.size() < fun->nargs())
+            return false;
+        for (size_t i = 0; i < fun->nargs(); ++i)
+            if (argumentForceOrder[i] != i)
+                return false;
+        return true;
     }
 
     bool isDominatingForce(Force* f) const {
@@ -192,32 +282,79 @@ struct ForcedBy {
 
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
-    explicit ForceDominanceAnalysis(Closure* cls, Code* code, LogStream& log)
+    using StaticAnalysis::PositioningStyle;
+
+    explicit ForceDominanceAnalysis(ClosureVersion* cls, Code* code,
+                                    LogStream& log)
         : StaticAnalysis("ForceDominance", cls, code, log) {}
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
-        bool changed = false;
+        AbstractResult res;
         if (auto f = Force::Cast(i)) {
             if (MkArg* arg = MkArg::Cast(f->arg<0>().val()->followCasts()))
-                changed = state.forcedAt(arg, f) || changed;
-            if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts()))
-                changed = state.forcedAt(arg, f) || changed;
+                if (state.forcedAt(arg, f))
+                    res.update();
+            if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
+                if (arg->type.maybeLazy()) {
+                    if (state.forcedAt(arg, f))
+                        res.update();
+                    if (!state.ambiguousForceOrder &&
+                        !state.maybeForced(arg->id)) {
+                        state.argumentForceOrder.push_back(arg->id);
+                        res.update();
+                    }
+                }
+            }
         } else if (auto mk = MkArg::Cast(i)) {
-            changed = state.declare(mk) || changed;
+            if (state.declare(mk))
+                res.update();
         } else if (auto ld = LdArg::Cast(i)) {
-            changed = state.declare(ld) || changed;
-        } else if (!CastType::Cast(i)) {
-            i->eachArg([&](Value* v) {
-                v = v->followCasts();
-                if (auto arg = MkArg::Cast(v))
-                    changed = state.escape(arg) || changed;
-                if (auto arg = LdArg::Cast(v))
-                    changed = state.escape(arg) || changed;
-            });
+            if (state.declare(ld))
+                res.update();
+        } else if (MkEnv::Cast(i)) {
+            // Promises assigned to envs is only relevant when the env leaks.
+            // This case is handled below.
+        } else if (CastType::Cast(i)) {
+            // This is a whitelist of instructions that get a promise as
+            // argument, but don't change it in any way.
+        } else {
+            auto apply = [&](Instruction* i) {
+                i->eachArg([&](Value* v) {
+                    v = v->followCasts();
+                    if (auto arg = MkArg::Cast(v))
+                        if (state.escape(arg))
+                            res.update();
+                    if (auto arg = LdArg::Cast(v))
+                        if (state.escape(arg))
+                            res.update();
+                });
+            };
+            apply(i);
+
+            if (i->leaksEnv()) {
+                auto env = i->env();
+                while (auto mk = MkEnv::Cast(env)) {
+                    // Stub cannot leak
+                    if (!mk->stub)
+                        apply(mk);
+                    env = mk->lexicalEnv();
+                }
+            }
+
             if (i->mayForcePromises())
-                changed = state.sideeffect() || changed;
+                if (state.sideeffect())
+                    res.taint();
+
+            if (i->hasEffect() && !state.ambiguousForceOrder &&
+                state.argumentForceOrder.size() < closure->nargs()) {
+                // After the first effect we give up on recording force order,
+                // since we can't use it to turn the arguments into eager ones
+                // anyway. Otherwise we would reorder effects.
+                state.ambiguousForceOrder = true;
+                res.taint();
+            }
         }
-        return changed ? AbstractResult::Updated : AbstractResult::None;
+        return res;
     }
 };
 
@@ -226,17 +363,22 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 namespace rir {
 namespace pir {
 
-void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
+void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
+                           LogStream& log) const {
     auto apply = [&](Code* code) {
         ForceDominanceAnalysis analysis(cls, code, log);
         analysis();
+
         auto& result = analysis.result();
+        if (result.eagerLikeFunction(cls))
+            cls->properties.set(ClosureVersion::Property::IsEager);
+        cls->properties.argumentForceOrder = result.argumentForceOrder;
 
         std::unordered_map<Force*, Value*> inlinedPromise;
         std::unordered_map<Instruction*, MkArg*> forcedMkArg;
 
         // 1. Inline dominating promises
-        Visitor::run(code->entry, [&](BB* bb) {
+        Visitor::runPostChange(code->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 auto next = ip + 1;
@@ -245,8 +387,8 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
                         f->strict = true;
 
                     if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
-                        Value* eager = mkarg->eagerArg();
-                        if (eager != Missing::instance()) {
+                        if (mkarg->isEager()) {
+                            Value* eager = mkarg->eagerArg();
                             f->replaceUsesWith(eager);
                             next = bb->remove(ip);
                         } else if (result.isDominatingForce(f)) {
@@ -270,7 +412,8 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
 
                                 // Create a return value phi of the promise
                                 Value* promRes =
-                                    BBTransform::forInline(prom_copy, split);
+                                    BBTransform::forInline(prom_copy, split)
+                                        .first;
 
                                 f = Force::Cast(*split->begin());
                                 assert(f);
@@ -284,16 +427,17 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
                                 forcedMkArg[mkarg] = fixedMkArg;
 
                                 inlinedPromise[f] = promRes;
-                                bb = split;
+                                break;
                             }
                         }
                     }
                 } else if (auto cast = CastType::Cast(*ip)) {
                     if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
-                        mk->ifEager([&](Value* val) {
-                            cast->replaceUsesWith(val);
+                        if (mk->isEager()) {
+                            auto eager = mk->eagerArg();
+                            cast->replaceUsesWith(eager);
                             next = bb->remove(ip);
-                        });
+                        }
                     }
                 }
                 ip = next;
@@ -332,8 +476,9 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
 
         // 3. replace remaining uses of the mkarg itself
         for (auto m : forcedMkArg) {
-            m.first->replaceUsesIn(m.second, m.second->bb());
-            m.first->eraseAndRemove();
+            m.first->replaceUsesWithLimits(m.second, m.second->bb(), m.first);
+            if (m.first->unused())
+                m.first->eraseAndRemove();
         }
     };
     apply(cls);
