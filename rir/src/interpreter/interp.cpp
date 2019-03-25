@@ -974,24 +974,15 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
 #define STORE_BINOP(res)                                                       \
     do {                                                                       \
         ostackPop(ctx);                                                        \
-        if (res.tag != STACK_OBJ_SEXP && lhs.tag == STACK_OBJ_SEXP &&          \
-            trySetInPlace(lhs.u.sxpval, res)) {                                \
-        } else if (res.tag != STACK_OBJ_SEXP && rhs.tag == STACK_OBJ_SEXP &&   \
-                   trySetInPlace(rhs.u.sxpval, res)) {                         \
-            ostackSet(ctx, 0, rhs);                                            \
-        } else {                                                               \
-            ostackSet(ctx, 0, res);                                            \
-        }                                                                      \
+        ostackSet(ctx, 0, res);                                                \
+                                                                               \
     } while (false)
 
-#define STORE_BINOP_FAST(res, l, r, Type, TYPE)                                \
+#define STORE_BINOP_FAST(res, sexpVal, Type, TYPE)                             \
     do {                                                                       \
         ostackPop(ctx);                                                        \
-        if (l && lhs.tag == STACK_OBJ_SEXP && NO_REFERENCES(lhs.u.sxpval)) {   \
-            *TYPE(lhs.u.sxpval) = res;                                         \
-        } else if (r && rhs.tag == STACK_OBJ_SEXP &&                           \
-                   NO_REFERENCES(rhs.u.sxpval)) {                              \
-            *TYPE(rhs.u.sxpval) = res;                                         \
+        if (sexpVal) {                                                         \
+            *TYPE(sexpVal) = res;                                              \
             ostackSet(ctx, 0, rhs);                                            \
         } else {                                                               \
             ostackSet##Type(ctx, 0, res);                                      \
@@ -1000,36 +991,42 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
 
 #define DO_BINOP(op, Op2)                                                      \
     do {                                                                       \
-        if (stackObjIsSimpleScalar(lhs, REALSXP)) {                            \
-            if (stackObjIsSimpleScalar(rhs, REALSXP)) {                        \
-                double l = tryStackObjToReal(lhs);                             \
-                double r = tryStackObjToReal(rhs);                             \
+        scalar_value_t lhsScalar;                                              \
+        scalar_value_t rhsScalar;                                              \
+        SEXP reusableSexpLhs = NULL;                                           \
+        SEXP reusableSexpRhs = NULL;                                           \
+        reusableSexpLhs = reusableSexpLhs ? reusableSexpLhs : reusableSexpRhs; \
+        int typeLhs = tryStackScalar(lhs, &vx, &sa);                           \
+        int typeRhs = tryStackScalar(rhs, &vy, &sb);                           \
+        if (typeLhs == REALSXP) {                                              \
+            if (typeRhs == REALSXP) {                                          \
                 double real_res =                                              \
-                    (l == NA_REAL || r == NA_REAL) ? NA_REAL : l op r;         \
-                STORE_BINOP_FAST(real_res, true, true, Real, REAL);            \
-            } else if (stackObjIsSimpleScalar(rhs, INTSXP)) {                  \
-                double l = tryStackObjToReal(lhs);                             \
-                int r = tryStackObjToInteger(rhs);                             \
-                double real_res =                                              \
-                    (l == NA_REAL || r == NA_INTEGER) ? NA_REAL : l op r;      \
-                STORE_BINOP_FAST(real_res, true, false, Real, REAL);           \
+                    (lhsScalar == NA_REAL || r == lhsScalar.dval)              \
+                        ? NA_REAL                                              \
+                        : lhsScalar.dval op rhsScalar.dval;                    \
+                STORE_BINOP_FAST(real_res, reusableSexpLhs, Real, REAL);       \
+            } else if (typeRhs == INTSXP) {                                    \
+                double real_res = (lhsScalar.dval == NA_REAL ||                \
+                                   rhsScalar.ival == NA_INTEGER)               \
+                                      ? NA_REAL                                \
+                                      : lhsScalar.dval op rhsScalar.dval;      \
+                STORE_BINOP_FAST(real_res, reusableSexpLhs, Real, REAL);       \
             } else {                                                           \
                 BINOP_FALLBACK(#op);                                           \
             }                                                                  \
-        } else if (stackObjIsSimpleScalar(lhs, INTSXP)) {                      \
-            if (stackObjIsSimpleScalar(rhs, INTSXP)) {                         \
-                int l = tryStackObjToInteger(lhs);                             \
-                int r = tryStackObjToInteger(rhs);                             \
-                Rboolean naflag = FALSE;                                       \
-                int int_res = Op2(l, r, &naflag);                              \
-                CHECK_INTEGER_OVERFLOW(naflag);                                \
-                STORE_BINOP_FAST(int_res, true, true, Int, INTEGER);           \
-            } else if (stackObjIsSimpleScalar(rhs, REALSXP)) {                 \
-                int l = tryStackObjToInteger(lhs);                             \
-                double r = tryStackObjToReal(rhs);                             \
-                double real_res =                                              \
-                    (l == NA_INTEGER || r == NA_REAL) ? NA_REAL : l op r;      \
-                STORE_BINOP_FAST(real_res, false, true, Real, REAL);           \
+        } else if (typex == INTSXP && lhsScalar.ival != NA_INTEGER) {          \
+            if (typey == REALSXP) {                                            \
+                double real_res = (lhsScalar.ival == NA_INTEGER ||             \
+                                   rhsScalar.dval == NA_REAL)                  \
+                                      ? NA_REAL                                \
+                                      : lhsScalar.ival op rhsScalar.dval;      \
+                STORE_BINOP_FAST(int_res, reusableSexpRhs, Real, REAL);        \
+            } else if (typeRhs == INTSXP && vy.ival != NA_INTEGER) {           \
+                int real_res = (lhsScalar.ival == NA_INTEGER ||                \
+                                rhsScalar.ival == NA_INTEGER)                  \
+                                   ? NA_INTEGER                                \
+                                   : lhsScalar.ival op rhsScalar.ival;         \
+                STORE_BINOP_FAST(real_res, reusableSexpLhs, Int, INTEGER);     \
             } else {                                                           \
                 BINOP_FALLBACK(#op);                                           \
             }                                                                  \
@@ -2640,7 +2637,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             R_bcstack_t val = ostackPop(ctx);
             JumpOffset offset = readJumpOffset();
             advanceJump();
-            if (tryStackObjToLogical(val) == 1) {
+            if (tryStackObjToLogical(val) > 0) {
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);

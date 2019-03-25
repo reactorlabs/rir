@@ -136,6 +136,10 @@ typedef enum {
 } stackObjType;
 
 static const R_bcstack_t nullStackObj = {STACK_OBJ_NULL, {0xBAD}};
+typedef union {
+    double dval;
+    int ival;
+} scalar_value_t;
 
 RIR_INLINE R_bcstack_t intStackObj(int x) {
     R_bcstack_t res;
@@ -474,6 +478,52 @@ RIR_INLINE bool stackObjIsVector(R_bcstack_t x) {
     default:
         assert(false);
     }
+}
+
+#ifdef USE_TYPED_STACK
+RIR_INLINE SEXP stackValueSexp(R_bcstack_t* value) { return value->u.sxpval; }
+#else
+RIR_INLINE SEXP stackValueSexp(R_bcstack_t* value) { return *value; }
+#endif
+
+static R_INLINE int tryStackScalar(R_bcstack_t* s, scalar_value_t* v,
+                                   SEXP* pv) {
+#ifdef TYPED_STACK
+    int tag = s->tag;
+
+    if (tag)
+        switch (tag) {
+        case REALSXP:
+            v->dval = s->u.dval;
+            return tag;
+        case INTSXP:
+            v->ival = s->u.ival;
+            return tag;
+        case LGLSXP:
+            v->ival = s->u.ival;
+            return tag;
+        }
+#endif
+    SEXP x = stackValueSexp(s);
+    if (IS_SIMPLE_SCALAR(x, REALSXP)) {
+#ifndef NO_SAVE_ALLOC
+        if (pv && NO_REFERENCES(x))
+            *pv = x;
+#endif
+        v->dval = SCALAR_DVAL(x);
+        return REALSXP;
+    } else if (IS_SIMPLE_SCALAR(x, INTSXP)) {
+#ifndef NO_SAVE_ALLOC
+        if (pv && NO_REFERENCES(x))
+            *pv = x;
+#endif
+        v->ival = SCALAR_IVAL(x);
+        return INTSXP;
+    } else if (IS_SIMPLE_SCALAR(x, LGLSXP)) {
+        v->ival = SCALAR_LVAL(x);
+        return LGLSXP;
+    } else
+        return 0;
 }
 
 RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type) {
