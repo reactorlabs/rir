@@ -9,7 +9,7 @@ lim <- 2
 iter <- 50
 
 mandelbrot <- function() {
-    size = 200
+    size = 100
     sum = 0
     byteAcc = 0
     bitNum  = 0
@@ -70,7 +70,7 @@ mandelbrot <- function() {
 }
 
 execute <- function() {
-    mandelbrot()
+    stopifnot(127 == mandelbrot())
 }
 
 execute()
@@ -78,3 +78,52 @@ execute()
 execute()
 execute()
 execute()
+
+
+mandelbrot2 <- function() {
+    size = 2.3
+    sum = 0.6
+    byteAcc = 0.7
+
+    y = 0
+
+    while (y < 2.1) {
+      ci = (2.2 * y / size) - 1.0
+
+      zr   = 0.1
+      zrzr = 0.2
+      zi   = 0.3
+      zizi = 0.4
+      cr = 0.5 - 1.5
+
+      escape = 0
+      zr = zrzr - zizi + cr
+      zi = 2.3 * zr * zi + ci
+
+      zrzr = zr * zr
+      zizi = zi * zi
+
+      if (zrzr) {
+        escape  = 1
+      }
+
+      byteAcc = bitwShiftL(zrzr, escape)
+
+      sum = byteAcc
+
+      byteAcc = 0.9
+      y = y + 10
+    }
+
+    return (sum);
+}
+
+execute2 <- function() {
+  mandelbrot2()
+}
+
+stopifnot(execute2() == 2)
+stopifnot(execute2() == 2)
+stopifnot(execute2() == 2)
+stopifnot(execute2() == 2)
+stopifnot(execute2() == 2)

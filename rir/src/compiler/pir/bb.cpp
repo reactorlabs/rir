@@ -162,6 +162,18 @@ void BB::gc() {
     deleted.clear();
 }
 
+bool BB::before(Instruction* a, Instruction* b) const {
+    assert(a->bb() == b->bb() && a->bb() == this);
+    for (const auto& i : instrs) {
+        if (i == b)
+            return false;
+        if (i == a)
+            return true;
+    }
+    assert(false);
+    return false;
+};
+
 void BB::collectDominated(std::unordered_set<BB*>& subs, DominanceGraph& dom) {
     Visitor::run(this, [&](BB* child) {
         if (dom.dominates(this, child))
