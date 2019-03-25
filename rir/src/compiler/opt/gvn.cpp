@@ -12,7 +12,6 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
 
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<size_t, Value*> firstValue;
-    DominanceGraph dom(cls);
     {
         std::unordered_map<size_t, std::vector<size_t>> classes;
         std::unordered_map<Value*, size_t> number;
@@ -79,6 +78,15 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 return;
             }
 
+            // We allow instructions with those effects to be deduplicated.
+            auto maskedEffects =
+                i->effects & (~(Effects(Effect::Error) | Effect::Warn |
+                                Effect::Visibility | Effect::Force));
+            if (!maskedEffects.empty()) {
+                assignNumber(i);
+                return;
+            }
+
             if (!i->producesRirResult())
                 return;
 
@@ -133,21 +141,15 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                     nextNumber++;
                 constants.emplace(constant, nextNumber);
                 storeNumber(i, nextNumber, {nextNumber});
-            } else {
-                // We allow instructions with those effects to be deduplicated.
-                auto effects =
-                    i->effects & (~(Effects(Effect::Error) | Effect::Warn |
-                                    Effect::Visibility | Effect::Force));
-                if (effects.empty())
-                    computeNumber(i);
-                else
-                    assignNumber(i);
+                return;
             }
+
+            computeNumber(i);
         };
 
         while (changed) {
             changed = false;
-            DominatorTreeVisitor<>(dom).run(cls->entry, [&](BB* bb) {
+            Visitor::run(cls->entry, [&](BB* bb) {
                 for (auto i : *bb)
                     computeGN(i);
             });
@@ -169,6 +171,7 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
 
     {
         std::unordered_map<Value*, Value*> replacements;
+        DominanceGraph dom(cls);
 
         for (auto& g : reverseNumber) {
             auto p = g.second.begin();
