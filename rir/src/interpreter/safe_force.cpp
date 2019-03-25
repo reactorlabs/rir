@@ -18,8 +18,8 @@ SEXP safeEval(SEXP e, SEXP rho) {
             // TODO: Is this possible? Should it be assert(false)?
             return R_UnboundValue;
         }
-        Case(BCODESXP) { assert(false); }
-        Case(EXTERNALSXP) { assert(false); }
+        Case(BCODESXP) { return R_UnboundValue; }
+        Case(EXTERNALSXP) { return R_UnboundValue; }
         // TODO : some code (eg. serialize.c:2154) puts closures into asts...
         //        not sure how we want to handle it...
         // Case(CLOSXP) {
