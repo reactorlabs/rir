@@ -642,7 +642,7 @@ class Pir2Rir {
         }
 
       public:
-        CodeBuffer(CodeStream& cs) : cs(cs) {}
+        explicit CodeBuffer(CodeStream& cs) : cs(cs) {}
         ~CodeBuffer() { flush(); }
 
         void add(BC&& bc) {
