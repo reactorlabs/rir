@@ -8,7 +8,7 @@
 
 namespace rir {
 
-SEXP safeEval(SEXP e, SEXP rho) {
+static SEXP safeEval(SEXP e, SEXP rho) {
     Match(e) {
         // Function application
         Case(LANGSXP) { return R_UnboundValue; }
