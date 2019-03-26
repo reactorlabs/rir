@@ -9,15 +9,15 @@ template <>
 void DominatorTreeVisitor<VisitorHelpers::IDMarker>::run(
     BB* entry, BBAction action) const {
     VisitorHelpers::IDMarker done;
-    std::stack<BB*> todo;
-    todo.push(entry);
+    std::deque<BB*> todo;
+    todo.push_back(entry);
 
     while (!todo.empty()) {
-        BB* cur = todo.top();
-        todo.pop();
+        BB* cur = todo.front();
+        todo.pop_front();
         if (!done.check(cur)) {
             done.set(cur);
-            dom.dominatorTreeNext(cur, [&](BB* bb) { todo.push(bb); });
+            dom.dominatorTreeNext(cur, [&](BB* bb) { todo.push_back(bb); });
             action(cur);
         }
     }
@@ -48,16 +48,16 @@ void DominatorTreeVisitor<VisitorHelpers::PointerMarker>::run(
     }
     {
         VisitorHelpers::PointerMarker done;
-        std::stack<BB*> todo;
-        todo.push(entry);
+        std::deque<BB*> todo;
+        todo.push_back(entry);
 
         while (!todo.empty()) {
-            BB* cur = todo.top();
-            todo.pop();
+            BB* cur = todo.front();
+            todo.pop_front();
             if (!done.check(cur)) {
                 done.set(cur);
                 for (auto& bb : cache[cur])
-                    todo.push(bb);
+                    todo.push_back(bb);
                 action(cur);
             }
         }

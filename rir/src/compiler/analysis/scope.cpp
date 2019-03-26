@@ -316,5 +316,19 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
     return effect;
 }
 
+void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
+                                      Value* env,
+                                      const MaybeMaterialized& action) {
+    auto envState = state.envs.at(env);
+    std::unordered_map<SEXP, AbstractPirValue> theEnv;
+    for (auto& e : envState.entries) {
+        if (e.second.isUnknown())
+            return;
+        theEnv[e.first] = e.second;
+    }
+
+    action(theEnv);
+}
+
 } // namespace pir
 } // namespace rir

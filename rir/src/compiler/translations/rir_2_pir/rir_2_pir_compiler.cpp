@@ -230,7 +230,7 @@ void Rir2PirCompiler::optimizeModule() {
     logger.flush();
 }
 
-const size_t Rir2PirCompiler::MAX_INPUT_SIZE =
+size_t Rir2PirCompiler::MAX_INPUT_SIZE =
     getenv("PIR_MAX_INPUT_SIZE") ? atoi(getenv("PIR_MAX_INPUT_SIZE")) : 3500;
 
 } // namespace pir

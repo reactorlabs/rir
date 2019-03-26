@@ -3,6 +3,7 @@
 
 #include "../pir/pir.h"
 #include "abstract_result.h"
+#include "utils/Set.h"
 
 #include <functional>
 #include <set>
@@ -351,6 +352,36 @@ class AbstractUnique {
             out << "?";
         out << "\n";
     };
+};
+
+template <typename T>
+struct IntersectionSet {
+    SmallSet<T> available;
+
+    AbstractResult mergeExit(const IntersectionSet& other) {
+        return merge(other);
+    }
+
+    AbstractResult merge(const IntersectionSet& other) {
+        AbstractResult res;
+        for (auto it = available.cbegin(); it != available.cend();) {
+            if (other.available.includes(*it)) {
+                it++;
+            } else {
+                it = available.erase(it);
+                res.update();
+            }
+        }
+        return res;
+    }
+
+    void print(std::ostream& out, bool tty) {
+        for (auto& a : available) {
+            a.print(out, tty);
+            out << " ";
+        }
+        out << "\n";
+    }
 };
 }
 }

@@ -166,6 +166,12 @@ class ScopeAnalysis : public StaticAnalysis<
                    [&](const AbstractLoad& ld) { aLoad = ld; });
         return aLoad;
     }
+
+    typedef std::function<void(
+        const std::unordered_map<SEXP, AbstractPirValue>&)>
+        MaybeMaterialized;
+    void tryMaterializeEnv(const ScopeAnalysisState& state, Value* env,
+                           const MaybeMaterialized&);
 };
 } // namespace pir
 } // namespace rir
