@@ -260,6 +260,7 @@ SEXP materialize(void* rirDataWrapper) {
         return stub->create();
     }
     assert(false);
+    return nullptr;
 }
 
 SEXP* keepAliveSEXPs(void* rirDataWrapper) {
@@ -267,6 +268,7 @@ SEXP* keepAliveSEXPs(void* rirDataWrapper) {
         return env->gcData();
     }
     assert(false);
+    return nullptr;
 }
 
 SEXP lazyPromargsCreation(void* rirDataWrapper) {
@@ -300,9 +302,7 @@ SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
                  R_bcstack_t* = nullptr);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
-    int trampIn = ostack_length(ctx);
     if ((SETJMP(cntxt.cjmpbuf))) {
-        assert(trampIn == ostack_length(ctx));
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
@@ -317,6 +317,10 @@ static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
                                          SEXP env, SEXP arglist,
                                          InterpreterInstance* ctx) {
+    assert(TYPEOF(env) == ENVSXP ||
+           fun->signature().envCreation ==
+               FunctionSignature::Environment::CalleeCreated);
+
     RCNTXT cntxt;
 
     // This code needs to be protected, because its slot in the dispatch table
@@ -354,6 +358,8 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
     return rirCallTrampoline(call, fun, symbol::delayedEnv, arglist, ctx);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
                            const CallContext* callCtxt, Opcode* pc,
@@ -378,6 +384,7 @@ static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
     assert(res == loopTrampolineMarker);
     Rf_endcontext(&cntxt);
 }
+#pragma GCC diagnostic pop
 
 static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
                                     SEXP ast, SEXP sysparent, SEXP op,
@@ -1348,6 +1355,7 @@ RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
         cptr = cptr->nextcontext;
     }
     assert(false);
+    return nullptr;
 }
 
 RCNTXT* findFunctionContextFor(SEXP e) {
@@ -1411,7 +1419,11 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
     auto frameBaseSize = ostack_length(ctx) - excessStack;
+#pragma GCC diagnostic pop
+
     auto trampoline = [&]() {
         // 1. Set up our (outer) context
         //
@@ -1446,14 +1458,13 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         //
         // This wrapper consumes the environment from the deopt metadata and the
         // result of the previous frame.
-        size_t extraDeoptArgNum = innermostFrame ? 1 : 2;
         assert((size_t)ostack_length(ctx) ==
-               frameBaseSize + f.stackSize + extraDeoptArgNum);
+               frameBaseSize + f.stackSize + (innermostFrame ? 1 : 2));
         SEXP res = nullptr;
         if (!innermostFrame)
             res = ostack_pop(ctx);
-        SEXP e = ostack_pop(ctx);
-        assert(e == deoptEnv);
+        assert(ostack_top() == deoptEnv);
+        ostack_pop(ctx);
         if (!innermostFrame)
             ostack_push(ctx, res);
         code->registerInvocation();
@@ -1503,7 +1514,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         memset(R_BCNodeStackTop, 0, sizeof(*R_BCNodeStackTop) * c->localsCount);
 #endif
         localsBase = R_BCNodeStackTop;
-
     }
     Locals locals(localsBase, c->localsCount, existingLocals);
 
@@ -1559,9 +1569,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(pop_context_) {
-            return ostack_pop(ctx);
-        }
+        INSTRUCTION(pop_context_) { return ostack_pop(ctx); }
 
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
@@ -2074,11 +2082,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             advanceImmediate();
 
-            ArgsLazyData lazyArgs(&call, ctx);
-            fun->registerInvocation();
-            supplyMissingArgs(call, fun);
-            res = rirCallTrampoline(call, fun, symbol::delayedEnv,
-                                    (SEXP)&lazyArgs, ctx);
+            if (fun->signature().envCreation ==
+                FunctionSignature::Environment::CallerProvided) {
+                res = doCall(call, ctx);
+            } else {
+                ArgsLazyData lazyArgs(&call, ctx);
+                fun->registerInvocation();
+                supplyMissingArgs(call, fun);
+                res = rirCallTrampoline(call, fun, symbol::delayedEnv,
+                                        (SEXP)&lazyArgs, ctx);
+            }
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 
@@ -2654,6 +2667,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             default:
                 assert(false);
+                res = false;
                 break;
             }
             ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
@@ -3195,7 +3209,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             advanceImmediate();
 #ifndef UNSOUND_OPTS
-            assert(res == Rf_findFun(sym, env) && "guard_fun_ fail");
+            if (res != Rf_findFun(sym, env))
+                Rf_error("Invalid Callee");
 #endif
             NEXT();
         }
@@ -3537,5 +3552,6 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     }
 
     assert(false && "Expected a code object or a dispatch table");
+    return nullptr;
 }
 } // namespace rir

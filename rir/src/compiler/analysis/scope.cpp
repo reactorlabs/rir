@@ -1,5 +1,6 @@
 #include "scope.h"
 #include "../pir/pir_impl.h"
+#include "../util/safe_builtins_list.h"
 #include "query.h"
 
 namespace rir {
@@ -236,11 +237,28 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||
                     NamedCall::Cast(i)) &&
                    "New call instruction not handled?");
-            if (!CallSafeBuiltin::Cast(i)) {
+            auto safe = false;
+            if (auto builtin = CallBuiltin::Cast(i)) {
+                if (SafeBuiltinsList::nonObject(builtin->blt)) {
+                    safe = true;
+                    builtin->eachCallArg([&](Value* arg) {
+                        lookup(state, arg->followCastsAndForce(),
+                               [&](const AbstractPirValue& analysisRes) {
+                                   if (analysisRes.type.maybeObj())
+                                       safe = false;
+                               },
+                               [&]() {
+                                   if (arg->type.maybeObj())
+                                       safe = false;
+                               });
+                    });
+                }
+            }
+            if (CallSafeBuiltin::Cast(i) || safe) {
+                handled = true;
+            } else {
                 state.mayUseReflection = true;
                 effect.lostPrecision();
-            } else {
-                handled = true;
             }
         }
         if (!handled) {
@@ -298,5 +316,19 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
     return effect;
 }
 
+void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
+                                      Value* env,
+                                      const MaybeMaterialized& action) {
+    auto envState = state.envs.at(env);
+    std::unordered_map<SEXP, AbstractPirValue> theEnv;
+    for (auto& e : envState.entries) {
+        if (e.second.isUnknown())
+            return;
+        theEnv[e.first] = e.second;
+    }
+
+    action(theEnv);
 }
-}
+
+} // namespace pir
+} // namespace rir

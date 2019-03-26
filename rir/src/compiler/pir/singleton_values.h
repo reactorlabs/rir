@@ -106,12 +106,13 @@ class Tombstone : public Value {
     }
     SEXP asRValue() const override final {
         assert(false && "This value is dead");
+        return nullptr;
     }
 
   private:
     explicit Tombstone(PirType t) : Value(t, Tag::Tombstone) {}
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

@@ -14,7 +14,7 @@ before_script:
   - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
   - apt-get update -yq && apt-get -o dir::cache::archives="$APT_CACHE_DIR" install -y -qq git libcurl4-openssl-dev texlive-latex-extra texlive-latex-base texlive-fonts-recommended texlive-fonts-extra texlive-latex-recommended texlive-font-utils dvipng cm-super bison ca-certificates-java java-common libbison-dev libcairo-script-interpreter2 libcairo2-dev libjbig-dev libmime-charset-perl libpango1.0-dev libpcsclite1 libpixman-1-dev libsombok3 libtext-unidecode-perl libtiff5-dev libtiffxx5 libunicode-linebreak-perl libxcb-render0-dev libxcb-shm0-dev libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl mpack openjdk-11-jre openjdk-11-jre-headless texinfo g++ xdg-utils gfortran subversion make r-base-dev liblzma-dev sed binutils curl cmake rsync xorg-dev valgrind cppcheck xvfb xauth xfonts-base tk-dev ninja-build python-pip
   - mkdir build_release && cd build_release
-  - cmake -DCMAKE_BUILD_TYPE=release -GNinja ..
+  - cmake -DCMAKE_BUILD_TYPE=releaseassert -GNinja ..
   - ninja setup
   - ninja -j 3
   - cd ..

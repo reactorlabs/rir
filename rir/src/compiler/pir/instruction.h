@@ -137,6 +137,8 @@ class Instruction : public Value {
 
     bool hasEffect() const { return !effects.empty(); }
 
+    virtual size_t gvnBase() const = 0;
+
   private:
     Effects getObservableEffects() const {
         auto e = effects;
@@ -299,6 +301,7 @@ class Instruction : public Value {
     virtual Value* env() const {
         assert(!mayHaveEnv() && "subclass must override env() if it uses env");
         assert(false && "this instruction has no env");
+        return nullptr;
     }
     virtual void env(Value* env) {
         assert(!mayHaveEnv() && "subclass must override env() if it uses env");
@@ -309,6 +312,7 @@ class Instruction : public Value {
         assert(!mayHaveEnv() &&
                "subclass must override envSlot() if it uses env");
         assert(false && "this instruction has no env");
+        return -1;
     }
 };
 
@@ -332,6 +336,12 @@ class InstructionImplementation : public Instruction {
         assert(Base::Cast(this));
         return new Base(*static_cast<const Base*>(this));
     }
+
+    size_t gvnBase() const override {
+        auto maskedEffects = effects & ~(Effects(Effect::Error) | Effect::Warn |
+                                         Effect::Visibility | Effect::Force);
+        return hash_combine((size_t)ITAG, maskedEffects.to_i());
+    };
 
     bool mayHaveEnv() const override final { return ENV == HasEnvSlot::Yes; }
     bool hasEnv() const override final {
@@ -573,6 +583,9 @@ class FLI(LdConst, 0, Effects::None()) {
     LdConst(SEXP c, PirType t);
     explicit LdConst(SEXP c);
     void printArgs(std::ostream& out, bool tty) const override;
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), c());
+    }
 };
 
 class FLIE(LdFun, 2, Effects::Any()) {
@@ -602,6 +615,10 @@ class FLIE(LdFun, 2, Effects::Any()) {
     }
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
 };
 
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
@@ -618,6 +635,10 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     }
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
 };
 
 class FLI(ForSeqSize, 1, Effect::Error) {
@@ -634,6 +655,10 @@ class FLI(LdArg, 0, Effects::None()) {
     explicit LdArg(size_t id) : FixedLenInstruction(PirType::any()), id(id) {}
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), id);
+    }
 };
 
 class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
@@ -643,6 +668,10 @@ class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
         : FixedLenInstructionWithEnvSlot(RType::logical, env),
           varName(varName) {}
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
 };
 
 class FLI(ChkMissing, 1, Effect::Warn) {
@@ -675,6 +704,10 @@ class FLIE(StVarSuper, 2, Effects() | Effect::ReadsEnv | Effect::WritesEnv) {
     using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
 };
 
 class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
@@ -689,6 +722,10 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     SEXP varName;
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
 };
 
 class FLIE(StVar, 2, Effect::WritesEnv) {
@@ -709,6 +746,10 @@ class FLIE(StVar, 2, Effect::WritesEnv) {
     using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
 };
 
 // Pseudo Instruction. Is actually a StVar with a flag set.
@@ -769,6 +810,10 @@ class FLIE(MkArg, 2, Effects::None()) {
     void printArgs(std::ostream& out, bool tty) const override;
 
     Value* promEnv() const { return env(); }
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), prom_);
+    }
 };
 
 class FLI(Seq, 3, Effects::None()) {
@@ -802,6 +847,10 @@ class FLIE(MkFunCls, 1, Effects::None()) {
     void printArgs(std::ostream&, bool tty) const override;
 
     Value* lexicalEnv() const { return env(); }
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), cls);
+    }
 };
 
 class FLIE(Force, 2, Effects::Any()) {
@@ -1171,6 +1220,8 @@ class VLIE(FrameState, Effect::LeaksEnv) {
 
     void printArgs(std::ostream& out, bool tty) const override;
     void printEnv(std::ostream& out, bool tty) const override final{};
+
+    size_t gvnBase() const override { return (size_t)this; }
 };
 
 // Common interface to all call instructions
@@ -1304,6 +1355,10 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     ClosureVersion* tryDispatch() const;
 
     ClosureVersion* tryOptimisticDispatch() const;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), cls_);
+    }
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
@@ -1326,6 +1381,10 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     }
     void printArgs(std::ostream & out, bool tty) const override;
     Value* callerEnv() { return env(); }
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), blt);
+    }
 
   private:
     CallBuiltin(Value * callerEnv, SEXP builtin,
@@ -1354,6 +1413,10 @@ class VLI(CallSafeBuiltin,
 
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned srcIdx);
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), blt);
+    }
 };
 
 class BuiltinCallFactory {
@@ -1399,6 +1462,8 @@ class VLIE(MkEnv, Effects::None()) {
     const char* name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
+
+    size_t gvnBase() const override { return (size_t)this; }
 };
 
 class FLI(IsObject, 1, Effects::None()) {

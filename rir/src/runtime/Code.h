@@ -13,9 +13,6 @@ namespace rir {
 typedef SEXP FunctionSEXP;
 typedef SEXP CodeSEXP;
 
-struct Function;
-struct FunctionSignature;
-
 #define CODE_MAGIC 0xc0de0000
 
 /**
@@ -46,7 +43,6 @@ static unsigned pad4(unsigned sizeInBytes) {
 }
 
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
-    friend struct Function;
     friend class FunctionWriter;
     friend class CodeVerifier;
     static constexpr size_t NumLocals = 1;
