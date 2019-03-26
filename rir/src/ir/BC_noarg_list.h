@@ -55,6 +55,8 @@
     V(NESTED, setShared, set_shared)                                           \
     V(NESTED, ensureNamed, ensure_named)                                       \
     V(NESTED, asLogical, aslogical)                                            \
+    V(NESTED, ceil, ceil)                                                      \
+    V(NESTED, floor, floor)                                                    \
     V(NESTED, lglOr, lgl_or)                                                   \
     V(NESTED, lglAnd, lgl_and)                                                 \
     V(NESTED, isfun, isfun)                                                    \

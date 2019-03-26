@@ -642,7 +642,6 @@ BC_NOARGS(V, _)
         case Opcode::is_:
         case Opcode::put_:
         case Opcode::alloc_:
-        case Opcode::asint_:
             memcpy(&immediate.i, pc, sizeof(uint32_t));
             break;
         case Opcode::ldarg_:

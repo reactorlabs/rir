@@ -111,7 +111,6 @@ BC_NOARGS(V, _)
     case Opcode::is_:
     case Opcode::put_:
     case Opcode::alloc_:
-    case Opcode::asint_:
         cs.insert(immediate.i);
         return;
 
@@ -268,9 +267,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::is_:
     case Opcode::alloc_:
         out << type2char(immediate.i);
-        break;
-    case Opcode::asint_:
-        out << ((bool)immediate.i ? "ceil" : "floor");
         break;
     case Opcode::record_call_: {
         ObservedCallees prof = immediate.callFeedback;
