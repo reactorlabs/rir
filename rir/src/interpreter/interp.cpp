@@ -1325,7 +1325,7 @@ RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
     if (isNaOrNan) {
         Rf_errorcall(getSrcAt(c, pc - 1, ctx), "NA/NaN argument");
     }
-    res = Rf_allocVector(INTSXP, 1);
+    SEXP res = Rf_allocVector(INTSXP, 1);
     *INTEGER(res) = x;
     ostack_pop(ctx);
     ostack_push(ctx, res);

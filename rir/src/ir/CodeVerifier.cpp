@@ -174,12 +174,13 @@ static Sources hasSources(Opcode bc) {
     case Opcode::deopt_:
     case Opcode::pop_context_:
     case Opcode::push_context_:
+    case Opcode::ceil_:
+    case Opcode::floor_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:
     case Opcode::aslogical_:
     case Opcode::asbool_:
-    case Opcode::asint_:
     case Opcode::missing_:
 #define V(NESTED, name, Name)\
     case Opcode::name ## _:\
