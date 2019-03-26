@@ -29,7 +29,7 @@ class TheCleanup {
                 auto next = ip + 1;
                 bool removed = false;
                 if (!i->branchOrExit() && !i->hasObservableEffects() &&
-                    i->unused()) {
+                    i->unused() && !i->isDebug()) {
                     removed = true;
                     next = bb->remove(ip);
                 } else if (auto force = Force::Cast(i)) {

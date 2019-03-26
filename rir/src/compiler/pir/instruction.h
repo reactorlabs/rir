@@ -238,6 +238,7 @@ class Instruction : public Value {
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();
+    virtual bool isDebug() const { return false; }
 
     virtual void updateType(){};
 
@@ -1532,6 +1533,7 @@ class FLI(TmpGet, 0, Effects::None()) {
     explicit TmpGet(DebugPoolIdx idx_)
         : FixedLenInstruction(PirType::bottom(), {{}}, {{}}), idx(idx_) {}
 
+    bool isDebug() const override { return true; }
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
@@ -1543,6 +1545,7 @@ class FLI(TmpSet, 1, Effects::None()) {
         : FixedLenInstruction(PirType::voyd(), {{PirType::any()}}, {{val}}),
           idx(idx_) {}
 
+    bool isDebug() const override { return true; }
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
@@ -1555,6 +1558,7 @@ class FLI(Print, 1, Effects::None()) {
           idx(idx_) {}
 
     const char* prefix() const { return DebugPool::prefixAt(idx); }
+    bool isDebug() const override { return true; }
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
@@ -1562,6 +1566,8 @@ class FLI(Assert, 1, Effects::None()) {
   public:
     explicit Assert(Value* val)
         : FixedLenInstruction(PirType::voyd(), {{PirType::any()}}, {{val}}) {}
+
+    bool isDebug() const override { return true; }
 };
 #endif
 
