@@ -21,6 +21,7 @@ f <- rir.compile(function() {
 stopifnot(f() == 1)
 print(f())
 pir.compile(f)
+rir.disassemble(f)
 print(f())
 stopifnot(f() == 1)
 

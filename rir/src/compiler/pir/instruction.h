@@ -897,6 +897,10 @@ class FLI(AsInt, 1, Effect::Error) {
         : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
                               {{PirType::any()}}, {{in}}),
           ceil(ceil_) {}
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), ceil);
+    }
 };
 
 class FLIE(Subassign1_1D, 4, Effects::Any()) {
