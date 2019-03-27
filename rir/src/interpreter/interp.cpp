@@ -517,8 +517,7 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
         Code* c = fun->defaultArg(pos++);
         if (CAR(f) != R_MissingArg) {
             if (CAR(a) == R_MissingArg) {
-                SLOWASSERT(c != nullptr &&
-                           "No more compiled formals available.");
+                SLOWASSERT(c && "No more compiled formals available.");
                 SETCAR(a, createPromise(c, newrho));
                 SET_MISSING(a, 2);
             }
@@ -901,7 +900,7 @@ static R_INLINE int RInteger_plus(int x, int y, Rboolean* pnaflag) {
 
     if (((y > 0) && (x > (R_INT_MAX - y))) ||
         ((y < 0) && (x < (R_INT_MIN - y)))) {
-        if (pnaflag != NULL)
+        if (pnaflag)
             *pnaflag = TRUE;
         return NA_INTEGER;
     }
@@ -914,7 +913,7 @@ static R_INLINE int RInteger_minus(int x, int y, Rboolean* pnaflag) {
 
     if (((y < 0) && (x > (R_INT_MAX + y))) ||
         ((y > 0) && (x < (R_INT_MIN + y)))) {
-        if (pnaflag != NULL)
+        if (pnaflag)
             *pnaflag = TRUE;
         return NA_INTEGER;
     }
@@ -930,7 +929,7 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
         if (GOODIPROD(x, y, z) && z != NA_INTEGER)
             return z;
         else {
-            if (pnaflag != NULL)
+            if (pnaflag)
                 *pnaflag = TRUE;
             return NA_INTEGER;
         }
@@ -949,21 +948,13 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
 
 #define BINOP_FALLBACK(op)                                                     \
     do {                                                                       \
-        static SEXP prim = NULL;                                               \
-        static CCODE blt;                                                      \
-        static int flag;                                                       \
-        if (!prim) {                                                           \
-            prim = Rf_findFun(Rf_install(op), R_GlobalEnv);                    \
-            blt = getBuiltin(prim);                                            \
-            flag = getFlag(prim);                                              \
-        }                                                                      \
+        static SEXP prim = Rf_findFun(Rf_install(op), R_GlobalEnv);            \
+        static CCODE blt = getBuiltin(prim);                                   \
+        static int flag = getFlag(prim);                                       \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
-        PROTECT(call);                                                         \
-        SEXP lhsSexp = ostackObjToSexpAt(lhs, ctx, 1);                         \
-        PROTECT(lhsSexp);                                                      \
-        SEXP rhsSexp = ostackObjToSexpAt(rhs, ctx, 0);                         \
-        SEXP argslist = CONS_NR(lhsSexp, CONS_NR(rhsSexp, R_NilValue));        \
-        UNPROTECT(2);                                                          \
+        SEXP argslist =                                                        \
+            CONS_NR(ostackObjToSexpAt(lhs, ctx, 1),                            \
+                    CONS_NR(ostackObjToSexpAt(rhs, ctx, 0), R_NilValue));      \
         ostackPushSexp(ctx, argslist);                                         \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
@@ -977,13 +968,16 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
 #define STORE_BINOP(res)                                                       \
     do {                                                                       \
         ostackPop(ctx);                                                        \
-        if (res.tag != STACK_OBJ_SEXP && lhs.tag == STACK_OBJ_SEXP &&          \
-            trySetInPlace(lhs.u.sxpval, res)) {                                \
-        } else if (res.tag != STACK_OBJ_SEXP && rhs.tag == STACK_OBJ_SEXP &&   \
-                   trySetInPlace(rhs.u.sxpval, res)) {                         \
+        R_bcstack_t __res__ = (res);                                           \
+        if (__res__.tag != STACK_OBJ_SEXP && lhs.tag == STACK_OBJ_SEXP &&      \
+            trySetInPlace(lhs.u.sxpval, __res__)) {                            \
+            break;                                                             \
+        } else if (__res__.tag != STACK_OBJ_SEXP &&                            \
+                   rhs.tag == STACK_OBJ_SEXP &&                                \
+                   trySetInPlace(rhs.u.sxpval, __res__)) {                     \
             ostackSet(ctx, 0, rhs);                                            \
         } else {                                                               \
-            ostackSet(ctx, 0, res);                                            \
+            ostackSet(ctx, 0, __res__);                                        \
         }                                                                      \
     } while (false)
 
@@ -1010,14 +1004,14 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
                 double real_res =                                              \
                     (l == NA_REAL || r == NA_REAL) ? NA_REAL : l op r;         \
                 STORE_BINOP_FAST(real_res, true, true, Real, REAL);            \
+                break;                                                         \
             } else if (stackObjIsSimpleScalar(rhs, INTSXP)) {                  \
                 double l = tryStackObjToReal(lhs);                             \
                 int r = tryStackObjToInteger(rhs);                             \
                 double real_res =                                              \
                     (l == NA_REAL || r == NA_INTEGER) ? NA_REAL : l op r;      \
                 STORE_BINOP_FAST(real_res, true, false, Real, REAL);           \
-            } else {                                                           \
-                BINOP_FALLBACK(#op);                                           \
+                break;                                                         \
             }                                                                  \
         } else if (stackObjIsSimpleScalar(lhs, INTSXP)) {                      \
             if (stackObjIsSimpleScalar(rhs, INTSXP)) {                         \
@@ -1027,130 +1021,22 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
                 int int_res = Op2(l, r, &naflag);                              \
                 CHECK_INTEGER_OVERFLOW(naflag);                                \
                 STORE_BINOP_FAST(int_res, true, true, Int, INTEGER);           \
+                break;                                                         \
             } else if (stackObjIsSimpleScalar(rhs, REALSXP)) {                 \
                 int l = tryStackObjToInteger(lhs);                             \
                 double r = tryStackObjToReal(rhs);                             \
                 double real_res =                                              \
                     (l == NA_INTEGER || r == NA_REAL) ? NA_REAL : l op r;      \
                 STORE_BINOP_FAST(real_res, false, true, Real, REAL);           \
-            } else {                                                           \
-                BINOP_FALLBACK(#op);                                           \
+                break;                                                         \
             }                                                                  \
-        } else {                                                               \
-            BINOP_FALLBACK(#op);                                               \
         }                                                                      \
-    } while (false)
-
-static double myfloor(double x1, double x2) {
-    double q = x1 / x2, tmp;
-
-    if (x2 == 0.0)
-        return q;
-    tmp = x1 - floor(q) * x2;
-    return floor(q) + floor(tmp / x2);
-}
-
-static double myfmod(double x1, double x2) {
-    if (x2 == 0.0)
-        return R_NaN;
-    double q = x1 / x2, tmp = x1 - floor(q) * x2;
-    if (R_FINITE(q) && (fabs(q) > 1 / R_AccuracyInfo.eps))
-        Rf_warning("probable complete loss of accuracy in modulus");
-    q = floor(tmp / x2);
-    return tmp - q * x2;
-}
-
-static R_INLINE int RInteger_uplus(int x, Rboolean* pnaflag) {
-    if (x == NA_INTEGER)
-        return NA_INTEGER;
-
-    return x;
-}
-
-static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
-    if (x == NA_INTEGER)
-        return NA_INTEGER;
-
-    return -x;
-}
-
-#define STORE_UNOP(res)                                                        \
-    do {                                                                       \
-        if (res.tag != STACK_OBJ_SEXP && val.tag == STACK_OBJ_SEXP &&          \
-            trySetInPlace(val.u.sxpval, res)) {                                \
-            ;                                                                  \
-        } else {                                                               \
-            ostackSet(ctx, 0, res);                                            \
-        }                                                                      \
-    } while (false)
-
-#define STORE_UNOP_FAST(res, Type, TYPE)                                       \
-    do {                                                                       \
-        if (val.tag == STACK_OBJ_SEXP && NO_REFERENCES(val.u.sxpval)) {        \
-            *TYPE(val.u.sxpval) = res;                                         \
-        } else {                                                               \
-            ostackSet##Type(ctx, 0, res);                                      \
-        }                                                                      \
-    } while (false)
-
-#define UNOP_FALLBACK(op)                                                      \
-    do {                                                                       \
-        static SEXP prim = NULL;                                               \
-        static CCODE blt;                                                      \
-        static int flag;                                                       \
-        if (!prim) {                                                           \
-            prim = Rf_findFun(Rf_install(op), R_GlobalEnv);                    \
-            blt = getBuiltin(prim);                                            \
-            flag = getFlag(prim);                                              \
-        }                                                                      \
-        SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
-        PROTECT(call);                                                         \
-        SEXP valSexp = ostackObjToSexpAt(val, ctx, 0);                         \
-        PROTECT(valSexp);                                                      \
-        SEXP argslist = CONS_NR(valSexp, R_NilValue);                          \
-        UNPROTECT(2);                                                          \
-        ostackPushSexp(ctx, argslist);                                         \
-        if (flag < 2)                                                          \
-            R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        SEXP res = blt(call, prim, argslist, env);                             \
-        if (flag < 2)                                                          \
-            R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        ostackPop(ctx);                                                        \
-        STORE_UNOP(sexpToStackObj(res));                                       \
-    } while (false)
-
-#define DO_UNOP(op, Op2)                                                       \
-    do {                                                                       \
-        Rboolean naflag = FALSE;                                               \
-        if (stackObjIsSimpleScalar(val, REALSXP)) {                            \
-            double x = tryStackObjToReal(val);                                 \
-            double res = (x == NA_REAL) ? NA_REAL : op x;                      \
-            STORE_UNOP_FAST(res, Real, REAL);                                  \
-        } else if (stackObjIsSimpleScalar(val, INTSXP)) {                      \
-            int res = Op2(tryStackObjToInteger(val), &naflag);                 \
-            CHECK_INTEGER_OVERFLOW(naflag);                                    \
-            STORE_UNOP_FAST(res, Int, INTEGER);                                \
-        } else {                                                               \
-            UNOP_FALLBACK(#op);                                                \
-            break;                                                             \
-        }                                                                      \
+        BINOP_FALLBACK(#op);                                                   \
     } while (false)
 
 #define DO_RELOP(op)                                                           \
     do {                                                                       \
-        if (stackObjIsSimpleScalar(lhs, LGLSXP)) {                             \
-            if (stackObjIsSimpleScalar(rhs, LGLSXP)) {                         \
-                int l = tryStackObjToLogical(lhs);                             \
-                int r = tryStackObjToLogical(rhs);                             \
-                if (l == NA_LOGICAL || r == NA_LOGICAL) {                      \
-                    STORE_BINOP_FAST(NA_LOGICAL, true, true, Logical,          \
-                                     LOGICAL);                                 \
-                } else {                                                       \
-                    STORE_BINOP_FAST(l op r, true, true, Logical, LOGICAL);    \
-                }                                                              \
-                break;                                                         \
-            }                                                                  \
-        } else if (stackObjIsSimpleScalar(lhs, REALSXP)) {                     \
+        if (stackObjIsSimpleScalar(lhs, REALSXP)) {                            \
             if (stackObjIsSimpleScalar(rhs, REALSXP)) {                        \
                 double l = tryStackObjToReal(lhs);                             \
                 double r = tryStackObjToReal(rhs);                             \
@@ -1194,6 +1080,86 @@ static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
         BINOP_FALLBACK(#op);                                                   \
     } while (false)
 
+static double myfloor(double x1, double x2) {
+    double q = x1 / x2, tmp;
+    if (x2 == 0.0)
+        return q;
+    tmp = x1 - floor(q) * x2;
+    return floor(q) + floor(tmp / x2);
+}
+
+static double myfmod(double x1, double x2) {
+    if (x2 == 0.0)
+        return R_NaN;
+    double q = x1 / x2, tmp = x1 - floor(q) * x2;
+    if (R_FINITE(q) && (fabs(q) > 1 / R_AccuracyInfo.eps))
+        Rf_warning("probable complete loss of accuracy in modulus");
+    q = floor(tmp / x2);
+    return tmp - q * x2;
+}
+
+static R_INLINE int RInteger_uplus(int x, Rboolean* pnaflag) { return x; }
+
+static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
+    if (x == NA_INTEGER)
+        return NA_INTEGER;
+    return -x;
+}
+
+#define UNOP_FALLBACK(op)                                                      \
+    do {                                                                       \
+        static SEXP prim = Rf_findFun(Rf_install(op), R_GlobalEnv);            \
+        static CCODE blt = getBuiltin(prim);                                   \
+        static int flag = getFlag(prim);                                       \
+        SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
+        SEXP argslist = CONS_NR(ostackObjToSexpAt(val, 0), R_NilValue);        \
+        ostackPushSexp(argslist);                                              \
+        if (flag < 2)                                                          \
+            R_Visible = static_cast<Rboolean>(flag != 1);                      \
+        SEXP res = blt(call, prim, argslist, env);                             \
+        if (flag < 2)                                                          \
+            R_Visible = static_cast<Rboolean>(flag != 1);                      \
+        ostackPop();                                                           \
+        STORE_UNOP(sexpToStackObj(res));                                       \
+    } while (false)
+
+#define STORE_UNOP(res)                                                        \
+    do {                                                                       \
+        R_bcstack_t __res__ = (res);                                           \
+        if (__res__.tag != STACK_OBJ_SEXP && val.tag == STACK_OBJ_SEXP &&      \
+            trySetInPlace(val.u.sxpval, __res__)) {                            \
+            break;                                                             \
+        } else {                                                               \
+            ostackSet(ctx, 0, __res__);                                        \
+        }                                                                      \
+    } while (false)
+
+#define STORE_UNOP_FAST(res, Type, TYPE)                                       \
+    do {                                                                       \
+        if (val.tag == STACK_OBJ_SEXP && NO_REFERENCES(val.u.sxpval)) {        \
+            *TYPE(val.u.sxpval) = res;                                         \
+        } else {                                                               \
+            ostackSet##Type(ctx, 0, res);                                      \
+        }                                                                      \
+    } while (false)
+
+#define DO_UNOP(op, Op2)                                                       \
+    do {                                                                       \
+        Rboolean naflag = FALSE;                                               \
+        if (stackObjIsSimpleScalar(val, REALSXP)) {                            \
+            double x = tryStackObjToReal(val);                                 \
+            double res = (x == NA_REAL) ? NA_REAL : op x;                      \
+            STORE_UNOP_FAST(res, Real, REAL);                                  \
+            break;                                                             \
+        } else if (stackObjIsSimpleScalar(val, INTSXP)) {                      \
+            int res = Op2(tryStackObjToInteger(val), &naflag);                 \
+            CHECK_INTEGER_OVERFLOW(naflag);                                    \
+            STORE_UNOP_FAST(res, Int, INTEGER);                                \
+            break;                                                             \
+        }                                                                      \
+        UNOP_FALLBACK(#op);                                                    \
+    } while (false)
+
 static SEXP seq_int(int n1, int n2) {
     int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
     SEXP ans = Rf_allocVector(INTSXP, n);
@@ -1218,7 +1184,7 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx,
                                             InterpreterInstance* ctx,
                                             BindingCache* bindingCache) {
     if (env == R_BaseEnv || env == R_BaseNamespace)
-        return NULL;
+        return nullptr;
 
     Immediate cidx = idx % BINDING_CACHE_SIZE;
     if (bindingCache[cidx].idx == idx) {
@@ -1233,7 +1199,7 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx,
         bindingCache[cidx].idx = idx;
         return loc.cell;
     }
-    return NULL;
+    return nullptr;
 }
 
 static SEXP cachedGetVar(SEXP env, Immediate idx, InterpreterInstance* ctx,
@@ -1304,7 +1270,7 @@ static void cachedSetVar(R_bcstack_t val, SEXP env, Immediate idx,
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
 RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
-    while (cptr->nextcontext != NULL) {
+    while (cptr->nextcontext) {
         if (cptr->callflag & CTXT_FUNCTION) {
             if (pos == 0)
                 return cptr;
@@ -1318,7 +1284,7 @@ RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
 
 RCNTXT* findFunctionContextFor(SEXP e) {
     auto cptr = R_GlobalContext;
-    while (cptr->nextcontext != NULL) {
+    while (cptr->nextcontext) {
         if (cptr->callflag & CTXT_FUNCTION && cptr->cloenv == e) {
             return cptr;
         }
@@ -1448,7 +1414,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         const CallContext* callCtxt, Opcode* initialPC,
                         R_bcstack_t* localsBase) {
-    SLOWASSERT(env != symbol::delayedEnv || (callCtxt != nullptr));
+    SLOWASSERT(env != symbol::delayedEnv || callCtxt);
 
 #ifdef THREADED_CODE
     static void* opAddr[static_cast<uint8_t>(Opcode::num_of)] = {
@@ -1841,8 +1807,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(stloc_) {
             Immediate offset = readImmediate();
             advanceImmediate();
-            locals.store(offset, ostackTop(ctx));
-            ostackPop(ctx);
+            locals.store(offset, ostackPop(ctx));
             NEXT();
         }
 
@@ -1876,8 +1841,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(c, ostackSexpAt(ctx, 0), n, ast, arguments, names,
                              env, given, ctx);
             R_bcstack_t res = doCall(call, ctx);
-            ostackPop(ctx); // callee
-            ostackPush(ctx, res);
+            // Callee is TOS, overwrite with result
+            ostackSet(ctx, 0, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll == ostackLength(ctx));
@@ -1921,8 +1886,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(c, ostackSexpAt(ctx, 0), n, ast, arguments, env,
                              given, ctx);
             R_bcstack_t res = doCall(call, ctx);
-            ostackPop(ctx); // callee
-            ostackPush(ctx, res);
+            // Callee is TOS, overwrite with result
+            ostackSet(ctx, 0, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll == ostackLength(ctx));
@@ -1945,8 +1910,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(c, ostackSexpAt(ctx, n), n, ast,
                              ostackCellAt(ctx, n - 1), env, given, ctx);
             R_bcstack_t res = doCall(call, ctx);
-            ostackPopn(ctx, call.passedArgs + 1);
-            ostackPush(ctx, res);
+            ostackPopn(call.passedArgs);
+            // Callee is TOS, overwrite with result
+            ostackSet(ctx, 0, res);
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostackLength(ctx));
             NEXT();
@@ -1970,8 +1936,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(c, ostackSexpAt(ctx, n), n, ast,
                              ostackCellAt(ctx, n - 1), names, env, given, ctx);
             R_bcstack_t res = doCall(call, ctx);
-            ostackPopn(ctx, call.passedArgs + 1);
-            ostackPush(ctx, res);
+            ostackPopn(call.passedArgs);
+            // Callee is TOS, overwrite with result
+            ostackSet(ctx, 0, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostackLength(ctx));
@@ -2157,10 +2124,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(swap_) {
-            R_bcstack_t lhs = ostackPop(ctx);
-            R_bcstack_t rhs = ostackPop(ctx);
-            ostackPush(ctx, lhs);
-            ostackPush(ctx, rhs);
+            R_bcstack_t top = ostackPop(ctx);
+            ostackPush(ctx, ostackTop(ctx));
+            ostackSet(ctx, 1, top);
             NEXT();
         }
 
@@ -2193,8 +2159,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(pull_) {
             Immediate i = readImmediate();
             advanceImmediate();
-            R_bcstack_t val = ostackAt(ctx, i);
-            ostackPush(ctx, val);
+            ostackPush(ctx, ostackAt(ctx, i));
             NEXT();
         }
 
@@ -2640,7 +2605,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SLOWASSERT(!DDVAL(sym));
             SLOWASSERT(env);
             SEXP val = R_findVarLocInFrame(env, sym).cell;
-            if (val == NULL)
+            if (!val)
                 Rf_errorcall(getSrcAt(c, pc - 1, ctx),
                              "'missing' can only be used for arguments");
 
@@ -3204,7 +3169,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(seq_) {
-            static SEXP prim = NULL;
+            static SEXP prim = nullptr;
             if (!prim) {
                 // TODO: we could call seq.default here, but it messes up the
                 // error call :(
@@ -3308,7 +3273,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
-            if (res == NULL) {
+            if (!res) {
                 BINOP_FALLBACK(":");
             } else {
                 STORE_BINOP(sexpToStackObj(res));
