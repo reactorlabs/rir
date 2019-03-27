@@ -894,7 +894,9 @@ static SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
 #define R_INT_MIN -INT_MAX
 // .. relying on fact that NA_INTEGER is outside of these
 
-static R_INLINE int RInteger_plus(int x, int y, Rboolean* pnaflag) {
+#define GOODIPROD(x, y, z) ((double)(x) * (double)(y) == (z))
+
+static RIR_INLINE int RInteger_plus(int x, int y, Rboolean* pnaflag) {
     if (x == NA_INTEGER || y == NA_INTEGER)
         return NA_INTEGER;
 
@@ -907,7 +909,7 @@ static R_INLINE int RInteger_plus(int x, int y, Rboolean* pnaflag) {
     return x + y;
 }
 
-static R_INLINE int RInteger_minus(int x, int y, Rboolean* pnaflag) {
+static RIR_INLINE int RInteger_minus(int x, int y, Rboolean* pnaflag) {
     if (x == NA_INTEGER || y == NA_INTEGER)
         return NA_INTEGER;
 
@@ -920,8 +922,7 @@ static R_INLINE int RInteger_minus(int x, int y, Rboolean* pnaflag) {
     return x - y;
 }
 
-#define GOODIPROD(x, y, z) ((double)(x) * (double)(y) == (z))
-static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
+static RIR_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
     if (x == NA_INTEGER || y == NA_INTEGER)
         return NA_INTEGER;
     else {
@@ -936,13 +937,39 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
     }
 }
 
-#define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
+static RIR_INLINE double myfloor(double x1, double x2) {
+    double q = x1 / x2, tmp;
+    if (x2 == 0.0)
+        return q;
+    tmp = x1 - floor(q) * x2;
+    return floor(q) + floor(tmp / x2);
+}
+
+static RIR_INLINE double myfmod(double x1, double x2) {
+    if (x2 == 0.0)
+        return R_NaN;
+    double q = x1 / x2, tmp = x1 - floor(q) * x2;
+    if (R_FINITE(q) && (fabs(q) > 1 / R_AccuracyInfo.eps))
+        Rf_warning("probable complete loss of accuracy in modulus");
+    q = floor(tmp / x2);
+    return tmp - q * x2;
+}
+
+static RIR_INLINE int RInteger_uplus(int x, Rboolean* pnaflag) {
+    return x;
+}
+
+static RIR_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
+    if (x == NA_INTEGER)
+        return NA_INTEGER;
+    return -x;
+}
 
 #define CHECK_INTEGER_OVERFLOW(naflag)                                         \
     do {                                                                       \
         if (naflag) {                                                          \
             SEXP call = getSrcForCall(c, pc - 1, ctx);                         \
-            Rf_warningcall(call, INTEGER_OVERFLOW_WARNING);                    \
+            Rf_warningcall(call, "NAs produced by integer overflow");          \
         }                                                                      \
     } while (0)
 
@@ -1080,32 +1107,6 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
         BINOP_FALLBACK(#op);                                                   \
     } while (false)
 
-static double myfloor(double x1, double x2) {
-    double q = x1 / x2, tmp;
-    if (x2 == 0.0)
-        return q;
-    tmp = x1 - floor(q) * x2;
-    return floor(q) + floor(tmp / x2);
-}
-
-static double myfmod(double x1, double x2) {
-    if (x2 == 0.0)
-        return R_NaN;
-    double q = x1 / x2, tmp = x1 - floor(q) * x2;
-    if (R_FINITE(q) && (fabs(q) > 1 / R_AccuracyInfo.eps))
-        Rf_warning("probable complete loss of accuracy in modulus");
-    q = floor(tmp / x2);
-    return tmp - q * x2;
-}
-
-static R_INLINE int RInteger_uplus(int x, Rboolean* pnaflag) { return x; }
-
-static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
-    if (x == NA_INTEGER)
-        return NA_INTEGER;
-    return -x;
-}
-
 #define UNOP_FALLBACK(op)                                                      \
     do {                                                                       \
         static SEXP prim = Rf_findFun(Rf_install(op), R_GlobalEnv);            \
@@ -1160,7 +1161,7 @@ static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
         UNOP_FALLBACK(#op);                                                    \
     } while (false)
 
-static SEXP seq_int(int n1, int n2) {
+static RIR_INLINE SEXP seq_int(int n1, int n2) {
     int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
     SEXP ans = Rf_allocVector(INTSXP, n);
     int* data = INTEGER(ans);
@@ -2236,14 +2237,14 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 int r = tryStackObjToInteger(rhs);
                 double real_res =
                     (l == NA_REAL || r == NA_INTEGER) ? NA_REAL : l / (double)r;
-                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+                STORE_BINOP_FAST(real_res, true, false, Real, REAL);
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, REALSXP)) {
                 int l = tryStackObjToInteger(lhs);
                 double r = tryStackObjToReal(rhs);
                 double real_res =
                     (l == NA_INTEGER || r == NA_REAL) ? NA_REAL : (double)l / r;
-                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+                STORE_BINOP_FAST(real_res, false, true, Real, REAL);
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
                 int l = tryStackObjToInteger(lhs);
@@ -2251,7 +2252,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 double real_res = (l == NA_INTEGER || r == NA_INTEGER)
                                       ? NA_REAL
                                       : (double)l / (double)r;
-                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+                STORE_BINOP_FAST(real_res, false, false, Real, REAL);
             } else {
                 BINOP_FALLBACK("/");
             }
@@ -2276,7 +2277,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 double real_res = (l == NA_REAL || r == NA_INTEGER)
                                       ? NA_REAL
                                       : myfloor(l, (double)r);
-                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+                STORE_BINOP_FAST(real_res, true, false, Real, REAL);
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, REALSXP)) {
                 int l = tryStackObjToInteger(lhs);
@@ -2284,7 +2285,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 double real_res = (l == NA_INTEGER || r == NA_REAL)
                                       ? NA_REAL
                                       : myfloor((double)l, r);
-                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+                STORE_BINOP_FAST(real_res, false, true, Real, REAL);
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
                 int l = tryStackObjToInteger(lhs);
@@ -2312,12 +2313,12 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
                 double real_res = myfmod(tryStackObjToReal(lhs),
                                          (double)tryStackObjToInteger(rhs));
-                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+                STORE_BINOP_FAST(real_res, true, false, Real, REAL);
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, REALSXP)) {
                 double real_res = myfmod((double)tryStackObjToInteger(lhs),
                                          tryStackObjToReal(rhs));
-                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+                STORE_BINOP_FAST(real_res, false, true, Real, REAL);
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
                 int l = tryStackObjToInteger(lhs);
