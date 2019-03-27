@@ -219,7 +219,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
 
             // i' <- m
             compileExpr(ctx, start);
-            cs << BC::ensureNamed() << BC::floor();
+            cs << BC::floor();
             // n' <- n
             compileExpr(ctx, end);
             cs << BC::ensureNamed();
