@@ -164,7 +164,7 @@ class Instruction : public Value {
         return !getObservableEffects().empty();
     }
 
-    bool isDeoptBarrier() const { return !getObservableEffects().empty(); }
+    bool isDeoptBarrier() const { return hasImpureEffects(); }
     bool mightChangeVisibility() const {
         return effects.includes(Effect::Visibility);
     }
