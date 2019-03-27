@@ -12,23 +12,22 @@ f <- rir.compile(function(depth) {
 stopifnot(f(4) == 64)
 
 f <- rir.compile(function() {
-    a <- 0
-    for (i in 1:1) {
-      a <- i
-    }
-    a
-})
-stopifnot(f() == 1)
-print(f())
-pir.compile(f)
-rir.disassemble(f)
-print(f())
-stopifnot(f() == 1)
-
-f <- rir.compile(function() {
   x <- 1
   for (i in 1L:x) NULL
 })
 f()
 f()
 f()
+
+f <- rir.compile(function() {
+    a <- 0
+    for (i in 1:2) {
+      a <- i
+    }
+    a
+})
+stopifnot(f() == 2)
+print(f())
+pir.compile(f)
+print(f())
+stopifnot(f() == 1)
