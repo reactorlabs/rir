@@ -21,12 +21,12 @@ f()
 
 f <- rir.compile(function() {
     a <- 0
-    for (i in 1:2) {
+    for (i in 1:1) {
       a <- i
     }
     a
 })
-stopifnot(f() == 2)
+stopifnot(f() == 1)
 print(f())
 pir.compile(f)
 print(f())
