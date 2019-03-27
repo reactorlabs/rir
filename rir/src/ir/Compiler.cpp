@@ -21,6 +21,18 @@ namespace rir {
 
 namespace {
 
+static bool isConstant(SEXP exp) {
+    // Dispatch on the current type of AST node
+    switch (TYPEOF(exp)) {
+    case LANGSXP:
+    case SYMSXP:
+    case PROMSXP:
+        return false;
+    default:
+        return true;
+    }
+}
+
 class CompilerContext {
   public:
     class LoopContext {
@@ -340,8 +352,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Case(SYMSXP) {
                 cs << BC::guardNamePrimitive(fun);
                 compileExpr(ctx, rhs);
-                cs << BC::dup() << BC::ensureNamed()
-                   << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs))
+                cs << BC::dup();
+                if (!isConstant(rhs))
+                    cs << BC::ensureNamed();
+                cs << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;
             }
@@ -401,10 +415,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, rhs);
         // Keep a copy of rhs since it's the result of this
         // expression
-        cs << BC::dup() << BC::setShared();
+        cs << BC::dup();
+        if (!isConstant(rhs))
+            cs << BC::ensureNamed();
 
         // Now load index and target
-        // cs << BC::ldvar(target);
         cs << (superAssign ? BC::ldvarSuper(target) : BC::ldvar(target));
         compileExpr(ctx, *idx);
         if (is2d) {
@@ -559,6 +574,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::extract1_1();
         }
         cs.addSrc(ast);
+        cs << BC::visible();
         return true;
     }
 
@@ -665,7 +681,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         ctx.pushLoop(loopBranch, breakBranch);
 
         compileExpr(ctx, seq);
-        cs << BC::setShared() << BC::forSeqSize() << BC::push((int)0);
+        if (!isConstant(seq))
+            cs << BC::setShared();
+        cs << BC::forSeqSize() << BC::push((int)0);
 
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch)
@@ -873,6 +891,7 @@ void compileGetvar(CodeStream& cs, SEXP name) {
     } else {
         cs << BC::ldvar(name);
     }
+    cs << BC::visible();
 }
 
 // Constant

@@ -55,6 +55,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     });
                     next = ip + 1;
                     i->type.setNotObject();
+                    i->effects.reset(Effect::Reflection);
+                    i->type = i->type.forced();
                 }
 
                 // Speculatively elide envs on forces that only require them in
@@ -63,7 +65,11 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     if (auto environment = MkEnv::Cast(force->env())) {
                         if (auto cp = checkpoint.next(i)) {
                             static std::unordered_set<Tag> forces{
-                                Tag::Force, Tag::FrameState, Tag::PushContext};
+                                Tag::Force, Tag::FrameState, Tag::PushContext,
+                                // stvar might lead to deopts, but really in
+                                // almost all cases deadStoreRemoval will
+                                // remove it later, once we stubbe the env.
+                                Tag::StVar};
 
                             if (cp->bb()->trueBranch() == bb) {
                                 bannedEnvs.insert(environment);

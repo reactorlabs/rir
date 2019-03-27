@@ -1,6 +1,5 @@
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
-#include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -27,34 +26,8 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                     if (!envIsNeeded) {
                         i->elideEnv();
                         i->type.setNotObject();
-                    }
-                }
-
-                if (auto b = CallBuiltin::Cast(i)) {
-                    bool noObjects = true;
-                    i->eachArg([&](Value* v) {
-                        if (v != i->env())
-                            if (v->type.maybeObj())
-                                noObjects = false;
-                    });
-
-                    if (noObjects &&
-                        SafeBuiltinsList::nonObject(b->builtinId)) {
-                        std::vector<Value*> args;
-                        i->eachArg([&](Value* v) {
-                            if (v != i->env()) {
-                                auto mk = MkArg::Cast(v);
-                                if (mk && mk->isEager())
-                                    args.push_back(mk->eagerArg());
-                                else
-                                    args.push_back(v);
-                            }
-                        });
-                        auto safe =
-                            new CallSafeBuiltin(b->blt, args, b->srcIdx);
-                        b->replaceUsesWith(safe);
-                        bb->replace(ip, safe);
-                        envIsNeeded = false;
+                        i->effects.reset(Effect::Reflection);
+                        i->type = i->type.forced();
                     }
                 }
 

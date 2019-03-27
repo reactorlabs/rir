@@ -7,20 +7,32 @@
 namespace rir {
 namespace pir {
 
-void Code::printCode(std::ostream& out, bool tty) const {
-    BreadthFirstVisitor::run(entry, [&](BB* bb) { bb->print(out, tty); });
+void Code::printCode(std::ostream& out, bool tty,
+                     bool omitDeoptBranches) const {
+    BreadthFirstVisitor::run(entry, [&](BB* bb) {
+        if (omitDeoptBranches &&
+            (bb->isDeopt() || (bb->isJmp() && bb->next()->isDeopt())))
+            return;
+        bb->print(out, tty);
+    });
 }
 
-void Code::printGraphCode(std::ostream& out, bool tty) const {
-    out << "digraph {\n";
-    BreadthFirstVisitor::run(entry, [&](BB* bb) { bb->printGraph(out, tty); });
-    out << "}\n";
+void Code::printGraphCode(std::ostream& out, bool omitDeoptBranches) const {
+    BreadthFirstVisitor::run(entry, [&](BB* bb) {
+        if (omitDeoptBranches &&
+            (bb->isDeopt() || (bb->isJmp() && bb->next()->isDeopt())))
+            return;
+        bb->printGraph(out, omitDeoptBranches);
+    });
 }
 
-void Code::printBBGraphCode(std::ostream& out) const {
-    out << "digraph {\n";
-    BreadthFirstVisitor::run(entry, [&](BB* bb) { bb->printBBGraph(out); });
-    out << "}\n";
+void Code::printBBGraphCode(std::ostream& out, bool omitDeoptBranches) const {
+    BreadthFirstVisitor::run(entry, [&](BB* bb) {
+        if (omitDeoptBranches &&
+            (bb->isDeopt() || (bb->isJmp() && bb->next()->isDeopt())))
+            return;
+        bb->printBBGraph(out, omitDeoptBranches);
+    });
 }
 
 Code::~Code() {

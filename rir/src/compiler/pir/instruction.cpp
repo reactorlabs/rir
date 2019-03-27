@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cassert>
 #include <iomanip>
+#include <set>
 #include <sstream>
 
 extern "C" SEXP deparse1line(SEXP call, Rboolean abbrev);
@@ -81,7 +82,7 @@ void Instruction::printGraphArgs(std::ostream& out, bool tty) const {
     printArgs(out, tty);
 }
 
-void Instruction::printGraphBranches(std::ostream& out, int bbId) const {
+void Instruction::printGraphBranches(std::ostream& out, size_t bbId) const {
     assert(false);
 }
 
@@ -172,28 +173,74 @@ Instruction* Instruction::hasSingleUse() {
 
 void Instruction::eraseAndRemove() { bb()->remove(this); }
 
-void Instruction::replaceUsesIn(Value* replace, BB* target) {
-    if (replace->type.isRType() != type.isRType() ||
-        (replace->type.maybePromiseWrapped() && !type.maybePromiseWrapped())) {
+static void checkReplace(Instruction* origin, Value* replace) {
+    if (replace->type.isRType() != origin->type.isRType() ||
+        (replace->type.maybePromiseWrapped() &&
+         !origin->type.maybePromiseWrapped())) {
         std::cerr << "Trying to replace a ";
-        type.print(std::cerr);
+        origin->type.print(std::cerr);
         std::cerr << " with a ";
         replace->type.print(std::cerr);
         std::cerr << "\n";
         printBacktrace();
         assert(false);
     }
+}
 
-    Visitor::run(target, [&](Instruction* i) {
-        i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this)
-                arg.val() = replace;
+void Instruction::replaceUsesWithLimits(Value* replace, BB* start,
+                                        Instruction* stop) {
+    checkReplace(this, replace);
+
+    auto apply = [&](BB* start) {
+        Visitor::run(start, stop ? stop->bb() : nullptr, [&](BB* bb) {
+            for (auto& i : *bb) {
+                if (i == stop)
+                    return;
+                i->eachArg([&](InstrArg& arg) {
+                    if (arg.val() == this)
+                        arg.val() = replace;
+                });
+            }
         });
-    });
+    };
+
+    // Since stop might also be in start (before the instruction to be
+    // replaced), we need to deal with start specially and only start after the
+    // instruction to be replaced (ignoring stop in that search).
+    if (start == bb()) {
+        bool found = false;
+        for (auto& i : *start) {
+            if (found) {
+                i->eachArg([&](InstrArg& arg) {
+                    if (arg.val() == this)
+                        arg.val() = replace;
+                });
+            }
+            if (!found && i == this)
+                found = true;
+            else if (found && i == stop)
+                return;
+        }
+    } else {
+        apply(start);
+    }
+
+    if (start->next0)
+        apply(start->next0);
+    if (start->next1)
+        apply(start->next1);
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
-    replaceUsesIn(replace, bb());
+    checkReplace(this, replace);
+    Visitor::run(bb(), [&](BB* bb) {
+        for (auto& i : *bb) {
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val() == this)
+                    arg.val() = replace;
+            });
+        }
+    });
 }
 
 void Instruction::replaceUsesAndSwapWith(
@@ -203,29 +250,26 @@ void Instruction::replaceUsesAndSwapWith(
 }
 
 bool Instruction::usesAreOnly(BB* target, std::unordered_set<Tag> tags) {
-    bool answer = true;
-    Visitor::run(target, [&](Instruction* i) {
+    return Visitor::check(target, [&](Instruction* i) -> bool {
+        bool ok = true;
         i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this && !tags.count(i->tag)) {
-                answer = false;
-                return;
-            }
+            if (arg.val() == this && !tags.count(i->tag))
+                ok = false;
         });
+        return ok;
     });
-    return answer;
 }
 
 bool Instruction::usesDoNotInclude(BB* target, std::unordered_set<Tag> tags) {
-    bool answer = true;
-    Visitor::run(target, [&](Instruction* i) {
+    return Visitor::check(target, [&](Instruction* i) -> bool {
+        bool ok = true;
         i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this && tags.find(i->tag) != tags.end()) {
-                answer = false;
-                return;
+            if (arg.val() == this && tags.count(i->tag)) {
+                ok = false;
             }
         });
+        return ok;
     });
-    return answer;
 }
 
 const Value* Instruction::cFollowCasts() const {
@@ -295,10 +339,10 @@ void Branch::printGraphArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
 }
 
-void Branch::printGraphBranches(std::ostream& out, int bbId) const {
-    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->id
+void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid()
         << " [color=green];\n  BB" << bbId << " -> BB"
-        << bb()->falseBranch()->id << " [color=red];\n";
+        << bb()->falseBranch()->uid() << " [color=red];\n";
 }
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
@@ -582,7 +626,7 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls,
     assert(fs);
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
-        pushArg(args[i], PirType::val() | RType::prom);
+        pushArg(args[i], RType::prom);
     assert(tryDispatch());
 }
 
@@ -622,17 +666,15 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {
-        if (auto mk = MkArg::Cast(arg)) {
-            if (mk->isEager()) {
-                auto eager = mk->eagerArg();
-                if (eager == MissingArg::instance())
-                    given.remove(Assumption::NoExplicitlyMissingArgs);
-                if (!eager->type.maybeLazy())
-                    given.setEager(i);
-                if (!eager->type.maybeObj())
-                    given.setNotObj(i);
-            }
+        auto mk = MkArg::Cast(arg);
+        if (mk && mk->isEager()) {
+            given.setEager(i);
+            if (mk->eagerArg() == MissingArg::instance())
+                given.remove(Assumption::NoExplicitlyMissingArgs);
         }
+        Value* value = arg->followCastsAndForce();
+        if (!MkArg::Cast(value) && !value->type.maybeObj())
+            given.setNotObj(i);
         ++i;
     });
     return given;
@@ -689,9 +731,9 @@ void Checkpoint::printGraphArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
 }
 
-void Checkpoint::printGraphBranches(std::ostream& out, int bbId) const {
-    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->id << ";\n  BB"
-        << bbId << " -> BB" << bb()->falseBranch()->id << " [color=red];\n";
+void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
+    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid() << ";\n  BB"
+        << bbId << " -> BB" << bb()->falseBranch()->uid() << " [color=red];\n";
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }

@@ -76,11 +76,6 @@ DEF_INSTR(ldvar_noforce_super_, 1, 0, 1, 1)
 DEF_INSTR(ldddvar_, 1, 0, 1, 0)
 
 /**
- * ldlval_:: take immediate CP index of symbol, load value from local frame.
- */
-DEF_INSTR(ldlval_, 1, 0, 1, 1)
-
-/**
  * ldarg_:: load argument
  */
 DEF_INSTR(ldarg_, 1, 0, 1, 0)
@@ -208,6 +203,11 @@ DEF_INSTR(dup2_, 0, 2, 4, 1)
  * pop_:: pop from object stack
  */
 DEF_INSTR(pop_, 0, 1, 0, 1)
+
+/**
+ * popn_:: pop n elements from object stack
+ */
+DEF_INSTR(popn_, 1, -1, 0, 1)
 
 /**
  * swap_:: swap two elements tos

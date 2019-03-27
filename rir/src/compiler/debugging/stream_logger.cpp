@@ -32,8 +32,12 @@ LogStream& StreamLogger::begin(ClosureVersion* cls) {
 
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
-        filename << "pir-function-" << std::setfill('0') << std::setw(5)
-                 << logId++ << "-" << cls->name() << ".log";
+        filename << cls->owner()->name() << "-pir-function-"
+                 << std::setfill('0') << std::setw(5) << logId++;
+        if (options.style == DebugStyle::Standard)
+            filename << ".log";
+        else
+            filename << ".dot";
         streams.emplace(cls, new FileLogStream(options, cls, filename.str()));
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
@@ -58,7 +62,8 @@ void LogStream::compilationEarlyPir(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         preparePrint();
         section("Compiled to PIR Version");
-        closure->print(options.style, out, tty());
+        closure->print(options.style, out, tty(),
+                       options.includes(DebugFlag::OmitDeoptBranches));
     }
 }
 
@@ -68,7 +73,8 @@ void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
         std::regex_match(name.begin(), name.end(), options.functionFilter)) {
         preparePrint();
         section("PIR Version After Optimizations");
-        closure->print(options.style, out, tty());
+        closure->print(options.style, out, tty(),
+                       options.includes(DebugFlag::OmitDeoptBranches));
         out << "\n";
     }
 }
@@ -107,7 +113,8 @@ void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
 void LogStream::pirOptimizations(ClosureVersion* closure,
                                  const PirTranslator* pass) {
     if (shouldLog(closure, pass, options)) {
-        closure->print(options.style, out, tty());
+        closure->print(options.style, out, tty(),
+                       options.includes(DebugFlag::OmitDeoptBranches));
     }
 }
 
@@ -125,7 +132,8 @@ void LogStream::afterAllocator(Code* code,
     if (options.includes(DebugFlag::PrintAllocator)) {
         preparePrint();
         section("PIR SSA allocator");
-        code->printCode(out, tty());
+        code->printCode(out, tty(),
+                        options.includes(DebugFlag::OmitDeoptBranches));
         out << "\n";
         allocDebug(out);
     }
@@ -135,7 +143,8 @@ void LogStream::CSSA(Code* code) {
     if (options.includes(DebugFlag::PrintCSSA)) {
         preparePrint();
         section("CSSA Version");
-        code->printCode(out, tty());
+        code->printCode(out, tty(),
+                        options.includes(DebugFlag::OmitDeoptBranches));
         out << "\n";
     }
 }
@@ -144,7 +153,8 @@ void LogStream::finalPIR(ClosureVersion* code) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         preparePrint();
         section("Final PIR Version");
-        code->print(options.style, out, tty());
+        code->print(options.style, out, tty(),
+                    options.includes(DebugFlag::OmitDeoptBranches));
         out << "\n";
     }
 }
@@ -193,8 +203,13 @@ void LogStream::highlightOff() {
 }
 
 void LogStream::header() {
+    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
+                            options.style != DebugStyle::Standard
+                        ? "// "
+                        : "";
+
     highlightOn();
-    out << "\n┌";
+    out << "\n" << c << "┌";
     for (size_t i = 0; i < 78; ++i)
         out << "─";
     std::stringstream assumptions;
@@ -202,17 +217,23 @@ void LogStream::header() {
     std::stringstream properties;
     properties << "Properties:  " << version->properties;
     out << "┐\n";
-    out << "│ " << std::left << std::setw(77) << version->name() << "│\n";
-    out << "│ " << std::left << std::setw(77) << assumptions.str() << "│\n";
+    out << c << "│ " << std::left << std::setw(77) << version->name() << "│\n";
+    out << c << "│ " << std::left << std::setw(77) << assumptions.str()
+        << "│\n";
     if (properties.str() != "")
-        out << "│ " << std::left << std::setw(77) << properties.str() << "│\n";
+        out << c << "│ " << std::left << std::setw(77) << properties.str()
+            << "│\n";
     highlightOff();
 }
 
 void LogStream::footer() {
+    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
+                            options.style != DebugStyle::Standard
+                        ? "// "
+                        : "";
     highlightOn();
-    out << "│ " << std::left << std::setw(77) << version->name() << "│\n";
-    out << "└";
+    out << c << "│ " << std::left << std::setw(77) << version->name() << "│\n";
+    out << c << "└";
     for (size_t i = 0; i < 78; ++i)
         out << "─";
     out << "┘\n";
@@ -220,9 +241,13 @@ void LogStream::footer() {
 }
 
 void LogStream::section(const std::string& title) {
+    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
+                            options.style != DebugStyle::Standard
+                        ? "// "
+                        : "";
     highlightOn();
     preparePrint();
-    out << "├────── " << title;
+    out << c << "├────── " << title;
     if (options.includes(DebugFlag::PrintIntoStdout))
         out << "(" << version->name() << ")";
     out << "\n";

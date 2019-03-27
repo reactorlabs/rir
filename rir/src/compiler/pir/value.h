@@ -40,14 +40,18 @@ class Value {
             const_cast<const Value*>(this)->cFollowCastsAndForce());
     }
     virtual bool validIn(Code* code) const { return true; }
-    virtual SEXP asRValue() const { assert(false && "Not a singleton"); }
+    virtual SEXP asRValue() const {
+        assert(false && "Not a singleton");
+        return nullptr;
+    }
 
     bool producesRirResult() const {
-        return type != PirType::voyd() && type != NativeType::context;
+        return type != PirType::voyd() &&
+               (type.isRType() || type == NativeType::test);
     }
 };
 
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

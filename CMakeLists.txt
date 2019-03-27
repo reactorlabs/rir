@@ -11,11 +11,13 @@ set(R_INCLUDE_DIR ${R_HOME}/include)
 set(R_COMMAND ${R_HOME}/bin/R)
 
 add_definitions(-g3)
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASEASSERT "-O2 -Werror")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS "-Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wctor-dtor-privacy -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
+set(CMAKE_C_FLAGS_RELEASEASSERT "-O2")
 set(CMAKE_C_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
@@ -26,7 +28,17 @@ MARK_AS_ADVANCED(
     CMAKE_CXX_FLAGS_DEBUGOPT,
     CMAKE_C_FLAGS_DEBUGOPT,
     CMAKE_CXX_FLAGS_SANITIZE
-    CMAKE_C_FLAGS_SANITIZE)
+    CMAKE_C_FLAGS_SANITIZE
+    CMAKE_CXX_FLAGS_RELEASEASSERT
+    CMAKE_C_FLAGS_RELEASEASSERT
+    )
+
+# Update the documentation string of CMAKE_BUILD_TYPE for GUIs
+SET( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING
+    "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel DebugOpt ReleaseAssert."
+    FORCE )
+
+
 
 # Take from https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 option(FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." FALSE)
@@ -75,7 +87,7 @@ add_custom_target(dependencies
 
 add_custom_target(default-gnur
     DEPENDS dependencies
-    COMMAND cd ${CMAKE_SOURCE_DIR}/external/custom-r && make -j 8
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh custom-r
 )
 
 add_custom_target(dependencies-vanilla
@@ -84,7 +96,7 @@ add_custom_target(dependencies-vanilla
 
 add_custom_target(vanilla-gnur
     DEPENDS dependencies-vanilla
-    COMMAND cd ${CMAKE_SOURCE_DIR}/external/vanilla-r && make -j 8
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh vanilla-r
 )
 
 add_custom_target(setup

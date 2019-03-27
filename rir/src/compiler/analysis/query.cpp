@@ -35,11 +35,8 @@ bool Query::noEnvSpec(Code* c) {
 }
 
 bool Query::pure(Code* c) {
-    return Visitor::check(c->entry, [](Instruction* i) {
-        // Yes visibility is a global effect. We try to preserve it. But geting
-        // it wrong is not a strong correctness issue.
-        return !i->hasEffectIgnoreVisibility() && !i->changesEnv();
-    });
+    return Visitor::check(
+        c->entry, [&](Instruction* i) { return !i->hasImpureEffects(); });
 }
 
 std::unordered_set<Value*> Query::returned(Code* c) {

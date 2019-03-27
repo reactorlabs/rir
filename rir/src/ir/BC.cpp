@@ -42,7 +42,6 @@ BC_NOARGS(V, _)
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
-    case Opcode::ldlval_:
     case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
@@ -107,6 +106,7 @@ BC_NOARGS(V, _)
         cs.patchpoint(immediate.offset);
         return;
 
+    case Opcode::popn_:
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::is_:
@@ -236,7 +236,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
-    case Opcode::ldlval_:
     case Opcode::ldddvar_:
     case Opcode::starg_:
     case Opcode::stvar_:
@@ -250,6 +249,7 @@ void BC::print(std::ostream& out) const {
             << " == " << Pool::get(immediate.guard_fun_args.expected);
         break;
     }
+    case Opcode::popn_:
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::put_:

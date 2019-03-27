@@ -24,6 +24,11 @@ BC_NOARGS(V, _)
 #undef V
 BC BC::recordCall() { return BC(Opcode::record_call_); }
 BC BC::recordBinop() { return BC(Opcode::record_binop_); }
+BC BC::popn(unsigned n) {
+    ImmediateArguments i;
+    i.i = n;
+    return BC(Opcode::popn_, i);
+}
 BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
     assert(!Code::check(constant));
@@ -57,13 +62,6 @@ BC BC::ldddvar(SEXP sym) {
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
-}
-BC BC::ldlval(SEXP sym) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateArguments i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::ldlval_, i);
 }
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);

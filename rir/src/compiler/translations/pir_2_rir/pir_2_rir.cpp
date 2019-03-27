@@ -4,6 +4,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "compiler/analysis/verifier.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -17,6 +18,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
+#include <list>
 #include <sstream>
 
 namespace rir {
@@ -138,7 +140,7 @@ class SSAAllocator {
         // Traverse the dominance graph in preorder and eagerly assign slots.
         // We assume that no critical paths exist, ie. we preprocessed the graph
         // such that every phi input is only used exactly once (by the phi).
-        DominatorTreeVisitor<>(dom).run(code, [&](BB* bb) {
+        DominatorTreeVisitor<>(dom).run(code->entry, [&](BB* bb) {
             auto findFreeSlot = [&](Instruction* i) {
                 SlotNumber slot = unassignedSlot;
                 for (;;) {
@@ -499,11 +501,183 @@ class Pir2Rir {
     std::unordered_map<Promise*, rir::Code*> promises;
     bool dryRun;
     LogStream& log;
+
+    class CodeBuffer {
+      private:
+        struct Src {
+            enum { None, Sexp, Idx } tag;
+            union {
+                SEXP sexp;
+                unsigned idx;
+            } u;
+        };
+        using RIRInstruction = std::pair<BC, Src>;
+        std::list<RIRInstruction> code;
+        CodeStream& cs;
+
+        void emplace_back(BC&& bc, Src src) {
+            code.emplace_back(std::make_pair(std::move(bc), std::move(src)));
+        }
+
+        void peephole() {
+            /*TODO: there are still more patterns that could be cleaned up:
+             *   pick(2) swap() pick(2) -> swap()
+             *   pick(2) pop() swap() pop() pop() -> pop() pop() pop()
+             */
+
+            auto plus = [](std::list<RIRInstruction>::iterator it, int n) {
+                while (n--)
+                    it++;
+                return it;
+            };
+
+            Src noSource;
+            noSource.tag = Src::None;
+            int steam = 5;
+            bool changed = false;
+
+            do {
+                changed = false;
+                auto it = code.begin();
+                while (it != code.end()) {
+                    auto next = plus(it, 1);
+                    auto& bc = it->first;
+
+                    if (bc.is(rir::Opcode::pick_)) {
+                        unsigned arg = bc.immediate.i;
+                        unsigned n = 1;
+                        // Have 1 pick(arg), can remove if we find arg + 1 of
+                        // them
+                        auto last = next;
+                        for (; last != code.end(); last++) {
+                            auto& bc = last->first;
+                            if (bc.is(rir::Opcode::pick_) &&
+                                bc.immediate.i == arg)
+                                n++;
+                            else
+                                break;
+                        }
+                        if (n == arg + 1 && last != code.end()) {
+                            next = code.erase(it, last);
+                            changed = true;
+                        } else if (arg == 1) {
+                            next = code.erase(it);
+                            next = code.emplace(next, BC::swap(), noSource);
+                            changed = true;
+                        }
+                    } else if (bc.is(rir::Opcode::pull_)) {
+                        if (bc.immediate.i == 0) {
+                            next = code.erase(it);
+                            next = code.emplace(next, BC::dup(), noSource);
+                            changed = true;
+                        } else if (bc.immediate.i == 1 && next != code.end() &&
+                                   next->first.is(rir::Opcode::pull_) &&
+                                   next->first.immediate.i == 1) {
+                            next = code.erase(it, plus(next, 1));
+                            next = code.emplace(next, BC::dup2(), noSource);
+                            changed = true;
+                        }
+                    } else if (bc.is(rir::Opcode::dup_) && next != code.end() &&
+                               plus(next, 1) != code.end() &&
+                               next->first.is(rir::Opcode::isobj_) &&
+                               plus(next, 1)->first.is(rir::Opcode::brtrue_)) {
+                        auto target = plus(next, 1)->first.immediate.offset;
+                        next = code.erase(it, plus(next, 2));
+                        next = code.emplace(next, BC::brobj(target), noSource);
+                        changed = true;
+                    } else if (bc.is(rir::Opcode::dup_) && next != code.end() &&
+                               plus(next, 1) != code.end() &&
+                               plus(next, 2) != code.end() &&
+                               next->first.is(rir::Opcode::for_seq_size_) &&
+                               plus(next, 1)->first.is(rir::Opcode::swap_) &&
+                               plus(next, 2)->first.is(rir::Opcode::pop_)) {
+                        next = plus(code.erase(it), 1);
+                        next = code.erase(next, plus(next, 2));
+                        changed = true;
+                    } else if (bc.is(rir::Opcode::ldvar_noforce_) &&
+                               next != code.end() &&
+                               next->first.is(rir::Opcode::force_)) {
+                        auto arg = Pool::get(bc.immediate.pool);
+                        next = code.erase(it, plus(next, 1));
+                        next = code.emplace(next, BC::ldvar(arg), noSource);
+                        changed = true;
+                    } else if (bc.is(rir::Opcode::pop_)) {
+                        unsigned n = 1;
+                        auto last = next;
+                        for (; last != code.end(); last++) {
+                            auto& bc = last->first;
+                            if (bc.is(rir::Opcode::pop_))
+                                n++;
+                            else
+                                break;
+                        }
+                        if (n > 1 && last != code.end()) {
+                            next = code.erase(it, last);
+                            next = code.emplace(next, BC::popn(n), noSource);
+                            changed = true;
+                        }
+                    }
+
+                    it = next;
+                }
+            } while (changed && steam-- > 0);
+        }
+
+        void flush() {
+            peephole();
+            for (auto const& instr : code) {
+                cs << instr.first;
+                switch (instr.second.tag) {
+                case Src::Sexp:
+                    cs.addSrc(instr.second.u.sexp);
+                    break;
+                case Src::Idx:
+                    cs.addSrcIdx(instr.second.u.idx);
+                    break;
+                default:
+                    break;
+                }
+            }
+            code.clear();
+        }
+
+      public:
+        explicit CodeBuffer(CodeStream& cs) : cs(cs) {}
+        ~CodeBuffer() { flush(); }
+
+        void add(BC&& bc) {
+            Src s;
+            s.tag = Src::None;
+            emplace_back(std::move(bc), s);
+        }
+
+        void add(BC&& bc, SEXP src) {
+            Src s;
+            s.tag = src ? Src::Sexp : Src::None;
+            s.u.sexp = src;
+            emplace_back(std::move(bc), s);
+        }
+
+        void add(BC&& bc, unsigned idx) {
+            Src s;
+            s.tag = Src::Idx;
+            s.u.idx = idx;
+            emplace_back(std::move(bc), s);
+        }
+
+        void add(BC::Label label) {
+            flush();
+            cs << label;
+        }
+    };
 };
 
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     lower(code);
     toCSSA(code);
+#ifdef ENABLE_SLOWASSERT
+    Verify::apply(cls, true);
+#endif
     log.CSSA(code);
 
     SSAAllocator alloc(code, cls, log);
@@ -525,11 +699,59 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     LastEnv lastEnv(cls, code, log);
     std::unordered_map<Value*, BC::Label> pushContexts;
 
+    std::deque<unsigned> order;
+    LoweringVisitor::run(code->entry, [&](BB* bb) {
+        if (!isJumpThrough(bb))
+            order.push_back(bb->id);
+    });
+
+    std::unordered_map<Instruction*, size_t> numberOfUses;
+    {
+        std::function<void(Value*)> count;
+
+        // Increases the counts on every value input of a phi cluster
+        auto countPhiInputs = [&](Phi* p) {
+            std::vector<bool> countedPhis(cls->nextBBId, false);
+            std::function<void(Phi*)> doCountPhis = [&](Phi* p) {
+                if (countedPhis[p->bb()->id])
+                    return;
+                countedPhis[p->bb()->id] = true;
+                p->eachArg([&](BB*, Value* v) {
+                    if (auto p = Phi::Cast(v))
+                        doCountPhis(p);
+                    else
+                        count(v);
+                });
+            };
+            doCountPhis(p);
+        };
+
+        count = [&](Value* v) {
+            if (auto j = Instruction::Cast(v)) {
+                if (!j->type.isRType())
+                    return;
+                if (SetShared::Cast(j) || LdConst::Cast(j) || MkEnv::Cast(j) ||
+                    MkArg::Cast(j))
+                    return;
+                if (auto p = Phi::Cast(j))
+                    return countPhiInputs(p);
+                numberOfUses[j]++;
+            }
+        };
+
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (!Phi::Cast(i))
+                i->eachArg([&](Value* v) { count(v); });
+        });
+    }
+
+    CodeBuffer cb(ctx.cs());
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
             return;
 
-        CodeStream& cs = ctx.cs();
+        order.pop_front();
+        cb.add(bbLabels[bb]);
 
         auto jumpThroughEmpty = [&](BB* bb) {
             while (isJumpThrough(bb))
@@ -537,83 +759,40 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             return bb;
         };
 
-        cs << bbLabels[bb];
-
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
 
-            // Prepare stack and araguments
+            // Prepare stack and arguments
             {
 
                 std::vector<bool> removedStackValues(
                     alloc.sa.stackBefore(instr).size(), false);
                 size_t pushedStackValues = 0;
 
-                // Put args to buffer first so that we don't have to clean up
-                // the code stream later
-                std::vector<BC> buffer;
-                std::vector<SEXP> srcBuffer;
-
+                auto debugAddVariableName = [&](Value* v) -> SEXP {
 #ifdef ENABLE_SLOWASSERT
-                auto debugAddVariableName = [&](Value* v) {
                     std::stringstream ss;
                     v->printRef(ss);
-                    srcBuffer.push_back(Rf_install(ss.str().c_str()));
-                };
+                    // Protect error: install can allocate and calling it
+                    // many times during pir2rir might in principle cause
+                    // some of these to be gc'd.. But unlikely and only
+                    // possible in debug mode
+                    return Rf_install(ss.str().c_str());
 #else
-        auto debugAddVariableName = [](Value*) {};
+                    return nullptr;
 #endif
-
-                /* TODO: there are still more patterns that could be cleaned up:
-                 *   pick(2) swap() pick(2) -> swap()
-                 *   pick(2) pop() swap() pop() pop() -> pop() pop() pop()
-                 * also maybe:
-                 * args being last use and matching the stack contents at tos
-                 * then no picks are needed, only fill in the values / locals
-                 * and put those to correct offsets
-                 */
+                };
 
                 auto explicitEnvValue = [](Instruction* instr) {
                     return MkEnv::Cast(instr) || IsEnvStub::Cast(instr);
                 };
 
                 auto moveToTOS = [&](size_t offset) {
-                    if (offset == 1) {
-                        // Get rid of double swaps
-                        if (!buffer.empty() &&
-                            buffer.back().is(rir::Opcode::swap_)) {
-                            buffer.pop_back();
-                        } else {
-                            buffer.emplace_back(BC::swap());
-                        }
-                    } else if (offset > 1) {
-                        // Get rid of n-fold pick(n)'s
-                        if (buffer.size() >= offset) {
-                            bool pickN = true;
-                            for (auto it = buffer.rbegin(); it != buffer.rend();
-                                 ++it)
-                                if (!it->is(rir::Opcode::pick_) ||
-                                    it->immediate.i != offset) {
-                                    pickN = false;
-                                    break;
-                                }
-                            if (pickN) {
-                                while (offset--)
-                                    buffer.pop_back();
-                            } else {
-                                buffer.emplace_back(BC::pick(offset));
-                            }
-                        } else {
-                            buffer.emplace_back(BC::pick(offset));
-                        }
-                    }
+                    cb.add(BC::pick(offset));
                 };
 
                 auto copyToTOS = [&](size_t offset) {
-                    if (offset == 0)
-                        buffer.emplace_back(BC::dup());
-                    else
-                        buffer.emplace_back(BC::pull(offset));
+                    cb.add(BC::pull(offset));
                 };
 
                 auto getFromStack = [&](Value* what, size_t argNumber) {
@@ -630,18 +809,18 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                 auto loadEnv = [&](Value* what, size_t argNumber) {
                     if (what == Env::notClosed()) {
-                        buffer.emplace_back(BC::parentEnv());
+                        cb.add(BC::parentEnv());
                     } else if (what == Env::nil()) {
-                        buffer.emplace_back(BC::push(R_NilValue));
+                        cb.add(BC::push(R_NilValue));
                     } else if (Env::isStaticEnv(what)) {
                         auto env = Env::Cast(what);
                         // Here we could also load env->rho, but if the user
                         // were to change the environment on the closure our
                         // code would be wrong.
                         if (env == cls->owner()->closureEnv())
-                            buffer.emplace_back(BC::parentEnv());
+                            cb.add(BC::parentEnv());
                         else
-                            buffer.emplace_back(BC::push(env->rho));
+                            cb.add(BC::push(env->rho));
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the env ";
@@ -652,8 +831,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         if (alloc.onStack(what)) {
                             getFromStack(what, argNumber);
                         } else {
-                            buffer.emplace_back(BC::ldloc(alloc[what]));
-                            debugAddVariableName(what);
+                            cb.add(BC::ldloc(alloc[what]),
+                                   debugAddVariableName(what));
                         }
                     }
                     pushedStackValues++;
@@ -663,13 +842,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     if (what == UnboundValue::instance()) {
                         assert(MkArg::Cast(instr) &&
                                "only mkarg supports R_UnboundValue");
-                        buffer.emplace_back(BC::push(R_UnboundValue));
+                        cb.add(BC::push(R_UnboundValue));
                     } else if (what == MissingArg::instance()) {
-                        buffer.emplace_back(BC::push(R_MissingArg));
+                        cb.add(BC::push(R_MissingArg));
                     } else if (what == True::instance()) {
-                        buffer.emplace_back(BC::push(R_TrueValue));
+                        cb.add(BC::push(R_TrueValue));
                     } else if (what == False::instance()) {
-                        buffer.emplace_back(BC::push(R_FalseValue));
+                        cb.add(BC::push(R_FalseValue));
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the arg ";
@@ -680,8 +859,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         if (alloc.onStack(what)) {
                             getFromStack(what, argNumber);
                         } else {
-                            buffer.emplace_back(BC::ldloc(alloc[what]));
-                            debugAddVariableName(what);
+                            cb.add(BC::ldloc(alloc[what]),
+                                   debugAddVariableName(what));
                         }
                     }
                     pushedStackValues++;
@@ -698,13 +877,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         auto offset = alloc.stackPhiOffset(instr, phi);
                         moveToTOS(offset);
                     } else {
-                        buffer.emplace_back(BC::ldloc(alloc[phi]));
-                        debugAddVariableName(phi);
+                        cb.add(BC::ldloc(alloc[phi]),
+                               debugAddVariableName(phi));
                     }
                 };
 
                 // Remove values from the stack that are dead here
-                for (auto val : alloc.sa.toDrop(instr)) {
+                auto toDrop = alloc.sa.toDrop(instr);
+                for (auto val : VisitorHelpers::reverse(toDrop)) {
                     // If not actually allocated on stack, do nothing
                     if (!alloc.onStack(val))
                         continue;
@@ -712,7 +892,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     auto offset = alloc.getStackOffset(
                         instr, removedStackValues, val, true);
                     moveToTOS(offset);
-                    buffer.emplace_back(BC::pop());
+                    cb.add(BC::pop());
                 }
 
                 if (auto phi = Phi::Cast(instr)) {
@@ -734,7 +914,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                 auto env = instr->env();
                                 if (!lastEnv.envStillValid(instr)) {
                                     loadEnv(env, argNumber);
-                                    buffer.emplace_back(BC::setEnv());
+                                    cb.add(BC::setEnv());
                                 } else {
                                     if (alloc.hasSlot(env) &&
                                         alloc.onStack(env) &&
@@ -745,7 +925,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                                 true) +
                                             pushedStackValues;
                                         moveToTOS(offset);
-                                        buffer.emplace_back(BC::pop());
+                                        cb.add(BC::pop());
                                     }
                                 }
                             }
@@ -755,90 +935,67 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         argNumber++;
                     });
                 }
-
-                unsigned srcBufferIdx = 0;
-                for (auto const& bc : buffer) {
-                    cs << bc;
-                    if (srcBufferIdx < srcBuffer.size() &&
-                        bc.is(rir::Opcode::ldloc_)) {
-                        cs.addSrc(srcBuffer[srcBufferIdx]);
-                        srcBufferIdx++;
-                    }
-                }
             }
 
             switch (instr->tag) {
 
             case Tag::LdConst: {
-                cs << BC::push_from_pool(LdConst::Cast(instr)->idx);
+                cb.add(BC::push_from_pool(LdConst::Cast(instr)->idx));
                 break;
             }
 
             case Tag::LdFun: {
                 auto ldfun = LdFun::Cast(instr);
-                cs << BC::ldfun(ldfun->varName);
+                cb.add(BC::ldfun(ldfun->varName));
                 break;
             }
 
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
-                cs << BC::ldvarNoForce(ldvar->varName);
+                cb.add(BC::ldvarNoForce(ldvar->varName));
                 break;
             }
 
             case Tag::ForSeqSize: {
-                cs << BC::forSeqSize();
+                cb.add(BC::forSeqSize());
                 // TODO: currently we always pop the sequence, since we
                 // cannot deal with instructions that do not pop the value
                 // after use.
-                cs << BC::swap() << BC::pop();
+                cb.add(BC::swap());
+                cb.add(BC::pop());
                 break;
             }
 
             case Tag::LdArg: {
                 auto ld = LdArg::Cast(instr);
-                cs << BC::ldarg(ld->id);
+                cb.add(BC::ldarg(ld->id));
                 break;
             }
 
             case Tag::StVarSuper: {
                 auto stvar = StVarSuper::Cast(instr);
-                cs << BC::stvarSuper(stvar->varName);
+                cb.add(BC::stvarSuper(stvar->varName));
                 break;
             }
 
             case Tag::LdVarSuper: {
                 auto ldvar = LdVarSuper::Cast(instr);
-                cs << BC::ldvarNoForceSuper(ldvar->varName);
+                cb.add(BC::ldvarNoForceSuper(ldvar->varName));
                 break;
             }
 
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
                 if (stvar->isStArg)
-                    cs << BC::starg(stvar->varName);
+                    cb.add(BC::starg(stvar->varName));
                 else
-                    cs << BC::stvar(stvar->varName);
+                    cb.add(BC::stvar(stvar->varName));
                 break;
             }
 
-            case Tag::Branch: {
-                auto trueBranch = jumpThroughEmpty(bb->trueBranch());
-                auto falseBranch = jumpThroughEmpty(bb->falseBranch());
-                // cs << BC::brtrue(bbLabels[trueBranch])
-                //    << BC::br(bbLabels[falseBranch]);
-                // this version looks better on a microbenchmark.. need to
-                // investigate
-                cs << BC::brfalse(bbLabels[falseBranch])
-                   << BC::br(bbLabels[trueBranch]);
-
-                // This is the end of this BB
-                return;
-            }
-
             case Tag::MkArg: {
-                cs << BC::promise(
-                    cs.addPromise(getPromise(ctx, MkArg::Cast(instr)->prom())));
+                cb.add(BC::promise(ctx.cs().addPromise(
+                    getPromise(ctx, MkArg::Cast(instr)->prom()))));
                 break;
             }
 
@@ -848,21 +1005,22 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // closed closures.
                 auto mkfuncls = MkFunCls::Cast(instr);
                 auto cls = mkfuncls->cls;
-                cs << BC::push(cls->formals().original())
-                   << BC::push(mkfuncls->originalBody->container())
-                   << BC::push(cls->srcRef()) << BC::close();
+                cb.add(BC::push(cls->formals().original()));
+                cb.add(BC::push(mkfuncls->originalBody->container()));
+                cb.add(BC::push(cls->srcRef()));
+                cb.add(BC::close());
                 break;
             }
 
             case Tag::Missing: {
                 auto m = Missing::Cast(instr);
-                cs << BC::missing(m->varName);
+                cb.add(BC::missing(m->varName));
                 break;
             }
 
             case Tag::Is: {
                 auto is = Is::Cast(instr);
-                cs << BC::is(is->sexpTag);
+                cb.add(BC::is(is->sexpTag));
                 break;
             }
 
@@ -875,25 +1033,17 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 EMPTY(PirCopy);
 #undef EMPTY
 
-            case Tag::IsObject: {
-                cs << BC::isobj();
-                break;
-            }
-
-            case Tag::IsEnvStub: {
-                cs << BC::isstubenv();
-                break;
-            }
-
 #define SIMPLE(Name, Factory)                                                  \
     case Tag::Name: {                                                          \
-        cs << BC::Factory();                                                   \
+        cb.add(BC::Factory());                                                 \
         break;                                                                 \
     }
                 SIMPLE(LdFunctionEnv, getEnv);
                 SIMPLE(Visible, visible);
                 SIMPLE(Invisible, invisible);
                 SIMPLE(Identical, identicalNoforce);
+                SIMPLE(IsObject, isobj);
+                SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
@@ -905,7 +1055,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
                 SIMPLE(SetShared, setShared);
-                SIMPLE(EnsureNamed, ensureNamed);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
@@ -913,8 +1062,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
 #define SIMPLE_WITH_SRCIDX(Name, Factory)                                      \
     case Tag::Name: {                                                          \
-        cs << BC::Factory();                                                   \
-        cs.addSrcIdx(instr->srcIdx);                                           \
+        cb.add(BC::Factory(), instr->srcIdx);                                  \
         break;                                                                 \
     }
                 SIMPLE_WITH_SRCIDX(Add, add);
@@ -947,16 +1095,16 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::Call: {
                 auto call = Call::Cast(instr);
-                cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
-                               call->inferAvailableAssumptions());
+                cb.add(BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
+                                call->inferAvailableAssumptions()));
                 break;
             }
 
             case Tag::NamedCall: {
                 auto call = NamedCall::Cast(instr);
-                cs << BC::call(call->nCallArgs(), call->names,
-                               Pool::get(call->srcIdx),
-                               call->inferAvailableAssumptions());
+                cb.add(BC::call(call->nCallArgs(), call->names,
+                                Pool::get(call->srcIdx),
+                                call->inferAvailableAssumptions()));
                 break;
             }
 
@@ -983,59 +1131,54 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                              Pool::get(call->srcIdx),
                                              originalClosure, funCont,
                                              call->inferAvailableAssumptions());
-                    cs << bc;
+                    auto hint = bc.immediate.staticCallFixedArgs.versionHint;
+                    cb.add(std::move(bc));
                     if (!funCont)
-                        compiler.needsPatching(
-                            trg, bc.immediate.staticCallFixedArgs.versionHint);
+                        compiler.needsPatching(trg, hint);
                 } else {
                     // Something went wrong with dispatching, let's put the
                     // baseline there
-                    cs << BC::staticCall(
+                    cb.add(BC::staticCall(
                         call->nCallArgs(), Pool::get(call->srcIdx),
                         originalClosure, dt->baseline()->container(),
-                        call->inferAvailableAssumptions());
+                        call->inferAvailableAssumptions()));
                 }
                 break;
             }
 
             case Tag::CallBuiltin: {
                 auto blt = CallBuiltin::Cast(instr);
-                cs << BC::callBuiltin(blt->nCallArgs(), Pool::get(blt->srcIdx),
-                                      blt->blt);
+                cb.add(BC::callBuiltin(blt->nCallArgs(), Pool::get(blt->srcIdx),
+                                       blt->blt));
                 break;
             }
 
             case Tag::CallSafeBuiltin: {
                 auto blt = CallSafeBuiltin::Cast(instr);
-                cs << BC::callBuiltin(blt->nargs(), Pool::get(blt->srcIdx),
-                                      blt->blt);
+                cb.add(BC::callBuiltin(blt->nargs(), Pool::get(blt->srcIdx),
+                                       blt->blt));
                 break;
             }
 
             case Tag::PushContext: {
                 if (!pushContexts.count(instr))
-                    pushContexts[instr] = cs.mkLabel();
-                cs << BC::pushContext(pushContexts.at(instr));
+                    pushContexts[instr] = ctx.cs().mkLabel();
+                cb.add(BC::pushContext(pushContexts.at(instr)));
                 break;
             }
 
             case Tag::PopContext: {
                 auto push = PopContext::Cast(instr)->push();
                 if (!pushContexts.count(push))
-                    pushContexts[push] = cs.mkLabel();
-                cs << pushContexts.at(push);
-                cs << BC::popContext();
+                    pushContexts[push] = ctx.cs().mkLabel();
+                cb.add(pushContexts.at(push));
+                cb.add(BC::popContext());
                 break;
             }
 
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-                bool stub;
-                if (mkenv->stub)
-                    stub = true;
-                else
-                    stub = false;
-                cs << BC::mkEnv(mkenv->varName, mkenv->context, stub);
+                cb.add(BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub));
                 break;
             }
 
@@ -1052,20 +1195,25 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
-            case Tag::Return: {
-                cs << BC::ret();
-                // end of this BB, return
+            // BB exitting instructions
+            case Tag::Branch: {
+                auto trueBranch = jumpThroughEmpty(bb->trueBranch());
+                auto falseBranch = jumpThroughEmpty(bb->falseBranch());
+                if (trueBranch->id == order.front()) {
+                    cb.add(BC::brfalse(bbLabels[falseBranch]));
+                    cb.add(BC::br(bbLabels[trueBranch]));
+                } else {
+                    cb.add(BC::brtrue(bbLabels[trueBranch]));
+                    cb.add(BC::br(bbLabels[falseBranch]));
+                }
+                // This is the end of this BB
                 return;
             }
 
-            case Tag::FrameState:
-            case Tag::Deopt:
-            case Tag::Assume:
-            case Tag::Checkpoint: {
-                assert(false && "Deopt instructions must be lowered into "
-                                "standard branches and scheduled deopt, "
-                                "before pir_2_rir");
-                break;
+            case Tag::Return: {
+                cb.add(BC::ret());
+                // end of this BB
+                return;
             }
 
             case Tag::ScheduledDeopt: {
@@ -1087,9 +1235,20 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                      fi != deopt->frames.rend(); fi++)
                     m->frames[i++] = *fi;
 
-                cs << BC::deopt(store);
-                // deopt is exit, return
+                cb.add(BC::deopt(store));
+                // deopt is exit
                 return;
+            }
+
+            // Invalid, should've been lowered away
+            case Tag::FrameState:
+            case Tag::Deopt:
+            case Tag::Assume:
+            case Tag::Checkpoint: {
+                assert(false && "Deopt instructions must be lowered into "
+                                "standard branches and scheduled deopt, "
+                                "before pir_2_rir");
+                break;
             }
 
             // Values, not instructions
@@ -1109,23 +1268,25 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
+            if (numberOfUses[instr] > 1)
+                cb.add(BC::ensureNamed());
+
             // Store the result
             if (alloc.sa.dead(instr)) {
-                cs << BC::pop();
+                cb.add(BC::pop());
             } else if (instr->producesRirResult()) {
                 if (!alloc.hasSlot(instr)) {
-                    cs << BC::pop();
+                    cb.add(BC::pop());
                 } else if (!alloc.onStack(instr)) {
-                    cs << BC::stloc(alloc[instr]);
+                    cb.add(BC::stloc(alloc[instr]));
                 }
             }
         }
 
         // This BB has exactly one successor, trueBranch().
-        // Jump through empty blocks
         assert(bb->isJmp());
         auto next = jumpThroughEmpty(bb->trueBranch());
-        cs << BC::br(bbLabels[next]);
+        cb.add(BC::br(bbLabels[next]));
     });
 
     return alloc.slots();
@@ -1180,7 +1341,7 @@ void Pir2Rir::lower(Code* code) {
                     debugMessage += dump.str();
                     debugMessage += " failed in\n";
                     dump.str("");
-                    code->printCode(dump, true);
+                    code->printCode(dump, false, false);
                     debugMessage += dump.str();
                 }
                 BBTransform::lowerExpect(
@@ -1212,112 +1373,6 @@ void Pir2Rir::lower(Code* code) {
             it = next;
         }
     });
-
-    // Lower phi functions - transform into a cfg where all input blocks of
-    // all phi functions are their immediate predecessors
-    {
-        bool done;
-        CFG cfg(code);
-        do {
-            done = true;
-            BreadthFirstVisitor::run(code->entry, [&](Instruction* i, BB* bb) {
-                // Check if this phi has the desired property
-                if (auto phi = Phi::Cast(i)) {
-                    bool ok = true;
-                    phi->eachArg([&](BB* inputBB, Value*) {
-                        if (!cfg.isImmediatePredecessor(inputBB, phi->bb()))
-                            ok = false;
-                    });
-                    if (ok)
-                        return;
-                    done = false;
-
-                    // Accumulate new arguments and inputs for the phi
-                    std::vector<std::pair<Value*, BB*>> update;
-
-                    // The idea here is to change the semantics of phi functions
-                    // from the one in PIR to the more common one. In PIR, phi
-                    // input blocks are not necessarily immediate predecessors.
-                    // The phi means, take the value associated with the last
-                    // visited bb from all the phi's input blocks. What we want
-                    // is, take the value associated with the immediate
-                    // predecessor block that we just came from. There is a
-                    // subtle difference when loops are in play...
-
-                    // We go backward breadth first from the phi's immediate
-                    // predecessors. The idea is, to every path we propagate all
-                    // the phi input values. If we find a block that creates one
-                    // of the inputs, we just update the input block for that
-                    // input. If we find a phi that has as argument one of the
-                    // inputs, we replace that argument with this phi. If we
-                    // find a merge block (ie. more than one immediate
-                    // predecessor), we insert a new phi that has as inputs the
-                    // inputs of the current one, and we update the current phi
-                    // to have the new phi as input.
-                    for (auto pred : cfg.immediatePredecessors(phi->bb())) {
-                        BreadthFirstVisitor::checkBackward(
-                            pred, cfg, [&](BB* bb) {
-                                // Check if block is the origin of one of the
-                                // phi args
-                                bool done = false;
-                                phi->eachArg([&](BB*, Value* val) {
-                                    assert(val->isInstruction());
-                                    if (Instruction::Cast(val)->bb() == bb) {
-                                        assert(!done);
-                                        update.emplace_back(val, pred);
-                                        done = true;
-                                    }
-                                });
-                                if (done)
-                                    return false;
-                                // Check if there is a phi in this block that
-                                // has one of the args the same as an arg to
-                                // the phi we are dealing with. If so, this phi
-                                // is the source of our phi input
-                                // (pretty much the case above but for phis)
-                                for (auto i : VisitorHelpers::reverse(*bb)) {
-                                    if (auto p = Phi::Cast(i)) {
-                                        bool stop = false;
-                                        p->eachArg([&](BB*, Value* v1) {
-                                            phi->eachArg([&](BB*, Value* v2) {
-                                                if (v1 == v2)
-                                                    stop = true;
-                                            });
-                                        });
-                                        if (stop) {
-                                            update.emplace_back(p, pred);
-                                            return false;
-                                        }
-                                    }
-                                }
-                                // Insert a new phi into a merge block
-                                if (cfg.immediatePredecessors(bb).size() > 1) {
-                                    auto newPhi = new Phi;
-                                    phi->eachArg([&](BB* b, Value* v) {
-                                        assert(v->isInstruction());
-                                        if (cfg.isPredecessor(
-                                                Instruction::Cast(v)->bb(), bb))
-                                            newPhi->addInput(
-                                                Instruction::Cast(v)->bb(), v);
-                                    });
-                                    bb->insert(bb->begin(), newPhi);
-                                    update.emplace_back(newPhi, pred);
-                                    return false;
-                                }
-                                return true;
-                            });
-                    }
-                    // Replace the current phi's args and inputs
-                    std::unordered_set<BB*> remove;
-                    phi->eachArg([&](BB* bb, Value*) { remove.insert(bb); });
-                    phi->removeInputs(remove);
-                    for (auto u : update) {
-                        phi->addInput(u.second, u.first);
-                    }
-                }
-            });
-        } while (!done);
-    }
 
     // Insert Nop into all empty blocks to make life easier
     Visitor::run(code->entry, [&](BB* bb) {

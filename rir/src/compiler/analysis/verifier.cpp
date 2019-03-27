@@ -23,8 +23,6 @@ class TheVerifier {
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
             f->print(std::cerr, true);
-            assert(false);
-            return;
         }
 
         f->eachPromise([&](Promise* p) {
@@ -38,10 +36,13 @@ class TheVerifier {
             }
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
-                p->print(std::cerr, true);
-                return;
+                p->printCode(std::cerr, true, false);
             }
         });
+
+        if (!ok) {
+            Rf_error("");
+        }
     }
 
     const CFG& cfg(Code* c) {
@@ -123,7 +124,6 @@ class TheVerifier {
                     ok = false;
                 }
             } else {
-                assert(!last->branchOrExit());
                 if (bb->falseBranch()) {
                     std::cerr << "bb" << bb->id
                               << " has false branch but no branch instr\n";
@@ -163,7 +163,11 @@ class TheVerifier {
 
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
-            assert(p->owner->promise(p->id) == p);
+            if (p->owner->promise(p->id) != p) {
+                std::cerr
+                    << "PIR Verifier: Promise code out of current closure";
+                ok = false;
+            }
             if (p->owner != f) {
                 mk->printRef(std::cerr);
                 std::cerr << " is referencing a promise from another function "
@@ -173,13 +177,27 @@ class TheVerifier {
         }
 
         if (i->branchOrExit())
-            assert(i == bb->last() &&
-                   "Only last instruction of BB can have controlflow");
+            if (i != bb->last()) {
+                std::cerr
+                    << "PIR Verifier: Only last instruction of BB can have "
+                       "controlflow";
+                ok = false;
+            }
 
         if (auto phi = Phi::Cast(i)) {
-            size_t directInputs = 0;
             phi->eachArg([&](BB* input, Value* v) {
                 if (auto iv = Instruction::Cast(v)) {
+                    if (iv == phi) {
+                        // Note: can happen in a one-block loop, but only if it
+                        // is not edge-split
+                        std::cerr << "Error at instruction '";
+                        i->print(std::cerr);
+                        std::cerr << "': input '";
+                        iv->printRef(std::cerr);
+                        std::cerr << "' phi has itself as input\n";
+                        ok = false;
+                    }
+
                     if (input == phi->bb()) {
                         // Note: can happen in a one-block loop, but only if it
                         // is not edge-split
@@ -194,9 +212,6 @@ class TheVerifier {
                     }
 
                     if (slow) {
-                        if (cfg(bb->owner).isImmediatePredecessor(input, bb))
-                            directInputs++;
-
                         if ((!cfg(bb->owner).isPredecessor(iv->bb(), i->bb()) ||
                              // A block can be it's own predecessor (loop). But
                              // then the input must come after the phi!
@@ -214,56 +229,40 @@ class TheVerifier {
                 }
             });
             if (slow) {
-                if (directInputs ==
-                    cfg(bb->owner).immediatePredecessors(bb).size()) {
-                    if (directInputs != phi->nargs()) {
-                        std::cout << "digraph { ";
-                        Visitor::run(f->entry, [&](BB* bb) {
-                            //                          std::cout << "BB" <<
-                            //                          bb->id << "
-                            //                          [shape=\"box\"
-                            //                          label=\"BB" << bb->id <<
-                            //                          "\"]; ";
-                            if (bb->next0)
-                                std::cout << "BB" << bb->id << " -> BB"
-                                          << bb->next0->id << "; ";
-                            if (bb->next1 && !Checkpoint::Cast(bb->last()))
-                                std::cout << "BB" << bb->id << " -> BB"
-                                          << bb->next1->id << "; ";
-                        });
-                        std::cout << "}\n";
-
+                std::unordered_set<BB*> inp;
+                for (auto in : cfg(bb->owner).immediatePredecessors(bb))
+                    inp.insert(in);
+                phi->eachArg([&](BB* bb, Value*) {
+                    auto pos = inp.find(bb);
+                    if (pos == inp.end()) {
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
-                        std::cerr << "'\nI have inputs from all my immediate "
-                                  << " predecessors but "
-                                  << phi->nargs() - directInputs
-                                  << " more arguments than immediate preds.\n";
-                        std::cerr << "This Means we created this kind of "
-                                     "graph, where a3 is in BB3 instead of\n"
-                                     "BB0. This will be impossible to convert "
-                                     "back to CSSA.\n"
-                                     "  .-----.                             \n"
-                                     "  | BB1 |         .-----.             \n"
-                                     "  |-----|----.----| BB0 |             \n"
-                                     "  | a1= |    |    '-----'             \n"
-                                     "  '-----'    v                        \n"
-                                     "          .-----.                     \n"
-                                     "          | BB3 |                     \n"
-                                     "          |-----|                     \n"
-                                     "          | a3= |                     \n"
-                                     "          '-----'                     \n"
-                                     "             |                        \n"
-                                     "             v                        \n"
-                                     "  .---------------------.             \n"
-                                     "  |         BB4         |             \n"
-                                     "  |---------------------|             \n"
-                                     "  | phi(BB1:a1, BB3:a3) |             \n"
-                                     "  '---------------------'             \n";
+                        std::cerr << " input BB" << bb->id
+                                  << " is not a predecessor\n";
                         ok = false;
-                        assert(false);
+                    } else {
+                        inp.erase(pos);
                     }
+                });
+                if (!inp.empty()) {
+                    std::cerr << "Error at instruction '";
+                    i->print(std::cerr);
+                    std::cerr << " the following predecessor blocks are not "
+                                 "handled in phi: ";
+                    for (auto& in : inp)
+                        std::cerr << in->id << " ";
+                    std::cerr << "\n";
+                    ok = false;
                 }
+            }
+        }
+
+        if (auto fs = FrameState::Cast(i)) {
+            if (fs->env() == Env::elided()) {
+                std::cerr << "Error at instruction '";
+                i->print(std::cerr);
+                std::cerr << " framestate env cannot be elided\n";
+                ok = false;
             }
         }
 
@@ -328,10 +327,9 @@ class TheVerifier {
 namespace rir {
 namespace pir {
 
-bool Verify::apply(ClosureVersion* f, bool slow) {
+void Verify::apply(ClosureVersion* f, bool slow) {
     TheVerifier v(f, slow);
     v();
-    return v.ok;
 }
 } // namespace pir
 } // namespace rir

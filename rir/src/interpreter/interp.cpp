@@ -7,6 +7,7 @@
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
+#include "safe_force.h"
 #include "utils/Pool.h"
 
 #include <assert.h>
@@ -263,6 +264,7 @@ SEXP materialize(void* rirDataWrapper) {
         return stub->create();
     }
     assert(false);
+    return nullptr;
 }
 
 SEXP* keepAliveSEXPs(void* rirDataWrapper) {
@@ -270,6 +272,7 @@ SEXP* keepAliveSEXPs(void* rirDataWrapper) {
         return env->gcData();
     }
     assert(false);
+    return nullptr;
 }
 
 SEXP lazyPromargsCreation(void* rirDataWrapper) {
@@ -303,9 +306,7 @@ R_bcstack_t evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*,
                         Opcode*, R_bcstack_t* = nullptr);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
-    int trampIn = ostackLength(ctx);
     if ((SETJMP(cntxt.cjmpbuf))) {
-        assert(trampIn == ostackLength(ctx));
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
@@ -320,6 +321,10 @@ static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
                                          SEXP env, SEXP arglist,
                                          InterpreterInstance* ctx) {
+    assert(TYPEOF(env) == ENVSXP ||
+           fun->signature().envCreation ==
+               FunctionSignature::Environment::CalleeCreated);
+
     RCNTXT cntxt;
 
     // This code needs to be protected, because its slot in the dispatch table
@@ -357,8 +362,9 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
     return rirCallTrampoline(call, fun, symbol::delayedEnv, arglist, ctx);
 }
 
-R_bcstack_t evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*,
-                        Opcode*, R_bcstack_t*);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
                            const CallContext* callCtxt, Opcode* pc,
                            R_bcstack_t* localsBase) {
@@ -383,6 +389,7 @@ static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
     assert(res == loopTrampolineMarker);
     Rf_endcontext(&cntxt);
 }
+#pragma GCC diagnostic pop
 
 static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
                                     SEXP ast, SEXP sysparent, SEXP op,
@@ -566,15 +573,17 @@ static void addDynamicAssumptionsFromContext(CallContext& call,
             bool notObj = true;
             bool isEager = true;
             if (stackObjSexpType(arg) == PROMSXP) {
-                if (PRVALUE(arg.u.sxpval) == R_UnboundValue) {
+                SEXP val = safeForcePromise(arg);
+                if (val == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
-                } else if (isObject(PRVALUE(arg.u.sxpval))) {
+                } else if (isObject(val)) {
                     notObj = false;
                 }
             } else if (arg.tag == STACK_OBJ_SEXP && isObject(arg.u.sxpval)) {
                 notObj = false;
-            } else if (arg.tag == STACK_OBJ_SEXP && arg.u.sxpval == R_MissingArg) {
+            } else if (arg.tag == STACK_OBJ_SEXP &&
+                       arg.u.sxpval == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
             }
             if (isEager)
@@ -1200,8 +1209,6 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
-
 #define BINDING_CACHE_SIZE 5
 typedef struct {
     SEXP loc;
@@ -1307,6 +1314,7 @@ RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
         cptr = cptr->nextcontext;
     }
     assert(false);
+    return nullptr;
 }
 
 RCNTXT* findFunctionContextFor(SEXP e) {
@@ -1370,7 +1378,11 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
     auto frameBaseSize = ostackLength(ctx) - excessStack;
+#pragma GCC diagnostic pop
+
     auto trampoline = [&]() {
         // 1. Set up our (outer) context
         //
@@ -1405,14 +1417,13 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         //
         // This wrapper consumes the environment from the deopt metadata and the
         // result of the previous frame.
-        size_t extraDeoptArgNum = innermostFrame ? 1 : 2;
         assert((size_t)ostackLength(ctx) ==
-               frameBaseSize + f.stackSize + extraDeoptArgNum);
+               frameBaseSize + f.stackSize + (innermostFrame ? 1 : 2));
         R_bcstack_t res = nullStackObj;
         if (!innermostFrame)
             res = ostackPop(ctx);
-        SEXP e = ostackPopSexp(ctx);
-        assert(e == deoptEnv);
+        assert(ostack_top() == deoptEnv);
+        ostackPopSexp(ctx);
         if (!innermostFrame)
             ostackPush(ctx, res);
         code->registerInvocation();
@@ -1463,7 +1474,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         memset(R_BCNodeStackTop, 0, sizeof(*R_BCNodeStackTop) * c->localsCount);
 #endif
         localsBase = R_BCNodeStackTop;
-
     }
     Locals locals(localsBase, c->localsCount, existingLocals);
 
@@ -1518,9 +1528,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(pop_context_) {
-            return ostackPop(ctx);
-        }
+        INSTRUCTION(pop_context_) { return ostackPop(ctx); }
 
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
@@ -1663,7 +1671,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP res = cachedGetVar(env, id, ctx, bindingCache);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1689,7 +1696,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP res = cachedGetVar(env, id, ctx, bindingCache);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1711,7 +1717,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SEXP res = Rf_findVar(sym, ENCLOS(env));
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1735,7 +1740,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SEXP res = Rf_findVar(sym, ENCLOS(env));
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1755,7 +1759,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SEXP res = Rf_ddfindVar(sym, env);
-            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
@@ -1767,29 +1770,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
-
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
-
-            ostackPushSexp(ctx, res);
-            NEXT();
-        }
-
-        INSTRUCTION(ldlval_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            SEXP res = cachedGetBindingCell(env, id, ctx, bindingCache);
-            SLOWASSERT(res);
-            res = CAR(res);
-            SLOWASSERT(res != R_UnboundValue);
-
-            R_Visible = TRUE;
-
-            if (TYPEOF(res) == PROMSXP)
-                res = PRVALUE(res);
-
-            SLOWASSERT(res != R_UnboundValue);
-            SLOWASSERT(res != R_MissingArg);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -1831,6 +1811,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             R_bcstack_t val = ostackPop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache);
 
             NEXT();
@@ -1841,6 +1823,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             R_bcstack_t val = ostackPop(ctx);
 
+            if (auto stub = LazyEnvironment::cast(env))
+                env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache, true);
 
             NEXT();
@@ -2058,11 +2042,16 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             advanceImmediate();
 
-            ArgsLazyData lazyArgs(&call, ctx);
-            fun->registerInvocation();
-            supplyMissingArgs(call, fun);
-            res = rirCallTrampoline(call, fun, symbol::delayedEnv,
-                                    (SEXP)&lazyArgs, ctx);
+            if (fun->signature().envCreation ==
+                FunctionSignature::Environment::CallerProvided) {
+                res = doCall(call, ctx);
+            } else {
+                ArgsLazyData lazyArgs(&call, ctx);
+                fun->registerInvocation();
+                supplyMissingArgs(call, fun);
+                res = rirCallTrampoline(call, fun, symbol::delayedEnv,
+                                        (SEXP)&lazyArgs, ctx);
+            }
             ostackPopn(ctx, call.passedArgs);
             ostackPushSexp(ctx, res);
 
@@ -2158,6 +2147,13 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(pop_) {
             ostackPop(ctx);
+            NEXT();
+        }
+
+        INSTRUCTION(popn_) {
+            Immediate i = readImmediate();
+            advanceImmediate();
+            ostack_popn(ctx, i);
             NEXT();
         }
 
@@ -2270,16 +2266,28 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 double real_res =
                     (l == NA_REAL || r == NA_REAL) ? NA_REAL : l / r;
                 STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+            } else if (stackObjIsSimpleScalar(lhs, REALSXP) &&
+                       stackObjIsSimpleScalar(rhs, INTSXP)) {
+                double l = tryStackObjToReal(lhs);
+                int r = tryStackObjToInteger(rhs);
+                double real_res =
+                    (l == NA_REAL || r == NA_INTEGER) ? NA_REAL : l / (double)r;
+                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+            } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
+                       stackObjIsSimpleScalar(rhs, REALSXP)) {
+                int l = tryStackObjToInteger(lhs);
+                double r = tryStackObjToReal(rhs);
+                double real_res =
+                    (l == NA_INTEGER || r == NA_REAL) ? NA_REAL : (double)l / r;
+                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
                 int l = tryStackObjToInteger(lhs);
                 int r = tryStackObjToInteger(rhs);
-                double real_res;
-                if (l == NA_INTEGER || r == NA_INTEGER)
-                    real_res = NA_REAL;
-                else
-                    real_res = (double)l / (double)r;
-                STORE_BINOP(realStackObj(real_res));
+                double real_res = (l == NA_INTEGER || r == NA_INTEGER)
+                                      ? NA_REAL
+                                      : (double)l / (double)r;
+                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
             } else {
                 BINOP_FALLBACK("/");
             }
@@ -2297,15 +2305,29 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 double real_res =
                     (l == NA_REAL || r == NA_REAL) ? NA_REAL : myfloor(l, r);
                 STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+            } else if (stackObjIsSimpleScalar(lhs, REALSXP) &&
+                       stackObjIsSimpleScalar(rhs, INTSXP)) {
+                double l = tryStackObjToReal(lhs);
+                int r = tryStackObjToInteger(rhs);
+                double real_res = (l == NA_REAL || r == NA_INTEGER)
+                                      ? NA_REAL
+                                      : myfloor(l, (double)r);
+                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+            } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
+                       stackObjIsSimpleScalar(rhs, REALSXP)) {
+                int l = tryStackObjToInteger(lhs);
+                double r = tryStackObjToReal(rhs);
+                double real_res = (l == NA_INTEGER || r == NA_REAL)
+                                      ? NA_REAL
+                                      : myfloor((double)l, r);
+                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
                 int l = tryStackObjToInteger(lhs);
                 int r = tryStackObjToInteger(rhs);
-                int int_res;
-                if (l == NA_INTEGER || r == NA_INTEGER)
-                    int_res = NA_REAL;
-                else
-                    int_res = (int)floor((double)l / (double)r);
+                int int_res = (l == NA_INTEGER || r == NA_INTEGER)
+                                  ? NA_REAL
+                                  : (int)floor((double)l / (double)r);
                 STORE_BINOP_FAST(int_res, true, true, Int, INTEGER);
             } else {
                 BINOP_FALLBACK("%/%");
@@ -2322,18 +2344,25 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 double real_res =
                     myfmod(tryStackObjToReal(lhs), tryStackObjToReal(rhs));
                 STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+            } else if (stackObjIsSimpleScalar(lhs, REALSXP) &&
+                       stackObjIsSimpleScalar(rhs, INTSXP)) {
+                double real_res = myfmod(tryStackObjToReal(lhs),
+                                         (double)tryStackObjToInteger(rhs));
+                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
+            } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
+                       stackObjIsSimpleScalar(rhs, REALSXP)) {
+                double real_res = myfmod((double)tryStackObjToInteger(lhs),
+                                         tryStackObjToReal(rhs));
+                STORE_BINOP_FAST(real_res, true, true, Real, REAL);
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
                 int l = tryStackObjToInteger(lhs);
                 int r = tryStackObjToInteger(rhs);
-                int int_res;
-                if (l == NA_INTEGER || r == NA_INTEGER || r == 0) {
-                    int_res = NA_INTEGER;
-                } else {
-                    int_res = (l >= 0 && r > 0)
-                                  ? l % r
-                                  : (int)myfmod((double)l, (double)r);
-                }
+                int int_res = (l == NA_INTEGER || r == NA_INTEGER || r == 0)
+                                  ? NA_INTEGER
+                                  : (l >= 0 && r > 0)
+                                        ? l % r
+                                        : (int)myfmod((double)l, (double)r);
                 STORE_BINOP_FAST(int_res, true, true, Int, INTEGER);
             } else {
                 BINOP_FALLBACK("%%");
@@ -2584,6 +2613,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             default:
                 assert(false);
+                res = false;
                 break;
             }
             ostackPushLogical(ctx, logical_res);
@@ -2707,7 +2737,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostackPopn(ctx, 3);
 
-            R_Visible = TRUE;
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -2736,7 +2765,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostackPopn(ctx, 4);
 
-            R_Visible = TRUE;
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -2775,6 +2803,10 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = sexpToStackObj(val);                                         \
+        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx)) {                  \
+            TYPEOF(idx) = vectype;                                             \
+            res = idx;                                                         \
+            vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \
             res = veccreate##StackObj(vecaccess(val)[i]);                      \
         }                                                                      \
@@ -2795,7 +2827,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 goto fallback;
             }
 
-            R_Visible = TRUE;
             ostackPopn(ctx, 2);
             ostackPush(ctx, res);
             NEXT();
@@ -2822,7 +2853,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             ostackPopn(ctx, 3);
 
-            R_Visible = TRUE;
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -2854,7 +2884,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             ostackPopn(ctx, 4);
-            R_Visible = TRUE;
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -3144,7 +3173,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             advanceImmediate();
 #ifndef UNSOUND_OPTS
-            assert(res == Rf_findFun(sym, env) && "guard_fun_ fail");
+            if (res != Rf_findFun(sym, env))
+                Rf_error("Invalid Callee");
 #endif
             NEXT();
         }
@@ -3509,5 +3539,6 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     }
 
     assert(false && "Expected a code object or a dispatch table");
+    return nullptr;
 }
 } // namespace rir

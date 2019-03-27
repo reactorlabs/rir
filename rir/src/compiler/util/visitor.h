@@ -198,24 +198,28 @@ class VisitorImplementation {
      *
      */
     static void run(BB* bb, const BBAction& action) {
-        forwardGenericRun<false>(bb, action);
+        forwardGenericRun<false>(bb, nullptr, action);
+    }
+
+    static void run(BB* bb, BB* stop, const BBAction& action) {
+        forwardGenericRun<false>(bb, stop, action);
     }
 
     static void runPostChange(BB* bb, const BBAction& action) {
-        forwardGenericRun<true>(bb, action);
+        forwardGenericRun<true>(bb, nullptr, action);
     }
 
     static bool check(BB* bb, const BBActionPredicate& action) {
-        return forwardGenericRun<false>(bb, action);
+        return forwardGenericRun<false>(bb, nullptr, action);
     }
 
     static void runBackward(BB* bb, CFG const& cfg, const BBAction& action) {
-        backwardGenericRun<false>(bb, cfg, action);
+        backwardGenericRun<false>(bb, nullptr, cfg, action);
     }
 
     static bool checkBackward(BB* bb, CFG const& cfg,
                               const BBActionPredicate& action) {
-        return backwardGenericRun<false>(bb, cfg, action);
+        return backwardGenericRun<false>(bb, nullptr, cfg, action);
     }
 
   protected:
@@ -223,24 +227,18 @@ class VisitorImplementation {
     typedef std::function<void(Schedule, BB*)> ScheduleNext;
 
     template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool forwardGenericRun(BB* bb, const ActionKind& action) {
+    static bool forwardGenericRun(BB* bb, BB* stop, const ActionKind& action) {
         struct Scheduler {
             RIR_INLINE std::array<BB*, 2> operator()(BB* cur) const {
-                if (ORDER == Order::Lowering) {
-                    // Curently we emit only brtrue in pir2rir, therefore we
-                    // always want next1 to be the fallthrough case.
-                    return {{cur->next1, cur->next0}};
-                } else {
-                    return {{cur->next0, cur->next1}};
-                }
+                return {{cur->next0, cur->next1}};
             }
         };
         const Scheduler scheduler;
-        return genericRun<PROCESS_NEW_NODES>(bb, scheduler, action);
+        return genericRun<PROCESS_NEW_NODES>(bb, stop, scheduler, action);
     }
 
     template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool backwardGenericRun(BB* bb, CFG const& cfg,
+    static bool backwardGenericRun(BB* bb, BB* stop, CFG const& cfg,
                                    const ActionKind& action) {
         struct Scheduler {
             const CFG& cfg;
@@ -249,11 +247,11 @@ class VisitorImplementation {
             }
         };
         const Scheduler scheduler = {cfg};
-        return genericRun<PROCESS_NEW_NODES>(bb, scheduler, action);
+        return genericRun<PROCESS_NEW_NODES>(bb, stop, scheduler, action);
     }
 
     template <bool PROCESS_NEW_NODES, typename Scheduler, typename ActionKind>
-    static bool RIR_INLINE genericRun(BB* bb, Scheduler& scheduleNext,
+    static bool RIR_INLINE genericRun(BB* bb, BB* stop, Scheduler& scheduleNext,
                                       const ActionKind& action) {
         typedef VisitorHelpers::PredicateWrapper<ActionKind> PredicateWrapper;
         const PredicateWrapper predicate = {action};
@@ -267,17 +265,27 @@ class VisitorImplementation {
 
         while (cur) {
             next = nullptr;
-            auto schedule = [&next, &done, &delayed, &todo](BB* bb) {
-                if (!bb || done.check(bb))
+            auto schedule = [&](BB* bb) {
+                if (!bb || done.check(bb) || cur == stop)
                     return;
-                bool deoptBranch =
-                    !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());
-                if (ORDER == Order::Lowering && deoptBranch) {
-                    delayed.push_back(bb);
-                } else if (!next && todo.empty()) {
-                    next = bb;
+                if (ORDER == Order::Lowering) {
+                    bool deoptBranch =
+                        !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());
+                    bool returnBranch =
+                        !bb->isEmpty() && Return::Cast(bb->last());
+                    if (deoptBranch) {
+                        delayed.push_back(bb);
+                    } else if (returnBranch) {
+                        delayed.push_front(bb);
+                    } else {
+                        enqueue(todo, bb);
+                    }
                 } else {
-                    enqueue(todo, bb);
+                    if (!next && todo.empty()) {
+                        next = bb;
+                    } else {
+                        enqueue(todo, bb);
+                    }
                 }
                 done.set(bb);
             };
@@ -321,8 +329,7 @@ class VisitorImplementation {
 
     static void enqueue(std::deque<BB*>& todo, BB* bb) {
         // For analysis random search is faster
-        if (ORDER == Order::Breadth || ORDER == Order::Lowering ||
-            (ORDER == Order::Random && coinFlip()))
+        if (ORDER == Order::Breadth || (ORDER == Order::Random && coinFlip()))
             todo.push_back(bb);
         else
             todo.push_front(bb);
@@ -351,42 +358,7 @@ class DominatorTreeVisitor {
   public:
     explicit DominatorTreeVisitor(const DominanceGraph& dom) : dom(dom) {}
 
-    void run(Code* code, BBAction action) {
-        Marker done;
-
-        std::stack<BB*> todo;
-        std::stack<BB*> delayedTodo;
-
-        todo.push(code->entry);
-        done.set(code->entry);
-
-        BB* cur;
-        while (!todo.empty() || !delayedTodo.empty()) {
-            if (!todo.empty()) {
-                cur = todo.top();
-                todo.pop();
-            } else {
-                cur = delayedTodo.top();
-                delayedTodo.pop();
-            }
-
-            auto apply = [&](BB* next) {
-                if (!next || done.check(next))
-                    return;
-                if (dom.dominates(cur, next)) {
-                    todo.push(next);
-                } else {
-                    delayedTodo.push(next);
-                }
-                done.set(next);
-            };
-
-            apply(cur->next0);
-            apply(cur->next1);
-
-            action(cur);
-        }
-    }
+    void run(BB* entry, BBAction action) const;
 };
 
 } // namespace pir

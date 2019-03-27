@@ -34,35 +34,54 @@ void BB::print(std::ostream& out, bool tty) {
     }
 }
 
-void BB::printGraph(std::ostream& out, bool tty) {
-    out << "BB" << id << " [shape=\"box\", fontname=\"monospace\", xlabel=\"BB"
-        << id << "\", label=\"\\\n";
+void BB::printGraph(std::ostream& out, bool omitDeoptBranches) {
+    out << "BB" << uid()
+        << " [shape=\"box\", fontname=\"monospace\", xlabel=\"BB" << id
+        << "\", ";
+    if (isDeopt())
+        out << "bgcolor=\"gray\", style=\"filled\", ";
+    out << "label=\"\\\n";
     for (auto i : instrs) {
         std::stringstream buf;
         i->printGraph(buf);
         out << escapeString(buf.str()) << "\\l\\\n";
     }
     out << "\"];\n";
+
+    bool printDeoptOnlyDefault =
+        omitDeoptBranches && !isEmpty() && Checkpoint::Cast(last());
     if (!instrs.empty() && last()->branches()) {
-        last()->printGraphBranches(out, id);
+        if (!printDeoptOnlyDefault)
+            last()->printGraphBranches(out, uid());
     }
-    if (isJmp()) {
-        out << "BB" << id << " -> "
-            << "BB" << next0->id << ";\n";
+    if (isJmp() || printDeoptOnlyDefault) {
+        out << "BB" << uid() << " -> "
+            << "BB" << next0->uid() << ";\n";
     }
+    if (printDeoptOnlyDefault)
+        out << "BB" << uid() << " -> d" << next1->id << " [color=red];\n";
     out << "\n";
 }
 
-void BB::printBBGraph(std::ostream& out) {
-    out << "BB" << id << " [shape=\"circle\", label=\"BB" << id << "\"];\n";
+void BB::printBBGraph(std::ostream& out, bool omitDeoptBranches) {
+    out << "BB" << uid() << " [shape=\"circle\", label=\"BB" << id << "\"];\n";
+    bool printDeoptOnlyDefault =
+        omitDeoptBranches && !isEmpty() && Checkpoint::Cast(last());
     if (!instrs.empty() && last()->branches()) {
-        last()->printGraphBranches(out, id);
+        if (!printDeoptOnlyDefault)
+            last()->printGraphBranches(out, uid());
     }
-    if (isJmp()) {
-        out << "BB" << id << " -> "
-            << "BB" << next0->id << ";\n";
+    if (isJmp() || printDeoptOnlyDefault) {
+        out << "BB" << uid() << " -> "
+            << "BB" << next0->uid() << ";\n";
     }
+    if (printDeoptOnlyDefault)
+        out << "BB" << uid() << " -> d" << next1->id << " [color=red];\n";
     out << "\n";
+}
+
+bool BB::isDeopt() const {
+    return !isEmpty() && (Deopt::Cast(last()) || ScheduledDeopt::Cast(last()));
 }
 
 BB::~BB() {
@@ -142,6 +161,18 @@ void BB::gc() {
         delete i;
     deleted.clear();
 }
+
+bool BB::before(Instruction* a, Instruction* b) const {
+    assert(a->bb() == b->bb() && a->bb() == this);
+    for (const auto& i : instrs) {
+        if (i == b)
+            return false;
+        if (i == a)
+            return true;
+    }
+    assert(false);
+    return false;
+};
 
 void BB::collectDominated(std::unordered_set<BB*>& subs, DominanceGraph& dom) {
     Visitor::run(this, [&](BB* child) {

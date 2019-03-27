@@ -35,6 +35,9 @@ struct StackUseAnalysisState {
     bool isDead;
 
     AbstractResult merge(const StackUseAnalysisState& other);
+    AbstractResult mergeExit(const StackUseAnalysisState& other) {
+        return merge(other);
+    }
     void print(std::ostream& out, bool tty) const;
 };
 

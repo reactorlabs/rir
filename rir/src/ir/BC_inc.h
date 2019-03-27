@@ -203,6 +203,8 @@ class BC {
             return immediate.callBuiltinFixedArgs.nargs;
         if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
             return immediate.mkEnvFixedArgs.nargs + 1;
+        if (bc == Opcode::popn_)
+            return immediate.i;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -325,6 +327,7 @@ BC_NOARGS(V, _)
 #undef V
     inline static BC recordCall();
     inline static BC recordBinop();
+    inline static BC popn(unsigned n);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
@@ -335,7 +338,6 @@ BC_NOARGS(V, _)
     inline static BC ldvarNoForce(SEXP sym);
     inline static BC ldvarSuper(SEXP sym);
     inline static BC ldvarNoForceSuper(SEXP sym);
-    inline static BC ldlval(SEXP sym);
     inline static BC ldddvar(SEXP sym);
     inline static BC ldarg(uint32_t offset);
     inline static BC ldloc(uint32_t offset);
@@ -596,7 +598,6 @@ BC_NOARGS(V, _)
         case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldvar_noforce_super_:
-        case Opcode::ldlval_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
         case Opcode::starg_:
@@ -638,6 +639,7 @@ BC_NOARGS(V, _)
         case Opcode::push_context_:
             memcpy(&immediate.offset, pc, sizeof(Jmp));
             break;
+        case Opcode::popn_:
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:

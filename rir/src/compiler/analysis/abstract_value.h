@@ -3,6 +3,7 @@
 
 #include "../pir/pir.h"
 #include "abstract_result.h"
+#include "utils/Set.h"
 
 #include <functional>
 #include <set>
@@ -122,6 +123,9 @@ struct AbstractPirValue {
     }
 
     AbstractResult merge(const AbstractPirValue& other);
+    AbstractResult mergeExit(const AbstractPirValue& other) {
+        return merge(other);
+    }
 
     void print(std::ostream& out, bool tty = false) const;
 };
@@ -171,6 +175,10 @@ struct AbstractREnvironment {
     }
 
     const bool absent(SEXP e) const { return !tainted && !entries.count(e); }
+
+    AbstractResult mergeExit(const AbstractREnvironment& other) {
+        return merge(other);
+    }
 
     AbstractResult merge(const AbstractREnvironment& other) {
         AbstractResult res;
@@ -259,6 +267,10 @@ class AbstractREnvironmentHierarchy {
 
     std::unordered_map<Value*, Value*> aliases;
 
+    AbstractResult mergeExit(const AbstractREnvironmentHierarchy& other) {
+        return merge(other);
+    }
+
     AbstractResult merge(const AbstractREnvironmentHierarchy& other) {
         AbstractResult res;
 
@@ -322,6 +334,9 @@ class AbstractUnique {
 
     Kind* get() const { return val; }
 
+    AbstractResult mergeExit(const AbstractUnique& other) {
+        return merge(other);
+    }
     AbstractResult merge(const AbstractUnique& other) {
         if (val && val != other.val) {
             val = nullptr;
@@ -337,6 +352,36 @@ class AbstractUnique {
             out << "?";
         out << "\n";
     };
+};
+
+template <typename T>
+struct IntersectionSet {
+    SmallSet<T> available;
+
+    AbstractResult mergeExit(const IntersectionSet& other) {
+        return merge(other);
+    }
+
+    AbstractResult merge(const IntersectionSet& other) {
+        AbstractResult res;
+        for (auto it = available.cbegin(); it != available.cend();) {
+            if (other.available.includes(*it)) {
+                it++;
+            } else {
+                it = available.erase(it);
+                res.update();
+            }
+        }
+        return res;
+    }
+
+    void print(std::ostream& out, bool tty) {
+        for (auto& a : available) {
+            a.print(out, tty);
+            out << " ";
+        }
+        out << "\n";
+    }
 };
 }
 }

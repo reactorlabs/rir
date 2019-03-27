@@ -202,6 +202,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::ldvar_:
         v = insert(new LdVar(bc.immediateConst(), env));
+        // Checkpoint might be useful if we end up inlining this force
+        if (!inPromise())
+            addCheckpoint(srcCode, pos, stack, insert);
         push(insert(new Force(v, env)));
         break;
 
@@ -270,6 +273,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::pop_:
         pop();
         break;
+
+    case Opcode::popn_: {
+        for (int i = bc.immediate.i; i > 0; --i)
+            pop();
+        break;
+    }
 
     case Opcode::record_binop_: {
         at(0)->typeFeedback.merge(bc.immediate.binopFeedback[0]);
@@ -376,18 +385,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto arg = tryCreateArg(promiseCode, insert, eager);
                     if (!arg)
                         return false;
-                    if (auto mk = MkArg::Cast(arg)) {
-                        if (mk->isEager()) {
-                            auto eager = mk->eagerArg();
-                            if (eager == MissingArg::instance())
-                                given.remove(
-                                    Assumption::NoExplicitlyMissingArgs);
-                            if (!eager->type.maybeLazy())
-                                given.setEager(i);
-                            if (!eager->type.maybeObj())
-                                given.setNotObj(i);
-                        }
+
+                    auto mk = MkArg::Cast(arg);
+                    if (mk && mk->isEager()) {
+                        given.setEager(i);
+                        if (mk->eagerArg() == MissingArg::instance())
+                            given.remove(Assumption::NoExplicitlyMissingArgs);
                     }
+                    Value* value = arg->followCastsAndForce();
+                    if (!MkArg::Cast(value) && !value->type.maybeObj())
+                        given.setNotObj(i);
+
                     args.push_back(arg);
                 }
                 i++;
@@ -506,8 +514,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         SEXP target = rir::Pool::get(bc.immediate.callBuiltinFixedArgs.builtin);
 
         std::vector<Value*> args(n);
-        for (size_t i = 0; i < n; ++i)
+        for (size_t i = 0; i < n; ++i) {
             args[n - i - 1] = pop();
+        }
 
         assert(TYPEOF(target) == BUILTINSXP);
         push(insert(BuiltinCallFactory::New(env, target, args, ast)));
@@ -726,7 +735,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::ensure_named_:
-        push(insert(new EnsureNamed(pop())));
+        // Recomputed automatically in the backend
         break;
 
     case Opcode::set_shared_:
@@ -797,7 +806,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
-    case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::beginloop_:
     case Opcode::endloop_:
@@ -1049,9 +1057,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 return nullptr;
             }
 
-            if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->hasEffectIgnoreVisibility()) {
-                addCheckpoint(srcCode, nextPos, cur.stack, insert);
+            if (!inPromise() && !insert.getCurrentBB()->isEmpty()) {
+                auto last = insert.getCurrentBB()->last();
+                if (last->isDeoptBarrier())
+                    addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
         }
     }

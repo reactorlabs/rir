@@ -51,7 +51,7 @@ typedef std::unordered_map<std::string, pir::ClosureVersion*> closuresByName;
 closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::StreamLogger logger({pir::DebugOptions::DebugFlags() |
                                   // pir::DebugFlag::PrintIntoStdout |
-                                  // pir::DebugFlag::PrintEarlyRir |
+                                  // pir::DebugFlag::PrintEarlyPir |
                                   // pir::DebugFlag::PrintOptimizationPasses |
                                   pir::DebugFlag::PrintFinalPir,
                               std::regex(".*"), std::regex(".*"),
@@ -131,16 +131,11 @@ class NullBuffer : public std::ostream, std::streambuf {
 };
 
 bool verify(Module* m) {
-    bool success = true;
-    m->eachPirClosureVersion([&success](ClosureVersion* v) {
-        if (!Verify::apply(v))
-            success = false;
-    });
+    m->eachPirClosureVersion([](ClosureVersion* v) { Verify::apply(v); });
     // TODO: find fix for osx
     NullBuffer nb;
     m->print(nb);
     // m->print(std::cout);
-
     return true;
 }
 
@@ -228,7 +223,7 @@ bool testCondition(const std::string& input,
     compile("", input, &m);
     bool t = verify(&m);
     m.eachPirClosureVersion(condition);
-    m.print(std::cout);
+    // m.print(std::cout);
     return t;
 }
 
@@ -254,6 +249,59 @@ bool canRemoveEnvironmentIfNonTypeFeedback(const std::string& input) {
         t = t && (Query::noEnv(f) || envOfAddElided(f));
     });
     return t;
+}
+
+bool testDeadStore() {
+    auto hasAssign = [](pir::ClosureVersion* f) {
+        size_t count = 0;
+        Visitor::run(f->entry, [&](Instruction* i) {
+            if (StVar::Cast(i))
+                count++;
+        });
+        return count;
+    };
+    {
+        pir::Module m;
+        auto res = compile("", "f <- function(x) {y <- 2}", &m);
+        auto f = res["f"];
+        CHECK(!hasAssign(f));
+    }
+    {
+        // Scope analysis promotes "y" to ssa variable. Thus the stores are not
+        // needed anymore.
+        pir::Module m;
+        auto res =
+            compile("", "f <- function(x) {if (x) y <- 1 else y <- 2; y}", &m);
+        auto f = res["f"];
+        CHECK(!hasAssign(f));
+    }
+    {
+        // Both updates to "y" happen before the first leak. therefore they are
+        // both folded into mkenv
+        pir::Module m;
+        auto res = compile("", "f <- function(x) {y <- 1; y <- 2; leak()}", &m);
+        auto f = res["f"];
+        CHECK(hasAssign(f) == 0);
+    }
+    {
+        // both updates to "y" happen between observations. Only when we
+        // return, the env could be observed again. Thus the first store can
+        // be removed
+        pir::Module m;
+        auto res = compile("", "f <- function(x) {leak(); y <- 1; y <- 2}", &m);
+        auto f = res["f"];
+        CHECK(hasAssign(f) == 1);
+    }
+    {
+        // Both updates to "y" are observable. The first by foo, the second by
+        // anything that happens after exit.
+        pir::Module m;
+        auto res =
+            compile("", "f <- function(x) {leak(); y <- 1; foo(); y <- 2}", &m);
+        auto f = res["f"];
+        CHECK(hasAssign(f) == 2);
+    }
+    return true;
 }
 
 bool testSuperAssign() {
@@ -394,7 +442,242 @@ bool testPir2Rir(const std::string& name, const std::string& fun,
     return checkPir2Rir(orig, after);
 }
 
+class MockBB : public BB {
+    class MockCode : public pir::Code {
+      public:
+        MockCode(BB* e, size_t s) : Code() {
+            entry = e;
+            nextBBId = s;
+        }
+        ~MockCode() {
+            // ~Code wants to delete something
+            entry = new MockBB;
+        }
+    };
+
+  public:
+    static MockCode code;
+    MockBB() : BB(&code, code.nextBBId++) {
+        if (!code.entry)
+            code.entry = this;
+    }
+    static void reset() {
+        code.entry = nullptr;
+        code.nextBBId = 0;
+    }
+};
+MockBB::MockCode MockBB::code = MockCode(nullptr, 0);
+
+bool testCfg() {
+    {
+        /*
+         *    A
+         *   / \
+         *  B   C
+         *  |   |
+         *  |   D
+         *   \ /
+         *    E
+         */
+        MockBB::reset();
+        MockBB A, B, C, D, E;
+        A.next0 = &B;
+        A.next1 = &C;
+        C.next0 = &D;
+        D.next0 = &E;
+        B.next0 = &E;
+
+        CFG cfg(&MockBB::code);
+
+        assert(cfg.isPredecessor(&A, &B));
+        assert(cfg.isPredecessor(&A, &C));
+        assert(cfg.isPredecessor(&A, &D));
+        assert(cfg.isPredecessor(&A, &E));
+        assert(!cfg.isPredecessor(&B, &C));
+        assert(!cfg.isPredecessor(&D, &C));
+
+        DominanceGraph dom(&MockBB::code);
+
+        assert(dom.dominates(&A, &B));
+        assert(dom.dominates(&A, &C));
+        assert(dom.dominates(&A, &D));
+        assert(dom.dominates(&A, &E));
+        assert(!dom.dominates(&B, &E));
+        assert(!dom.dominates(&C, &E));
+        assert(dom.dominates(&C, &D));
+        assert(dom.immediatelyDominates(&A, &B));
+        assert(dom.immediatelyDominates(&A, &C));
+        assert(!dom.immediatelyDominates(&A, &D));
+        assert(dom.immediatelyDominates(&A, &E));
+    }
+
+    {
+        /*
+         *    A
+         *   / \
+         *  B   C <-> E
+         *   \ /
+         *    D
+         */
+
+        MockBB::reset();
+        MockBB A, B, C, D, E;
+        A.next0 = &B;
+        B.next0 = &D;
+        A.next1 = &C;
+        C.next0 = &E;
+        C.next1 = &D;
+        E.next0 = &C;
+
+        CFG cfg(&MockBB::code);
+        assert(cfg.isPredecessor(&A, &E));
+        assert(cfg.isPredecessor(&C, &E));
+        assert(cfg.isPredecessor(&E, &C));
+        assert(cfg.isPredecessor(&C, &D));
+
+        DominanceGraph dom(&MockBB::code);
+        assert(dom.dominates(&A, &B));
+        assert(dom.dominates(&A, &C));
+        assert(dom.dominates(&A, &D));
+        assert(dom.dominates(&A, &E));
+
+        assert(dom.immediatelyDominates(&A, &B));
+        assert(dom.immediatelyDominates(&A, &C));
+        assert(dom.immediatelyDominates(&A, &D));
+        assert(!dom.immediatelyDominates(&A, &E));
+        assert(dom.immediatelyDominates(&C, &E));
+        assert(!dom.dominates(&E, &C));
+        assert(!dom.dominates(&E, &D));
+
+        DominanceFrontier f(&MockBB::code, cfg, dom);
+        assert(f.at(&A).empty());
+        assert(f.at(&B) == DominanceFrontier::BBList({&D}));
+        assert(f.at(&C) == DominanceFrontier::BBList({&C, &D}));
+        assert(f.at(&E) == DominanceFrontier::BBList({&C}));
+        assert(f.at(&D) == DominanceFrontier::BBList({}));
+    }
+
+    {
+        /*
+         *  .-> A <--.
+         *  |  / \   |
+         *  | /   |  |
+         *  B <-- C  |
+         *   \       |
+         *     D ----‘
+         */
+
+        MockBB::reset();
+        MockBB A, B, C, D;
+        A.next0 = &B;
+        A.next1 = &C;
+        B.next0 = &A;
+        B.next1 = &D;
+        C.next0 = &B;
+        D.next0 = &A;
+
+        CFG cfg(&MockBB::code);
+        assert(cfg.isPredecessor(&A, &B));
+        assert(cfg.isPredecessor(&B, &A));
+        assert(cfg.isPredecessor(&D, &C));
+        assert(cfg.isPredecessor(&C, &A));
+
+        DominanceGraph dom(&MockBB::code);
+        assert(dom.dominates(&A, &B));
+        assert(dom.dominates(&A, &C));
+        assert(dom.dominates(&A, &D));
+        assert(dom.dominates(&B, &A));
+        assert(!dom.dominates(&C, &A));
+        assert(!dom.dominates(&D, &A));
+
+        assert(dom.immediatelyDominates(&A, &B));
+        assert(dom.immediatelyDominates(&A, &C));
+        assert(dom.immediatelyDominates(&B, &D));
+        assert(!dom.immediatelyDominates(&A, &D));
+
+        assert(dom.dominators(&B) == DominanceGraph::BBList({&A}));
+
+        DominanceFrontier f(&MockBB::code, cfg, dom);
+        assert(f.at(&A).empty());
+        assert(f.at(&B).empty());
+        assert(f.at(&C) == DominanceFrontier::BBList({&B}));
+        assert(f.at(&D) == DominanceFrontier::BBList({&A}));
+    }
+
+    return true;
+}
+
+static std::string mandelbrot = "\
+mandelbrot <- function() {\n\
+    size = 30\n\
+    sum = 0\n\
+    byteAcc = 0\n\
+    bitNum  = 0\n\
+    y = 0\n\
+    while (y < size) {\n\
+      ci = (2.0 * y / size) - 1.0\n\
+      x = 0\n\
+      while (x < size) {\n\
+        zr   = 0.0\n\
+        zrzr = 0.0\n\
+        zi   = 0.0\n\
+        zizi = 0.0\n\
+        cr = (2.0 * x / size) - 1.5\n\
+        z = 0\n\
+        notDone = TRUE\n\
+        escape = 0\n\
+        while (notDone && (z < 50)) {\n\
+          zr = zrzr - zizi + cr\n\
+          zi = 2.0 * zr * zi + ci\n\
+          zrzr = zr * zr\n\
+          zizi = zi * zi\n\
+          if ((zrzr + zizi) > 4.0) {\n\
+            notDone = FALSE\n\
+            escape  = 1\n\
+          }\n\
+          z = z + 1\n\
+        }\n\
+        byteAcc = bitwShiftL(byteAcc, 1) + escape\n\
+        bitNum = bitNum + 1\n\
+        if (bitNum == 8) {\n\
+          sum = bitwXor(sum, byteAcc)\n\
+          byteAcc = 0\n\
+          bitNum  = 0\n\
+        } else if (x == (size - 1)) {\n\
+          byteAcc = bitwShiftL(byteAcc, 8 - bitNum)\n\
+          sum = bitwXor(sum, byteAcc)\n\
+          byteAcc = 0\n\
+          bitNum  = 0\n\
+        }\n\
+        x = x + 1\n\
+      }\n\
+      y = y + 1\n\
+    }\n\
+    return (sum);\n\
+}\n";
+
+static bool testMandelbrot() {
+    pir::Module m;
+    SEXP env = compileToRir("", mandelbrot, R_GlobalEnv);
+    SEXP fun = CAR(FRAME(env));
+    // warmup
+    rirApplyClosure(R_NilValue, fun, R_NilValue, R_GlobalEnv);
+    rirApplyClosure(R_NilValue, fun, R_NilValue, R_GlobalEnv);
+    auto res = compileRir2Pir(env, &m);
+    auto f = res["mandelbrot"];
+
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (auto ld = LdVar::Cast(i))
+            CHECK(Env::Cast(ld->env()) && Env::Cast(ld->env())->rho == env);
+        CHECK(CallSafeBuiltin::Cast(i) || !CallInstruction::CastCall(i));
+        return true;
+    });
+
+    return true;
+}
+
 static Test tests[] = {
+    Test("test cfg", &testCfg),
     Test("test_42L", []() { return test42("42L"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("test_inline_two",
@@ -595,6 +878,8 @@ static Test tests[] = {
                            " f <- function(a,b,c) if (a() == (b+c)) 42L;"
                            " f(x,y(),z)}");
          }),
+    Test("Test dead store analysis", &testDeadStore),
+    Test("Test mandelbrot is scope-resolved", &testMandelbrot),
 };
 
 } // namespace
@@ -602,6 +887,8 @@ static Test tests[] = {
 namespace rir {
 
 void PirTests::run() {
+    size_t oldconfig = Rir2PirCompiler::MAX_INPUT_SIZE;
+    Rir2PirCompiler::MAX_INPUT_SIZE = 3000;
     for (auto t : tests) {
         std::cout << "> " << t.first << "\n";
         if (!t.second()) {
@@ -609,5 +896,6 @@ void PirTests::run() {
             exit(1);
         }
     }
+    Rir2PirCompiler::MAX_INPUT_SIZE = oldconfig;
 }
 } // namespace rir
