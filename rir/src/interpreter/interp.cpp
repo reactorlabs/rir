@@ -364,7 +364,6 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
-const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
                            const CallContext* callCtxt, Opcode* pc,
                            R_bcstack_t* localsBase) {
@@ -573,7 +572,7 @@ static void addDynamicAssumptionsFromContext(CallContext& call,
             bool notObj = true;
             bool isEager = true;
             if (stackObjSexpType(arg) == PROMSXP) {
-                SEXP val = safeForcePromise(arg);
+                SEXP val = safeForcePromise(stackObjToSexp(arg));
                 if (val == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
@@ -2044,7 +2043,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (fun->signature().envCreation ==
                 FunctionSignature::Environment::CallerProvided) {
-                res = doCall(call, ctx);
+                res = stackObjToSexp(doCall(call, ctx));
             } else {
                 ArgsLazyData lazyArgs(&call, ctx);
                 fun->registerInvocation();
@@ -2153,7 +2152,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(popn_) {
             Immediate i = readImmediate();
             advanceImmediate();
-            ostack_popn(ctx, i);
+            ostackPopn(ctx, i);
             NEXT();
         }
 
@@ -2595,7 +2594,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXPTYPE type = stackObjSexpType(val);
             Immediate i = readImmediate();
             advanceImmediate();
-            int logical_res;
+            int logical_res = false;
             switch (i) {
             case NILSXP:
             case LGLSXP:
@@ -2613,7 +2612,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             default:
                 assert(false);
-                res = false;
                 break;
             }
             ostackPushLogical(ctx, logical_res);
@@ -2803,10 +2801,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = sexpToStackObj(val);                                         \
-        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx)) {                  \
-            TYPEOF(idx) = vectype;                                             \
-            res = idx;                                                         \
-            vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \
             res = veccreate##StackObj(vecaccess(val)[i]);                      \
         }                                                                      \

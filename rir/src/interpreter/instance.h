@@ -176,8 +176,8 @@ RIR_INLINE R_bcstack_t sexpToStackObj(SEXP x) {
 
 RIR_INLINE SEXP stackObjToSexp(R_bcstack_t x) {
     switch (x.tag) {
-    case STACK_OBJ_INT:
 #ifdef USE_TYPED_STACK
+    case STACK_OBJ_INT:
         SEXP res;
         res = Rf_allocVector(INTSXP, 1);
         *INTEGER(res) = x.u.ival;
@@ -205,6 +205,7 @@ RIR_INLINE SEXP stackObjToSexp(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return nullptr;
 }
 
 RIR_INLINE bool stackObjIsNull(R_bcstack_t x) {
@@ -224,6 +225,7 @@ RIR_INLINE bool stackObjIsInteger(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return false;
 }
 
 // Returns NA_INTEGER if not an integer, doesn't consider reals integers
@@ -243,6 +245,7 @@ RIR_INLINE int tryStackObjToInteger(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return 0;
 }
 
 // Doesn't consider integers reals
@@ -258,6 +261,7 @@ RIR_INLINE bool stackObjIsReal(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return false;
 }
 
 // Returns NA_REAL if not a real, doesn't consider integers reals
@@ -277,6 +281,7 @@ RIR_INLINE double tryStackObjToReal(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return 0;
 }
 
 RIR_INLINE bool stackObjIsLogical(R_bcstack_t x) {
@@ -291,6 +296,7 @@ RIR_INLINE bool stackObjIsLogical(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return false;
 }
 
 // Returns NA_LOGICAL if not a logical
@@ -310,6 +316,7 @@ RIR_INLINE int tryStackObjToLogical(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return 0;
 }
 
 // Fails if not a logical or NA
@@ -326,6 +333,7 @@ RIR_INLINE int tryStackObjToLogicalNa(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return 0;
 }
 
 // Returns regular if int, truncated if real, -1 otherwise
@@ -352,6 +360,7 @@ RIR_INLINE SEXPTYPE stackObjSexpType(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return 0;
 }
 
 RIR_INLINE bool stackObjIsVector(R_bcstack_t x) {
@@ -365,6 +374,7 @@ RIR_INLINE bool stackObjIsVector(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return false;
 }
 
 RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type) {
@@ -380,6 +390,7 @@ RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type) {
     default:
         assert(false);
     }
+    return false;
 }
 
 RIR_INLINE bool stackObjIsScalar(R_bcstack_t x) {
@@ -393,6 +404,7 @@ RIR_INLINE bool stackObjIsScalar(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return false;
 }
 
 RIR_INLINE R_xlen_t stackObjLength(R_bcstack_t x) {
@@ -406,6 +418,7 @@ RIR_INLINE R_xlen_t stackObjLength(R_bcstack_t x) {
     default:
         assert(false);
     }
+    return 0;
 }
 
 RIR_INLINE int stackObjAsLogical(R_bcstack_t x) {
@@ -436,6 +449,7 @@ RIR_INLINE bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
     default:
         assert(false);
     }
+    return false;
 }
 
 RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
@@ -478,6 +492,7 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
     default:
         assert(false);
     }
+    return false;
 }
 
 #define ostackLength(c) (R_BCNodeStackTop - R_BCNodeStackBase)
