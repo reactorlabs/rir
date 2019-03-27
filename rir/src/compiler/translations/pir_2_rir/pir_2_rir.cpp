@@ -1027,9 +1027,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::AsInt: {
                 auto asInt = AsInt::Cast(instr);
                 if (asInt->ceil)
-                    cs << BC::ceil();
+                    cb.add(BC::ceil());
                 else
-                    cs << BC::floor();
+                    cb.add(BC::floor());
                 break;
             }
 
