@@ -1007,11 +1007,13 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
     do {                                                                       \
         SEXP a = ostack_at(ctx, 0);                                            \
         SEXP b = ostack_at(ctx, 1);                                            \
-        if (TYPEOF(a) == res_type && NO_REFERENCES(a)) {                       \
+        if (NO_REFERENCES(a)) {                                                \
+            TYPEOF(a) = res_type;                                              \
             res = a;                                                           \
             ostack_pop(ctx);                                                   \
             ostack_at(ctx, 0) = a;                                             \
-        } else if (TYPEOF(b) == res_type && NO_REFERENCES(b)) {                \
+        } else if (NO_REFERENCES(b)) {                                         \
+            TYPEOF(b) = res_type;                                              \
             res = b;                                                           \
             ostack_pop(ctx);                                                   \
         } else {                                                               \
@@ -2742,8 +2744,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = val;                                                         \
-        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx) &&                  \
-                   TYPEOF(idx) == vectype) {                                   \
+        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx)) {                  \
+            TYPEOF(idx) = vectype;                                             \
             res = idx;                                                         \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \
