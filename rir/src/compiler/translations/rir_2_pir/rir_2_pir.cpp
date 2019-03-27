@@ -202,6 +202,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::ldvar_:
         v = insert(new LdVar(bc.immediateConst(), env));
+        // Checkpoint might be useful if we end up inlining this force
+        if (!inPromise())
+            addCheckpoint(srcCode, pos, stack, insert);
         push(insert(new Force(v, env)));
         break;
 
@@ -511,8 +514,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         SEXP target = rir::Pool::get(bc.immediate.callBuiltinFixedArgs.builtin);
 
         std::vector<Value*> args(n);
-        for (size_t i = 0; i < n; ++i)
+        for (size_t i = 0; i < n; ++i) {
             args[n - i - 1] = pop();
+        }
 
         assert(TYPEOF(target) == BUILTINSXP);
         push(insert(BuiltinCallFactory::New(env, target, args, ast)));
@@ -1053,9 +1057,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 return nullptr;
             }
 
-            if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->isDeoptBarrier()) {
-                addCheckpoint(srcCode, nextPos, cur.stack, insert);
+            if (!inPromise() && !insert.getCurrentBB()->isEmpty()) {
+                auto last = insert.getCurrentBB()->last();
+                if (last->isDeoptBarrier())
+                    addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
         }
     }
