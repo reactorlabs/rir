@@ -1244,22 +1244,22 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 #ifdef ENABLE_DEBUGOPS
             case Tag::TmpGet: {
                 auto tmpGet = TmpGet::Cast(instr);
-                cs << BC::tmpGet(tmpGet->idx);
+                cb.add(BC::tmpGet(tmpGet->idx));
                 break;
             }
             case Tag::TmpSet: {
                 auto tmpSet = TmpSet::Cast(instr);
-                cs << BC::tmpSet(tmpSet->idx);
+                cb.add(BC::tmpSet(tmpSet->idx));
                 break;
             }
             case Tag::Print: {
                 auto print = Print::Cast(instr);
-                cs << BC::print(print->idx);
+                cb.add(BC::print(print->idx));
                 break;
             }
             case Tag::PrintStack: {
                 auto print = PrintStack::Cast(instr);
-                cs << BC::printStack(print->idx);
+                cb.add(BC::printStack(print->idx));
                 break;
             }
 #endif
