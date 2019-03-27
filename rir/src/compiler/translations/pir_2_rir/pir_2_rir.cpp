@@ -1149,6 +1149,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::print(print->idx);
                 break;
             }
+            case Tag::PrintStack: {
+                auto print = PrintStack::Cast(instr);
+                cs << BC::printStack(print->idx);
+                break;
+            }
 #endif
 
             // Values, not instructions

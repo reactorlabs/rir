@@ -1599,6 +1599,9 @@ class FLI(TmpGet, 0, Effects::None()) {
 
     bool isDebug() const override { return true; }
     void printArgs(std::ostream& out, bool tty) const override;
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), idx);
+    }
 };
 
 class FLI(TmpSet, 1, Effects::None()) {
@@ -1611,6 +1614,9 @@ class FLI(TmpSet, 1, Effects::None()) {
 
     bool isDebug() const override { return true; }
     void printArgs(std::ostream& out, bool tty) const override;
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), idx);
+    }
 };
 
 class FLI(Print, 1, Effects::None()) {
@@ -1624,6 +1630,24 @@ class FLI(Print, 1, Effects::None()) {
     const char* prefix() const { return DebugPool::prefixAt(idx); }
     bool isDebug() const override { return true; }
     void printArgs(std::ostream& out, bool tty) const override;
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), idx);
+    }
+};
+
+class FLI(PrintStack, 0, Effects::None()) {
+  public:
+    const DebugPoolIdx idx = (DebugPoolIdx)-1;
+
+    explicit PrintStack(DebugPoolIdx idx_)
+        : FixedLenInstruction(PirType::voyd(), {{}}, {{}}), idx(idx_) {}
+
+    const char* prefix() const { return DebugPool::prefixAt(idx); }
+    bool isDebug() const override { return true; }
+    void printArgs(std::ostream& out, bool tty) const override;
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), idx);
+    }
 };
 
 class FLI(Assert, 1, Effects::None()) {

@@ -382,6 +382,8 @@ BC_NOARGS(V, _)
     inline static BC tmpSet(DebugPoolIdx idx);
     inline static BC print(DebugPoolIdx idx);
     inline static BC print(const char* prefix);
+    inline static BC printStack(DebugPoolIdx idx);
+    inline static BC printStack(const char* prefix);
 #endif
 
     inline static BC decode(Opcode* pc, const Code* code) {
@@ -676,6 +678,7 @@ BC_NOARGS(V, _)
         case Opcode::tmp_get_:
         case Opcode::tmp_set_:
         case Opcode::print_:
+        case Opcode::print_stack_:
             memcpy(&immediate.debugIdx, pc, sizeof(DebugPoolIdx));
             break;
 #endif

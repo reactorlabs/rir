@@ -177,6 +177,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::tmp_get_:
     case Opcode::tmp_set_:
     case Opcode::print_:
+    case Opcode::print_stack_:
     case Opcode::assert_:
         return Sources::NotNeeded;
 #endif

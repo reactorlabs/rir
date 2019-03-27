@@ -327,6 +327,14 @@ BC BC::print(DebugPoolIdx idx) {
 BC BC::print(const char* prefix) {
     return BC::print(DebugPool::prefixIdx(prefix));
 }
+BC BC::printStack(DebugPoolIdx idx) {
+    ImmediateArguments i;
+    i.debugIdx = idx;
+    return BC(Opcode::print_stack_, i);
+}
+BC BC::printStack(const char* prefix) {
+    return BC::printStack(DebugPool::prefixIdx(prefix));
+}
 #endif
 
 } // namespace rir

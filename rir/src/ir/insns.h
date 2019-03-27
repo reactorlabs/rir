@@ -502,6 +502,12 @@ DEF_INSTR(tmp_set_, 1, 1, 0, 0)
 DEF_INSTR(print_, 1, 1, 0, 0)
 
 /**
+ * print_stack_ :: reads index of c-string from opcode, pops, prints the string
+ * followed by up to 5 top stack contents.
+ */
+DEF_INSTR(print_stack_, 1, 1, 0, 0)
+
+/**
  * assert_ :: pops, crashes if not R_TrueValue.
  */
 DEF_INSTR(assert_, 0, 1, 0, 0)

@@ -750,6 +750,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::print_:
         insert(new Print(bc.immediate.debugIdx, pop()));
         break;
+    case Opcode::print_stack_:
+        insert(new PrintStack(bc.immediate.debugIdx));
+        break;
     case Opcode::assert_:
         insert(new Assert(pop()));
         break;

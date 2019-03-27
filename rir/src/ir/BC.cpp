@@ -131,6 +131,7 @@ BC_NOARGS(V, _)
     case Opcode::tmp_get_:
     case Opcode::tmp_set_:
     case Opcode::print_:
+    case Opcode::print_stack_:
         cs.insert(immediate.debugIdx);
         return;
 #endif
@@ -340,6 +341,7 @@ BC_NOARGS(V, _)
         out << immediate.debugIdx;
         break;
     case Opcode::print_:
+    case Opcode::print_stack_:
         out << DebugPool::prefixAt(immediate.debugIdx);
         break;
 #endif

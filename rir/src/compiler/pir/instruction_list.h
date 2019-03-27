@@ -93,6 +93,7 @@
     IFDBG(V(TmpGet))                                                           \
     IFDBG(V(TmpSet))                                                           \
     IFDBG(V(Print))                                                            \
+    IFDBG(V(PrintStack))                                                       \
     IFDBG(V(Assert))
 
 #endif

@@ -751,6 +751,10 @@ void Print::printArgs(std::ostream& out, bool tty) const {
     // TODO: Could import and use escapeString if necessary
     out << " \"" << prefix() << "\"";
 }
+void PrintStack::printArgs(std::ostream& out, bool tty) const {
+    FixedLenInstruction::printArgs(out, tty);
+    out << " \"" << prefix() << "\"";
+}
 #endif
 
 } // namespace pir

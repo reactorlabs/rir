@@ -3383,6 +3383,23 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(print_stack_) {
+            DebugPoolIdx idx = (DebugPoolIdx)readImmediate();
+            advanceImmediate();
+            std::cout << "[Debug Stack] " << DebugPool::prefixAt(idx) << "\n";
+            int len = ostack_length(ctx);
+            int i = 0;
+            for (int i = 0; i < std::min(5, len); i++) {
+                Rf_PrintValue(ostack_at(ctx, i));
+            }
+            if (i == len) {
+                std::cout << "=====\n";
+            } else {
+                std::cout << "... =====\n";
+            }
+            NEXT();
+        }
+
         INSTRUCTION(assert_) {
             SEXP test = ostack_pop(ctx);
             if (!IS_SIMPLE_SCALAR(test, LGLSXP) || *LOGICAL(test) != 1) {
