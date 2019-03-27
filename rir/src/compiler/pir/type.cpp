@@ -84,7 +84,7 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
 
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
-            flags_.set(TypeFlags::isScalar);
+            flags_.reset(TypeFlags::maybeNotScalar);
     }
 }
 
@@ -97,7 +97,7 @@ void PirType::merge(const ObservedValues& other) {
         if (record.object)
             flags_.set(TypeFlags::maybeObject);
         if (!record.scalar)
-            flags_.reset(TypeFlags::isScalar);
+            flags_.set(TypeFlags::maybeNotScalar);
 
         merge(record.sexptype);
     }
