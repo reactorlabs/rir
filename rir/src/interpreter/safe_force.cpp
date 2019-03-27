@@ -21,9 +21,16 @@ static RIR_INLINE SEXP safeEval(SEXP e, SEXP rho) {
 
 SEXP safeForcePromise(SEXP e) {
     if (PRVALUE(e) == R_UnboundValue) {
-        PRVALUE(e) = safeEval(PRCODE(e), PRENV(e));
+        SEXP val = safeEval(PRCODE(e), PRENV(e));
+        if (val != R_UnboundValue) {
+            SET_PRVALUE(e, val);
+            ENSURE_NAMEDMAX(val);
+            SET_PRENV(e, R_NilValue);
+        }
+        return val;
+    } else {
+        return PRVALUE(e);
     }
-    return PRVALUE(e);
 }
 
 } // namespace rir

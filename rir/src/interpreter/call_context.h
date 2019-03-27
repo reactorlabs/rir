@@ -98,7 +98,7 @@ struct CallContext {
 
     void safeForceArgs() const {
         assert(hasStackArgs());
-        for (int i = 0; i < passedArgs; i++) {
+        for (unsigned i = 0; i < passedArgs; i++) {
             SEXP arg = stackArg(i);
             if (TYPEOF(arg) == PROMSXP) {
                 safeForcePromise(arg);
