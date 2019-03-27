@@ -205,6 +205,11 @@ DEF_INSTR(dup2_, 0, 2, 4, 1)
 DEF_INSTR(pop_, 0, 1, 0, 1)
 
 /**
+ * popn_:: pop n elements from object stack
+ */
+DEF_INSTR(popn_, 1, -1, 0, 1)
+
+/**
  * swap_:: swap two elements tos
  */
 DEF_INSTR(swap_, 0, 2, 2, 1)

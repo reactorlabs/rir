@@ -164,7 +164,7 @@ class Instruction : public Value {
         return !getObservableEffects().empty();
     }
 
-    bool isDeoptBarrier() const { return !getObservableEffects().empty(); }
+    bool isDeoptBarrier() const { return hasImpureEffects(); }
     bool mightChangeVisibility() const {
         return effects.includes(Effect::Visibility);
     }
@@ -624,7 +624,6 @@ class FLIE(LdFun, 2, Effects::Any()) {
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
   public:
     SEXP varName;
-    bool fusedWithForce = false;
 
     LdVar(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::any(), env),

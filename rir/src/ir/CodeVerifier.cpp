@@ -150,6 +150,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::set_names_:
     case Opcode::force_:
     case Opcode::pop_:
+    case Opcode::popn_:
     case Opcode::close_:
     case Opcode::asast_:
     case Opcode::dup_:
