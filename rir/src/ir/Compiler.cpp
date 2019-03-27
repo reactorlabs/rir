@@ -229,7 +229,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
             cs << BC::brfalse(fwdBranch);
             // {
             // n' <- ceil(n') - 1
-            cs << BC::setShared() << BC::ceil() << BC::dec();
+            cs << BC::ceil() << BC::dec();
             // while
             compileWhile(ctx,
                          [&cs]() {
@@ -240,8 +240,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
                          [&ctx, &cs, &sym, &body]() {
                              // {
                              // i <- i'
-                             cs << BC::pull(1) << BC::setShared()
-                                << BC::stvar(sym);
+                             cs << BC::pull(1) << BC::stvar(sym);
                              // i' <- i' - 1
                              cs << BC::swap() << BC::dec() << BC::swap();
                              // ...
@@ -251,7 +250,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
             // } else {
             cs << BC::br(endBranch) << fwdBranch;
             // n' <- floor(n') + 1
-            cs << BC::setShared() << BC::floor() << BC::inc();
+            cs << BC::floor() << BC::inc();
             // while
             compileWhile(ctx,
                          [&cs]() {
@@ -262,8 +261,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
                          [&ctx, &cs, &sym, &body]() {
                              // {
                              // i <- i'
-                             cs << BC::pull(1) << BC::setShared()
-                                << BC::stvar(sym);
+                             cs << BC::pull(1) << BC::stvar(sym);
                              // i' <- i' + 1
                              cs << BC::swap() << BC::inc() << BC::swap();
                              // ...
@@ -800,7 +798,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         compileExpr(ctx, seq);
         if (!isConstant(seq))
-            cs << BC::setShared();
+            cs << BC::ensureNamed();
         cs << BC::forSeqSize() << BC::push((int)0);
 
         unsigned int beginLoopPos = cs.currentPos();

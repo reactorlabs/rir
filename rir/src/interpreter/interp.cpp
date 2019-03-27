@@ -1265,12 +1265,12 @@ RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
     } else if (IS_SIMPLE_SCALAR(val, REALSXP) && NO_REFERENCES(val) &&
                !ISNAN(*REAL(val))) {
         double r = *REAL(val);
-        val->sxpinfo.type = INTSXP;
+        TYPEOF(val) = INTSXP;
         *INTEGER(val) = (int)(ceil_ ? ceil(r) : floor(r));
         return;
     } else if (IS_SIMPLE_SCALAR(val, LGLSXP) && NO_REFERENCES(val) &&
                *LOGICAL(val) != NA_LOGICAL) {
-        val->sxpinfo.type = INTSXP;
+        TYPEOF(val) = INTSXP;
         return;
     }
     int x = -20;
@@ -2261,13 +2261,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_top(ctx);
             assert(TYPEOF(val) == INTSXP);
             int i = INTEGER(val)[0];
-            if (MAYBE_SHARED(val)) {
+            if (NO_REFERENCES(val)) {
+                INTEGER(val)[0]++;
+            } else {
                 ostack_pop(ctx);
                 SEXP n = Rf_allocVector(INTSXP, 1);
                 INTEGER(n)[0] = i + 1;
                 ostack_push(ctx, n);
-            } else {
-                INTEGER(val)[0]++;
             }
             NEXT();
         }
@@ -2276,13 +2276,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_top(ctx);
             assert(TYPEOF(val) == INTSXP);
             int i = INTEGER(val)[0];
-            if (MAYBE_SHARED(val)) {
+            if (NO_REFERENCES(val)) {
+                INTEGER(val)[0]--;
+            } else {
                 ostack_pop(ctx);
                 SEXP n = Rf_allocVector(INTSXP, 1);
                 INTEGER(n)[0] = i - 1;
                 ostack_push(ctx, n);
-            } else {
-                INTEGER(val)[0]--;
             }
             NEXT();
         }
