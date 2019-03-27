@@ -7,6 +7,7 @@
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
+#include "safe_force.h"
 #include "utils/Pool.h"
 
 #include <assert.h>
@@ -564,10 +565,11 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             bool notObj = true;
             bool isEager = true;
             if (TYPEOF(arg) == PROMSXP) {
-                if (PRVALUE(arg) == R_UnboundValue) {
+                SEXP val = safeForcePromise(arg);
+                if (val == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
-                } else if (isObject(PRVALUE(arg))) {
+                } else if (isObject(val)) {
                     notObj = false;
                 }
             } else if (isObject(arg)) {
@@ -774,7 +776,7 @@ class SlowcaseCounter {
         if (call.suppliedArgs > 0) {
             auto arg = call.stackArg(0);
             if (TYPEOF(arg) == PROMSXP)
-                arg = PRVALUE(arg);
+                arg = safeForcePromise(arg);
             if (arg == R_UnboundValue)
                 message << "arg0 lazy";
             else if (arg == R_MissingArg)
