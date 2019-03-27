@@ -7,6 +7,7 @@
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
+#include "safe_force.h"
 #include "utils/Pool.h"
 
 #include <assert.h>
@@ -564,10 +565,11 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             bool notObj = true;
             bool isEager = true;
             if (TYPEOF(arg) == PROMSXP) {
-                if (PRVALUE(arg) == R_UnboundValue) {
+                SEXP val = safeForcePromise(arg);
+                if (val == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
-                } else if (isObject(PRVALUE(arg))) {
+                } else if (isObject(val)) {
                     notObj = false;
                 }
             } else if (isObject(arg)) {
@@ -774,7 +776,7 @@ class SlowcaseCounter {
         if (call.suppliedArgs > 0) {
             auto arg = call.stackArg(0);
             if (TYPEOF(arg) == PROMSXP)
-                arg = PRVALUE(arg);
+                arg = safeForcePromise(arg);
             if (arg == R_UnboundValue)
                 message << "arg0 lazy";
             else if (arg == R_MissingArg)
@@ -1007,11 +1009,13 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
     do {                                                                       \
         SEXP a = ostack_at(ctx, 0);                                            \
         SEXP b = ostack_at(ctx, 1);                                            \
-        if (TYPEOF(a) == res_type && NO_REFERENCES(a)) {                       \
+        if (NO_REFERENCES(a)) {                                                \
+            TYPEOF(a) = res_type;                                              \
             res = a;                                                           \
             ostack_pop(ctx);                                                   \
             ostack_at(ctx, 0) = a;                                             \
-        } else if (TYPEOF(b) == res_type && NO_REFERENCES(b)) {                \
+        } else if (NO_REFERENCES(b)) {                                         \
+            TYPEOF(b) = res_type;                                              \
             res = b;                                                           \
             ostack_pop(ctx);                                                   \
         } else {                                                               \
@@ -2102,6 +2106,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(popn_) {
+            Immediate i = readImmediate();
+            advanceImmediate();
+            ostack_popn(ctx, i);
+            NEXT();
+        }
+
         INSTRUCTION(swap_) {
             SEXP lhs = ostack_pop(ctx);
             SEXP rhs = ostack_pop(ctx);
@@ -2742,8 +2753,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = val;                                                         \
-        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx) &&                  \
-                   TYPEOF(idx) == vectype) {                                   \
+        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx)) {                  \
+            TYPEOF(idx) = vectype;                                             \
             res = idx;                                                         \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \

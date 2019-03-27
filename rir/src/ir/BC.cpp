@@ -106,6 +106,7 @@ BC_NOARGS(V, _)
         cs.patchpoint(immediate.offset);
         return;
 
+    case Opcode::popn_:
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::is_:
@@ -257,6 +258,7 @@ void BC::print(std::ostream& out) const {
             << " == " << Pool::get(immediate.guard_fun_args.expected);
         break;
     }
+    case Opcode::popn_:
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::put_:

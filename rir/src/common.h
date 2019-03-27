@@ -4,8 +4,7 @@
 #include <cassert>
 #include <cstdint>
 
-// TODO force inlining for clang & gcc
-#define RIR_INLINE __attribute__((always_inline)) inline
+#define RIR_INLINE inline
 
 extern void printCBacktrace();
 extern void printRBacktrace();

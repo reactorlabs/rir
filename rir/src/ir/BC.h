@@ -24,6 +24,11 @@ BC_NOARGS(V, _)
 #undef V
 BC BC::recordCall() { return BC(Opcode::record_call_); }
 BC BC::recordBinop() { return BC(Opcode::record_binop_); }
+BC BC::popn(unsigned n) {
+    ImmediateArguments i;
+    i.i = n;
+    return BC(Opcode::popn_, i);
+}
 BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
     assert(!Code::check(constant));
