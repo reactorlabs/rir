@@ -33,14 +33,33 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
   public:
     StaticReferenceCount(ClosureVersion* cls, LogStream& log)
         : StaticAnalysis("StaticReferenceCountAnalysis", cls, cls, log) {
-        Visitor::run(code->entry, [&](Instruction* i) {
-            if (Phi::Cast(i)) {
-                i->eachArg([&](Value* v) {
-                    if (auto a = Instruction::Cast(v))
-                        alias[i].insert(a);
-                });
-            }
-        });
+        bool changed = true;
+        while (changed) {
+            changed = false;
+
+            Visitor::run(code->entry, [&](Instruction* i) {
+                // Recursively enumerate all actual values a phi might contain
+                if (Phi::Cast(i)) {
+                    i->eachArg([&](Value* v) {
+                        if (auto a = Instruction::Cast(v)) {
+                            if (Phi::Cast(a)) {
+                                for (auto otherAlias : alias[a]) {
+                                    if (!alias[i].includes(otherAlias)) {
+                                        changed = true;
+                                        alias[i].insert(otherAlias);
+                                    }
+                                }
+                            } else {
+                                if (!alias[i].includes(a)) {
+                                    changed = true;
+                                    alias[i].insert(a);
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
     }
 
   protected:
