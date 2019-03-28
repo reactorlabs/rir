@@ -16,9 +16,10 @@ Code::Code(FunctionSEXP fun, SEXP ast, unsigned cs, unsigned sourceLength,
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      funInvocationCount(0), src(src_pool_add(globalContext(), ast)),
-      stackLength(0), localsCount(localsCnt), codeSize(cs),
-      srcLength(sourceLength), extraPoolSize(0) {
+      nativeCode(nullptr), funInvocationCount(0),
+      src(src_pool_add(globalContext(), ast)), stackLength(0),
+      localsCount(localsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
 }
 

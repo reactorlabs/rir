@@ -42,6 +42,7 @@ flags = [
     '-Drir_EXPORTS',
     '-DENABLE_SLOWASSERT',
     '-I'+DirectoryOfThisScript()+'/external/custom-r/include',
+    '-I'+DirectoryOfThisScript()+'/external/libjit/include',
     '-I'+DirectoryOfThisScript()+'/rir/src',
     '-Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wctor-dtor-privacy -Wmissing-include-dirs -Wstrict-overflow=5 -Werror -fno-rtti -fno-exceptions',
     '-std=c++14',

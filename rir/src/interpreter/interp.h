@@ -41,6 +41,9 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     }
     return nullptr;
 }
+
+SEXP builtinCall(CallContext& call, InterpreterInstance* ctx);
+SEXP doCall(CallContext& call, InterpreterInstance* ctx);
 }
 
 #endif // RIR_INTERPRETER_C_H

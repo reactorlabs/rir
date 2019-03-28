@@ -7,6 +7,7 @@ set(R_HOME ${CMAKE_SOURCE_DIR}/external/custom-r)
 set(R_LIBRARY_TREE ${CMAKE_SOURCE_DIR}/packages)
 set(R_ROOT_DIR ${R_HOME})
 set(R_INCLUDE_DIR ${R_HOME}/include)
+set(LIBJIT_DIR ${CMAKE_SOURCE_DIR}/external/libjit)
 
 set(R_COMMAND ${R_HOME}/bin/R)
 
@@ -74,8 +75,12 @@ endif(${NO_LOCAL_CONFIG})
 
 include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rir/src)
-
 message(STATUS "Using R from ${R_HOME}")
+
+# Find the LibJIT headers
+set(LIBJIT_INCLUDE_DIR ${LIBJIT_DIR}/include)
+include_directories(${LIBJIT_INCLUDE_DIR})
+set(LIBJIT_LIB ${LIBJIT_DIR}/jit/.libs/libjit.a ${LIBJIT_DIR}/jitplus/.libs/libjitplus.a)
 
 add_custom_target(setup-build-dir
     COMMAND ${CMAKE_SOURCE_DIR}/tools/setup-build-dir ${CMAKE_SOURCE_DIR} ${R_HOME}
@@ -99,9 +104,15 @@ add_custom_target(vanilla-gnur
     COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh vanilla-r
 )
 
+add_custom_target(libjit-build
+    DEPENDS dependencies
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-libjit.sh
+)
+
 add_custom_target(setup
     DEPENDS dependencies
     DEPENDS default-gnur
+    DEPENDS libjit-build
 )
 
 add_custom_target(tests
@@ -118,6 +129,8 @@ add_dependencies(${PROJECT_NAME} setup-build-dir)
 
 # dummy target so that IDEs show the tools folder in solution explorers
 add_custom_target(tools SOURCES ${BIN})
+
+target_link_libraries(${PROJECT_NAME} ${LIBJIT_LIB})
 
 if(APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${R_HOME}/lib")

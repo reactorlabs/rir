@@ -109,6 +109,10 @@ addons:
       - xauth
       - xfonts-base
       - tk-dev
+      - flex
+      - bison
+      - make
+      - automake
     sources:
       - ubuntu-toolchain-r-test
 

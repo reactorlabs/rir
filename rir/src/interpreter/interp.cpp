@@ -104,6 +104,8 @@ static RIR_INLINE SEXP promiseValue(SEXP promise, InterpreterInstance* ctx) {
         return promise;
     } else {
         SEXP res = forcePromise(promise);
+        if (TYPEOF(res) == PROMSXP)
+            asm("int3");
         assert(TYPEOF(res) != PROMSXP && "promise returned promise");
         return res;
     }
@@ -806,8 +808,7 @@ class SlowcaseCounter {
 SlowcaseCounter SLOWCASE_COUNTER;
 #endif
 
-static RIR_INLINE SEXP builtinCall(CallContext& call,
-                                   InterpreterInstance* ctx) {
+SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
     if (call.hasStackArgs() && !call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
         if (res)
@@ -832,7 +833,7 @@ static RIR_INLINE SEXP specialCall(CallContext& call,
     return legacySpecialCall(call, ctx);
 }
 
-static SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
+SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
     assert(call.callee);
 
     switch (TYPEOF(call.callee)) {
@@ -1387,6 +1388,20 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  R_bcstack_t* localsBase) {
+    if (c->nativeCode) {
+        if (!callCtxt || callCtxt->hasStackArgs() ||
+            (callCtxt->suppliedArgs == 0 &&
+             callCtxt->givenAssumptions.includes(
+                 Assumption::NotTooFewArguments))) {
+            void* args = callCtxt ? (void*)callCtxt->stackArgs : (void*)0xdead;
+            return ((SEXP(*)(Code*, InterpreterInstance*, void*,
+                             SEXP))c->nativeCode)(c, ctx, args, env);
+        }
+        // TODO: figure out how to create some adapter frame here. If we fix the
+        // fall through case, we don't have to emit rir bytecode as fallback
+        // anymore...
+    }
+
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
 #ifdef THREADED_CODE

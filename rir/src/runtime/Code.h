@@ -3,6 +3,7 @@
 
 #include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
+#include "jit/jit-function.h"
 
 #include <cassert>
 #include <cstdint>
@@ -14,6 +15,7 @@ typedef SEXP FunctionSEXP;
 typedef SEXP CodeSEXP;
 
 #define CODE_MAGIC 0xc0de0000
+#define NATIVE_CODE_MAGIC 0xc0deffff
 
 /**
  * Code holds a sequence of instructions; for each instruction
@@ -61,6 +63,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     SEXP locals_[NumLocals];
 
   public:
+    void* nativeCode;
+
     void registerInvocation() {
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;

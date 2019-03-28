@@ -6,6 +6,7 @@
 
 #include "api.h"
 
+#include "compiler/native/lower.h"
 #include "compiler/pir_tests.h"
 #include "compiler/translations/pir_2_rir/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"

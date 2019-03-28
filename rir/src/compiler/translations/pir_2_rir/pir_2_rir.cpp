@@ -6,6 +6,7 @@
 #include "../../util/visitor.h"
 #include "compiler/analysis/refrence_count.h"
 #include "compiler/analysis/verifier.h"
+#include "compiler/native/lower.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -673,6 +674,10 @@ class Pir2Rir {
     };
 };
 
+static bool PIR_NATIVE_BACKEND =
+    getenv("PIR_NATIVE_BACKEND") &&
+    0 == strncmp("1", getenv("PIR_NATIVE_BACKEND"), 1);
+
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     lower(code);
     toCSSA(code);
@@ -1266,6 +1271,14 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto localsCnt = alloc.slots();
     auto res = ctx.finalizeCode(localsCnt);
+    if (PIR_NATIVE_BACKEND) {
+        {
+            Lower native;
+            if (auto n = native.tryCompile(code, promMap)) {
+                res->nativeCode = n;
+            }
+        }
+    }
     return res;
 }
 
