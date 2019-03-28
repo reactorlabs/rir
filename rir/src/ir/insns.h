@@ -447,11 +447,6 @@ DEF_INSTR(visible_, 0, 0, 0, 1)
 DEF_INSTR(invisible_, 0, 0, 0, 1)
 
 /**
- * set_shared_:: marks tos to be shared (ie. named = 2)
- */
-DEF_INSTR(set_shared_, 0, 1, 1, 1)
-
-/**
  * ensure_named_:: ensures tos has named >= 1
  */
 DEF_INSTR(ensure_named_, 0, 1, 1, 1)

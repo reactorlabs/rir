@@ -749,10 +749,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // Recomputed automatically in the backend
         break;
 
-    case Opcode::set_shared_:
-        push(insert(new SetShared(pop())));
-        break;
-
     case Opcode::invisible_:
         insert(new Invisible());
         break;

@@ -2941,7 +2941,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP vec = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
 
-            if (MAYBE_SHARED(vec)) {
+            if (MAYBE_REFERENCED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
             }
@@ -2979,7 +2979,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP mtx = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 3);
 
-            if (MAYBE_SHARED(mtx)) {
+            if (MAYBE_REFERENCED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }
@@ -3019,7 +3019,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_at(ctx, 2);
 
             // Fast case
-            if (NOT_SHARED(vec) && !isObject(vec)) {
+            if (NO_REFERENCES(vec) && !isObject(vec)) {
                 SEXPTYPE vectorT = TYPEOF(vec);
                 SEXPTYPE valT = TYPEOF(val);
                 SEXPTYPE idxT = TYPEOF(idx);
@@ -3070,7 +3070,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
-            if (MAYBE_SHARED(vec)) {
+            if (MAYBE_REFERENCED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
             }
@@ -3112,7 +3112,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_at(ctx, 3);
 
             // Fast case
-            if (NOT_SHARED(mtx) && !isObject(mtx)) {
+            if (NO_REFERENCES(mtx) && !isObject(mtx)) {
                 SEXPTYPE matrixT = TYPEOF(mtx);
                 SEXPTYPE valT = TYPEOF(val);
                 SEXPTYPE idx1T = TYPEOF(idx1);
@@ -3178,7 +3178,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
-            if (MAYBE_SHARED(mtx)) {
+            if (MAYBE_REFERENCED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }
@@ -3429,15 +3429,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(set_shared_) {
-            SEXP val = ostack_top(ctx);
-            INCREMENT_NAMED(val);
-            NEXT();
-        }
-
         INSTRUCTION(make_unique_) {
             SEXP val = ostack_top(ctx);
-            if (MAYBE_SHARED(val)) {
+            if (MAYBE_REFERENCED(val)) {
                 val = Rf_shallow_duplicate(val);
                 ostack_set(ctx, 0, val);
                 SET_NAMED(val, 1);
