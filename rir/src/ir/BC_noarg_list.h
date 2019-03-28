@@ -50,7 +50,6 @@
     V(NESTED, ne, ne)                                                          \
     V(NESTED, seq, seq)                                                        \
     V(NESTED, colon, colon)                                                    \
-    V(NESTED, makeUnique, make_unique)                                         \
     V(NESTED, setShared, set_shared)                                           \
     V(NESTED, ensureNamed, ensure_named)                                       \
     V(NESTED, asLogical, aslogical)                                            \
