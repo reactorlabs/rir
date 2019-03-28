@@ -10,6 +10,7 @@
 #include "compiler/analysis/verifier.h"
 #include "compiler/parameter.h"
 #include "event_counters.h"
+#include "compiler/native/lower.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -258,6 +259,10 @@ static unsigned ClosuresCompiled =
     EventCounters::instance().registerCounter("closures compiled");
 #endif
 
+static bool PIR_NATIVE_BACKEND =
+    getenv("PIR_NATIVE_BACKEND") &&
+    0 == strncmp("1", getenv("PIR_NATIVE_BACKEND"), 1);
+
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 #ifdef ENABLE_EVENT_COUNTERS
     if (ENABLE_EVENT_COUNTERS) {
@@ -360,6 +365,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                     needsEnsureNamed.insert(u.first);
             }
     }
+
+    std::unordered_map<Promise*, unsigned> promMap;
 
     CodeBuffer cb(ctx.cs());
 
@@ -654,6 +661,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::MkArg: {
                 auto p = MkArg::Cast(instr)->prom();
                 unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
+                promMap[p] = id;
                 cb.add(BC::promise(id));
                 break;
             }
@@ -1008,6 +1016,14 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto localsCnt = alloc.slots();
     auto res = ctx.finalizeCode(localsCnt, cache.size());
+    if (PIR_NATIVE_BACKEND) {
+        {
+            Lower native;
+            if (auto n = native.tryCompile(code, promMap, needsEnsureNamed)) {
+                res->nativeCode = (NativeCode)n;
+            }
+        }
+    }
     return res;
 }
 

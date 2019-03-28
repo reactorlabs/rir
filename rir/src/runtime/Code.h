@@ -4,6 +4,7 @@
 #include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
 #include "utils/UUID.h"
+#include "jit/jit-function.h"
 
 #include <cassert>
 #include <cstdint>
@@ -15,6 +16,7 @@ typedef SEXP FunctionSEXP;
 typedef SEXP CodeSEXP;
 
 #define CODE_MAGIC 0xc0de0000
+#define NATIVE_CODE_MAGIC 0xc0deffff
 
 /**
  * Code holds a sequence of instructions; for each instruction
@@ -43,6 +45,10 @@ static unsigned pad4(unsigned sizeInBytes) {
     return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
 }
 
+struct InterpreterInstance;
+struct Code;
+typedef SEXP (*NativeCode)(Code*, InterpreterInstance*, void*, SEXP, SEXP);
+
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
     friend class CodeVerifier;
@@ -69,6 +75,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     SEXP locals_[NumLocals];
 
   public:
+    NativeCode nativeCode;
+
     void registerInvocation() {
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;

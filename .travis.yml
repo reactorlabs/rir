@@ -87,6 +87,11 @@ addons:
       - xauth
       - xfonts-base
       - tk-dev
+      - flex
+      - bison
+      - make
+      - automake
+      - libtool
     sources:
       - ubuntu-toolchain-r-test
 

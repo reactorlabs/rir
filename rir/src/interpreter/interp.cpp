@@ -219,7 +219,7 @@ SEXP createLegacyArgsListFromStackValues(CallContext& call, bool eagerCallee,
         SEXP arg = call.stackArg(i);
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
-            arg = Rf_eval(arg, materializeCallerEnv(call, ctx));
+            arg = forcePromise(arg);
         }
         __listAppend(&result, &pos, arg, name);
     }
@@ -783,6 +783,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             }
         }
     }
+    Assumptions derived =
+        addDynamicAssumptionsForOneTarget(call, fun->signature());
+    call.givenAssumptions = derived;
 
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
@@ -870,8 +873,7 @@ class SlowcaseCounter {
 SlowcaseCounter SLOWCASE_COUNTER;
 #endif
 
-static RIR_INLINE SEXP builtinCall(CallContext& call,
-                                   InterpreterInstance* ctx) {
+SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
     if (call.hasStackArgs() && !call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
         if (res)
@@ -896,7 +898,7 @@ static RIR_INLINE SEXP specialCall(CallContext& call,
     return legacySpecialCall(call, ctx);
 }
 
-static SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
+SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
     assert(call.callee);
 
     switch (TYPEOF(call.callee)) {
@@ -1510,6 +1512,20 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  R_bcstack_t* localsBase, BindingCache* cache) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
+
+    if (c->nativeCode) {
+        if (!callCtxt || callCtxt->hasStackArgs() ||
+            (callCtxt->suppliedArgs == 0 &&
+             callCtxt->givenAssumptions.includes(
+                 Assumption::NotTooFewArguments))) {
+            void* args = callCtxt ? (void*)callCtxt->stackArgs : (void*)0xdead;
+            return c->nativeCode(c, ctx, args, env,
+                                 callCtxt ? callCtxt->callee : nullptr);
+        }
+        // TODO: figure out how to create some adapter frame here. If we fix the
+        // fall through case, we don't have to emit rir bytecode as fallback
+        // anymore...
+    }
 
 #ifdef THREADED_CODE
     static void* opAddr[static_cast<uint8_t>(Opcode::num_of)] = {

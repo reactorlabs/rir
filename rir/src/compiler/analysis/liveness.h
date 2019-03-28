@@ -72,6 +72,7 @@ class LivenessIntervals {
     bool liveAtBBEntry(BB* bb, Value* what) const;
 
     size_t count(Value* v) const { return intervals.count(v); }
+    size_t maxLive = 0;
 };
 
 } // namespace pir

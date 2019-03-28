@@ -26,6 +26,7 @@ struct CallContext {
           stackArgs(stackArgs), implicitArgs(implicitArgs), names(names),
           callerEnv(callerEnv), ast(ast), callee(callee),
           givenAssumptions(givenAssumptions) {
+        assert(callerEnv);
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
                 TYPEOF(callee) == BUILTINSXP));

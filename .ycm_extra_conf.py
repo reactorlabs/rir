@@ -43,6 +43,7 @@ flags = [
     '-DENABLE_SLOWASSERT',
     '-DMEASURE',
     '-I'+DirectoryOfThisScript()+'/external/custom-r/include',
+    '-I'+DirectoryOfThisScript()+'/external/libjit/include',
     '-I'+DirectoryOfThisScript()+'/rir/src',
     '-Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wctor-dtor-privacy -Wmissing-include-dirs -Wstrict-overflow=5 -Werror -fno-rtti -fno-exceptions -Wimplicit-fallthrough',
     '-std=c++14',
