@@ -49,6 +49,10 @@ class Value {
         return type != PirType::voyd() &&
                (type.isRType() || type == NativeType::test);
     }
+
+    virtual bool needsReferenceCount() const {
+        return type.maybeReferenceCounted();
+    }
 };
 
 } // namespace pir
