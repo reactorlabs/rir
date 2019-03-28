@@ -69,7 +69,7 @@ class EnumSet {
         return !EnumSet(s.set_ & set_).empty();
     }
 
-    RIR_INLINE bool includes(const EnumSet& s) const {
+    RIR_INLINE bool constexpr includes(const EnumSet& s) const {
         return (s.set_ & set_) == s.set_;
     }
 
