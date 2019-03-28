@@ -798,7 +798,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         compileExpr(ctx, seq);
         if (!isConstant(seq))
-            cs << BC::ensureNamed();
+            cs << BC::setShared();
         cs << BC::forSeqSize() << BC::push((int)0);
 
         unsigned int beginLoopPos = cs.currentPos();

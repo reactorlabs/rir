@@ -3429,13 +3429,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(make_unique_) {
+        INSTRUCTION(set_shared_) {
             SEXP val = ostack_top(ctx);
-            if (MAYBE_REFERENCED(val)) {
-                val = Rf_shallow_duplicate(val);
-                ostack_set(ctx, 0, val);
-                SET_NAMED(val, 1);
-            }
+            if (NAMED(val) < 2)
+                SET_NAMED(val, 2);
             NEXT();
         }
 

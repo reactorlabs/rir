@@ -157,7 +157,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::dup2_:
     case Opcode::for_seq_size_:
     case Opcode::swap_:
-    case Opcode::make_unique_:
+    case Opcode::set_shared_:
     case Opcode::ensure_named_:
     case Opcode::return_:
     case Opcode::isfun_:

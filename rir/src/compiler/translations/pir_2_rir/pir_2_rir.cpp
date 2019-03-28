@@ -730,7 +730,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             if (auto j = Instruction::Cast(v)) {
                 if (!j->type.isRType())
                     return;
-                if (LdConst::Cast(j) || MkEnv::Cast(j) || MkArg::Cast(j))
+                if (SetShared::Cast(j) || LdConst::Cast(j) || MkEnv::Cast(j) ||
+                    MkArg::Cast(j))
                     return;
                 if (auto p = Phi::Cast(j))
                     return countPhiInputs(p);
@@ -1063,6 +1064,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
+                SIMPLE(SetShared, setShared);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
