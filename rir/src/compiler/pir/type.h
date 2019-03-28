@@ -446,11 +446,10 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
     }
 
     // If the base type is at least a value, then it's a value
-    if (t.isRType() && PirType::val().baseType() == t.baseType()) {
-        if (!t.maybeMissing())
-            out << "val";
-        else
-            out << "val?";
+    if (t.isRType() && PirType::val().notMissing().baseType() == t.baseType()) {
+        out << "val";
+    } else if (t.isRType() && PirType::val().baseType() == t.baseType()) {
+        out << "val?";
     } else {
         if (t.t_.r.count() > 1)
             out << "(";
