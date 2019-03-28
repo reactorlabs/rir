@@ -4,6 +4,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "compiler/analysis/refrence_count.h"
 #include "compiler/analysis/verifier.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
@@ -705,44 +706,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             order.push_back(bb->id);
     });
 
-    std::unordered_map<Instruction*, size_t> numberOfUses;
+    std::unordered_map<Instruction*, bool> needsEnsureNamed;
     {
-        std::function<void(Value*)> count;
-
-        // Increases the counts on every value input of a phi cluster
-        auto countPhiInputs = [&](Phi* p) {
-            std::vector<bool> countedPhis(cls->nextBBId, false);
-            std::function<void(Phi*)> doCountPhis = [&](Phi* p) {
-                if (countedPhis[p->bb()->id])
-                    return;
-                countedPhis[p->bb()->id] = true;
-                p->eachArg([&](BB*, Value* v) {
-                    if (auto p = Phi::Cast(v))
-                        doCountPhis(p);
-                    else
-                        count(v);
-                });
-            };
-            doCountPhis(p);
-        };
-
-        count = [&](Value* v) {
-            if (auto j = Instruction::Cast(v)) {
-                if (!j->type.isRType())
-                    return;
-                if (SetShared::Cast(j) || LdConst::Cast(j) || MkEnv::Cast(j) ||
-                    MkArg::Cast(j))
-                    return;
-                if (auto p = Phi::Cast(j))
-                    return countPhiInputs(p);
-                numberOfUses[j]++;
-            }
-        };
-
-        Visitor::run(code->entry, [&](Instruction* i) {
-            if (!Phi::Cast(i))
-                i->eachArg([&](Value* v) { count(v); });
-        });
+        StaticReferenceCount analysis(cls, log);
+        for (auto& u : analysis.result().uses) {
+            if (u.second > 1)
+                needsEnsureNamed[u.first] = u.second;
+        }
     }
 
     CodeBuffer cb(ctx.cs());
@@ -1268,7 +1238,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
-            if (numberOfUses[instr] > 1)
+            if (instr->needsReferenceCount() && needsEnsureNamed[instr])
                 cb.add(BC::ensureNamed());
 
             // Store the result
