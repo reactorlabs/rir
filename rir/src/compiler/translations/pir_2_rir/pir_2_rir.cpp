@@ -4,6 +4,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "compiler/analysis/refrence_count.h"
 #include "compiler/analysis/verifier.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
@@ -707,93 +708,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     std::unordered_map<Instruction*, bool> needsEnsureNamed;
     {
-        std::unordered_map<Instruction*, SmallSet<Instruction*>> alias;
-        Visitor::run(code->entry, [&](Instruction* i) {
-            if (Phi::Cast(i)) {
-                i->eachArg([&](Value* v) {
-                    if (auto a = Instruction::Cast(v))
-                        alias[i].insert(a);
-                });
-            }
-        });
-
-        struct AUses {
-            std::unordered_map<Instruction*, size_t> uses;
-            AbstractResult mergeExit(const AUses& other) {
-                return merge(other);
-            }
-            AbstractResult merge(const AUses& other) {
-                AbstractResult res;
-                for (auto u : other.uses) {
-                    // used in both branches, use count is the maximum
-                    if (!uses.count(u.first)) {
-                        uses.emplace(u);
-                        res.update();
-                    } else if (uses.at(u.first) < u.second) {
-                        uses.at(u.first) = u.second;
-                        res.update();
-                    }
-                }
-                return res;
-            }
-            void print(std::ostream&, bool) const {
-                // TODO
-            }
-        };
-
-        class UseAnalysis : public StaticAnalysis<AUses> {
-          public:
-            UseAnalysis(ClosureVersion* cls,
-                        const std::unordered_map<Instruction*,
-                                                 SmallSet<Instruction*>>& alias,
-                        LogStream& log)
-                : StaticAnalysis("UseAnalysis", cls, cls, log), alias(alias) {}
-
-          protected:
-            const std::unordered_map<Instruction*, SmallSet<Instruction*>>&
-                alias;
-
-            AbstractResult apply(AUses& state, Instruction* i) const override {
-                AbstractResult res;
-                if (Phi::Cast(i))
-                    return res;
-
-                if (i->needsReferenceCount()) {
-                    // This value was used only once in a loop, we can thus
-                    // reset the count on
-                    // redefinition.
-                    if (state.uses.count(i) && state.uses.at(i) == 1) {
-                        state.uses[i] = 0;
-                        res.update();
-                    }
-                }
-
-                auto count = [&](Instruction* i) {
-                    auto& use = state.uses[i];
-                    if (use < 2) {
-                        use++;
-                        res.update();
-                    }
-                };
-
-                auto apply = [&](Value* v) {
-                    if (auto j = Instruction::Cast(v)) {
-                        if (!j->needsReferenceCount())
-                            return;
-                        if (alias.count(j))
-                            for (auto a : alias.at(j))
-                                count(a);
-                        else
-                            count(j);
-                    }
-                };
-
-                i->eachArg(apply);
-                return res;
-            }
-        };
-
-        UseAnalysis analysis(cls, alias, log);
+        StaticReferenceCount analysis(cls, log);
         for (auto& u : analysis.result().uses) {
             if (u.second > 1)
                 needsEnsureNamed[u.first] = u.second;
