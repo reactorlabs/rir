@@ -768,7 +768,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::push_code_:
     case Opcode::set_names_:
     case Opcode::names_:
-    case Opcode::make_unique_:
 
     // Invalid opcodes:
     case Opcode::invalid_:
