@@ -2190,13 +2190,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_top(ctx);
             assert(TYPEOF(val) == INTSXP);
             int i = INTEGER(val)[0];
-            if (MAYBE_SHARED(val)) {
+            if (NO_REFERENCES(val)) {
+                INTEGER(val)[0]++;
+            } else {
                 ostack_pop(ctx);
                 SEXP n = Rf_allocVector(INTSXP, 1);
                 INTEGER(n)[0] = i + 1;
                 ostack_push(ctx, n);
-            } else {
-                INTEGER(val)[0]++;
             }
             NEXT();
         }
@@ -3324,17 +3324,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(set_shared_) {
             SEXP val = ostack_top(ctx);
-            INCREMENT_NAMED(val);
-            NEXT();
-        }
-
-        INSTRUCTION(make_unique_) {
-            SEXP val = ostack_top(ctx);
-            if (MAYBE_SHARED(val)) {
-                val = Rf_shallow_duplicate(val);
-                ostack_set(ctx, 0, val);
-                SET_NAMED(val, 1);
-            }
+            if (NAMED(val) < 2)
+                SET_NAMED(val, 2);
             NEXT();
         }
 

@@ -53,9 +53,10 @@ class TheScopeResolution {
             bool fail = false;
             res.eachSource([&](ValOrig v) {
                 auto i = Instruction::Cast(v.val);
-                if (fail || !i || inputs.count(i->bb())) {
+                if (fail)
+                    return;
+                if (!i || inputs.count(v.origin->bb()))
                     fail = true;
-                }
                 inputs[v.origin->bb()] = i;
             });
             if (fail)

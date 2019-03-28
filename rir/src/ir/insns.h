@@ -444,11 +444,6 @@ DEF_INSTR(set_shared_, 0, 1, 1, 1)
 DEF_INSTR(ensure_named_, 0, 1, 1, 1)
 
 /**
- * make_unique_:: duplicates tos if it is shared (ie. named > 1)
- */
-DEF_INSTR(make_unique_, 0, 1, 1, 1)
-
-/**
  * beginloop_:: begins loop context, break and continue target immediate (this is the target for break and next long jumps)
  */
 DEF_INSTR(beginloop_, 1, 0, 0, 0)
