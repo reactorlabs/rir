@@ -565,7 +565,7 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             bool notObj = true;
             bool isEager = true;
             if (TYPEOF(arg) == PROMSXP) {
-                SEXP val = safeForcePromise(arg);
+                SEXP val = PRVALUE(arg);
                 if (val == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
@@ -3417,6 +3417,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
                      nullptr, names.empty() ? nullptr : names.data(), rho,
                      Assumptions(), ctx);
     call.arglist = arglist;
+    call.safeForceArgs();
 
     auto res = rirCall(call, ctx);
     ostack_popn(ctx, call.passedArgs);
