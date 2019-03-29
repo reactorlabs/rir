@@ -113,12 +113,12 @@ struct CallContext {
         return cp_pool_at(ctx, names[i]);
     }
 
-    void safeForceArgs() const {
+    void safeForceArgs(InterpreterInstance* ctx) const {
         assert(hasStackArgs());
         for (unsigned i = 0; i < passedArgs; i++) {
-            SEXP arg = stackArg(i);
-            if (TYPEOF(arg) == PROMSXP) {
-                safeForcePromise(arg);
+            auto arg = stackArg(i, ctx);
+            if (arg.tag == STACK_OBJ_SEXP && TYPEOF(arg.u.sxpval) == PROMSXP) {
+                safeForcePromise(arg.u.sxpval);
             }
         }
     }

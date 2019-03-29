@@ -2188,7 +2188,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 ostackPushInt(ctx, i);
                 break;
             case STACK_OBJ_SEXP:
-                if (NO_REFERENCES(val)) {
+                if (NO_REFERENCES(val.u.sxpval)) {
                     (*INTEGER(val.u.sxpval))++;
                 } else {
                     ostackPop(ctx);
@@ -3462,7 +3462,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
                      nullptr, names.empty() ? nullptr : names.data(), rho,
                      Assumptions(), ctx);
     call.arglist = arglist;
-    call.safeForceArgs();
+    call.safeForceArgs(ctx);
 
     auto res = rirCall(call, ctx);
     ostackPopn(ctx, call.passedArgs);
