@@ -98,8 +98,28 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
                     count(j);
             }
         };
-
         i->eachArg(apply);
+
+        // Those instructions -- at the rir level -- are allowed to override
+        // inputs, even if the refcount is 1. Therefore if they are used
+        // multiple times, we need to bump the refcount even further.
+        switch (i->tag) {
+        case Tag::Subassign1_1D:
+        case Tag::Subassign2_1D:
+        case Tag::Subassign1_2D:
+        case Tag::Subassign2_2D:
+        case Tag::Inc:
+            if (auto input = Instruction::Cast(i->arg(0).val())) {
+                if (state.uses.count(input) && state.uses.at(input) == 2) {
+                    state.uses[input] = 3;
+                    res.update();
+                }
+            }
+            break;
+        default:
+            break;
+        };
+
         return res;
     }
 };

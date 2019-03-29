@@ -696,9 +696,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 #undef UNOP
 
     case Opcode::inc_: {
-        auto one = insert(new LdConst(1));
-        auto inc = insert(new Add(one, pop(), Env::elided(), -1));
-        push(inc);
+        push(insert(new Inc(pop())));
         break;
     }
 

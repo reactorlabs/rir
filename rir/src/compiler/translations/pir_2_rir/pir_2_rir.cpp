@@ -706,12 +706,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             order.push_back(bb->id);
     });
 
-    std::unordered_map<Instruction*, bool> needsEnsureNamed;
+    std::unordered_map<Instruction*, size_t> needsRefcount;
     {
         StaticReferenceCount analysis(cls, log);
         for (auto& u : analysis.result().uses) {
             if (u.second > 1)
-                needsEnsureNamed[u.first] = u.second;
+                needsRefcount[u.first] = u.second - 1;
         }
     }
 
@@ -1016,6 +1016,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
+                SIMPLE(Inc, inc);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
                 SIMPLE(Length, length);
@@ -1237,8 +1238,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
-            if (instr->needsReferenceCount() && needsEnsureNamed[instr])
-                cb.add(BC::ensureNamed());
+            if (instr->needsReferenceCount()) {
+                if (needsRefcount[instr] == 1)
+                    cb.add(BC::ensureNamed());
+                else if (needsRefcount[instr] == 2)
+                    cb.add(BC::setShared());
+            }
 
             // Store the result
             if (alloc.sa.dead(instr)) {
