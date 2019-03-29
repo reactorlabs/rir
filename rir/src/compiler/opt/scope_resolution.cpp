@@ -53,50 +53,60 @@ class TheScopeResolution {
             bool fail = false;
             res.eachSource([&](ValOrig v) {
                 auto i = Instruction::Cast(v.val);
-                if (fail || !i || inputs.count(i->bb())) {
+                if (fail)
+                    return;
+                if (!i || inputs.count(v.origin->bb()))
                     fail = true;
-                }
-                inputs[i->bb()] = i;
+                inputs[v.origin->bb()] = i;
             });
             if (fail)
                 return nullptr;
 
-            auto placement =
-                PhiPlacement::compute(function, inputs, cfg, dom, dfront);
-            auto dominators = dom.dominators(bb);
-            int maxDom = 0;
-            BB* resPhiPos = nullptr;
-            for (auto& phi : placement) {
-                if (phi.first == bb) {
-                    resPhiPos = bb;
-                } else {
-                    auto pos = std::find(dominators.begin(), dominators.end(),
-                                         phi.first);
-                    if (pos != dominators.end()) {
-                        if (pos - dominators.begin() > maxDom)
-                            maxDom = pos - dominators.begin();
-                    }
-                }
-            }
-            if (!resPhiPos)
-                resPhiPos = dominators[maxDom];
-
-            if (placement.size() == 0)
+            auto pl = PhiPlacement(function, bb, inputs, cfg, dom, dfront);
+            if (!pl.success)
                 return nullptr;
 
-            std::unordered_map<BB*, Phi*> thePhis;
-            for (auto& phi : placement)
-                thePhis[phi.first] = new Phi;
+            auto findExistingPhi =
+                [&](BB* pos,
+                    const rir::SmallSet<PhiPlacement::PhiInput>& inps) -> Phi* {
+                for (auto i : *pos) {
+                    if (auto candidate = Phi::Cast(i)) {
+                        if (candidate->nargs() == inps.size()) {
+                            rir::SmallSet<PhiPlacement::PhiInput> candidateInp;
+                            // This only works for value inputs, not for phi
+                            // inputs. I am not sure how it could be extended...
+                            candidate->eachArg([&](BB* inbb, Value* inval) {
+                                candidateInp.insert({inbb, nullptr, inval});
+                            });
+                            if (candidateInp == inps)
+                                return candidate;
+                        };
+                    }
+                }
+                return nullptr;
+            };
 
-            for (auto& computed : placement) {
+            std::unordered_map<BB*, Phi*> thePhis;
+            for (auto& phi : pl.placement) {
+                if (auto p = findExistingPhi(phi.first, phi.second))
+                    thePhis[phi.first] = p;
+                else
+                    thePhis[phi.first] = new Phi;
+            }
+
+            for (auto& computed : pl.placement) {
                 auto& pos = computed.first;
                 auto& phi = thePhis.at(pos);
+
+                // Existing phi
+                if (phi->nargs() > 0)
+                    continue;
 
                 assert(computed.second.size() > 1);
                 for (auto& p : computed.second) {
                     if (p.aValue) {
                         auto val = p.aValue;
-                        if (alreadyReplaced.count(val))
+                        while (alreadyReplaced.count(val))
                             val = alreadyReplaced.at(val);
                         phi->addInput(p.inputBlock, val);
                     } else {
@@ -117,7 +127,7 @@ class TheScopeResolution {
             for (auto& phi : thePhis)
                 phi.second->updateType();
 
-            return thePhis.at(resPhiPos);
+            return thePhis.at(pl.targetPhi);
         };
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -197,6 +207,52 @@ class TheScopeResolution {
                     }
                 }
 
+                if (bb->isDeopt()) {
+                    if (auto fs = FrameState::Cast(i)) {
+                        if (auto mk = MkEnv::Cast(fs->env())) {
+                            if (mk->context == 1 && !mk->stub &&
+                                mk->bb() != bb &&
+                                mk->usesAreOnly(
+                                    function->entry,
+                                    {Tag::FrameState, Tag::StVar})) {
+                                analysis.tryMaterializeEnv(
+                                    before, mk,
+                                    [&](const std::unordered_map<
+                                        SEXP, AbstractPirValue>& env) {
+                                        std::vector<SEXP> names;
+                                        std::vector<Value*> values;
+                                        for (auto& e : env) {
+                                            names.push_back(e.first);
+                                            if (e.second.isUnknown())
+                                                return;
+                                            if (e.second.isSingleValue()) {
+                                                auto val =
+                                                    e.second.singleValue().val;
+                                                while (
+                                                    alreadyReplaced.count(val))
+                                                    val =
+                                                        alreadyReplaced.at(val);
+                                                values.push_back(val);
+                                            } else {
+                                                auto phi = tryInsertPhis(
+                                                    e.second, bb, ip);
+                                                if (!phi)
+                                                    return;
+                                                values.push_back(phi);
+                                            }
+                                        }
+                                        auto deoptEnv =
+                                            new MkEnv(mk->lexicalEnv(), names,
+                                                      values.data());
+                                        next = bb->insert(ip, deoptEnv);
+                                        next++;
+                                        mk->replaceUsesWithLimits(deoptEnv, bb);
+                                    });
+                            }
+                        }
+                    }
+                }
+
                 analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
                     auto& res = aLoad.result;
 
@@ -208,7 +264,7 @@ class TheScopeResolution {
                         if (value.val->type.isA(i->type) &&
                             value.recursionLevel == 0) {
                             auto val = value.val;
-                            if (alreadyReplaced.count(val))
+                            while (alreadyReplaced.count(val))
                                 val = alreadyReplaced.at(val);
                             alreadyReplaced[i] = val;
                             i->replaceUsesWith(val);
@@ -288,7 +344,10 @@ class TheScopeResolution {
                             }
                             if (guess->type.isA(PirType::closure()) &&
                                 guess->validIn(function)) {
+                                while (alreadyReplaced.count(guess))
+                                    guess = alreadyReplaced.at(guess);
                                 ldfun->replaceUsesWith(guess);
+                                alreadyReplaced[ldfun] = guess;
                                 next = bb->remove(ip);
                                 return;
                             }

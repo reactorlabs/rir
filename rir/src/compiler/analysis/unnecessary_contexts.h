@@ -33,9 +33,8 @@ struct UnnecessaryContextsState : public AbstractUnique<PushContext> {
 
 class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
   public:
-    ClosureVersion* code;
     UnnecessaryContexts(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("UnnecessaryContexts", cls, cls, log), code(cls) {}
+        : StaticAnalysis("UnnecessaryContexts", cls, cls, log) {}
 
     AbstractResult apply(UnnecessaryContextsState& state,
                          Instruction* i) const override {
@@ -49,9 +48,9 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
             // checkpoints.
             state.needed = true;
             return AbstractResult::Updated;
-        } else if (auto p = PopContext::Cast(i)) {
+        } else if (PopContext::Cast(i)) {
             if (state.get()) {
-                assert(state.get() == p->push());
+                assert(state.get() == PopContext::Cast(i)->push());
                 state.clear();
                 state.affected.clear();
                 return AbstractResult::Updated;

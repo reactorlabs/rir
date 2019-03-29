@@ -1,7 +1,7 @@
 #include "scope.h"
 #include "../pir/pir_impl.h"
-#include "query.h"
 #include "../util/safe_builtins_list.h"
+#include "query.h"
 
 namespace rir {
 namespace pir {
@@ -314,6 +314,20 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
     }
 
     return effect;
+}
+
+void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
+                                      Value* env,
+                                      const MaybeMaterialized& action) {
+    auto envState = state.envs.at(env);
+    std::unordered_map<SEXP, AbstractPirValue> theEnv;
+    for (auto& e : envState.entries) {
+        if (e.second.isUnknown())
+            return;
+        theEnv[e.first] = e.second;
+    }
+
+    action(theEnv);
 }
 
 } // namespace pir

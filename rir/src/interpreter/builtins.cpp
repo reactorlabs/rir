@@ -12,22 +12,6 @@ struct bitShiftR {
     int operator()(int lhs, int rhs) const { return lhs >> rhs; }
 };
 
-static RIR_INLINE int checkBitOpCompatibility(SEXP* lhs, SEXP* rhs) {
-    int protects = 0;
-    if (isReal(*lhs)) {
-        *lhs = PROTECT(coerceVector(*lhs, INTSXP));
-        protects++;
-    }
-    if (isReal(*rhs)) {
-        *rhs = PROTECT(coerceVector(*rhs, INTSXP));
-        protects++;
-    }
-    if ((TYPEOF(*lhs) != TYPEOF(*rhs)) || TYPEOF(*lhs) != INTSXP)
-        return -1;
-
-    return protects;
-}
-
 R_xlen_t asVecSize(R_bcstack_t* stackCell) {
     switch (stackCell->tag) {
     case STACK_OBJ_INT:
@@ -89,8 +73,9 @@ R_xlen_t asVecSize(R_bcstack_t* stackCell) {
 template <class Func>
 static RIR_INLINE SEXP bitwiseOp(Func operation, SEXP lhs, SEXP rhs,
                                  bool testLimits) {
-    int protects = checkBitOpCompatibility(&lhs, &rhs);
-    if (protects < 0)
+    if (TYPEOF(lhs) != REALSXP && TYPEOF(lhs) != INTSXP)
+        return nullptr;
+    if (TYPEOF(rhs) != REALSXP && TYPEOF(rhs) != INTSXP)
         return nullptr;
 
     R_xlen_t lhsLength = XLENGTH(lhs), rhsLength = XLENGTH(rhs);
@@ -101,13 +86,16 @@ static RIR_INLINE SEXP bitwiseOp(Func operation, SEXP lhs, SEXP rhs,
         resultLength = 0;
     SEXP res = allocVector(INTSXP, resultLength);
     int* resValues = INTEGER(res);
-    const int *lhsValues = INTEGER_RO(lhs), *rhsValues = INTEGER_RO(rhs);
+
     R_xlen_t iLhs = 0, iRhs = 0;
     for (R_xlen_t i = 0; i < resultLength;
          iLhs = (++iLhs == lhsLength) ? 0 : iLhs,
                   iRhs = (++iRhs == rhsLength) ? 0 : iRhs, ++i) {
-        int currentValLeft = lhsValues[iLhs];
-        int currentValRight = rhsValues[iRhs];
+
+        int currentValLeft =
+            TYPEOF(lhs) == INTSXP ? INTEGER(lhs)[iLhs] : REAL(lhs)[iLhs];
+        int currentValRight =
+            TYPEOF(rhs) == INTSXP ? INTEGER(rhs)[iRhs] : REAL(rhs)[iRhs];
         bool guard =
             currentValLeft == NA_INTEGER || currentValRight == NA_INTEGER;
         if (testLimits)
@@ -115,8 +103,6 @@ static RIR_INLINE SEXP bitwiseOp(Func operation, SEXP lhs, SEXP rhs,
         resValues[i] =
             guard ? NA_INTEGER : operation(currentValLeft, currentValRight);
     }
-    if (protects)
-        UNPROTECT(protects);
     return res;
 }
 
@@ -135,7 +121,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return nullptr;
 
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
-        auto arg = *call.stackArg(i, ctx);
+        auto arg = *call.stackArg(i);
         if (arg.tag == STACK_OBJ_SEXP && TYPEOF(arg.u.sxpval) == PROMSXP)
             arg.u.sxpval = PRVALUE(arg.u.sxpval);
         if (arg.tag == STACK_OBJ_SEXP &&

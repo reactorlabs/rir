@@ -69,7 +69,7 @@ class EnumSet {
         return !EnumSet(s.set_ & set_).empty();
     }
 
-    RIR_INLINE bool includes(const EnumSet& s) const {
+    RIR_INLINE bool constexpr includes(const EnumSet& s) const {
         return (s.set_ & set_) == s.set_;
     }
 
@@ -79,6 +79,10 @@ class EnumSet {
 
     RIR_INLINE bool operator==(const EnumSet& s) const {
         return set_ == s.set_;
+    }
+
+    constexpr RIR_INLINE EnumSet operator~() const {
+        return EnumSet(~set_ & Any());
     }
 
     RIR_INLINE bool operator<(const EnumSet& s) const { return set_ < s.set_; }
@@ -91,6 +95,10 @@ class EnumSet {
 
     RIR_INLINE bool operator!=(const Element& t) const {
         return EnumSet(t) != set_;
+    }
+
+    constexpr RIR_INLINE EnumSet operator&(const EnumSet& s) const {
+        return EnumSet(s.set_ & set_);
     }
 
     constexpr RIR_INLINE EnumSet operator|(const EnumSet& s) const {

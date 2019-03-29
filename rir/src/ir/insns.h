@@ -205,6 +205,11 @@ DEF_INSTR(dup2_, 0, 2, 4, 1)
 DEF_INSTR(pop_, 0, 1, 0, 1)
 
 /**
+ * popn_:: pop n elements from object stack
+ */
+DEF_INSTR(popn_, 1, -1, 0, 1)
+
+/**
  * swap_:: swap two elements tos
  */
 DEF_INSTR(swap_, 0, 2, 2, 1)
@@ -437,11 +442,6 @@ DEF_INSTR(set_shared_, 0, 1, 1, 1)
  * ensure_named_:: ensures tos has named >= 1
  */
 DEF_INSTR(ensure_named_, 0, 1, 1, 1)
-
-/**
- * make_unique_:: duplicates tos if it is shared (ie. named > 1)
- */
-DEF_INSTR(make_unique_, 0, 1, 1, 1)
 
 /**
  * beginloop_:: begins loop context, break and continue target immediate (this is the target for break and next long jumps)

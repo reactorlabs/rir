@@ -54,12 +54,15 @@ class SmallSet {
     size_t size() const { return container.size(); }
 
     iterator erase(iterator e) { return container.erase(e); }
+    const_iterator erase(const_iterator e) { return container.erase(e); }
 
     iterator begin() { return container.begin(); }
     iterator end() { return container.end(); }
-    const_iterator begin() const { return container.begin(); }
-    const_iterator end() const { return container.end(); }
+    const_iterator cbegin() const { return container.cbegin(); }
+    const_iterator cend() const { return container.cend(); }
+    const_iterator begin() const { return container.cbegin(); }
+    const_iterator end() const { return container.cend(); }
 };
-}
+} // namespace rir
 
 #endif

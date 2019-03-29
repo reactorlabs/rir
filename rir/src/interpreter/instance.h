@@ -256,6 +256,7 @@ RIR_INLINE SEXP typedStackAsSexp(R_bcstack_t* stackCell) {
 #endif
     default:
         assert(false);
+        return nullptr;
     }
 }
 
@@ -281,6 +282,7 @@ RIR_INLINE bool stackObjIsInteger(R_bcstack_t* stackCell) {
         return IS_SIMPLE_SCALAR(stackCell->u.sxpval, INTSXP);
     default:
         assert(false);
+        return false;
     }
 }
 
@@ -306,6 +308,7 @@ RIR_INLINE int tryStackObjToInteger(R_bcstack_t* stackCell) {
         }
     default:
         assert(false);
+        return 0;
     }
 }
 
@@ -327,6 +330,7 @@ RIR_INLINE bool stackObjIsReal(R_bcstack_t* stackCell) {
         return IS_SIMPLE_SCALAR(stackCell->u.sxpval, REALSXP);
     default:
         assert(false);
+        return (false);
     }
 }
 
@@ -352,6 +356,7 @@ RIR_INLINE double tryStackObjToReal(R_bcstack_t* stackCell) {
         }
     default:
         assert(false);
+        return 0;
     }
 }
 
@@ -372,6 +377,7 @@ RIR_INLINE bool stackObjIsLogical(R_bcstack_t* stackCell) {
         return IS_SIMPLE_SCALAR(stackCell->u.sxpval, LGLSXP);
     default:
         assert(false);
+        return (false);
     }
 }
 
@@ -397,6 +403,7 @@ RIR_INLINE int tryStackObjToLogical(R_bcstack_t* stackCell) {
         }
     default:
         assert(false);
+        return false;
     }
 }
 
@@ -421,6 +428,7 @@ RIR_INLINE int tryStackObjToLogicalNa(R_bcstack_t* stackCell) {
         }
     default:
         assert(false);
+        return 0;
     }
 }
 
@@ -453,7 +461,12 @@ RIR_INLINE SEXPTYPE stackObjSexpType(R_bcstack_t* stackCell) {
         return TYPEOF(stackCell->u.sxpval);
     default:
         assert(false);
+        return 0;
     }
+}
+
+RIR_INLINE SEXPTYPE isUnboxed(R_bcstack_t* stackCell) {
+    return stackObjSexpType(stackCell) != STACK_OBJ_SEXP;
 }
 
 RIR_INLINE bool stackObjIsVector(R_bcstack_t* stackCell) {
@@ -472,6 +485,7 @@ RIR_INLINE bool stackObjIsVector(R_bcstack_t* stackCell) {
         return Rf_isVector(stackCell->u.sxpval);
     default:
         assert(false);
+        return false;
     }
 }
 
@@ -539,6 +553,7 @@ RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t* stackCell, SEXPTYPE type) {
         return IS_SIMPLE_SCALAR(stackCell->u.sxpval, type);
     default:
         assert(false);
+        return false;
     }
 }
 
@@ -558,6 +573,7 @@ RIR_INLINE bool stackObjIsScalar(R_bcstack_t* stackCell) {
         return stackCell->u.sxpval->sxpinfo.scalar;
     default:
         assert(false);
+        return false;
     }
 }
 
@@ -577,6 +593,7 @@ RIR_INLINE R_xlen_t stackObjLength(R_bcstack_t* stackCell) {
         return XLENGTH(stackCell->u.sxpval);
     default:
         assert(false);
+        return 0;
     }
 }
 
@@ -613,6 +630,7 @@ RIR_INLINE bool stackObjsIdentical(R_bcstack_t* x, R_bcstack_t* y) {
         return x->u.sxpval == y->u.sxpval;
     default:
         assert(false);
+        return false;
     }
 }
 
@@ -664,6 +682,7 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t* val) {
         assert(false);
     default:
         assert(false);
+        return false;
     }
 }
 
@@ -775,6 +794,10 @@ RIR_INLINE SEXP ostackSexpAt(InterpreterInstance* ctx, unsigned idx) {
 
 RIR_INLINE SEXP ostackPopSexp(InterpreterInstance* ctx) {
     return stackObjAsSexp(ostackCellPop(ctx));
+}
+
+RIR_INLINE SEXP ostackTopSexp(InterpreterInstance* ctx) {
+    return stackObjAsSexp(ostackTopCell(ctx));
 }
 
 RIR_INLINE void ostackEnsureSize(InterpreterInstance* ctx, unsigned minFree) {

@@ -8,11 +8,10 @@
 namespace rir {
 namespace pir {
 
-PhiPlacement::Phis
-PhiPlacement::compute(ClosureVersion* cls,
-                      const std::unordered_map<BB*, Value*>& writes,
-                      const CFG& cfg, const DominanceGraph& dom,
-                      const DominanceFrontier& dfrontier) {
+PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
+                           const std::unordered_map<BB*, Value*>& writes,
+                           const CFG& cfg, const DominanceGraph& dom,
+                           const DominanceFrontier& dfrontier) {
     SmallSet<BB*> phis;
     SmallSet<BB*> defs;
     for (const auto& w : writes)
@@ -35,45 +34,56 @@ PhiPlacement::compute(ClosureVersion* cls,
         }
     }
 
-    // Depth first traversal to connect inputs with phis
-    Phis computed;
-    std::vector<bool> seen(cls->nextBBId, false);
-    std::function<void(BB*, PhiInput)> computePhis = [&](BB* cur,
-                                                         PhiInput input) {
-        if (!cur)
-            return;
+    {
+        std::unordered_map<BB*, PhiInput> pendingInput;
+        DominatorTreeVisitor<>(dom).run(cls->entry, [&](BB* cur) {
+            PhiInput input = {nullptr, nullptr, nullptr};
+            if (pendingInput.count(cur))
+                input = pendingInput.at(cur);
 
-        if (phis.includes(cur)) {
-            if (input.aValue || input.otherPhi) {
-                computed[cur].insert(input);
+            if (phis.includes(cur)) {
+                input.aValue = nullptr;
+                input.otherPhi = cur;
             }
-        }
 
-        if (seen[cur->id])
+            if (writes.count(cur)) {
+                input.otherPhi = nullptr;
+                input.aValue = writes.at(cur);
+            }
+            input.inputBlock = cur;
+
+            auto apply = [&](BB* next) {
+                if (!next)
+                    return;
+                if (!input.otherPhi && !input.aValue)
+                    return;
+                if (phis.includes(next))
+                    placement[next].insert(input);
+                else
+                    pendingInput[next] = input;
+            };
+
+            apply(cur->next0);
+            apply(cur->next1);
+        });
+
+        if (phis.includes(target))
+            targetPhi = target;
+        else if (pendingInput.count(target))
+            targetPhi = pendingInput.at(target).otherPhi;
+
+        if (!targetPhi)
             return;
-        seen[cur->id] = true;
-
-        if (writes.count(cur)) {
-            input.otherPhi = nullptr;
-            input.aValue = writes.at(cur);
-        } else if (phis.includes(cur)) {
-            input.aValue = nullptr;
-            input.otherPhi = cur;
-        }
-        input.inputBlock = cur;
-        computePhis(cur->next0, input);
-        computePhis(cur->next1, input);
-    };
-    computePhis(cls->entry, {});
+    }
 
     // Cleanup the resulting phi graph
     bool changed = true;
     auto cleanup = [&]() {
-        for (auto ci = computed.begin(); ci != computed.end();) {
+        for (auto ci = placement.begin(); ci != placement.end();) {
             // Remove dead inputs
             auto& inputs = ci->second;
             for (auto ii = inputs.begin(); ii != inputs.end();) {
-                if (ii->otherPhi && !computed.count(ii->otherPhi)) {
+                if (ii->otherPhi && !placement.count(ii->otherPhi)) {
                     ii = inputs.erase(ii);
                     changed = true;
                 } else {
@@ -81,12 +91,12 @@ PhiPlacement::compute(ClosureVersion* cls,
                 }
             }
             if (ci->second.size() == 0) {
-                ci = computed.erase(ci);
+                ci = placement.erase(ci);
             } else if (ci->second.size() == 1) {
                 // Remove single input phis
                 auto input1 = *ci->second.begin();
                 // update all other phis which have us as input
-                for (auto& c : computed) {
+                for (auto& c : placement) {
                     for (auto in : c.second) {
                         if (in.otherPhi == ci->first) {
                             in.otherPhi = input1.otherPhi;
@@ -95,7 +105,9 @@ PhiPlacement::compute(ClosureVersion* cls,
                         }
                     }
                 }
-                ci = computed.erase(ci);
+                if (targetPhi == ci->first)
+                    targetPhi = input1.otherPhi;
+                ci = placement.erase(ci);
             } else {
                 ci++;
             }
@@ -107,12 +119,14 @@ PhiPlacement::compute(ClosureVersion* cls,
     }
 
     // Fail if not all phis are well formed
-    for (auto& i : computed) {
-        if (i.second.size() != cfg.immediatePredecessors(i.first).size())
-            return {};
+    for (auto& i : placement) {
+        if (i.second.size() != cfg.immediatePredecessors(i.first).size()) {
+            placement.clear();
+            return;
+        }
     }
 
-    return computed;
+    success = !placement.empty();
 }
 
 } // namespace pir

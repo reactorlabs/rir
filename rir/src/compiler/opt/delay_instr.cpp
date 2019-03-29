@@ -16,35 +16,6 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
             auto i = *ip;
             auto next = ip + 1;
 
-            if (!i->hasEnv() && !i->hasEffect() && !Phi::Cast(i) &&
-                !i->branchOrExit()) {
-                Instruction* usage = i->hasSingleUse();
-                if (usage && usage->bb() != bb) {
-                    auto phi = Phi::Cast(usage);
-                    if (phi) {
-                        // If the usage is a phi, we make sure to keep this
-                        // value only in the input branch, where it is
-                        // actually needed.
-                        for (size_t j = 0; j < phi->nargs(); ++j) {
-                            if (phi->arg(j).val() == i) {
-                                if (phi->inputAt(j) != bb) {
-                                    next = bb->moveToEnd(ip, phi->inputAt(j));
-                                }
-                                break;
-                            }
-                        }
-                    } else {
-                        next = bb->moveToBegin(ip, usage->bb());
-                    }
-                } else if (usage && usage != *next) {
-                    auto swap = ip;
-                    while (swap + 1 != bb->end() && *(swap + 1) != usage) {
-                        bb->swapWithNext(swap);
-                        ++swap;
-                    }
-                }
-            }
-
             /*
              * The Idea with the following line is to convert code produced by
              * speculative call target resolution. We want to convert the

@@ -13,6 +13,7 @@
 
 #include "instance.h"
 #include "interp_incl.h"
+#include "safe_force.h"
 
 namespace rir {
 
@@ -72,8 +73,11 @@ struct CallContext {
     bool hasNames() const { return names; }
 
     Immediate implicitArgIdx(unsigned i) const {
-        assert(implicitArgs && i < passedArgs);
-        return implicitArgs[i];
+        assert(implicitArgs);
+        if (i < passedArgs)
+            return implicitArgs[i];
+        else
+            return MISSING_ARG_IDX;
     }
 
     bool missingArg(unsigned i) const {
@@ -87,19 +91,29 @@ struct CallContext {
 
     // WARNING: Don't convert to sexp, instead use stackArgSexp
     // Otherwise the SEXP, if modified, won't modify the origianl stack arg
-    R_bcstack_t* stackArg(unsigned i, InterpreterInstance* ctx) const {
+    R_bcstack_t* stackArg(unsigned i) const {
         assert(stackArgs && i < passedArgs);
         return &stackArgs[i];
     }
 
-    SEXP stackArgSexp(unsigned i, InterpreterInstance* ctx) const {
+    SEXP stackArgSexp(unsigned i) const {
         assert(stackArgs && i < passedArgs);
-        return stackObjToSexp(stackArg(i, ctx));
+        return stackObjToSexp(stackArg(i));
     }
 
     SEXP name(unsigned i, InterpreterInstance* ctx) const {
         assert(hasNames() && i < suppliedArgs);
         return cp_pool_at(ctx, names[i]);
+    }
+
+    void safeForceArgs() const {
+        assert(hasStackArgs());
+        for (unsigned i = 0; i < passedArgs; i++) {
+            SEXP arg = stackObjToSexp(stackArg(i));
+            if (TYPEOF(arg) == PROMSXP) {
+                safeForcePromise(arg);
+            }
+        }
     }
 };
 

@@ -5,11 +5,14 @@
 namespace rir {
 namespace pir {
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 void StackUseAnalysisState::AbstractStack::push(Value* v) {
     for (auto have : *this)
         assert(have != v && "Stack already contains the value to be pushed.");
     push_back(v);
 }
+#pragma GCC diagnostic pop
 
 void StackUseAnalysisState::AbstractStack::eraseValue(Value* v) {
     for (auto it = rbegin(); it != rend(); ++it) {
@@ -43,15 +46,19 @@ void StackUseAnalysisState::AbstractStack::matchContents(
     // Check that the stacks have the same contents, or the differences all
     // relate to phi inputs
     for (size_t i = 0; i < size(); ++i) {
-        if (operator[](i) != other.operator[](i)) {
-            if (operator[](i)->isInstruction() &&
+        auto myContent = (*this)[i];
+        auto otherContent = other[i];
+        if (myContent != otherContent) {
+            if (myContent->isInstruction() &&
                 other.operator[](i)->isInstruction()) {
-                auto my = Instruction::Cast(operator[](i))->hasSingleUse();
-                auto their =
-                    Instruction::Cast(other.operator[](i))->hasSingleUse();
-                assert(my && Phi::Cast(my));
-                assert(their && Phi::Cast(their));
-                assert(my == their && "Stack mismatch.");
+                assert(Instruction::Cast(myContent)->hasSingleUse() &&
+                       Phi::Cast(Instruction::Cast(myContent)->hasSingleUse()));
+                assert(
+                    Instruction::Cast(otherContent)->hasSingleUse() &&
+                    Phi::Cast(Instruction::Cast(otherContent)->hasSingleUse()));
+                assert(Instruction::Cast(myContent)->hasSingleUse() ==
+                           Instruction::Cast(otherContent)->hasSingleUse() &&
+                       "Stack mismatch.");
             } else {
                 assert(false &&
                        "Found a phi that has a non-instruction as input.");
