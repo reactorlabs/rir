@@ -182,7 +182,7 @@ static void checkReplace(Instruction* origin, Value* replace) {
         std::cerr << " with a ";
         replace->type.print(std::cerr);
         std::cerr << "\n";
-        printBacktrace();
+        origin->bb()->owner->printCode(std::cout, true, false);
         assert(false);
     }
 }

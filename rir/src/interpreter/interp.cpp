@@ -1267,30 +1267,6 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx,
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
-RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION) {
-            if (pos == 0)
-                return cptr;
-            pos--;
-        }
-        cptr = cptr->nextcontext;
-    }
-    assert(false);
-    return nullptr;
-}
-
-RCNTXT* findFunctionContextFor(SEXP e) {
-    auto cptr = R_GlobalContext;
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION && cptr->cloenv == e) {
-            return cptr;
-        }
-        cptr = cptr->nextcontext;
-    }
-    return nullptr;
-}
-
 /*
  * This function takes some deopt metadata and stack frame contents on the
  * interpreter stack. It first recursively reconstructs a context for each
