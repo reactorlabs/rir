@@ -76,6 +76,10 @@ struct Assumptions {
 
     RIR_INLINE size_t count() const { return flags.count(); }
 
+    constexpr Assumptions operator|(const Flags& other) const {
+        return Assumptions(flags | other, missing);
+    }
+
     constexpr Assumptions operator|(const Assumptions& other) const {
         assert(missing == other.missing);
         return Assumptions(other.flags | flags, missing);

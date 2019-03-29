@@ -62,13 +62,19 @@ pir.tests <- function() {
 }
 
 # Returns TRUE f is a PIR compiled function with the given check (e.g.
-# environment was elided)
-pir.check <- function(f, check) {
+# environment was elided). Max assumptions compiled (+ minimal) are used, if
+# warmup=TRUE will call the function with 0 args to get better assumptions.
+pir.check <- function(f, check, warmup=FALSE) {
     check <-
       if (missing(check))
         NULL
       else
         as.name(as.character(substitute(check)))
+    if (warmup) {
+      rir.compile(f)
+      f()
+      f()
+    }
     .Call("pir_check", f, check)
 }
 

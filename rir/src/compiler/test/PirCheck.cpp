@@ -14,7 +14,7 @@ namespace rir {
 
 using namespace pir;
 
-static ClosureVersion* compilePir(SEXP f) {
+static ClosureVersion* compilePir(SEXP f, Module* m) {
     if (TYPEOF(f) != CLOSXP) {
         Rf_warning("pir check failed: not a closure");
         return nullptr;
@@ -23,14 +23,14 @@ static ClosureVersion* compilePir(SEXP f) {
         Rf_warning("pir check failed: not a RIR closure");
         return nullptr;
     }
-    assert(DispatchTable::check(f));
-    auto table = DispatchTable::unpack(f);
-    auto assumptions = table->best()->signature().assumptions;
+    assert(DispatchTable::check(BODY(f)));
+    auto table = DispatchTable::unpack(BODY(f));
+    auto assumptions = table->best()->signature().assumptions |
+                       Rir2PirCompiler::minimalAssumptions;
 
-    Module m;
     StreamLogger logger(PirDebug);
     logger.title("Pir Check");
-    Rir2PirCompiler cmp(&m, logger);
+    Rir2PirCompiler cmp(m, logger);
     ClosureVersion* res = nullptr;
     cmp.compileClosure(
         f, "pir_check", assumptions, [&](ClosureVersion* r) { res = r; },
@@ -109,7 +109,8 @@ PirCheck::Type PirCheck::parseType(const char* str) {
 }
 
 bool PirCheck::run(SEXP f) {
-    ClosureVersion* pir = compilePir(f);
+    Module m;
+    ClosureVersion* pir = compilePir(f, &m);
     if (pir == nullptr)
         return false;
     switch (type) {
