@@ -6,7 +6,8 @@
 
 #include "api.h"
 
-#include "compiler/pir_tests.h"
+#include "compiler/test/PirCheck.h"
+#include "compiler/test/PirTests.h"
 #include "compiler/translations/pir_2_rir/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
 #include "interpreter/interp_incl.h"
@@ -186,7 +187,7 @@ static pir::DebugStyle getInitialDebugStyle() {
     return style;
 }
 
-static pir::DebugOptions PirDebug = {
+pir::DebugOptions PirDebug = {
     getInitialDebugFlags(), getInitialDebugPassFilter(),
     getInitialDebugFunctionFilter(), getInitialDebugStyle()};
 
@@ -284,6 +285,24 @@ REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags,
 REXPORT SEXP pir_tests() {
     PirTests::run();
     return R_NilValue;
+}
+
+REXPORT SEXP pir_check(SEXP f, SEXP checkSym, SEXP env) {
+    if (TYPEOF(checkSym) != SYMSXP)
+        Rf_error("pir_check: 2nd parameter must be a symbol, NULL isn't valid");
+    PirCheck::Type type = PirCheck::parseType(CHAR(PRINTNAME(checkSym)));
+    if (type == PirCheck::Type::Invalid)
+        Rf_error("pir_check: invalid check type. List of check types:"
+#define V(Check) "\n    " #Check
+                 LIST_OF_PIR_CHECKS(V)
+#undef V
+        );
+    // Automatically compile rir for convenience (necessary to get PIR)
+    if (!isValidClosureSEXP(f))
+        rir_compile(f, env);
+    PirCheck check(type);
+    bool res = check.run(f);
+    return res ? R_TrueValue : R_FalseValue;
 }
 
 SEXP rirOptDefaultOpts(SEXP closure, const Assumptions& assumptions,

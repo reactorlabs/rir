@@ -61,6 +61,17 @@ pir.tests <- function() {
     invisible(.Call("pir_tests"))
 }
 
+# Returns TRUE f is a PIR compiled function with the given check (e.g.
+# environment was elided)
+pir.check <- function(f, check) {
+    check <-
+      if (missing(check))
+        NULL
+      else
+        as.name(as.character(substitute(check)))
+    .Call("pir_check", f, check)
+}
+
 # creates a bitset with pir debug options
 pir.debugFlags <- function(ShowWarnings = FALSE,
                            DryRun = FALSE,
