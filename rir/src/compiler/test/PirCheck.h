@@ -26,7 +26,7 @@ struct PirCheck {
     Type type;
 
     static Type parseType(const char* str);
-    PirCheck(Type type) : type(type) { assert(type != Type::Invalid); }
+    explicit PirCheck(Type type) : type(type) { assert(type != Type::Invalid); }
     bool run(SEXP f);
 };
 

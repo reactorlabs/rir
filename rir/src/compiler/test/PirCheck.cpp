@@ -122,6 +122,7 @@ bool PirCheck::run(SEXP f) {
     default:
         assert(false);
     }
+    return false;
 }
 
 } // namespace rir
