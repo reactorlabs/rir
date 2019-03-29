@@ -242,7 +242,7 @@ DEF_INSTR(add_, 0, 2, 1, 0)
 DEF_INSTR(uplus_, 0, 1, 1, 0)
 
 /**
- * inc_ :: increment tos integer
+ * inc_ :: increment tos integer (destructive! ignores refcount)
  */
 DEF_INSTR(inc_, 0, 1, 1, 1)
 

@@ -68,7 +68,6 @@
     V(LdFunctionEnv)                                                           \
     V(LAnd)                                                                    \
     V(LOr)                                                                     \
-    V(Inc)                                                                     \
     V(Not)                                                                     \
     V(Is)                                                                      \
     V(Plus)                                                                    \

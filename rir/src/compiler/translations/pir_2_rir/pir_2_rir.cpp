@@ -1016,7 +1016,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
-                SIMPLE(Inc, inc);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
                 SIMPLE(Length, length);
