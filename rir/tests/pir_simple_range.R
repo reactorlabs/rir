@@ -26,8 +26,8 @@ f <- rir.compile(function() {
     }
     a
 })
-stopifnot(f() == 1)
 print(f())
+stopifnot(f() == 1)
 pir.compile(f)
 print(f())
 stopifnot(f() == 1)
