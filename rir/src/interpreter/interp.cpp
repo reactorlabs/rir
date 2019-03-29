@@ -1113,8 +1113,8 @@ static RIR_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
         static CCODE blt = getBuiltin(prim);                                   \
         static int flag = getFlag(prim);                                       \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
-        SEXP argslist = CONS_NR(ostackObjToSexpAt(val, 0), R_NilValue);        \
-        ostackPushSexp(argslist);                                              \
+        SEXP argslist = CONS_NR(ostackObjToSexpAt(val, ctx, 0), R_NilValue);   \
+        ostackPushSexp(ctx, argslist);                                         \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
         SEXP res = blt(call, prim, argslist, env);                             \
@@ -1911,7 +1911,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(c, ostackSexpAt(ctx, n), n, ast,
                              ostackCellAt(ctx, n - 1), env, given, ctx);
             R_bcstack_t res = doCall(call, ctx);
-            ostackPopn(call.passedArgs);
+            ostackPopn(ctx, call.passedArgs);
             // Callee is TOS, overwrite with result
             ostackSet(ctx, 0, res);
             SLOWASSERT(ttt == R_PPStackTop);
@@ -1937,7 +1937,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(c, ostackSexpAt(ctx, n), n, ast,
                              ostackCellAt(ctx, n - 1), names, env, given, ctx);
             R_bcstack_t res = doCall(call, ctx);
-            ostackPopn(call.passedArgs);
+            ostackPopn(ctx, call.passedArgs);
             // Callee is TOS, overwrite with result
             ostackSet(ctx, 0, res);
 
