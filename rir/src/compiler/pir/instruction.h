@@ -601,6 +601,7 @@ class FLI(LdConst, 0, Effects::None()) {
     SEXP c() const;
     LdConst(SEXP c, PirType t);
     explicit LdConst(SEXP c);
+    explicit LdConst(int i);
     void printArgs(std::ostream& out, bool tty) const override;
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), c());
@@ -1044,14 +1045,6 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
     }
-};
-
-class FLI(Inc, 1, Effects::None()) {
-  public:
-    explicit Inc(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
-                              {{PirType(RType::integer).scalar().notObject()}},
-                              {{v}}) {}
 };
 
 class FLI(Is, 1, Effects::None()) {

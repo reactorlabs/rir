@@ -694,6 +694,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         UNOP(Not, not_);
 #undef UNOP
 
+    case Opcode::inc_: {
+        auto one = insert(new LdConst(1));
+        auto inc = insert(new Add(one, pop(), Env::elided(), -1));
+        push(inc);
+        break;
+    }
+
 #define UNOP_NOENV(Name, Op)                                                   \
     case Opcode::Op: {                                                         \
         v = pop();                                                             \
@@ -701,7 +708,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;                                                                 \
     }
         UNOP_NOENV(Length, length_);
-        UNOP_NOENV(Inc, inc_);
 #undef UNOP_NOENV
 
     case Opcode::missing_:
