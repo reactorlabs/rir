@@ -145,7 +145,7 @@ stopifnot(pir.check(function() {
   f(x, y(), z)
 }, NoEnv))
 
-mandelbrot <- function() {
+stopifnot(pir.check(function() {
     size = 30
     sum = 0
     byteAcc = 0
@@ -191,7 +191,4 @@ mandelbrot <- function() {
       y = y + 1
     }
     return (sum)
-}
-mandelbrot()
-mandelbrot()
-stopifnot(pir.check(mandelbrot, NoExternalCalls))
+}, NoExternalCalls, warmup=TRUE))
