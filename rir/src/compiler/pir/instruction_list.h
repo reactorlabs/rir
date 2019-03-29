@@ -69,6 +69,7 @@
     V(LAnd)                                                                    \
     V(LOr)                                                                     \
     V(Not)                                                                     \
+    V(Inc)                                                                     \
     V(Is)                                                                      \
     V(Plus)                                                                    \
     V(Minus)                                                                   \

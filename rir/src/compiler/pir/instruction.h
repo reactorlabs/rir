@@ -1047,6 +1047,14 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
     }
 };
 
+class FLI(Inc, 1, Effects::None()) {
+  public:
+    explicit Inc(Value* v)
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType(RType::integer).scalar().notObject()}},
+                              {{v}}) {}
+};
+
 class FLI(Is, 1, Effects::None()) {
   public:
     Is(uint32_t sexpTag, Value* v)
