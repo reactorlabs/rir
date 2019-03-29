@@ -39,7 +39,7 @@ struct ObservedType {
     uint8_t object : 1;
     uint8_t attribs : 1;
     ObservedType() {}
-    explicit ObservedType(R_bcstack_t s);
+    explicit ObservedType(R_bcstack_t* s);
     explicit ObservedType(SEXP s);
     bool operator==(const ObservedType& other) {
         return memcmp(this, &other, sizeof(ObservedType)) == 0;
@@ -58,7 +58,7 @@ struct ObservedValues {
 
     ObservedValues() : numTypes(0) {}
 
-    void record(R_bcstack_t e) {
+    void record(R_bcstack_t* e) {
         ObservedType type(e);
         record(type);
     }

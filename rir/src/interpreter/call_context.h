@@ -87,21 +87,14 @@ struct CallContext {
 
     // WARNING: Don't convert to sexp, instead use stackArgSexp
     // Otherwise the SEXP, if modified, won't modify the origianl stack arg
-    R_bcstack_t stackArg(unsigned i, InterpreterInstance* ctx) const {
+    R_bcstack_t* stackArg(unsigned i, InterpreterInstance* ctx) const {
         assert(stackArgs && i < passedArgs);
-        return stackArgs[i];
+        return &stackArgs[i];
     }
 
     SEXP stackArgSexp(unsigned i, InterpreterInstance* ctx) const {
         assert(stackArgs && i < passedArgs);
-        R_bcstack_t x = stackArgs[i];
-        if (x.tag != STACK_OBJ_SEXP) {
-            SEXP sexp = stackObjToSexp(x);
-            x.u.sxpval = sexp;
-            x.tag = STACK_OBJ_SEXP;
-            stackArgs[i] = x;
-        }
-        return x.u.sxpval;
+        return stackObjToSexp(stackArg(i, ctx));
     }
 
     SEXP name(unsigned i, InterpreterInstance* ctx) const {

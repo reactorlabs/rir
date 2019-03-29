@@ -34,8 +34,8 @@ InterpreterInstance* globalContext();
 Configurations* pirConfigurations();
 
 SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env);
-R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
-                        const CallContext* callContext);
+SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
+                 const CallContext* callContext);
 
 SEXP rirExpr(SEXP f);
 

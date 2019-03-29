@@ -189,22 +189,29 @@ RIR_INLINE R_bcstack_t logicalStackObj(int x) {
     return res;
 }
 
+RIR_INLINE R_bcstack_t sexpStackObj(SEXP value) {
+    R_bcstack_t res;
+    res.tag = STACK_OBJ_SEXP;
+    res.u.sxpval = value;
+    return res;
+}
+
 RIR_INLINE R_bcstack_t sexpToStackObj(SEXP x) {
     R_bcstack_t res;
     bool tryUnbox = x != loopTrampolineMarker && MAYBE_SHARED(x);
-    if (tryUnbox && IS_SCALAR(x, INTSXP)) {
+    if (tryUnbox && IS_SIMPLE_SCALAR(x, INTSXP)) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("int stack object created from sexp");
 #endif
         res.tag = STACK_OBJ_INT;
         res.u.ival = *INTEGER(x);
-    } else if (tryUnbox && IS_SCALAR(x, REALSXP)) {
+    } else if (tryUnbox && IS_SIMPLE_SCALAR(x, REALSXP)) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("real stack object created from sexp");
 #endif
         res.tag = STACK_OBJ_REAL;
         res.u.dval = *REAL(x);
-    } else if (tryUnbox && IS_SCALAR(x, LGLSXP)) {
+    } else if (tryUnbox && IS_SIMPLE_SCALAR(x, LGLSXP)) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("logical stack object created from sexp");
 #endif
@@ -221,46 +228,32 @@ RIR_INLINE R_bcstack_t sexpToStackObj(SEXP x) {
     return res;
 }
 
-RIR_INLINE SEXP stackObjToSexp(R_bcstack_t x) {
-    switch (x.tag) {
-#ifdef USE_TYPED_STACK
+RIR_INLINE SEXP typedStackAsSexp(R_bcstack_t* stackCell) {
+    switch (stackCell->tag) {
     case STACK_OBJ_INT:
-        SEXP res;
-        res = Rf_allocVector(INTSXP, 1);
-        *INTEGER(res) = x.u.ival;
+        return ScalarInteger(stackCell->u.ival);
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("int stack object boxed");
 #endif
 #ifdef LOG_SEXP_BOX
-        std::cout << "Boxed int " << x.u.ival << "\n";
+        std::cout << "Boxed int " << stackCell->u.ival << "\n";
 #endif
-        return res;
     case STACK_OBJ_REAL:
-        res = Rf_allocVector(REALSXP, 1);
-        *REAL(res) = x.u.dval;
+        return ScalarReal(stackCell->u.dval);
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("real stack object boxed");
 #endif
 #ifdef LOG_SEXP_BOX
-        std::cout << "Boxed real " << x.u.dval << "\n";
+        std::cout << "Boxed real " << stackCell->u.dval << "\n";
 #endif
-        return res;
     case STACK_OBJ_LOGICAL:
-        res = Rf_allocVector(LGLSXP, 1);
-        *LOGICAL(res) = x.u.ival;
+        return ScalarLogical(stackCell->u.ival);
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("logical stack object boxed");
 #endif
 #ifdef LOG_SEXP_BOX
-        std::cout << "Boxed logical " << x.u.ival << "\n";
+        std::cout << "Boxed logical " << stackCell->u.ival << "\n";
 #endif
-        return res;
-#endif
-    case STACK_OBJ_SEXP:
-#ifdef PROFILE_TYPED_STACK
-        TSPROFILE.mark("sexp stack object accessed");
-#endif
-        return x.u.sxpval;
     default:
         assert(false);
     }
@@ -271,11 +264,11 @@ RIR_INLINE bool stackObjIsNull(R_bcstack_t x) {
 }
 
 // Doesn't consider reals integers
-RIR_INLINE bool stackObjIsInteger(R_bcstack_t x) {
+RIR_INLINE bool stackObjIsInteger(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("type test");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_INT:
         return true;
     case STACK_OBJ_REAL:
@@ -285,20 +278,20 @@ RIR_INLINE bool stackObjIsInteger(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("type test boxed");
 #endif
-        return IS_SCALAR(x.u.sxpval, INTSXP);
+        return IS_SIMPLE_SCALAR(stackCell->u.sxpval, INTSXP);
     default:
         assert(false);
     }
 }
 
 // Returns NA_INTEGER if not an integer, doesn't consider reals integers
-RIR_INLINE int tryStackObjToInteger(R_bcstack_t x) {
+RIR_INLINE int tryStackObjToInteger(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_INT:
-        return x.u.ival;
+        return stackCell->u.ival;
     case STACK_OBJ_REAL:
     case STACK_OBJ_LOGICAL:
         return NA_INTEGER;
@@ -306,8 +299,8 @@ RIR_INLINE int tryStackObjToInteger(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        if (IS_SCALAR(x.u.sxpval, INTSXP)) {
-            return *INTEGER(x.u.sxpval);
+        if (IS_SIMPLE_SCALAR(stackCell->u.sxpval, INTSXP)) {
+            return *INTEGER(stackCell->u.sxpval);
         } else {
             return NA_INTEGER;
         }
@@ -317,11 +310,11 @@ RIR_INLINE int tryStackObjToInteger(R_bcstack_t x) {
 }
 
 // Doesn't consider integers reals
-RIR_INLINE bool stackObjIsReal(R_bcstack_t x) {
+RIR_INLINE bool stackObjIsReal(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("type test");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_REAL:
         return true;
     case STACK_OBJ_INT:
@@ -331,20 +324,20 @@ RIR_INLINE bool stackObjIsReal(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("type test boxed");
 #endif
-        return IS_SCALAR(x.u.sxpval, REALSXP);
+        return IS_SIMPLE_SCALAR(stackCell->u.sxpval, REALSXP);
     default:
         assert(false);
     }
 }
 
 // Returns NA_REAL if not a real, doesn't consider integers reals
-RIR_INLINE double tryStackObjToReal(R_bcstack_t x) {
+RIR_INLINE double tryStackObjToReal(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_REAL:
-        return x.u.dval;
+        return stackCell->u.dval;
     case STACK_OBJ_INT:
     case STACK_OBJ_LOGICAL:
         return NA_REAL;
@@ -352,8 +345,8 @@ RIR_INLINE double tryStackObjToReal(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        if (IS_SCALAR(x.u.sxpval, REALSXP)) {
-            return *REAL(x.u.sxpval);
+        if (IS_SIMPLE_SCALAR(stackCell->u.sxpval, REALSXP)) {
+            return *REAL(stackCell->u.sxpval);
         } else {
             return NA_REAL;
         }
@@ -362,11 +355,11 @@ RIR_INLINE double tryStackObjToReal(R_bcstack_t x) {
     }
 }
 
-RIR_INLINE bool stackObjIsLogical(R_bcstack_t x) {
+RIR_INLINE bool stackObjIsLogical(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("type test");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_LOGICAL:
         return true;
     case STACK_OBJ_INT:
@@ -376,20 +369,20 @@ RIR_INLINE bool stackObjIsLogical(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("type test boxed");
 #endif
-        return IS_SCALAR(x.u.sxpval, LGLSXP);
+        return IS_SIMPLE_SCALAR(stackCell->u.sxpval, LGLSXP);
     default:
         assert(false);
     }
 }
 
 // Returns NA_LOGICAL if not a logical
-RIR_INLINE int tryStackObjToLogical(R_bcstack_t x) {
+RIR_INLINE int tryStackObjToLogical(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_LOGICAL:
-        return x.u.ival;
+        return stackCell->u.ival;
     case STACK_OBJ_INT:
     case STACK_OBJ_REAL:
         return NA_LOGICAL;
@@ -397,8 +390,8 @@ RIR_INLINE int tryStackObjToLogical(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        if (IS_SCALAR(x.u.sxpval, LGLSXP)) {
-            return *LOGICAL(x.u.sxpval);
+        if (IS_SIMPLE_SCALAR(stackCell->u.sxpval, LGLSXP)) {
+            return *LOGICAL(stackCell->u.sxpval);
         } else {
             return NA_LOGICAL;
         }
@@ -408,19 +401,21 @@ RIR_INLINE int tryStackObjToLogical(R_bcstack_t x) {
 }
 
 // Fails if not a logical or NA
-RIR_INLINE int tryStackObjToLogicalNa(R_bcstack_t x) {
+RIR_INLINE int tryStackObjToLogicalNa(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_LOGICAL:
-        return x.u.ival;
+        return stackCell->u.ival;
     case STACK_OBJ_SEXP:
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        if (TYPEOF(x.u.sxpval) == LGLSXP) {
-            return XLENGTH(x.u.sxpval) == 0 ? NA_LOGICAL : *LOGICAL(x.u.sxpval);
+        if (TYPEOF(stackCell->u.sxpval) == LGLSXP) {
+            return XLENGTH(stackCell->u.sxpval) == 0
+                       ? NA_LOGICAL
+                       : *LOGICAL(stackCell->u.sxpval);
         } else {
             assert(false);
         }
@@ -430,21 +425,21 @@ RIR_INLINE int tryStackObjToLogicalNa(R_bcstack_t x) {
 }
 
 // Returns regular if int, truncated if real, -1 otherwise
-RIR_INLINE int tryStackObjToIdx(R_bcstack_t x) {
-    if (stackObjIsInteger(x)) {
-        return tryStackObjToInteger(x) - 1;
-    } else if (stackObjIsReal(x)) {
-        return (int)tryStackObjToReal(x) - 1;
+RIR_INLINE int tryStackObjToIdx(R_bcstack_t* stackCell) {
+    if (stackObjIsInteger(stackCell)) {
+        return tryStackObjToInteger(stackCell) - 1;
+    } else if (stackObjIsReal(stackCell)) {
+        return (int)tryStackObjToReal(stackCell) - 1;
     } else {
         return -1;
     }
 }
 
-RIR_INLINE SEXPTYPE stackObjSexpType(R_bcstack_t x) {
+RIR_INLINE SEXPTYPE stackObjSexpType(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_INT:
         return INTSXP;
     case STACK_OBJ_REAL:
@@ -455,17 +450,17 @@ RIR_INLINE SEXPTYPE stackObjSexpType(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        return TYPEOF(x.u.sxpval);
+        return TYPEOF(stackCell->u.sxpval);
     default:
         assert(false);
     }
 }
 
-RIR_INLINE bool stackObjIsVector(R_bcstack_t x) {
+RIR_INLINE bool stackObjIsVector(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_INT:
     case STACK_OBJ_REAL:
     case STACK_OBJ_LOGICAL:
@@ -474,7 +469,7 @@ RIR_INLINE bool stackObjIsVector(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        return Rf_isVector(x.u.sxpval);
+        return Rf_isVector(stackCell->u.sxpval);
     default:
         assert(false);
     }
@@ -486,25 +481,25 @@ RIR_INLINE SEXP stackValueSexp(R_bcstack_t* value) { return value->u.sxpval; }
 RIR_INLINE SEXP stackValueSexp(R_bcstack_t* value) { return *value; }
 #endif
 
-static R_INLINE int tryStackScalar(R_bcstack_t* s, scalar_value_t* v,
+static R_INLINE int tryStackScalar(R_bcstack_t* stackCell, scalar_value_t* v,
                                    SEXP* pv) {
 #ifdef TYPED_STACK
-    int tag = s->tag;
+    int tag = stackCell->tag;
 
     if (tag)
         switch (tag) {
         case REALSXP:
-            v->dval = s->u.dval;
+            v->dval = stackCell->u.dval;
             return tag;
         case INTSXP:
-            v->ival = s->u.ival;
+            v->ival = stackCell->u.ival;
             return tag;
         case LGLSXP:
-            v->ival = s->u.ival;
+            v->ival = stackCell->u.ival;
             return tag;
         }
 #endif
-    SEXP x = stackValueSexp(s);
+    SEXP x = stackValueSexp(stackCell);
     if (IS_SIMPLE_SCALAR(x, REALSXP)) {
 #ifndef NO_SAVE_ALLOC
         if (pv && NO_REFERENCES(x))
@@ -526,11 +521,11 @@ static R_INLINE int tryStackScalar(R_bcstack_t* s, scalar_value_t* v,
         return 0;
 }
 
-RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type) {
+RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t* stackCell, SEXPTYPE type) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_INT:
         return type == INTSXP;
     case STACK_OBJ_REAL:
@@ -541,17 +536,17 @@ RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        return IS_SCALAR(x.u.sxpval, type);
+        return IS_SIMPLE_SCALAR(stackCell->u.sxpval, type);
     default:
         assert(false);
     }
 }
 
-RIR_INLINE bool stackObjIsScalar(R_bcstack_t x) {
+RIR_INLINE bool stackObjIsScalar(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_INT:
     case STACK_OBJ_REAL:
     case STACK_OBJ_LOGICAL:
@@ -560,17 +555,17 @@ RIR_INLINE bool stackObjIsScalar(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        return x.u.sxpval->sxpinfo.scalar;
+        return stackCell->u.sxpval->sxpinfo.scalar;
     default:
         assert(false);
     }
 }
 
-RIR_INLINE R_xlen_t stackObjLength(R_bcstack_t x) {
+RIR_INLINE R_xlen_t stackObjLength(R_bcstack_t* stackCell) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    switch (x.tag) {
+    switch (stackCell->tag) {
     case STACK_OBJ_INT:
     case STACK_OBJ_REAL:
     case STACK_OBJ_LOGICAL:
@@ -579,50 +574,50 @@ RIR_INLINE R_xlen_t stackObjLength(R_bcstack_t x) {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        return XLENGTH(x.u.sxpval);
+        return XLENGTH(stackCell->u.sxpval);
     default:
         assert(false);
     }
 }
 
-RIR_INLINE int stackObjAsLogical(R_bcstack_t x) {
-    if (stackObjIsSimpleScalar(x, REALSXP)) {
-        return tryStackObjToReal(x) != 0.0;
-    } else if (stackObjIsSimpleScalar(x, INTSXP)) {
-        return tryStackObjToInteger(x) != 0;
-    } else if (stackObjIsSimpleScalar(x, LGLSXP)) {
-        return tryStackObjToLogical(x);
+RIR_INLINE int stackObjAsLogical(R_bcstack_t* stackCell) {
+    if (stackObjIsSimpleScalar(stackCell, REALSXP)) {
+        return tryStackObjToReal(stackCell) != 0.0;
+    } else if (stackObjIsSimpleScalar(stackCell, INTSXP)) {
+        return tryStackObjToInteger(stackCell) != 0;
+    } else if (stackObjIsSimpleScalar(stackCell, LGLSXP)) {
+        return tryStackObjToLogical(stackCell);
     } else {
-        return Rf_asLogical(x.u.sxpval);
+        return Rf_asLogical(stackCell->u.sxpval);
     }
 }
 
-RIR_INLINE bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
+RIR_INLINE bool stackObjsIdentical(R_bcstack_t* x, R_bcstack_t* y) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
 #endif
-    if (x.tag != y.tag) {
+    if (x->tag != y->tag) {
         return false;
     }
 
-    switch (x.tag) { // == y.tag
+    switch (x->tag) { // == y.tag
     case STACK_OBJ_INT:
     case STACK_OBJ_LOGICAL:
-        return x.u.ival == y.u.ival;
+        return x->u.ival == y->u.ival;
     case STACK_OBJ_REAL:
-        return x.u.dval == y.u.dval;
+        return x->u.dval == y->u.dval;
     case STACK_OBJ_SEXP:
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
-        return x.u.sxpval == y.u.sxpval;
+        return x->u.sxpval == y->u.sxpval;
     default:
         assert(false);
     }
 }
 
-RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
-    switch (val.tag) {
+RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t* val) {
+    switch (val->tag) {
     case STACK_OBJ_INT:
         if (TYPEOF(old) == INTSXP && NOT_SHARED(old)) {
 #ifdef PROFILE_TYPED_STACK
@@ -630,9 +625,9 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 #endif
 #ifdef LOG_SEXP_BOX
             std::cout << "Reused int from " << *INTEGER(old) << " to "
-                      << val.u.ival << "\n";
+                      << val->u.ival << "\n";
 #endif
-            *INTEGER(old) = val.u.ival;
+            *INTEGER(old) = val->u.ival;
             return true;
         } else {
             return false;
@@ -644,9 +639,9 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 #endif
 #ifdef LOG_SEXP_BOX
             std::cout << "Reused real from " << *REAL(old) << " to "
-                      << val.u.dval << "\n";
+                      << val->u.dval << "\n";
 #endif
-            *REAL(old) = val.u.dval;
+            *REAL(old) = val->u.dval;
             return true;
         } else {
             return false;
@@ -658,9 +653,9 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 #endif
 #ifdef LOG_SEXP_BOX
             std::cout << "Reused logical from " << *LOGICAL(old) << " to "
-                      << val.u.ival << "\n";
+                      << val->u.ival << "\n";
 #endif
-            *LOGICAL(old) = val.u.ival;
+            *LOGICAL(old) = val->u.ival;
             return true;
         } else {
             return false;
@@ -677,10 +672,10 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 #define ostackEmpty(c) (R_BCNodeStackTop == R_BCNodeStackBase)
 
 #define ostackTop(c) *(R_BCNodeStackTop - 1)
-
 #define ostackAt(c, i) *(R_BCNodeStackTop - 1 - (i))
 
 #define ostackCellAt(c, i) (R_BCNodeStackTop - 1 - (i))
+#define ostackTopCell(c) ostackCellAt(c, 0)
 
 #define ostackSet(c, i, v) *(R_BCNodeStackTop - 1 - (i)) = (v)
 
@@ -718,6 +713,7 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
     } while (0)
 
 #define ostackPop(c) (*(--R_BCNodeStackTop))
+#define ostackCellPop(c) (--R_BCNodeStackTop)
 
 #define ostackPush(c, v)                                                       \
     do {                                                                       \
@@ -753,25 +749,32 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 
-RIR_INLINE SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx,
-                                  unsigned idx) {
-    if (x.tag != STACK_OBJ_SEXP) {
-        SEXP sexp = stackObjToSexp(x);
-        x.u.sxpval = sexp;
-        x.tag = STACK_OBJ_SEXP;
-        ostackSet(ctx, idx, x);
+RIR_INLINE SEXP stackObjToSexp(R_bcstack_t* stackCell) {
+#ifdef USE_TYPED_STACK
+    if (stackCell->tag != STACK_OBJ_SEXP) {
+        stackCell->u.sxpval = typedStackAsSexp(stackCell);
+        stackCell->tag = STACK_OBJ_SEXP;
     }
-    return x.u.sxpval;
+#endif
+    return stackCell->u.sxpval;
+}
+
+RIR_INLINE SEXP stackObjAsSexp(R_bcstack_t* stackCell) {
+#ifdef USE_TYPED_STACK
+    if (stackCell->tag != STACK_OBJ_SEXP) {
+        return typedStackAsSexp(stackCell);
+    }
+#endif
+    return stackCell->u.sxpval;
 }
 
 RIR_INLINE SEXP ostackSexpAt(InterpreterInstance* ctx, unsigned idx) {
-    R_bcstack_t x = ostackAt(ctx, idx);
-    SEXP sexp = ostackObjToSexpAt(x, ctx, idx);
-    return sexp;
+    R_bcstack_t* stackCell = ostackCellAt(ctx, idx);
+    return stackObjToSexp(stackCell);
 }
 
 RIR_INLINE SEXP ostackPopSexp(InterpreterInstance* ctx) {
-    return stackObjToSexp(ostackPop(ctx));
+    return stackObjAsSexp(ostackCellPop(ctx));
 }
 
 RIR_INLINE void ostackEnsureSize(InterpreterInstance* ctx, unsigned minFree) {
