@@ -176,9 +176,10 @@ class Instruction : public Value {
         return leaksEnv() || effects.includes(Effect::LeakArg);
     }
 
-    void maskEffectsOnNonObjects(Effects mask = Effects(Effect::Error) |
-                                                Effect::Warn |
-                                                Effect::Visibility) {
+    void maskEffectsAndTypeOnNonObjects(PirType tmask,
+                                        Effects mask = Effects(Effect::Error) |
+                                                       Effect::Warn |
+                                                       Effect::Visibility) {
         bool maybeObj = false;
         eachArg([&](Value* v) {
             if (v->type.maybeObj())
@@ -186,7 +187,20 @@ class Instruction : public Value {
         });
         if (!maybeObj) {
             effects = effects & mask;
+            type = type & tmask;
         }
+    }
+
+    void updateScalarOnScalarInputs() {
+        if (type.maybeObj())
+            return;
+        bool scalar = true;
+        eachArg([&](Value* v) {
+            if (!v->type.isScalar())
+                scalar = false;
+        });
+        if (scalar)
+            type.setScalar();
     }
 
     bool readsEnv() const {
@@ -586,6 +600,7 @@ class FLI(LdConst, 0, Effects::None()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), c());
     }
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(LdFun, 2, Effects::Any()) {
@@ -619,6 +634,8 @@ class FLIE(LdFun, 2, Effects::Any()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
@@ -638,6 +655,8 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLI(ForSeqSize, 1, Effect::Error) {
@@ -725,6 +744,8 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(StVar, 2, Effect::WritesEnv) {
@@ -813,6 +834,8 @@ class FLIE(MkArg, 2, Effects::None()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), prom_);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLI(Seq, 3, Effects::None()) {
@@ -834,6 +857,8 @@ class FLIE(MkCls, 4, Effects::None()) {
 
     Value* lexicalEnv() const { return env(); }
 
+    bool needsReferenceCount() const override { return false; }
+
   private:
     using FixedLenInstructionWithEnvSlot::env;
 };
@@ -850,6 +875,8 @@ class FLIE(MkFunCls, 1, Effects::None()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), cls);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(Force, 2, Effects::Any()) {
@@ -893,13 +920,15 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::val(),
+              PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
     Value* rhs() { return arg(0).val(); }
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::val());
+    }
 };
 
 class FLIE(Subassign2_1D, 4, Effects::Any()) {
@@ -907,20 +936,22 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::val(),
+              PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
     Value* rhs() { return arg(0).val(); }
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::val());
+    }
 };
 
 class FLIE(Subassign1_2D, 5, Effects::Any()) {
   public:
     Subassign1_2D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* env,
                   unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val(),
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val(),
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
@@ -929,14 +960,16 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::val());
+    }
 };
 
 class FLIE(Subassign2_2D, 5, Effects::Any()) {
   public:
     Subassign2_2D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* env,
                   unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val(),
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val(),
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
@@ -945,25 +978,31 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::val());
+    }
 };
 
 class FLIE(Extract1_1D, 3, Effects::Any()) {
   public:
     Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val(),
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::val());
+    }
 };
 
 class FLIE(Extract2_1D, 3, Effects::Any()) {
   public:
     Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val().scalar(),
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::val().scalar());
+    }
 };
 
 class FLIE(Extract1_2D, 4, Effects::Any()) {
@@ -971,10 +1010,12 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
     Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::val(),
+              PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::val());
+    }
 };
 
 class FLIE(Extract2_2D, 4, Effects::Any()) {
@@ -982,10 +1023,12 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
     Extract2_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::val().scalar(),
+              PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::val().scalar());
+    }
 };
 
 class FLI(Inc, 1, Effects::None()) {
@@ -1050,6 +1093,15 @@ class FLI(Identical, 2, Effects::None()) {
                               {{PirType::any(), PirType::any()}}, {{a, b}}) {}
 };
 
+class FLIE(Colon, 3, Effects::Any()) {
+  public:
+    Colon(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+                                         {{PirType::val(), PirType::val()}},
+                                         {{lhs, rhs}}, env, srcIdx) {}
+    void updateType() override final {}
+};
+
 #define V(NESTED, name, Name)                                                  \
     class FLI(Name, 0, Effects::Any()) {                                       \
       public:                                                                  \
@@ -1063,9 +1115,12 @@ SIMPLE_INSTRUCTIONS(V, _)
       public:                                                                  \
         Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
             : FixedLenInstructionWithEnvSlot(                                  \
-                  Type, {{PirType::val(), PirType::val()}}, {{lhs, rhs}}, env, \
-                  srcIdx) {}                                                   \
-        void updateType() override final { maskEffectsOnNonObjects(); }        \
+                  PirType::valOrLazy(), {{PirType::val(), PirType::val()}},    \
+                  {{lhs, rhs}}, env, srcIdx) {}                                \
+        void updateType() override final {                                     \
+            maskEffectsAndTypeOnNonObjects(Type);                              \
+            updateScalarOnScalarInputs();                                      \
+        }                                                                      \
     }
 
 BINOP(Mul, PirType::val());
@@ -1073,7 +1128,6 @@ BINOP(Div, PirType::val());
 BINOP(IDiv, PirType::val());
 BINOP(Mod, PirType::val());
 BINOP(Add, PirType::val());
-BINOP(Colon, PirType::val());
 BINOP(Pow, PirType::val());
 BINOP(Sub, PirType::val());
 BINOP(Gte, RType::logical);
@@ -1102,9 +1156,13 @@ BINOP_NOENV(LOr, RType::logical);
     class FLIE(Name, 2, Effects::Any()) {                                      \
       public:                                                                  \
         Name(Value* v, Value* env, unsigned srcIdx)                            \
-            : FixedLenInstructionWithEnvSlot(                                  \
-                  PirType::val(), {{PirType::val()}}, {{v}}, env, srcIdx) {}   \
-        void updateType() override final { maskEffectsOnNonObjects(); }        \
+            : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),             \
+                                             {{PirType::val()}}, {{v}}, env,   \
+                                             srcIdx) {}                        \
+        void updateType() override final {                                     \
+            maskEffectsAndTypeOnNonObjects(PirType::val());                    \
+            updateScalarOnScalarInputs();                                      \
+        }                                                                      \
     }
 
 UNOP(Not);
@@ -1445,6 +1503,8 @@ class VLIE(MkEnv, Effects::None()) {
     size_t nLocals() { return nargs() - 1; }
 
     size_t gvnBase() const override { return (size_t)this; }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLI(IsObject, 1, Effects::None()) {

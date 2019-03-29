@@ -2178,20 +2178,22 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(inc_) {
-            R_bcstack_t val = ostackPop(ctx);
+            R_bcstack_t val = ostackTop(ctx);
             SLOWASSERT(stackObjIsSimpleScalar(val, INTSXP));
             int i;
             switch (val.tag) {
             case STACK_OBJ_INT:
+                ostackPop(ctx);
                 i = val.u.ival + 1;
                 ostackPushInt(ctx, i);
                 break;
             case STACK_OBJ_SEXP:
-                if (MAYBE_SHARED(val.u.sxpval)) {
+                if (NO_REFERENCES(val)) {
+                    (*INTEGER(val.u.sxpval))++;
+                } else {
+                    ostackPop(ctx);
                     i = *INTEGER(val.u.sxpval) + 1;
                     ostackPushInt(ctx, i);
-                } else {
-                    (*INTEGER(val.u.sxpval))++;
                 }
                 break;
             default:
@@ -3366,17 +3368,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(set_shared_) {
             R_bcstack_t val = ostackTop(ctx);
             if (val.tag == STACK_OBJ_SEXP) {
-                INCREMENT_NAMED(val.u.sxpval);
-            }
-            NEXT();
-        }
-
-        INSTRUCTION(make_unique_) {
-            R_bcstack_t val = ostackTop(ctx);
-            if (val.tag == STACK_OBJ_SEXP && MAYBE_SHARED(val.u.sxpval)) {
-                val = sexpToStackObj(Rf_shallow_duplicate(val.u.sxpval));
-                ostackSet(ctx, 0, val);
-                SET_NAMED(val.u.sxpval, 1);
+                if (NAMED(val.u.sxpval) < 2)
+                    SET_NAMED(val.u.sxpval, 2);
             }
             NEXT();
         }
@@ -3469,6 +3462,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
                      nullptr, names.empty() ? nullptr : names.data(), rho,
                      Assumptions(), ctx);
     call.arglist = arglist;
+    call.safeForceArgs();
 
     auto res = rirCall(call, ctx);
     ostackPopn(ctx, call.passedArgs);
