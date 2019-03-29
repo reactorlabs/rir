@@ -888,47 +888,7 @@ static SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
 #define R_INT_MIN -INT_MAX
 // .. relying on fact that NA_INTEGER is outside of these
 
-static R_INLINE int RInteger_plus(int x, int y, Rboolean* pnaflag) {
-    if (x == NA_INTEGER || y == NA_INTEGER)
-        return NA_INTEGER;
-
-    if (((y > 0) && (x > (R_INT_MAX - y))) ||
-        ((y < 0) && (x < (R_INT_MIN - y)))) {
-        if (pnaflag != NULL)
-            *pnaflag = TRUE;
-        return NA_INTEGER;
-    }
-    return x + y;
-}
-
-static R_INLINE int RInteger_minus(int x, int y, Rboolean* pnaflag) {
-    if (x == NA_INTEGER || y == NA_INTEGER)
-        return NA_INTEGER;
-
-    if (((y < 0) && (x > (R_INT_MAX + y))) ||
-        ((y > 0) && (x < (R_INT_MIN + y)))) {
-        if (pnaflag != NULL)
-            *pnaflag = TRUE;
-        return NA_INTEGER;
-    }
-    return x - y;
-}
-
 #define GOODIPROD(x, y, z) ((double)(x) * (double)(y) == (z))
-static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
-    if (x == NA_INTEGER || y == NA_INTEGER)
-        return NA_INTEGER;
-    else {
-        int z = x * y;
-        if (GOODIPROD(x, y, z) && z != NA_INTEGER)
-            return z;
-        else {
-            if (pnaflag != NULL)
-                *pnaflag = TRUE;
-            return NA_INTEGER;
-        }
-    }
-}
 
 #define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
 
