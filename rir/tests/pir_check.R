@@ -30,10 +30,9 @@ stopifnot(pir.check(function() {
   f()
   x
 }, Returns42L))
-# TODO This fails, why?
-# stopifnot(pir.check(function() {
-#   f <- function() 123
-# }, NoEnv, warmup=TRUE))
+stopifnot(pir.check(function() {
+  123
+}, NoEnv))
 stopifnot(pir.check(function(depth) {
   if (depth == 0)
     1
