@@ -145,7 +145,7 @@ stopifnot(pir.check(function() {
   f(x, y(), z)
 }, NoEnv))
 
-stopifnot(pir.check(function() {
+mandelbrot <- function() {
     size = 30
     sum = 0
     byteAcc = 0
@@ -191,4 +191,12 @@ stopifnot(pir.check(function() {
       y = y + 1
     }
     return (sum)
-}, NoExternalCalls, warmup=TRUE))
+}
+mandelbrot()
+mandelbrot()
+# This can't be run if PIR_MAX_INPUT_SIZE is too low
+stopifnot(tryCatch({
+  pir.check(mandelbrot, NoExternalCalls)
+}, warning = function(w) {
+  conditionMessage(w) == "pir check failed: couldn't compile"
+}))
