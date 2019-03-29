@@ -230,6 +230,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
             // {
             // n' <- ceil(n') - 1
             cs << BC::ceil() << BC::push(1) << BC::sub();
+            cs.addSrc(R_NilValue);
             // while
             compileWhile(ctx,
                          [&cs]() {
@@ -251,6 +252,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
             cs << BC::br(endBranch) << fwdBranch;
             // n' <- floor(n') + 1
             cs << BC::floor() << BC::push(1) << BC::add();
+            cs.addSrc(R_NilValue);
             // while
             compileWhile(ctx,
                          [&cs]() {
