@@ -1388,7 +1388,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         R_bcstack_t res = nullStackObj;
         if (!innermostFrame)
             res = ostackPop(ctx);
-        assert(ostackTop(ctx) == deoptEnv);
+        assert(stackObjToSexp(ostackTop(ctx)) == deoptEnv);
         ostackPopSexp(ctx);
         if (!innermostFrame)
             ostackPush(ctx, res);
