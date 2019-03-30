@@ -14,6 +14,7 @@
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 
+#include <list>
 #include <memory>
 #include <string>
 
@@ -289,20 +290,27 @@ REXPORT SEXP pir_tests() {
     return R_NilValue;
 }
 
-REXPORT SEXP pir_check(SEXP f, SEXP checkSym, SEXP env) {
-    if (TYPEOF(checkSym) != SYMSXP)
-        Rf_error("pir_check: 2nd parameter must be a symbol, NULL isn't valid");
-    PirCheck::Type type = PirCheck::parseType(CHAR(PRINTNAME(checkSym)));
-    if (type == PirCheck::Type::Invalid)
-        Rf_error("pir_check: invalid check type. List of check types:"
+REXPORT SEXP pir_check(SEXP f, SEXP checksSxp, SEXP env) {
+    if (TYPEOF(checksSxp) != LISTSXP)
+        Rf_error("pir_check: 2nd parameter must be a pairlist (of symbols)");
+    std::list<PirCheck::Type> checkTypes;
+    for (SEXP c = checksSxp; c != R_NilValue; c = CDR(c)) {
+        SEXP checkSxp = CAR(c);
+        if (TYPEOF(checkSxp) != SYMSXP)
+            Rf_error("pir_check: each item in 2nd parameter must be a symbol");
+        PirCheck::Type type = PirCheck::parseType(CHAR(PRINTNAME(checkSxp)));
+        if (type == PirCheck::Type::Invalid)
+            Rf_error("pir_check: invalid check type. List of check types:"
 #define V(Check) "\n    " #Check
-                 LIST_OF_PIR_CHECKS(V)
+                     LIST_OF_PIR_CHECKS(V)
 #undef V
-        );
+            );
+        checkTypes.push_back(type);
+    }
     // Automatically compile rir for convenience (necessary to get PIR)
     if (!isValidClosureSEXP(f))
         rir_compile(f, env);
-    PirCheck check(type);
+    PirCheck check(checkTypes);
     bool res = check.run(f);
     return res ? R_TrueValue : R_FalseValue;
 }

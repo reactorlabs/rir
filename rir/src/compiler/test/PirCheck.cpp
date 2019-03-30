@@ -116,16 +116,20 @@ bool PirCheck::run(SEXP f) {
     ClosureVersion* pir = compilePir(f, &m);
     if (pir == nullptr)
         return false;
-    switch (type) {
+    for (PirCheck::Type type : types) {
+        switch (type) {
 #define V(Check)                                                               \
     case PirCheck::Type::Check:                                                \
-        return test##Check(pir);
-        LIST_OF_PIR_CHECKS(V)
+        if (!test##Check(pir))                                                 \
+            return false;                                                      \
+        break;
+            LIST_OF_PIR_CHECKS(V)
 #undef V
-    default:
-        assert(false);
+        default:
+            assert(false);
+        }
     }
-    return false;
+    return true;
 }
 
 } // namespace rir

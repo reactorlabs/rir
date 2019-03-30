@@ -1,6 +1,7 @@
 #pragma once
 
 #include "R/Symbols.h"
+#include <list>
 
 namespace rir {
 
@@ -23,10 +24,13 @@ struct PirCheck {
             Invalid
     };
 
-    Type type;
+    std::list<Type> types;
 
     static Type parseType(const char* str);
-    explicit PirCheck(Type type) : type(type) { assert(type != Type::Invalid); }
+    explicit PirCheck(std::list<Type> types) : types(types) {
+        for (Type type : types)
+            assert(type != Type::Invalid);
+    }
     bool run(SEXP f);
 };
 

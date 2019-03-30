@@ -1,3 +1,5 @@
+# Copied / cross-validated from pir_tests
+
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
 stopifnot(!pir.check(function(x = 4) {
   print("PIR doesn't support default args")
