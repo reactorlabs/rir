@@ -19,6 +19,8 @@
 
 using namespace rir;
 
+int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
+
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
     if (strcmp(str, #style) == 0) {                                            \

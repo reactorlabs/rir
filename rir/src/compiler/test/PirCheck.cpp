@@ -23,7 +23,7 @@ static ClosureVersion* compilePir(SEXP f, Module* m) {
         Rf_warning("pir check failed: not a RIR closure");
         return nullptr;
     }
-    if (atoi(getenv("R_ENABLE_JIT")) == 0) {
+    if (R_ENABLE_JIT == 0) {
         Rf_warning("R JIT disabled, this will prevent some optimizations");
     }
     assert(DispatchTable::check(BODY(f)));
