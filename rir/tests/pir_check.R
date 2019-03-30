@@ -198,5 +198,7 @@ mandelbrot()
 stopifnot(tryCatch({
   pir.check(mandelbrot, NoExternalCalls)
 }, warning = function(w) {
-  conditionMessage(w) == "pir check failed: couldn't compile"
+  cat("Couldn't run:", conditionMessage(w), "\n")
+  conditionMessage(w) == "pir check failed: couldn't compile" ||
+  conditionMessage(w) == "R JIT disabled, this will prevent some optimizations"
 }))
