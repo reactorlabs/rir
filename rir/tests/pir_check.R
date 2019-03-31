@@ -1,3 +1,5 @@
+jitOn <- getenv("R_ENABLE_JIT") != 0
+
 # Copied / cross-validated from pir_tests
 
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
@@ -194,22 +196,21 @@ mandelbrot <- function() {
 }
 # This can't be run if PIR_MAX_INPUT_SIZE is too low
 stopifnot(tryCatch({
-  pir.check(mandelbrot, NoExternalCalls, warmup=list())
+  !jitOn || pir.check(mandelbrot, NoExternalCalls, warmup=list())
 }, warning = function(w) {
   cat("Couldn't run:", conditionMessage(w), "\n")
-  conditionMessage(w) == "pir check failed: couldn't compile" ||
-  conditionMessage(w) == "R JIT disabled, this will prevent some optimizations"
+  conditionMessage(w) == "pir check failed: couldn't compile"
 }))
 
 # New tests
 
-stopifnot(pir.check(function() {
+stopifnot(!jitOn || pir.check(function() {
   x <- 1
   while (x < 10)
     x <- x + 1
   x
 }, NoLoad, NoStore))
-stopifnot(pir.check(function(n) {
+stopifnot(!jitOn || pir.check(function(n) {
   x <- 1
   while (x < n)
     x <- x + 1
