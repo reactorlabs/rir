@@ -28,7 +28,7 @@ struct PirCheck {
     std::list<Type> types;
 
     static Type parseType(const char* str);
-    explicit PirCheck(std::list<Type> types) : types(types) {
+    explicit PirCheck(std::list<Type>& types) : types(types) {
 #ifdef ENABLE_SLOWASSERT
         for (Type type : types)
             assert(type != Type::Invalid);
