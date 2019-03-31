@@ -51,7 +51,7 @@ static bool testIsPirCompilable(ClosureVersion* f) {
 
 static bool testNoLoad(ClosureVersion* f) {
     return Visitor::check(f->entry, [&](Instruction* i) {
-        return !LdVar::Cast(i) && !LdFun::Cast(i) && !LdArg::Cast(i);
+        return !LdVar::Cast(i) && !LdFun::Cast(i);
     });
 };
 

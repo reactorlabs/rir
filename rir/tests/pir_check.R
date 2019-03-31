@@ -43,11 +43,9 @@ stopifnot(pir.check(function(depth) {
 }, NoEnvSpec))
 
 xxx <- 12
-f <- rir.compile(function() {
+stopifnot(pir.check(function() {
   1 + xxx
-})
-f()
-stopifnot(pir.check(f, NoEnvForAdd))
+}, NoEnvForAdd, warmup=list()))
 
 stopifnot(pir.check(function() {
   1 + yyy
@@ -194,13 +192,26 @@ mandelbrot <- function() {
     }
     return (sum)
 }
-mandelbrot()
-mandelbrot()
 # This can't be run if PIR_MAX_INPUT_SIZE is too low
 stopifnot(tryCatch({
-  pir.check(mandelbrot, NoExternalCalls)
+  pir.check(mandelbrot, NoExternalCalls, warmup=list())
 }, warning = function(w) {
   cat("Couldn't run:", conditionMessage(w), "\n")
   conditionMessage(w) == "pir check failed: couldn't compile" ||
   conditionMessage(w) == "R JIT disabled, this will prevent some optimizations"
 }))
+
+# New tests
+
+stopifnot(pir.check(function() {
+  x <- 1
+  while (x < 10)
+    x <- x + 1
+  x
+}, NoLoad, NoStore))
+stopifnot(pir.check(function(n) {
+  x <- 1
+  while (x < n)
+    x <- x + 1
+  x
+}, NoLoad, NoStore, warmup=list(10)))
