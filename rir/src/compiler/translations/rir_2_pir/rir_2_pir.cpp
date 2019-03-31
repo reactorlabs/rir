@@ -394,7 +394,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     }
                     Value* value = arg->followCastsAndForce();
                     if (!MkArg::Cast(value) && !value->type.maybeObj())
-                        given.setNotObj(i);
+                        value->type.addAssumptions(given, i);
 
                     args.push_back(arg);
                 }

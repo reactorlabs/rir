@@ -664,14 +664,14 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
     size_t i = 0;
     eachCallArg([&](Value* arg) {
         auto mk = MkArg::Cast(arg);
+        Value* value = arg->followCastsAndForce();
         if (mk && mk->isEager()) {
             given.setEager(i);
             if (mk->eagerArg() == MissingArg::instance())
                 given.remove(Assumption::NoExplicitlyMissingArgs);
         }
-        Value* value = arg->followCastsAndForce();
-        if (!MkArg::Cast(value) && !value->type.maybeObj())
-            given.setNotObj(i);
+        if (!MkArg::Cast(value))
+            value->type.addAssumptions(given, i);
         ++i;
     });
     return given;

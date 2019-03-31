@@ -565,14 +565,13 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             bool notObj = true;
             bool isEager = true;
             if (TYPEOF(arg) == PROMSXP) {
-                SEXP val = PRVALUE(arg);
-                if (val == R_UnboundValue) {
+                arg = PRVALUE(arg);
+                if (arg == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
-                } else if (isObject(val)) {
-                    notObj = false;
                 }
-            } else if (isObject(arg)) {
+            }
+            if (isObject(arg)) {
                 notObj = false;
             } else if (arg == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
@@ -581,6 +580,10 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                 given.setEager(i);
             if (notObj)
                 given.setNotObj(i);
+            if (isEager && notObj && IS_SIMPLE_SCALAR(arg, REALSXP))
+                given.setSimpleReal(i);
+            if (isEager && notObj && IS_SIMPLE_SCALAR(arg, INTSXP))
+                given.setSimpleInt(i);
         };
 
         for (size_t i = 0; i < call.suppliedArgs; ++i) {

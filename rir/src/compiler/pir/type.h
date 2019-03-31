@@ -8,6 +8,7 @@
 
 #include "R/r_incl.h"
 #include "ir/RuntimeFeedback.h"
+#include "runtime/Assumptions.h"
 #include "utils/EnumSet.h"
 
 namespace rir {
@@ -343,6 +344,36 @@ struct PirType {
             return false;
         }
         return t_.r.includes(o.t_.r);
+    }
+
+    void addAssumptions(Assumptions& given, int idx) const {
+        if (!maybeObj())
+            given.setNotObj(idx);
+        if (given.isEager(idx) && given.isNotObj(idx) && isScalar()) {
+            assert(isRType());
+            if (t_.r == RTypeSet(RType::real))
+                given.setSimpleReal(idx);
+            if (t_.r == RTypeSet(RType::integer))
+                given.setSimpleInt(idx);
+        }
+    }
+
+    void loadAssumptions(const Assumptions& given, int idx) {
+        if (given.isEager(idx))
+            *this = PirType::promiseWrappedVal().notMissing();
+        if (given.isNotObj(idx))
+            setNotObject();
+        if (given.isSimpleReal(idx)) {
+            assert(given.isEager(idx) && given.isNotObj(idx));
+            setScalar();
+            t_.r = RTypeSet(RType::real);
+        }
+        if (given.isSimpleInt(idx)) {
+            assert(given.isEager(idx) && given.isNotObj(idx) &&
+                   !given.isSimpleReal(idx));
+            setScalar();
+            t_.r = RTypeSet(RType::integer);
+        }
     }
 
     void print(std::ostream& out = std::cout);
