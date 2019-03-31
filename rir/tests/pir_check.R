@@ -1,4 +1,5 @@
-jitOn <- getenv("R_ENABLE_JIT") != 0
+jitOn <- as.numeric(Sys.getenv("R_ENABLE_JIT")) != 0
+fullOptim <- jitOn && Sys.getenv("PIR_ENABLE", unset="on") == "on"
 
 # Copied / cross-validated from pir_tests
 
@@ -204,13 +205,13 @@ stopifnot(tryCatch({
 
 # New tests
 
-stopifnot(!jitOn || pir.check(function() {
+stopifnot(!fullOptim || pir.check(function() {
   x <- 1
   while (x < 10)
     x <- x + 1
   x
 }, NoLoad, NoStore))
-stopifnot(!jitOn || pir.check(function(n) {
+stopifnot(!fullOptim || pir.check(function(n) {
   x <- 1
   while (x < n)
     x <- x + 1
