@@ -706,12 +706,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             order.push_back(bb->id);
     });
 
-    std::unordered_map<Instruction*, size_t> needsRefcount;
+    std::unordered_map<Instruction*, AUses::Kind> needsRefcount;
     {
         StaticReferenceCount analysis(cls, log);
         for (auto& u : analysis.result().uses) {
-            if (u.second > 1)
-                needsRefcount[u.first] = u.second - 1;
+            if (u.second > AUses::Once)
+                needsRefcount[u.first] = u.second;
         }
     }
 
@@ -1239,9 +1239,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             if (instr->needsReferenceCount()) {
-                if (needsRefcount[instr] == 1)
+                if (needsRefcount[instr] == AUses::Multiple)
                     cb.add(BC::ensureNamed());
-                else if (needsRefcount[instr] == 2)
+                else if (needsRefcount[instr] == AUses::Destructive)
                     cb.add(BC::setShared());
             }
 
