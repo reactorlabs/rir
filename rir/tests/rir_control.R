@@ -180,3 +180,17 @@ f <- rir.compile(function(x) {
 })
 stopifnot(f(-1.1) == -5)
 stopifnot(f(-1.0) == -6)
+
+count <- 0
+n <- 3
+f <- rir.compile(function() {
+  for (i in 1:n) {
+    count <<- count + 1
+    i[[1]] <- 10L
+  }
+})
+f()
+f()
+f()
+f()
+stopifnot(count == 12)

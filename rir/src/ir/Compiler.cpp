@@ -219,31 +219,31 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
 
             // i' <- m
             compileExpr(ctx, start);
-            cs << BC::floor();
+            cs << BC::floor() << BC::ensureNamed();
             // n' <- n
             compileExpr(ctx, end);
+            cs << BC::ensureNamed();
             // if (i' > n')
             cs << BC::dup2() << BC::gt();
             cs.addSrc(R_NilValue);
             cs << BC::brfalse(fwdBranch);
             // {
             // n' <- ceil(n') - 1
-            cs << BC::ceil() << BC::push(1) << BC::sub();
-            cs.addSrc(R_NilValue);
+            cs << BC::ceil() << BC::dec() << BC::ensureNamed() << BC::swap();
             // while
             compileWhile(ctx,
                          [&cs]() {
                              // (i' > n')
-                             cs << BC::dup2() << BC::gt();
+                             cs << BC::dup2() << BC::lt();
                              cs.addSrc(R_NilValue);
                          },
                          [&ctx, &cs, &sym, &body]() {
                              // {
                              // i <- i'
-                             cs << BC::pull(1) << BC::ensureNamed()
-                                << BC::stvar(sym);
+                             cs << BC::dup() << BC::stvar(sym)
+                                << BC::setShared();
                              // i' <- i' - 1
-                             cs << BC::swap() << BC::dec() << BC::swap();
+                             cs << BC::dec();
                              // ...
                              compileExpr(ctx, body);
                              // }
@@ -251,29 +251,28 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
             // } else {
             cs << BC::br(endBranch) << fwdBranch;
             // n' <- floor(n') + 1
-            cs << BC::floor() << BC::push(1) << BC::add();
-            cs.addSrc(R_NilValue);
+            cs << BC::floor() << BC::inc() << BC::swap();
             // while
             compileWhile(ctx,
                          [&cs]() {
                              // (i' < n')
-                             cs << BC::dup2() << BC::lt();
+                             cs << BC::dup2() << BC::gt();
                              cs.addSrc(R_NilValue);
                          },
                          [&ctx, &cs, &sym, &body]() {
                              // {
                              // i <- i'
-                             cs << BC::pull(1) << BC::ensureNamed()
-                                << BC::stvar(sym);
+                             cs << BC::dup() << BC::stvar(sym)
+                                << BC::setShared();
                              // i' <- i' + 1
-                             cs << BC::swap() << BC::inc() << BC::swap();
+                             cs << BC::inc();
                              // ...
                              compileExpr(ctx, body);
                              // }
                          });
 
-            cs << endBranch << BC::pop() << BC::pop() << BC::pop()
-               << BC::push(R_NilValue) << BC::invisible();
+            cs << endBranch << BC::popn(3) << BC::push(R_NilValue)
+               << BC::invisible();
 
             return true;
         }
