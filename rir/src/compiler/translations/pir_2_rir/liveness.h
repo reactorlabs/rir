@@ -33,7 +33,6 @@ struct Liveness : public std::vector<BBLiveness> {
 };
 
 struct LivenessIntervals : public std::unordered_map<Value*, Liveness> {
-    size_t maxLive;
     LivenessIntervals(unsigned bbsSize, CFG const& cfg);
     bool live(Instruction* where, Value* what) const;
 };

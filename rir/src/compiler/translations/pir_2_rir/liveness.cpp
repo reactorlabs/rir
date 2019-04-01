@@ -9,8 +9,6 @@ namespace rir {
 namespace pir {
 
 LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
-    maxLive = 0;
-
     // temp list of live out sets for every BB
     std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
@@ -85,8 +83,6 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
                     accumulated.erase(accumulated.find(i));
                 }
 
-                if (accumulated.size() > maxLive)
-                    maxLive = accumulated.size();
             } while (ip != bb->begin());
         }
         assert(pos == 0);
