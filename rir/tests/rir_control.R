@@ -169,6 +169,8 @@ f <- rir.compile(function(x) {
 })
 stopifnot(f(1.1) == 2)
 stopifnot(f(1.0) == 3)
+pir.compile(f)
+stopifnot(f(1.0) == 3)
 
 f <- rir.compile(function(x) {
     s <- 0

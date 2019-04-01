@@ -127,6 +127,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         case Tag::Subassign1_2D:
         case Tag::Subassign2_2D:
         case Tag::Inc:
+        case Tag::Dec:
             if (auto input = Instruction::Cast(i->arg(0).val())) {
                 if (input->needsReferenceCount() && state.uses.count(input) &&
                     state.uses.at(input) == AUses::Multiple) {
