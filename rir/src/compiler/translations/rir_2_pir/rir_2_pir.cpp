@@ -692,7 +692,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         UNOP(Plus, uplus_);
         UNOP(Minus, uminus_);
         UNOP(Not, not_);
-        UNOP(Length, length_);
 #undef UNOP
 
 #define UNOP_NOENV(Name, Op)                                                   \
@@ -701,6 +700,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Name(v)));                                             \
         break;                                                                 \
     }
+        UNOP_NOENV(Length, length_);
         UNOP_NOENV(Inc, inc_);
 #undef UNOP_NOENV
 
