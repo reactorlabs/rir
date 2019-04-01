@@ -276,8 +276,6 @@ bool Instruction::usesDoNotInclude(BB* target, std::unordered_set<Tag> tags) {
 const Value* Instruction::cFollowCasts() const {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCasts();
-    if (auto shared = SetShared::Cast(this))
-        return shared->arg<0>().val()->followCasts();
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCasts();
     return this;
@@ -291,8 +289,6 @@ const Value* Instruction::cFollowCastsAndForce() const {
     if (auto mkarg = MkArg::Cast(this))
         if (mkarg->isEager())
             return mkarg->eagerArg()->followCastsAndForce();
-    if (auto shared = SetShared::Cast(this))
-        return shared->arg<0>().val()->followCastsAndForce();
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCastsAndForce();
     return this;

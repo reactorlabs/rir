@@ -8,7 +8,14 @@ namespace rir {
 namespace pir {
 
 struct AUses {
-    std::unordered_map<Instruction*, size_t> uses;
+    enum Kind {
+        None = 0,
+        Once = 1,
+        Multiple = 2,
+        Destructive = 3,
+    };
+
+    std::unordered_map<Instruction*, Kind> uses;
     AbstractResult mergeExit(const AUses& other) { return merge(other); }
     AbstractResult merge(const AUses& other) {
         AbstractResult res;
@@ -73,17 +80,24 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         if (i->needsReferenceCount()) {
             // This value was used only once in a loop, we can thus
             // reset the count on redefinition.
-            if (state.uses.count(i) && state.uses.at(i) == 1) {
-                state.uses[i] = 0;
+            if (state.uses.count(i) && state.uses.at(i) == AUses::Once) {
+                state.uses[i] = AUses::None;
                 res.update();
             }
         }
 
         auto count = [&](Instruction* i) {
             auto& use = state.uses[i];
-            if (use < 2) {
-                use++;
+            switch (use) {
+            case AUses::None:
+                use = AUses::Once;
                 res.update();
+                break;
+            case AUses::Once:
+                use = AUses::Multiple;
+                res.update();
+                break;
+            default: {}
             }
         };
 
@@ -100,22 +114,34 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         };
         i->eachArg(apply);
 
-        // Those instructions -- at the rir level -- are allowed to override
-        // inputs, even if the refcount is 1. Therefore if they are used
-        // multiple times, we need to bump the refcount even further.
         switch (i->tag) {
         case Tag::Subassign1_1D:
         case Tag::Subassign2_1D:
         case Tag::Subassign1_2D:
         case Tag::Subassign2_2D:
         case Tag::Inc:
+            // Those instructions -- at the rir level -- are allowed to override
+            // inputs, even if the refcount is 1. Therefore if they are used
+            // multiple times, we need to bump the refcount even further.
             if (auto input = Instruction::Cast(i->arg(0).val())) {
-                if (state.uses.count(input) && state.uses.at(input) == 2) {
-                    state.uses[input] = 3;
+                if (state.uses.count(input) &&
+                    state.uses.at(input) == AUses::Multiple) {
+                    state.uses[input] = AUses::Destructive;
                     res.update();
                 }
             }
             break;
+
+        case Tag::ForSeqSize:
+            // Loop sequence needs to stay constant for the whole loop duration.
+            if (auto input = Instruction::Cast(i->arg(0).val())) {
+                if (state.uses[input] < AUses::Multiple) {
+                    state.uses[input] = AUses::Multiple;
+                    res.update();
+                }
+            }
+            break;
+
         default:
             break;
         };

@@ -83,7 +83,6 @@
     V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \
     V(CastType)                                                                \
-    V(SetShared)                                                               \
     V(Missing)                                                                 \
     V(Visible)                                                                 \
     V(Invisible)                                                               \

@@ -2838,6 +2838,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP vec = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
@@ -2876,6 +2879,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP mtx = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 3);
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
@@ -2967,6 +2973,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
@@ -3075,6 +3084,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
