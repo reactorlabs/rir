@@ -54,6 +54,19 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     }
                     break;
                 }
+                case Tag::Assume: {
+                    auto assumption = Assume::Cast(i);
+                    if (!assumption->assumeTrue)
+                        if (auto isO = IsObject::Cast(assumption->condition()))
+                            if (auto val =
+                                    Instruction::Cast(isO->arg<0>().val())) {
+                                if (types.count(val))
+                                    infered = types.at(val).notObject();
+                                else
+                                    infered = val->type.notObject();
+                            }
+                    break;
+                }
                 default:
                     infered = i->type;
                 }
