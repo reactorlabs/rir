@@ -4,7 +4,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
-#include "compiler/analysis/refrence_count.h"
+#include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
