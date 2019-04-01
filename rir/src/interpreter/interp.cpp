@@ -565,7 +565,7 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             bool notObj = true;
             bool isEager = true;
             if (TYPEOF(arg) == PROMSXP) {
-                SEXP val = safeForcePromise(arg);
+                SEXP val = PRVALUE(arg);
                 if (val == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
@@ -2270,9 +2270,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(inc_) {
             SEXP val = ostack_top(ctx);
-            assert(TYPEOF(val) == INTSXP);
-            int i = INTEGER(val)[0];
+            SLOWASSERT(TYPEOF(val) == INTSXP);
+            // Inc_ destructively modifies TOS, even if the refcount is 1. This
+            // can be used to perform `++i` on a value on the stack. The old i
+            // value will be overwritten (generally only do this if you are sure
+            // that this is the last copy on the stack).
             if (MAYBE_SHARED(val)) {
+                int i = INTEGER(val)[0];
                 ostack_pop(ctx);
                 SEXP n = Rf_allocVector(INTSXP, 1);
                 INTEGER(n)[0] = i + 1;
@@ -2285,9 +2289,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(dec_) {
             SEXP val = ostack_top(ctx);
-            assert(TYPEOF(val) == INTSXP);
-            int i = INTEGER(val)[0];
+            SLOWASSERT(TYPEOF(val) == INTSXP);
+            // Dec_ destructively modifies TOS, even if the refcount is 1. This
+            // can be used to perform `--i` on a value on the stack. The old i
+            // value will be overwritten (generally only do this if you are sure
+            // that this is the last copy on the stack).
             if (MAYBE_SHARED(val)) {
+                int i = INTEGER(val)[0];
                 ostack_pop(ctx);
                 SEXP n = Rf_allocVector(INTSXP, 1);
                 INTEGER(n)[0] = i - 1;
@@ -2941,6 +2949,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP vec = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
@@ -2979,6 +2990,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP mtx = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 3);
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
@@ -3070,6 +3084,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
@@ -3178,6 +3195,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
@@ -3524,6 +3544,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
                      nullptr, names.empty() ? nullptr : names.data(), rho,
                      Assumptions(), ctx);
     call.arglist = arglist;
+    call.safeForceArgs();
 
     auto res = rirCall(call, ctx);
     ostack_popn(ctx, call.passedArgs);

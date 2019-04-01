@@ -60,6 +60,8 @@ class SmallSet {
     iterator end() { return container.end(); }
     const_iterator cbegin() const { return container.cbegin(); }
     const_iterator cend() const { return container.cend(); }
+    const_iterator begin() const { return container.cbegin(); }
+    const_iterator end() const { return container.cend(); }
 };
 } // namespace rir
 

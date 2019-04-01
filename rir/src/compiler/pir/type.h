@@ -119,42 +119,44 @@ struct PirType {
     union Type {
         RTypeSet r;
         NativeTypeSet n;
-        Type(RTypeSet r) : r(r) {}
-        Type(NativeTypeSet n) : n(n) {}
+        constexpr Type(RTypeSet r) : r(r) {}
+        constexpr Type(NativeTypeSet n) : n(n) {}
     };
     Type t_;
 
-    static FlagSet defaultRTypeFlags() {
+    static constexpr FlagSet defaultRTypeFlags() {
         return FlagSet() | TypeFlags::maybeNotScalar | TypeFlags::rtype;
     }
 
-    static FlagSet topRTypeFlags() {
+    static constexpr FlagSet topRTypeFlags() {
         return FlagSet() | TypeFlags::lazy | TypeFlags::promiseWrapped |
                TypeFlags::maybeObject | TypeFlags::maybeNotScalar |
                TypeFlags::rtype;
     }
-    static FlagSet optimisticRTypeFlags() {
+    static constexpr FlagSet optimisticRTypeFlags() {
         return FlagSet() | TypeFlags::rtype;
     }
 
-    static PirType optimistic() {
+    static constexpr PirType optimistic() {
         PirType t;
         t.flags_ = optimisticRTypeFlags();
         return t;
     }
 
-    PirType() : flags_(topRTypeFlags()), t_(RTypeSet()) {}
+    constexpr PirType() : flags_(topRTypeFlags()), t_(RTypeSet()) {}
     // cppcheck-suppress noExplicitConstructor
-    PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    constexpr PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
     // cppcheck-suppress noExplicitConstructor
-    PirType(const NativeType& t) : t_(t) {}
+    constexpr PirType(const NativeType& t) : t_(t) {}
     // cppcheck-suppress noExplicitConstructor
-    PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
-    explicit PirType(const NativeTypeSet& t) : t_(t) {}
+    constexpr PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    constexpr PirType(const RTypeSet& t, const FlagSet& f) : flags_(f), t_(t) {}
+    explicit constexpr PirType(const NativeTypeSet& t) : t_(t) {}
     explicit PirType(SEXP);
-    PirType(const PirType& other) : flags_(other.flags_), t_(other.t_) {}
+    constexpr PirType(const PirType& other)
+        : flags_(other.flags_), t_(other.t_) {}
 
-    PirType& operator=(const PirType& o) {
+    constexpr PirType& operator=(const PirType& o) {
         flags_ = o.flags_;
         if (isRType())
             t_.r = o.t_.r;
@@ -172,23 +174,27 @@ struct PirType {
     void merge(const ObservedValues& other);
     void merge(SEXPTYPE t);
 
-    static PirType num() {
+    static constexpr PirType num() {
         return PirType(RType::logical) | RType::integer | RType::real |
                RType::cplx;
     }
-    static PirType val() {
+    static constexpr PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
                        RType::missing | RType::unbound | RType::ast)
             .orObject();
     }
-    static PirType vecs() { return num() | RType::str | RType::vec; }
-    static PirType closure() { return RType::closure; }
+    static constexpr PirType vecs() { return num() | RType::str | RType::vec; }
+    static constexpr PirType closure() { return RType::closure; }
 
-    static PirType promiseWrappedVal() { return val().orPromiseWrapped(); }
-    static PirType valOrLazy() { return val().orLazy(); }
-    static PirType list() { return PirType(RType::cons) | RType::nil; }
-    static PirType any() { return val().orLazy(); }
+    static constexpr PirType promiseWrappedVal() {
+        return val().orPromiseWrapped();
+    }
+    static constexpr PirType valOrLazy() { return val().orLazy(); }
+    static constexpr PirType list() {
+        return PirType(RType::cons) | RType::nil;
+    }
+    static constexpr PirType any() { return val().orLazy(); }
 
     RIR_INLINE bool maybeMissing() const {
         if (!isRType())
@@ -205,21 +211,54 @@ struct PirType {
             return false;
         return flags_.includes(TypeFlags::promiseWrapped);
     }
-    RIR_INLINE bool isScalar() const {
+    RIR_INLINE constexpr bool isScalar() const {
         if (!isRType())
             return true;
         return !flags_.includes(TypeFlags::maybeNotScalar);
     }
-    RIR_INLINE bool isRType() const {
+    RIR_INLINE constexpr bool isRType() const {
         return flags_.includes(TypeFlags::rtype);
     }
-    RIR_INLINE bool maybe(RType type) const {
+    RIR_INLINE constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
-    RIR_INLINE bool maybeObj() const {
+    RIR_INLINE constexpr bool maybeObj() const {
         if (!isRType())
             return false;
         return isRType() && flags_.includes(TypeFlags::maybeObject);
+    }
+
+    RIR_INLINE constexpr PirType operator|(const PirType& o) const {
+        assert(isRType() == o.isRType());
+
+        PirType r;
+        if (isRType())
+            r = t_.r | o.t_.r;
+        else
+            r = RTypeSet(t_.n | o.t_.n);
+
+        r.flags_ = flags_ | o.flags_;
+        return r;
+    }
+
+    RIR_INLINE constexpr PirType operator&(const PirType& o) const {
+        assert(isRType() == o.isRType());
+
+        PirType r;
+        if (isRType())
+            r = t_.r & o.t_.r;
+        else
+            r = RTypeSet(t_.n & o.t_.n);
+
+        r.flags_ = flags_ & o.flags_;
+        return r;
+    }
+
+    bool maybeReferenceCounted() const {
+        static constexpr RTypeSet refcount =
+            RTypeSet() | RType::logical | RType::integer | RType::real |
+            RType::str | RType::vec | RType::cplx;
+        return isRType() && t_.r.intersects(refcount);
     }
 
     PirType notObject() const {
@@ -243,37 +282,30 @@ struct PirType {
         return t;
     }
 
-    RIR_INLINE PirType orPromiseWrapped() const {
+    RIR_INLINE constexpr PirType orPromiseWrapped() const {
         assert(isRType());
-        PirType t = *this;
-        t.flags_.set(TypeFlags::promiseWrapped);
-        return t;
+        return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
     }
 
-    RIR_INLINE PirType orLazy() const {
+    RIR_INLINE constexpr PirType orLazy() const {
         assert(isRType());
-        PirType t = *this;
-        t.flags_.set(TypeFlags::lazy);
-        t.flags_.set(TypeFlags::promiseWrapped);
-        return t;
+        return PirType(t_.r,
+                       flags_ | TypeFlags::lazy | TypeFlags::promiseWrapped);
     }
 
-    RIR_INLINE PirType orObject() const {
+    RIR_INLINE constexpr PirType orObject() const {
         assert(isRType());
-        PirType t = *this;
-        t.flags_.set(TypeFlags::maybeObject);
-        return t;
+        return PirType(t_.r, flags_ | TypeFlags::maybeObject);
     }
 
-    PirType forced() const {
+    PirType constexpr forced() const {
         assert(isRType());
-        PirType t = *this;
-        t.flags_.reset(TypeFlags::promiseWrapped);
-        t.flags_.reset(TypeFlags::lazy);
-        return t;
+        FlagSet notPromised =
+            ~(FlagSet() | TypeFlags::promiseWrapped | TypeFlags::lazy);
+        return PirType(t_.r, flags_ & notPromised);
     }
 
-    RIR_INLINE PirType baseType() const {
+    RIR_INLINE constexpr PirType baseType() const {
         assert(isRType());
         return PirType(t_.r);
     }
@@ -284,32 +316,6 @@ struct PirType {
 
     static const PirType voyd() { return PirType(NativeTypeSet()); }
     static const PirType bottom() { return PirType(RTypeSet()); }
-
-    RIR_INLINE PirType operator|(const PirType& o) const {
-        assert(isRType() == o.isRType());
-
-        PirType r;
-        if (isRType())
-            r = t_.r | o.t_.r;
-        else
-            r = RTypeSet(t_.n | o.t_.n);
-
-        r.flags_ = flags_ | o.flags_;
-        return r;
-    }
-
-    RIR_INLINE PirType operator&(const PirType& o) const {
-        assert(isRType() == o.isRType());
-
-        PirType r;
-        if (isRType())
-            r = t_.r & o.t_.r;
-        else
-            r = RTypeSet(t_.n & o.t_.n);
-
-        r.flags_ = flags_ & o.flags_;
-        return r;
-    }
 
     RIR_INLINE bool operator==(const NativeType& o) const {
         return !isRType() && t_.n == o;

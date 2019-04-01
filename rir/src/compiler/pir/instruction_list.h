@@ -69,9 +69,9 @@
     V(LdFunctionEnv)                                                           \
     V(LAnd)                                                                    \
     V(LOr)                                                                     \
+    V(Not)                                                                     \
     V(Inc)                                                                     \
     V(Dec)                                                                     \
-    V(Not)                                                                     \
     V(Is)                                                                      \
     V(Plus)                                                                    \
     V(Minus)                                                                   \
@@ -85,7 +85,6 @@
     V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \
     V(CastType)                                                                \
-    V(SetShared)                                                               \
     V(Missing)                                                                 \
     V(Visible)                                                                 \
     V(Invisible)                                                               \

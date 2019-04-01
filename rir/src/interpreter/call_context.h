@@ -13,6 +13,7 @@
 
 #include "instance.h"
 #include "interp_incl.h"
+#include "safe_force.h"
 
 namespace rir {
 
@@ -96,6 +97,16 @@ struct CallContext {
     SEXP name(unsigned i, InterpreterInstance* ctx) const {
         assert(hasNames() && i < suppliedArgs);
         return cp_pool_at(ctx, names[i]);
+    }
+
+    void safeForceArgs() const {
+        assert(hasStackArgs());
+        for (unsigned i = 0; i < passedArgs; i++) {
+            SEXP arg = stackArg(i);
+            if (TYPEOF(arg) == PROMSXP) {
+                safeForcePromise(arg);
+            }
+        }
     }
 };
 

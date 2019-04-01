@@ -705,15 +705,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         UNOP(Length, length_);
 #undef UNOP
 
-#define UNOP_NOENV(Name, Op)                                                   \
-    case Opcode::Op: {                                                         \
-        v = pop();                                                             \
-        push(insert(new Name(v)));                                             \
-        break;                                                                 \
+    case Opcode::inc_: {
+        push(insert(new Inc(pop())));
+        break;
     }
-        UNOP_NOENV(Inc, inc_);
-        UNOP_NOENV(Dec, dec_);
-#undef UNOP_NOENV
+
+    case Opcode::dec_: {
+        push(insert(new Dec(pop())));
+        break;
+    }
 
     case Opcode::missing_:
         push(insert(new Missing(Pool::get(bc.immediate.pool), env)));
@@ -746,11 +746,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::ensure_named_:
-        // Recomputed automatically in the backend
-        break;
-
     case Opcode::set_shared_:
-        push(insert(new SetShared(pop())));
+        // Recomputed automatically in the backend
         break;
 
     case Opcode::invisible_:

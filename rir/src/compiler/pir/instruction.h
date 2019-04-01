@@ -596,10 +596,12 @@ class FLI(LdConst, 0, Effects::None()) {
     SEXP c() const;
     LdConst(SEXP c, PirType t);
     explicit LdConst(SEXP c);
+    explicit LdConst(int i);
     void printArgs(std::ostream& out, bool tty) const override;
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), c());
     }
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(LdFun, 2, Effects::Any()) {
@@ -633,6 +635,8 @@ class FLIE(LdFun, 2, Effects::Any()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
@@ -652,6 +656,8 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLI(ForSeqSize, 1, Effect::Error) {
@@ -739,6 +745,8 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(StVar, 2, Effect::WritesEnv) {
@@ -827,6 +835,8 @@ class FLIE(MkArg, 2, Effects::None()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), prom_);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLI(Seq, 3, Effects::None()) {
@@ -848,6 +858,8 @@ class FLIE(MkCls, 4, Effects::None()) {
 
     Value* lexicalEnv() const { return env(); }
 
+    bool needsReferenceCount() const override { return false; }
+
   private:
     using FixedLenInstructionWithEnvSlot::env;
 };
@@ -864,6 +876,8 @@ class FLIE(MkFunCls, 1, Effects::None()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), cls);
     }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(Force, 2, Effects::Any()) {
@@ -1062,13 +1076,6 @@ class FLI(Is, 1, Effects::None()) {
 class FLI(LdFunctionEnv, 0, Effects::None()) {
   public:
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
-};
-
-class FLI(SetShared, 1, Effects::None()) {
-  public:
-    explicit SetShared(Value* v)
-        : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
-    void updateType() override final { type = arg<0>().val()->type; }
 };
 
 class FLI(Visible, 0, Effect::Visibility) {
@@ -1512,6 +1519,8 @@ class VLIE(MkEnv, Effects::None()) {
     size_t nLocals() { return nargs() - 1; }
 
     size_t gvnBase() const override { return (size_t)this; }
+
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLI(IsObject, 1, Effects::None()) {
