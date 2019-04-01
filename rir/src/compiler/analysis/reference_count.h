@@ -51,13 +51,15 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
                         if (auto a = Instruction::Cast(v)) {
                             if (Phi::Cast(a)) {
                                 for (auto otherAlias : alias[a]) {
-                                    if (!alias[i].includes(otherAlias)) {
+                                    if (otherAlias->needsReferenceCount() &&
+                                        !alias[i].includes(otherAlias)) {
                                         changed = true;
                                         alias[i].insert(otherAlias);
                                     }
                                 }
                             } else {
-                                if (!alias[i].includes(a)) {
+                                if (a->needsReferenceCount() &&
+                                    !alias[i].includes(a)) {
                                     changed = true;
                                     alias[i].insert(a);
                                 }
@@ -126,7 +128,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         case Tag::Subassign2_2D:
         case Tag::Inc:
             if (auto input = Instruction::Cast(i->arg(0).val())) {
-                if (state.uses.count(input) &&
+                if (input->needsReferenceCount() && state.uses.count(input) &&
                     state.uses.at(input) == AUses::Multiple) {
                     state.uses[input] = AUses::Destructive;
                     res.update();
