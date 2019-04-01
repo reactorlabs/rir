@@ -699,7 +699,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     LastEnv lastEnv(cls, code, log);
     std::unordered_map<Value*, BC::Label> pushContexts;
-    std::unordered_map<Promise*, unsigned> promMap;
 
     std::deque<unsigned> order;
     LoweringVisitor::run(code->entry, [&](BB* bb) {
@@ -966,9 +965,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::MkArg: {
                 auto p = MkArg::Cast(instr)->prom();
-                unsigned id = ctx.cs().addPromise(
-                    getPromise(ctx, MkArg::Cast(instr)->prom()));
-                promMap[p] = id;
+                unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
                 cb.add(BC::promise(id));
                 break;
             }
