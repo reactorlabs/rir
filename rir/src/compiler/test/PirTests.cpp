@@ -1,15 +1,15 @@
-#include "pir_tests.h"
+#include "PirTests.h"
+#include "../../ir/Compiler.h"
+#include "../analysis/query.h"
+#include "../analysis/verifier.h"
+#include "../pir/pir_impl.h"
+#include "../translations/pir_2_rir/pir_2_rir.h"
+#include "../translations/rir_2_pir/rir_2_pir.h"
+#include "../util/visitor.h"
 #include "R/Protect.h"
 #include "R/RList.h"
 #include "R_ext/Parse.h"
-#include "analysis/query.h"
-#include "analysis/verifier.h"
 #include "api.h"
-#include "ir/Compiler.h"
-#include "pir/pir_impl.h"
-#include "translations/pir_2_rir/pir_2_rir.h"
-#include "translations/rir_2_pir/rir_2_pir.h"
-#include "util/visitor.h"
 #include <string>
 #include <vector>
 
@@ -46,9 +46,9 @@ SEXP compileToRir(const std::string& context, const std::string& expr,
     eval(expr, env);
     return env;
 }
-typedef std::unordered_map<std::string, pir::ClosureVersion*> closuresByName;
+typedef std::unordered_map<std::string, pir::ClosureVersion*> ClosuresByName;
 
-closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
+ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::StreamLogger logger({pir::DebugOptions::DebugFlags() |
                                   // pir::DebugFlag::PrintIntoStdout |
                                   // pir::DebugFlag::PrintEarlyPir |
@@ -59,7 +59,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::Rir2PirCompiler cmp(m, logger);
 
     // Compile every function in the environment
-    closuresByName results;
+    ClosuresByName results;
     auto envlist = RList(FRAME(env));
     for (auto f = envlist.begin(); f != envlist.end(); ++f) {
         auto fun = *f;
@@ -78,7 +78,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     return results;
 }
 
-closuresByName compile(const std::string& context, const std::string& expr,
+ClosuresByName compile(const std::string& context, const std::string& expr,
                        pir::Module* m, SEXP super = R_GlobalEnv) {
     SEXP env = compileToRir(context, expr, super);
     return compileRir2Pir(env, m);
