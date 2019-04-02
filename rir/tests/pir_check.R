@@ -217,3 +217,7 @@ stopifnot(pir.check(function(n) {
     x <- x + 1
   x
 }, NoLoad, NoStore, warmup=list(10)))
+
+# Negative Test
+
+stopifnot(!pir.check(function() x(), NoExternalCalls))
