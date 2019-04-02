@@ -607,75 +607,6 @@ bool testCfg() {
     return true;
 }
 
-static std::string mandelbrot = "\
-mandelbrot <- function() {\n\
-    size = 30\n\
-    sum = 0\n\
-    byteAcc = 0\n\
-    bitNum  = 0\n\
-    y = 0\n\
-    while (y < size) {\n\
-      ci = (2.0 * y / size) - 1.0\n\
-      x = 0\n\
-      while (x < size) {\n\
-        zr   = 0.0\n\
-        zrzr = 0.0\n\
-        zi   = 0.0\n\
-        zizi = 0.0\n\
-        cr = (2.0 * x / size) - 1.5\n\
-        z = 0\n\
-        notDone = TRUE\n\
-        escape = 0\n\
-        while (notDone && (z < 50)) {\n\
-          zr = zrzr - zizi + cr\n\
-          zi = 2.0 * zr * zi + ci\n\
-          zrzr = zr * zr\n\
-          zizi = zi * zi\n\
-          if ((zrzr + zizi) > 4.0) {\n\
-            notDone = FALSE\n\
-            escape  = 1\n\
-          }\n\
-          z = z + 1\n\
-        }\n\
-        byteAcc = bitwShiftL(byteAcc, 1) + escape\n\
-        bitNum = bitNum + 1\n\
-        if (bitNum == 8) {\n\
-          sum = bitwXor(sum, byteAcc)\n\
-          byteAcc = 0\n\
-          bitNum  = 0\n\
-        } else if (x == (size - 1)) {\n\
-          byteAcc = bitwShiftL(byteAcc, 8 - bitNum)\n\
-          sum = bitwXor(sum, byteAcc)\n\
-          byteAcc = 0\n\
-          bitNum  = 0\n\
-        }\n\
-        x = x + 1\n\
-      }\n\
-      y = y + 1\n\
-    }\n\
-    return (sum);\n\
-}\n";
-
-static bool testMandelbrot() {
-    pir::Module m;
-    SEXP env = compileToRir("", mandelbrot, R_GlobalEnv);
-    SEXP fun = CAR(FRAME(env));
-    // warmup
-    rirApplyClosure(R_NilValue, fun, R_NilValue, R_GlobalEnv);
-    rirApplyClosure(R_NilValue, fun, R_NilValue, R_GlobalEnv);
-    auto res = compileRir2Pir(env, &m);
-    auto f = res["mandelbrot"];
-
-    Visitor::run(f->entry, [&](Instruction* i) {
-        if (auto ld = LdVar::Cast(i))
-            CHECK(Env::Cast(ld->env()) && Env::Cast(ld->env())->rho == env);
-        CHECK(CallSafeBuiltin::Cast(i) || !CallInstruction::CastCall(i));
-        return true;
-    });
-
-    return true;
-}
-
 static Test tests[] = {
     Test("test cfg", &testCfg),
     Test("test_42L", []() { return test42("42L"); }),
@@ -879,7 +810,6 @@ static Test tests[] = {
                            " f(x,y(),z)}");
          }),
     Test("Test dead store analysis", &testDeadStore),
-    Test("Test mandelbrot is scope-resolved", &testMandelbrot),
 };
 
 } // namespace
