@@ -51,6 +51,12 @@ DEF_INSTR(ldfun_, 1, 0, 1, 0)
 
 /**
  * ldvar_:: take immediate CP index of symbol, finding binding in env and push.
+ * Increment named count if the variable is not local.
+ */
+DEF_INSTR(ldvar_for_update_, 1, 0, 1, 0)
+
+/**
+ * ldvar_:: take immediate CP index of symbol, finding binding in env and push.
  */
 DEF_INSTR(ldvar_, 1, 0, 1, 0)
 
