@@ -2247,11 +2247,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(inc_) {
             SEXP val = ostack_top(ctx);
             SLOWASSERT(TYPEOF(val) == INTSXP);
-            // Inc_ destructively modifies TOS, even if the refcount is 1. This
-            // can be used to perform `++i` on a value on the stack. The old i
-            // value will be overwritten (generally only do this if you are sure
-            // that this is the last copy on the stack).
-            if (MAYBE_SHARED(val)) {
+            if (MAYBE_REFERENCED(val)) {
                 int i = INTEGER(val)[0];
                 ostack_pop(ctx);
                 SEXP n = Rf_allocVector(INTSXP, 1);
@@ -2266,11 +2262,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(dec_) {
             SEXP val = ostack_top(ctx);
             SLOWASSERT(TYPEOF(val) == INTSXP);
-            // Dec_ destructively modifies TOS, even if the refcount is 1. This
-            // can be used to perform `--i` on a value on the stack. The old i
-            // value will be overwritten (generally only do this if you are sure
-            // that this is the last copy on the stack).
-            if (MAYBE_SHARED(val)) {
+            if (MAYBE_REFERENCED(val)) {
                 int i = INTEGER(val)[0];
                 ostack_pop(ctx);
                 SEXP n = Rf_allocVector(INTSXP, 1);
@@ -3049,6 +3041,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             INTEGER(vec)[idx_] = *INTEGER(val);
                             break;
                         case VECSXP:
+                            // Avoid recursive vectors
+                            if (val == vec)
+                                val = Rf_shallow_duplicate(val);
                             SET_VECTOR_ELT(vec, idx_, val);
                             break;
                         }
@@ -3160,6 +3155,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             INTEGER(mtx)[idx_] = *INTEGER(val);
                             break;
                         case VECSXP:
+                            // Avoid recursive vectors
+                            if (val == mtx)
+                                val = Rf_shallow_duplicate(val);
                             SET_VECTOR_ELT(mtx, idx_, val);
                             break;
                         }
