@@ -1261,7 +1261,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             int contextPos = readSignedImmediate();
             advanceImmediate();
             SEXP parent = ostackPopSexp(ctx);
-            assert(parent == ENVSXP &&
+            assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
             SEXP arglist = R_NilValue;
             auto names = (Immediate*)pc;
@@ -2911,8 +2911,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             if (!has_res) {
-                SLOWASSERT(from->tag != STACK_OBJ_SEXP ||
-                           !isObject(from->u.sxpval));
+                SLOWASSERT(typeFrom != STACK_OBJ_SEXP ||
+                           !isObject(ostackCellAt(ctx, 2)->u.sxpval));
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
                 PROTECT(call);
                 SEXP fromSexp = ostackSexpAt(ctx, 2);
