@@ -122,7 +122,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
 
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = *call.stackArg(i);
-        if (arg.tag == STACK_OBJ_SEXP && TYPEOF(arg.u.sxpval) == PROMSXP)
+        if (stackObjSexpType(&arg) == PROMSXP)
             arg.u.sxpval = PRVALUE(arg.u.sxpval);
         if (arg.tag == STACK_OBJ_SEXP &&
             (arg.u.sxpval == R_UnboundValue || arg.u.sxpval == R_MissingArg ||
@@ -276,13 +276,13 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
 
         switch (stackObjSexpType(arg)) {
         case INTSXP:
-            return tryStackObjToInteger(arg) == NA_INTEGER ? R_TrueValue
-                                                           : R_FalseValue;
+            return stackObjAsInteger(arg) == NA_INTEGER ? R_TrueValue
+                                                        : R_FalseValue;
         case LGLSXP:
-            return tryStackObjToLogical(arg) == NA_LOGICAL ? R_TrueValue
-                                                           : R_FalseValue;
+            return stackAsLogical(arg) == NA_LOGICAL ? R_TrueValue
+                                                     : R_FalseValue;
         case REALSXP:
-            return ISNAN(tryStackObjToReal(arg)) ? R_TrueValue : R_FalseValue;
+            return ISNAN(stackObjAsReal(arg)) ? R_TrueValue : R_FalseValue;
         default:
             return nullptr;
         }
@@ -434,7 +434,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 2)
             return nullptr;
 
-        auto times = tryStackObjToInteger(&args[1]);
+        auto times = stackObjAsInteger(&args[1]);
         if (times == NA_INTEGER)
             return nullptr;
 
@@ -496,35 +496,30 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
 
         switch (combination) {
         case (INTSXP << 8) + INTSXP:
-            if (tryStackObjToInteger(a) == NA_INTEGER ||
-                tryStackObjToInteger(b) == NA_INTEGER)
+            if (stackObjAsInteger(a) == NA_INTEGER ||
+                stackObjAsInteger(b) == NA_INTEGER)
                 return nullptr;
-            return tryStackObjToInteger(a) < tryStackObjToInteger(b)
+            return stackObjAsInteger(a) < stackObjAsInteger(b)
                        ? stackObjToSexp(a)
                        : stackObjToSexp(b);
 
         case (INTSXP << 8) + REALSXP:
-            if (tryStackObjToInteger(a) == NA_INTEGER ||
-                ISNAN(tryStackObjToReal(b)))
+            if (stackObjAsInteger(a) == NA_INTEGER || ISNAN(stackObjAsReal(b)))
                 return nullptr;
-            return tryStackObjToInteger(a) < tryStackObjToReal(b)
-                       ? stackObjToSexp(a)
-                       : stackObjToSexp(b);
+            return stackObjAsInteger(a) < stackObjAsReal(b) ? stackObjToSexp(a)
+                                                            : stackObjToSexp(b);
 
         case (REALSXP << 8) + INTSXP:
-            if (tryStackObjToInteger(b) == NA_INTEGER ||
-                ISNAN(tryStackObjToReal(a)))
+            if (stackObjAsInteger(b) == NA_INTEGER || ISNAN(stackObjAsReal(a)))
                 return nullptr;
-            return tryStackObjToReal(a) < tryStackObjToInteger(b)
-                       ? stackObjToSexp(a)
-                       : stackObjToSexp(b);
+            return stackObjAsReal(a) < stackObjAsInteger(b) ? stackObjToSexp(a)
+                                                            : stackObjToSexp(b);
 
         case (REALSXP << 8) + REALSXP:
-            if (ISNAN(tryStackObjToReal(a)) || ISNAN(tryStackObjToReal(b)))
+            if (ISNAN(stackObjAsReal(a)) || ISNAN(stackObjAsReal(b)))
                 return nullptr;
-            return tryStackObjToReal(a) < tryStackObjToReal(b)
-                       ? stackObjToSexp(a)
-                       : stackObjToSexp(b);
+            return stackObjAsReal(a) < stackObjAsReal(b) ? stackObjToSexp(a)
+                                                         : stackObjToSexp(b);
 
         default:
             return nullptr;
