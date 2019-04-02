@@ -142,13 +142,13 @@ class CompilerContext {
 };
 
 Code* compilePromise(CompilerContext& ctx, SEXP exp);
-void compileExpr(CompilerContext& ctx, SEXP exp);
-void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args);
+void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
 
 // Inline some specials
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
-bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
+bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bool voidContext) {
     // `true` if an argument isn't missing, labeled, or `...`.
     auto isRegularArg = [](RListIter& arg) {
         return *arg != R_DotsSymbol && *arg != R_MissingArg && !arg.hasTag();
@@ -352,9 +352,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Case(SYMSXP) {
                 cs << BC::guardNamePrimitive(fun);
                 compileExpr(ctx, rhs);
+                // No ensureNamed needed, stvar already ensures named
                 cs << BC::dup();
-                if (!isConstant(rhs))
-                    cs << BC::ensureNamed();
                 cs << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;
@@ -413,14 +412,36 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         // First rhs (assign is right-associative)
         compileExpr(ctx, rhs);
-        // Keep a copy of rhs since it's the result of this
-        // expression
-        cs << BC::dup();
-        if (!isConstant(rhs))
-            cs << BC::ensureNamed();
 
-        // Now load index and target
+        // Keep a copy of rhs since it's the result of this expression. The
+        // subassign bytecode might modify this value, if it is equal to the
+        // lhs, thus we need to mark it shared, if it is still needed after the
+        // assignment. An example for such a bad case is
+        //
+        //     return (a[[1]] <- a)
+        //
+        cs << BC::dup();
+        if (!voidContext && !isConstant(rhs))
+            cs << BC::setShared();
+
+        // Now load target
         cs << (superAssign ? BC::ldvarSuper(target) : BC::ldvar(target));
+
+        // Again, subassign bytecodes override objects with named count of 1. If
+        // the target is from the outer scope that would be wrong. For example
+        //
+        //     a <- 1
+        //     f <- function()
+        //         a[[1]] <- 2
+        //
+        // the f function should not override a. To deal with this situation we
+        // load and store a. This is a noop, if a is local, but bumps the name
+        // count if a is from a parent. Hopefully pir will remove this again,
+        // through scope resolution.
+        if (!superAssign)
+            cs << BC::dup() << BC::stvar(target);
+
+        // And index
         compileExpr(ctx, *idx);
         if (is2d) {
             compileExpr(ctx, *idx2);
@@ -461,9 +482,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
 
         for (RListIter e = args.begin(); e != args.end(); ++e) {
-            compileExpr(ctx, *e);
-            if (e + 1 != args.end())
+            if (e + 1 != args.end()) {
+                compileExpr(ctx, *e, true);
                 cs << BC::pop();
+            } else {
+                compileExpr(ctx, *e);
+            }
         }
 
         return true;
@@ -484,12 +508,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << BC::push(R_NilValue)
                << BC::invisible();
         } else {
-            compileExpr(ctx, args[2]);
+            compileExpr(ctx, args[2], voidContext);
         }
         cs << BC::br(nextBranch);
 
         cs << trueBranch;
-        compileExpr(ctx, args[1]);
+        compileExpr(ctx, args[1], voidContext);
 
         cs << nextBranch;
         return true;
@@ -607,7 +631,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::asbool()
            << BC::brfalse(nextBranch);
 
-        compileExpr(ctx, body);
+        compileExpr(ctx, body, true);
         cs << BC::pop()
            << BC::br(loopBranch)
            << nextBranch;
@@ -643,7 +667,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::beginloop(nextBranch)
            << loopBranch;
 
-        compileExpr(ctx, body);
+        compileExpr(ctx, body, true);
         cs << BC::pop()
            << BC::br(loopBranch)
            << nextBranch;
@@ -703,7 +727,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         // Set the loop variable
         cs << BC::stvar(sym);
 
-        compileExpr(ctx, body);
+        compileExpr(ctx, body, true);
         cs << BC::pop()
            << BC::br(loopBranch);
 
@@ -820,7 +844,7 @@ SIMPLE_INSTRUCTIONS(V, _)
 }
 
 // function application
-void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args) {
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext) {
     CodeStream& cs = ctx.cs();
 
     // application has the form:
@@ -829,7 +853,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args) {
     // LHS can either be an identifier or an expression
     Match(fun) {
         Case(SYMSXP) {
-            if (compileSpecialCall(ctx, ast, fun, args))
+            if (compileSpecialCall(ctx, ast, fun, args, voidContext))
                 return;
 
             cs << BC::ldfun(fun);
@@ -900,11 +924,11 @@ void compileConst(CodeStream& cs, SEXP constant) {
     cs << BC::push(constant) << BC::visible();
 }
 
-void compileExpr(CompilerContext& ctx, SEXP exp) {
+void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
-        Case(LANGSXP, fun, args) { compileCall(ctx, exp, fun, args); }
+        Case(LANGSXP, fun, args) { compileCall(ctx, exp, fun, args, voidContext); }
         // Variable lookup
         Case(SYMSXP) { compileGetvar(ctx.cs(), exp); }
         Case(PROMSXP, value, expr) {
