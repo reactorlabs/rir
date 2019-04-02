@@ -14,8 +14,6 @@
 #include <deque>
 #include <set>
 
-#define DEBUG_DISPATCH 1
-
 #define NOT_IMPLEMENTED assert(false)
 
 #undef eval
