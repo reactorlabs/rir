@@ -14,6 +14,8 @@
 #include <deque>
 #include <set>
 
+#define DEBUG_DISPATCH 1
+
 #define NOT_IMPLEMENTED assert(false)
 
 #undef eval
@@ -1992,18 +1994,28 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
             bool dispatchFail = !matches(call, fun->signature());
-            if (fun->invocationCount() % PIR_WARMUP == 0)
-                if (addDynamicAssumptionsForOneTarget(call, fun->signature()) !=
-                    fun->signature().assumptions)
+            if (fun->invocationCount() % PIR_WARMUP == 0) {
+                Assumptions assumptions =
+                    addDynamicAssumptionsForOneTarget(call, fun->signature());
+                if (assumptions != fun->signature().assumptions) {
                     // We have more assumptions available, let's recompile
                     dispatchFail = true;
+
+#ifdef DEBUG_DISPATCH
+                    std::cout << "Optimizing static for new context:";
+                    std::cout << given << " vs " << fun->signature().assumptions
+                              << "\n";
+#endif
+                    SEXP name = CAR(call.ast);
+                    ctx->closureOptimizer(callee, assumptions, name);
+                }
+            }
 
             if (dispatchFail) {
                 auto dt = DispatchTable::unpack(BODY(callee));
                 fun = dispatch(call, dt);
                 // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
-                assert(fun != dt->baseline());
             }
             advanceImmediate();
 
