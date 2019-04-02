@@ -1569,6 +1569,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             bool hasMissing = false;
             for (long i = n - 1; i >= 0; --i) {
                 SEXP val = ostack_pop(ctx);
+                ENSURE_NAMED(val);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
@@ -1628,8 +1629,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto names = pc;
             advanceImmediateN(n);
             std::vector<SEXP>* args = new std::vector<SEXP>();
-            for (size_t i = 0; i < n; ++i)
-                args->push_back(ostack_pop(ctx));
+            for (size_t i = 0; i < n; ++i) {
+                SEXP val = ostack_pop(ctx);
+                ENSURE_NAMED(val);
+                args->push_back(val);
+            }
             auto envStub =
                 new LazyEnvironment(args, parent, names, ctx, localsBase);
             envStubs.push_back(envStub);
@@ -1686,6 +1690,49 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             default:
                 Rf_error("attempt to apply non-function");
             }
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_for_update_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            SEXP loc = cachedGetBindingCell(env, id, ctx, bindingCache);
+            bool isLocal = loc;
+
+            if (isLocal) {
+                res = CAR(loc);
+                if (res == R_UnboundValue)
+                    isLocal = false;
+            }
+
+            if (!isLocal) {
+                SEXP sym = cp_pool_at(ctx, id);
+                res = Rf_findVar(sym, env);
+            }
+
+            if (res == R_UnboundValue) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            }
+
+            // if promise, evaluate & return
+            if (TYPEOF(res) == PROMSXP)
+                res = promiseValue(res, ctx);
+
+            if (res != R_NilValue) {
+                if (isLocal) {
+                    ENSURE_NAMED(res);
+                } else {
+                    if (NAMED(res) < 2)
+                        SET_NAMED(res, 2);
+                }
+            }
+
             ostack_push(ctx, res);
             NEXT();
         }
@@ -3054,6 +3101,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             INTEGER(vec)[idx_] = *INTEGER(val);
                             break;
                         case VECSXP:
+                            // Avoid recursive vectors
+                            if (val == vec)
+                                val = Rf_shallow_duplicate(val);
                             SET_VECTOR_ELT(vec, idx_, val);
                             break;
                         }
@@ -3165,6 +3215,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             INTEGER(mtx)[idx_] = *INTEGER(val);
                             break;
                         case VECSXP:
+                            // Avoid recursive vectors
+                            if (val == mtx)
+                                val = Rf_shallow_duplicate(val);
                             SET_VECTOR_ELT(mtx, idx_, val);
                             break;
                         }
