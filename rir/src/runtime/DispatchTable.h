@@ -27,6 +27,7 @@ struct DispatchTable
     }
 
     Function* baseline() { return Function::unpack(getEntry(0)); }
+    Function* best() { return get(size() - 1); }
 
     void baseline(Function* f) {
         assert(f->signature().optimization ==

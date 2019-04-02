@@ -6,17 +6,21 @@
 
 #include "api.h"
 
-#include "compiler/pir_tests.h"
+#include "compiler/test/PirCheck.h"
+#include "compiler/test/PirTests.h"
 #include "compiler/translations/pir_2_rir/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
 #include "interpreter/interp_incl.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 
+#include <list>
 #include <memory>
 #include <string>
 
 using namespace rir;
+
+int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
@@ -186,7 +190,7 @@ static pir::DebugStyle getInitialDebugStyle() {
     return style;
 }
 
-static pir::DebugOptions PirDebug = {
+pir::DebugOptions PirDebug = {
     getInitialDebugFlags(), getInitialDebugPassFilter(),
     getInitialDebugFunctionFilter(), getInitialDebugStyle()};
 
@@ -284,6 +288,31 @@ REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags,
 REXPORT SEXP pir_tests() {
     PirTests::run();
     return R_NilValue;
+}
+
+REXPORT SEXP pir_check(SEXP f, SEXP checksSxp, SEXP env) {
+    if (TYPEOF(checksSxp) != LISTSXP)
+        Rf_error("pir_check: 2nd parameter must be a pairlist (of symbols)");
+    std::list<PirCheck::Type> checkTypes;
+    for (SEXP c = checksSxp; c != R_NilValue; c = CDR(c)) {
+        SEXP checkSxp = CAR(c);
+        if (TYPEOF(checkSxp) != SYMSXP)
+            Rf_error("pir_check: each item in 2nd parameter must be a symbol");
+        PirCheck::Type type = PirCheck::parseType(CHAR(PRINTNAME(checkSxp)));
+        if (type == PirCheck::Type::Invalid)
+            Rf_error("pir_check: invalid check type. List of check types:"
+#define V(Check) "\n    " #Check
+                     LIST_OF_PIR_CHECKS(V)
+#undef V
+            );
+        checkTypes.push_back(type);
+    }
+    // Automatically compile rir for convenience (necessary to get PIR)
+    if (!isValidClosureSEXP(f))
+        rir_compile(f, env);
+    PirCheck check(checkTypes);
+    bool res = check.run(f);
+    return res ? R_TrueValue : R_FalseValue;
 }
 
 SEXP rirOptDefaultOpts(SEXP closure, const Assumptions& assumptions,
