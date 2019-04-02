@@ -2938,6 +2938,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             INTEGER(vec)[idx_] = *INTEGER(val);
                             break;
                         case VECSXP:
+                            // Avoid recursive vectors
+                            if (val == vec)
+                                val = Rf_shallow_duplicate(val);
                             SET_VECTOR_ELT(vec, idx_, val);
                             break;
                         }
@@ -3049,6 +3052,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             INTEGER(mtx)[idx_] = *INTEGER(val);
                             break;
                         case VECSXP:
+                            // Avoid recursive vectors
+                            if (val == mtx)
+                                val = Rf_shallow_duplicate(val);
                             SET_VECTOR_ELT(mtx, idx_, val);
                             break;
                         }
