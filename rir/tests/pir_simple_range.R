@@ -31,3 +31,15 @@ stopifnot(f() == 1)
 pir.compile(f)
 print(f())
 stopifnot(f() == 1)
+
+f <- rir.compile(function(fc) {
+  nfc <- length(fc)
+  for(j in 2:nfc) {
+  }
+  nfc
+})
+
+f(c(1, 2))
+f(c(1, 2))
+f(c(1, 2))
+stopifnot(f(c(1, 2, 3, 4)) == 4)
