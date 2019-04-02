@@ -1238,11 +1238,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
-            if (instr->needsReferenceCount()) {
-                if (needsRefcount[instr] == AUses::Multiple)
-                    cb.add(BC::ensureNamed());
-                else if (needsRefcount[instr] == AUses::Destructive)
+            if (instr->minReferenceCount() < Value::MAX_REFCOUNT) {
+                if (needsRefcount[instr] == AUses::MultipleWithDestructive)
                     cb.add(BC::setShared());
+                else if (needsRefcount[instr] >= AUses::Multiple &&
+                         instr->minReferenceCount() == 0)
+                    cb.add(BC::ensureNamed());
             }
 
             // Store the result
