@@ -4,7 +4,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
-#include "compiler/analysis/refrence_count.h"
+#include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
@@ -706,12 +706,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             order.push_back(bb->id);
     });
 
-    std::unordered_map<Instruction*, bool> needsEnsureNamed;
+    std::unordered_map<Instruction*, AUses::Kind> needsRefcount;
     {
         StaticReferenceCount analysis(cls, log);
         for (auto& u : analysis.result().uses) {
-            if (u.second > 1)
-                needsEnsureNamed[u.first] = u.second;
+            if (u.second > AUses::Once)
+                needsRefcount[u.first] = u.second;
         }
     }
 
@@ -1025,7 +1025,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
-                SIMPLE(SetShared, setShared);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
@@ -1239,8 +1238,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
-            if (instr->needsReferenceCount() && needsEnsureNamed[instr])
-                cb.add(BC::ensureNamed());
+            if (instr->needsReferenceCount()) {
+                if (needsRefcount[instr] == AUses::Multiple)
+                    cb.add(BC::ensureNamed());
+                else if (needsRefcount[instr] == AUses::Destructive)
+                    cb.add(BC::setShared());
+            }
 
             // Store the result
             if (alloc.sa.dead(instr)) {

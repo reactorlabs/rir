@@ -242,7 +242,7 @@ DEF_INSTR(add_, 0, 2, 1, 0)
 DEF_INSTR(uplus_, 0, 1, 1, 0)
 
 /**
- * inc_ :: increment tos integer
+ * inc_ :: increment tos integer (destructive! ignores refcount)
  */
 DEF_INSTR(inc_, 0, 1, 1, 1)
 
@@ -355,11 +355,21 @@ DEF_INSTR(extract1_2_, 0, 3, 1, 1)
 
 /**
  * subassign1_1_ :: a[b] <- c
+ *
+ * this instruction creates the rhs part of a <- `[<-(a,b,c)` and still needs
+ * to be assigned.
+ *
+ * Warning: on named == 1 it updates the array in-place!
  */
 DEF_INSTR(subassign1_1_, 0, 3, 1, 1)
 
 /**
  * subassign1_2_ :: a[b,c] <- d
+ *
+ * this instruction creates the rhs part of a <- `[<-(a,b,c,d)` and still needs
+ * to be assigned.
+ *
+ * Warning: on named == 1 it updates the array in-place!
  */
 DEF_INSTR(subassign1_2_, 0, 4, 1, 1)
 
@@ -375,11 +385,21 @@ DEF_INSTR(extract2_2_, 0, 3, 1, 1)
 
 /**
  * subassign2_1 :: a[[b]] <- c
+ *
+ * this instruction creates the rhs part of a <- `[[<-(a,b,c)` and still needs
+ * to be assigned.
+ *
+ * Warning: on named == 1 it updates the array in-place!
  */
 DEF_INSTR(subassign2_1_, 0, 3, 1, 1)
 
 /**
  * subassign2_2_ :: a[[b,c]] <- d
+ *
+ * this instruction creates the rhs part of a <- `[[<-(a,b,c,c)` and still needs
+ * to be assigned.
+ *
+ * Warning: on named == 1 it updates the array in-place!
  */
 DEF_INSTR(subassign2_2_, 0, 4, 1, 1)
 

@@ -601,6 +601,7 @@ class FLI(LdConst, 0, Effects::None()) {
     SEXP c() const;
     LdConst(SEXP c, PirType t);
     explicit LdConst(SEXP c);
+    explicit LdConst(int i);
     void printArgs(std::ostream& out, bool tty) const override;
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), c());
@@ -660,8 +661,6 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
-
-    bool needsReferenceCount() const override { return false; }
 };
 
 class FLI(ForSeqSize, 1, Effect::Error) {
@@ -682,6 +681,7 @@ class FLI(LdArg, 0, Effects::None()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), id);
     }
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
@@ -749,8 +749,6 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
-
-    bool needsReferenceCount() const override { return false; }
 };
 
 class FLIE(StVar, 2, Effect::WritesEnv) {
@@ -903,6 +901,7 @@ class FLIE(Force, 2, Effects::Any()) {
             effects.reset();
         }
     }
+    bool needsReferenceCount() const override { return false; }
 };
 
 class FLI(CastType, 1, Effects::None()) {
@@ -1070,13 +1069,6 @@ class FLI(LdFunctionEnv, 0, Effects::None()) {
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
 };
 
-class FLI(SetShared, 1, Effects::None()) {
-  public:
-    explicit SetShared(Value* v)
-        : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
-    void updateType() override final { type = arg<0>().val()->type; }
-};
-
 class FLI(Visible, 0, Effect::Visibility) {
   public:
     explicit Visible() : FixedLenInstruction(PirType::voyd()) {}
@@ -1093,6 +1085,9 @@ class FLI(PirCopy, 1, Effects::None()) {
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void print(std::ostream& out, bool tty) const override;
     void updateType() override final { type = arg<0>().val()->type; }
+    bool needsReferenceCount() const override {
+        return arg<0>().val()->needsReferenceCount();
+    }
 };
 
 // Effects::Any() prevents this instruction from being optimized away
