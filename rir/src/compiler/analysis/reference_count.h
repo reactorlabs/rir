@@ -129,6 +129,23 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             }
         };
 
+        auto applyDestructive = [&](Instruction* i, size_t index,
+                                    bool constantUse) {
+            if (auto input = Instruction::Cast(i->arg(index).val())) {
+                if (input->minReferenceCount() < Value::MAX_REFCOUNT) {
+                    if (state.uses.count(input) &&
+                        state.uses.at(input) < AUses::Destructive) {
+                        state.uses[input] = AUses::Destructive;
+                        res.update();
+                    }
+                }
+            }
+            i->eachArg([&](Value* v) {
+                if (v != i->arg(index).val())
+                    apply(v, constantUse);
+            });
+        };
+
         switch (i->tag) {
         // (1) Instructions which never reuse SEXPS
         //
@@ -166,10 +183,14 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             }
             break;
 
-        // (3) Instructions which update in-place, even if named count is 1
+        // (3) Loop sequence needs to stay constant for the whole loop duration.
         //
-        // Loop sequence needs to stay constant for the whole loop duration.
         case Tag::ForSeqSize:
+            applyDestructive(i, 0, false);
+            break;
+
+        // (4) Instructions which update in-place, even if named count is 1
+        //
         // Those instructions -- at the rir level -- are allowed to override
         // inputs, even if the refcount is 1. Therefore if they are used
         // multiple times, we need to bump the refcount even further.
@@ -177,24 +198,10 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         case Tag::Subassign2_1D:
         case Tag::Subassign1_2D:
         case Tag::Subassign2_2D:
-            if (auto input = Instruction::Cast(i->arg(0).val())) {
-                if (input->minReferenceCount() < Value::MAX_REFCOUNT) {
-                    if (state.uses.count(input) &&
-                        state.uses.at(input) < AUses::Destructive) {
-                        state.uses[input] = AUses::Destructive;
-                        res.update();
-                    }
+            applyDestructive(i, 1, false);
+            break;
 
-                    i->eachArg([&](Value* v) {
-                        if (v != input)
-                            apply(v, false);
-                    });
-                    break;
-                }
-            }
-        // fall through
-
-        // (4) Default: instructions which might update in-place, if named
+        // (5) Default: instructions which might update in-place, if named
         // count is 0
         //
         default:
