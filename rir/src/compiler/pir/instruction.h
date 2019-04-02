@@ -606,7 +606,7 @@ class FLI(LdConst, 0, Effects::None()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), c());
     }
-    bool needsReferenceCount() const override { return false; }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLIE(LdFun, 2, Effects::Any()) {
@@ -641,7 +641,7 @@ class FLIE(LdFun, 2, Effects::Any()) {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
 
-    bool needsReferenceCount() const override { return false; }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
@@ -661,6 +661,8 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
+
+    int minReferenceCount() const override { return 1; }
 };
 
 class FLI(ForSeqSize, 1, Effect::Error) {
@@ -681,7 +683,7 @@ class FLI(LdArg, 0, Effects::None()) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), id);
     }
-    bool needsReferenceCount() const override { return false; }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
@@ -749,6 +751,8 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), varName);
     }
+
+    int minReferenceCount() const override { return 1; }
 };
 
 class FLIE(StVar, 2, Effect::WritesEnv) {
@@ -838,7 +842,7 @@ class FLIE(MkArg, 2, Effects::None()) {
         return hash_combine(InstructionImplementation::gvnBase(), prom_);
     }
 
-    bool needsReferenceCount() const override { return false; }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLI(Seq, 3, Effects::None()) {
@@ -864,7 +868,7 @@ class FLIE(MkCls, 4, Effects::None()) {
 
     Value* lexicalEnv() const { return env(); }
 
-    bool needsReferenceCount() const override { return false; }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 
   private:
     using FixedLenInstructionWithEnvSlot::env;
@@ -883,7 +887,7 @@ class FLIE(MkFunCls, 1, Effects::None()) {
         return hash_combine(InstructionImplementation::gvnBase(), cls);
     }
 
-    bool needsReferenceCount() const override { return false; }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLIE(Force, 2, Effects::Any()) {
@@ -901,7 +905,7 @@ class FLIE(Force, 2, Effects::Any()) {
             effects.reset();
         }
     }
-    bool needsReferenceCount() const override { return false; }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLI(CastType, 1, Effects::None()) {
@@ -1085,8 +1089,8 @@ class FLI(PirCopy, 1, Effects::None()) {
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void print(std::ostream& out, bool tty) const override;
     void updateType() override final { type = arg<0>().val()->type; }
-    bool needsReferenceCount() const override {
-        return arg<0>().val()->needsReferenceCount();
+    int minReferenceCount() const override {
+        return arg<0>().val()->minReferenceCount();
     }
 };
 
@@ -1522,7 +1526,7 @@ class VLIE(MkEnv, Effects::None()) {
 
     size_t gvnBase() const override { return (size_t)this; }
 
-    bool needsReferenceCount() const override { return false; }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLI(IsObject, 1, Effects::None()) {
