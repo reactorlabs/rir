@@ -9,7 +9,6 @@ namespace rir {
 namespace pir {
 
 LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
-
     // temp list of live out sets for every BB
     std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
@@ -69,8 +68,9 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
                     });
                 } else {
                     i->eachArg([&](Value* v) {
-                        if (markIfNotSeen(v))
+                        if (markIfNotSeen(v)) {
                             accumulated.insert(v);
+                        }
                     });
                 }
 
@@ -82,6 +82,7 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
                     liveRange.begin = pos;
                     accumulated.erase(accumulated.find(i));
                 }
+
             } while (ip != bb->begin());
         }
         assert(pos == 0);

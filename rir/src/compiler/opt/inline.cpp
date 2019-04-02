@@ -211,17 +211,26 @@ class TheInliner {
                         if (ld) {
                             Value* a = arguments[ld->id];
                             if (auto mk = MkArg::Cast(a)) {
-                                // We need to cast from a promise to a lazy
-                                // value
-                                auto cast = new CastType(
-                                    a, RType::prom,
-                                    mk->isEager() ? mk->eagerArg()
-                                                        ->type.forced()
-                                                        .promiseWrappedVal()
-                                                  : ld->type);
-                                ip = bb->insert(ip + 1, cast);
-                                ip--;
-                                a = cast;
+                                if (!ld->type.maybePromiseWrapped()) {
+                                    // This load already expects to load an
+                                    // eager value. We can just discard the
+                                    // promise altogether.
+                                    assert(mk->isEager());
+                                    a = mk->eagerArg();
+                                } else {
+                                    // We need to cast from a promise to a lazy
+                                    // value
+                                    auto type = mk->isEager()
+                                                    ? mk->eagerArg()
+                                                          ->type.forced()
+                                                          .orPromiseWrapped()
+                                                    : ld->type;
+                                    auto cast =
+                                        new CastType(a, RType::prom, type);
+                                    ip = bb->insert(ip + 1, cast);
+                                    ip--;
+                                    a = cast;
+                                }
                             }
                             ld->replaceUsesWith(a);
                             next = bb->remove(ip);

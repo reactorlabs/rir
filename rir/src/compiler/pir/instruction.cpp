@@ -182,7 +182,7 @@ static void checkReplace(Instruction* origin, Value* replace) {
         std::cerr << " with a ";
         replace->type.print(std::cerr);
         std::cerr << "\n";
-        printBacktrace();
+        origin->bb()->owner->printCode(std::cout, true, false);
         assert(false);
     }
 }
@@ -425,7 +425,7 @@ void PirCopy::print(std::ostream& out, bool tty) const {
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                                  unsigned srcIdx)
-    : VarLenInstruction(PirType::val(), srcIdx), blt(builtin),
+    : VarLenInstruction(PirType::val().notObject(), srcIdx), blt(builtin),
       builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());

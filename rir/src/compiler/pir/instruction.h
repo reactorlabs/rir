@@ -182,6 +182,8 @@ class Instruction : public Value {
                                                        Effect::Visibility) {
         bool maybeObj = false;
         eachArg([&](Value* v) {
+            if (mayHaveEnv() && env() == v)
+                return;
             if (v->type.maybeObj())
                 maybeObj = true;
         });
@@ -196,6 +198,8 @@ class Instruction : public Value {
             return;
         bool scalar = true;
         eachArg([&](Value* v) {
+            if (mayHaveEnv() && env() == v)
+                return;
             if (!v->type.isScalar())
                 scalar = false;
         });
@@ -683,7 +687,7 @@ class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
   public:
     SEXP varName;
     explicit Missing(SEXP varName, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::logical, env),
+        : FixedLenInstructionWithEnvSlot(PirType::simpleScalarLogical(), env),
           varName(varName) {}
     void printArgs(std::ostream& out, bool tty) const override;
 
@@ -840,10 +844,14 @@ class FLI(Seq, 3, Effects::None()) {
   public:
     Seq(Value* start, Value* end, Value* step)
         : FixedLenInstruction(
-              PirType::num(),
+              PirType::any(),
               // TODO: require scalars, but this needs some cast support
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{start, end, step}}) {}
+
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::num().notObject());
+    }
 };
 
 class FLIE(MkCls, 4, Effects::None()) {
@@ -904,8 +912,8 @@ class FLI(CastType, 1, Effects::None()) {
 class FLI(AsLogical, 1, Effect::Warn) {
   public:
     AsLogical(Value* in, unsigned srcIdx)
-        : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}},
-                              srcIdx) {}
+        : FixedLenInstruction(PirType::simpleScalarLogical(),
+                              {{PirType::val()}}, {{in}}, srcIdx) {}
 };
 
 class FLI(AsTest, 1, Effect::Error) {
@@ -940,7 +948,7 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::val());
+        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
 };
 
@@ -956,7 +964,7 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::val());
+        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
 };
 
@@ -974,7 +982,7 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::val());
+        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
 };
 
@@ -992,7 +1000,7 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::val());
+        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
 };
 
@@ -1003,7 +1011,10 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::val());
+        auto t = arg<0>().val()->type;
+        if (arg<1>().val()->type.isScalar())
+            t.setScalar();
+        maskEffectsAndTypeOnNonObjects(t);
     }
 };
 
@@ -1014,7 +1025,7 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::val().scalar());
+        maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
     }
 };
 
@@ -1027,7 +1038,10 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::val());
+        auto t = arg<0>().val()->type;
+        if (arg<1>().val()->type.isScalar())
+            t.setScalar();
+        maskEffectsAndTypeOnNonObjects(t);
     }
 };
 
@@ -1040,7 +1054,7 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::val().scalar());
+        maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
     }
 };
 
@@ -1063,7 +1077,7 @@ class FLI(Dec, 1, Effects::None()) {
 class FLI(Is, 1, Effects::None()) {
   public:
     Is(uint32_t sexpTag, Value* v)
-        : FixedLenInstruction(PirType(RType::logical).scalar(),
+        : FixedLenInstruction(PirType::simpleScalarLogical(),
                               {{PirType::val()}}, {{v}}),
           sexpTag(sexpTag) {}
     uint32_t sexpTag;
@@ -1138,21 +1152,23 @@ SIMPLE_INSTRUCTIONS(V, _)
             maskEffectsAndTypeOnNonObjects(Type);                              \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
+        Value* lhs() const { return arg<0>().val(); }                          \
+        Value* rhs() const { return arg<1>().val(); }                          \
     }
 
-BINOP(Mul, PirType::val());
-BINOP(Div, PirType::val());
-BINOP(IDiv, PirType::val());
-BINOP(Mod, PirType::val());
-BINOP(Add, PirType::val());
-BINOP(Pow, PirType::val());
-BINOP(Sub, PirType::val());
-BINOP(Gte, RType::logical);
-BINOP(Lte, RType::logical);
-BINOP(Gt, RType::logical);
-BINOP(Lt, RType::logical);
-BINOP(Neq, RType::logical);
-BINOP(Eq, RType::logical);
+BINOP(Mul, lhs()->type | rhs()->type);
+BINOP(Div, PirType::val().notObject());
+BINOP(IDiv, lhs()->type | rhs()->type);
+BINOP(Mod, lhs()->type | rhs()->type);
+BINOP(Add, lhs()->type | rhs()->type);
+BINOP(Pow, lhs()->type | rhs()->type);
+BINOP(Sub, lhs()->type | rhs()->type);
+BINOP(Gte, PirType(RType::logical).notObject());
+BINOP(Lte, PirType(RType::logical).notObject());
+BINOP(Gt, PirType(RType::logical).notObject());
+BINOP(Lt, PirType(RType::logical).notObject());
+BINOP(Neq, PirType(RType::logical).notObject());
+BINOP(Eq, PirType(RType::logical).notObject());
 
 #undef BINOP
 
@@ -1164,8 +1180,8 @@ BINOP(Eq, RType::logical);
                                   {{lhs, rhs}}) {}                             \
     }
 
-BINOP_NOENV(LAnd, RType::logical);
-BINOP_NOENV(LOr, RType::logical);
+BINOP_NOENV(LAnd, PirType::simpleScalarLogical());
+BINOP_NOENV(LOr, PirType::simpleScalarLogical());
 
 #undef BINOP_NOENV
 
@@ -1177,7 +1193,7 @@ BINOP_NOENV(LOr, RType::logical);
                                              {{PirType::val()}}, {{v}}, env,   \
                                              srcIdx) {}                        \
         void updateType() override final {                                     \
-            maskEffectsAndTypeOnNonObjects(PirType::val());                    \
+            maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
     }
@@ -1185,9 +1201,15 @@ BINOP_NOENV(LOr, RType::logical);
 UNOP(Not);
 UNOP(Plus);
 UNOP(Minus);
-UNOP(Length);
 
 #undef UNOP
+
+class FLI(Length, 1, Effects::None()) {
+  public:
+    explicit Length(Value* v)
+        : FixedLenInstruction(PirType::simpleScalarInt(), {{PirType::val()}},
+                              {{v}}) {}
+};
 
 struct RirStack {
   private:

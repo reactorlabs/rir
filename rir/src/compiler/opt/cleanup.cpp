@@ -76,7 +76,7 @@ class TheCleanup {
                     }
                 } else if (auto lgl = AsLogical::Cast(i)) {
                     auto arg = lgl->arg<0>().val();
-                    if (arg->type.isA(RType::logical)) {
+                    if (arg->type.isA(PirType::simpleScalarLogical())) {
                         lgl->replaceUsesWith(arg);
                         removed = true;
                         next = bb->remove(ip);

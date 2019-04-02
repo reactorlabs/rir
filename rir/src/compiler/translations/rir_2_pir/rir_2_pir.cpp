@@ -702,18 +702,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         UNOP(Plus, uplus_);
         UNOP(Minus, uminus_);
         UNOP(Not, not_);
-        UNOP(Length, length_);
 #undef UNOP
 
-    case Opcode::inc_: {
-        push(insert(new Inc(pop())));
-        break;
+#define UNOP_NOENV(Name, Op)                                                   \
+    case Opcode::Op: {                                                         \
+        push(insert(new Name(pop())));                                         \
+        break;                                                                 \
     }
-
-    case Opcode::dec_: {
-        push(insert(new Dec(pop())));
-        break;
-    }
+        UNOP_NOENV(Length, length_);
+        UNOP_NOENV(Inc, inc_);
+        UNOP_NOENV(Dec, dec_);
+#undef UNOP_NOENV
 
     case Opcode::missing_:
         push(insert(new Missing(Pool::get(bc.immediate.pool), env)));
