@@ -23,11 +23,6 @@ void ScopeAnalysis::lookup(const ScopeAnalysisState& state, Value* v,
     // value from the inter-procedural analysis.
     if (state.returnValues.count(instr)) {
         auto& res = state.returnValues.at(instr);
-        if (res.isSingleValue()) {
-            lookup(state, res.singleValue().val, action,
-                   [&]() { action(AbstractLoad(res)); });
-            return;
-        }
         action(AbstractLoad(res));
         return;
     }
