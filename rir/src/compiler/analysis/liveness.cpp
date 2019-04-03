@@ -10,10 +10,12 @@ namespace pir {
 
 LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
     // temp list of live out sets for every BB
+    // ordered set so we can use std::includes
     std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
-    std::set<BB*> todo;
-    for (auto e : cfg.exits())
+    // this is a backwards analysis, starting from CFG exits
+    std::unordered_set<BB*> todo;
+    for (const auto& e : cfg.exits())
         todo.insert(e);
 
     while (!todo.empty()) {
@@ -21,11 +23,12 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
         todo.erase(todo.begin());
 
         // keep track of currently live variables
+        // ordered sets so we can use std::includes
         std::set<Value*> accumulated;
-        std::map<BB*, std::set<Value*>> accumulatedPhiInput;
+        std::unordered_map<BB*, std::set<Value*>> accumulatedPhiInput;
 
         // Mark all (backwards) incoming live variables
-        for (auto v : liveAtEnd[bb]) {
+        for (const auto& v : liveAtEnd[bb]) {
             assert(count(v));
             auto& liveRange = at(v)[bb->id];
             if (!liveRange.live || liveRange.end < bb->size()) {
@@ -94,11 +97,10 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
             assert(liveRange.live);
             liveRange.begin = 0;
         };
-
-        for (auto v : accumulated)
+        for (const auto& v : accumulated)
             markLiveEntry(v);
-        for (auto pi : accumulatedPhiInput)
-            for (auto v : pi.second)
+        for (const auto& pi : accumulatedPhiInput)
+            for (const auto& v : pi.second)
                 markLiveEntry(v);
 
         // Merge everything that is live at the beginning of the BB into the
@@ -115,17 +117,16 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
             }
         };
         auto mergePhiInp = [&](BB* bb) {
-            for (auto in : accumulatedPhiInput) {
-                auto inBB = in.first;
-                auto inLive = in.second;
+            for (const auto& in : accumulatedPhiInput) {
+                auto& inBB = in.first;
+                auto& inLive = in.second;
                 if (bb == inBB || cfg.isPredecessor(inBB, bb)) {
                     merge(bb, inLive);
                 }
             }
         };
-        for (auto pre : cfg.immediatePredecessors(bb)) {
-            bool firstTime = !liveAtEnd.count(pre);
-            if (firstTime) {
+        for (const auto& pre : cfg.immediatePredecessors(bb)) {
+            if (!liveAtEnd.count(pre)) {
                 liveAtEnd[pre] = accumulated;
                 mergePhiInp(pre);
                 todo.insert(pre);
@@ -140,7 +141,7 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
 bool LivenessIntervals::live(Instruction* where, Value* what) const {
     if (!what->isInstruction() || count(what) == 0)
         return false;
-    auto bbLiveness = at(what)[where->bb()->id];
+    const auto& bbLiveness = at(what)[where->bb()->id];
     if (!bbLiveness.live)
         return false;
     unsigned idx = where->bb()->indexOf(where);
