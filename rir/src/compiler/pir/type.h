@@ -188,9 +188,22 @@ struct PirType {
     static constexpr PirType vecs() { return num() | RType::str | RType::vec; }
     static constexpr PirType closure() { return RType::closure; }
 
+    static constexpr PirType simpleScalarInt() {
+        return PirType(RType::integer).notObject().scalar();
+    }
+
+    static constexpr PirType simpleScalarReal() {
+        return PirType(RType::real).notObject().scalar();
+    }
+
+    static constexpr PirType simpleScalarLogical() {
+        return PirType(RType::logical).notObject().scalar();
+    }
+
     static constexpr PirType promiseWrappedVal() {
         return val().orPromiseWrapped();
     }
+
     static constexpr PirType valOrLazy() { return val().orLazy(); }
     static constexpr PirType list() {
         return PirType(RType::cons) | RType::nil;
@@ -262,25 +275,19 @@ struct PirType {
         return isRType() && t_.r.intersects(refcount);
     }
 
-    PirType notObject() const {
+    PirType constexpr notObject() const {
         assert(isRType());
-        PirType t = *this;
-        t.flags_.reset(TypeFlags::maybeObject);
-        return t;
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeObject));
     }
 
-    PirType notMissing() const {
+    PirType constexpr notMissing() const {
         assert(isRType());
-        PirType t = *this;
-        t.t_.r.reset(RType::missing);
-        return t;
+        return PirType(t_.r & ~RTypeSet(RType::missing), flags_);
     }
 
-    RIR_INLINE PirType scalar() const {
+    RIR_INLINE constexpr PirType scalar() const {
         assert(isRType());
-        PirType t = *this;
-        t.flags_.reset(TypeFlags::maybeNotScalar);
-        return t;
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNotScalar));
     }
 
     RIR_INLINE constexpr PirType orPromiseWrapped() const {
@@ -321,7 +328,7 @@ struct PirType {
     }
 
     static const PirType voyd() { return PirType(NativeTypeSet()); }
-    static const PirType bottom() { return PirType(RTypeSet()); }
+    static const PirType bottom() { return optimistic(); }
 
     RIR_INLINE bool operator==(const RType& o) const {
         return isRType() && t_.r == o;

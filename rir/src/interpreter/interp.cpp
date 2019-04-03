@@ -1270,30 +1270,6 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx,
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
-RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION) {
-            if (pos == 0)
-                return cptr;
-            pos--;
-        }
-        cptr = cptr->nextcontext;
-    }
-    assert(false);
-    return nullptr;
-}
-
-RCNTXT* findFunctionContextFor(SEXP e) {
-    auto cptr = R_GlobalContext;
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION && cptr->cloenv == e) {
-            return cptr;
-        }
-        cptr = cptr->nextcontext;
-    }
-    return nullptr;
-}
-
 /*
  * This function takes some deopt metadata and stack frame contents on the
  * interpreter stack. It first recursively reconstructs a context for each
@@ -2201,15 +2177,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(inc_) {
             SEXP val = ostack_top(ctx);
-            assert(TYPEOF(val) == INTSXP);
-            int i = INTEGER(val)[0];
-            if (NO_REFERENCES(val)) {
-                INTEGER(val)[0]++;
-            } else {
+            SLOWASSERT(TYPEOF(val) == INTSXP);
+            if (MAYBE_REFERENCED(val)) {
+                int i = INTEGER(val)[0];
                 ostack_pop(ctx);
                 SEXP n = Rf_allocVector(INTSXP, 1);
                 INTEGER(n)[0] = i + 1;
                 ostack_push(ctx, n);
+            } else {
+                INTEGER(val)[0]++;
             }
             NEXT();
         }
@@ -2847,6 +2823,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP vec = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
@@ -2885,6 +2864,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP mtx = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 3);
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
@@ -2976,6 +2958,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
@@ -3084,6 +3069,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
