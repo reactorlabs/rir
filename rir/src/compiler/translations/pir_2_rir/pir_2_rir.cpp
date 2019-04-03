@@ -102,8 +102,7 @@ class SSAAllocator {
         std::unordered_map<SlotNumber, std::unordered_set<Value*>> reverseAlloc;
         auto slotIsAvailable = [&](SlotNumber slot, Value* i) {
             for (auto other : reverseAlloc[slot])
-                if (livenessIntervals.at(other).interfere(
-                        livenessIntervals.at(i)))
+                if (livenessIntervals.interfere(other, i))
                     return false;
             return true;
         };

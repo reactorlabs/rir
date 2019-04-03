@@ -148,5 +148,20 @@ bool LivenessIntervals::live(Instruction* where, Value* what) const {
     return bbLiveness.begin <= idx && idx < bbLiveness.end;
 }
 
+bool LivenessIntervals::interfere(Value* v1, Value* v2) const {
+    const auto& l1 = at(v1);
+    const auto& l2 = at(v2);
+    assert(l1.size() == l2.size());
+
+    for (size_t i = 0; i < l1.size(); ++i) {
+        const auto& int1 = l1[i];
+        const auto& int2 = l2[i];
+        if (int1.live && int2.live) {
+            return int1.begin <= int2.end && int2.begin <= int1.end;
+        }
+    }
+    return false;
+}
+
 } // namespace pir
 } // namespace rir
