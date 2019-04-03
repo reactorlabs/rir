@@ -122,7 +122,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
 
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = *call.stackArg(i);
-        if (stackObjSexpType(&arg) == PROMSXP)
+        if (stackObjTypeof(&arg) == PROMSXP)
             arg.u.sxpval = PRVALUE(arg.u.sxpval);
         if (arg.tag == STACK_OBJ_SEXP &&
             (arg.u.sxpval == R_UnboundValue || arg.u.sxpval == R_MissingArg ||
@@ -136,12 +136,12 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs == 0)
             return R_NilValue;
 
-        auto type = stackObjSexpType(&args[0]);
+        auto type = stackObjTypeof(&args[0]);
         if (type != REALSXP && type != LGLSXP && type != INTSXP)
             return nullptr;
         long total = stackObjLength(&args[0]);
         for (size_t i = 1; i < nargs; ++i) {
-            auto thistype = stackObjSexpType(&args[i]);
+            auto thistype = stackObjTypeof(&args[i]);
             if (thistype != REALSXP && thistype != LGLSXP && thistype != INTSXP)
                 return nullptr;
 
@@ -167,7 +167,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
                 // because they are essentially the same type.
                 SLOWASSERT(NA_INTEGER == NA_LOGICAL);
                 if (type == REALSXP) {
-                    if (stackObjSexpType(&args[i]) == REALSXP) {
+                    if (stackObjTypeof(&args[i]) == REALSXP) {
                         REAL(res)
                         [pos++] = args[i].tag == STACK_OBJ_REAL
                                       ? args[i].u.dval
@@ -198,7 +198,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     case 109: { // "vector"
         if (nargs != 2)
             return nullptr;
-        if (stackObjSexpType(&args[0]) != STRSXP)
+        if (stackObjTypeof(&args[0]) != STRSXP)
             return nullptr;
         if (stackObjLength(&args[0]) != 1)
             return nullptr;
@@ -263,7 +263,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         auto arg = &args[0];
         if (stackObjLength(arg) != 1)
             return nullptr;
-        return stackObjSexpType(arg) == VECSXP ? R_TrueValue : R_FalseValue;
+        return stackObjTypeof(arg) == VECSXP ? R_TrueValue : R_FalseValue;
     }
 
     case 395: { // "is.na"
@@ -274,13 +274,13 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (stackObjLength(arg) != 1)
             return nullptr;
 
-        switch (stackObjSexpType(arg)) {
+        switch (stackObjTypeof(arg)) {
         case INTSXP:
             return stackObjAsInteger(arg) == NA_INTEGER ? R_TrueValue
                                                         : R_FalseValue;
         case LGLSXP:
-            return stackAsLogical(arg) == NA_LOGICAL ? R_TrueValue
-                                                     : R_FalseValue;
+            return stackObjAsLogical(arg) == NA_LOGICAL ? R_TrueValue
+                                                        : R_FalseValue;
         case REALSXP:
             return ISNAN(stackObjAsReal(arg)) ? R_TrueValue : R_FalseValue;
         default:
@@ -324,7 +324,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 1)
             return nullptr;
 
-        switch (stackObjSexpType(&args[0])) {
+        switch (stackObjTypeof(&args[0])) {
         case INTSXP:
         case REALSXP:
         case LGLSXP:
@@ -372,7 +372,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     case 389: { // "is.atomic"
         if (nargs != 1)
             return nullptr;
-        switch (stackObjSexpType(&args[0])) {
+        switch (stackObjTypeof(&args[0])) {
         case NILSXP:
         /* NULL is atomic (S compatibly), but not in isVectorAtomic(.) */
         case CHARSXP:
@@ -401,7 +401,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 1)
             return nullptr;
         auto arg = &args[0];
-        if (stackObjSexpType(arg) != LGLSXP)
+        if (stackObjTypeof(arg) != LGLSXP)
             return nullptr;
         std::vector<size_t> which;
         switch (arg->tag) {
@@ -439,14 +439,14 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
 
         auto x = &args[0];
-        if (stackObjSexpType(x) != INTSXP && stackObjSexpType(x) != REALSXP)
+        if (stackObjTypeof(x) != INTSXP && stackObjTypeof(x) != REALSXP)
             return nullptr;
 
         auto len = stackObjLength(x);
 
-        auto res = Rf_allocVector(stackObjSexpType(x), len * times);
+        auto res = Rf_allocVector(stackObjTypeof(x), len * times);
 
-        switch (stackObjSexpType(x)) {
+        switch (stackObjTypeof(x)) {
 
         case INTSXP:
             for (long i = 0; i < times; ++i) {
@@ -492,7 +492,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
 
         auto combination =
-            (stackObjSexpType(&args[0]) << 8) + stackObjSexpType(&args[1]);
+            (stackObjTypeof(&args[0]) << 8) + stackObjTypeof(&args[1]);
 
         switch (combination) {
         case (INTSXP << 8) + INTSXP:
