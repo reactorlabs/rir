@@ -30,7 +30,7 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
         // Mark all (backwards) incoming live variables
         for (const auto& v : liveAtEnd[bb]) {
             assert(count(v));
-            auto& liveRange = at(v)[bb->id];
+            auto& liveRange = intervals[v][bb->id];
             if (!liveRange.live || liveRange.end < bb->size()) {
                 liveRange.live = true;
                 liveRange.end = bb->size();
@@ -51,10 +51,10 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
                     if (!count(v)) {
                         // First time we see this variable, need to allocate
                         // vector of all liveranges
-                        operator[](v).resize(bbsSize);
-                        assert(!operator[](v)[bb->id].live);
+                        intervals[v].resize(bbsSize);
+                        assert(!intervals[v][bb->id].live);
                     }
-                    auto& liveRange = operator[](v)[bb->id];
+                    auto& liveRange = intervals[v][bb->id];
                     if (!liveRange.live) {
                         liveRange.live = true;
                         liveRange.end = pos;
@@ -80,7 +80,7 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
                 // Mark the end of the current instructions liveness
                 if (accumulated.count(i)) {
                     assert(count(i));
-                    auto& liveRange = operator[](i)[bb->id];
+                    auto& liveRange = intervals[i][bb->id];
                     assert(liveRange.live);
                     liveRange.begin = pos;
                     accumulated.erase(accumulated.find(i));
@@ -93,7 +93,7 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
         // Mark everything that is live at the beginning of the BB.
         auto markLiveEntry = [&](Value* v) {
             assert(count(v));
-            auto& liveRange = operator[](v)[bb->id];
+            auto& liveRange = intervals[v][bb->id];
             assert(liveRange.live);
             liveRange.begin = 0;
         };
@@ -141,7 +141,7 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
 bool LivenessIntervals::live(Instruction* where, Value* what) const {
     if (!what->isInstruction() || count(what) == 0)
         return false;
-    const auto& bbLiveness = at(what)[where->bb()->id];
+    const auto& bbLiveness = intervals.at(what)[where->bb()->id];
     if (!bbLiveness.live)
         return false;
     unsigned idx = where->bb()->indexOf(where);
@@ -149,8 +149,8 @@ bool LivenessIntervals::live(Instruction* where, Value* what) const {
 }
 
 bool LivenessIntervals::interfere(Value* v1, Value* v2) const {
-    const auto& l1 = at(v1);
-    const auto& l2 = at(v2);
+    const auto& l1 = intervals.at(v1);
+    const auto& l2 = intervals.at(v2);
     assert(l1.size() == l2.size());
 
     for (size_t i = 0; i < l1.size(); ++i) {

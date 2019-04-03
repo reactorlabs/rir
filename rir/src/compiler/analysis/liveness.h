@@ -50,12 +50,14 @@ struct BBLiveness {
     unsigned end = -1;
 };
 
-typedef std::vector<BBLiveness> Liveness;
+class LivenessIntervals {
+    std::unordered_map<Value*, std::vector<BBLiveness>> intervals;
 
-struct LivenessIntervals : public std::unordered_map<Value*, Liveness> {
+  public:
     LivenessIntervals(unsigned bbsSize, CFG const& cfg);
     bool live(Instruction* where, Value* what) const;
     bool interfere(Value* v1, Value* v2) const;
+    size_t count(Value* v) const { return intervals.count(v); }
 };
 
 } // namespace pir
