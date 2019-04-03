@@ -1,6 +1,7 @@
 #include "instruction.h"
 #include "pir_impl.h"
 
+#include "../util/ConvertAssumptions.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
@@ -662,15 +663,7 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {
-        auto mk = MkArg::Cast(arg);
-        Value* value = arg->followCastsAndForce();
-        if (mk && mk->isEager()) {
-            given.setEager(i);
-            if (mk->eagerArg() == MissingArg::instance())
-                given.remove(Assumption::NoExplicitlyMissingArgs);
-        }
-        if (!MkArg::Cast(value))
-            value->type.addAssumptions(given, i);
+        writeArgTypeToAssumptions(given, arg, i);
         ++i;
     });
     return given;
