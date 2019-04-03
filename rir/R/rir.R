@@ -61,6 +61,22 @@ pir.tests <- function() {
     invisible(.Call("pir_tests"))
 }
 
+# returns TRUE f, when PIR compiled, satisfies the the given checks (e.g.
+# environment was elided). Max assumptions compiled (+ minimal) are used, if
+# warmup=list(...) will call the function with ... to get better assumptions.
+pir.check <- function(f, ..., warmup=NULL) {
+    checks <- 
+        as.pairlist(lapply(lapply(as.list(substitute(...())), as.character), as.name))
+    if (length(checks) == 0)
+        stop("pir.check: needs at least 1 check")
+    rir.compile(f)
+    if (is.list(warmup)) {
+        for (i in 1:as.numeric(Sys.getenv("PIR_WARMUP", unset="3")))
+            do.call(f, warmup)
+    }
+    .Call("pir_check", f, checks)
+}
+
 # creates a bitset with pir debug options
 pir.debugFlags <- function(ShowWarnings = FALSE,
                            DryRun = FALSE,

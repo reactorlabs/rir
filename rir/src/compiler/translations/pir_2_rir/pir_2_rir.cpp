@@ -4,7 +4,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
-#include "compiler/analysis/refrence_count.h"
+#include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
@@ -489,7 +489,7 @@ class Pir2Rir {
     Pir2Rir(Pir2RirCompiler& cmp, ClosureVersion* cls, bool dryRun,
             LogStream& log)
         : compiler(cmp), cls(cls), dryRun(dryRun), log(log) {}
-    size_t compileCode(Context& ctx, Code* code);
+    rir::Code* compileCode(Context& ctx, Code* code);
     rir::Code* getPromise(Context& ctx, Promise* code);
 
     void lower(Code* code);
@@ -624,6 +624,7 @@ class Pir2Rir {
             } while (changed && steam-- > 0);
         }
 
+      public:
         void flush() {
             peephole();
             for (auto const& instr : code) {
@@ -642,9 +643,8 @@ class Pir2Rir {
             code.clear();
         }
 
-      public:
         explicit CodeBuffer(CodeStream& cs) : cs(cs) {}
-        ~CodeBuffer() { flush(); }
+        ~CodeBuffer() { assert(code.empty()); }
 
         void add(BC&& bc) {
             Src s;
@@ -673,7 +673,7 @@ class Pir2Rir {
     };
 };
 
-size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
+rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     lower(code);
     toCSSA(code);
 #ifdef ENABLE_SLOWASSERT
@@ -706,12 +706,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             order.push_back(bb->id);
     });
 
-    std::unordered_map<Instruction*, bool> needsEnsureNamed;
+    std::unordered_map<Instruction*, AUses::Kind> needsRefcount;
     {
         StaticReferenceCount analysis(cls, log);
         for (auto& u : analysis.result().uses) {
-            if (u.second > 1)
-                needsEnsureNamed[u.first] = u.second;
+            if (u.second > AUses::Once)
+                needsRefcount[u.first] = u.second;
         }
     }
 
@@ -964,8 +964,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             case Tag::MkArg: {
-                cb.add(BC::promise(ctx.cs().addPromise(
-                    getPromise(ctx, MkArg::Cast(instr)->prom()))));
+                auto p = MkArg::Cast(instr)->prom();
+                unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
+                cb.add(BC::promise(id));
                 break;
             }
 
@@ -1024,7 +1025,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
-                SIMPLE(SetShared, setShared);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
@@ -1238,8 +1238,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
-            if (instr->needsReferenceCount() && needsEnsureNamed[instr])
-                cb.add(BC::ensureNamed());
+            if (instr->needsReferenceCount()) {
+                if (needsRefcount[instr] == AUses::Multiple)
+                    cb.add(BC::ensureNamed());
+                else if (needsRefcount[instr] == AUses::Destructive)
+                    cb.add(BC::setShared());
+            }
 
             // Store the result
             if (alloc.sa.dead(instr)) {
@@ -1258,8 +1262,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         auto next = jumpThroughEmpty(bb->trueBranch());
         cb.add(BC::br(bbLabels[next]));
     });
+    cb.flush();
 
-    return alloc.slots();
+    auto localsCnt = alloc.slots();
+    auto res = ctx.finalizeCode(localsCnt);
+    return res;
 }
 
 static bool DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
@@ -1394,8 +1401,7 @@ void Pir2Rir::toCSSA(Code* code) {
 rir::Code* Pir2Rir::getPromise(Context& ctx, Promise* p) {
     if (!promises.count(p)) {
         ctx.push(src_pool_at(globalContext(), p->srcPoolIdx()));
-        size_t localsCnt = compileCode(ctx, p);
-        promises[p] = ctx.finalizeCode(localsCnt);
+        promises[p] = compileCode(ctx, p);
     }
     return promises.at(p);
 }
@@ -1420,9 +1426,8 @@ rir::Function* Pir2Rir::finalize() {
 
     assert(signature.formalNargs() == cls->nargs());
     ctx.push(R_NilValue);
-    size_t localsCnt = compileCode(ctx, cls);
+    auto body = compileCode(ctx, cls);
     log.finalPIR(cls);
-    auto body = ctx.finalizeCode(localsCnt);
     function.finalize(body, signature);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),

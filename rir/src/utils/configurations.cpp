@@ -60,6 +60,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::GVN());
         optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::Cleanup());
+        optimizations.push_back(new pir::TypeInference());
     };
 
     phasemarker("Initial");
