@@ -2164,14 +2164,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 ostackPushInt(ctx, i);
                 break;
             case STACK_OBJ_SEXP:
-                if (NOT_SHARED(val.u.sxpval)) {
-                    // Inc_ destructively modifies TOS, even if the refcount is
-                    // 1. This can be used to perform `++i` on a value on the
-                    // stack. The old i value will be overwritten (generally
-                    // only do this if you are sure that this is the last copy
-                    // on the stack).
-                    // TODO: This probably isn't even necessary because of
-                    // simple scalars
+                if (NO_REFERENCES(val.u.sxpval)) {
                     (*INTEGER(val.u.sxpval))++;
                 } else {
                     ostackPop(ctx);

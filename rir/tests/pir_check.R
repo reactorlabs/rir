@@ -1,5 +1,8 @@
-jitOn <- as.numeric(Sys.getenv("R_ENABLE_JIT")) != 0
-fullOptim <- jitOn && Sys.getenv("PIR_ENABLE", unset="on") == "on"
+jitOn <- as.numeric(Sys.getenv("R_ENABLE_JIT", unset=2)) != 0
+jitOn <- jitOn && (Sys.getenv("PIR_ENABLE", unset="on") == "on")
+
+if (!jitOn)
+  quit()
 
 # Copied / cross-validated from pir_tests
 
@@ -196,24 +199,25 @@ mandelbrot <- function() {
     return (sum)
 }
 # This can't be run if PIR_MAX_INPUT_SIZE is too low
-stopifnot(tryCatch({
-  !jitOn || pir.check(mandelbrot, NoExternalCalls, warmup=list())
-}, warning = function(w) {
-  cat("Couldn't run:", conditionMessage(w), "\n")
-  conditionMessage(w) == "pir check failed: couldn't compile"
-}))
+stopifnot(
+  pir.check(mandelbrot, NoExternalCalls, NoPromise, NoStore, warmup=list())
+)
 
 # New tests
 
-stopifnot(!fullOptim || pir.check(function() {
+stopifnot(pir.check(function() {
   x <- 1
   while (x < 10)
     x <- x + 1
   x
 }, NoLoad, NoStore))
-stopifnot(!fullOptim || pir.check(function(n) {
+stopifnot(pir.check(function(n) {
   x <- 1
   while (x < n)
     x <- x + 1
   x
 }, NoLoad, NoStore, warmup=list(10)))
+
+# Negative Test
+
+stopifnot(!pir.check(function() x(), NoExternalCalls))
