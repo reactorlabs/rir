@@ -3,6 +3,7 @@
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
 #include "../../transform/insert_cast.h"
+#include "../../util/ConvertAssumptions.h"
 #include "../../util/arg_match.h"
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
@@ -385,16 +386,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto arg = tryCreateArg(promiseCode, insert, eager);
                     if (!arg)
                         return false;
-
-                    auto mk = MkArg::Cast(arg);
-                    if (mk && mk->isEager()) {
-                        given.setEager(i);
-                        if (mk->eagerArg() == MissingArg::instance())
-                            given.remove(Assumption::NoExplicitlyMissingArgs);
-                    }
-                    Value* value = arg->followCastsAndForce();
-                    if (!MkArg::Cast(value) && !value->type.maybeObj())
-                        value->type.addAssumptions(given, i);
+                    writeArgTypeToAssumptions(given, arg, i);
 
                     args.push_back(arg);
                 }

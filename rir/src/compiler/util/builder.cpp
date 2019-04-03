@@ -1,5 +1,6 @@
 #include "builder.h"
 #include "../pir/pir_impl.h"
+#include "ConvertAssumptions.h"
 
 namespace rir {
 namespace pir {
@@ -92,7 +93,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     size_t nargs = closure->nargs() - assumptions.numMissing();
     for (long i = nargs - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
-        args[i]->type.loadAssumptions(assumptions, i);
+        readArgTypeFromAssumptions(assumptions, args[i]->type, i);
     }
     for (size_t i = nargs; i < closure->nargs(); ++i)
         args[i] = MissingArg::instance();
