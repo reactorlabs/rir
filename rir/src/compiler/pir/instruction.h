@@ -356,9 +356,8 @@ class InstructionImplementation : public Instruction {
     }
 
     size_t gvnBase() const override {
-        auto maskedEffects = effects &
-                             ~(Effects(Effect::Error) | Effect::Warn |
-                               Effect::Visibility | Effect::Force);
+        auto maskedEffects = effects & ~(Effects(Effect::Error) | Effect::Warn |
+                                         Effect::Visibility | Effect::Force);
         return hash_combine((size_t)ITAG, maskedEffects.to_i());
     };
 
@@ -923,6 +922,20 @@ class FLI(AsTest, 1, Effect::Error) {
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}) {}
 };
 
+class FLI(AsInt, 1, Effect::Error) {
+  public:
+    bool ceil;
+
+    explicit AsInt(Value* in, bool ceil_)
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType::any()}}, {{in}}),
+          ceil(ceil_) {}
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), ceil);
+    }
+};
+
 class FLIE(Subassign1_1D, 4, Effects::Any()) {
   public:
     Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
@@ -1048,6 +1061,14 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
 class FLI(Inc, 1, Effects::None()) {
   public:
     explicit Inc(Value* v)
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType(RType::integer).scalar().notObject()}},
+                              {{v}}) {}
+};
+
+class FLI(Dec, 1, Effects::None()) {
+  public:
+    explicit Dec(Value* v)
         : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
                               {{PirType(RType::integer).scalar().notObject()}},
                               {{v}}) {}

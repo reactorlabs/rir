@@ -246,6 +246,11 @@ DEF_INSTR(uplus_, 0, 1, 1, 0)
  */
 DEF_INSTR(inc_, 0, 1, 1, 1)
 
+/**
+ * dec_ :: decrement tos integer
+ */
+DEF_INSTR(dec_, 0, 1, 1, 1)
+
 DEF_INSTR(sub_, 0, 2, 1, 0)
 DEF_INSTR(uminus_, 0, 1, 1, 0)
 DEF_INSTR(mul_, 0, 2, 1, 0)
@@ -290,6 +295,14 @@ DEF_INSTR(aslogical_, 0, 1, 1, 0)
  * asbool_:: pop object stack, convert to Logical vector of size 1 and push on object stack. Throws an error if the result would be NA.
  */
 DEF_INSTR(asbool_, 0, 1, 1, 0)
+
+/**
+ * ceil_ / floor_ :: pop object stack, convert to integer scalar and push. Ceils
+ *                   or floors if real, 0 or 1 if logical, throws an NA error if
+ *                   another type. For simple ranges.
+ */
+DEF_INSTR(ceil_, 0, 1, 1, 1)
+DEF_INSTR(floor_, 0, 1, 1, 1)
 
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack
@@ -454,7 +467,7 @@ DEF_INSTR(visible_, 0, 0, 0, 1)
 DEF_INSTR(invisible_, 0, 0, 0, 1)
 
 /**
- * set_shared_:: marks tos to be shared (ie. named = 2)
+ * set_shared:: ensures tos has named >= 2
  */
 DEF_INSTR(set_shared_, 0, 1, 1, 1)
 
