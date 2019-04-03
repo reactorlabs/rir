@@ -143,6 +143,7 @@ class CompilerContext {
 
 Code* compilePromise(CompilerContext& ctx, SEXP exp);
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
+<<<<<<< HEAD
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext);
 
