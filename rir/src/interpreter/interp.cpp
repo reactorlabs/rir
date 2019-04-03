@@ -1029,30 +1029,6 @@ static void cachedSetVar(R_bcstack_t* val, SEXP env, Immediate idx,
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
-RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION) {
-            if (pos == 0)
-                return cptr;
-            pos--;
-        }
-        cptr = cptr->nextcontext;
-    }
-    assert(false);
-    return nullptr;
-}
-
-RCNTXT* findFunctionContextFor(SEXP e) {
-    auto cptr = R_GlobalContext;
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION && cptr->cloenv == e) {
-            return cptr;
-        }
-        cptr = cptr->nextcontext;
-    }
-    return nullptr;
-}
-
 /*
  * This function takes some deopt metadata and stack frame contents on the
  * interpreter stack. It first recursively reconstructs a context for each
@@ -1940,15 +1916,17 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(inc_) {
             R_bcstack_t* val = ostackCellAt(ctx, 0);
             SLOWASSERT(stackObjIsSimpleScalar(val, INTSXP));
-            int i;
             switch (val->tag) {
             case STACK_OBJ_INT:
                 val->u.ival = val->u.ival + 1;
                 break;
             case STACK_OBJ_SEXP:
-                if (MAYBE_SHARED(val->u.sxpval)) {
-                    i = *INTEGER(val->u.sxpval) + 1;
-                    ostackSetInt(ctx, 0, i);
+                if (MAYBE_REFERENCED(val->u.sxpval)) {
+                    int i = INTEGER(val->u.sxpval)[0];
+                    ostackPop(ctx);
+                    SEXP n = Rf_allocVector(INTSXP, 1);
+                    INTEGER(n)[0] = i + 1;
+                    ostackPushSexp(ctx, n);
                 } else {
                     INTEGER(val->u.sxpval)[0]++;
                 }
