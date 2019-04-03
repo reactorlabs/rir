@@ -729,7 +729,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
                          compileExpr(ctx, cond);
                          cs << BC::asbool();
                      },
-                     [&ctx, &body]() { compileExpr(ctx, body, true); });
+                     [&ctx, &body]() { compileExpr(ctx, body); });
 
         return true;
     }
