@@ -235,6 +235,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
 
+    case Opcode::ceil_: {
+        push(insert(new AsInt(pop(), true)));
+        break;
+    }
+
+    case Opcode::floor_: {
+        push(insert(new AsInt(pop(), false)));
+        break;
+    }
+
     case Opcode::ldfun_:
         push(insert(new LdFun(bc.immediateConst(), env)));
         break;
@@ -696,12 +706,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
 #define UNOP_NOENV(Name, Op)                                                   \
     case Opcode::Op: {                                                         \
-        v = pop();                                                             \
-        push(insert(new Name(v)));                                             \
+        push(insert(new Name(pop())));                                         \
         break;                                                                 \
     }
         UNOP_NOENV(Length, length_);
         UNOP_NOENV(Inc, inc_);
+        UNOP_NOENV(Dec, dec_);
 #undef UNOP_NOENV
 
     case Opcode::missing_:

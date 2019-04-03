@@ -104,6 +104,7 @@ static Sources hasSources(Opcode bc) {
         return Sources::Required;
 
     case Opcode::inc_:
+    case Opcode::dec_:
     case Opcode::identical_noforce_:
     case Opcode::push_:
     case Opcode::ldfun_:
@@ -173,6 +174,8 @@ static Sources hasSources(Opcode bc) {
     case Opcode::deopt_:
     case Opcode::pop_context_:
     case Opcode::push_context_:
+    case Opcode::ceil_:
+    case Opcode::floor_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

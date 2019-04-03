@@ -78,7 +78,7 @@ bool DominanceGraph::DomTree::merge(const DomTree& other) {
         }
     }
     return changed;
-        }
+}
 
 DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
     // Static Analysis computes the set of all dominating bb's, for every bb

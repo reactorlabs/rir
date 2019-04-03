@@ -145,6 +145,138 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp);
 void compileExpr(CompilerContext& ctx, SEXP exp);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args);
 
+void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
+                  std::function<void()> compileBody) {
+    CodeStream& cs = ctx.cs();
+
+    BC::Label loopBranch = cs.mkLabel();
+    BC::Label nextBranch = cs.mkLabel();
+
+    ctx.pushLoop(loopBranch, nextBranch);
+
+    unsigned beginLoopPos = cs.currentPos();
+
+    cs << BC::beginloop(nextBranch) << loopBranch;
+
+    compileCond();
+    cs << BC::brfalse(nextBranch);
+
+    compileBody();
+    cs << BC::pop() << BC::br(loopBranch) << nextBranch;
+
+    if (ctx.loopNeedsContext()) {
+        cs << BC::endloop();
+    } else {
+        cs.remove(beginLoopPos);
+    }
+
+    cs << BC::push(R_NilValue) << BC::invisible();
+
+    ctx.popLoop();
+}
+
+bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
+    Match(seq){Case(LANGSXP, fun, argsSexp){RList args(argsSexp);
+    if (fun != symbol::Colon || args.length() != 2) {
+        return false;
+    }
+
+    SEXP start = args[0];
+    SEXP end = args[1];
+    if (TYPEOF(start) != INTSXP && TYPEOF(start) != LGLSXP &&
+        (TYPEOF(start) != REALSXP || XLENGTH(start) == 0 ||
+         *REAL(start) != (int)*REAL(start))) {
+        return false;
+    }
+
+    // for(i in m:n) {
+    //   ...
+    // }
+    // =>
+    // i' <- m
+    // n' <- n
+    // if (i' > n') {
+    //   n' <- ceil(n') - 1
+    //   while (i' > n') {
+    //     i <- i'
+    //     i' <- i' - 1
+    //     ...
+    //   }
+    // } else {
+    //   n' <- floor(n') + 1
+    //   while (i' < n') {
+    //     i <- i'
+    //     i' <- i' + 1
+    //     ...
+    //   }
+    // }
+
+    CodeStream& cs = ctx.cs();
+    BC::Label fwdBranch = cs.mkLabel();
+    BC::Label endBranch = cs.mkLabel();
+
+    // i' <- m
+    compileExpr(ctx, start);
+    cs << BC::floor() << BC::ensureNamed();
+    // n' <- n
+    compileExpr(ctx, end);
+    cs << BC::ensureNamed();
+    // if (i' > n')
+    cs << BC::dup2() << BC::gt();
+    cs.addSrc(R_NilValue);
+    cs << BC::brfalse(fwdBranch);
+    // {
+    // n' <- ceil(n') - 1
+    cs << BC::ceil() << BC::dec() << BC::ensureNamed() << BC::swap();
+    // while
+    compileWhile(ctx,
+                 [&cs]() {
+                     // (i' > n')
+                     cs << BC::dup2() << BC::lt();
+                     cs.addSrc(R_NilValue);
+                 },
+                 [&ctx, &cs, &sym, &body]() {
+                     // {
+                     // i <- i'
+                     cs << BC::dup() << BC::stvar(sym);
+                     // i' <- i' - 1
+                     cs << BC::dec();
+                     // ...
+                     compileExpr(ctx, body);
+                     // }
+                 });
+    // } else {
+    cs << BC::br(endBranch) << fwdBranch;
+    // n' <- floor(n') + 1
+    cs << BC::floor() << BC::inc() << BC::swap();
+    // while
+    compileWhile(ctx,
+                 [&cs]() {
+                     // (i' < n')
+                     cs << BC::dup2() << BC::gt();
+                     cs.addSrc(R_NilValue);
+                 },
+                 [&ctx, &cs, &sym, &body]() {
+                     // {
+                     // i <- i'
+                     cs << BC::dup() << BC::stvar(sym);
+                     // i' <- i' + 1
+                     cs << BC::inc();
+                     // ...
+                     compileExpr(ctx, body);
+                     // }
+                 });
+
+    cs << endBranch << BC::popn(3) << BC::push(R_NilValue) << BC::invisible();
+
+    return true;
+}
+Else({ return false; })
+} // namespace
+
+assert(false);
+} // namespace rir
+
 // Inline some specials
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
@@ -413,8 +545,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         // First rhs (assign is right-associative)
         compileExpr(ctx, rhs);
-        // Keep a copy of rhs since it's the result of this
-        // expression
+        // Keep a copy of rhs since it's the result of this expression
         cs << BC::dup();
         if (!isConstant(rhs))
             cs << BC::ensureNamed();
@@ -593,35 +724,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        BC::Label loopBranch = cs.mkLabel();
-        BC::Label nextBranch = cs.mkLabel();
-
-        ctx.pushLoop(loopBranch, nextBranch);
-
-        unsigned beginLoopPos = cs.currentPos();
-
-        cs << BC::beginloop(nextBranch)
-           << loopBranch;
-
-        compileExpr(ctx, cond);
-        cs << BC::asbool()
-           << BC::brfalse(nextBranch);
-
-        compileExpr(ctx, body);
-        cs << BC::pop()
-           << BC::br(loopBranch)
-           << nextBranch;
-
-        if (ctx.loopNeedsContext()) {
-            cs << BC::endloop();
-        } else {
-            cs.remove(beginLoopPos);
-        }
-
-        cs << BC::push(R_NilValue)
-           << BC::invisible();
-
-        ctx.popLoop();
+        compileWhile(ctx,
+                     [&ctx, &cs, &cond]() {
+                         compileExpr(ctx, cond);
+                         cs << BC::asbool();
+                     },
+                     [&ctx, &body]() { compileExpr(ctx, body); });
 
         return true;
     }
@@ -673,6 +781,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         assert(TYPEOF(sym) == SYMSXP);
 
         cs << BC::guardNamePrimitive(fun);
+
+        if (compileSimpleFor(ctx, sym, seq, body))
+            return true;
 
         BC::Label loopBranch = cs.mkLabel();
         BC::Label breakBranch = cs.mkLabel();
@@ -983,4 +1094,4 @@ bool Compiler::profile =
     !(getenv("RIR_PROFILING") &&
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
-}  // namespace rir
+} // namespace rir
