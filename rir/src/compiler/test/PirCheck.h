@@ -14,6 +14,7 @@ namespace rir {
     V(NoEnvForAdd)                                                             \
     V(NoEnvSpec)                                                               \
     V(NoEnv)                                                                   \
+    V(NoPromise)                                                               \
     V(NoExternalCalls)                                                         \
     V(Returns42L)
 

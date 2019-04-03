@@ -10,6 +10,7 @@
 #include "compiler/test/PirTests.h"
 #include "compiler/translations/pir_2_rir/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "interpreter/interp_incl.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"

@@ -83,6 +83,11 @@ static bool testNoEnvSpec(ClosureVersion* f) { return Query::noEnvSpec(f); }
 
 static bool testNoEnv(ClosureVersion* f) { return Query::noEnv(f); }
 
+static bool testNoPromise(ClosureVersion* f) {
+    return Visitor::check(f->entry,
+                          [&](Instruction* i) { return !MkArg::Cast(i); });
+}
+
 static bool testNoExternalCalls(ClosureVersion* f) {
     return Visitor::check(f->entry, [&](Instruction* i) {
         return !CallInstruction::CastCall(i) || CallSafeBuiltin::Cast(i);
@@ -112,24 +117,30 @@ PirCheck::Type PirCheck::parseType(const char* str) {
 }
 
 bool PirCheck::run(SEXP f) {
+    size_t oldconfig = Rir2PirCompiler::MAX_INPUT_SIZE;
+    Rir2PirCompiler::MAX_INPUT_SIZE = 3000;
     Module m;
     ClosureVersion* pir = compilePir(f, &m);
-    if (pir == nullptr)
-        return false;
-    for (PirCheck::Type type : types) {
-        switch (type) {
+    bool success = pir;
+    if (success) {
+        for (PirCheck::Type type : types) {
+            switch (type) {
 #define V(Check)                                                               \
     case PirCheck::Type::Check:                                                \
         if (!test##Check(pir))                                                 \
-            return false;                                                      \
+            success = false;                                                   \
         break;
-            LIST_OF_PIR_CHECKS(V)
+                LIST_OF_PIR_CHECKS(V)
 #undef V
         default:
             assert(false);
         }
     }
-    return true;
+    }
+    Rir2PirCompiler::MAX_INPUT_SIZE = oldconfig;
+    if (!success)
+        m.print(std::cout, false);
+    return success;
 }
 
 } // namespace rir
