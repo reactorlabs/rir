@@ -8,6 +8,7 @@
 
 #include "R/r_incl.h"
 #include "ir/RuntimeFeedback.h"
+#include "runtime/Assumptions.h"
 #include "utils/EnumSet.h"
 
 namespace rir {
@@ -321,8 +322,17 @@ struct PirType {
     RIR_INLINE void setNotObject() { *this = notObject(); }
     RIR_INLINE void setScalar() { *this = scalar(); }
 
+    RIR_INLINE void setScalar(RType rtype) {
+        setScalar();
+        t_.r = RTypeSet(rtype);
+    }
+
     static const PirType voyd() { return PirType(NativeTypeSet()); }
     static const PirType bottom() { return optimistic(); }
+
+    RIR_INLINE bool operator==(const RType& o) const {
+        return isRType() && t_.r == o;
+    }
 
     RIR_INLINE bool operator==(const NativeType& o) const {
         return !isRType() && t_.n == o;

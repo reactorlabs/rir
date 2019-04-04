@@ -565,14 +565,13 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             bool notObj = true;
             bool isEager = true;
             if (TYPEOF(arg) == PROMSXP) {
-                SEXP val = PRVALUE(arg);
-                if (val == R_UnboundValue) {
+                arg = PRVALUE(arg);
+                if (arg == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
-                } else if (isObject(val)) {
-                    notObj = false;
                 }
-            } else if (isObject(arg)) {
+            }
+            if (isObject(arg)) {
                 notObj = false;
             } else if (arg == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
@@ -581,6 +580,10 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                 given.setEager(i);
             if (notObj)
                 given.setNotObj(i);
+            if (isEager && notObj && IS_SIMPLE_SCALAR(arg, REALSXP))
+                given.setSimpleReal(i);
+            if (isEager && notObj && IS_SIMPLE_SCALAR(arg, INTSXP))
+                given.setSimpleInt(i);
         };
 
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
@@ -2047,18 +2050,28 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
             bool dispatchFail = !matches(call, fun->signature());
-            if (fun->invocationCount() % PIR_WARMUP == 0)
-                if (addDynamicAssumptionsForOneTarget(call, fun->signature()) !=
-                    fun->signature().assumptions)
+            if (fun->invocationCount() % PIR_WARMUP == 0) {
+                Assumptions assumptions =
+                    addDynamicAssumptionsForOneTarget(call, fun->signature());
+                if (assumptions != fun->signature().assumptions) {
                     // We have more assumptions available, let's recompile
                     dispatchFail = true;
+
+#ifdef DEBUG_DISPATCH
+                    std::cout << "Optimizing static for new context:";
+                    std::cout << given << " vs " << fun->signature().assumptions
+                              << "\n";
+#endif
+                    SEXP name = CAR(call.ast);
+                    ctx->closureOptimizer(callee, assumptions, name);
+                }
+            }
 
             if (dispatchFail) {
                 auto dt = DispatchTable::unpack(BODY(callee));
                 fun = dispatch(call, dt);
                 // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
-                assert(fun != dt->baseline());
             }
             advanceImmediate();
 
