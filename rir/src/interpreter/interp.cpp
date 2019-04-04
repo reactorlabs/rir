@@ -1998,7 +1998,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(add_) {
             R_bcstack_t* lhs = ostackCellAt(ctx, 1);
             R_bcstack_t* rhs = ostackCellAt(ctx, 0);
-            DO_BINOP(+);
+            DO_BINOP(+, false);
             NEXT();
         }
 
@@ -2059,7 +2059,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(sub_) {
             R_bcstack_t* lhs = ostackCellAt(ctx, 1);
             R_bcstack_t* rhs = ostackCellAt(ctx, 0);
-            DO_BINOP(-);
+            DO_BINOP(-, false);
             NEXT();
         }
 
@@ -2072,14 +2072,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(mul_) {
             R_bcstack_t* lhs = ostackCellAt(ctx, 1);
             R_bcstack_t* rhs = ostackCellAt(ctx, 0);
-            DO_BINOP(*);
+            DO_BINOP(*, true);
             NEXT();
         }
 
         INSTRUCTION(div_) {
             R_bcstack_t* lhs = ostackCellAt(ctx, 1);
             R_bcstack_t* rhs = ostackCellAt(ctx, 0);
-            DO_BINOP(/);
+            DO_BINOP(/, true);
             NEXT();
         }
 
@@ -2296,7 +2296,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(aslogical_) {
             R_bcstack_t* val = ostackCellPop(ctx);
-            ostackPushLogical(ctx, stackObjAsLogicalAsLglScalar(val));
+            ostackPushLogical(ctx, stackObjAsLglScalar(val));
             NEXT();
         }
 
@@ -2314,7 +2314,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                                  "missing value where "
                                  "TRUE/FALSE needed");
             }
-            ostackPushLogical(ctx, stackObjAsLogicalAsLglScalar(val));
+            ostackPushLogical(ctx, stackObjAsLglScalar(val));
             NEXT();
         }
 

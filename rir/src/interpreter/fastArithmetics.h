@@ -18,7 +18,7 @@
         }                                                                      \
     } while (false)
 
-#define DO_BINOP(op)                                                           \
+#define DO_BINOP(op, realRes)                                                  \
     do {                                                                       \
         scalar_value_t lhsScalar;                                              \
         scalar_value_t rhsScalar;                                              \
@@ -48,7 +48,7 @@
                                       : lhsScalar.ival op rhsScalar.dval;      \
                 STORE_BINOP_FAST(real_res, reusableSexpRhs, Real, REAL);       \
             } else if (typeRhs == INTSXP && rhsScalar.ival != NA_INTEGER) {    \
-                if (#op == "*" || #op == "/") {                                \
+                if (realRes) {                                                 \
                     double real_res =                                          \
                         (lhsScalar.ival == NA_INTEGER ||                       \
                          rhsScalar.dval == NA_REAL)                            \

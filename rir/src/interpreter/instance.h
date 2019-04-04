@@ -128,7 +128,6 @@ TSProfile TSPROFILE;
 #endif
 
 #define INTEGER_TO_REAL(x) ((x) == NA_INTEGER ? NA_REAL : (x))
-
 #define INTEGER_TO_LOGICAL(x)                                                  \
     ((x) == NA_INTEGER ? NA_LOGICAL : (x) ? TRUE : FALSE)
 #define LOGICAL_TO_REAL(x) ((x) == NA_LOGICAL ? NA_REAL : (x))
@@ -384,7 +383,7 @@ RIR_INLINE int stackObjAsLogical(R_bcstack_t* stackCell) {
     }
 }
 
-RIR_INLINE int stackObjAsLogicalAsLglScalar(R_bcstack_t* stackCell) {
+RIR_INLINE int stackObjAsLglScalar(R_bcstack_t* stackCell) {
     switch (stackCell->tag) {
     case STACK_OBJ_LOGICAL:
         return stackCell->u.ival;
@@ -392,7 +391,6 @@ RIR_INLINE int stackObjAsLogicalAsLglScalar(R_bcstack_t* stackCell) {
         return stackCell->u.ival != 0;
     case STACK_OBJ_REAL:
         return stackCell->u.dval != 0.0;
-        return NA_LOGICAL;
     case STACK_OBJ_SEXP:
         return Rf_asLogical(stackCell->u.sxpval);
     default:
