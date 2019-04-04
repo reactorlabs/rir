@@ -52,6 +52,19 @@ struct DispatchTable
                FunctionSignature::OptimizationLevel::Baseline);
         auto assumptions = fun->signature().assumptions;
         assert(size() < capacity());
+        if (size() == capacity() - 1) {
+            // Remove a random overload, worse case we'll need to recompile.
+            // Since it's random, shouldn't remove a common overload
+            // consistently
+            // Never want to remove baseline
+            size_t del = (rand() % (capacity() - 1)) + 1;
+#ifdef DEBUG_DISPATCH
+            std::cout << "Removed " << del << " from DT to free space\n";
+#endif
+            for (size_t j = del + 1; j < size(); ++j)
+                setEntry(j - 1, getEntry(j));
+            size_--;
+        }
         size_t i = 1;
         for (; i < size(); ++i) {
             if (get(i)->signature().assumptions == assumptions) {
@@ -81,7 +94,7 @@ struct DispatchTable
         SLOWASSERT(contains(fun->signature().assumptions));
     }
 
-    static DispatchTable* create(size_t capacity = 15) {
+    static DispatchTable* create(size_t capacity = 5) {
         size_t size =
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
         SEXP s = Rf_allocVector(EXTERNALSXP, size);
