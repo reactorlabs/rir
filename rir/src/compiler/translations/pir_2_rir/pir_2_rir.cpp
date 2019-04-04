@@ -32,11 +32,7 @@ namespace {
  * stack. It uses the following algorithm:
  *
  * 1. Split phis with moves. This translates the IR to CSSA (see toCSSA).
- * 2. Compute liveness (see computeLiveness):
- *    Liveness intervals are stored as:
- *        Instruction* -> BB id -> { start : pos, end : pos, live : bool}
- *    Two Instructions interfere iff there is a BB where they are both live
- *    and the start-end overlap.
+ * 2. Compute liveness (see liveness.h):
  * 3. For now, just put everything on stack. (step 4 is thus skipped...)
  * 4. Assign the remaining Instructions to local RIR variable numbers
  *    (see computeAllocation):
@@ -106,8 +102,7 @@ class SSAAllocator {
         std::unordered_map<SlotNumber, std::unordered_set<Value*>> reverseAlloc;
         auto slotIsAvailable = [&](SlotNumber slot, Value* i) {
             for (auto other : reverseAlloc[slot])
-                if (livenessIntervals.at(other).interfere(
-                        livenessIntervals.at(i)))
+                if (livenessIntervals.interfere(other, i))
                     return false;
             return true;
         };
@@ -995,6 +990,15 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::AsInt: {
+                auto asInt = AsInt::Cast(instr);
+                if (asInt->ceil)
+                    cb.add(BC::ceil());
+                else
+                    cb.add(BC::floor());
+                break;
+            }
+
 #define EMPTY(Name)                                                            \
     case Tag::Name: {                                                          \
         break;                                                                 \
@@ -1018,6 +1022,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
+                SIMPLE(Dec, dec);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
                 SIMPLE(Length, length);

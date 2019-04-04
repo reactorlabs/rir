@@ -226,7 +226,6 @@ void Instruction::replaceUsesWithLimits(Value* replace, BB* start,
         apply(start);
     }
 
-
     if (start->next0)
         apply(start->next0);
     if (start->next1)

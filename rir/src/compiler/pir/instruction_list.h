@@ -49,6 +49,7 @@
     V(Phi)                                                                     \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
+    V(AsInt)                                                                   \
     V(IsObject)                                                                \
     V(IsEnvStub)                                                               \
     V(Return)                                                                  \
@@ -70,6 +71,7 @@
     V(LOr)                                                                     \
     V(Not)                                                                     \
     V(Inc)                                                                     \
+    V(Dec)                                                                     \
     V(Is)                                                                      \
     V(Plus)                                                                    \
     V(Minus)                                                                   \

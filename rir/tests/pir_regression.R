@@ -107,3 +107,9 @@ if (Sys.getenv("PIR_ENABLE") == "") {
   stopifnot(length(.Call("rir_invocation_count", p)) > 3)
   compiler::enableJIT(old)
 }
+
+# scope analysis bug
+f <- function() {a <- r(); b <- a; a[[1]] <- 2; a+b}
+r <- function() 22
+for (i in 1:5)
+  stopifnot(f() == 24)

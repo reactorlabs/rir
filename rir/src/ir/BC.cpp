@@ -270,7 +270,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::alloc_:
         out << type2char(immediate.i);
         break;
-
     case Opcode::record_call_: {
         ObservedCallees prof = immediate.callFeedback;
         out << "[ ";

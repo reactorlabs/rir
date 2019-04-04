@@ -1,7 +1,7 @@
 #include "scope.h"
 #include "../pir/pir_impl.h"
-#include "query.h"
 #include "../util/safe_builtins_list.h"
+#include "query.h"
 
 namespace rir {
 namespace pir {
@@ -23,11 +23,6 @@ void ScopeAnalysis::lookup(const ScopeAnalysisState& state, Value* v,
     // value from the inter-procedural analysis.
     if (state.returnValues.count(instr)) {
         auto& res = state.returnValues.at(instr);
-        if (res.isSingleValue()) {
-            lookup(state, res.singleValue().val, action,
-                   [&]() { action(AbstractLoad(res)); });
-            return;
-        }
         action(AbstractLoad(res));
         return;
     }
@@ -145,7 +140,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         }
 
         if (!handled) {
-            lookup(state, arg->followCastsAndForce(),
+            lookup(state, arg->followCasts(),
                    [&](const AbstractPirValue& analysisRes) {
                        if (!analysisRes.type.maybeLazy()) {
                            if (!analysisRes.type.maybePromiseWrapped())
@@ -167,7 +162,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             // We are certain that we do force something here. Let's peek
             // through the argument and see if we find a promise. If so, we
             // will analyze it.
-            if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
+            if (auto mkarg = MkArg::Cast(arg->followCasts())) {
                 ScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(), state,
                                    depth + 1, log);
                 prom();
@@ -242,7 +237,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 if (SafeBuiltinsList::nonObject(builtin->blt)) {
                     safe = true;
                     builtin->eachCallArg([&](Value* arg) {
-                        lookup(state, arg->followCastsAndForce(),
+                        lookup(state, arg->followCasts(),
                                [&](const AbstractPirValue& analysisRes) {
                                    if (analysisRes.type.maybeObj())
                                        safe = false;

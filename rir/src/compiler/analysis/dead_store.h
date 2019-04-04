@@ -213,7 +213,7 @@ class DeadStoreAnalysis {
         return !observed.isObserved(st);
     };
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif
