@@ -46,7 +46,6 @@ struct DispatchTable
 
     // insert function ordered by increasing number of assumptions
     void insert(Function* fun) {
-        // TODO: we might need to grow the DT here!
         assert(size() > 0);
         assert(fun->signature().optimization !=
                FunctionSignature::OptimizationLevel::Baseline);
