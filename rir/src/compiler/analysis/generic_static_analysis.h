@@ -297,8 +297,10 @@ class StaticAnalysis {
                             extra.emplace(i, state);
                         }
                         recursiveTodo.push_back(Position(bb, i));
-                    } else if (res.keepSnapshot) {
-                        snapshots[bb->id].extra.emplace(i, state);
+                    }
+
+                    if (res.keepSnapshot || snapshots[bb->id].extra.count(i)) {
+                        snapshots[bb->id].extra[i] = state;
                     }
                 }
 
@@ -653,8 +655,11 @@ class BackwardStaticAnalysis {
                                 extra.emplace(i, state);
                             }
                             recursiveTodo.push_back(Position(bb, i));
-                        } else if (res.keepSnapshot) {
-                            snapshots[bb->id].extra.emplace(i, state);
+                        }
+
+                        if (res.keepSnapshot ||
+                            snapshots[bb->id].extra.count(i)) {
+                            snapshots[bb->id].extra[i] = state;
                         }
                     }
 

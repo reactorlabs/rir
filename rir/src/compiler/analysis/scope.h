@@ -141,30 +141,15 @@ class ScopeAnalysis : public StaticAnalysis<
 
     AbstractLoad loadFun(const ScopeAnalysisState& state, SEXP name,
                          Value* env) const {
-        auto aLoad = state.envs.getFun(env, name);
-        // recurse into the result
-        if (aLoad.result.isSingleValue())
-            lookup(state, aLoad.result.singleValue().val,
-                   [&](const AbstractLoad& ld) { aLoad = ld; });
-        return aLoad;
+        return state.envs.getFun(env, name);
     }
     AbstractLoad load(const ScopeAnalysisState& state, SEXP name,
                       Value* env) const {
-        auto aLoad = state.envs.get(env, name);
-        // recurse into the result
-        if (aLoad.result.isSingleValue())
-            lookup(state, aLoad.result.singleValue().val,
-                   [&](const AbstractLoad& ld) { aLoad = ld; });
-        return aLoad;
+        return state.envs.get(env, name);
     }
     AbstractLoad superLoad(const ScopeAnalysisState& state, SEXP name,
                            Value* env) const {
-        auto aLoad = state.envs.get(env, name);
-        // recurse into the result
-        if (aLoad.result.isSingleValue())
-            lookup(state, aLoad.result.singleValue().val,
-                   [&](const AbstractLoad& ld) { aLoad = ld; });
-        return aLoad;
+        return state.envs.get(env, name);
     }
 
     typedef std::function<void(
