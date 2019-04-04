@@ -81,6 +81,14 @@ class TheCleanup {
                         removed = true;
                         next = bb->remove(ip);
                     }
+                } else if (auto asInt = AsInt::Cast(i)) {
+                    auto arg = asInt->arg<0>().val();
+                    if (arg->type.isA(
+                            PirType(RType::integer).scalar().notObject())) {
+                        asInt->replaceUsesWith(arg);
+                        removed = true;
+                        next = bb->remove(ip);
+                    }
                 } else if (auto env = MkEnv::Cast(i)) {
                     static std::unordered_set<Tag> tags{Tag::IsEnvStub};
                     if (env->stub && env->usesAreOnly(function->entry, tags)) {

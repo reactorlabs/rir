@@ -208,7 +208,8 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 // objects... We should have some profiling. It's still sound, since
                 // static_call_ will check the assumptions
                 for (size_t i = 0; i < call->nCallArgs(); ++i)
-                    if (!newAssumptions.notObj(i) && newAssumptions.isEager(i))
+                    if (!newAssumptions.isNotObj(i) &&
+                        newAssumptions.isEager(i))
                         newAssumptions.setNotObj(i);
 
                 auto newVersion = cls->cloneWithAssumptions(

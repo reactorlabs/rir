@@ -3,6 +3,7 @@
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
 #include "../../transform/insert_cast.h"
+#include "../../util/ConvertAssumptions.h"
 #include "../../util/arg_match.h"
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
@@ -235,6 +236,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
 
+    case Opcode::ceil_: {
+        push(insert(new AsInt(pop(), true)));
+        break;
+    }
+
+    case Opcode::floor_: {
+        push(insert(new AsInt(pop(), false)));
+        break;
+    }
+
     case Opcode::ldfun_:
         push(insert(new LdFun(bc.immediateConst(), env)));
         break;
@@ -385,16 +396,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto arg = tryCreateArg(promiseCode, insert, eager);
                     if (!arg)
                         return false;
-
-                    auto mk = MkArg::Cast(arg);
-                    if (mk && mk->isEager()) {
-                        given.setEager(i);
-                        if (mk->eagerArg() == MissingArg::instance())
-                            given.remove(Assumption::NoExplicitlyMissingArgs);
-                    }
-                    Value* value = arg->followCastsAndForce();
-                    if (!MkArg::Cast(value) && !value->type.maybeObj())
-                        given.setNotObj(i);
+                    writeArgTypeToAssumptions(given, arg, i);
 
                     args.push_back(arg);
                 }
@@ -696,12 +698,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
 #define UNOP_NOENV(Name, Op)                                                   \
     case Opcode::Op: {                                                         \
-        v = pop();                                                             \
-        push(insert(new Name(v)));                                             \
+        push(insert(new Name(pop())));                                         \
         break;                                                                 \
     }
         UNOP_NOENV(Length, length_);
         UNOP_NOENV(Inc, inc_);
+        UNOP_NOENV(Dec, dec_);
 #undef UNOP_NOENV
 
     case Opcode::missing_:

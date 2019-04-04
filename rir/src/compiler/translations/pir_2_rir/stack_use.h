@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../../analysis/generic_static_analysis.h"
+#include "../../analysis/liveness.h"
 #include "../../pir/pir.h"
-#include "liveness.h"
 
 #include <unordered_map>
 #include <vector>
