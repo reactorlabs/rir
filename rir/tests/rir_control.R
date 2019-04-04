@@ -70,10 +70,6 @@ f <- rir.compile(function() {
 })
 f()
 
-j <- 1
-f <- rir.compile(function() { j; for (i in 1:10) a <- i + 1 })
-pir.compile(f)()
-
 f <- rir.compile(function() {
     i <- 1
     for (i in 1:123)
@@ -146,3 +142,55 @@ f <- rir.compile(function() {
     s
 })
 stopifnot(f() == 21)
+
+f <- rir.compile(function(x) {
+    s <- 0
+    for (i in 1:x)
+        s <- s + i
+    s
+})
+stopifnot(f(4.7) == 10)
+stopifnot(f(-1.7) == 0)
+
+f <- rir.compile(function(x) {
+    s <- 0
+    for (i in -1:x)
+        s <- s + i
+    s
+})
+stopifnot(f(c(-2.1, 49)) == -3)
+stopifnot(f(TRUE) == 0)
+
+f <- rir.compile(function(x) {
+    s <- 0
+    for (i in 2:x)
+        s <- s + i
+    s
+})
+stopifnot(f(1.1) == 2)
+stopifnot(f(1.0) == 3)
+pir.compile(f)
+stopifnot(f(1.0) == 3)
+
+f <- rir.compile(function(x) {
+    s <- 0
+    for (i in -3:x)
+        s <- s + i
+    s
+})
+stopifnot(f(-1.1) == -5)
+stopifnot(f(-1.0) == -6)
+
+count <- 0
+n <- 3
+f <- rir.compile(function() {
+  for (i in 1:n) {
+    count <<- count + 1
+    i[[1]] <- 10L
+  }
+})
+f()
+f()
+f()
+f()
+stopifnot(count == 12)

@@ -1,9 +1,13 @@
-stopifnot <- function(x) x
+a <<- 3
+b <<- 10
+g <<- function(a, b) a + b
+f <<- function(x)  g(10, 78)
+fc <<- rir.compile(f)
+stopifnot(fc(1) == 88)
 
-f2 <- rir.compile(function(n) n)
-f <- rir.compile(function(n) if (n) 1 else f2(FALSE))
-fc <- pir.compile(f)
-fc(FALSE)
+f <- function(n)  if (n < 2) 1 else fc(n-1) + fc(n-2)
+fc <- rir.compile(f)
+stopifnot(fc(n=4) == 5)
 
 f <- rir.compile(function(a, b, c, x, d=44) c(d, c, b, a))
 print(f(1,2,3))

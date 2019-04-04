@@ -894,11 +894,13 @@ static SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
 
 #define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
 
-#define CHECK_INTEGER_OVERFLOW(naflag)                                         \
+#define CHECK_INTEGER_OVERFLOW(ans, naflag)                                    \
     do {                                                                       \
         if (naflag) {                                                          \
+            PROTECT(ans);                                                      \
             SEXP call = getSrcForCall(c, pc - 1, ctx);                         \
             Rf_warningcall(call, INTEGER_OVERFLOW_WARNING);                    \
+            UNPROTECT(1);                                                      \
         }                                                                      \
     } while (0)
 

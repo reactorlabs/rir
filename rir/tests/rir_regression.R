@@ -46,8 +46,7 @@ function (x)
     x_start <- borrow + 1L
     x_end <- x_len
     result_index <- 1L
-    z <- x_end - x_start + 1L
-    result <- integer(z)
+    result <- integer(x_end - x_start + 1L)
     for (x_index in x_start:x_end) {
         d = x[[x_index]] + elem_max * borrow
         result[[result_index]] <- d%/%2
