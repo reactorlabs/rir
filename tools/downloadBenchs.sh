@@ -58,8 +58,10 @@ fi
 
 ## Customize the locations of RIR, GNU-R and the benchmarks in
 ## rebench's conf file
-sed -i.bak 's/\&LOCATION_AWF .*$/\&LOCATION_AWF "areWeFast"/' "$BENCHMARKS_PATH/rebench.conf"
-sed -i.bak 's/\&LOCATION_SHT .*$/\&LOCATION_SHT "shootout"/' "$BENCHMARKS_PATH/rebench.conf"
+sed -i.bak 's/\&LOCATION_AWF .*$/\&LOCATION_AWF "'"$BENCHMARKS_PATH"'/Benchmarks/areWeFast"/' "$BENCHMARKS_PATH/rebench.conf"
+sed -i.bak 's/\&LOCATION_SHT .*$/\&LOCATION_SHT "'"$BENCHMARKS_PATH"'/Benchmarks/shootout"/' "$BENCHMARKS_PATH/rebench.conf"
+sed -i.bak 's/\&LOCATION_SPL .*$/\&LOCATION_SPL "'"$BENCHMARKS_PATH"'/Benchmarks/simple"/' "$BENCHMARKS_PATH/rebench.conf"
+sed -i.bak 's/\&LOCATION_GNU .*$/\&LOCATION_GNU "'"$VM_PATH"'\/external/vanilla-r/bin"/' "$BENCHMARKS_PATH/rebench.conf"
 sed -i.bak 's/\&LOCATION_RIR .*$/\&LOCATION_RIR "'"$VM_PATH"'\/bin"/' "$BENCHMARKS_PATH/rebench.conf"
 sed -i.bak '/warmup:/d' "$BENCHMARKS_PATH/rebench.conf"
 rm "$BENCHMARKS_PATH/rebench.conf.bak"
