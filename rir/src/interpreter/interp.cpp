@@ -570,11 +570,11 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                     notObj = false;
                     isEager = false;
                 }
+            } else if (arg == R_MissingArg) {
+                given.remove(Assumption::NoExplicitlyMissingArgs);
             }
             if (isObject(arg)) {
                 notObj = false;
-            } else if (arg == R_MissingArg) {
-                given.remove(Assumption::NoExplicitlyMissingArgs);
             }
             if (isEager)
                 given.setEager(i);
