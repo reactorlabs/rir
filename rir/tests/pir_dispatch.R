@@ -1,0 +1,23 @@
+options(error=expression(NULL)) # don't stop on error in batch
+
+##  cacheMethod  :
+c0 <- character(0)
+l0 <- logical(0)
+m0 <- matrix(1,0,0)
+df0 <- as.data.frame(c0)
+f <- rir.compile(get("cacheMethod", pos = 'package:methods'))
+f()
+f(NULL)
+f(,NULL)
+f(NULL,NULL)
+f(list())
+f(l0)
+f(c0)
+f(m0)
+f(df0)
+f(FALSE)
+f(list(),list())
+f(l0,l0)
+f(c0,c0)
+f(df0,df0)
+f(FALSE,FALSE)
