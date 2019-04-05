@@ -262,7 +262,7 @@ class TheScopeResolution {
                     }
                 }
 
-                analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
+                analysis.lookupAt(after, i, [&](const AbstractLoad& aLoad) {
                     auto& res = aLoad.result;
 
                     // In case the scope analysis is sure that this is
@@ -341,7 +341,7 @@ class TheScopeResolution {
                             // TODO: if !guess->maybe(closure) we know that the
                             // guess is wrong and could try the next binding.
                             if (!guess->type.isA(PirType::closure())) {
-                                analysis.lookup(
+                                analysis.lookupAt(
                                     before, guess,
                                     [&](const AbstractPirValue& res) {
                                         if (auto val = getSingleLocalValue(res))

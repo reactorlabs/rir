@@ -12,48 +12,72 @@ ScopeAnalysis::ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
     : StaticAnalysis("Scope", cls, prom, initialState, log), depth(depth),
       staticClosureEnv(promEnv) {}
 
-void ScopeAnalysis::lookup(const ScopeAnalysisState& state, Value* v,
-                           const LoadMaybe& action,
-                           const Maybe& notFound) const {
+void ScopeAnalysis::lookupGlobal(const ScopeAnalysisState& state, Value* v,
+                                 const LoadMaybe& action,
+                                 const Maybe& notFound) const {
     auto instr = Instruction::Cast(v);
     if (!instr)
         return notFound();
 
     // If the this is an call instruction or force we might have some result
     // value from the inter-procedural analysis.
+    // Since the "returnValues" are indexed by SSA variables, they are always
+    // valid, even if "state" does not correspond with the position of "v".
     if (state.returnValues.count(instr)) {
         auto& res = state.returnValues.at(instr);
+        if (res.isSingleValue()) {
+            lookupGlobal(state, res.singleValue().val, action,
+                         [&]() { action(AbstractLoad(res)); });
+            return;
+        }
         action(AbstractLoad(res));
         return;
     }
 
-    // IMPORTANT: Dead store elimination relies on the fact that we handle all
-    // possible loads here
-
-    // If this is a ldvar, we perform a get on the abstract environment and
-    // if possible recurse on the result
-    if (auto ld = LdVar::Cast(instr)) {
-        action(load(state, ld->varName, ld->env()));
-        return;
-    }
-
-    // If this is a ldfun, we perform a getFun on the abstract environment and
-    // if possible recurse on the result. The loadFun is an abstract version of
-    // ldFun and considers the special case of skipping non-closure bindings.
-    // Thus it is a lot less reliable than normal load.
-    if (auto ldf = LdFun::Cast(instr)) {
-        action(loadFun(state, ldf->varName, ldf->env()));
-        return;
-    }
-
-    // If this is a ldvarsuper, we perform a superget on the abstract
-    // environment and if possible recurse on the result
-    if (auto sld = LdVarSuper::Cast(instr)) {
-        action(superLoad(state, sld->varName, sld->env()));
-        return;
-    }
-
     notFound();
+}
+
+void ScopeAnalysis::lookupAt(const ScopeAnalysisState& state, Value* v,
+                             const LoadMaybe& action,
+                             const Maybe& notFound) const {
+
+    auto instr = Instruction::Cast(v);
+    if (!instr)
+        return notFound();
+
+    lookupGlobal(state, instr, action, [&]() {
+        // IMPORTANT: Dead store elimination relies on the fact that we handle
+        // all
+        // possible loads here
+
+        // If this is a ldvar, we perform a get on the abstract environment and
+        // if possible recurse on the result
+        if (auto ld = LdVar::Cast(instr)) {
+            action(load(state, ld->varName, ld->env()));
+            return;
+        }
+
+        // If this is a ldfun, we perform a getFun on the abstract environment
+        // and
+        // if possible recurse on the result. The loadFun is an abstract version
+        // of
+        // ldFun and considers the special case of skipping non-closure
+        // bindings.
+        // Thus it is a lot less reliable than normal load.
+        if (auto ldf = LdFun::Cast(instr)) {
+            action(loadFun(state, ldf->varName, ldf->env()));
+            return;
+        }
+
+        // If this is a ldvarsuper, we perform a superget on the abstract
+        // environment and if possible recurse on the result
+        if (auto sld = LdVarSuper::Cast(instr)) {
+            action(superLoad(state, sld->varName, sld->env()));
+            return;
+        }
+
+        notFound();
+    });
 }
 
 AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
@@ -64,11 +88,11 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
     if (auto ret = Return::Cast(i)) {
         // We keep track of the result of function returns.
         auto res = ret->arg<0>().val();
-        lookup(state, res,
-               [&](const AbstractPirValue& analysisRes) {
-                   state.returnValue.merge(analysisRes);
-               },
-               [&]() { state.returnValue.merge(ValOrig(res, i, depth)); });
+        lookupAt(state, res,
+                 [&](const AbstractPirValue& analysisRes) {
+                     state.returnValue.merge(analysisRes);
+                 },
+                 [&]() { state.returnValue.merge(ValOrig(res, i, depth)); });
         effect.update();
     } else if (Deopt::Cast(i)) {
         // who knows what the deopt target will return...
@@ -140,17 +164,17 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         }
 
         if (!handled) {
-            lookup(state, arg->followCasts(),
-                   [&](const AbstractPirValue& analysisRes) {
-                       if (!analysisRes.type.maybeLazy()) {
-                           if (!analysisRes.type.maybePromiseWrapped())
-                               effect.max(
-                                   state.returnValues[i].merge(analysisRes));
-                           handled = true;
-                       } else if (analysisRes.isSingleValue()) {
-                           arg = analysisRes.singleValue().val;
-                       }
-                   });
+            lookupAt(state, arg->followCasts(),
+                     [&](const AbstractPirValue& analysisRes) {
+                         if (!analysisRes.type.maybeLazy()) {
+                             if (!analysisRes.type.maybePromiseWrapped())
+                                 effect.max(
+                                     state.returnValues[i].merge(analysisRes));
+                             handled = true;
+                         } else if (analysisRes.isSingleValue()) {
+                             arg = analysisRes.singleValue().val;
+                         }
+                     });
         }
 
         if (!handled && depth < MAX_DEPTH && force->strict) {
@@ -162,7 +186,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             // We are certain that we do force something here. Let's peek
             // through the argument and see if we find a promise. If so, we
             // will analyze it.
-            if (auto mkarg = MkArg::Cast(arg->followCasts())) {
+            if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
                 ScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(), state,
                                    depth + 1, log);
                 prom();
@@ -213,7 +237,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
 
         if (auto call = Call::Cast(i)) {
             auto target = call->cls()->followCastsAndForce();
-            lookup(state, target, [&](const AbstractPirValue& result) {
+            lookupGlobal(state, target, [&](const AbstractPirValue& result) {
                 if (result.isSingleValue())
                     target = result.singleValue().val->followCastsAndForce();
             });
@@ -237,15 +261,15 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 if (SafeBuiltinsList::nonObject(builtin->blt)) {
                     safe = true;
                     builtin->eachCallArg([&](Value* arg) {
-                        lookup(state, arg->followCasts(),
-                               [&](const AbstractPirValue& analysisRes) {
-                                   if (analysisRes.type.maybeObj())
-                                       safe = false;
-                               },
-                               [&]() {
-                                   if (arg->type.maybeObj())
-                                       safe = false;
-                               });
+                        lookupAt(state, arg->followCasts(),
+                                 [&](const AbstractPirValue& analysisRes) {
+                                     if (analysisRes.type.maybeObj())
+                                         safe = false;
+                                 },
+                                 [&]() {
+                                     if (arg->type.maybeObj())
+                                         safe = false;
+                                 });
                     });
                 }
             }
@@ -279,12 +303,12 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                         return false;
 
                     bool maybeObj = false;
-                    lookup(state, v,
-                           [&](const AbstractPirValue& analysisRes) {
-                               if (analysisRes.type.maybeObj())
-                                   maybeObj = true;
-                           },
-                           [&]() { maybeObj = true; });
+                    lookupAt(state, v,
+                             [&](const AbstractPirValue& analysisRes) {
+                                 if (analysisRes.type.maybeObj())
+                                     maybeObj = true;
+                             },
+                             [&]() { maybeObj = true; });
                     return maybeObj;
                 });
             }

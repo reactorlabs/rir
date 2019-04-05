@@ -130,26 +130,49 @@ class ScopeAnalysis : public StaticAnalysis<
     // instruction i. This recursively queries all available ressources,
     // such as binding structure, inter-procedural return values, function
     // arguments and so on.
-    void lookup(const ScopeAnalysisState& envs, Value* i, const LoadMaybe&,
-                const Maybe& notFound = []() {}) const;
-    void lookup(const ScopeAnalysisState& envs, Value* i,
-                const ValueMaybe& action,
-                const Maybe& notFound = []() {}) const {
-        lookup(envs, i, [&](AbstractLoad load) { action(load.result); },
-               notFound);
+    //
+    // global version, can be called if the state does not correspond with i
+    void lookupGlobal(const ScopeAnalysisState&, Value*, const LoadMaybe&,
+                      const Maybe& notFound = []() {}) const;
+    void lookupGlobal(const ScopeAnalysisState& state, Value* v,
+                      const ValueMaybe& action,
+                      const Maybe& notFound = []() {}) const {
+        lookupGlobal(state, v, [&](AbstractLoad load) { action(load.result); },
+                     notFound);
+    }
+    // state MUST correspond with the position of "i"
+    void lookupAt(const ScopeAnalysisState&, Value*, const LoadMaybe&,
+                  const Maybe& notFound = []() {}) const;
+    void lookupAt(const ScopeAnalysisState& state, Value* v,
+                  const ValueMaybe& action,
+                  const Maybe& notFound = []() {}) const {
+        lookupAt(state, v, [&](AbstractLoad load) { action(load.result); },
+                 notFound);
     }
 
     AbstractLoad loadFun(const ScopeAnalysisState& state, SEXP name,
                          Value* env) const {
-        return state.envs.getFun(env, name);
+        auto aLoad = state.envs.getFun(env, name);
+        if (aLoad.result.isSingleValue())
+            lookupGlobal(state, aLoad.result.singleValue().val,
+                         [&](const AbstractLoad& ld) { aLoad = ld; });
+        return aLoad;
     }
     AbstractLoad load(const ScopeAnalysisState& state, SEXP name,
                       Value* env) const {
-        return state.envs.get(env, name);
+        auto aLoad = state.envs.get(env, name);
+        if (aLoad.result.isSingleValue())
+            lookupGlobal(state, aLoad.result.singleValue().val,
+                         [&](const AbstractLoad& ld) { aLoad = ld; });
+        return aLoad;
     }
     AbstractLoad superLoad(const ScopeAnalysisState& state, SEXP name,
                            Value* env) const {
-        return state.envs.get(env, name);
+        auto aLoad = state.envs.get(env, name);
+        if (aLoad.result.isSingleValue())
+            lookupGlobal(state, aLoad.result.singleValue().val,
+                         [&](const AbstractLoad& ld) { aLoad = ld; });
+        return aLoad;
     }
 
     typedef std::function<void(
