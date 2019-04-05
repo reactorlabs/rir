@@ -2072,6 +2072,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 fun = dispatch(call, dt);
                 // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
+                assert(fun != dt->baseline());
             }
             advanceImmediate();
 
