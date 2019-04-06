@@ -56,11 +56,13 @@ else
     VM_PATH='\.\.'
 fi
 
+BENCHMARKS_PATH_ESC=$(echo "$BENCHMARKS_PATH" | sed 's/\//\\\//g')
+
 ## Customize the locations of RIR, GNU-R and the benchmarks in
 ## rebench's conf file
-sed -i.bak 's/\&LOCATION_AWF .*$/\&LOCATION_AWF "'"$BENCHMARKS_PATH"'\/Benchmarks\/areWeFast"/' "$BENCHMARKS_PATH/rebench.conf"
-sed -i.bak 's/\&LOCATION_SHT .*$/\&LOCATION_SHT "'"$BENCHMARKS_PATH"'\/Benchmarks\/shootout"/' "$BENCHMARKS_PATH/rebench.conf"
-sed -i.bak 's/\&LOCATION_SPL .*$/\&LOCATION_SPL "'"$BENCHMARKS_PATH"'\/Benchmarks\/simple"/' "$BENCHMARKS_PATH/rebench.conf"
+sed -i.bak 's/\&LOCATION_AWF .*$/\&LOCATION_AWF "'"$BENCHMARKS_PATH_ESC"'\/Benchmarks\/areWeFast"/' "$BENCHMARKS_PATH/rebench.conf"
+sed -i.bak 's/\&LOCATION_SHT .*$/\&LOCATION_SHT "'"$BENCHMARKS_PATH_ESC"'\/Benchmarks\/shootout"/' "$BENCHMARKS_PATH/rebench.conf"
+sed -i.bak 's/\&LOCATION_SPL .*$/\&LOCATION_SPL "'"$BENCHMARKS_PATH_ESC"'\/Benchmarks\/simple"/' "$BENCHMARKS_PATH/rebench.conf"
 sed -i.bak 's/\&LOCATION_GNU .*$/\&LOCATION_GNU "'"$VM_PATH"'\/external\/vanilla-r\/bin"/' "$BENCHMARKS_PATH/rebench.conf"
 sed -i.bak 's/\&LOCATION_RIR .*$/\&LOCATION_RIR "'"$VM_PATH"'\/bin"/' "$BENCHMARKS_PATH/rebench.conf"
 sed -i.bak '/warmup:/d' "$BENCHMARKS_PATH/rebench.conf"
