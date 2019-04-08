@@ -8,7 +8,7 @@
 
 namespace rir {
 
-static RIR_INLINE SEXP safeEval(SEXP e, SEXP rho) {
+SEXP safeEval(SEXP e, SEXP rho) {
     SEXPTYPE t = TYPEOF(e);
     if (t == LANGSXP || t == SYMSXP || t == PROMSXP || t == BCODESXP ||
         t == EXTERNALSXP) {
