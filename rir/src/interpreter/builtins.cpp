@@ -411,6 +411,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
                 which.push_back(1);
             else
                 return R_NilValue;
+            break;
         case STACK_OBJ_SEXP: {
             auto argSexp = arg->u.sxpval;
             std::vector<size_t> which;
@@ -419,6 +420,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
                     which.push_back(i);
                 }
             }
+            break;
         }
         default:
             assert(false);
