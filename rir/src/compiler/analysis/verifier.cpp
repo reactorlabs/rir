@@ -244,16 +244,6 @@ class TheVerifier {
                         inp.erase(pos);
                     }
                 });
-                if (!inp.empty()) {
-                    std::cerr << "Error at instruction '";
-                    i->print(std::cerr);
-                    std::cerr << " the following predecessor blocks are not "
-                                 "handled in phi: ";
-                    for (auto& in : inp)
-                        std::cerr << in->id << " ";
-                    std::cerr << "\n";
-                    ok = false;
-                }
             }
         }
 
