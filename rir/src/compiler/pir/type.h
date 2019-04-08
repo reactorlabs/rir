@@ -233,6 +233,9 @@ struct PirType {
     RIR_INLINE constexpr bool isRType() const {
         return flags_.includes(TypeFlags::rtype);
     }
+    RIR_INLINE bool isRType(const RType& o) const {
+        return isRType() && t_.r == o;
+    }
     RIR_INLINE constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
@@ -329,10 +332,6 @@ struct PirType {
 
     static const PirType voyd() { return PirType(NativeTypeSet()); }
     static const PirType bottom() { return optimistic(); }
-
-    RIR_INLINE bool operator==(const RType& o) const {
-        return isRType() && t_.r == o;
-    }
 
     RIR_INLINE bool operator==(const NativeType& o) const {
         return !isRType() && t_.n == o;
