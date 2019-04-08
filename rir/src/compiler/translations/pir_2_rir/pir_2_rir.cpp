@@ -962,9 +962,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
                 if (needsLdVarForUpdate.count(instr))
-                    cb.add(BC::ldvarNoForce(ldvar->varName));
-                else
                     cb.add(BC::ldvarForUpdate(ldvar->varName));
+                else
+                    cb.add(BC::ldvarNoForce(ldvar->varName));
                 break;
             }
 

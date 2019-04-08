@@ -46,9 +46,10 @@ struct AUses {
 
         assert(false);
         return Multiple;
-    };
+    }
 
     bool overflow = false;
+    // The merge function needs an ordered map
     std::map<Instruction*, Kind> uses;
     AbstractResult mergeExit(const AUses& other) { return merge(other); }
     AbstractResult merge(const AUses& other) {

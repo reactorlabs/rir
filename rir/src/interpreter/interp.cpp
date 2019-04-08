@@ -1757,12 +1757,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 res = promiseValue(res, ctx);
 
             if (res != R_NilValue) {
-                if (isLocal) {
+                if (isLocal)
                     ENSURE_NAMED(res);
-                } else {
-                    if (NAMED(res) < 2)
-                        SET_NAMED(res, 2);
-                }
+                else if (NAMED(res) < 2)
+                    SET_NAMED(res, 2);
             }
 
             ostack_push(ctx, res);
