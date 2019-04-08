@@ -933,6 +933,26 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
 enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
 #define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
 
+static SEXPREC createFakeSEXP(SEXPTYPE t) {
+    SEXPREC res;
+    res.attrib = R_NilValue;
+    res.gengc_next_node = R_NilValue;
+    res.gengc_prev_node = R_NilValue;
+    res.sxpinfo.gcgen = 1;
+    res.sxpinfo.mark = 1;
+    res.sxpinfo.named = 2;
+    res.sxpinfo.type = t;
+    return res;
+}
+
+static SEXPREC createFakeCONS(SEXP cdr) {
+    auto res = createFakeSEXP(LISTSXP);
+    res.u.listsxp.carval = R_NilValue;
+    res.u.listsxp.tagval = R_NilValue;
+    res.u.listsxp.cdrval = cdr;
+    return res;
+}
+
 #define CHECK_INTEGER_OVERFLOW(ans, naflag)                                    \
     do {                                                                       \
         if (naflag) {                                                          \
@@ -953,15 +973,26 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
+                                                                               \
+        if (flag < 2)                                                          \
+            R_Visible = static_cast<Rboolean>(flag != 1);                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
-        SEXP argslist = CONS_NR(lhs, CONS_NR(rhs, R_NilValue));                \
-        ostack_push(ctx, argslist);                                            \
+                                                                               \
+        if (!env || !(isObject(lhs) || isObject(rhs))) {                       \
+            SEXPREC arglist2 = createFakeCONS(R_NilValue);                     \
+            SEXPREC arglist = createFakeCONS(&arglist2);                       \
+            arglist.u.listsxp.carval = lhs;                                    \
+            arglist2.u.listsxp.carval = rhs;                                   \
+            res = blt(call, prim, &arglist, env);                              \
+        } else {                                                               \
+            SEXP arglist = CONS_NR(lhs, CONS_NR(rhs, R_NilValue));             \
+            ostack_push(ctx, arglist);                                         \
+            res = blt(call, prim, arglist, env);                               \
+            ostack_pop(ctx);                                                   \
+        }                                                                      \
+                                                                               \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        res = blt(call, prim, argslist, env);                                  \
-        if (flag < 2)                                                          \
-            R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        ostack_pop(ctx);                                                       \
     } while (false)
 
 #define DO_FAST_BINOP(op, op2)                                                 \
