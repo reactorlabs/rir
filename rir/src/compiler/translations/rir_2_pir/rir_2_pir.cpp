@@ -731,7 +731,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::put_: {
         x = top();
-        for (size_t i = 0; i < bc.immediate.i - 1; ++i)
+        for (size_t i = 0; i < bc.immediate.i; ++i)
             set(i, at(i + 1));
         set(bc.immediate.i, x);
         break;
