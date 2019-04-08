@@ -1730,6 +1730,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP loc = cachedGetBindingCell(env, id, ctx, bindingCache);
             bool isLocal = loc;
+            SEXP res = nullptr;
 
             if (isLocal) {
                 res = CAR(loc);
