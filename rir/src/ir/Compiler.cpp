@@ -1029,9 +1029,12 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidC
     if (Compiler::profile) {
         cs << BC::recordCall();
     }
-    if (!hasNames)
+    if (hasNames) {
+        cs << BC::callImplicit(callArgs, names, ast, assumptions);
+    } else {
         assumptions.add(Assumption::CorrectOrderOfArguments);
-    cs << BC::callImplicit(callArgs, names, ast, assumptions);
+        cs << BC::callImplicit(callArgs, ast, assumptions);
+    }
     if (voidContext)
         cs << BC::pop();
 }
