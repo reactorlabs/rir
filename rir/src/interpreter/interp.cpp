@@ -570,11 +570,11 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                     notObj = false;
                     isEager = false;
                 }
+            } else if (arg == R_MissingArg) {
+                given.remove(Assumption::NoExplicitlyMissingArgs);
             }
             if (isObject(arg)) {
                 notObj = false;
-            } else if (arg == R_MissingArg) {
-                given.remove(Assumption::NoExplicitlyMissingArgs);
             }
             if (isEager)
                 given.setEager(i);
@@ -2150,6 +2150,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 fun = dispatch(call, dt);
                 // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
+                assert(fun != dt->baseline());
             }
             advanceImmediate();
 
