@@ -201,18 +201,17 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
     // n' <- n
     // if (i' > n') {
     //   n' <- ceil(n') - 1
-    //   while (i' > n') {
-    //     i <- i'
-    //     i' <- i' - 1
-    //     ...
-    //   }
+    //   diff' <- -1
+    //   gt' <- TRUE
     // } else {
-    //   n' <- floor(n') + 1
-    //   while (i' < n') {
-    //     i <- i'
-    //     i' <- i' + 1
-    //     ...
-    //   }
+    //   n' <- floor(n')
+    //   diff' <- 1
+    //   gt' <- FALSE
+    // }
+    // while ((i' > n') == gt') {
+    //   i <- i'
+    //   i' <- i' + diff'
+    //   ...
     // }
 
     CodeStream& cs = ctx.cs();
@@ -232,19 +231,26 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
     // {
     // n' <- ceil(n') - 1
     cs << BC::ceil() << BC::dec() << BC::ensureNamed() << BC::swap();
-    cs << BC::push(-1) << BC::push(R_TrueValue) << BC::put(3) << BC::put(2)
-       << BC::br(startBranch) << fwdBranch;
+    // diff' <- -1
+    cs << BC::push(-1);
+    // gt' <- TRUE
+    cs << BC::push(R_TrueValue);
+    cs << BC::put(3) << BC::put(2) << BC::br(startBranch) << fwdBranch;
     // } else {
-    // n' <- floor(n') + 1
+    // n' <- floor(n')
     cs << BC::floor() << BC::swap();
-    cs << BC::push(1) << BC::push(R_FalseValue) << BC::put(3) << BC::put(2)
-       << startBranch;
+    // diff' <- 1
+    cs << BC::push(1);
+    // gt' <- FALSE
+    cs << BC::push(R_FalseValue);
+    cs << BC::put(3) << BC::put(2) << startBranch;
     // while
     compileWhile(ctx,
                  [&cs]() {
-                     // (i' > n')
+                     // ((i' > n') ...
                      cs << BC::dup2() << BC::lt();
                      cs.addSrc(R_NilValue);
+                     // ... == gt')
                      cs << BC::pull(4) << BC::eq();
                      cs.addSrc(R_NilValue);
                  },
@@ -252,6 +258,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
                      // {
                      // i <- i'
                      cs << BC::dup() << BC::stvar(sym);
+                     // i' <- i' + diff'
                      cs << BC::pull(2) << BC::add();
                      cs.addSrc(R_NilValue);
                      // ...
