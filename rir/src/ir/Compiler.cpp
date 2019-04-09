@@ -9,6 +9,7 @@
 #include "R/Symbols.h"
 #include "R/Funtab.h"
 
+#include "../interpreter/safe_force.h"
 #include "utils/Pool.h"
 
 #include "CodeVerifier.h"
@@ -981,9 +982,11 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidC
     // Arguments can be optionally named
     std::vector<BC::FunIdx> callArgs;
     std::vector<SEXP> names;
+    Assumptions assumptions;
 
     bool hasNames = false;
-    for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg) {
+    int i = 0;
+    for (RListIter arg = RList(args).begin(); arg != RList::end(); ++i, ++arg) {
         if (*arg == R_DotsSymbol) {
             callArgs.push_back(DOTS_ARG_IDX);
             names.push_back(R_NilValue);
@@ -1005,6 +1008,21 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidC
         names.push_back(arg.tag());
         if (arg.tag() != R_NilValue)
             hasNames = true;
+
+        // (3) "safe force" the argument to get static assumptions
+        SEXP known = safeEval(*arg, nullptr);
+        // TODO: If we add more assumptions should probably abstract with
+        // testArg in interp.cpp. For now they're both much different though
+        if (known != R_UnboundValue) {
+            assumptions.setEager(i);
+            if (!isObject(known)) {
+                assumptions.setNotObj(i);
+                if (IS_SIMPLE_SCALAR(known, REALSXP))
+                    assumptions.setSimpleReal(i);
+                if (IS_SIMPLE_SCALAR(known, INTSXP))
+                    assumptions.setSimpleInt(i);
+            }
+        }
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
@@ -1012,10 +1030,10 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidC
         cs << BC::recordCall();
     }
     if (hasNames) {
-        cs << BC::callImplicit(callArgs, names, ast, {});
+        cs << BC::callImplicit(callArgs, names, ast, assumptions);
     } else {
-        cs << BC::callImplicit(
-            callArgs, ast, Assumptions(Assumption::CorrectOrderOfArguments));
+        assumptions.add(Assumption::CorrectOrderOfArguments);
+        cs << BC::callImplicit(callArgs, ast, assumptions);
     }
     if (voidContext)
         cs << BC::pop();
