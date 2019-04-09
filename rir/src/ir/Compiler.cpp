@@ -18,6 +18,8 @@
 
 #include <stack>
 
+#define SIMPLE_FOR_2LOOPS
+
 namespace rir {
 
 namespace {
@@ -217,7 +219,11 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
 
     CodeStream& cs = ctx.cs();
     BC::Label fwdBranch = cs.mkLabel();
+#ifdef SIMPLE_FOR_2LOOPS
+    BC::Label startBranch = cs.mkLabel();
+#else
     BC::Label endBranch = cs.mkLabel();
+#endif
 
     // i' <- m
     compileExpr(ctx, start);
@@ -232,24 +238,45 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
     // {
     // n' <- ceil(n') - 1
     cs << BC::ceil() << BC::dec() << BC::ensureNamed() << BC::swap();
+#ifdef SIMPLE_FOR_2LOOPS
+    cs << BC::push(-1) << BC::push(R_TrueValue) << BC::put(3) << BC::put(2)
+       << BC::br(startBranch) << fwdBranch;
+    // } else {
+    // n' <- floor(n') + 1
+    cs << BC::floor() << BC::swap();
+    cs << BC::push(1) << BC::push(R_FalseValue) << BC::put(3) << BC::put(2)
+       << startBranch;
+#endif
     // while
     compileWhile(ctx,
                  [&cs]() {
                      // (i' > n')
                      cs << BC::dup2() << BC::lt();
                      cs.addSrc(R_NilValue);
+#ifdef SIMPLE_FOR_2LOOPS
+                     cs << BC::pull(4) << BC::eq();
+                     cs.addSrc(R_NilValue);
+#endif
                  },
                  [&ctx, &cs, &sym, &body]() {
                      // {
                      // i <- i'
                      cs << BC::dup() << BC::stvar(sym);
+#ifdef SIMPLE_FOR_2LOOPS
+                     cs << BC::pull(2) << BC::add();
+                     cs.addSrc(R_NilValue);
+#else
                      // i' <- i' - 1
                      cs << BC::dec();
+#endif
                      // ...
                      compileExpr(ctx, body, true);
                      // }
                  });
     // } else {
+#ifdef SIMPLE_FOR_2LOOPS
+    cs << BC::popn(4);
+#else
     cs << BC::br(endBranch) << fwdBranch;
     // n' <- floor(n') + 1
     cs << BC::floor() << BC::inc() << BC::swap();
@@ -272,7 +299,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
                  });
 
     cs << endBranch << BC::popn(2);
-
+#endif
     if (!voidContext)
         cs << BC::push(R_NilValue) << BC::invisible();
 
