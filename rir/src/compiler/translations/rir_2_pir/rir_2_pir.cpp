@@ -93,9 +93,7 @@ void State::mergeIn(const State& incom, BB* incomBB) {
         Phi* p = Phi::Cast(stack.at(i));
         assert(p);
         Value* in = incom.stack.at(i);
-        if (in != p) {
-            p->addInput(incomBB, in);
-        }
+        p->addInput(incomBB, in);
     }
     incomBB->setNext(entryBB);
 }

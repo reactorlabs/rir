@@ -57,7 +57,10 @@ class TheCleanup {
                     }
                 } else if (auto phi = Phi::Cast(i)) {
                     std::unordered_set<Value*> phin;
-                    phi->eachArg([&](BB*, Value* v) { phin.insert(v); });
+                    phi->eachArg([&](BB*, Value* v) {
+                        if (v != phi)
+                            phin.insert(v);
+                    });
                     if (phin.size() == 1) {
                         removed = true;
                         phi->replaceUsesWith(*phin.begin());
@@ -148,6 +151,7 @@ class TheCleanup {
                 bool block = false;
                 // Prevent this removal from merging a phi input block with the
                 // block the phi resides in
+                // TODO: Is this necessary anymore?
                 for (auto phi : usedBB[bb]) {
                     phi->eachArg([&](BB* in, Value*) {
                         if (in == bb && bb->next0 == phi->bb())

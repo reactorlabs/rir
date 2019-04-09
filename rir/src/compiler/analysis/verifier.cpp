@@ -187,9 +187,25 @@ class TheVerifier {
         if (auto phi = Phi::Cast(i)) {
             phi->eachArg([&](BB* input, Value* v) {
                 if (auto iv = Instruction::Cast(v)) {
-                    if (iv == phi) {
+                    if (slow && iv == phi && phi->nargs() == 2) {
                         // Note: can happen in a one-block loop, but only if it
                         // is not edge-split
+                        //
+                        // nargs == 2 because this is OK:
+                        // a   b
+                        //  \ /
+                        //   m<-.
+                        //   \_/
+                        // but this:
+                        //   a
+                        //   |
+                        //   m<-.
+                        //   \_/
+                        // should be cleaned up to
+                        //   a
+                        //   |
+                        //   /<-.
+                        //   \_/
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
                         std::cerr << "': input '";
