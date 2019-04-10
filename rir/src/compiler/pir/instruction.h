@@ -627,7 +627,7 @@ class FLI(LdConst, 0, Effects::None()) {
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
-class FLIE(LdFun, 2, Effects::Any()) {
+class FLIE(LdFun, 2, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     SEXP varName;
     SEXP hint = nullptr;
@@ -908,7 +908,7 @@ class FLIE(MkFunCls, 1, Effects::None()) {
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
-class FLIE(Force, 2, Effects::Any()) {
+class FLIE(Force, 2, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     // Set to true if we are sure that the promise will be forced here
     bool strict = false;
@@ -959,7 +959,7 @@ class FLI(AsInt, 1, Effect::Error) {
     }
 };
 
-class FLIE(Subassign1_1D, 4, Effects::Any()) {
+class FLIE(Subassign1_1D, 4, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
@@ -976,7 +976,7 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     }
 };
 
-class FLIE(Subassign2_1D, 4, Effects::Any()) {
+class FLIE(Subassign2_1D, 4, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
@@ -993,7 +993,7 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     }
 };
 
-class FLIE(Subassign1_2D, 5, Effects::Any()) {
+class FLIE(Subassign1_2D, 5, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     Subassign1_2D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* env,
                   unsigned srcIdx)
@@ -1012,7 +1012,7 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     }
 };
 
-class FLIE(Subassign2_2D, 5, Effects::Any()) {
+class FLIE(Subassign2_2D, 5, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     Subassign2_2D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* env,
                   unsigned srcIdx)
@@ -1031,7 +1031,7 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     }
 };
 
-class FLIE(Extract1_1D, 3, Effects::Any()) {
+class FLIE(Extract1_1D, 3, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
@@ -1046,7 +1046,7 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
     }
 };
 
-class FLIE(Extract2_1D, 3, Effects::Any()) {
+class FLIE(Extract2_1D, 3, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
@@ -1058,7 +1058,7 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
     }
 };
 
-class FLIE(Extract1_2D, 4, Effects::Any()) {
+class FLIE(Extract1_2D, 4, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
@@ -1075,7 +1075,7 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
     }
 };
 
-class FLIE(Extract2_2D, 4, Effects::Any()) {
+class FLIE(Extract2_2D, 4, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     Extract2_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
@@ -1155,7 +1155,7 @@ class FLI(Identical, 2, Effects::None()) {
                               {{PirType::any(), PirType::any()}}, {{a, b}}) {}
 };
 
-class FLIE(Colon, 3, Effects::Any()) {
+class FLIE(Colon, 3, Effects::Any() & ~Effects(Effect::Visibility)) {
   public:
     Colon(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
@@ -1173,7 +1173,7 @@ SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
 #define BINOP(Name, Type)                                                      \
-    class FLIE(Name, 3, Effects::Any()) {                                      \
+    class FLIE(Name, 3, Effects::Any() & ~Effects(Effect::Visibility)) {       \
       public:                                                                  \
         Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
             : FixedLenInstructionWithEnvSlot(                                  \
@@ -1219,7 +1219,7 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
 #undef BINOP_NOENV
 
 #define UNOP(Name)                                                             \
-    class FLIE(Name, 2, Effects::Any()) {                                      \
+    class FLIE(Name, 2, Effects::Any() & ~Effects(Effect::Visibility)) {       \
       public:                                                                  \
         Name(Value* v, Value* env, unsigned srcIdx)                            \
             : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),             \
