@@ -180,7 +180,7 @@ struct PirType {
                RType::cplx;
     }
     static constexpr PirType atomOrSimpleVec() {
-        return num() | RType::sym | RType::chr | RType::str | RType::ast;
+        return num() | RType::sym | RType::chr | RType::str | RType::code;
     }
     static constexpr PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
