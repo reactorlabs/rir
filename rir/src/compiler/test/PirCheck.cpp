@@ -106,6 +106,11 @@ static bool testReturns42L(ClosureVersion* f) {
     return true;
 };
 
+static bool testNoAsInt(ClosureVersion* f) {
+    return Visitor::check(f->entry,
+                          [&](Instruction* i) { return !AsInt::Cast(i); });
+}
+
 static bool testNoEq(ClosureVersion* f) {
     return Visitor::check(f->entry,
                           [&](Instruction* i) { return !Eq::Cast(i); });
