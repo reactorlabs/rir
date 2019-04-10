@@ -1,6 +1,7 @@
 #include "pir_2_rir.h"
 #include "../../analysis/last_env.h"
 #include "../../pir/pir_impl.h"
+#include "../../pir/value_list.h"
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
@@ -1274,13 +1275,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             // Values, not instructions
-            case Tag::Tombstone:
-            case Tag::MissingArg:
-            case Tag::UnboundValue:
-            case Tag::Env:
-            case Tag::Nil:
-            case Tag::False:
-            case Tag::True: {
+#define V(Value) case Tag::Value:
+            COMPILER_VALUES(V) {
+#undef V
                 break;
             }
 
