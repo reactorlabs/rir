@@ -36,7 +36,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
             if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which
-                // both operators are primitive values
+                // all operators are primitive values
                 if (checkpoint.at(i) && i->envOnlyForObj() &&
                     nonObjectArgs(i)) {
                     i->elideEnv();

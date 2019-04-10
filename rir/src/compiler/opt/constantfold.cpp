@@ -58,6 +58,19 @@ static LdConst* isConst(Value* instr) {
         }                                                                      \
     } while (false)
 
+#define FOLD_BINARY_EITHER(Instruction, Operation)                             \
+    do {                                                                       \
+        if (auto instr = Instruction::Cast(i)) {                               \
+            if (auto lhs = isConst(instr->arg<0>().val())) {                   \
+                if (Operation(lhs->c(), instr->arg<1>().val()))                \
+                    break;                                                     \
+            }                                                                  \
+            if (auto rhs = isConst(instr->arg<1>().val())) {                   \
+                Operation(rhs->c(), instr->arg<0>().val());                    \
+            }                                                                  \
+        }                                                                      \
+    } while (false)
+
 static bool convertsToLogicalWithoutWarning(SEXP arg) {
     switch (TYPEOF(arg)) {
     case LGLSXP:
@@ -90,6 +103,29 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             auto i = *ip;
             auto next = ip + 1;
 
+            auto foldLglCmp = [&](SEXP carg, Value* varg, bool isEq) {
+                if (IS_SIMPLE_SCALAR(carg, LGLSXP) &&
+                    varg->type.isA(PirType::simpleScalarLogical())) {
+                    bool larg = *LOGICAL(carg);
+                    if (larg == (int)isEq) {
+                        i->replaceUsesWith(varg);
+                        next = bb->remove(ip);
+                    } else if (larg == (int)!isEq) {
+                        auto res = new Not(varg, i->env(), i->srcIdx);
+                        i->replaceUsesWith(res);
+                        bb->replace(ip, res);
+                    } else if (larg == NA_LOGICAL) {
+                        i->replaceUsesWith(NaLogical::instance());
+                        next = bb->remove(ip);
+                    } else {
+                        assert(false);
+                    }
+                    return true;
+                } else {
+                    return false;
+                }
+            };
+
             // Constantfolding of some common operations
             FOLD_BINARY_NATIVE(Add, symbol::Add);
             FOLD_BINARY_NATIVE(Sub, symbol::Sub);
@@ -100,9 +136,15 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             FOLD_BINARY_NATIVE(Gt, symbol::Gt);
             FOLD_BINARY_NATIVE(Lte, symbol::Le);
             FOLD_BINARY_NATIVE(Gte, symbol::Ge);
-            FOLD_BINARY_NATIVE(Eq, symbol::Eq);
-            FOLD_BINARY_NATIVE(Neq, symbol::Ne);
             FOLD_BINARY_NATIVE(Pow, symbol::Pow);
+
+            FOLD_BINARY_EITHER(Eq, [&](SEXP carg, Value* varg) {
+                return foldLglCmp(carg, varg, true);
+            });
+
+            FOLD_BINARY_EITHER(Neq, [&](SEXP carg, Value* varg) {
+                return foldLglCmp(carg, varg, false);
+            });
 
             FOLD_UNARY(AsLogical, [&](SEXP arg) {
                 if (convertsToLogicalWithoutWarning(arg)) {
@@ -175,6 +217,37 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         ScalarInteger(function->nargs() -
                                       function->assumptions().numMissing()));
                     callb->replaceUsesAndSwapWith(nargsC, ip);
+                }
+            }
+
+            if (auto not_ = Not::Cast(i)) {
+                if (auto arg = isConst(not_->arg<0>().val())) {
+                    SEXP carg = arg->c();
+                    if (IS_SIMPLE_SCALAR(carg, LGLSXP) ||
+                        IS_SIMPLE_SCALAR(carg, INTSXP) ||
+                        IS_SIMPLE_SCALAR(carg, REALSXP)) {
+                        assert(NA_LOGICAL == NA_INTEGER);
+                        int larg = (TYPEOF(carg) == REALSXP)
+                                       ? (int)*REAL(carg)
+                                       : (int)*INTEGER(carg);
+                        Value* rep;
+                        if (larg == 0) {
+                            rep = True::instance();
+                        } else if (larg == NA_LOGICAL) {
+                            rep = NaLogical::instance();
+                        } else {
+                            rep = False::instance();
+                        }
+                        i->replaceUsesWith(rep);
+                        next = bb->remove(ip);
+                    }
+                } else if (auto not2 = Not::Cast(arg)) {
+                    // Double negation
+                    // not2 might still be used, if not then it will be removed
+                    // in a later pass
+                    Value* rep = not2->arg<0>().val();
+                    i->replaceUsesWith(rep);
+                    next = bb->remove(ip);
                 }
             }
 
