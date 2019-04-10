@@ -45,6 +45,13 @@ extern std::ostream& operator<<(std::ostream& out,
     return out;
 }
 
+void Instruction::printRef(std::ostream& out) const {
+    if (type == RType::env)
+        out << "e" << id();
+    else
+        out << "%" << id();
+};
+
 void printPaddedInstructionName(std::ostream& out, const std::string& name) {
     out << std::left << std::setw(maxInstructionNameLength + 1) << name << " ";
 }
@@ -61,8 +68,6 @@ void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
         out << "        ";
     }
 }
-
-bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
 
 void Instruction::printArgs(std::ostream& out, bool tty) const {
     size_t n = nargs();
@@ -87,35 +92,6 @@ void Instruction::printGraphBranches(std::ostream& out, size_t bbId) const {
     assert(false);
 }
 
-void Instruction::print(std::ostream& out, bool tty) const {
-    printPaddedTypeAndRef(out, this);
-    printPaddedInstructionName(out, name());
-    printArgs(out, tty);
-    printEnv(out, tty);
-}
-
-void Instruction::printGraph(std::ostream& out, bool tty) const {
-    printPaddedTypeAndRef(out, this);
-    printPaddedInstructionName(out, name());
-    printGraphArgs(out, tty);
-    printEnv(out, tty);
-}
-
-void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
-    auto bbIter = input.begin();
-    auto argIter = args_.begin();
-    while (argIter != args_.end()) {
-        if (deletedBBs.count(*bbIter)) {
-            bbIter = input.erase(bbIter);
-            argIter = args_.erase(argIter);
-        } else {
-            argIter++;
-            bbIter++;
-        }
-    }
-    assert(bbIter == input.end());
-}
-
 void Instruction::printEnv(std::ostream& out, bool tty) const {
     if (hasEnv()) {
         if (tty) {
@@ -134,12 +110,102 @@ void Instruction::printEnv(std::ostream& out, bool tty) const {
     }
 }
 
-void Instruction::printRef(std::ostream& out) const {
-    if (type == RType::env)
-        out << "e" << id();
-    else
-        out << "%" << id();
-};
+void Instruction::printEffects(std::ostream& out, bool tty) const {
+    assert(canRemoveEffects());
+    for (auto it = effects.begin(); it != effects.end(); ++it) {
+        Effect effect = *it;
+        switch (effect) {
+#define CASE(Name, Str)                                                        \
+    case Effect::Name:                                                         \
+        out << Str;                                                            \
+        break;
+            CASE(Visibility, "Vis")
+            CASE(Warn, "Warn")
+            CASE(Error, "Err")
+            CASE(Force, "Force")
+            CASE(Reflection, "Refl")
+            CASE(LeakArg, "LeakArg")
+            CASE(ChangesContexts, "ModCtx")
+            CASE(ReadsEnv, "ReadEnv")
+            CASE(WritesEnv, "WriteEnv")
+            CASE(LeaksEnv, "LeakEnv")
+            CASE(TriggerDeopt, "Deopt")
+            CASE(ExecuteCode, "Exec")
+#undef CASE
+        default:
+            assert(false);
+        }
+        if (it + 1 != effects.end()) {
+            Effect next = (Effect)((uint8_t)effect + 1);
+            // NOTE: Can go past last effect (will never be read in that case)
+            Effect after = (Effect)((uint8_t)effect + 2);
+            if (it + 2 != effects.end() && effects.includes(next) &&
+                effects.includes(after)) {
+                out << "...";
+                do {
+                    after = (Effect)((uint8_t)after + 1);
+                    ++it;
+                } while (it + 2 != effects.end() && effects.includes(after));
+            } else
+                out << ", ";
+        }
+    }
+}
+
+void Instruction::printArgsEnvEffects(std::ostream& out, bool tty) const {
+    if (canRemoveEffects()) {
+        std::ostringstream buf;
+        printArgs(buf, tty);
+        printEnv(buf, tty);
+        out << std::setw(24) << buf.str();
+        printEffects(out, tty);
+    } else {
+        printArgs(out, tty);
+        printEnv(out, tty);
+    }
+}
+
+void Instruction::printGraphArgsEnvEffects(std::ostream& out, bool tty) const {
+    if (canRemoveEffects()) {
+        std::ostringstream buf;
+        printGraphArgs(buf, tty);
+        printEnv(buf, tty);
+        out << std::setw(24) << buf.str();
+        printEffects(out, tty);
+    } else {
+        printGraphArgs(out, tty);
+        printEnv(out, tty);
+    }
+}
+
+void Instruction::print(std::ostream& out, bool tty) const {
+    printPaddedTypeAndRef(out, this);
+    printPaddedInstructionName(out, name());
+    printArgsEnvEffects(out, tty);
+}
+
+void Instruction::printGraph(std::ostream& out, bool tty) const {
+    printPaddedTypeAndRef(out, this);
+    printPaddedInstructionName(out, name());
+    printGraphArgsEnvEffects(out, tty);
+}
+
+bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
+
+void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
+    auto bbIter = input.begin();
+    auto argIter = args_.begin();
+    while (argIter != args_.end()) {
+        if (deletedBBs.count(*bbIter)) {
+            bbIter = input.erase(bbIter);
+            argIter = args_.erase(argIter);
+        } else {
+            argIter++;
+            bbIter++;
+        }
+    }
+    assert(bbIter == input.end());
+}
 
 Instruction::InstructionUID Instruction::id() const {
     return InstructionUID(bb()->id, bb()->indexOf(this));

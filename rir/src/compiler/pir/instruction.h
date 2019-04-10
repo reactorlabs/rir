@@ -236,6 +236,7 @@ class Instruction : public Value {
     virtual bool exits() const = 0;
     virtual bool branches() const = 0;
     virtual bool branchOrExit() const = 0;
+    virtual bool canRemoveEffects() const = 0;
 
     virtual size_t nargs() const = 0;
 
@@ -275,10 +276,13 @@ class Instruction : public Value {
 
     virtual void updateType(){};
 
-    virtual void printEnv(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
     virtual void printGraphArgs(std::ostream& out, bool tty) const;
     virtual void printGraphBranches(std::ostream& out, size_t bbId) const;
+    virtual void printEnv(std::ostream& out, bool tty) const;
+    virtual void printEffects(std::ostream& out, bool tty) const;
+    void printArgsEnvEffects(std::ostream& out, bool tty) const;
+    void printGraphArgsEnvEffects(std::ostream& out, bool tty) const;
     virtual void print(std::ostream& out, bool tty = false) const;
     void printGraph(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
@@ -382,6 +386,7 @@ class InstructionImplementation : public Instruction {
     bool exits() const override final { return CF == Controlflow::Exit; }
     bool branches() const override final { return CF == Controlflow::Branch; }
     bool branchOrExit() const override final { return branches() || exits(); }
+    bool canRemoveEffects() const override { return false; }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -866,7 +871,7 @@ class FLI(Seq, 3, Effects::None()) {
               // TODO: require scalars, but this needs some cast support
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{start, end, step}}) {}
-
+    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(PirType::num().notObject());
     }
@@ -965,6 +970,7 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* rhs() { return arg(0).val(); }
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
+    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
@@ -981,6 +987,7 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Value* rhs() { return arg(0).val(); }
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
+    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
@@ -999,6 +1006,7 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
+    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
@@ -1017,6 +1025,7 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
+    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
@@ -1028,6 +1037,7 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
+    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         auto t = arg<0>().val()->type;
         if (arg<1>().val()->type.isScalar())
@@ -1042,6 +1052,7 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
+    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
     }
@@ -1055,6 +1066,7 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
+    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         auto t = arg<0>().val()->type;
         if (arg<1>().val()->type.isScalar())
@@ -1071,6 +1083,7 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
+    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
     }
@@ -1166,6 +1179,7 @@ SIMPLE_INSTRUCTIONS(V, _)
             : FixedLenInstructionWithEnvSlot(                                  \
                   PirType::valOrLazy(), {{PirType::val(), PirType::val()}},    \
                   {{lhs, rhs}}, env, srcIdx) {}                                \
+        bool canRemoveEffects() const override { return true; }                \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(Type);                              \
             maskEffectsOnNumerics();                                           \
@@ -1211,6 +1225,7 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
             : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),             \
                                              {{PirType::val()}}, {{v}}, env,   \
                                              srcIdx) {}                        \
+        bool canRemoveEffects() const override { return true; }                \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
             maskEffectsOnNumerics();                                           \
