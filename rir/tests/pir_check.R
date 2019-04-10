@@ -253,3 +253,56 @@ stopifnot(!pir.check(function(x) x == 3 || x == 4, OneEq))
 #   (x == c("foo", 4)) == TRUE
 #   x + x
 # }, OneEq, warmup=list(7)))
+
+# More constantfolding
+
+stopifnot(pir.check(function() {
+  if (!FALSE)
+    42L
+  else
+    41L
+}, Returns42L))
+stopifnot(pir.check(function() {
+  if (!TRUE)
+    41L
+  else
+    42L
+}, Returns42L))
+stopifnot(pir.check(function() {
+  x <- NA
+  y <- 41L
+  if (!x == NA)
+    y + 1
+  else
+    y - 1
+}, Returns42L))
+stopifnot(pir.check(function(x) {
+  if ((x == 1) == TRUE)
+    5
+  else
+    4
+}, OneEq))
+stopifnot(pir.check(function(x) {
+  if ((x == 1) == FALSE)
+    5
+  else
+    4
+}, OneEq))
+stopifnot(pir.check(function(x) {
+  a <- x == 1 # This is the one eq
+  (x == 1) == NA
+}, OneEq))
+# Testing NoAsInt itself
+stopifnot(!pir.check(function(n) {
+  x <- 0
+  for (i in 1:n)
+    x <- x + i
+  x
+}, NoAsInt))
+# Ok
+stopifnot(pir.check(function() {
+  x <- 0
+  for (i in 1:10)
+    x <- x + i
+  x
+}, NoAsInt))

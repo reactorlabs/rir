@@ -859,6 +859,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::push(R_TrueValue));
                     } else if (what == False::instance()) {
                         cb.add(BC::push(R_FalseValue));
+                    } else if (what == NaLogical::instance()) {
+                        cb.add(BC::push(R_LogicalNAValue));
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the arg ";

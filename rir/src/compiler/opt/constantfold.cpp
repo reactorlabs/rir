@@ -106,15 +106,18 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             auto foldLglCmp = [&](SEXP carg, Value* varg, bool isEq) {
                 if (IS_SIMPLE_SCALAR(carg, LGLSXP) &&
                     varg->type.isA(PirType::simpleScalarLogical())) {
-                    bool larg = *LOGICAL(carg);
+                    int larg = *LOGICAL(carg);
                     if (larg == (int)isEq) {
                         i->replaceUsesWith(varg);
                         next = bb->remove(ip);
                     } else if (larg == (int)!isEq) {
                         auto res = new Not(varg, i->env(), i->srcIdx);
+                        // Guarenteed, and required by replaceUsesWith
+                        res->type = PirType::simpleScalarLogical();
                         i->replaceUsesWith(res);
                         bb->replace(ip, res);
                     } else if (larg == NA_LOGICAL) {
+                        // Even NA == NA (and NA != NA) yield NA
                         i->replaceUsesWith(NaLogical::instance());
                         next = bb->remove(ip);
                     } else {
@@ -171,6 +174,15 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 if (IS_SIMPLE_SCALAR(arg, INTSXP)) {
                     i->replaceUsesWith(i->arg(0).val());
                     next = bb->remove(ip);
+                } else if (IS_SIMPLE_SCALAR(arg, REALSXP) &&
+                           *REAL(arg) == (int)*REAL(arg)) {
+                    auto c = new LdConst(Rf_ScalarInteger((int)*REAL(arg)));
+                    i->replaceUsesWith(c);
+                    bb->replace(ip, c);
+                } else if (IS_SIMPLE_SCALAR(arg, LGLSXP)) {
+                    auto c = new LdConst(Rf_ScalarInteger((int)*LOGICAL(arg)));
+                    i->replaceUsesWith(c);
+                    bb->replace(ip, c);
                 }
             });
 
@@ -221,25 +233,38 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             }
 
             if (auto not_ = Not::Cast(i)) {
-                if (auto arg = isConst(not_->arg<0>().val())) {
-                    SEXP carg = arg->c();
+                Value* arg = not_->arg<0>().val();
+                if (auto varg = isConst(arg)) {
+                    SEXP carg = varg->c();
                     if (IS_SIMPLE_SCALAR(carg, LGLSXP) ||
                         IS_SIMPLE_SCALAR(carg, INTSXP) ||
                         IS_SIMPLE_SCALAR(carg, REALSXP)) {
                         assert(NA_LOGICAL == NA_INTEGER);
-                        int larg = (TYPEOF(carg) == REALSXP)
-                                       ? (int)*REAL(carg)
-                                       : (int)*INTEGER(carg);
-                        Value* rep;
-                        if (larg == 0) {
-                            rep = True::instance();
-                        } else if (larg == NA_LOGICAL) {
-                            rep = NaLogical::instance();
-                        } else {
-                            rep = False::instance();
+                        int larg;
+                        switch (TYPEOF(carg)) {
+                        case REALSXP:
+                            larg = *REAL(carg) == NA_REAL ? NA_LOGICAL
+                                                          : (int)*REAL(carg);
+                            break;
+                        case INTSXP:
+                            larg = *INTEGER(carg);
+                            break;
+                        case LGLSXP:
+                            larg = *LOGICAL(carg);
+                            break;
+                        default:
+                            assert(false);
                         }
+                        int negArg;
+                        if (larg == 0)
+                            negArg = 1;
+                        else if (larg == NA_LOGICAL)
+                            negArg = NA_LOGICAL;
+                        else
+                            negArg = 0;
+                        auto rep = new LdConst(Rf_ScalarLogical(negArg));
                         i->replaceUsesWith(rep);
-                        next = bb->remove(ip);
+                        bb->replace(ip, rep);
                     }
                 } else if (auto not2 = Not::Cast(arg)) {
                     // Double negation
