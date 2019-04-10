@@ -112,11 +112,12 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
                 // Recursively enumerate all actual values a phi might contain
                 if (Phi::Cast(i)) {
                     i->eachArg([&](Value* v) {
+                        if (auto c = PirCopy::Cast(v))
+                            v = c->arg<0>().val();
                         if (auto a = Instruction::Cast(v)) {
                             if (Phi::Cast(a)) {
                                 for (auto otherAlias : alias[a]) {
-                                    if (otherAlias->minReferenceCount() < 1 &&
-                                        !alias[i].includes(otherAlias)) {
+                                    if (!alias[i].includes(otherAlias)) {
                                         changed = true;
                                         alias[i].insert(otherAlias);
                                     }
