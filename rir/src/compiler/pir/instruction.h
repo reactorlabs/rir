@@ -193,6 +193,20 @@ class Instruction : public Value {
         }
     }
 
+    // Includes numeric vectors
+    void maskEffectsOnNumerics() {
+        bool numeric = true;
+        eachArg([&](Value* v) {
+            if (mayHaveEnv() && env() == v)
+                return;
+            if (!v->type.isA(PirType::num().notObject()))
+                numeric = false;
+        });
+        if (numeric) {
+            effects = effects & Effects(Effect::Visibility);
+        }
+    }
+
     void updateScalarOnScalarInputs() {
         if (type.maybeObj())
             return;
@@ -1154,6 +1168,7 @@ SIMPLE_INSTRUCTIONS(V, _)
                   {{lhs, rhs}}, env, srcIdx) {}                                \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(Type);                              \
+            maskEffectsOnNumerics();                                           \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
         Value* lhs() const { return arg<0>().val(); }                          \
@@ -1198,6 +1213,7 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
                                              srcIdx) {}                        \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
+            maskEffectsOnNumerics();                                           \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
     }

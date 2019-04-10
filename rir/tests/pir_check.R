@@ -221,3 +221,23 @@ stopifnot(pir.check(function(n) {
 # Negative Test
 
 stopifnot(!pir.check(function() x(), NoExternalCalls))
+
+# Numeric effect removal
+# Testing NoEq
+stopifnot(pir.check(function(x) x + 3, NoEq))
+stopifnot(!pir.check(function(x) x == 3, NoEq))
+stopifnot(!pir.check(function(x) x == 3 || x == 4, NoEq))
+# Ok
+stopifnot(!pir.check(function(x) {
+  x == 4
+  x
+}, NoEq))
+stopifnot(pir.check(function(x) {
+  x == 4
+  x
+}, NoEq, warmup=list(5)))
+stopifnot(pir.check(function(x, y) {
+  x == 3+7i
+  y == NA
+  x
+}, NoEq, warmup=list(5L, 2L)))
