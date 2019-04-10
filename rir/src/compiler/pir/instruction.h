@@ -193,16 +193,15 @@ class Instruction : public Value {
         }
     }
 
-    // Includes numeric vectors
-    void maskEffectsOnNumerics() {
-        bool numeric = true;
+    void maskWarnErrOn(PirType argt) {
+        bool safe = true;
         eachArg([&](Value* v) {
             if (mayHaveEnv() && env() == v)
                 return;
-            if (!v->type.isA(PirType::num().notObject()))
-                numeric = false;
+            if (!v->type.isA(argt))
+                safe = false;
         });
-        if (numeric) {
+        if (safe) {
             effects = effects & Effects(Effect::Visibility);
         }
     }
@@ -1172,7 +1171,7 @@ class FLIE(Colon, 3, Effects::Any() & ~Effects(Effect::Visibility)) {
 SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
-#define BINOP(Name, Type)                                                      \
+#define BINOP(Name, Type, SafeType)                                            \
     class FLIE(Name, 3, Effects::Any() & ~Effects(Effect::Visibility)) {       \
       public:                                                                  \
         Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
@@ -1182,26 +1181,26 @@ SIMPLE_INSTRUCTIONS(V, _)
         bool canRemoveEffects() const override { return true; }                \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(Type);                              \
-            maskEffectsOnNumerics();                                           \
+            maskWarnErrOn(PirType::SafeType().notObject());                    \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
         Value* lhs() const { return arg<0>().val(); }                          \
         Value* rhs() const { return arg<1>().val(); }                          \
     }
 
-BINOP(Mul, lhs()->type | rhs()->type);
-BINOP(Div, PirType::val().notObject());
-BINOP(IDiv, lhs()->type | rhs()->type);
-BINOP(Mod, lhs()->type | rhs()->type);
-BINOP(Add, lhs()->type | rhs()->type);
-BINOP(Pow, lhs()->type | rhs()->type);
-BINOP(Sub, lhs()->type | rhs()->type);
-BINOP(Gte, PirType(RType::logical).notObject());
-BINOP(Lte, PirType(RType::logical).notObject());
-BINOP(Gt, PirType(RType::logical).notObject());
-BINOP(Lt, PirType(RType::logical).notObject());
-BINOP(Neq, PirType(RType::logical).notObject());
-BINOP(Eq, PirType(RType::logical).notObject());
+BINOP(Mul, lhs()->type | rhs()->type, num);
+BINOP(Div, PirType::val().notObject(), num);
+BINOP(IDiv, lhs()->type | rhs()->type, num);
+BINOP(Mod, lhs()->type | rhs()->type, num);
+BINOP(Add, lhs()->type | rhs()->type, num);
+BINOP(Pow, lhs()->type | rhs()->type, num);
+BINOP(Sub, lhs()->type | rhs()->type, num);
+BINOP(Gte, PirType(RType::logical).notObject(), atomOrSimpleVec);
+BINOP(Lte, PirType(RType::logical).notObject(), atomOrSimpleVec);
+BINOP(Gt, PirType(RType::logical).notObject(), atomOrSimpleVec);
+BINOP(Lt, PirType(RType::logical).notObject(), atomOrSimpleVec);
+BINOP(Neq, PirType(RType::logical).notObject(), atomOrSimpleVec);
+BINOP(Eq, PirType(RType::logical).notObject(), atomOrSimpleVec);
 
 #undef BINOP
 
@@ -1218,7 +1217,7 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
 
 #undef BINOP_NOENV
 
-#define UNOP(Name)                                                             \
+#define UNOP(Name, SafeType)                                                   \
     class FLIE(Name, 2, Effects::Any() & ~Effects(Effect::Visibility)) {       \
       public:                                                                  \
         Name(Value* v, Value* env, unsigned srcIdx)                            \
@@ -1228,14 +1227,14 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
         bool canRemoveEffects() const override { return true; }                \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
-            maskEffectsOnNumerics();                                           \
+            maskWarnErrOn(PirType::SafeType().notObject());                    \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
     }
 
-UNOP(Not);
-UNOP(Plus);
-UNOP(Minus);
+UNOP(Not, num);
+UNOP(Plus, num);
+UNOP(Minus, num);
 
 #undef UNOP
 

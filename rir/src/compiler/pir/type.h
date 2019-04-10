@@ -179,6 +179,9 @@ struct PirType {
         return PirType(RType::logical) | RType::integer | RType::real |
                RType::cplx;
     }
+    static constexpr PirType atomOrSimpleVec() {
+        return num() | RType::sym | RType::chr | RType::str | RType::ast;
+    }
     static constexpr PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
