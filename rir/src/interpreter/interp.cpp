@@ -1074,6 +1074,7 @@ static SEXPREC createFakeCONS(SEXP cdr) {
         DO_FAST_BINOP(op, op2);                                                \
         if (res_type) {                                                        \
             STORE_BINOP(res_type, int_res, real_res);                          \
+            R_Visible = (Rboolean) true;                                       \
         } else {                                                               \
             BINOP_FALLBACK(#op);                                               \
             ostack_pop(ctx);                                                   \
@@ -1140,6 +1141,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         if (IS_SIMPLE_SCALAR(val, REALSXP)) {                                  \
             res = Rf_allocVector(REALSXP, 1);                                  \
             *REAL(res) = (*REAL(val) == NA_REAL) ? NA_REAL : op * REAL(val);   \
+            R_Visible = (Rboolean) true;                                       \
         } else if (IS_SIMPLE_SCALAR(val, INTSXP)) {                            \
             Rboolean naflag = FALSE;                                           \
             res = Rf_allocVector(INTSXP, 1);                                   \
@@ -1152,6 +1154,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
                 break;                                                         \
             }                                                                  \
             CHECK_INTEGER_OVERFLOW(res, naflag);                               \
+            R_Visible = (Rboolean) true;                                       \
         } else {                                                               \
             UNOP_FALLBACK(#op);                                                \
         }                                                                      \
@@ -2954,6 +2957,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
+            R_Visible = (Rboolean) true;
             NEXT();
 
         // ---------
@@ -3141,6 +3145,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         ostack_popn(ctx, 3);
 
                         ostack_push(ctx, vec);
+                        R_Visible = (Rboolean) true;
                         NEXT();
                     }
                 }
@@ -3255,6 +3260,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         ostack_popn(ctx, 4);
 
                         ostack_push(ctx, mtx);
+                        R_Visible = (Rboolean) true;
                         NEXT();
                     }
                 }
@@ -3433,7 +3439,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
-            if (res == NULL) {
+            if (res != NULL) {
+                R_Visible = (Rboolean) true;
+            } else {
                 BINOP_FALLBACK(":");
             }
 
