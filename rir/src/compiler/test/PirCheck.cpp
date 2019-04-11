@@ -125,6 +125,15 @@ static bool testOneEq(ClosureVersion* f) {
     return numEqs == 1;
 }
 
+static bool testOneNot(ClosureVersion* f) {
+    int numNots = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (Not::Cast(i))
+            numNots++;
+    });
+    return numNots == 1;
+}
+
 PirCheck::Type PirCheck::parseType(const char* str) {
 #define V(Check)                                                               \
     if (strcmp(str, #Check) == 0)                                              \

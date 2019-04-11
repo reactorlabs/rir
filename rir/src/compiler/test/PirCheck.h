@@ -19,7 +19,8 @@ namespace rir {
     V(Returns42L)                                                              \
     V(NoAsInt)                                                                 \
     V(NoEq)                                                                    \
-    V(OneEq)
+    V(OneEq)                                                                   \
+    V(OneNot)
 
 struct PirCheck {
     enum class Type : unsigned {
