@@ -30,9 +30,16 @@ AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
 
         if (builtinUpdatesVisibility(builtinId)) {
             isVisibilityChanging();
+            break;
         }
-        break;
+    // fall through
     default:
+        // This instruction might change visibility, thus it's visibility effect
+        // might be observable. But it does not clear previous visibility
+        // instructions, because it might also not change it.
+        if (i->effects.contains(Effect::Visibility))
+            vis.observable.insert(i);
+
         if (i->exits() && vis.last) {
             vis.observable.insert(vis.last);
             res.update();
