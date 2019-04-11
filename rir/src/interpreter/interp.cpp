@@ -2973,6 +2973,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
         }
 
+        // TODO: Fastcase
         INSTRUCTION(extract2_2_) {
             SEXP val = ostack_at(ctx, 2);
             SEXP idx = ostack_at(ctx, 1);

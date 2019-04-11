@@ -1001,6 +1001,7 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
+    bool alwaysOverridesVisibility() const override { return true; }
 };
 
 class FLIE(Subassign1_2D, 5, Effects::Any()) {
@@ -1037,6 +1038,9 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
+    bool alwaysOverridesVisibility() const override {
+        return !lhs()->type.isObject() && ~rhs()->type.isObject();
+    }
 };
 
 class FLIE(Extract1_1D, 3, Effects::Any()) {
@@ -1061,6 +1065,9 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
                                          {{vec, idx}}, env, srcIdx) {}
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
+    }
+    bool alwaysOverridesVisibility() const override {
+        return arg<0>().val()->type.isScalar();
     }
 };
 
@@ -1091,6 +1098,8 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
     }
+    // Uncomment when implement fastcase
+    // bool alwaysOverridesVisibility() const override { return true; }
 };
 
 class FLI(Inc, 1, Effects::None()) {
@@ -1166,6 +1175,7 @@ class FLIE(Colon, 3, Effects::Any()) {
                                          {{PirType::val(), PirType::val()}},
                                          {{lhs, rhs}}, env, srcIdx) {}
     void updateType() override final {}
+    bool alwaysOverridesVisibility() const override { return true; }
 };
 
 #define V(NESTED, name, Name)                                                  \
