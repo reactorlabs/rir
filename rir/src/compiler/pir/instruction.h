@@ -1,7 +1,6 @@
 #ifndef COMPILER_INSTRUCTION_H
 #define COMPILER_INSTRUCTION_H
 
-#include "R/Funtab.h"
 #include "R/r.h"
 #include "env.h"
 #include "instruction_list.h"
@@ -1521,9 +1520,7 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
         return hash_combine(InstructionImplementation::gvnBase(), blt);
     }
 
-    bool alwaysOverridesVisibility() const override {
-        return builtinUpdatesVisibility(builtinId);
-    }
+    bool alwaysOverridesVisibility() const override;
 
   private:
     CallBuiltin(Value * callerEnv, SEXP builtin,
@@ -1557,9 +1554,7 @@ class VLI(CallSafeBuiltin,
         return hash_combine(InstructionImplementation::gvnBase(), blt);
     }
 
-    bool alwaysOverridesVisibility() const override {
-        return builtinUpdatesVisibility(builtinId);
-    }
+    bool alwaysOverridesVisibility() const override;
 };
 
 class BuiltinCallFactory {
