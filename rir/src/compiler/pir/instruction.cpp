@@ -145,6 +145,7 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
                 do {
                     after = (Effect)((uint8_t)after + 1);
                     ++it;
+                    assert(it != effect.end()); // For cppcheck
                 } while (it + 2 != effects.end() && effects.includes(after));
             } else
                 out << ", ";
