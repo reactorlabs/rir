@@ -510,12 +510,20 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
         return new CallBuiltin(callerEnv, builtin, args, srcIdx);
 }
 
-bool CallBuiltin::alwaysOverridesVisibility() const {
-    return builtinUpdatesVisibility(builtinId);
+VisibilityMod CallBuiltin::visibilityMod() const {
+    if (builtinUpdatesVisibility(builtinId)) {
+        return VisibilityMod::AlwaysOverrides;
+    } else {
+        return VisibilityMod::Uncertain;
+    }
 }
 
-bool CallSafeBuiltin::alwaysOverridesVisibility() const {
-    return builtinUpdatesVisibility(builtinId);
+VisibilityMod CallSafeBuiltin::visibilityMod() const {
+    if (builtinUpdatesVisibility(builtinId)) {
+        return VisibilityMod::AlwaysOverrides;
+    } else {
+        return VisibilityMod::Uncertain;
+    }
 }
 
 static void printCallArgs(std::ostream& out, const CallInstruction* call) {

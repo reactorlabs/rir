@@ -119,6 +119,14 @@ enum class Controlflow : uint8_t {
     Branch,
 };
 
+// How an instruction modifies visibility
+enum class VisibilityMod : uint8_t {
+    Uncertain,
+    AlwaysVis,
+    AlwaysInvis,
+    AlwaysOverrides,
+};
+
 class Instruction : public Value {
   public:
     struct InstructionUID : public std::pair<unsigned, unsigned> {
@@ -230,13 +238,25 @@ class Instruction : public Value {
         return effects & ~(Effects(Effect::Error) | Effect::Warn |
                            Effect::Visibility | Effect::Force);
     }
+
     virtual size_t gvnBase() const = 0;
+
+    bool alwaysOverridesVisibility() const {
+        return visibilityMod() != VisibilityMod::Uncertain;
+    }
+    bool alwaysSetsVisible() const {
+        return visibilityMod() == VisibilityMod::AlwaysVis;
+    }
+    bool alwaysSetsInvisible() const {
+        return visibilityMod() == VisibilityMod::AlwaysInvis;
+    }
 
     virtual bool mayHaveEnv() const = 0;
     virtual bool hasEnv() const = 0;
     virtual bool exits() const = 0;
     virtual bool branches() const = 0;
     virtual bool branchOrExit() const = 0;
+    virtual VisibilityMod visibilityMod() const = 0;
 
     virtual size_t nargs() const = 0;
 
@@ -382,6 +402,9 @@ class InstructionImplementation : public Instruction {
     bool exits() const override final { return CF == Controlflow::Exit; }
     bool branches() const override final { return CF == Controlflow::Branch; }
     bool branchOrExit() const override final { return branches() || exits(); }
+    VisibilityMod visibilityMod() const override {
+        return VisibilityMod::Uncertain;
+    }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -1128,13 +1151,17 @@ class FLI(LdFunctionEnv, 0, Effects::None()) {
 class FLI(Visible, 0, Effect::Visibility) {
   public:
     explicit Visible() : FixedLenInstruction(PirType::voyd()) {}
-    bool alwaysOverridesVisibility() const override { return true; }
+    VisibilityMod visibilityMod() const override {
+        return VisibilityMod::AlwaysVis;
+    }
 };
 
 class FLI(Invisible, 0, Effect::Visibility) {
   public:
     explicit Invisible() : FixedLenInstruction(PirType::voyd()) {}
-    bool alwaysOverridesVisibility() const override { return true; }
+    VisibilityMod visibilityMod() const override {
+        return VisibilityMod::AlwaysInvis;
+    }
 };
 
 class FLI(PirCopy, 1, Effects::None()) {
@@ -1168,9 +1195,13 @@ class FLIE(Colon, 3, Effects::Any()) {
                                          {{PirType::val(), PirType::val()}},
                                          {{lhs, rhs}}, env, srcIdx) {}
     void updateType() override final {}
-    bool alwaysOverridesVisibility() const override {
-        return lhs()->type.isA(PirType::simpleScalar()) &&
-               rhs()->type.isA(PirType::simpleScalar());
+    VisibilityMod visibilityMod() const override {
+        if (lhs()->type.isA(PirType::simpleScalar()) &&
+            rhs()->type.isA(PirType::simpleScalar())) {
+            return VisibilityMod::AlwaysVis;
+        } else {
+            return VisibilityMod::Uncertain;
+        }
     }
     Value* lhs() const { return arg<0>().val(); }
     Value* rhs() const { return arg<1>().val(); }
@@ -1192,9 +1223,13 @@ SIMPLE_INSTRUCTIONS(V, _)
                   PirType::valOrLazy(), {{PirType::val(), PirType::val()}},    \
                   {{lhs, rhs}}, env, srcIdx) {}                                \
         bool canRemoveEffects() const override { return true; }                \
-        bool alwaysOverridesVisibility() const override {                      \
-            return lhs()->type.isA(PirType::num().notObject()) &&              \
-                   rhs()->type.isA(PirType::num().notObject());                \
+        VisibilityMod visibilityMod() const override {                         \
+            if (lhs()->type.isA(PirType::num().notObject()) &&                 \
+                rhs()->type.isA(PirType::num().notObject())) {                 \
+                return VisibilityMod::AlwaysVis;                               \
+            } else {                                                           \
+                return VisibilityMod::Uncertain;                               \
+            }                                                                  \
         }                                                                      \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(Type);                              \
@@ -1243,8 +1278,12 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
                                              {{PirType::val()}}, {{v}}, env,   \
                                              srcIdx) {}                        \
         bool canRemoveEffects() const override { return true; }                \
-        bool alwaysOverridesVisibility() const override {                      \
-            return arg<0>().val()->type.isA(PirType::num().notObject());       \
+        VisibilityMod visibilityMod() const override {                         \
+            if (arg<0>().val()->type.isA(PirType::num().notObject())) {        \
+                return VisibilityMod::AlwaysVis;                               \
+            } else {                                                           \
+                return VisibilityMod::Uncertain;                               \
+            }                                                                  \
         }                                                                      \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
@@ -1520,7 +1559,7 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
         return hash_combine(InstructionImplementation::gvnBase(), blt);
     }
 
-    bool alwaysOverridesVisibility() const override;
+    VisibilityMod visibilityMod() const override;
 
   private:
     CallBuiltin(Value * callerEnv, SEXP builtin,
@@ -1554,7 +1593,7 @@ class VLI(CallSafeBuiltin,
         return hash_combine(InstructionImplementation::gvnBase(), blt);
     }
 
-    bool alwaysOverridesVisibility() const override;
+    VisibilityMod visibilityMod() const override;
 };
 
 class BuiltinCallFactory {

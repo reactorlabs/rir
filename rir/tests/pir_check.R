@@ -230,26 +230,16 @@ stopifnot(pir.check(function(x) x == 3, OneEq))
 stopifnot(!pir.check(function(x) x == 3 || x == 4, NoEq))
 stopifnot(!pir.check(function(x) x == 3 || x == 4, OneEq))
 # Ok
-# TODO: Re-enable when we get fix visibility
-# stopifnot(!pir.check(function(x) {
-#   x == 4
-#   x
-# }, NoEq))
-# stopifnot(pir.check(function(x) {
-#   x == 4
-#   x
-# }, NoEq, warmup=list(5)))
-# stopifnot(pir.check(function(x, y) {
-#   x == 3+7i
-#   y == NA
-#   x
-# }, NoEq, warmup=list(5L, 2L)))
-# stopifnot(pir.check(function(x, y) {
-#   x == "foo"
-#   y == quote(bar + 1)
-#   x
-# }, NoEq, warmup=list(5L, 2L)))
-# stopifnot(pir.check(function(x) {
-#   (x == c("foo", 4)) == TRUE
-#   x + x
-# }, OneEq, warmup=list(7)))
+stopifnot(!pir.check(function(x) {
+  x == 4
+  x
+}, NoEq))
+stopifnot(pir.check(function(x) {
+  x == 4
+  x
+}, NoEq, warmup=list(5)))
+stopifnot(pir.check(function(x, y) {
+  x == 3+7i
+  y == NA
+  x
+}, NoEq, warmup=list(5L, 2L)))
