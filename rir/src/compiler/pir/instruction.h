@@ -1,6 +1,7 @@
 #ifndef COMPILER_INSTRUCTION_H
 #define COMPILER_INSTRUCTION_H
 
+#include "R/Funtab.h"
 #include "R/r.h"
 #include "env.h"
 #include "instruction_list.h"
@@ -1001,7 +1002,6 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
-    bool alwaysOverridesVisibility() const override { return true; }
 };
 
 class FLIE(Subassign1_2D, 5, Effects::Any()) {
@@ -1038,9 +1038,6 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
-    bool alwaysOverridesVisibility() const override {
-        return !lhs()->type.isObject() && ~rhs()->type.isObject();
-    }
 };
 
 class FLIE(Extract1_1D, 3, Effects::Any()) {
@@ -1065,9 +1062,6 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
                                          {{vec, idx}}, env, srcIdx) {}
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
-    }
-    bool alwaysOverridesVisibility() const override {
-        return arg<0>().val()->type.isScalar();
     }
 };
 
@@ -1098,8 +1092,6 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
     }
-    // Uncomment when implement fastcase
-    // bool alwaysOverridesVisibility() const override { return true; }
 };
 
 class FLI(Inc, 1, Effects::None()) {
@@ -1137,11 +1129,13 @@ class FLI(LdFunctionEnv, 0, Effects::None()) {
 class FLI(Visible, 0, Effect::Visibility) {
   public:
     explicit Visible() : FixedLenInstruction(PirType::voyd()) {}
+    bool alwaysOverridesVisibility() const override { return true; }
 };
 
 class FLI(Invisible, 0, Effect::Visibility) {
   public:
     explicit Invisible() : FixedLenInstruction(PirType::voyd()) {}
+    bool alwaysOverridesVisibility() const override { return true; }
 };
 
 class FLI(PirCopy, 1, Effects::None()) {
@@ -1175,7 +1169,12 @@ class FLIE(Colon, 3, Effects::Any()) {
                                          {{PirType::val(), PirType::val()}},
                                          {{lhs, rhs}}, env, srcIdx) {}
     void updateType() override final {}
-    bool alwaysOverridesVisibility() const override { return true; }
+    bool alwaysOverridesVisibility() const override {
+        return lhs()->type.isA(PirType::simpleScalar()) &&
+               rhs()->type.isA(PirType::simpleScalar());
+    }
+    Value* lhs() const { return arg<0>().val(); }
+    Value* rhs() const { return arg<1>().val(); }
 };
 
 #define V(NESTED, name, Name)                                                  \
@@ -1193,6 +1192,11 @@ SIMPLE_INSTRUCTIONS(V, _)
             : FixedLenInstructionWithEnvSlot(                                  \
                   PirType::valOrLazy(), {{PirType::val(), PirType::val()}},    \
                   {{lhs, rhs}}, env, srcIdx) {}                                \
+        bool canRemoveEffects() const override { return true; }                \
+        bool alwaysOverridesVisibility() const override {                      \
+            return lhs()->type.isA(PirType::num().notObject()) &&              \
+                   rhs()->type.isA(PirType::num().notObject());                \
+        }                                                                      \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(Type);                              \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
@@ -1239,6 +1243,10 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
             : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),             \
                                              {{PirType::val()}}, {{v}}, env,   \
                                              srcIdx) {}                        \
+        bool canRemoveEffects() const override { return true; }                \
+        bool alwaysOverridesVisibility() const override {                      \
+            return arg<0>().val()->type.isA(PirType::num().notObject());       \
+        }                                                                      \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
@@ -1513,6 +1521,10 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
         return hash_combine(InstructionImplementation::gvnBase(), blt);
     }
 
+    bool alwaysOverridesVisibility() const override {
+        return builtinUpdatesVisibility(builtinId);
+    }
+
   private:
     CallBuiltin(Value * callerEnv, SEXP builtin,
                 const std::vector<Value*>& args, unsigned srcIdx);
@@ -1543,6 +1555,10 @@ class VLI(CallSafeBuiltin,
 
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), blt);
+    }
+
+    bool alwaysOverridesVisibility() const override {
+        return builtinUpdatesVisibility(builtinId);
     }
 };
 

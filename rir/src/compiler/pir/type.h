@@ -203,6 +203,12 @@ struct PirType {
         return PirType(RType::logical).notObject().scalar();
     }
 
+    static constexpr PirType simpleScalar() {
+        return (PirType(RType::integer) | RType::real | RType::logical)
+            .notObject()
+            .scalar();
+    }
+
     static constexpr PirType promiseWrappedVal() {
         return val().orPromiseWrapped();
     }
