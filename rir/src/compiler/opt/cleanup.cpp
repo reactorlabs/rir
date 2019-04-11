@@ -57,7 +57,10 @@ class TheCleanup {
                     }
                 } else if (auto phi = Phi::Cast(i)) {
                     std::unordered_set<Value*> phin;
-                    phi->eachArg([&](BB*, Value* v) { phin.insert(v); });
+                    phi->eachArg([&](BB*, Value* v) {
+                        if (v != phi)
+                            phin.insert(v);
+                    });
                     if (phin.size() == 1) {
                         removed = true;
                         phi->replaceUsesWith(*phin.begin());

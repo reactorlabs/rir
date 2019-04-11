@@ -187,17 +187,6 @@ class TheVerifier {
         if (auto phi = Phi::Cast(i)) {
             phi->eachArg([&](BB* input, Value* v) {
                 if (auto iv = Instruction::Cast(v)) {
-                    if (iv == phi) {
-                        // Note: can happen in a one-block loop, but only if it
-                        // is not edge-split
-                        std::cerr << "Error at instruction '";
-                        i->print(std::cerr);
-                        std::cerr << "': input '";
-                        iv->printRef(std::cerr);
-                        std::cerr << "' phi has itself as input\n";
-                        ok = false;
-                    }
-
                     if (input == phi->bb()) {
                         // Note: can happen in a one-block loop, but only if it
                         // is not edge-split
