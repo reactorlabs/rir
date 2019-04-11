@@ -104,7 +104,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             auto next = ip + 1;
 
             auto foldLglCmp = [&](SEXP carg, Value* varg, bool isEq) {
-                if (IS_SIMPLE_SCALAR(carg, LGLSXP) &&
+                if (!isConst(varg) && // If this is true, was already folded
+                    IS_SIMPLE_SCALAR(carg, LGLSXP) &&
                     varg->type.isA(PirType::simpleScalarLogical())) {
                     int larg = *LOGICAL(carg);
                     if (larg == (int)isEq) {
@@ -140,6 +141,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             FOLD_BINARY_NATIVE(Lte, symbol::Le);
             FOLD_BINARY_NATIVE(Gte, symbol::Ge);
             FOLD_BINARY_NATIVE(Pow, symbol::Pow);
+            FOLD_BINARY_NATIVE(Eq, symbol::Eq);
+            FOLD_BINARY_NATIVE(Neq, symbol::Ne);
 
             FOLD_BINARY_EITHER(Eq, [&](SEXP carg, Value* varg) {
                 return foldLglCmp(carg, varg, true);
@@ -240,7 +243,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         IS_SIMPLE_SCALAR(carg, INTSXP) ||
                         IS_SIMPLE_SCALAR(carg, REALSXP)) {
                         assert(NA_LOGICAL == NA_INTEGER);
-                        int larg;
+                        int larg = -1;
                         switch (TYPEOF(carg)) {
                         case REALSXP:
                             larg = *REAL(carg) == NA_REAL ? NA_LOGICAL

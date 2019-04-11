@@ -269,29 +269,45 @@ stopifnot(pir.check(function() {
     42L
 }, Returns42L))
 stopifnot(pir.check(function() {
+  x <- FALSE
+  y <- 41L
+  if (!x == TRUE)
+    y + 1L
+  else
+    y - 1L
+}, Returns42L))
+stopifnot(!pir.check(function() {
   x <- NA
   y <- 41L
   if (!x == NA)
-    y + 1
+    y + 1L
   else
-    y - 1
+    y - 1L
 }, Returns42L))
+stopifnot(pir.check(function() {
+  x <- NA
+  y <- 41L
+  if (!x == NA)
+    y + 1L
+  else
+    y - 1L
+}, NoEq))
 stopifnot(pir.check(function(x) {
   if ((x == 1) == TRUE)
     5
   else
     4
-}, OneEq))
+}, OneEq, warmup=list(3)))
 stopifnot(pir.check(function(x) {
   if ((x == 1) == FALSE)
     5
   else
     4
-}, OneEq))
-stopifnot(pir.check(function(x) {
-  a <- x == 1 # This is the one eq
+}, OneEq, warmup=list(4L)))
+stopifnot(pir.check(function(x, y) {
+  a <- y == 1 # This is the one eq
   (x == 1) == NA
-}, OneEq))
+}, OneEq, warmup=list(5.7, data.frame())))
 # Testing NoAsInt itself
 stopifnot(!pir.check(function(n) {
   x <- 0
