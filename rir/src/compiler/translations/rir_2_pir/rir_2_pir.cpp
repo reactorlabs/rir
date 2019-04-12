@@ -452,7 +452,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             given.add(Assumption::CorrectOrderOfArguments);
             compiler.compileClosure(
                 monomorphic, name, given,
-                [&](ClosureVersion* f) {
+                [&](ClosureVersion* f, bool) {
                     pop();
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
@@ -1020,7 +1020,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             inner << (pos - srcCode->code());
 
             compiler.compileFunction(function, inner.str(), formals, srcRef,
-                                     [&](ClosureVersion* innerF) {
+                                     [&](ClosureVersion* innerF, bool) {
                                          cur.stack.push(insert(new MkFunCls(
                                              innerF->owner(), dt, insert.env)));
 

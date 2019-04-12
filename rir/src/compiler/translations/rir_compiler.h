@@ -21,7 +21,7 @@ class RirCompiler {
     RirCompiler& operator=(const RirCompiler&) = delete;
 
     typedef std::function<void()> Maybe;
-    typedef std::function<void(ClosureVersion*)> MaybeCls;
+    typedef std::function<void(ClosureVersion*, bool)> MaybeCls;
 
     void preserve(SEXP c) { preserve_(c); }
 

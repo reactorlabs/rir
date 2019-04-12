@@ -109,7 +109,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     }
 
     if (auto existing = closure->findCompatibleVersion(ctx))
-        return success(existing);
+        return success(existing, false);
 
     auto version = closure->declareVersion(ctx);
 
@@ -156,7 +156,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         log.compilationEarlyPir(version);
         Verify::apply(version);
         log.flush();
-        return success(version);
+        return success(version, true);
 
         log.failed("rir2pir failed to verify");
         log.flush();

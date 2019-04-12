@@ -36,7 +36,7 @@ static ClosureVersion* compilePir(SEXP f, Module* m) {
     Rir2PirCompiler cmp(m, logger);
     ClosureVersion* res = nullptr;
     cmp.compileClosure(
-        f, "pir_check", assumptions, [&](ClosureVersion* r) { res = r; },
+        f, "pir_check", assumptions, [&](ClosureVersion* r, bool) { res = r; },
         []() { Rf_warning("pir check failed: couldn't compile"); });
 
     cmp.optimizeModule();

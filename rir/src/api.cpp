@@ -222,8 +222,13 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
     logger.title("Compiling " + name);
     pir::Rir2PirCompiler cmp(m, logger);
     cmp.compileClosure(what, name, assumptions,
-                       [&](pir::ClosureVersion* c) {
+                       [&](pir::ClosureVersion* c, bool isNew) {
                            logger.flush();
+                           if (!isNew) {
+                               logger.debug("Reused already compiled version");
+                               return;
+                           }
+
                            cmp.optimizeModule();
 
                            // compile back to rir

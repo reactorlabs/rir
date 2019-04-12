@@ -40,6 +40,7 @@ class LogStream {
     void pirOptimizations(ClosureVersion*, const PirTranslator*);
     void afterAllocator(Code*, std::function<void(std::ostream&)>);
     void CSSA(Code*);
+    void reusedPIR(ClosureVersion*);
     void finalPIR(ClosureVersion*);
     void finalRIR(Function*);
     void unsupportedBC(const std::string&, const rir::BC&);
@@ -149,6 +150,7 @@ class StreamLogger {
         return *streams.at(cls);
     }
 
+    void debug(const std::string& msg);
     void warn(const std::string& msg);
 
     void title(const std::string& msg);

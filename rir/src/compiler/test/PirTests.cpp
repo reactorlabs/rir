@@ -66,7 +66,8 @@ ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
             cmp.compileClosure(fun, "test_function",
-                               [&](pir::ClosureVersion* cls) {
+                               [&](pir::ClosureVersion* cls, bool isNew) {
+                                   assert(isNew);
                                    results[CHAR(PRINTNAME(f.tag()))] = cls;
                                },
                                []() { assert(false); });

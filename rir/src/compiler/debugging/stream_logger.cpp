@@ -173,6 +173,14 @@ void LogStream::unsupportedBC(const std::string& warning, const rir::BC& bc) {
     }
 }
 
+void StreamLogger::debug(const std::string& msg) {
+    if (!options.includes(DebugFlag::PrintIntoFiles) &&
+        (options.intersects(PrintDebugPasses) ||
+         options.includes(DebugFlag::ShowWarnings))) {
+        std::cout << msg << "\n";
+    }
+}
+
 void StreamLogger::warn(const std::string& msg) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         std::cerr << "Warning: " << msg << "\n";
