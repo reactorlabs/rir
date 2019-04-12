@@ -69,6 +69,61 @@ void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
     }
 }
 
+void Instruction::printEffects(std::ostream& out, bool tty) const {
+    assert(canRemoveEffects());
+    Effects eff = effects;
+    if (tty) {
+        if (eff.contains(Effect::WritesEnv))
+            ConsoleColor::red(out);
+        else if (eff.contains(Effect::LeaksEnv))
+            ConsoleColor::magenta(out);
+        else if (eff.contains(Effect::ReadsEnv))
+            ConsoleColor::yellow(out);
+    }
+    eff.reset(Effect::ReadsEnv);
+    eff.reset(Effect::WritesEnv);
+    eff.reset(Effect::LeaksEnv);
+    Effects allEff = Effects::Any();
+    allEff.reset(Effect::ReadsEnv);
+    allEff.reset(Effect::WritesEnv);
+    allEff.reset(Effect::LeaksEnv);
+    if (eff == allEff) {
+        out << "!!!";
+    } else if (eff == Effects::None()) {
+        out << "---";
+    } else {
+        for (auto it = eff.begin(); it != eff.end(); ++it) {
+            Effect effect = *it;
+            switch (effect) {
+#define CASE(Name, Str)                                                        \
+    case Effect::Name:                                                         \
+        out << Str;                                                            \
+        break;
+                CASE(Visibility, "v")
+                CASE(Warn, "w")
+                CASE(Error, "e")
+                CASE(Force, "f")
+                CASE(Reflection, "r")
+                CASE(LeakArg, "l")
+                CASE(ChangesContexts, "c")
+                CASE(TriggerDeopt, "d")
+                CASE(ExecuteCode, "x")
+#undef CASE
+            default:
+                assert(false);
+            }
+        }
+    }
+    ConsoleColor::clear(out);
+}
+
+void printPaddedEffects(std::ostream& out, bool tty,
+                        const Instruction* i) const {
+    std::ostringstream buf;
+    i->printEffects(out, tty);
+    out << std::setw(3) << buf.str();
+}
+
 void Instruction::printArgs(std::ostream& out, bool tty) const {
     size_t n = nargs();
     size_t env = hasEnv() ? envSlot() : n + 1;
@@ -110,85 +165,20 @@ void Instruction::printEnv(std::ostream& out, bool tty) const {
     }
 }
 
-void Instruction::printEffects(std::ostream& out, bool tty) const {
-    assert(canRemoveEffects());
-    for (auto it = effects.begin(); it != effects.end(); ++it) {
-        Effect effect = *it;
-        switch (effect) {
-#define CASE(Name, Str)                                                        \
-    case Effect::Name:                                                         \
-        out << Str;                                                            \
-        break;
-            CASE(Visibility, "Vis")
-            CASE(Warn, "Warn")
-            CASE(Error, "Err")
-            CASE(Force, "Force")
-            CASE(Reflection, "Refl")
-            CASE(LeakArg, "LeakArg")
-            CASE(ChangesContexts, "ModCtx")
-            CASE(ReadsEnv, "ReadEnv")
-            CASE(WritesEnv, "WriteEnv")
-            CASE(LeaksEnv, "LeakEnv")
-            CASE(TriggerDeopt, "Deopt")
-            CASE(ExecuteCode, "Exec")
-#undef CASE
-        default:
-            assert(false);
-        }
-        if (it + 1 != effects.end()) {
-            Effect next = (Effect)((uint8_t)effect + 1);
-            // NOTE: Can go past last effect (will never be read in that case)
-            Effect after = (Effect)((uint8_t)effect + 2);
-            if (it + 2 != effects.end() && effects.includes(next) &&
-                effects.includes(after)) {
-                out << "...";
-                do {
-                    after = (Effect)((uint8_t)after + 1);
-                    ++it;
-                    assert(it != effects.end()); // For cppcheck
-                } while (it + 2 != effects.end() && effects.includes(after));
-            } else
-                out << ", ";
-        }
-    }
-}
-
-void Instruction::printArgsEnvEffects(std::ostream& out, bool tty) const {
-    if (canRemoveEffects()) {
-        std::ostringstream buf;
-        printArgs(buf, tty);
-        printEnv(buf, tty);
-        out << std::setw(24) << buf.str();
-        printEffects(out, tty);
-    } else {
-        printArgs(out, tty);
-        printEnv(out, tty);
-    }
-}
-
-void Instruction::printGraphArgsEnvEffects(std::ostream& out, bool tty) const {
-    if (canRemoveEffects()) {
-        std::ostringstream buf;
-        printGraphArgs(buf, tty);
-        printEnv(buf, tty);
-        out << std::setw(24) << buf.str();
-        printEffects(out, tty);
-    } else {
-        printGraphArgs(out, tty);
-        printEnv(out, tty);
-    }
-}
-
 void Instruction::print(std::ostream& out, bool tty) const {
     printPaddedTypeAndRef(out, this);
     printPaddedInstructionName(out, name());
-    printArgsEnvEffects(out, tty);
+    printPaddedEffects(out, tty, this);
+    printArgs(buf, tty);
+    printEnv(buf, tty);
 }
 
 void Instruction::printGraph(std::ostream& out, bool tty) const {
     printPaddedTypeAndRef(out, this);
     printPaddedInstructionName(out, name());
-    printGraphArgsEnvEffects(out, tty);
+    printPaddedEffects(out, tty, this);
+    printGraphArgs(buf, tty);
+    printEnv(buf, tty);
 }
 
 bool Instruction::validIn(Code* code) const { return bb()->owner == code; }

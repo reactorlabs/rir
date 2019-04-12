@@ -81,9 +81,8 @@ struct InstrArg {
 enum class HasEnvSlot : uint8_t { Yes, No };
 
 // Effect that can be produced by an instruction.
-// This is a trivial lattice, any effect with higher order contains all the
-// lower order effects.
-enum class Effect : uint8_t {
+enum class Effect : int8_t {
+    None = -1,
     // Changes R_Visible
     Visibility,
     // Instruction might produce a warning. Example: AsTest warns if the
@@ -112,6 +111,11 @@ enum class Effect : uint8_t {
     FIRST = Visibility,
     LAST = ExecuteCode,
 };
+// Effects an instruction causes itself. These effects can lead to
+// lower effects, e.g. if an instruction executes more code, that can cause
+// a warning, but if the instruction doesn't cause a warning another way
+// we can remove Effect::Warning from this set. So dont't make assumptions
+// on these, instead use Instruction's public methods
 typedef EnumSet<Effect> Effects;
 
 // Controlflow of instruction.
@@ -133,13 +137,8 @@ class Instruction : public Value {
     Instruction(Tag tag, PirType t, Effects effects, unsigned srcIdx)
         : Value(t, tag), effects(effects), srcIdx(srcIdx) {}
 
-    Effects effects;
-
-    bool hasEffect() const { return !effects.empty(); }
-
-    virtual size_t gvnBase() const = 0;
-
   private:
+    Effects effects;
     Effects getObservableEffects() const {
         auto e = effects;
         // Those are effects, and we are required to have them in the correct
@@ -152,6 +151,16 @@ class Instruction : public Value {
     }
 
   public:
+    void clearEffects() { effects.reset(); }
+    bool hasEffect() const { return !effects.empty(); }
+    Effect maxEffect() const {
+        if (hasEffect()) {
+            return effects.max();
+        } else {
+            return Effect::None;
+        }
+    }
+
     bool hasImpureEffects() const {
         auto e = getObservableEffects();
         // Yes visibility is a global effect. We try to preserve it. But geting
@@ -166,15 +175,11 @@ class Instruction : public Value {
 
     bool isDeoptBarrier() const { return hasImpureEffects(); }
     bool mightChangeVisibility() const {
-        return effects.includes(Effect::Visibility);
+        return maxEffect() >= Effect::Visibility;
     }
-    bool mayUseReflection() const {
-        return effects.includes(Effect::Reflection);
-    }
-    bool mayForcePromises() const { return effects.includes(Effect::Force); }
-    bool leaksArg(Value* val) const {
-        return leaksEnv() || effects.includes(Effect::LeakArg);
-    }
+    bool mayUseReflection() const { return maxEffect() >= Effect::Reflection; }
+    bool mayForcePromises() const { return maxEffect() >= Effect::Force; }
+    bool leaksArg(Value* val) const { return maxEffect() >= Effect::LeakArg; }
 
     void maskEffectsAndTypeOnNonObjects(PirType tmask,
                                         Effects mask = Effects(Effect::Error) |
@@ -229,21 +234,30 @@ class Instruction : public Value {
     }
 
     bool readsEnv() const {
-        return hasEnv() && effects.includes(Effect::ReadsEnv);
+        return hasEnv() && (effects.includes(Effect::ReadsEnv) ||
+                            maxEffect() >= Effect::TriggerDeopt);
     }
     bool changesEnv() const {
-        return hasEnv() && effects.includes(Effect::WritesEnv);
+        return hasEnv() && (effects.includes(Effect::WritesEnv) ||
+                            maxEffect() >= Effect::TriggerDeopt);
     }
     bool leaksEnv() const {
-        return hasEnv() && effects.includes(Effect::LeaksEnv);
+        return hasEnv() && (effects.includes(Effect::LeaksEnv) ||
+                            maxEffect() >= Effect::TriggerDeopt);
     }
+
+    size_t gvnEffectsHash() const {
+        auto maskedEffects = effects & ~(Effects(Effect::Error) | Effect::Warn |
+                                         Effect::Visibility | Effect::Force);
+        return maskedEffects.to_i();
+    }
+    virtual size_t gvnBase() const = 0;
 
     virtual bool mayHaveEnv() const = 0;
     virtual bool hasEnv() const = 0;
     virtual bool exits() const = 0;
     virtual bool branches() const = 0;
     virtual bool branchOrExit() const = 0;
-    virtual bool canRemoveEffects() const = 0;
 
     virtual size_t nargs() const = 0;
 
@@ -283,13 +297,11 @@ class Instruction : public Value {
 
     virtual void updateType(){};
 
+    virtual void printEffects(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
     virtual void printGraphArgs(std::ostream& out, bool tty) const;
     virtual void printGraphBranches(std::ostream& out, size_t bbId) const;
     virtual void printEnv(std::ostream& out, bool tty) const;
-    virtual void printEffects(std::ostream& out, bool tty) const;
-    void printArgsEnvEffects(std::ostream& out, bool tty) const;
-    void printGraphArgsEnvEffects(std::ostream& out, bool tty) const;
     virtual void print(std::ostream& out, bool tty = false) const;
     void printGraph(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
@@ -381,9 +393,7 @@ class InstructionImplementation : public Instruction {
     }
 
     size_t gvnBase() const override {
-        auto maskedEffects = effects & ~(Effects(Effect::Error) | Effect::Warn |
-                                         Effect::Visibility | Effect::Force);
-        return hash_combine((size_t)ITAG, maskedEffects.to_i());
+        return hash_combine((size_t)ITAG, gvnEffectsHash());
     };
 
     bool mayHaveEnv() const override final { return ENV == HasEnvSlot::Yes; }
@@ -393,7 +403,6 @@ class InstructionImplementation : public Instruction {
     bool exits() const override final { return CF == Controlflow::Exit; }
     bool branches() const override final { return CF == Controlflow::Branch; }
     bool branchOrExit() const override final { return branches() || exits(); }
-    bool canRemoveEffects() const override { return false; }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -878,7 +887,6 @@ class FLI(Seq, 3, Effects::None()) {
               // TODO: require scalars, but this needs some cast support
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{start, end, step}}) {}
-    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(PirType::num().notObject());
     }
@@ -927,7 +935,7 @@ class FLIE(Force, 2, Effects::Any()) {
     void updateType() override final {
         type = arg<0>().val()->type.forced();
         if (!input()->type.maybeLazy()) {
-            effects.reset();
+            clearEffects();
         }
     }
     int minReferenceCount() const override { return MAX_REFCOUNT; }
@@ -977,7 +985,6 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* rhs() { return arg(0).val(); }
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
-    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
@@ -994,7 +1001,6 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Value* rhs() { return arg(0).val(); }
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
-    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
@@ -1013,7 +1019,6 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
-    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
@@ -1032,7 +1037,6 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
-    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
     }
@@ -1044,7 +1048,6 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
-    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         auto t = arg<0>().val()->type;
         if (arg<1>().val()->type.isScalar())
@@ -1059,7 +1062,6 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
-    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
     }
@@ -1073,7 +1075,6 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
-    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         auto t = arg<0>().val()->type;
         if (arg<1>().val()->type.isScalar())
@@ -1090,7 +1091,6 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
-    bool canRemoveEffects() const override { return true; }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
     }
@@ -1186,7 +1186,6 @@ SIMPLE_INSTRUCTIONS(V, _)
             : FixedLenInstructionWithEnvSlot(                                  \
                   PirType::valOrLazy(), {{PirType::val(), PirType::val()}},    \
                   {{lhs, rhs}}, env, srcIdx) {}                                \
-        bool canRemoveEffects() const override { return true; }                \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(Type);                              \
             maskWarnErrOn(PirType::SafeType().notObject());                    \
@@ -1232,7 +1231,6 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
             : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),             \
                                              {{PirType::val()}}, {{v}}, env,   \
                                              srcIdx) {}                        \
-        bool canRemoveEffects() const override { return true; }                \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
             maskWarnErrOn(PirType::SafeType().notObject());                    \
