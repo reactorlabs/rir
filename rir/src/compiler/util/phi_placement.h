@@ -23,7 +23,7 @@ class PhiPlacement {
     };
     typedef std::unordered_map<BB*, SmallSet<PhiInput>> Phis;
     bool success = false;
-    BB* targetPhi = nullptr;
+    BB* targetPhiPosition = nullptr;
     Phis placement;
 
     PhiPlacement(ClosureVersion* cls, BB* target,
