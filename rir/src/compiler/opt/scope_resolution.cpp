@@ -51,7 +51,7 @@ class TheScopeResolution {
         };
 
         auto tryInsertPhis = [&](AbstractPirValue res, BB* bb,
-                                 BB::Instrs::iterator& iter) -> Instruction* {
+                                 BB::Instrs::iterator& iter) -> Value* {
             if (res.isUnknown())
                 return nullptr;
 
@@ -138,7 +138,7 @@ class TheScopeResolution {
             for (auto& phi : thePhis)
                 phi.second->updateType();
 
-            return thePhis.at(pl.targetPhi);
+            return thePhis.at(pl.targetPhiPosition);
         };
 
         Visitor::run(function->entry, [&](BB* bb) {

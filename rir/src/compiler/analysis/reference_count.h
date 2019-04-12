@@ -95,8 +95,26 @@ struct AUses {
         return res;
     }
 
-    void print(std::ostream&, bool) const {
-        // TODO
+    void print(std::ostream& out, bool) const {
+        for (const auto& use : uses) {
+            use.first->print(out);
+            out << " = ";
+            switch (use.second) {
+            case Kind::None:
+                out << "0";
+                break;
+            case Kind::Once:
+                out << "1";
+                break;
+            case Kind::AlreadyIncremented:
+                out << "+1";
+                break;
+            case Kind::Multiple:
+                out << "m";
+                break;
+            }
+            out << "\n";
+        }
     }
 };
 
@@ -112,6 +130,10 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
                 // Recursively enumerate all actual values a phi might contain
                 if (Phi::Cast(i)) {
                     i->eachArg([&](Value* v) {
+                        v = v->followCasts();
+                        while (auto cp = PirCopy::Cast(v->followCasts()))
+                            v = cp->arg<0>().val();
+                        v = v->followCasts();
                         if (auto a = Instruction::Cast(v)) {
                             if (Phi::Cast(a)) {
                                 for (auto otherAlias : alias[a]) {
@@ -154,16 +176,10 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             }
         }
 
-        std::function<void(Value*, bool)> count = [&](Value* v,
-                                                      bool constantUse) {
+        auto count = [&](Value* v, bool constantUse) {
             auto i = Instruction::Cast(v);
             if (!i)
                 return;
-
-            if (auto cp = PirCopy::Cast(i))
-                return count(cp->arg<0>().val(), constantUse);
-            if (auto cp = CastType::Cast(i))
-                return count(cp->arg<0>().val(), constantUse);
 
             auto use = state.uses.find(i);
             if (use == state.uses.end()) {
@@ -196,6 +212,11 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
 
         std::function<void(Value*, bool)> apply = [&](Value* v,
                                                       bool constantUse) {
+            v = v->followCasts();
+            while (auto cp = PirCopy::Cast(v->followCasts()))
+                v = cp->arg<0>().val();
+            v = v->followCasts();
+
             if (auto j = Instruction::Cast(v)) {
                 if (j->minReferenceCount() >= 1)
                     return;
