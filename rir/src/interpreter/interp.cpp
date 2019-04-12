@@ -2130,18 +2130,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (fun->invocationCount() % PIR_WARMUP == 0) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
-                if (assumptions != fun->signature().assumptions) {
+                if (assumptions != fun->signature().assumptions)
                     // We have more assumptions available, let's recompile
                     dispatchFail = true;
-
-#ifdef DEBUG_DISPATCH
-                    std::cout << "Optimizing static for new context:";
-                    std::cout << given << " vs " << fun->signature().assumptions
-                              << "\n";
-#endif
-                    SEXP name = CAR(call.ast);
-                    ctx->closureOptimizer(callee, assumptions, name);
-                }
             }
 
             if (dispatchFail) {
