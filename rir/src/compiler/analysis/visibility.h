@@ -10,7 +10,6 @@ namespace pir {
 class LastVisibilityUpdate {
   public:
     std::unordered_set<Instruction*> observable;
-    Instruction* last;
 
     AbstractResult mergeExit(const LastVisibilityUpdate& other) {
         return merge(other);
@@ -24,25 +23,10 @@ class LastVisibilityUpdate {
                 res.update();
             }
         }
-        if (last != other.last) {
-            if (last && !observable.count(last)) {
-                observable.insert(last);
-                res.update();
-            }
-            if (other.last && !observable.count(other.last)) {
-                observable.insert(other.last);
-                res.update();
-            }
-        }
         return res;
     }
 
     void print(std::ostream& out, bool tty) const {
-        if (last) {
-            out << "Last Update : ";
-            last->printRef(std::cout);
-            out << "\n";
-        }
         out << "Observable: ";
         for (auto& o : observable) {
             o->printRef(out);
