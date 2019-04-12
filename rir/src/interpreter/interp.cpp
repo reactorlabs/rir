@@ -3145,8 +3145,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         ostack_popn(ctx, 3);
 
                         ostack_push(ctx, vec);
-                        // This is intentional - subassign enables visibility
-                        R_Visible = (Rboolean) true;
                         NEXT();
                     }
                 }
@@ -3261,8 +3259,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         ostack_popn(ctx, 4);
 
                         ostack_push(ctx, mtx);
-                        // This is intentional - subassign enables visibility
-                        R_Visible = (Rboolean) true;
                         NEXT();
                     }
                 }
