@@ -156,10 +156,9 @@ class TheScopeResolution {
                     (CallInstruction::CastCall(i) || Force::Cast(i))) {
                     if (after.noReflection()) {
                         i->elideEnv();
-                        i->effects.reset(Effect::Reflection);
                     }
                     if (after.envNotEscaped(i->env())) {
-                        i->effects.reset(Effect::LeaksEnv);
+                        i->clearLeaksEnv();
                     }
                 }
 

@@ -152,6 +152,7 @@ class Instruction : public Value {
 
   public:
     void clearEffects() { effects.reset(); }
+    void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
     bool hasEffect() const { return !effects.empty(); }
     Effect maxEffect() const {
         if (hasEffect()) {
@@ -246,10 +247,11 @@ class Instruction : public Value {
                             maxEffect() >= Effect::TriggerDeopt);
     }
 
-    size_t gvnEffectsHash() const {
-        auto maskedEffects = effects & ~(Effects(Effect::Error) | Effect::Warn |
-                                         Effect::Visibility | Effect::Force);
-        return maskedEffects.to_i();
+    // Instructions can be deduplicated if they have different effects,
+    // unless these effects are different
+    Effects gvnEffects() const {
+        return effects & ~(Effects(Effect::Error) | Effect::Warn |
+                           Effect::Visibility | Effect::Force);
     }
     virtual size_t gvnBase() const = 0;
 
@@ -362,7 +364,10 @@ class Instruction : public Value {
         assert(!mayHaveEnv() && "subclass must override env() if it uses env");
         assert(false && "this instruction has no env");
     }
-    void elideEnv() { arg(envSlot()).val() = Env::elided(); }
+    void elideEnv() {
+        arg(envSlot()).val() = Env::elided();
+        effects.reset(Effect::Reflection);
+    }
     virtual size_t envSlot() const {
         assert(!mayHaveEnv() &&
                "subclass must override envSlot() if it uses env");
@@ -393,7 +398,7 @@ class InstructionImplementation : public Instruction {
     }
 
     size_t gvnBase() const override {
-        return hash_combine((size_t)ITAG, gvnEffectsHash());
+        return hash_combine((size_t)ITAG, gvnEffects().to_i());
     };
 
     bool mayHaveEnv() const override final { return ENV == HasEnvSlot::Yes; }
