@@ -112,8 +112,6 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
                 // Recursively enumerate all actual values a phi might contain
                 if (Phi::Cast(i)) {
                     i->eachArg([&](Value* v) {
-                        if (auto c = PirCopy::Cast(v))
-                            v = c->arg<0>().val();
                         if (auto a = Instruction::Cast(v)) {
                             if (Phi::Cast(a)) {
                                 for (auto otherAlias : alias[a]) {
@@ -156,7 +154,17 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             }
         }
 
-        auto count = [&](Instruction* i, bool constantUse) {
+        std::function<void(Value*, bool)> count = [&](Value* v,
+                                                      bool constantUse) {
+            auto i = Instruction::Cast(v);
+            if (!i)
+                return;
+
+            if (auto cp = PirCopy::Cast(i))
+                return count(cp->arg<0>().val(), constantUse);
+            if (auto cp = CastType::Cast(i))
+                return count(cp->arg<0>().val(), constantUse);
+
             auto use = state.uses.find(i);
             if (use == state.uses.end()) {
                 if (!constantUse) {
@@ -191,11 +199,6 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             if (auto j = Instruction::Cast(v)) {
                 if (j->minReferenceCount() >= 1)
                     return;
-
-                if (auto cp = PirCopy::Cast(v))
-                    return apply(cp->arg<0>().val(), constantUse);
-                if (auto cp = CastType::Cast(v))
-                    return apply(cp->arg<0>().val(), constantUse);
 
                 if (alias.count(j))
                     for (auto a : alias.at(j))

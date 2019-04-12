@@ -46,9 +46,7 @@ struct StackUseAnalysisState {
  * executed. Also get a set of values that need to be removed from the stack
  * after each instruction.
  */
-class StackUseAnalysis
-    : public StaticAnalysis<StackUseAnalysisState, AnalysisDebugLevel::None> {
-
+class StackUseAnalysis : public StaticAnalysis<StackUseAnalysisState> {
   private:
     LivenessIntervals const& liveness;
 
