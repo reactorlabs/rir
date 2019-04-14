@@ -77,7 +77,7 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 return;
             }
 
-            if (!gvnEffects.empty()) {
+            if (!i->gvnEffects().empty()) {
                 assignNumber(i);
                 return;
             }

@@ -78,13 +78,33 @@ completely disables the PIR optimizer. As follows are the different Options avai
 * `!ObjN` : Argument `N` is not an object
 * `CooOrd`: Arguments are passed in the correct order (ie. callee reorders)
 
-#### Types Annotations (aka type flags)
+#### Type Annotations (aka type flags)
 
 * `$` : Is scalar
 * `^` : May be lazy (and wrapped in a promise)
 * `~` : May be wrapped in a promise (but evaluated)
 * `?` : May be missing
 * `'` : May not be an object
+
+#### Effects
+
+Note that these are all *potential* effects. Some effects can also indirectly
+trigger others, e.g. if an instruction executes arbitrary code, that can cause
+errors or warnings.
+
+* yellow : Reads environment
+* magenta : Leaks environment (or reads)
+* red : Changes environment (or leaks, or reads)
+* `-` : No additional effects (besides environment)
+* `v` : Changes visibility
+* `w` : Warns
+* `e` : Errors
+* `f` : Forces
+* `r` : Uses reflection
+* `l` : Leaks argument
+* `c` : Changes contexts
+* `d` : Triggers deoptimization
+* `x` : Executes arbitrary code
 
 ## Within R
 

@@ -87,10 +87,17 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
     allEff.reset(Effect::ReadsEnv);
     allEff.reset(Effect::WritesEnv);
     allEff.reset(Effect::LeaksEnv);
+    Effects allEffButRefl = allEff;
+    allEffButRefl.reset(Effect::Reflection);
     if (eff == allEff) {
-        out << "!!!";
+        out << "!";
+    } else if (eff == allEffButRefl) {
+        out << "!/r";
     } else if (eff == Effects::None()) {
-        out << "---";
+        if (effects != Effects::None()) // Has some env effects
+            out << "-";
+        else
+            out << " ";
     } else {
         for (auto it = eff.begin(); it != eff.end(); ++it) {
             Effect effect = *it;
@@ -117,8 +124,7 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
     ConsoleColor::clear(out);
 }
 
-void printPaddedEffects(std::ostream& out, bool tty,
-                        const Instruction* i) const {
+void printPaddedEffects(std::ostream& out, bool tty, const Instruction* i) {
     std::ostringstream buf;
     i->printEffects(out, tty);
     out << std::setw(3) << buf.str();
@@ -169,16 +175,16 @@ void Instruction::print(std::ostream& out, bool tty) const {
     printPaddedTypeAndRef(out, this);
     printPaddedInstructionName(out, name());
     printPaddedEffects(out, tty, this);
-    printArgs(buf, tty);
-    printEnv(buf, tty);
+    printArgs(out, tty);
+    printEnv(out, tty);
 }
 
 void Instruction::printGraph(std::ostream& out, bool tty) const {
     printPaddedTypeAndRef(out, this);
     printPaddedInstructionName(out, name());
     printPaddedEffects(out, tty, this);
-    printGraphArgs(buf, tty);
-    printEnv(buf, tty);
+    printGraphArgs(out, tty);
+    printEnv(out, tty);
 }
 
 bool Instruction::validIn(Code* code) const { return bb()->owner == code; }

@@ -199,25 +199,17 @@ class Instruction : public Value {
         }
     }
 
-    // Won't produce errors if all arguments are type argt (and no env)
-    // Won't produce warnings if all arguments are argt and scalar (and no env)
-    void maskWarnErrOn(PirType argt) {
-        bool noErr = true;
-        bool noWarn = true;
+    // Removes e if all arguments are argt
+    void maskEffect(PirType argt, Effect e) {
+        bool mask = true;
         eachArg([&](Value* v) {
             if (mayHaveEnv() && env() == v)
                 return;
-            if (!v->type.isA(argt)) {
-                noErr = false;
-                noWarn = false;
-            } else if (!v->type.isScalar()) {
-                noWarn = false;
-            }
+            if (!v->type.isA(argt))
+                mask = false;
         });
-        if (noErr)
-            effects.reset(Effect::Error);
-        if (noWarn)
-            effects.reset(Effect::Warn);
+        if (mask)
+            effects.reset(e);
     }
 
     void updateScalarOnScalarInputs() {
@@ -1193,7 +1185,9 @@ SIMPLE_INSTRUCTIONS(V, _)
                   {{lhs, rhs}}, env, srcIdx) {}                                \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(Type);                              \
-            maskWarnErrOn(PirType::SafeType().notObject());                    \
+            maskEffect(PirType::SafeType().notObject(), Effect::Warn);         \
+            maskEffect(PirType::SafeType().notObject().scalar(),               \
+                       Effect::Error);                                         \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
         Value* lhs() const { return arg<0>().val(); }                          \
@@ -1238,7 +1232,9 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
                                              srcIdx) {}                        \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
-            maskWarnErrOn(PirType::SafeType().notObject());                    \
+            maskEffect(PirType::SafeType().notObject(), Effect::Warn);         \
+            maskEffect(PirType::SafeType().notObject().scalar(),               \
+                       Effect::Error);                                         \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
     }
