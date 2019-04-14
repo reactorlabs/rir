@@ -51,7 +51,7 @@ class TheScopeResolution {
         };
 
         auto tryInsertPhis = [&](AbstractPirValue res, BB* bb,
-                                 BB::Instrs::iterator& iter) -> Instruction* {
+                                 BB::Instrs::iterator& iter) -> Value* {
             if (res.isUnknown())
                 return nullptr;
 
@@ -138,7 +138,7 @@ class TheScopeResolution {
             for (auto& phi : thePhis)
                 phi.second->updateType();
 
-            return thePhis.at(pl.targetPhi);
+            return thePhis.at(pl.targetPhiPosition);
         };
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -261,7 +261,7 @@ class TheScopeResolution {
                     }
                 }
 
-                analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
+                analysis.lookupAt(after, i, [&](const AbstractLoad& aLoad) {
                     auto& res = aLoad.result;
 
                     // In case the scope analysis is sure that this is
@@ -340,12 +340,15 @@ class TheScopeResolution {
                             // TODO: if !guess->maybe(closure) we know that the
                             // guess is wrong and could try the next binding.
                             if (!guess->type.isA(PirType::closure())) {
-                                analysis.lookup(
-                                    before, guess,
-                                    [&](const AbstractPirValue& res) {
-                                        if (auto val = getSingleLocalValue(res))
-                                            guess = val;
-                                    });
+                                if (auto i = Instruction::Cast(guess)) {
+                                    analysis.lookupAt(
+                                        before, i,
+                                        [&](const AbstractPirValue& res) {
+                                            if (auto val =
+                                                    getSingleLocalValue(res))
+                                                guess = val;
+                                        });
+                                }
                             }
                             if (guess->type.isA(PirType::closure()) &&
                                 guess->validIn(function)) {

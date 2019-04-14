@@ -102,10 +102,10 @@ export -f run_test
 
 TESTS_PATH="${ROOT_DIR}/rir/tests"
 
-NUM_TESTS=`find ${TESTS_PATH} -name '*.R' | wc -l`
+NUM_TESTS=`find ${TESTS_PATH} -name '*.[Rr]' | wc -l`
 export NUM_TESTS
 
-find ${TESTS_PATH} -name '*.R' | xargs -n 1 -P `ncores` bash -c 'run_test $@'
+find ${TESTS_PATH} -name '*.[Rr]' | xargs -n 1 -P `ncores` bash -c 'run_test $@'
 
 rm -rf $STATUS
 echo ""

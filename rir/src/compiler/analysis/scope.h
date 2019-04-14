@@ -20,9 +20,16 @@ namespace pir {
  * all loads (`LdVar`).
  *
  */
+struct ScopeAnalysisResults {
+    std::unordered_map<Instruction*, AbstractLoad> results;
+    std::unordered_map<Instruction*, AbstractPirValue> returnValues;
+    bool _changed;
+    void resetChanged() { _changed = false; }
+    bool changed() const { return _changed; }
+};
+
 class ScopeAnalysisState {
     AbstractREnvironmentHierarchy envs;
-    std::unordered_map<Instruction*, AbstractPirValue> returnValues;
     AbstractPirValue returnValue;
 
     bool mayUseReflection = false;
@@ -46,15 +53,7 @@ class ScopeAnalysisState {
 
   public:
     AbstractResult merge(const ScopeAnalysisState& other) {
-        AbstractResult res;
-
-        // Return values are only useful within one function. No need to merge
-        // across interprocedural invocations. That's why this part is not in
-        // mergeGeneric.
-        for (const auto& f : other.returnValues)
-            res.max(returnValues[f.first].merge(f.second));
-
-        return res.max(mergeGeneric(other));
+        return mergeGeneric(other);
     }
 
     AbstractResult mergeExit(const ScopeAnalysisState& other) {
@@ -69,16 +68,6 @@ class ScopeAnalysisState {
 
     void print(std::ostream& out, bool tty) const {
         envs.print(out, tty);
-        if (returnValues.size() > 0) {
-            out << "== Infered call/force result:\n";
-            for (auto& t : returnValues) {
-                out << "* ";
-                t.first->printRef(out);
-                out << " : ";
-                t.second.print(out, tty);
-                out << "\n";
-            }
-        }
         out << "== Result: ";
         returnValue.print(out, tty);
         out << "\n";
@@ -87,69 +76,112 @@ class ScopeAnalysisState {
     }
 };
 
-class ScopeAnalysis : public StaticAnalysis<
-                          ScopeAnalysisState /*, AnalysisDebugLevel::Taint */> {
+class ScopeAnalysis
+    : public StaticAnalysis<
+          ScopeAnalysisState,
+          ScopeAnalysisResults /*, AnalysisDebugLevel::Instruction */> {
   private:
     const std::vector<Value*> args;
 
     static constexpr size_t MAX_DEPTH = 2;
-    static constexpr size_t MAX_SIZE = 200;
+    static constexpr size_t MAX_SIZE = 1000;
+    static constexpr size_t MAX_RESULTS = 1000;
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
     using StaticAnalysis::PositioningStyle;
 
+    AbstractResult doCompute(ScopeAnalysisState& state, Instruction* i,
+                             bool updateGlobalState);
+
+    ScopeAnalysisResults* globalStateStore = nullptr;
+
   protected:
+    AbstractResult compute(ScopeAnalysisState& state, Instruction* i) override {
+        return doCompute(state, i, true);
+    }
     AbstractResult apply(ScopeAnalysisState& state,
-                         Instruction* i) const override;
+                         Instruction* i) const override {
+        return const_cast<ScopeAnalysis*>(this)->doCompute(state, i, false);
+    }
 
   public:
     // Default
     ScopeAnalysis(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, log), depth(0) {}
+        : StaticAnalysis("Scope", cls, cls, log), depth(0) {
+        globalState = globalStateStore = new ScopeAnalysisResults;
+    }
+
+    ~ScopeAnalysis() {
+        if (globalStateStore)
+            delete globalStateStore;
+    }
 
     // For interprocedural analysis of a function
     ScopeAnalysis(ClosureVersion* cls, const std::vector<Value*>& args,
                   Value* staticClosureEnv,
-                  const ScopeAnalysisState& initialState, size_t depth,
+                  const ScopeAnalysisState& initialState,
+                  ScopeAnalysisResults* globalState, size_t depth,
                   LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, initialState, log), depth(depth),
-          staticClosureEnv(staticClosureEnv) {
+        : StaticAnalysis("Scope", cls, cls, initialState, globalState, log),
+          depth(depth), staticClosureEnv(staticClosureEnv) {
         assert(args.size() == cls->nargs());
     }
 
     // For interprocedural analysis of a promise
     ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
-                  const ScopeAnalysisState& initialState, size_t depth,
+                  const ScopeAnalysisState& initialState,
+                  ScopeAnalysisResults* globalState, size_t depth,
                   LogStream& log);
 
     typedef std::function<void(const AbstractLoad&)> LoadMaybe;
     typedef std::function<void(const AbstractPirValue&)> ValueMaybe;
     typedef std::function<void()> Maybe;
 
+  public:
     // Lookup what the analysis knows about the result of executing
     // instruction i. This recursively queries all available ressources,
     // such as binding structure, inter-procedural return values, function
     // arguments and so on.
-    void lookup(const ScopeAnalysisState& envs, Value* i, const LoadMaybe&,
+    void lookup(Value*, const LoadMaybe&,
                 const Maybe& notFound = []() {}) const;
-    void lookup(const ScopeAnalysisState& envs, Value* i,
-                const ValueMaybe& action,
+    void lookup(Value* v, const ValueMaybe& action,
                 const Maybe& notFound = []() {}) const {
-        lookup(envs, i, [&](AbstractLoad load) { action(load.result); },
-               notFound);
+        lookup(v, [&](AbstractLoad load) { action(load.result); }, notFound);
+    }
+    // lookupAt must be called with a state that is valid at the instruction
+    // position!
+    void lookupAt(const ScopeAnalysisState&, Instruction*, const LoadMaybe&,
+                  const Maybe& notFound = []() {}) const;
+    void lookupAt(const ScopeAnalysisState& state, Instruction* i,
+                  const ValueMaybe& action,
+                  const Maybe& notFound = []() {}) const {
+        lookupAt(state, i, [&](AbstractLoad load) { action(load.result); },
+                 notFound);
     }
 
     AbstractLoad loadFun(const ScopeAnalysisState& state, SEXP name,
                          Value* env) const {
-        return state.envs.getFun(env, name);
+        auto aLoad = state.envs.getFun(env, name);
+        if (aLoad.result.isSingleValue())
+            lookup(aLoad.result.singleValue().val,
+                   [&](const AbstractLoad& ld) { aLoad = ld; });
+        return aLoad;
     }
     AbstractLoad load(const ScopeAnalysisState& state, SEXP name,
                       Value* env) const {
-        return state.envs.get(env, name);
+        auto aLoad = state.envs.get(env, name);
+        if (aLoad.result.isSingleValue())
+            lookup(aLoad.result.singleValue().val,
+                   [&](const AbstractLoad& ld) { aLoad = ld; });
+        return aLoad;
     }
     AbstractLoad superLoad(const ScopeAnalysisState& state, SEXP name,
                            Value* env) const {
-        return state.envs.get(env, name);
+        auto aLoad = state.envs.get(env, name);
+        if (aLoad.result.isSingleValue())
+            lookup(aLoad.result.singleValue().val,
+                   [&](const AbstractLoad& ld) { aLoad = ld; });
+        return aLoad;
     }
 
     typedef std::function<void(
