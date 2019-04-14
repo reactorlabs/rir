@@ -320,6 +320,21 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // currently it does not pay off to put any deopts in there.
         if (callTargetFeedback.count(callee)) {
             auto& feedback = callTargetFeedback.at(callee);
+            // If this call was never executed. Might as well compile an
+            // unconditional deopt
+            if (!inPromise() && srcCode->funInvocationCount > 0 &&
+                feedback.taken == 0) {
+                // Hack to record the deoptimized call, to ensure we compile
+                // something better on re-optimization.
+                auto deoptPos = pos - 1 - sizeof(ObservedCallees);
+                if (*deoptPos != Opcode::record_call_)
+                    deoptPos = pos;
+                auto fs = insert.registerFrameState(srcCode, deoptPos, stack);
+                insert(new Deopt(fs));
+                stack.clear();
+                break;
+            }
+
             if (feedback.numTargets == 1)
                 monomorphic = feedback.getTarget(srcCode, 0);
         }
@@ -1043,6 +1058,19 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 log.failed("Abort r2p due to unsupported bc");
                 return nullptr;
             }
+
+            if (!inPromise() && !insert.getCurrentBB()->isEmpty()) {
+                auto last = insert.getCurrentBB()->last();
+
+                if (Deopt::Cast(last)) {
+                    finger = end;
+                    continue;
+                }
+
+                if (last->isDeoptBarrier())
+                    addCheckpoint(srcCode, nextPos, cur.stack, insert);
+            }
+
             if (cur.stack.size() != size - bc.popCount() + bc.pushCount()) {
                 srcCode->print(std::cerr);
                 std::cerr << "After interpreting '";
@@ -1052,12 +1080,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                           << size << " to " << cur.stack.size() << "\n";
                 assert(false);
                 return nullptr;
-            }
-
-            if (!inPromise() && !insert.getCurrentBB()->isEmpty()) {
-                auto last = insert.getCurrentBB()->last();
-                if (last->isDeoptBarrier())
-                    addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
         }
     }
