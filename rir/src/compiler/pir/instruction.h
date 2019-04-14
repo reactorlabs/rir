@@ -152,8 +152,10 @@ class Instruction : public Value {
 
   public:
     void clearEffects() { effects.reset(); }
+    void clearVisibility() { effects.reset(Effect::Visibility); }
     void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
     bool hasEffect() const { return !effects.empty(); }
+    bool hasVisibility() const { return effects.contains(Effect::Visibility); }
     Effect maxEffect() const {
         if (hasEffect()) {
             return effects.max();

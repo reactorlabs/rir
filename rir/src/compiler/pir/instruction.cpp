@@ -70,7 +70,6 @@ void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
 }
 
 void Instruction::printEffects(std::ostream& out, bool tty) const {
-    assert(canRemoveEffects());
     Effects eff = effects;
     if (tty) {
         if (eff.contains(Effect::WritesEnv))

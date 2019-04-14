@@ -31,9 +31,9 @@ void OptimizeVisibility::apply(RirCompiler&, ClosureVersion* function,
                 if (!visible.observed(vis)) {
                     next = bb->remove(ip);
                 }
-            } else if (instr->effects.contains(Effect::Visibility)) {
+            } else if (instr->hasVisibility()) {
                 if (!visible.observed(instr)) {
-                    instr->effects.reset(Effect::Visibility);
+                    instr->clearVisibility();
                 }
             }
 
