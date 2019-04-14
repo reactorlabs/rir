@@ -1222,7 +1222,6 @@ SIMPLE_INSTRUCTIONS(V, _)
             : FixedLenInstructionWithEnvSlot(                                  \
                   PirType::valOrLazy(), {{PirType::val(), PirType::val()}},    \
                   {{lhs, rhs}}, env, srcIdx) {}                                \
-        bool canRemoveEffects() const override { return true; }                \
         VisibilityMod visibilityMod() const override {                         \
             if (lhs()->type.isA(PirType::num().notObject()) &&                 \
                 rhs()->type.isA(PirType::num().notObject())) {                 \
@@ -1277,7 +1276,6 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
             : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),             \
                                              {{PirType::val()}}, {{v}}, env,   \
                                              srcIdx) {}                        \
-        bool canRemoveEffects() const override { return true; }                \
         VisibilityMod visibilityMod() const override {                         \
             if (arg<0>().val()->type.isA(PirType::num().notObject())) {        \
                 return VisibilityMod::AlwaysVis;                               \
