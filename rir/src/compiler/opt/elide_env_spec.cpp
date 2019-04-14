@@ -19,6 +19,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     auto nonObjectArgs = [&](Instruction* i) {
         auto answer = true;
         i->eachArg([&](Value* arg) {
+            if (i->env() == arg)
+                return;
             if (arg->type.maybeObj() &&
                 (arg->typeFeedback.isVoid() || arg->typeFeedback.maybeObj()))
                 answer = false;

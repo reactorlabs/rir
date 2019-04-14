@@ -1038,6 +1038,28 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::IsType: {
+                auto is = IsType::Cast(instr);
+                auto t = is->typeTest;
+                assert(!t.isVoid() && !t.maybeObj() && !t.maybeLazy() &&
+                       !t.maybePromiseWrapped());
+
+                if (t.isA(RType::integer)) {
+                    if (t.isScalar())
+                        cb.add(BC::is(TypeChecks::IntegerSimpleScalar));
+                    else
+                        cb.add(BC::is(TypeChecks::IntegerNonObject));
+                } else if (t.isA(RType::real)) {
+                    if (t.isScalar())
+                        cb.add(BC::is(TypeChecks::RealSimpleScalar));
+                    else
+                        cb.add(BC::is(TypeChecks::RealNonObject));
+                } else {
+                    assert(false);
+                }
+                break;
+            }
+
             case Tag::AsInt: {
                 auto asInt = AsInt::Cast(instr);
                 if (asInt->ceil)

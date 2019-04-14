@@ -290,9 +290,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::record_type_: {
+        if (bc.immediate.typeFeedback.numTypes)
+            at(0)->typeFeedback.merge(bc.immediate.typeFeedback);
+        break;
+    }
+
     case Opcode::record_binop_: {
-        at(0)->typeFeedback.merge(bc.immediate.binopFeedback[0]);
-        at(1)->typeFeedback.merge(bc.immediate.binopFeedback[1]);
+        if (bc.immediate.binopFeedback[0].numTypes)
+            at(0)->typeFeedback.merge(bc.immediate.binopFeedback[0]);
+        if (bc.immediate.binopFeedback[1].numTypes)
+            at(1)->typeFeedback.merge(bc.immediate.binopFeedback[1]);
         break;
     }
 

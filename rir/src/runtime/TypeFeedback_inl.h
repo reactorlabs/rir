@@ -1,8 +1,8 @@
 #ifndef RIR_RUNTIME_FEEDBACK_INL_H
 #define RIR_RUNTIME_FEEDBACK_INL_H
 
-#include "RuntimeFeedback.h"
-#include "runtime/Code.h"
+#include "Code.h"
+#include "TypeFeedback.h"
 
 namespace rir {
 

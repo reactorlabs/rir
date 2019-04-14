@@ -1120,6 +1120,16 @@ class FLI(Is, 1, Effects::None()) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
+class FLI(IsType, 1, Effects::None()) {
+  public:
+    const PirType typeTest;
+    IsType(PirType type, Value* v)
+        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
+          typeTest(type) {}
+
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
 class FLI(LdFunctionEnv, 0, Effects::None()) {
   public:
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}

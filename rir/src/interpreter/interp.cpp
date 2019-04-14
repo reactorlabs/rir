@@ -7,7 +7,7 @@
 #include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
-#include "ir/RuntimeFeedback_inl.h"
+#include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
 #include "utils/Pool.h"
 
@@ -1999,6 +1999,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(record_type_) {
+            ObservedValues* feedback = (ObservedValues*)pc;
+            SEXP t = ostack_top(ctx);
+            feedback->record(t);
+            pc += sizeof(ObservedValues);
+            NEXT();
+        }
+
         INSTRUCTION(record_binop_) {
             ObservedValues* feedback = (ObservedValues*)pc;
             SEXP l = ostack_at(ctx, 1);
@@ -2746,6 +2754,19 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             case LISTSXP:
                 res = TYPEOF(val) == LISTSXP || TYPEOF(val) == NILSXP;
+                break;
+
+            case static_cast<Immediate>(TypeChecks::RealNonObject):
+                res = TYPEOF(val) == REALSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, REALSXP);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+                res = TYPEOF(val) == INTSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, INTSXP);
                 break;
 
             default:

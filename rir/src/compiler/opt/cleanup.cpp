@@ -77,6 +77,20 @@ class TheCleanup {
                         used_p.insert(arg->prom()->id);
                         todo.push_back(arg->prom());
                     }
+                } else if (auto tt = IsType::Cast(i)) {
+                    auto arg = tt->arg<0>().val();
+                    if (arg->type.isA(tt->typeTest)) {
+                        tt->replaceUsesWith(True::instance());
+                        removed = true;
+                        next = bb->remove(ip);
+                    }
+                } else if (auto tt = CastType::Cast(i)) {
+                    auto arg = tt->arg<0>().val();
+                    if (arg->type == tt->type) {
+                        tt->replaceUsesWith(arg);
+                        removed = true;
+                        next = bb->remove(ip);
+                    }
                 } else if (auto asInt = AsInt::Cast(i)) {
                     auto arg = asInt->arg<0>().val();
                     if (arg->type.isA(

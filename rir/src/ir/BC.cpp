@@ -29,6 +29,10 @@ BC_NOARGS(V, _)
         cs.insert(immediate.callFeedback);
         return;
 
+    case Opcode::record_type_:
+        cs.insert(immediate.typeFeedback);
+        break;
+
     case Opcode::record_binop_:
         cs.insert(immediate.binopFeedback[0]);
         cs.insert(immediate.binopFeedback[1]);
@@ -166,8 +170,23 @@ void BC::printOpcode(std::ostream& out) const { out << name(bc) << "  "; }
 
 void BC::print(std::ostream& out) const {
     out << "   ";
-    if (bc != Opcode::record_call_ && bc != Opcode::record_binop_)
+    if (bc != Opcode::record_call_ && bc != Opcode::record_binop_ &&
+        bc != Opcode::record_type_)
         printOpcode(out);
+
+    auto printTypeFeedback = [&](const ObservedValues& prof) {
+        if (prof.numTypes) {
+            for (size_t i = 0; i < prof.numTypes; ++i) {
+                auto t = prof.seen[i];
+                out << Rf_type2char(t.sexptype) << "(" << (t.object ? "o" : "")
+                    << (t.attribs ? "a" : "") << (t.scalar ? "s" : "") << ")";
+                if (i != (unsigned)prof.numTypes - 1)
+                    out << ", ";
+            }
+        } else {
+            out << "<?>";
+        }
+    };
 
     switch (bc) {
     case Opcode::invalid_:
@@ -290,22 +309,18 @@ void BC::print(std::ostream& out) const {
         break;
     }
 
+    case Opcode::record_type_: {
+        out << "[ ";
+        printTypeFeedback(immediate.typeFeedback);
+        out << " ]";
+        break;
+    }
+
     case Opcode::record_binop_: {
         auto prof = immediate.binopFeedback;
         out << "[ ";
         for (size_t j = 0; j < 2; ++j) {
-            if (prof[j].numTypes) {
-                for (size_t i = 0; i < prof[j].numTypes; ++i) {
-                    auto t = prof[j].seen[i];
-                    out << Rf_type2char(t.sexptype) << "("
-                        << (t.object ? "o" : "") << (t.attribs ? "a" : "")
-                        << (t.scalar ? "s" : "") << ")";
-                    if (i != (unsigned)prof[j].numTypes - 1)
-                        out << ", ";
-                }
-            } else {
-                out << "<?>";
-            }
+            printTypeFeedback(prof[j]);
             if (j == 0)
                 out << " x ";
         }

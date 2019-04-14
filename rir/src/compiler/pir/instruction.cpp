@@ -472,6 +472,12 @@ void Is::printArgs(std::ostream& out, bool tty) const {
     out << ", " << Rf_type2char(sexpTag);
 }
 
+void IsType::printArgs(std::ostream& out, bool tty) const {
+    arg<0>().val()->printRef(out);
+    out << " isA ";
+    typeTest.print(out);
+}
+
 void Phi::updateType() {
     type = arg(0).val()->type;
     eachArg([&](BB*, Value* v) -> void { type = type | v->type; });

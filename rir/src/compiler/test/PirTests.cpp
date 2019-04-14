@@ -151,72 +151,8 @@ bool compileAndVerify(const std::string& input) {
     return compileAndVerify("", input);
 }
 
-void insertTypeFeedbackForBinops(rir::Function* srcFunction,
-                                 std::array<SEXP, 2> typeFeedback) {
-    auto function = srcFunction->body();
-    Opcode* end = function->endCode();
-    Opcode* finger = function->code();
-    while (finger != end) {
-        Opcode* prev = finger;
-        BC bc = BC::advance(&finger, function);
-        if (bc.bc == Opcode::record_binop_) {
-            prev++;
-            ObservedValues* feedback = (ObservedValues*)prev;
-            feedback[0].record(typeFeedback[0]);
-            feedback[1].record(typeFeedback[1]);
-        }
-    }
-}
-
 extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 SEXP parseCompileToRir(std::string);
-
-static bool envOfAddElided(pir::Code* c) {
-    bool hasAdd = false;
-
-    bool res = Visitor::check(c->entry, [&](BB* bb) -> bool {
-        for (auto& i : *bb) {
-            if (auto a = Add::Cast(i)) {
-                hasAdd = true;
-                if (a->env() != Env::elided())
-                    return false;
-            }
-        }
-        return true;
-    });
-    return hasAdd && res;
-}
-
-bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
-    Protect p;
-    std::array<SEXP, 2> types;
-
-    // Set type feedback to primitive int vectors
-    SEXP res = p(Rf_allocVector(INTSXP, 1));
-    INTEGER(res)[0] = 1;
-    types[0] = res;
-    types[1] = res;
-
-    // Parser and compile the input
-    auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
-    auto rirFun = p(parseCompileToRir(input));
-    SET_CLOENV(rirFun, execEnv);
-    Rf_defineVar(Rf_install("removeEnvInBinopTest"), rirFun, execEnv);
-    rir::Function* srcFunction =
-        DispatchTable::unpack(BODY(rirFun))->baseline();
-    assert(srcFunction != nullptr);
-    insertTypeFeedbackForBinops(srcFunction, types);
-
-    // Test if there is an environment in the resulted function
-    pir::Module m;
-    compileRir2Pir(execEnv, &m);
-    bool t = verify(&m);
-    m.eachPirClosureVersion(
-        [&t](pir::ClosureVersion* f) { t = t && envOfAddElided(f); });
-    if (!t)
-        m.print(std::cout, true);
-    return t;
-}
 
 bool testCondition(const std::string& input,
                    std::function<void(pir::ClosureVersion*)> condition) {
@@ -619,11 +555,6 @@ static Test tests[] = {
          }),
     Test("context_load",
          []() { return canRemoveEnvironment("f <- function() 123"); }),
-    Test("binop_nonobjects",
-         []() {
-             return canRemoveEnvironmentIfTypeFeedback(
-                 "f <- function() 1 + xxx");
-         }),
     Test("super_assign", &testSuperAssign),
     Test("loop",
          []() {
