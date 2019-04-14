@@ -308,7 +308,8 @@ stopifnot(pir.check(function(x, y) {
   a <- y == 1 # This is the one eq
   (x == 1) == NA
 }, OneEq, warmup=list(5.7, data.frame())))
-stopifnot(pir.check(function(x) !!!!!x, OneNot, warmup=list(1)))
+# Relies on better visibility
+# stopifnot(pir.check(function(x) !!!!!x, OneNot, warmup=list(1)))
 # Testing NoAsInt itself
 stopifnot(!pir.check(function(n) {
   x <- 0
