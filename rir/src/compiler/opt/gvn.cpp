@@ -77,11 +77,7 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 return;
             }
 
-            // We allow instructions with those effects to be deduplicated.
-            auto maskedEffects =
-                i->effects & (~(Effects(Effect::Error) | Effect::Warn |
-                                Effect::Visibility | Effect::Force));
-            if (!maskedEffects.empty()) {
+            if (!i->gvnEffects().empty()) {
                 assignNumber(i);
                 return;
             }

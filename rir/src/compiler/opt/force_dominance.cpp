@@ -341,7 +341,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                 }
             }
 
-            if (i->mayForcePromises())
+            if (i->effects.contains(Effect::Force))
                 if (state.sideeffect())
                     res.taint();
 

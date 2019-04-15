@@ -106,6 +106,20 @@ static bool testReturns42L(ClosureVersion* f) {
     return true;
 };
 
+static bool testNoEq(ClosureVersion* f) {
+    return Visitor::check(f->entry,
+                          [&](Instruction* i) { return !Eq::Cast(i); });
+}
+
+static bool testOneEq(ClosureVersion* f) {
+    int numEqs = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (Eq::Cast(i))
+            numEqs++;
+    });
+    return numEqs == 1;
+}
+
 PirCheck::Type PirCheck::parseType(const char* str) {
 #define V(Check)                                                               \
     if (strcmp(str, #Check) == 0)                                              \
