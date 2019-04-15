@@ -378,7 +378,8 @@ DEF_INSTR(extract1_2_, 0, 3, 1, 1)
  * this instruction creates the rhs part of a <- `[<-(a,b,c)` and still needs
  * to be assigned.
  *
- * Warning: on named == 1 it updates the array in-place!
+ * Warning: on named == 1 it updates the array in-place! This is not the same
+ * as GNUR's subassign, and it's not equivalent to `[<-(a,b,c)` itself
  */
 DEF_INSTR(subassign1_1_, 0, 3, 1, 1)
 
@@ -388,7 +389,8 @@ DEF_INSTR(subassign1_1_, 0, 3, 1, 1)
  * this instruction creates the rhs part of a <- `[<-(a,b,c,d)` and still needs
  * to be assigned.
  *
- * Warning: on named == 1 it updates the array in-place!
+ * Warning: on named == 1 it updates the array in-place! This is not the same
+ * as GNUR's subassign, and it's not equivalent to `[<-(a,b,c, d)` itself
  */
 DEF_INSTR(subassign1_2_, 0, 4, 1, 1)
 
@@ -408,17 +410,19 @@ DEF_INSTR(extract2_2_, 0, 3, 1, 1)
  * this instruction creates the rhs part of a <- `[[<-(a,b,c)` and still needs
  * to be assigned.
  *
- * Warning: on named == 1 it updates the array in-place!
+ * Warning: on named == 1 it updates the array in-place! This is not the same
+ * as GNUR's subassign, and it's not equivalent to `[[<-(a,b,c)` itself
  */
 DEF_INSTR(subassign2_1_, 0, 3, 1, 1)
 
 /**
  * subassign2_2_ :: a[[b,c]] <- d
  *
- * this instruction creates the rhs part of a <- `[[<-(a,b,c,c)` and still needs
+ * this instruction creates the rhs part of a <- `[[<-(a,b,c,d)` and still needs
  * to be assigned.
  *
- * Warning: on named == 1 it updates the array in-place!
+ * Warning: on named == 1 it updates the array in-place! This is not the same
+ * as GNUR's subassign, and it's not equivalent to `[[<-(a,b,c,d)` itself
  */
 DEF_INSTR(subassign2_2_, 0, 4, 1, 1)
 
