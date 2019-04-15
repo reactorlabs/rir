@@ -83,13 +83,6 @@ class TheCleanup {
                         if (lgl->unused())
                             lgl->effects.reset();
                     }
-                } else if (auto lgl = AsLogical::Cast(i)) {
-                    auto arg = lgl->arg<0>().val();
-                    if (arg->type.isA(PirType::simpleScalarLogical())) {
-                        lgl->replaceUsesWith(arg);
-                        removed = true;
-                        next = bb->remove(ip);
-                    }
                 } else if (auto asInt = AsInt::Cast(i)) {
                     auto arg = asInt->arg<0>().val();
                     if (arg->type.isA(

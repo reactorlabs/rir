@@ -915,9 +915,19 @@ class FLI(CastType, 1, Effects::None()) {
 
 class FLI(AsLogical, 1, Effect::Error) {
   public:
+    Value* val() { return arg<0>().val(); }
+
     AsLogical(Value* in, unsigned srcIdx)
         : FixedLenInstruction(PirType::simpleScalarLogical(),
                               {{PirType::val()}}, {{in}}, srcIdx) {}
+
+    void updateType() override final {
+        if (val()->type.isA((PirType() | RType::logical | RType::integer |
+                             RType::real | RType::str | RType::cplx)
+                                .notObject())) {
+            effects.reset(Effect::Error);
+        }
+    }
 };
 
 class FLI(AsTest, 1, Effect::Error) {
