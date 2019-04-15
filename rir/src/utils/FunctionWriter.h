@@ -67,10 +67,11 @@ class FunctionWriter {
         unsigned codeSize = originalCodeSize - nops;
         unsigned totalSize = Code::size(codeSize, sources.size());
 
+        auto src = src_pool_add(globalContext(), ast);
         SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
         void* payload = DATAPTR(store);
         Code* code = new (payload)
-            Code(nullptr, ast, codeSize, sources.size(), localsCnt);
+            Code(nullptr, src, codeSize, sources.size(), localsCnt);
         preserve(store);
 
         size_t numberOfSources = 0;
