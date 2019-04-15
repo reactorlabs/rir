@@ -325,6 +325,8 @@ const Value* Instruction::cFollowCasts() const {
         return cast->arg<0>().val()->followCasts();
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCasts();
+    if (auto chk = ChkMissing::Cast(this))
+        return chk->arg<0>().val()->followCasts();
     return this;
 }
 
@@ -337,6 +339,8 @@ const Value* Instruction::cFollowCastsAndForce() const {
         if (mkarg->isEager())
             return mkarg->eagerArg()->followCastsAndForce();
     if (auto chk = ChkClosure::Cast(this))
+        return chk->arg<0>().val()->followCastsAndForce();
+    if (auto chk = ChkMissing::Cast(this))
         return chk->arg<0>().val()->followCastsAndForce();
     return this;
 }
