@@ -114,6 +114,8 @@ enum class Effect : uint8_t {
 };
 typedef EnumSet<Effect> Effects;
 
+extern std::ostream& operator<<(std::ostream& out, Effects eff);
+
 // Controlflow of instruction.
 enum class Controlflow : uint8_t {
     None,
@@ -142,8 +144,8 @@ class Instruction : public Value {
   private:
     Effects getObservableEffects() const {
         auto e = effects;
-        // Those are effects, and we are required to have them in the correct
-        // order. But they are not "doing" anything on their own. If e.g.
+        // Those are effects, and we are required to have them.
+        // But they are not "doing" anything on their own. If e.g.
         // instructions with those effects are unused, we can remove them.
         e.reset(Effect::LeakArg);
         e.reset(Effect::ReadsEnv);
@@ -1271,7 +1273,7 @@ struct RirStack {
  *  Collects metadata about the current state of variables
  *  eventually needed for deoptimization purposes
  */
-class VLIE(FrameState, Effect::LeaksEnv) {
+class VLIE(FrameState, Effects(Effect::LeaksEnv) | Effect::LeakArg) {
   public:
     bool inlined = false;
     Opcode* pc;

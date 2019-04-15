@@ -315,16 +315,21 @@ class TheVerifier {
 
     void verifyEffects(Instruction* i) {
         Effects eff = i->effects;
+        Effects effAndEnv = eff;
+        effAndEnv.set(Effect::LeakArg);
+        effAndEnv.set(Effect::ReadsEnv);
+        effAndEnv.set(Effect::WritesEnv);
+        effAndEnv.set(Effect::LeaksEnv);
 
         auto fail = [&](auto msg) {
             std::cerr << "Error in effects '" << eff << "', in:\n";
             i->print(std::cerr);
-            std::cerr << "\n" << msg << "\n"; 
+            std::cerr << "\n" << msg << "\n";
             ok = false;
         };
 
-        if (eff.contains(Effect::ExecuteCode) && eff != Effects::Any()) {
-            fail("ExecuteCode implies all other effects");
+        if (eff.contains(Effect::ExecuteCode) && effAndEnv != Effects::Any()) {
+            fail("ExecuteCode implies all other effects except env-based");
         }
 
         if (eff.contains(Effect::LeaksEnv) && !eff.contains(Effect::LeakArg)) {

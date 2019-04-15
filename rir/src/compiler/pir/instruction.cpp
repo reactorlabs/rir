@@ -64,6 +64,43 @@ void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
 
 bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
 
+std::ostream& operator<<(std::ostream& out, Effects eff) {
+    if (eff.empty()) {
+        out << " ";
+        return out;
+    }
+    const size_t totalEffs = (size_t)Effect::LAST - (size_t)Effect::FIRST;
+    if (eff.count() > totalEffs / 2) {
+        out << "!";
+        eff = ~eff;
+    }
+    for (auto it = eff.begin(); it != eff.end(); ++it) {
+        Effect effect = *it;
+        switch (effect) {
+#define CASE(Name, Str)                                                        \
+    case Effect::Name:                                                         \
+        out << Str;                                                            \
+        break;
+            CASE(Visibility, "v")
+            CASE(Warn, "w")
+            CASE(Error, "e")
+            CASE(Force, "f")
+            CASE(Reflection, "r")
+            CASE(LeakArg, "l")
+            CASE(ChangesContexts, "C")
+            CASE(ReadsEnv, "R")
+            CASE(WritesEnv, "W")
+            CASE(LeaksEnv, "L")
+            CASE(TriggerDeopt, "D")
+            CASE(ExecuteCode, "X")
+#undef CASE
+        default:
+            assert(false);
+        }
+    }
+    return out;
+}
+
 void Instruction::printArgs(std::ostream& out, bool tty) const {
     size_t n = nargs();
     size_t env = hasEnv() ? envSlot() : n + 1;
