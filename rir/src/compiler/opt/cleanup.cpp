@@ -81,7 +81,7 @@ class TheCleanup {
                     if (auto lgl = AsLogical::Cast(tst->arg<0>().val())) {
                         tst->arg<0>().val() = lgl->arg<0>().val();
                         if (lgl->unused())
-                            lgl->clearEffects();
+                            lgl->effects.reset();
                     }
                 } else if (auto lgl = AsLogical::Cast(i)) {
                     auto arg = lgl->arg<0>().val();

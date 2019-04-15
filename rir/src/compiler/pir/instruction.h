@@ -81,8 +81,7 @@ struct InstrArg {
 enum class HasEnvSlot : uint8_t { Yes, No };
 
 // Effect that can be produced by an instruction.
-enum class Effect : int8_t {
-    None = -1,
+enum class Effect : uint8_t {
     // Changes R_Visible
     Visibility,
     // Instruction might produce a warning. Example: AsTest warns if the
@@ -111,11 +110,6 @@ enum class Effect : int8_t {
     FIRST = Visibility,
     LAST = ExecuteCode,
 };
-// Effects an instruction causes itself. These effects can lead to
-// lower effects, e.g. if an instruction executes more code, that can cause
-// a warning, but if the instruction doesn't cause a warning another way
-// we can remove Effect::Warning from this set. So dont't make assumptions
-// on these, instead use Instruction's public methods
 typedef EnumSet<Effect> Effects;
 
 // Controlflow of instruction.
@@ -137,8 +131,9 @@ class Instruction : public Value {
     Instruction(Tag tag, PirType t, Effects effects, unsigned srcIdx)
         : Value(t, tag), effects(effects), srcIdx(srcIdx) {}
 
-  private:
     Effects effects;
+
+  private:
     Effects getObservableEffects() const {
         auto e = effects;
         // Those are effects, and we are required to have them in the correct
@@ -156,13 +151,6 @@ class Instruction : public Value {
     void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
     bool hasEffect() const { return !effects.empty(); }
     bool hasVisibility() const { return effects.contains(Effect::Visibility); }
-    Effect maxEffect() const {
-        if (hasEffect()) {
-            return effects.max();
-        } else {
-            return Effect::None;
-        }
-    }
 
     bool hasImpureEffects() const {
         auto e = getObservableEffects();
@@ -177,12 +165,10 @@ class Instruction : public Value {
     }
 
     bool isDeoptBarrier() const { return hasImpureEffects(); }
-    bool mightChangeVisibility() const {
-        return maxEffect() >= Effect::Visibility;
+    // TODO: Add verify, then replace with effects.includes(Effect::LeakArg)
+    bool leaksArg(Value* val) const {
+        return leaksEnv() || effects.includes(Effect::LeakArg);
     }
-    bool mayUseReflection() const { return maxEffect() >= Effect::Reflection; }
-    bool mayForcePromises() const { return maxEffect() >= Effect::Force; }
-    bool leaksArg(Value* val) const { return maxEffect() >= Effect::LeakArg; }
 
     void maskEffectsAndTypeOnNonObjects(PirType tmask,
                                         Effects mask = Effects(Effect::Error) |
@@ -229,16 +215,13 @@ class Instruction : public Value {
     }
 
     bool readsEnv() const {
-        return hasEnv() && (effects.includes(Effect::ReadsEnv) ||
-                            maxEffect() >= Effect::TriggerDeopt);
+        return hasEnv() && effects.includes(Effect::ReadsEnv);
     }
     bool changesEnv() const {
-        return hasEnv() && (effects.includes(Effect::WritesEnv) ||
-                            maxEffect() >= Effect::TriggerDeopt);
+        return hasEnv() && effects.includes(Effect::WritesEnv);
     }
     bool leaksEnv() const {
-        return hasEnv() && (effects.includes(Effect::LeaksEnv) ||
-                            maxEffect() >= Effect::TriggerDeopt);
+        return hasEnv() && effects.includes(Effect::LeaksEnv);
     }
 
     // Instructions can be deduplicated if they have different effects,
@@ -358,10 +341,7 @@ class Instruction : public Value {
         assert(!mayHaveEnv() && "subclass must override env() if it uses env");
         assert(false && "this instruction has no env");
     }
-    void elideEnv() {
-        arg(envSlot()).val() = Env::elided();
-        effects.reset(Effect::Reflection);
-    }
+    void elideEnv() { arg(envSlot()).val() = Env::elided(); }
     virtual size_t envSlot() const {
         assert(!mayHaveEnv() &&
                "subclass must override envSlot() if it uses env");
@@ -934,7 +914,7 @@ class FLIE(Force, 2, Effects::Any()) {
     void updateType() override final {
         type = arg<0>().val()->type.forced();
         if (!input()->type.maybeLazy()) {
-            clearEffects();
+            effects.reset();
         }
     }
     int minReferenceCount() const override { return MAX_REFCOUNT; }
@@ -1187,28 +1167,27 @@ SIMPLE_INSTRUCTIONS(V, _)
                   {{lhs, rhs}}, env, srcIdx) {}                                \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(Type);                              \
-            maskEffect(PirType::SafeType().notObject(), Effect::Warn);         \
-            maskEffect(PirType::SafeType().notObject().scalar(),               \
-                       Effect::Error);                                         \
+            maskEffect(SafeType.notObject(), Effect::Warn);                    \
+            maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
         Value* lhs() const { return arg<0>().val(); }                          \
         Value* rhs() const { return arg<1>().val(); }                          \
     }
 
-BINOP(Mul, lhs()->type | rhs()->type, num);
-BINOP(Div, PirType::val().notObject(), num);
-BINOP(IDiv, lhs()->type | rhs()->type, num);
-BINOP(Mod, lhs()->type | rhs()->type, num);
-BINOP(Add, lhs()->type | rhs()->type, num);
-BINOP(Pow, lhs()->type | rhs()->type, num);
-BINOP(Sub, lhs()->type | rhs()->type, num);
-BINOP(Gte, PirType(RType::logical).notObject(), atomOrSimpleVec);
-BINOP(Lte, PirType(RType::logical).notObject(), atomOrSimpleVec);
-BINOP(Gt, PirType(RType::logical).notObject(), atomOrSimpleVec);
-BINOP(Lt, PirType(RType::logical).notObject(), atomOrSimpleVec);
-BINOP(Neq, PirType(RType::logical).notObject(), atomOrSimpleVec);
-BINOP(Eq, PirType(RType::logical).notObject(), atomOrSimpleVec);
+BINOP(Mul, lhs()->type | rhs()->type, PirType::num());
+BINOP(Div, PirType::val().notObject(), PirType::num());
+BINOP(IDiv, lhs()->type | rhs()->type, PirType::num());
+BINOP(Mod, lhs()->type | rhs()->type, PirType::num());
+BINOP(Add, lhs()->type | rhs()->type, PirType::num());
+BINOP(Pow, lhs()->type | rhs()->type, PirType::num());
+BINOP(Sub, lhs()->type | rhs()->type, PirType::num());
+BINOP(Gte, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Lte, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Gt, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Lt, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Neq, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Eq, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
 
 #undef BINOP
 
@@ -1234,16 +1213,15 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
                                              srcIdx) {}                        \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
-            maskEffect(PirType::SafeType().notObject(), Effect::Warn);         \
-            maskEffect(PirType::SafeType().notObject().scalar(),               \
-                       Effect::Error);                                         \
+            maskEffect(SafeType.notObject(), Effect::Warn);                    \
+            maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
     }
 
-UNOP(Not, num);
-UNOP(Plus, num);
-UNOP(Minus, num);
+UNOP(Not, PirType::num());
+UNOP(Plus, PirType::num());
+UNOP(Minus, PirType::num());
 
 #undef UNOP
 

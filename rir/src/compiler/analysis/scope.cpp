@@ -372,7 +372,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             }
         }
 
-        if (i->mayUseReflection()) {
+        if (i->effects.contains(Effect::Reflection)) {
             state.mayUseReflection = true;
             effect.lostPrecision();
         }

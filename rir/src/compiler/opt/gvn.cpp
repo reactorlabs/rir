@@ -190,7 +190,7 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                     }
                     i->replaceUsesWith(first);
                     // Make sure this instruction really gets removed
-                    i->clearEffects();
+                    i->effects.reset();
                     replacements[i] = first;
                 }
             }

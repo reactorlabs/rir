@@ -88,23 +88,22 @@ completely disables the PIR optimizer. As follows are the different Options avai
 
 #### Effects
 
-Note that these are all *potential* effects. Some effects can also indirectly
-trigger others, e.g. if an instruction executes arbitrary code, that can cause
-errors or warnings.
+* `v` : Visibility
+* `w` : Warn
+* `e` : Error
+* `f` : Force
+* `r` : Reflection
+* `l` : LeakArg
+* `C` : ChangesContexts
+* `R` : ReadsEnv
+* `W` : WritesEnv
+* `L` : LeaksEnv
+* `D` : TriggerDeopt
+* `X` : ExecuteCode
 
-* yellow : Reads environment
-* magenta : Leaks environment (or reads)
-* red : Changes environment (or leaks, or reads)
-* `-` : No additional effects (besides environment)
-* `v` : Changes visibility
-* `w` : Warns
-* `e` : Errors
-* `f` : Forces
-* `r` : Uses reflection
-* `l` : Leaks argument
-* `c` : Changes contexts
-* `d` : Triggers deoptimization
-* `x` : Executes arbitrary code
+`!` means that an instruction has all effects *except* the following. e.g. `!r`
+means an instruction has all effects but reflection, just `!` means it has all
+effects.
 
 ## Within R
 

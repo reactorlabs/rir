@@ -44,7 +44,7 @@ AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
         // might be observable. But it does not clear previous visibility
         // instructions, because it might also preserve the previous visibility
         // setting.
-        if (i->hasVisibility())
+        if (i->effects.contains(Effect::Visibility))
             maybeChangesVisibility();
         break;
     }

@@ -178,7 +178,7 @@ class DeadStoreAnalysis {
                 }
             } else if (i->readsEnv()) {
                 observeFullEnv(i->env());
-            } else if (i->exits() || i->maxEffect() >= Effect::ExecuteCode) {
+            } else if (i->exits() || i->effects.contains(Effect::ExecuteCode)) {
                 auto leakedEnvs = leaked.leakedAt(i);
                 for (auto& l : leakedEnvs.envs)
                     observeFullEnv(l);

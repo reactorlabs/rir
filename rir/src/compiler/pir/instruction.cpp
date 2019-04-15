@@ -70,63 +70,48 @@ void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
 }
 
 void Instruction::printEffects(std::ostream& out, bool tty) const {
-    Effects eff = effects;
-    if (tty) {
-        if (eff.contains(Effect::WritesEnv))
-            ConsoleColor::red(out);
-        else if (eff.contains(Effect::LeaksEnv))
-            ConsoleColor::magenta(out);
-        else if (eff.contains(Effect::ReadsEnv))
-            ConsoleColor::yellow(out);
+    if (!hasEffect()) {
+        out << " ";
+        return;
     }
-    eff.reset(Effect::ReadsEnv);
-    eff.reset(Effect::WritesEnv);
-    eff.reset(Effect::LeaksEnv);
-    Effects allEff = Effects::Any();
-    allEff.reset(Effect::ReadsEnv);
-    allEff.reset(Effect::WritesEnv);
-    allEff.reset(Effect::LeaksEnv);
-    Effects allEffButRefl = allEff;
-    allEffButRefl.reset(Effect::Reflection);
-    if (eff == allEff) {
+    const size_t totalEffs = (size_t)Effect::LAST - (size_t)Effect::FIRST;
+    Effects eff;
+    if (effects.count() > totalEffs / 2) {
         out << "!";
-    } else if (eff == allEffButRefl) {
-        out << "!/r";
-    } else if (eff == Effects::None()) {
-        if (effects != Effects::None()) // Has some env effects
-            out << "-";
-        else
-            out << " ";
+        eff = ~effects;
     } else {
-        for (auto it = eff.begin(); it != eff.end(); ++it) {
-            Effect effect = *it;
-            switch (effect) {
+        eff = effects;
+    }
+    for (auto it = eff.begin(); it != eff.end(); ++it) {
+        Effect effect = *it;
+        switch (effect) {
 #define CASE(Name, Str)                                                        \
     case Effect::Name:                                                         \
         out << Str;                                                            \
         break;
-                CASE(Visibility, "v")
-                CASE(Warn, "w")
-                CASE(Error, "e")
-                CASE(Force, "f")
-                CASE(Reflection, "r")
-                CASE(LeakArg, "l")
-                CASE(ChangesContexts, "c")
-                CASE(TriggerDeopt, "d")
-                CASE(ExecuteCode, "x")
+            CASE(Visibility, "v")
+            CASE(Warn, "w")
+            CASE(Error, "e")
+            CASE(Force, "f")
+            CASE(Reflection, "r")
+            CASE(LeakArg, "l")
+            CASE(ChangesContexts, "C")
+            CASE(ReadsEnv, "R")
+            CASE(WritesEnv, "W")
+            CASE(LeaksEnv, "L")
+            CASE(TriggerDeopt, "D")
+            CASE(ExecuteCode, "X")
 #undef CASE
-            default:
-                assert(false);
-            }
+        default:
+            assert(false);
         }
     }
-    ConsoleColor::clear(out);
 }
 
 void printPaddedEffects(std::ostream& out, bool tty, const Instruction* i) {
     std::ostringstream buf;
     i->printEffects(out, tty);
-    out << std::setw(3) << buf.str();
+    out << std::setw(6) << buf.str();
 }
 
 void Instruction::printArgs(std::ostream& out, bool tty) const {
