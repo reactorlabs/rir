@@ -278,7 +278,6 @@ class Instruction : public Value {
 
     virtual void updateType(){};
 
-    virtual void printEffects(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
     virtual void printGraphArgs(std::ostream& out, bool tty) const;
     virtual void printGraphBranches(std::ostream& out, size_t bbId) const;

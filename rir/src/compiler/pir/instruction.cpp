@@ -69,86 +69,47 @@ void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
     }
 }
 
-void Instruction::printEffects(std::ostream& out, bool tty) const {
-    if (!hasEffect()) {
-        out << " ";
-        return;
-    }
-    const size_t totalEffs = (size_t)Effect::LAST - (size_t)Effect::FIRST;
-    Effects eff;
-    if (effects.count() > totalEffs / 2) {
-        out << "!";
-        eff = ~effects;
+std::ostream& operator<<(std::ostream& out, Effects eff) {
+    std::ostringstream buf;
+    if (eff.empty()) {
+        buf << " ";
     } else {
-        eff = effects;
-    }
-    for (auto it = eff.begin(); it != eff.end(); ++it) {
-        Effect effect = *it;
-        switch (effect) {
+        const size_t totalEffs = (size_t)Effect::LAST - (size_t)Effect::FIRST;
+        if (eff.count() > totalEffs / 2) {
+            buf << "!";
+            eff = ~eff;
+        }
+        for (auto it = eff.begin(); it != eff.end(); ++it) {
+            Effect effect = *it;
+            switch (effect) {
 #define CASE(Name, Str)                                                        \
     case Effect::Name:                                                         \
-        out << Str;                                                            \
+        buf << Str;                                                            \
         break;
-            CASE(Visibility, "v")
-            CASE(Warn, "w")
-            CASE(Error, "e")
-            CASE(Force, "f")
-            CASE(Reflection, "r")
-            CASE(LeakArg, "l")
-            CASE(ChangesContexts, "C")
-            CASE(ReadsEnv, "R")
-            CASE(WritesEnv, "W")
-            CASE(LeaksEnv, "L")
-            CASE(TriggerDeopt, "D")
-            CASE(ExecuteCode, "X")
+                CASE(Visibility, "v")
+                CASE(Warn, "w")
+                CASE(Error, "e")
+                CASE(Force, "f")
+                CASE(Reflection, "r")
+                CASE(LeakArg, "l")
+                CASE(ChangesContexts, "C")
+                CASE(ReadsEnv, "R")
+                CASE(WritesEnv, "W")
+                CASE(LeaksEnv, "L")
+                CASE(TriggerDeopt, "D")
+                CASE(ExecuteCode, "X")
 #undef CASE
-        default:
-            assert(false);
+            default:
+                assert(false);
+            }
         }
     }
+    out << buf.str();
+    return out;
 }
 
 void printPaddedEffects(std::ostream& out, bool tty, const Instruction* i) {
-    std::ostringstream buf;
-    i->printEffects(buf, tty);
-    out << std::setw(6) << buf.str();
-}
-
-std::ostream& operator<<(std::ostream& out, Effects eff) {
-    if (eff.empty()) {
-        out << " ";
-        return out;
-    }
-    const size_t totalEffs = (size_t)Effect::LAST - (size_t)Effect::FIRST;
-    if (eff.count() > totalEffs / 2) {
-        out << "!";
-        eff = ~eff;
-    }
-    for (auto it = eff.begin(); it != eff.end(); ++it) {
-        Effect effect = *it;
-        switch (effect) {
-#define CASE(Name, Str)                                                        \
-    case Effect::Name:                                                         \
-        out << Str;                                                            \
-        break;
-            CASE(Visibility, "v")
-            CASE(Warn, "w")
-            CASE(Error, "e")
-            CASE(Force, "f")
-            CASE(Reflection, "r")
-            CASE(LeakArg, "l")
-            CASE(ChangesContexts, "C")
-            CASE(ReadsEnv, "R")
-            CASE(WritesEnv, "W")
-            CASE(LeaksEnv, "L")
-            CASE(TriggerDeopt, "D")
-            CASE(ExecuteCode, "X")
-#undef CASE
-        default:
-            assert(false);
-        }
-    }
-    return out;
+    out << std::setw(6) << i->effects;
 }
 
 void Instruction::printArgs(std::ostream& out, bool tty) const {
