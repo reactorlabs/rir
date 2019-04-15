@@ -110,7 +110,7 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
 
 void printPaddedEffects(std::ostream& out, bool tty, const Instruction* i) {
     std::ostringstream buf;
-    i->printEffects(out, tty);
+    i->printEffects(buf, tty);
     out << std::setw(6) << buf.str();
 }
 
