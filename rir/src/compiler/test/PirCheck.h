@@ -16,7 +16,9 @@ namespace rir {
     V(NoEnv)                                                                   \
     V(NoPromise)                                                               \
     V(NoExternalCalls)                                                         \
-    V(Returns42L)
+    V(Returns42L)                                                              \
+    V(NoEq)                                                                    \
+    V(OneEq)
 
 struct PirCheck {
     enum class Type : unsigned {
