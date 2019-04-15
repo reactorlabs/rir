@@ -9,11 +9,11 @@ AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
     AbstractResult res;
     if (i->alwaysOverridesVisibility()) {
         // Always changes visibility
-        if (vis.observable.size() == 1 && *vis.observable.begin() == i)
-            return;
-        vis.observable.clear();
-        vis.observable.insert(i);
-        res.update();
+        if (vis.observable.size() != 1 || *vis.observable.begin() != i) {
+            vis.observable.clear();
+            vis.observable.insert(i);
+            res.update();
+        }
     } else if (i->effects.contains(Effect::Visibility)) {
         // Maybe changes visibility
         if (!vis.observable.count(i)) {
