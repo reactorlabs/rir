@@ -309,6 +309,10 @@ struct PirType {
         return PirType(t_.r, flags_ | TypeFlags::maybeObject);
     }
 
+    PirType constexpr notLazy() const {
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
+    }
+
     PirType constexpr forced() const {
         assert(isRType());
         FlagSet notPromised =

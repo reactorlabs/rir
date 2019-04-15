@@ -59,6 +59,7 @@ if (Sys.getenv("PIR_DEOPT_CHAOS") != "1") {
     i <- rir.compile(function(x) 40-x)
     
     stopifnot(f(-1) == 42)
+    stopifnot(f(-1) == 42)
     
     hc1 = .Call("rir_invocation_count", h)
     ic1 = .Call("rir_invocation_count", i)
