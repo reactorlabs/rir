@@ -77,12 +77,6 @@ class TheCleanup {
                         used_p.insert(arg->prom()->id);
                         todo.push_back(arg->prom());
                     }
-                } else if (auto tst = AsTest::Cast(i)) {
-                    if (auto lgl = AsLogical::Cast(tst->arg<0>().val())) {
-                        tst->arg<0>().val() = lgl->arg<0>().val();
-                        if (lgl->unused())
-                            lgl->effects.reset();
-                    }
                 } else if (auto asInt = AsInt::Cast(i)) {
                     auto arg = asInt->arg<0>().val();
                     if (arg->type.isA(
