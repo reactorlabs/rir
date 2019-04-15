@@ -930,10 +930,18 @@ class FLI(AsLogical, 1, Effect::Error) {
     }
 };
 
-class FLI(AsTest, 1, Effect::Error) {
+class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
   public:
+    Value* val() { return arg<0>().val(); }
+
     explicit AsTest(Value* in)
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}) {}
+
+    void updateType() override final {
+        if (val()->type.isScalar())
+            effects.reset(Effect::Warn);
+        // Error on NA, hard to exclude
+    }
 };
 
 class FLI(AsInt, 1, Effect::Error) {
