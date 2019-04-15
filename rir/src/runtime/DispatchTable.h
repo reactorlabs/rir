@@ -52,6 +52,7 @@ struct DispatchTable
         }
         if (i == size())
             return;
+        get(i)->dead = true;
         for (; i < size() - 1; ++i) {
             setEntry(i, getEntry(i + 1));
         }

@@ -322,20 +322,22 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto& feedback = callTargetFeedback.at(callee);
             // If this call was never executed. Might as well compile an
             // unconditional deopt
-            if (!inPromise() && srcCode->funInvocationCount > 0 &&
+            if (!inPromise() && srcCode->funInvocationCount > 1 &&
                 feedback.taken == 0) {
-                // Hack to record the deoptimized call, to ensure we compile
-                // something better on re-optimization.
-                auto deoptPos = pos - 1 - sizeof(ObservedCallees);
-                if (*deoptPos != Opcode::record_call_)
-                    deoptPos = pos;
-                auto fs = insert.registerFrameState(srcCode, deoptPos, stack);
-                insert(new Deopt(fs));
-                stack.clear();
-                break;
+                // To avoid deoptimization loops, we must ensure that on
+                // deoptimization we actually record the new call target.
+                // We do this by jumping back, before the record call bc.
+                auto deoptPos = pos - BC::recordCall().size();
+                if (*deoptPos == Opcode::record_call_) {
+                    auto fs =
+                        insert.registerFrameState(srcCode, deoptPos, stack);
+                    insert(new Deopt(fs));
+                    stack.clear();
+                    break;
+                }
             }
 
-            if (feedback.numTargets == 1)
+            if (feedback.taken > 1 && feedback.numTargets == 1)
                 monomorphic = feedback.getTarget(srcCode, 0);
         }
 

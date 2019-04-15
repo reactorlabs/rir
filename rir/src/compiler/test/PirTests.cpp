@@ -10,6 +10,7 @@
 #include "R/RList.h"
 #include "R_ext/Parse.h"
 #include "api.h"
+#include "compiler/parameter.h"
 #include <string>
 #include <vector>
 
@@ -817,8 +818,8 @@ static Test tests[] = {
 namespace rir {
 
 void PirTests::run() {
-    size_t oldconfig = Rir2PirCompiler::MAX_INPUT_SIZE;
-    Rir2PirCompiler::MAX_INPUT_SIZE = 3000;
+    size_t oldconfig = pir::Parameter::MAX_INPUT_SIZE;
+    pir::Parameter::MAX_INPUT_SIZE = 3000;
     for (auto t : tests) {
         std::cout << "> " << t.first << "\n";
         if (!t.second()) {
@@ -826,6 +827,6 @@ void PirTests::run() {
             exit(1);
         }
     }
-    Rir2PirCompiler::MAX_INPUT_SIZE = oldconfig;
+    pir::Parameter::MAX_INPUT_SIZE = oldconfig;
 }
 } // namespace rir
