@@ -926,17 +926,35 @@ class FLI(CastType, 1, Effects::None()) {
         : FixedLenInstruction(to, {{from}}, {{in}}) {}
 };
 
-class FLI(AsLogical, 1, Effect::Warn) {
+class FLI(AsLogical, 1, Effect::Error) {
   public:
+    Value* val() { return arg<0>().val(); }
+
     AsLogical(Value* in, unsigned srcIdx)
         : FixedLenInstruction(PirType::simpleScalarLogical(),
                               {{PirType::val()}}, {{in}}, srcIdx) {}
+
+    void updateType() override final {
+        if (val()->type.isA((PirType() | RType::logical | RType::integer |
+                             RType::real | RType::str | RType::cplx)
+                                .notObject())) {
+            effects.reset(Effect::Error);
+        }
+    }
 };
 
-class FLI(AsTest, 1, Effect::Error) {
+class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
   public:
+    Value* val() { return arg<0>().val(); }
+
     explicit AsTest(Value* in)
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}) {}
+
+    void updateType() override final {
+        if (val()->type.isScalar())
+            effects.reset(Effect::Warn);
+        // Error on NA, hard to exclude
+    }
 };
 
 class FLI(AsInt, 1, Effect::Error) {
