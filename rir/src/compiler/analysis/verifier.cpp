@@ -309,6 +309,27 @@ class TheVerifier {
                 ok = false;
             }
         });
+
+        verifyEffects(i);
+    }
+
+    void verifyEffects(Instruction* i) {
+        Effects eff = i->effects;
+
+        auto fail = [&](auto msg) {
+            std::cerr << "Error in effects '" << eff << "', in:\n";
+            i->print(std::cerr);
+            std::cerr << "\n" << msg << "\n"; 
+            ok = false;
+        };
+
+        if (eff.contains(Effect::ExecuteCode) && eff != Effects::Any()) {
+            fail("ExecuteCode implies all other effects");
+        }
+
+        if (eff.contains(Effect::LeaksEnv) && !eff.contains(Effect::LeakArg)) {
+            fail("LeaksEnv implies LeakArg");
+        }
     }
 };
 } // namespace
