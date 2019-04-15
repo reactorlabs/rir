@@ -913,7 +913,7 @@ class FLI(CastType, 1, Effects::None()) {
         : FixedLenInstruction(to, {{from}}, {{in}}) {}
 };
 
-class FLI(AsLogical, 1, Effect::Warn) {
+class FLI(AsLogical, 1, Effect::Error) {
   public:
     AsLogical(Value* in, unsigned srcIdx)
         : FixedLenInstruction(PirType::simpleScalarLogical(),
