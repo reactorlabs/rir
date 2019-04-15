@@ -146,6 +146,12 @@ typedef union {
     int ival;
 } scalar_value_t;
 
+RIR_INLINE SEXP intAsSexp(int x) {
+    SEXP res = Rf_allocVector(INTSXP, 1);
+    *INTEGER(res) = x;
+    return res;
+}
+
 RIR_INLINE R_bcstack_t intStackObj(int x) {
     R_bcstack_t res;
 #ifdef USE_TYPED_STACK
@@ -161,9 +167,9 @@ RIR_INLINE R_bcstack_t intStackObj(int x) {
     return res;
 }
 
-RIR_INLINE SEXP intAsSexp(int x) {
-    SEXP res = Rf_allocVector(INTSXP, 1);
-    *INTEGER(res) = x;
+RIR_INLINE SEXP realAsSexp(double x) {
+    SEXP res = Rf_allocVector(REALSXP, 1);
+    *REAL(res) = x;
     return res;
 }
 
@@ -182,9 +188,9 @@ RIR_INLINE R_bcstack_t realStackObj(double x) {
     return res;
 }
 
-RIR_INLINE SEXP realAsSexp(double x) {
-    SEXP res = Rf_allocVector(REALSXP, 1);
-    *REAL(res) = x;
+RIR_INLINE SEXP logicalAsSexp(int x) {
+    SEXP res = Rf_allocVector(LGLSXP, 1);
+    *LOGICAL(res) = x;
     return res;
 }
 
@@ -200,12 +206,6 @@ RIR_INLINE R_bcstack_t logicalStackObj(int x) {
     res.tag = STACK_OBJ_SEXP;
     res.u.sxpval = logicalAsSexp(x);
 #endif
-    return res;
-}
-
-RIR_INLINE SEXP logicalAsSexp(int x) {
-    SEXP res = Rf_allocVector(LGLSXP, 1);
-    *LOGICAL(res) = x;
     return res;
 }
 

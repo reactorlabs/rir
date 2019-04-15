@@ -405,7 +405,7 @@ static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
             if (R_ReturnedValue == R_RestartToken) {
                 cntxt.callflag = CTXT_RETURN; /* turn restart off */
                 R_ReturnedValue = R_NilValue; /* remove restart token */
-                evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc);
+                return evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc);
             } else {
                 return R_ReturnedValue;
             }
@@ -1315,7 +1315,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(pop_context_) { return stackObjToSexp(ostackCellPop(ctx)); }
+        INSTRUCTION(pop_context_) { return ostackPopSexp(ctx); }
 
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
@@ -1323,12 +1323,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             int contextPos = readSignedImmediate();
             advanceImmediate();
             SEXP parent = ostackPopSexp(ctx);
+            PROTECT(parent);
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
             SEXP arglist = R_NilValue;
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            PROTECT(parent);
             bool hasMissing = false;
             for (long i = n - 1; i >= 0; --i) {
                 PROTECT(arglist);
@@ -1341,7 +1341,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 hasMissing = hasMissing || val == R_MissingArg;
                 SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
             }
-            UNPROTECT(1);
             SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent);
 
             if (contextPos > 0) {
@@ -1374,6 +1373,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
+            UNPROTECT(1);
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -1643,7 +1643,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             R_bcstack_t* val = ostackCellPop(ctx);
-
             if (auto stub = LazyEnvironment::cast(env))
                 env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache);
@@ -1655,7 +1654,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             R_bcstack_t* val = ostackCellPop(ctx);
-
             if (auto stub = LazyEnvironment::cast(env))
                 env = stub->create();
             cachedSetVar(val, env, id, ctx, bindingCache, true);
@@ -1668,7 +1666,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             R_bcstack_t* val = ostackCellPop(ctx);
+            if (val->tag == STACK_OBJ_SEXP)
+                PROTECT(val->u.sxpval);
             setVar(sym, val, ENCLOS(env), true);
+            if (val->tag == STACK_OBJ_SEXP)
+                UNPROTECT(1);
             NEXT();
         }
 
@@ -2290,8 +2292,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             int x1 = tryStackObjToLogicalNa(lhs);
             int x2 = tryStackObjToLogicalNa(rhs);
 #else
-            int x1 = *LOGICAL(lhs.u.sxpval);
-            int x2 = *LOGICAL(rhs.u.sxpval);
+            int x1 = *LOGICAL(lhs->u.sxpval);
+            int x2 = *LOGICAL(rhs->u.sxpval);
 #endif
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
