@@ -93,9 +93,7 @@ void State::mergeIn(const State& incom, BB* incomBB) {
         Phi* p = Phi::Cast(stack.at(i));
         assert(p);
         Value* in = incom.stack.at(i);
-        if (in != p) {
-            p->addInput(incomBB, in);
-        }
+        p->addInput(incomBB, in);
     }
     incomBB->setNext(entryBB);
 }
@@ -202,6 +200,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
         v = insert(new LdVar(bc.immediateConst(), env));
         // Checkpoint might be useful if we end up inlining this force
         if (!inPromise())
@@ -730,7 +729,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::put_: {
         x = top();
-        for (size_t i = 0; i < bc.immediate.i - 1; ++i)
+        for (size_t i = 0; i < bc.immediate.i; ++i)
             set(i, at(i + 1));
         set(bc.immediate.i, x);
         break;

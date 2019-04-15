@@ -701,13 +701,57 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             order.push_back(bb->id);
     });
 
-    std::unordered_map<Instruction*, AUses::Kind> needsRefcount;
+    std::unordered_set<Instruction*> needsEnsureNamed;
+    std::unordered_set<Instruction*> needsSetShared;
+    std::unordered_set<Instruction*> needsLdVarForUpdate;
+    bool refcountAnalysisOverflow = false;
     {
+        Visitor::run(code->entry, [&](Instruction* i) {
+            switch (i->tag) {
+            case Tag::ForSeqSize:
+                if (auto arg = Instruction::Cast(i->arg(0).val()))
+                    if (arg->minReferenceCount() < Value::MAX_REFCOUNT)
+                        needsSetShared.insert(arg);
+                break;
+            case Tag::Subassign1_1D:
+            case Tag::Subassign2_1D:
+            case Tag::Subassign1_2D:
+            case Tag::Subassign2_2D:
+                // Subassigns override the vector, even if the named count
+                // is 1. This is only valid, if we are sure that the vector
+                // is local, ie. vector and subassign operation come from
+                // the same lexical scope.
+                if (auto vec = Instruction::Cast(
+                        i->arg(1).val()->followCastsAndForce())) {
+                    if (auto ld = LdVar::Cast(vec)) {
+                        if (auto su = vec->hasSingleUse()) {
+                            if (auto st = StVar::Cast(su)) {
+                                if (ld->env() != st->env())
+                                    needsLdVarForUpdate.insert(vec);
+                                break;
+                            }
+                        }
+                        if (ld->env() != i->env())
+                            needsLdVarForUpdate.insert(vec);
+                    } else {
+                        if (vec->minReferenceCount() < 2 &&
+                            !vec->hasSingleUse())
+                            needsSetShared.insert(vec);
+                    }
+                }
+                break;
+            default: {}
+            }
+        });
+
         StaticReferenceCount analysis(cls, log);
-        for (auto& u : analysis.result().uses) {
-            if (u.second > AUses::Once)
-                needsRefcount[u.first] = u.second;
-        }
+        if (analysis.result().overflow)
+            refcountAnalysisOverflow = true;
+        else
+            for (auto& u : analysis.result().uses) {
+                if (u.second == AUses::Multiple)
+                    needsEnsureNamed.insert(u.first);
+            }
     }
 
     CodeBuffer cb(ctx.cs());
@@ -917,7 +961,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
-                cb.add(BC::ldvarNoForce(ldvar->varName));
+                if (needsLdVarForUpdate.count(instr))
+                    cb.add(BC::ldvarForUpdate(ldvar->varName));
+                else
+                    cb.add(BC::ldvarNoForce(ldvar->varName));
                 break;
             }
 
@@ -1243,12 +1290,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
-            if (instr->needsReferenceCount()) {
-                if (needsRefcount[instr] == AUses::Multiple)
-                    cb.add(BC::ensureNamed());
-                else if (needsRefcount[instr] == AUses::Destructive)
-                    cb.add(BC::setShared());
-            }
+            if (instr->minReferenceCount() < 2 && needsSetShared.count(instr))
+                cb.add(BC::setShared());
+            else if (instr->minReferenceCount() < 1 &&
+                     (refcountAnalysisOverflow ||
+                      needsEnsureNamed.count(instr)))
+                cb.add(BC::ensureNamed());
 
             // Store the result
             if (alloc.sa.dead(instr)) {

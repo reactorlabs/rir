@@ -47,7 +47,13 @@ enum class AnalysisDebugLevel {
     Instruction,
 };
 
-template <class AbstractState,
+struct DummyState {
+    void resetChanged() {}
+    bool changed() { return false; }
+};
+
+template <class AbstractState,                    // Flow sensitive
+          class GlobalAbstractState = DummyState, // Flow insensitive
           AnalysisDebugLevel DEBUG_LEVEL = AnalysisDebugLevel::None>
 class StaticAnalysis {
   public:
@@ -64,6 +70,11 @@ class StaticAnalysis {
     typedef std::vector<BBSnapshot> AnalysisSnapshots;
     AnalysisSnapshots snapshots;
 
+    // For fixed-point computation, allowed to modify global state
+    virtual AbstractResult compute(AbstractState& state, Instruction* i) {
+        return apply(state, i);
+    }
+    // For lookup, after fixed-point was found
     virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
 
     constexpr static size_t MAX_CACHE_SIZE = 128 / sizeof(AbstractState);
@@ -84,8 +95,8 @@ class StaticAnalysis {
         const_cast<StaticAnalysis*>(this)->cache.emplace(i, state);
         const_cast<StaticAnalysis*>(this)->cacheQueue.push_back(i);
     }
-
   protected:
+    GlobalAbstractState* globalState = nullptr;
     AbstractState exitpoint;
 
     bool done = false;
@@ -102,8 +113,10 @@ class StaticAnalysis {
         snapshots.resize(code->nextBBId);
     }
     StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
-                   const AbstractState& initialState, LogStream& log)
-        : name(name), log(log), closure(cls), code(code), entry(code->entry) {
+                   const AbstractState& initialState,
+                   GlobalAbstractState* globalState, LogStream& log)
+        : name(name), globalState(globalState), log(log), closure(cls),
+          code(code), entry(code->entry) {
         snapshots.resize(code->nextBBId);
         snapshots[entry->id].entry = initialState;
     }
@@ -139,6 +152,7 @@ class StaticAnalysis {
         if (DEBUG_LEVEL >= AnalysisDebugLevel::Instruction &&
             res >= AbstractResult::None) {
             log << "===== After applying instruction ";
+            log(i);
             if (res == AbstractResult::Tainted) {
                 log << " (State got tainted)";
             } else {
@@ -267,6 +281,9 @@ class StaticAnalysis {
         std::vector<Position> recursiveTodo;
         do {
             done = true;
+            if (globalState)
+                globalState->resetChanged();
+
             Visitor::run(entry, [&](BB* bb) {
                 size_t id = bb->id;
 
@@ -280,10 +297,10 @@ class StaticAnalysis {
                     AbstractResult res;
                     if (DEBUG_LEVEL == AnalysisDebugLevel::Taint) {
                         AbstractState old = state;
-                        res = apply(state, i);
+                        res = compute(state, i);
                         logTaintChange(old, state, res, i);
                     } else {
-                        res = apply(state, i);
+                        res = compute(state, i);
                         logChange(state, res, i);
                     }
 
@@ -341,6 +358,8 @@ class StaticAnalysis {
                 }
                 recursiveTodo.clear();
             }
+            if (globalState && globalState->changed())
+                done = false;
         } while (!done);
     }
 
@@ -509,6 +528,7 @@ class BackwardStaticAnalysis {
                 log(pre);
             }
             log << "===== After applying instruction ";
+            log(i);
             if (res == AbstractResult::Tainted) {
                 log << " (State got tainted)";
             } else {

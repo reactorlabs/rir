@@ -32,6 +32,7 @@ struct ValOrig {
         return val == other.val && origin == other.origin &&
                recursionLevel == other.recursionLevel;
     }
+    bool operator!=(const ValOrig& other) const { return !(*this == other); }
 };
 }
 }
@@ -128,6 +129,17 @@ struct AbstractPirValue {
     }
 
     void print(std::ostream& out, bool tty = false) const;
+
+    bool operator==(const AbstractPirValue& other) const {
+        if (unknown && other.unknown)
+            return true;
+        return type == other.type && vals == other.vals &&
+               unknown == other.unknown;
+    }
+
+    bool operator!=(const AbstractPirValue& other) const {
+        return !(*this == other);
+    }
 };
 
 /*
@@ -255,6 +267,14 @@ struct AbstractLoad {
     AbstractLoad(Value* env, const AbstractPirValue& val)
         : env(env), result(val) {
         assert(env);
+    }
+
+    bool operator==(const AbstractLoad& other) const {
+        return env == other.env && result == other.result;
+    }
+
+    bool operator!=(const AbstractLoad& other) const {
+        return !(*this == other);
     }
 };
 

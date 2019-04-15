@@ -35,9 +35,9 @@ void writeArgTypeToAssumptions(Assumptions& assumptions, Value* arg, int i) {
         if (assumptions.isEager(i) && assumptions.isNotObj(i) &&
             value->type.isScalar()) {
             assert(value->type.isRType());
-            if (value->type == RType::real)
+            if (value->type.isRType(RType::real))
                 assumptions.setSimpleReal(i);
-            if (value->type == RType::integer)
+            if (value->type.isRType(RType::integer))
                 assumptions.setSimpleInt(i);
         }
     }

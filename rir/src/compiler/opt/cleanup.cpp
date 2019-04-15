@@ -57,7 +57,10 @@ class TheCleanup {
                     }
                 } else if (auto phi = Phi::Cast(i)) {
                     std::unordered_set<Value*> phin;
-                    phi->eachArg([&](BB*, Value* v) { phin.insert(v); });
+                    phi->eachArg([&](BB*, Value* v) {
+                        if (v != phi)
+                            phin.insert(v);
+                    });
                     if (phin.size() == 1) {
                         removed = true;
                         phi->replaceUsesWith(*phin.begin());
@@ -73,13 +76,6 @@ class TheCleanup {
                     } else {
                         used_p.insert(arg->prom()->id);
                         todo.push_back(arg->prom());
-                    }
-                } else if (auto lgl = AsLogical::Cast(i)) {
-                    auto arg = lgl->arg<0>().val();
-                    if (arg->type.isA(PirType::simpleScalarLogical())) {
-                        lgl->replaceUsesWith(arg);
-                        removed = true;
-                        next = bb->remove(ip);
                     }
                 } else if (auto asInt = AsInt::Cast(i)) {
                     auto arg = asInt->arg<0>().val();

@@ -573,11 +573,12 @@ static void addDynamicAssumptionsFromContext(CallContext& call,
                     notObj = false;
                     isEager = false;
                 }
-            } else if (arg->tag == STACK_OBJ_SEXP && isObject(arg->u.sxpval)) {
-                notObj = false;
             } else if (arg->tag == STACK_OBJ_SEXP &&
                        arg->u.sxpval == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
+            }
+            if (arg->tag == STACK_OBJ_SEXP && isObject(arg->u.sxpval)) {
+                notObj = false;
             }
             if (isEager)
                 given.setEager(i);
@@ -1332,6 +1333,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             for (long i = n - 1; i >= 0; --i) {
                 PROTECT(arglist);
                 SEXP val = ostackPopSexp(ctx);
+                ENSURE_NAMED(val);
                 UNPROTECT(1);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
@@ -1392,8 +1394,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto names = pc;
             advanceImmediateN(n);
             std::vector<SEXP>* args = new std::vector<SEXP>();
-            for (size_t i = 0; i < n; ++i)
-                args->push_back(ostackPopSexp(ctx));
+            for (size_t i = 0; i < n; ++i) {
+                SEXP val = ostackPopSexp(ctx);
+                ENSURE_NAMED(val);
+                args->push_back(val);
+            }
             auto envStub =
                 new LazyEnvironment(args, parent, names, ctx, localsBase);
             envStubs.push_back(envStub);
@@ -1449,6 +1454,48 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             default:
                 Rf_error("attempt to apply non-function");
             }
+            ostackPushSexp(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_for_update_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            SEXP loc = cachedGetBindingCell(env, id, ctx, bindingCache);
+            bool isLocal = loc;
+            SEXP res = nullptr;
+
+            if (isLocal) {
+                res = CAR(loc);
+                if (res == R_UnboundValue)
+                    isLocal = false;
+            }
+
+            if (!isLocal) {
+                SEXP sym = cp_pool_at(ctx, id);
+                res = Rf_findVar(sym, env);
+            }
+
+            if (res == R_UnboundValue) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            }
+
+            // if promise, evaluate & return
+            if (TYPEOF(res) == PROMSXP)
+                res = promiseValue(res, ctx);
+
+            if (res != R_NilValue) {
+                if (isLocal)
+                    ENSURE_NAMED(res);
+                else if (NAMED(res) < 2)
+                    SET_NAMED(res, 2);
+            }
+
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -1816,18 +1863,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (fun->invocationCount() % PIR_WARMUP == 0) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
-                if (assumptions != fun->signature().assumptions) {
+                if (assumptions != fun->signature().assumptions)
                     // We have more assumptions available, let's recompile
                     dispatchFail = true;
-
-#ifdef DEBUG_DISPATCH
-                    std::cout << "Optimizing static for new context:";
-                    std::cout << given << " vs " << fun->signature().assumptions
-                              << "\n";
-#endif
-                    SEXP name = CAR(call.ast);
-                    ctx->closureOptimizer(callee, assumptions, name);
-                }
             }
 
             if (dispatchFail) {
@@ -1835,6 +1873,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 fun = dispatch(call, dt);
                 // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
+                assert(fun != dt->baseline());
             }
             advanceImmediate();
 
@@ -2958,6 +2997,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (res) {
                 ostackPopn(ctx, 2);
                 ostackPushSexp(ctx, res);
+                R_Visible = (Rboolean) true;
             } else {
                 BINOP_FALLBACK(":");
             }
