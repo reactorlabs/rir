@@ -7,6 +7,7 @@
 #include "../translations/rir_2_pir/rir_2_pir.h"
 #include "../util/visitor.h"
 #include "api.h"
+#include "compiler/parameter.h"
 #include <string>
 #include <vector>
 
@@ -131,8 +132,8 @@ PirCheck::Type PirCheck::parseType(const char* str) {
 }
 
 bool PirCheck::run(SEXP f) {
-    size_t oldconfig = Rir2PirCompiler::MAX_INPUT_SIZE;
-    Rir2PirCompiler::MAX_INPUT_SIZE = 3000;
+    size_t oldconfig = pir::Parameter::MAX_INPUT_SIZE;
+    pir::Parameter::MAX_INPUT_SIZE = 3000;
     Module m;
     ClosureVersion* pir = compilePir(f, &m);
     bool success = pir;
@@ -151,7 +152,7 @@ bool PirCheck::run(SEXP f) {
         }
     }
     }
-    Rir2PirCompiler::MAX_INPUT_SIZE = oldconfig;
+    pir::Parameter::MAX_INPUT_SIZE = oldconfig;
     if (!success)
         m.print(std::cout, false);
     return success;

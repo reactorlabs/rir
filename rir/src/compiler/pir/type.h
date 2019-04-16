@@ -337,6 +337,13 @@ struct PirType {
         t_.r = RTypeSet(rtype);
     }
 
+    bool isVoid() const {
+        if (isRType())
+            return t_.r.empty();
+        else
+            return t_.n.empty();
+    }
+
     static const PirType voyd() { return PirType(NativeTypeSet()); }
     static const PirType bottom() { return optimistic(); }
 
@@ -368,7 +375,7 @@ struct PirType {
         return t_.r.includes(o.t_.r);
     }
 
-    void print(std::ostream& out = std::cout);
+    void print(std::ostream& out = std::cout) const;
 };
 
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {
