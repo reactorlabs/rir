@@ -122,8 +122,8 @@ enum class Controlflow : uint8_t {
 // How an instruction modifies visibility
 // The order is important - this is equivalent to R's visibility flag
 enum class VisibilityFlag : uint8_t {
-    Visible,
-    Invisible,
+    On,
+    Off,
     Unknown,
 };
 
@@ -1141,7 +1141,7 @@ class FLI(Visible, 0, Effect::Visibility) {
   public:
     explicit Visible() : FixedLenInstruction(PirType::voyd()) {}
     VisibilityFlag visibilityFlag() const override {
-        return VisibilityFlag::Visible;
+        return VisibilityFlag::On;
     }
 };
 
@@ -1149,7 +1149,7 @@ class FLI(Invisible, 0, Effect::Visibility) {
   public:
     explicit Invisible() : FixedLenInstruction(PirType::voyd()) {}
     VisibilityFlag visibilityFlag() const override {
-        return VisibilityFlag::Invisible;
+        return VisibilityFlag::Off;
     }
 };
 
@@ -1187,7 +1187,7 @@ class FLIE(Colon, 3, Effects::Any()) {
     VisibilityFlag visibilityFlag() const override {
         if (lhs()->type.isA(PirType::simpleScalar()) &&
             rhs()->type.isA(PirType::simpleScalar())) {
-            return VisibilityFlag::Visible;
+            return VisibilityFlag::On;
         } else {
             return VisibilityFlag::Unknown;
         }
@@ -1214,7 +1214,7 @@ SIMPLE_INSTRUCTIONS(V, _)
         VisibilityFlag visibilityFlag() const override {                       \
             if (lhs()->type.isA(PirType::num().notObject()) &&                 \
                 rhs()->type.isA(PirType::num().notObject())) {                 \
-                return VisibilityFlag::Visible;                                \
+                return VisibilityFlag::On;                                     \
             } else {                                                           \
                 return VisibilityFlag::Unknown;                                \
             }                                                                  \
@@ -1267,7 +1267,7 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
                                              srcIdx) {}                        \
         VisibilityFlag visibilityFlag() const override {                       \
             if (arg<0>().val()->type.isA(PirType::num().notObject())) {        \
-                return VisibilityFlag::Visible;                                \
+                return VisibilityFlag::On;                                     \
             } else {                                                           \
                 return VisibilityFlag::Unknown;                                \
             }                                                                  \

@@ -38,10 +38,10 @@ class TheCleanup {
                            !Visible::Cast(i) && !Invisible::Cast(i)) {
                     removed = true;
                     switch (i->visibilityFlag()) {
-                    case VisibilityFlag::Visible:
+                    case VisibilityFlag::On:
                         bb->replace(ip, new Visible());
                         break;
-                    case VisibilityFlag::Invisible:
+                    case VisibilityFlag::Off:
                         bb->replace(ip, new Invisible());
                         break;
                     default:

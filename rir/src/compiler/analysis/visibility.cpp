@@ -9,8 +9,8 @@ AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
     AbstractResult res;
     if (i->effects.contains(Effect::Visibility)) {
         switch (i->visibilityFlag()) {
-        case VisibilityFlag::Visible:
-        case VisibilityFlag::Invisible:
+        case VisibilityFlag::On:
+        case VisibilityFlag::Off:
             // Always changes visibility, overrides previous changes
             if (vis.observable.size() != 1 || *vis.observable.begin() != i) {
                 vis.observable.clear();
