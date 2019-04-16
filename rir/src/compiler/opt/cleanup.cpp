@@ -28,20 +28,25 @@ class TheCleanup {
                 Instruction* i = *ip;
                 auto next = ip + 1;
                 bool removed = false;
-                if (i->unused() && !i->branchOrExit() &&
-                    !i->hasObservableEffects()) {
+                bool dead = i->unused() && !i->branchOrExit();
+                if (dead && !i->hasObservableEffects()) {
                     removed = true;
                     next = bb->remove(ip);
-                } else if (i->unused() && !i->branchOrExit() &&
-                           !i->hasImpureEffects() && i->alwaysSetsVisible() &&
-                           !Visible::Cast(i)) {
+                } else if (dead &&
+                           i->getObservableEffects() == Effect::Visibility &&
+                           i->visibilityFlag() != VisibilityFlag::Unknown &&
+                           !Visible::Cast(i) && !Invisible::Cast(i)) {
                     removed = true;
-                    bb->replace(ip, new Visible());
-                } else if (i->unused() && !i->branchOrExit() &&
-                           !i->hasImpureEffects() && i->alwaysSetsInvisible() &&
-                           !Invisible::Cast(i)) {
-                    removed = true;
-                    bb->replace(ip, new Invisible());
+                    switch (i->visibilityFlag()) {
+                    case VisibilityFlag::Visible:
+                        bb->replace(ip, new Visible());
+                        break;
+                    case VisibilityFlag::Invisible:
+                        bb->replace(ip, new Invisible());
+                        break;
+                    default:
+                        assert(false);
+                    }
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
                     // Missing args produce error.
