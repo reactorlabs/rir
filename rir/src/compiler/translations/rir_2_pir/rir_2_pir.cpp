@@ -296,14 +296,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::record_binop_: {
-        if (bc.immediate.binopFeedback[0].numTypes)
-            at(0)->typeFeedback.merge(bc.immediate.binopFeedback[0]);
-        if (bc.immediate.binopFeedback[1].numTypes)
-            at(1)->typeFeedback.merge(bc.immediate.binopFeedback[1]);
-        break;
-    }
-
     case Opcode::record_call_: {
         Value* target = top();
         callTargetFeedback[target] = bc.immediate.callFeedback;

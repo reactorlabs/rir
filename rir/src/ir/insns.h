@@ -518,7 +518,6 @@ DEF_INSTR(deopt_, 1, -1, 0, 0)
  * heavy in size.
  */
 DEF_INSTR(record_call_, 4, 1, 1, 0)
-DEF_INSTR(record_binop_, 2, 2, 2, 0)
 DEF_INSTR(record_type_, 1, 1, 1, 0)
 
 DEF_INSTR(int3_, 0, 0, 0, 0)

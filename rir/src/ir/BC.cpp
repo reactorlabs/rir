@@ -33,11 +33,6 @@ BC_NOARGS(V, _)
         cs.insert(immediate.typeFeedback);
         break;
 
-    case Opcode::record_binop_:
-        cs.insert(immediate.binopFeedback[0]);
-        cs.insert(immediate.binopFeedback[1]);
-        return;
-
     case Opcode::push_:
     case Opcode::deopt_:
     case Opcode::ldfun_:
@@ -170,8 +165,7 @@ void BC::printOpcode(std::ostream& out) const { out << name(bc) << "  "; }
 
 void BC::print(std::ostream& out) const {
     out << "   ";
-    if (bc != Opcode::record_call_ && bc != Opcode::record_binop_ &&
-        bc != Opcode::record_type_)
+    if (bc != Opcode::record_call_ && bc != Opcode::record_type_)
         printOpcode(out);
 
     auto printTypeFeedback = [&](const ObservedValues& prof) {
@@ -312,18 +306,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::record_type_: {
         out << "[ ";
         printTypeFeedback(immediate.typeFeedback);
-        out << " ]";
-        break;
-    }
-
-    case Opcode::record_binop_: {
-        auto prof = immediate.binopFeedback;
-        out << "[ ";
-        for (size_t j = 0; j < 2; ++j) {
-            printTypeFeedback(prof[j]);
-            if (j == 0)
-                out << " x ";
-        }
         out << " ]";
         break;
     }

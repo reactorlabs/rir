@@ -138,7 +138,6 @@ class BC {
         NumLocals loc;
         LocalsCopy loc_cpy;
         ObservedCallees callFeedback;
-        ObservedValues binopFeedback[2];
         ObservedValues typeFeedback;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
@@ -668,9 +667,6 @@ BC_NOARGS(V, _)
             break;
         case Opcode::record_type_:
             memcpy(&immediate.typeFeedback, pc, sizeof(ObservedValues));
-            break;
-        case Opcode::record_binop_:
-            memcpy(&immediate.binopFeedback, pc, sizeof(ObservedValues) * 2);
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)

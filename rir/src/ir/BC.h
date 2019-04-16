@@ -23,7 +23,6 @@ BC BC::name() { return BC(Opcode::name_##_); }
 BC_NOARGS(V, _)
 #undef V
 BC BC::recordCall() { return BC(Opcode::record_call_); }
-BC BC::recordBinop() { return BC(Opcode::record_binop_); }
 BC BC::recordType() { return BC(Opcode::record_type_); }
 BC BC::popn(unsigned n) {
     ImmediateArguments i;

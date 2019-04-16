@@ -2007,16 +2007,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(record_binop_) {
-            ObservedValues* feedback = (ObservedValues*)pc;
-            SEXP l = ostack_at(ctx, 1);
-            SEXP r = ostack_top(ctx);
-            feedback[0].record(l);
-            feedback[1].record(r);
-            pc += 2 * sizeof(ObservedValues);
-            NEXT();
-        }
-
         INSTRUCTION(call_implicit_) {
 #ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
