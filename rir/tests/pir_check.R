@@ -46,16 +46,16 @@ stopifnot(pir.check(function(depth) {
     1
   else
     0
-}, NoEnvSpec))
+}, NoEnvSpec, warmup=list(1)))
 
 xxx <- 12
 stopifnot(pir.check(function() {
   1 + xxx
 }, NoEnvForAdd, warmup=list()))
-
+yyy = 0
 stopifnot(pir.check(function() {
   1 + yyy
-}, NoEnvForAdd))
+}, NoEnvForAdd, warmup=list()))
 stopifnot(pir.check(function(x) {
   y <- 2
 }, NoStore))
@@ -139,7 +139,7 @@ stopifnot(pir.check(function() {
   b <- function() 1L
   f <- function(x, y) x() + y
   f(a, b())
-}, Returns42L))
+}, Returns42L, warmup=list()))
 stopifnot(pir.check(function() {
   x <- function() 32
   y <- function() 31
@@ -149,7 +149,7 @@ stopifnot(pir.check(function() {
       42L
   }
   f(x, y(), z)
-}, NoEnv))
+}, NoEnv, warmup=list()))
 
 mandelbrot <- function() {
     size = 30
@@ -210,7 +210,7 @@ stopifnot(pir.check(function() {
   while (x < 10)
     x <- x + 1
   x
-}, NoLoad, NoStore))
+}, NoLoad, NoStore, warmup=list()))
 stopifnot(pir.check(function(n) {
   x <- 1
   while (x < n)
