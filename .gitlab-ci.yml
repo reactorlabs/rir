@@ -78,7 +78,12 @@ test_flaky:
 
 test_benchmarks:
   script:
+    - git clone https://github.com/charig/ReBench.git -b envVarsSupport && cd ReBench
+    - pip install --user .
+    - export PATH=$HOME/.local/bin:$PATH
+    - cd ..
     - cd build_release
-    - ../tools/downloadBenchs.sh ../build_release
-    - ../tools/runBenchs.sh --installRebench --travis
-    - PIR_DEOPT_CHAOS=1 ../tools/runBenchs.sh --travis
+    - git clone https://github.com/reactorlabs/rbenchmarking
+    - cd rbenchmarking
+    - ./Setup/run.sh rebench.conf .. ../../external/custom-r Benchmarks e:RIR e:PIR -r -SN -wu 0 --iterations 2
+    - PIR_DEOPT_CHAOS=1 ./Setup/run.sh rebench.conf .. ../../external/custom-r Benchmarks e:RIR e:PIR -r -SN -wu 0 --iterations 2
