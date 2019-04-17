@@ -1673,11 +1673,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             R_bcstack_t* val = ostackCellPop(ctx);
-            if (val->tag == STACK_OBJ_SEXP)
-                PROTECT(val->u.sxpval);
             setVar(sym, val, ENCLOS(env), true);
-            if (val->tag == STACK_OBJ_SEXP)
-                UNPROTECT(1);
             NEXT();
         }
 
