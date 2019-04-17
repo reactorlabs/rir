@@ -113,16 +113,14 @@ struct Assumptions {
         // Order by number of assumptions! Important for dispatching.
         if (*this != other) {
             if (subtype(other))
-                return false;
-            if (other.subtype(*this))
                 return true;
+            if (other.subtype(*this))
+                return false;
         }
 
-        // for std::map we need a complete order, subtype is only partial
+        // we need a complete order, subtype is only partial
         if (missing != other.missing)
-            return missing > other.missing;
-        if (flags.count() != other.flags.count())
-            return flags.count() > other.flags.count();
+            return missing < other.missing;
         return flags < other.flags;
     }
 
