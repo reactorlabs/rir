@@ -2150,7 +2150,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     int_res = NA_REAL;
                 else
                     int_res = (int)floor((double)lhsScalar.ival /
-                                         (double)lhsScalar.ival);
+                                         (double)rhsScalar.ival);
                 STORE_BINOP_FAST(int_res, reusableSexpLhs, Int, INTEGER);
             } else {
                 BINOP_FALLBACK("%/%");
