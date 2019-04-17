@@ -113,7 +113,6 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
 
 SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(call.hasStackArgs() && !call.hasNames());
-    return nullptr;
     static constexpr size_t MAXARGS = 16;
     std::array<R_bcstack_t, MAXARGS> args;
     auto nargs = call.suppliedArgs;
@@ -407,15 +406,11 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         std::vector<size_t> which;
         switch (arg->tag) {
         case STACK_OBJ_LOGICAL:
-            // TODO: Is R_NilValue NA?
             if ((bool)arg->u.ival)
-                which.push_back(1);
-            else
-                return R_NilValue;
+                which.push_back(0);
             break;
         case STACK_OBJ_SEXP: {
             auto argSexp = arg->u.sxpval;
-            std::vector<size_t> which;
             for (long i = 0; i < XLENGTH(argSexp); ++i) {
                 if (LOGICAL(argSexp)[i] == TRUE) {
                     which.push_back(i);

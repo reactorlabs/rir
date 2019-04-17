@@ -819,8 +819,13 @@ static RIR_INLINE SEXP builtinCall(CallContext& call,
                                    InterpreterInstance* ctx) {
     if (call.hasStackArgs() && !call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
-        if (res)
+        if (res) {
+#ifdef DEBUG_FASTCASES
+            std::cout << "Succeeded builtin " << call.callee->u.primsxp.offset
+                      << "\n";
+#endif
             return res;
+        }
 #ifdef DEBUG_SLOWCASES
         SLOWCASE_COUNTER.count("builtin", call, ctx);
 #endif
