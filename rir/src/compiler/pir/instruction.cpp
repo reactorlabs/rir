@@ -45,6 +45,13 @@ extern std::ostream& operator<<(std::ostream& out,
     return out;
 }
 
+void Instruction::printRef(std::ostream& out) const {
+    if (type == RType::env)
+        out << "e" << id();
+    else
+        out << "%" << id();
+};
+
 void printPaddedInstructionName(std::ostream& out, const std::string& name) {
     out << std::left << std::setw(maxInstructionNameLength + 1) << name << " ";
 }
@@ -52,7 +59,13 @@ void printPaddedInstructionName(std::ostream& out, const std::string& name) {
 void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
     std::ostringstream buf;
     buf << i->type;
-    out << std::left << std::setw(7) << buf.str() << " ";
+    if (!i->typeFeedback.isVoid()) {
+        if (i->type == i->typeFeedback)
+            buf << "<>";
+        else
+            buf << "<" << i->typeFeedback << ">";
+    }
+    out << std::left << std::setw(15) << buf.str() << " ";
     buf.str("");
     if (i->type != PirType::voyd()) {
         i->printRef(buf);
@@ -62,7 +75,50 @@ void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
     }
 }
 
-bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
+void Instruction::printEffects(std::ostream& out, bool tty) const {
+    if (!hasEffect()) {
+        out << " ";
+        return;
+    }
+    const size_t totalEffs = (size_t)Effect::LAST - (size_t)Effect::FIRST;
+    Effects eff;
+    if (effects.count() > totalEffs / 2) {
+        out << "!";
+        eff = ~effects;
+    } else {
+        eff = effects;
+    }
+    for (auto it = eff.begin(); it != eff.end(); ++it) {
+        Effect effect = *it;
+        switch (effect) {
+#define CASE(Name, Str)                                                        \
+    case Effect::Name:                                                         \
+        out << Str;                                                            \
+        break;
+            CASE(Visibility, "v")
+            CASE(Warn, "w")
+            CASE(Error, "e")
+            CASE(Force, "f")
+            CASE(Reflection, "r")
+            CASE(LeakArg, "l")
+            CASE(ChangesContexts, "C")
+            CASE(ReadsEnv, "R")
+            CASE(WritesEnv, "W")
+            CASE(LeaksEnv, "L")
+            CASE(TriggerDeopt, "D")
+            CASE(ExecuteCode, "X")
+#undef CASE
+        default:
+            assert(false);
+        }
+    }
+}
+
+void printPaddedEffects(std::ostream& out, bool tty, const Instruction* i) {
+    std::ostringstream buf;
+    i->printEffects(buf, tty);
+    out << std::setw(6) << buf.str();
+}
 
 void Instruction::printArgs(std::ostream& out, bool tty) const {
     size_t n = nargs();
@@ -87,35 +143,6 @@ void Instruction::printGraphBranches(std::ostream& out, size_t bbId) const {
     assert(false);
 }
 
-void Instruction::print(std::ostream& out, bool tty) const {
-    printPaddedTypeAndRef(out, this);
-    printPaddedInstructionName(out, name());
-    printArgs(out, tty);
-    printEnv(out, tty);
-}
-
-void Instruction::printGraph(std::ostream& out, bool tty) const {
-    printPaddedTypeAndRef(out, this);
-    printPaddedInstructionName(out, name());
-    printGraphArgs(out, tty);
-    printEnv(out, tty);
-}
-
-void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
-    auto bbIter = input.begin();
-    auto argIter = args_.begin();
-    while (argIter != args_.end()) {
-        if (deletedBBs.count(*bbIter)) {
-            bbIter = input.erase(bbIter);
-            argIter = args_.erase(argIter);
-        } else {
-            argIter++;
-            bbIter++;
-        }
-    }
-    assert(bbIter == input.end());
-}
-
 void Instruction::printEnv(std::ostream& out, bool tty) const {
     if (hasEnv()) {
         if (tty) {
@@ -134,12 +161,38 @@ void Instruction::printEnv(std::ostream& out, bool tty) const {
     }
 }
 
-void Instruction::printRef(std::ostream& out) const {
-    if (type == RType::env)
-        out << "e" << id();
-    else
-        out << "%" << id();
-};
+void Instruction::print(std::ostream& out, bool tty) const {
+    printPaddedTypeAndRef(out, this);
+    printPaddedInstructionName(out, name());
+    printPaddedEffects(out, tty, this);
+    printArgs(out, tty);
+    printEnv(out, tty);
+}
+
+void Instruction::printGraph(std::ostream& out, bool tty) const {
+    printPaddedTypeAndRef(out, this);
+    printPaddedInstructionName(out, name());
+    printPaddedEffects(out, tty, this);
+    printGraphArgs(out, tty);
+    printEnv(out, tty);
+}
+
+bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
+
+void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
+    auto bbIter = input.begin();
+    auto argIter = args_.begin();
+    while (argIter != args_.end()) {
+        if (deletedBBs.count(*bbIter)) {
+            bbIter = input.erase(bbIter);
+            argIter = args_.erase(argIter);
+        } else {
+            argIter++;
+            bbIter++;
+        }
+    }
+    assert(bbIter == input.end());
+}
 
 Instruction::InstructionUID Instruction::id() const {
     return InstructionUID(bb()->id, bb()->indexOf(this));
@@ -230,6 +283,12 @@ void Instruction::replaceUsesWithLimits(Value* replace, BB* start,
         apply(start->next0);
     if (start->next1)
         apply(start->next1);
+
+    // Propagate typefeedback
+    if (auto rep = Instruction::Cast(replace)) {
+        if (!rep->type.isA(typeFeedback) && rep->typeFeedback.isVoid())
+            rep->typeFeedback = typeFeedback;
+    }
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
@@ -242,6 +301,12 @@ void Instruction::replaceUsesWith(Value* replace) {
             });
         }
     });
+
+    // Propagate typefeedback
+    if (auto rep = Instruction::Cast(replace)) {
+        if (!rep->type.isA(typeFeedback) && rep->typeFeedback.isVoid())
+            rep->typeFeedback = typeFeedback;
+    }
 }
 
 void Instruction::replaceUsesAndSwapWith(
@@ -278,6 +343,8 @@ const Value* Instruction::cFollowCasts() const {
         return cast->arg<0>().val()->followCasts();
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCasts();
+    if (auto chk = ChkMissing::Cast(this))
+        return chk->arg<0>().val()->followCasts();
     return this;
 }
 
@@ -290,6 +357,8 @@ const Value* Instruction::cFollowCastsAndForce() const {
         if (mkarg->isEager())
             return mkarg->eagerArg()->followCastsAndForce();
     if (auto chk = ChkClosure::Cast(this))
+        return chk->arg<0>().val()->followCastsAndForce();
+    if (auto chk = ChkMissing::Cast(this))
         return chk->arg<0>().val()->followCastsAndForce();
     return this;
 }

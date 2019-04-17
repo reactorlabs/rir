@@ -372,7 +372,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             }
         }
 
-        if (i->mayUseReflection()) {
+        if (i->effects.contains(Effect::Reflection)) {
             state.mayUseReflection = true;
             effect.lostPrecision();
         }
@@ -388,6 +388,18 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
     std::unordered_map<SEXP, AbstractPirValue> theEnv;
     for (auto& e : envState.entries) {
         if (e.second.isUnknown())
+            return;
+        // If any of the stores are StArg, then we cannot do this trick. The
+        // reason is in the following case:
+        //   e = MKEnv         x=missingArg
+        //       StVar (StArg) x, ...
+        // in this case starg must be preserved, since it does not override the
+        // missing flag on the environment binding
+        auto maybeMissing = e.second.checkEachSource([&](const ValOrig& src) {
+            auto st = StVar::Cast(src.origin);
+            return st && st->isStArg;
+        });
+        if (maybeMissing)
             return;
         theEnv[e.first] = e.second;
     }

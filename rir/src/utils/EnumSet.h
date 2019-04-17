@@ -48,6 +48,16 @@ class EnumSet {
     static_assert(!std::is_same<Element, Store>::value, "That is confusing");
     constexpr EnumSet(const Store& s) : set_(s) {}
 
+    RIR_INLINE Element max() const {
+        for (size_t i = static_cast<size_t>(Element::LAST) - 1;
+             i >= static_cast<size_t>(Element::FIRST); i--) {
+            Element e = static_cast<Element>(i);
+            if (contains(e))
+                return e;
+        }
+        assert(false && "EnumSet has no max because it's empty");
+    }
+
     RIR_INLINE bool contains(const Element& e) const {
         assert(boundscheck(e));
         return set_ & EnumSet(e);
