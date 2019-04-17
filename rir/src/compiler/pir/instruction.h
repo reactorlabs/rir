@@ -837,6 +837,8 @@ class FLIE(MkArg, 2, Effects::None()) {
     Promise* prom_;
 
   public:
+    bool noReflection = false;
+
     MkArg(Promise* prom, Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),

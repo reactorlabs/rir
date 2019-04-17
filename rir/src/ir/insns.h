@@ -127,21 +127,21 @@ DEF_INSTR(movloc_, 2, 0, 0, 1)
  *                  THIS IS A VARIABLE LENGTH INSTRUCTION
  *                  the actual number of immediates is 3 + nargs
  */
-DEF_INSTR(call_implicit_, 3, 1, 1, 0)
+DEF_INSTR(call_implicit_, 4, 1, 1, 0)
 /*
  * Same as above, but with names for the arguments as immediates
  *
  *                  THIS IS A VARIABLE LENGTH INSTRUCTION
  *                  the actual number of immediates is 3 + 2 * nargs
  */
-DEF_INSTR(named_call_implicit_, 3, 1, 1, 0)
+DEF_INSTR(named_call_implicit_, 4, 1, 1, 0)
 
 /**
  * call_:: Like call_implicit_, but expects arguments on stack
  *         on top of the callee; these arguments can be both
  *         values and promises (even preseeded w/ a value)
  */
-DEF_INSTR(call_, 3, -1, 1, 0)
+DEF_INSTR(call_, 4, -1, 1, 0)
 
 /*
  * Same as above, but with names for the arguments as immediates
@@ -149,13 +149,13 @@ DEF_INSTR(call_, 3, -1, 1, 0)
  *                  THIS IS A VARIABLE LENGTH INSTRUCTION
  *                  the actual number of immediates is 3 + nargs
  */
-DEF_INSTR(named_call_, 3, -1, 1, 0)
+DEF_INSTR(named_call_, 4, -1, 1, 0)
 
 /**
  * static_call_:: Like call_, but the callee is statically known
  *                and is accessed via the immediate callsite
  */
-DEF_INSTR(static_call_, 5, -1, 1, 0)
+DEF_INSTR(static_call_, 6, -1, 1, 0)
 
 /**
  * call_builtin_:: Like static call, but calls a builtin
