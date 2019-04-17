@@ -511,11 +511,25 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
 }
 
 VisibilityFlag CallBuiltin::visibilityFlag() const {
-    return (VisibilityFlag)getFlag(builtinId);
+    switch (getFlag(builtinId)) {
+    case 0:
+        return VisibilityFlag::On;
+    case 1:
+        return VisibilityFlag::Off;
+    default:
+        return VisibilityFlag::Unknown;
+    }
 }
 
 VisibilityFlag CallSafeBuiltin::visibilityFlag() const {
-    return (VisibilityFlag)getFlag(builtinId);
+    switch (getFlag(builtinId)) {
+    case 0:
+        return VisibilityFlag::On;
+    case 1:
+        return VisibilityFlag::Off;
+    default:
+        return VisibilityFlag::Unknown;
+    }
 }
 
 static void printCallArgs(std::ostream& out, const CallInstruction* call) {

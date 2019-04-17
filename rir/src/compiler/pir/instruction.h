@@ -120,7 +120,6 @@ enum class Controlflow : uint8_t {
 };
 
 // How an instruction modifies visibility
-// The order is important - this is equivalent to R's visibility flag
 enum class VisibilityFlag : uint8_t {
     On,
     Off,
