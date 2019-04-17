@@ -284,7 +284,7 @@ stopifnot(pir.check(function(x) {
 stopifnot(pir.check(function(x, y) {
   a <- y == 1 # This is the one eq
   (x == 1) == NA
-}, OneEq, warmup=list(5.7, data.frame())))
+}, OneEq, warmup=list(5.7, "")))
 # Relies on better visibility
 # stopifnot(pir.check(function(x) !!!!!x, OneNot, warmup=list(1)))
 # Testing NoAsInt itself
