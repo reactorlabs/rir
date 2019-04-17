@@ -113,6 +113,7 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
 
 SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(call.hasStackArgs() && !call.hasNames());
+    return nullptr;
     static constexpr size_t MAXARGS = 16;
     std::array<R_bcstack_t, MAXARGS> args;
     auto nargs = call.suppliedArgs;
