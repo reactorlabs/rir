@@ -481,6 +481,10 @@ void IsType::printArgs(std::ostream& out, bool tty) const {
 void Phi::updateType() {
     type = arg(0).val()->type;
     eachArg([&](BB*, Value* v) -> void { type = type | v->type; });
+    typeFeedback = arg(0).val()->type;
+    eachArg([&](BB*, Value* v) -> void {
+        typeFeedback = typeFeedback | v->typeFeedback;
+    });
 }
 
 void Phi::printArgs(std::ostream& out, bool tty) const {

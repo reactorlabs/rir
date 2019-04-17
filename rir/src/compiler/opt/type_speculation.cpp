@@ -26,14 +26,16 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             auto i = *ip;
             bool trigger = false;
             if (Force::Cast(i)) {
-                auto arg = i->arg(0).val()->followCasts();
-                // Blacklist of where it is not worthwhile
-                if (!LdConst::Cast(arg) &&
-                    // leave this to the promise inliner
-                    !MkArg::Cast(arg) && !Force::Cast(arg) &&
-                    // leave this to scope analysis
-                    !LdVar::Cast(arg) && !LdVarSuper::Cast(arg)) {
-                    trigger = true;
+                if (!i->type.isA(i->typeFeedback)) {
+                    auto arg = i->arg(0).val()->followCasts();
+                    // Blacklist of where it is not worthwhile
+                    if (!LdConst::Cast(arg) &&
+                        // leave this to the promise inliner
+                        !MkArg::Cast(arg) && !Force::Cast(arg) &&
+                        // leave this to scope analysis
+                        !LdVar::Cast(arg) && !LdVarSuper::Cast(arg)) {
+                        trigger = true;
+                    }
                 }
             }
             if (trigger) {

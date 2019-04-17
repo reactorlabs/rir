@@ -132,8 +132,10 @@ PirCheck::Type PirCheck::parseType(const char* str) {
 }
 
 bool PirCheck::run(SEXP f) {
-    size_t oldconfig = pir::Parameter::MAX_INPUT_SIZE;
+    size_t oldMaxInput = pir::Parameter::MAX_INPUT_SIZE;
+    size_t oldInlinerMax = pir::Parameter::INLINER_MAX_SIZE;
     pir::Parameter::MAX_INPUT_SIZE = 3000;
+    pir::Parameter::INLINER_MAX_SIZE = 3000;
     Module m;
     ClosureVersion* pir = compilePir(f, &m);
     bool success = pir;
@@ -152,7 +154,8 @@ bool PirCheck::run(SEXP f) {
         }
     }
     }
-    pir::Parameter::MAX_INPUT_SIZE = oldconfig;
+    pir::Parameter::MAX_INPUT_SIZE = oldMaxInput;
+    pir::Parameter::INLINER_MAX_SIZE = oldInlinerMax;
     if (!success)
         m.print(std::cout, false);
     return success;
