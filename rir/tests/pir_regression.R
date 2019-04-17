@@ -52,12 +52,13 @@ rir.compile(function(){
 
 # inlined frameStates:
 
-if (Sys.getenv("PIR_DEOPT_CHAOS") != "1") {
+if (Sys.getenv("PIR_DEOPT_CHAOS") != "1" && Sys.getenv("PIR_WARMUP") != "2") {
     f <- pir.compile(rir.compile(function(x) g(x)))
     g <- rir.compile(function(x) h(x))
     h <- rir.compile(function(x) 1+i(x))
     i <- rir.compile(function(x) 40-x)
     
+    stopifnot(f(-1) == 42)
     stopifnot(f(-1) == 42)
     
     hc1 = .Call("rir_invocation_count", h)

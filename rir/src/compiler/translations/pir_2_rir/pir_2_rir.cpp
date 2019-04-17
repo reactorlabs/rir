@@ -6,6 +6,7 @@
 #include "../../util/visitor.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
+#include "compiler/parameter.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -1321,16 +1322,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     return res;
 }
 
-static bool DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
-                           0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
-static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
-                          0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
-static bool DEOPT_CHAOS_SEED = getenv("PIR_DEOPT_CHAOS_SEED")
-                                   ? atoi(getenv("PIR_DEOPT_CHAOS_SEED"))
-                                   : std::random_device()();
-
 static bool coinFlip() {
-    static std::mt19937 gen(DEOPT_CHAOS_SEED);
+    static std::mt19937 gen(Parameter::DEOPT_CHAOS_SEED);
     static std::bernoulli_distribution coin(0.03);
     return coin(gen);
 };
@@ -1358,12 +1351,12 @@ void Pir2Rir::lower(Code* code) {
                 bb->replace(it, newDeopt);
             } else if (auto expect = Assume::Cast(*it)) {
                 auto condition = expect->condition();
-                if (DEOPT_CHAOS && coinFlip()) {
+                if (Parameter::DEOPT_CHAOS && coinFlip()) {
                     condition = expect->assumeTrue ? (Value*)False::instance()
                                                    : (Value*)True::instance();
                 }
                 std::string debugMessage;
-                if (DEBUG_DEOPTS) {
+                if (Parameter::DEBUG_DEOPTS) {
                     std::stringstream dump;
                     debugMessage = "DEOPT, assumption ";
                     expect->condition()->printRef(dump);
@@ -1506,6 +1499,14 @@ rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, bool dryRun) {
     }
     return fun;
 }
+
+bool Parameter::DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
+                               0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
+bool Parameter::DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
+                              0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
+bool Parameter::DEOPT_CHAOS_SEED = getenv("PIR_DEOPT_CHAOS_SEED")
+                                       ? atoi(getenv("PIR_DEOPT_CHAOS_SEED"))
+                                       : std::random_device()();
 
 } // namespace pir
 } // namespace rir

@@ -225,8 +225,8 @@ class TheInliner {
                                                           ->type.forced()
                                                           .orPromiseWrapped()
                                                     : ld->type;
-                                    auto cast =
-                                        new CastType(a, RType::prom, type);
+                                    auto cast = new CastType(a, RType::prom,
+                                                             type.notMissing());
                                     ip = bb->insert(ip + 1, cast);
                                     ip--;
                                     a = cast;

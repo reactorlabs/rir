@@ -4,6 +4,7 @@
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
+#include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
@@ -572,6 +573,7 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                 }
             } else if (arg == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
+                isEager = false;
             }
             if (isObject(arg)) {
                 notObj = false;
@@ -683,7 +685,7 @@ static Function* dispatch(const CallContext& call, DispatchTable* vt) {
     return fun;
 };
 
-static unsigned PIR_WARMUP =
+unsigned pir::Parameter::RIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
 
 // Call a RIR function. Arguments are still untouched.
@@ -697,7 +699,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!fun->unoptimizable && fun->invocationCount() % PIR_WARMUP == 0) {
+    if (!fun->unoptimizable &&
+        fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -2129,8 +2132,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                              given, ctx);
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
-            bool dispatchFail = !matches(call, fun->signature());
-            if (fun->invocationCount() % PIR_WARMUP == 0) {
+            bool dispatchFail = !fun->dead && !matches(call, fun->signature());
+            if (fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
                 if (assumptions != fun->signature().assumptions)
@@ -2143,7 +2146,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 fun = dispatch(call, dt);
                 // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
-                assert(fun != dt->baseline());
             }
             advanceImmediate();
 
@@ -2564,7 +2566,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 rhs = PRVALUE(rhs);
             if (TYPEOF(lhs) == PROMSXP && PRVALUE(lhs) != R_UnboundValue)
                 lhs = PRVALUE(lhs);
-            ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
+            // Special case for closures: (level 1) deep compare with body
+            // expression instead of body object, to ensure that a compiled
+            // closure is equal to the uncompiled one
+            if (lhs != rhs && TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP &&
+                CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
+                BODY_EXPR(lhs) == BODY_EXPR(rhs))
+                ostack_push(ctx, R_TrueValue);
+            else
+                ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
+
             NEXT();
         }
 
@@ -3327,6 +3338,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 #endif
 
+            if (!pir::Parameter::DEOPT_CHAOS) {
+                // TODO: this version is still reachable from static call inline
+                // caches. Thus we need to preserve it forever. We need some
+                // dependency management here.
+                Pool::insert(c->container());
+                // remove the deoptimized function. Unless on deopt chaos,
+                // always recompiling would just blow testing time...
+                auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
+                dt->remove(c);
+            }
             assert(m->numFrames >= 1);
             size_t stackHeight = 0;
             for (size_t i = 0; i < m->numFrames; ++i)
@@ -3584,7 +3605,8 @@ SEXP rirExpr(SEXP s) {
     return s;
 }
 
-SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
+SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
+                     SEXP suppliedvars) {
     auto ctx = globalContext();
 
     RList args(arglist);
@@ -3600,6 +3622,21 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
     }
     if (!names.empty()) {
         names.resize(nargs);
+    }
+    // Add extra arguments from object dispatching
+    if (suppliedvars != R_NilValue) {
+        auto extra = RList(suppliedvars);
+        for (auto a = extra.begin(); a != extra.end(); ++a) {
+            if (a.hasTag()) {
+                auto var = Pool::insert(a.tag());
+                if (std::find(names.begin(), names.end(), var) == names.end()) {
+                    ostack_push(ctx, *a);
+                    names.resize(nargs + 1);
+                    names[nargs] = var;
+                    nargs++;
+                }
+            }
+        }
     }
 
     CallContext call(nullptr, op, nargs, ast, ostack_cell_at(ctx, nargs - 1),
