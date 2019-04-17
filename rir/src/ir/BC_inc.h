@@ -281,7 +281,7 @@ class BC {
         switch (bc) {
         // First handle the varlength BCs. In all three cases the number of
         // call arguments is the 2nd immediate argument and the
-        // instructions have 2 fixed length immediates. After that there are
+        // instructions have 4 fixed length immediates. After that there are
         // narg varlen immediates for the first two and 2*narg varlen
         // immediates in the last case.
         case Opcode::call_implicit_:
@@ -289,13 +289,13 @@ class BC {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (3 + nargs) * sizeof(Immediate);
+            return 1 + (4 + nargs) * sizeof(Immediate);
         }
         case Opcode::named_call_implicit_: {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (3 + 2 * nargs) * sizeof(Immediate);
+            return 1 + (4 + 2 * nargs) * sizeof(Immediate);
         }
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {

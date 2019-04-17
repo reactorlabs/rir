@@ -4,6 +4,9 @@ namespace rir {
 
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
+    case Assumption::NoReflectiveArgument:
+        out << "!RefA";
+        break;
     case Assumption::NoExplicitlyMissingArgs:
         out << "!ExpMi";
         break;

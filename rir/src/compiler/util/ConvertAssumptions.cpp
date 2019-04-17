@@ -42,6 +42,8 @@ void writeArgTypeToAssumptions(Assumptions& assumptions, Value* arg, int i) {
                 assumptions.setSimpleInt(i);
         }
     }
+    if (!MkArg::Cast(value) || !MkArg::Cast(value)->noReflection)
+        assumptions.remove(Assumption::NoReflectiveArgument);
 }
 
 } // namespace pir
