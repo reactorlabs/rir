@@ -288,6 +288,7 @@ static R_INLINE Rboolean setElementFromScalar(SEXP vec, R_xlen_t index,
             if (XLENGTH(vec) > index) {                                        \
                 handled = true;                                                \
                 SEXP elt = VECTOR_ELT(vec, index);                             \
+                ENSURE_NAMED(elt);                                             \
                 ostackPopn(ctx, popCount);                                     \
                 if (subset2)                                                   \
                     ostackPushSexp(ctx, elt);                                  \

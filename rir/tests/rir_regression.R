@@ -58,3 +58,14 @@ function (x)
 for (i in 1:5000) f(c(1,2,3))
 
 (rir.compile(function(a) {a;a}))(1)
+
+L <- list(list(txt = "original value"))
+f <- rir.compile(function(LL) {
+    ll <- LL[[1]]
+    ll$txt <- "changed in f"
+    LL
+})
+rir.disassemble(f)
+f(L)
+L
+stopifnot(L$a$ll$txt == "original value")
