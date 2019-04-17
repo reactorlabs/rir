@@ -3605,7 +3605,8 @@ SEXP rirExpr(SEXP s) {
     return s;
 }
 
-SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
+SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
+                     SEXP suppliedvars) {
     auto ctx = globalContext();
 
     RList args(arglist);
@@ -3621,6 +3622,21 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
     }
     if (!names.empty()) {
         names.resize(nargs);
+    }
+    // Add extra arguments from object dispatching
+    if (suppliedvars != R_NilValue) {
+        auto extra = RList(suppliedvars);
+        for (auto a = extra.begin(); a != extra.end(); ++a) {
+            if (a.hasTag()) {
+                auto var = Pool::insert(a.tag());
+                if (std::find(names.begin(), names.end(), var) == names.end()) {
+                    ostack_push(ctx, *a);
+                    names.resize(nargs + 1);
+                    names[nargs] = var;
+                    nargs++;
+                }
+            }
+        }
     }
 
     CallContext call(nullptr, op, nargs, ast, ostack_cell_at(ctx, nargs - 1),
