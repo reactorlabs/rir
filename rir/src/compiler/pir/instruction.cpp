@@ -413,7 +413,10 @@ void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
     eagerArg()->printRef(out);
-    out << ", " << *prom() << ", ";
+    out << ", " << *prom();
+    if (noReflection)
+        out << " (!refl)";
+    out << ", ";
 }
 
 void Missing::printArgs(std::ostream& out, bool tty) const {

@@ -844,12 +844,14 @@ class FLIE(MkArg, 2, Effects::None()) {
                                          env),
           prom_(prom) {
         assert(eagerArg() == v);
+        noReflection = isEager();
     }
     MkArg(Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
           prom_(nullptr) {
         assert(eagerArg() == v);
+        noReflection = isEager();
     }
 
     Value* eagerArg() const { return arg(0).val(); }
