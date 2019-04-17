@@ -2,9 +2,9 @@
 
 ROOT=$1
 
-DIFF=$(git diff)
-if [ -n "$DIFF" ]; then
-  echo "please commit before pushing."
+git diff --exit-code > /dev/null && git diff --cached --exit-code > /dev/null
+if test "$?" -ne 0; then
+  echo "please commit or stash your changes before pushing."
   exit 1
 fi
 
