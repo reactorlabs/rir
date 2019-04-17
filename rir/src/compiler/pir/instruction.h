@@ -726,7 +726,7 @@ class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
 class FLI(ChkMissing, 1, Effect::Warn) {
   public:
     explicit ChkMissing(Value* in)
-        : FixedLenInstruction(in->type.notMissing(), {{PirType::val()}},
+        : FixedLenInstruction(in->type.notMissing(), {{PirType::any()}},
                               {{in}}) {}
 };
 
