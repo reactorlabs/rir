@@ -565,30 +565,30 @@ static void addDynamicAssumptionsFromContext(CallContext& call,
         given.add(Assumption::NotTooFewArguments);
 
         auto testArg = [&](size_t i) {
-            R_bcstack_t* arg = call.stackArg(i);
+            R_bcstack_t arg = *call.stackArg(i);
             bool notObj = true;
             bool isEager = true;
-            if (stackObjTypeof(arg) == PROMSXP) {
-                SEXP val = PRVALUE(arg->u.sxpval);
-                if (val == R_UnboundValue) {
+            if (stackObjTypeof(&arg) == PROMSXP) {
+                arg = sexpStackObj(PRVALUE(arg.u.sxpval));
+                if (arg.u.sxpval == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
                 }
-            } else if (arg->tag == STACK_OBJ_SEXP &&
-                       arg->u.sxpval == R_MissingArg) {
+            } else if (arg.tag == STACK_OBJ_SEXP &&
+                       arg.u.sxpval == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
                 isEager = false;
             }
-            if (arg->tag == STACK_OBJ_SEXP && isObject(arg->u.sxpval)) {
+            if (arg.tag == STACK_OBJ_SEXP && isObject(arg.u.sxpval)) {
                 notObj = false;
             }
             if (isEager)
                 given.setEager(i);
             if (notObj)
                 given.setNotObj(i);
-            if (isEager && notObj && stackObjIsSimpleScalar(arg, REALSXP))
+            if (isEager && notObj && stackObjIsSimpleScalar(&arg, REALSXP))
                 given.setSimpleReal(i);
-            if (isEager && notObj && stackObjIsSimpleScalar(arg, INTSXP))
+            if (isEager && notObj && stackObjIsSimpleScalar(&arg, INTSXP))
                 given.setSimpleInt(i);
         };
 
