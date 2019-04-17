@@ -69,9 +69,39 @@ stopifnot(h()==3)
 stopifnot(h()==3)
 stopifnot(h()==3)
 
+xx1 <- function() {
+   ok = 0
+
+   # returning a missing arg is supposed to error
+   f <- function(a,b)
+     a
+
+   tryCatch(f(), error=function(e) ok <<- 1)
+   stopifnot(ok == 1);
+}
+
+xx2 <- function() {
+   ok = 0
+   # forcing it too, the `(` function forces
+   q <- function(a) (a)
+   tryCatch(q(), error=function(e) ok <<- 1)
+   stopifnot(ok == 1);
+}
+
+xx3 <- function() {
+   # but passing on without forcing should not error
+   h <- function(a) 1
+   g <- function(a) h(a)
+   g()
+}
+
+for (i in 1:10)
+{xx1(); xx2(); xx3()}
+
+
+
 f <- pir.compile(rir.compile(function(a,b,c) a))
 g <- rir.compile(function() {
-  f()
   f(1)
   f(1,2)
   f(1,2,3)

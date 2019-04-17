@@ -59,7 +59,13 @@ void printPaddedInstructionName(std::ostream& out, const std::string& name) {
 void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
     std::ostringstream buf;
     buf << i->type;
-    out << std::left << std::setw(7) << buf.str() << " ";
+    if (!i->typeFeedback.isVoid()) {
+        if (i->type == i->typeFeedback)
+            buf << "<>";
+        else
+            buf << "<" << i->typeFeedback << ">";
+    }
+    out << std::left << std::setw(15) << buf.str() << " ";
     buf.str("");
     if (i->type != PirType::voyd()) {
         i->printRef(buf);
@@ -277,6 +283,12 @@ void Instruction::replaceUsesWithLimits(Value* replace, BB* start,
         apply(start->next0);
     if (start->next1)
         apply(start->next1);
+
+    // Propagate typefeedback
+    if (auto rep = Instruction::Cast(replace)) {
+        if (!rep->type.isA(typeFeedback) && rep->typeFeedback.isVoid())
+            rep->typeFeedback = typeFeedback;
+    }
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
@@ -289,6 +301,12 @@ void Instruction::replaceUsesWith(Value* replace) {
             });
         }
     });
+
+    // Propagate typefeedback
+    if (auto rep = Instruction::Cast(replace)) {
+        if (!rep->type.isA(typeFeedback) && rep->typeFeedback.isVoid())
+            rep->typeFeedback = typeFeedback;
+    }
 }
 
 void Instruction::replaceUsesAndSwapWith(
@@ -325,6 +343,8 @@ const Value* Instruction::cFollowCasts() const {
         return cast->arg<0>().val()->followCasts();
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCasts();
+    if (auto chk = ChkMissing::Cast(this))
+        return chk->arg<0>().val()->followCasts();
     return this;
 }
 
@@ -337,6 +357,8 @@ const Value* Instruction::cFollowCastsAndForce() const {
         if (mkarg->isEager())
             return mkarg->eagerArg()->followCastsAndForce();
     if (auto chk = ChkClosure::Cast(this))
+        return chk->arg<0>().val()->followCastsAndForce();
+    if (auto chk = ChkMissing::Cast(this))
         return chk->arg<0>().val()->followCastsAndForce();
     return this;
 }
@@ -508,6 +530,28 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
         return new CallSafeBuiltin(builtin, args, srcIdx);
     else
         return new CallBuiltin(callerEnv, builtin, args, srcIdx);
+}
+
+VisibilityFlag CallBuiltin::visibilityFlag() const {
+    switch (getFlag(builtinId)) {
+    case 0:
+        return VisibilityFlag::On;
+    case 1:
+        return VisibilityFlag::Off;
+    default:
+        return VisibilityFlag::Unknown;
+    }
+}
+
+VisibilityFlag CallSafeBuiltin::visibilityFlag() const {
+    switch (getFlag(builtinId)) {
+    case 0:
+        return VisibilityFlag::On;
+    case 1:
+        return VisibilityFlag::Off;
+    default:
+        return VisibilityFlag::Unknown;
+    }
 }
 
 static void printCallArgs(std::ostream& out, const CallInstruction* call) {

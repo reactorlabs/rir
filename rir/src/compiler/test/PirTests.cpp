@@ -10,6 +10,7 @@
 #include "R/RList.h"
 #include "R_ext/Parse.h"
 #include "api.h"
+#include "compiler/parameter.h"
 #include <string>
 #include <vector>
 
@@ -231,24 +232,6 @@ bool canRemoveEnvironment(const std::string& input) {
     auto t = true;
     auto condition = [&t](pir::ClosureVersion* f) { t = t && Query::noEnv(f); };
     return testCondition(input, condition) && t;
-}
-
-bool canRemoveEnvironmentSpec(const std::string& input) {
-    auto t = true;
-    auto condition = [&t](pir::ClosureVersion* f) {
-        t = t && Query::noEnvSpec(f);
-    };
-    return testCondition(input, condition) && t;
-}
-
-bool canRemoveEnvironmentIfNonTypeFeedback(const std::string& input) {
-    pir::Module m;
-    compile("", input, &m);
-    bool t = verify(&m);
-    m.eachPirClosureVersion([&t](pir::ClosureVersion* f) {
-        t = t && (Query::noEnv(f) || envOfAddElided(f));
-    });
-    return t;
 }
 
 bool testDeadStore() {
@@ -636,23 +619,9 @@ static Test tests[] = {
          }),
     Test("context_load",
          []() { return canRemoveEnvironment("f <- function() 123"); }),
-    Test("force_nonreflective",
-         []() {
-             return canRemoveEnvironmentSpec("f <- function(depth){\n"
-                                             "   if (depth == 0)\n"
-                                             "      1\n"
-                                             "   else\n"
-                                             "      0\n"
-                                             "}");
-         }),
     Test("binop_nonobjects",
          []() {
              return canRemoveEnvironmentIfTypeFeedback(
-                 "f <- function() 1 + xxx");
-         }),
-    Test("binop_nonobjects_nofeedback",
-         []() {
-             return canRemoveEnvironmentIfNonTypeFeedback(
                  "f <- function() 1 + xxx");
          }),
     Test("super_assign", &testSuperAssign),
@@ -796,19 +765,6 @@ static Test tests[] = {
          []() {
              return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
          }),
-    Test("Inlining promises and closures with Constantfolding",
-         []() {
-             return test42("{a<- function() 41L; b<- function() 1L; f <- "
-                           "function(x,y) x()+y; f(a,b())}");
-         }),
-    Test("more cf",
-         []() {
-             return test42("{x <- function() 42;"
-                           " y <- function() 41;"
-                           " z <- 1;"
-                           " f <- function(a,b,c) if (a() == (b+c)) 42L;"
-                           " f(x,y(),z)}");
-         }),
     Test("Test dead store analysis", &testDeadStore),
 };
 
@@ -817,8 +773,8 @@ static Test tests[] = {
 namespace rir {
 
 void PirTests::run() {
-    size_t oldconfig = Rir2PirCompiler::MAX_INPUT_SIZE;
-    Rir2PirCompiler::MAX_INPUT_SIZE = 3000;
+    size_t oldconfig = pir::Parameter::MAX_INPUT_SIZE;
+    pir::Parameter::MAX_INPUT_SIZE = 3000;
     for (auto t : tests) {
         std::cout << "> " << t.first << "\n";
         if (!t.second()) {
@@ -826,6 +782,6 @@ void PirTests::run() {
             exit(1);
         }
     }
-    Rir2PirCompiler::MAX_INPUT_SIZE = oldconfig;
+    pir::Parameter::MAX_INPUT_SIZE = oldconfig;
 }
 } // namespace rir

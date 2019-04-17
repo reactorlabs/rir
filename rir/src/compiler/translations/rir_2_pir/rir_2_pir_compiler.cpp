@@ -3,6 +3,8 @@
 #include "R/RList.h"
 #include "rir_2_pir.h"
 
+#include "compiler/parameter.h"
+
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
 #include "../../opt/pass_definitions.h"
@@ -103,7 +105,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         return fail();
     }
 
-    if (closure->rirFunction()->body()->codeSize > MAX_INPUT_SIZE) {
+    if (closure->rirFunction()->body()->codeSize > Parameter::MAX_INPUT_SIZE) {
         logger.warn("skipping huge function");
         return fail();
     }
@@ -230,7 +232,7 @@ void Rir2PirCompiler::optimizeModule() {
     logger.flush();
 }
 
-size_t Rir2PirCompiler::MAX_INPUT_SIZE =
+size_t Parameter::MAX_INPUT_SIZE =
     getenv("PIR_MAX_INPUT_SIZE") ? atoi(getenv("PIR_MAX_INPUT_SIZE")) : 3500;
 
 } // namespace pir

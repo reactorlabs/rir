@@ -7,46 +7,27 @@ namespace pir {
 AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
                                          Instruction* i) const {
     AbstractResult res;
-    auto changesVisibility = [&]() {
-        if (vis.observable.size() == 1 && *vis.observable.begin() == i)
-            return;
-        vis.observable.clear();
-        vis.observable.insert(i);
-        res.update();
-    };
-    auto maybeChangesVisibility = [&]() {
-        if (!vis.observable.count(i)) {
-            vis.observable.insert(i);
-            res.update();
+    if (i->effects.contains(Effect::Visibility)) {
+        switch (i->visibilityFlag()) {
+        case VisibilityFlag::On:
+        case VisibilityFlag::Off:
+            // Always changes visibility, overrides previous changes
+            if (vis.observable.size() != 1 || *vis.observable.begin() != i) {
+                vis.observable.clear();
+                vis.observable.insert(i);
+                res.update();
+            }
+            break;
+        case VisibilityFlag::Unknown:
+            // Maybe changes visibility, need to keep previous if it doesn't
+            if (!vis.observable.count(i)) {
+                vis.observable.insert(i);
+                res.update();
+            }
+            break;
+        default:
+            assert(false);
         }
-    };
-
-    switch (i->tag) {
-    case Tag::Invisible:
-    case Tag::Visible:
-        changesVisibility();
-        break;
-    case Tag::CallBuiltin:
-    case Tag::CallSafeBuiltin:
-        int builtinId;
-        if (auto c = CallBuiltin::Cast(i)) {
-            builtinId = c->builtinId;
-        } else {
-            builtinId = CallSafeBuiltin::Cast(i)->builtinId;
-        }
-
-        if (builtinUpdatesVisibility(builtinId))
-            changesVisibility();
-        break;
-
-    default:
-        // This instruction might change visibility, thus it's visibility effect
-        // might be observable. But it does not clear previous visibility
-        // instructions, because it might also preserve the previous visibility
-        // setting.
-        if (i->effects.contains(Effect::Visibility))
-            maybeChangesVisibility();
-        break;
     }
     return res;
 };

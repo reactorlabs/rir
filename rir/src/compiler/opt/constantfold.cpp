@@ -302,6 +302,11 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         toDelete.insert(deadBranch);
     }
 
+    Visitor::run(function->entry, [&](Instruction* i) {
+        if (auto phi = Phi::Cast(i))
+            phi->removeInputs(toDelete);
+    });
+
     for (auto e : branchRemoval) {
         auto branch = e.first;
         auto condition = e.second;
@@ -312,60 +317,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             branch->next0 = branch->next1;
             branch->next1 = nullptr;
         }
-    }
-
-    // If we deleted a branch, then it can happen that some phi inputs are
-    // now dead. We need to take care of them and remove them. The canonical
-    // case is the following:
-    //
-    //    BB0:
-    //      a <- 1
-    //      branch TRUE -> BB1 | BB2
-    //    BB1:
-    //      b <- 2
-    //      goto BB3
-    //    BB2:
-    //      goto BB3
-    //    BB3:
-    //      phi(BB0:a, BB1:b)
-    //
-    // In this case removing the branch BB2, also kills the input `BB0:a`.
-    //
-    // TODO: currently the algorithm is very slow. For each phi that comes
-    // after a removed branch, we check if (in the modified CFG) we have two
-    // inputs, both dominating the phi. If so we will remove the one that
-    // comes earlier (ie. the one that dominates the other).
-    if (!branchRemoval.empty()) {
-        DominanceGraph dom(function);
-        CFG cfg(function);
-        Visitor::run(function->entry, [&](BB* bb) {
-            bool afterARemovedBranch = false;
-            for (auto& d : branchRemoval)
-                if (!afterARemovedBranch && cfg.isPredecessor(d.first, bb))
-                    afterARemovedBranch = true;
-
-            if (afterARemovedBranch) {
-                for (auto it = bb->begin(); it != bb->end(); ++it) {
-                    auto i = *it;
-                    if (auto phi = Phi::Cast(i)) {
-                        std::unordered_set<BB*> deadInput;
-                        phi->eachArg([&](BB* a, Value* va) {
-                            if (toDelete.find(a) != toDelete.end()) {
-                                deadInput.insert(a);
-                            } else if (dom.dominates(a, phi->bb())) {
-                                phi->eachArg([&](BB* b, Value* vb) {
-                                    if (va != vb &&
-                                        dom.dominates(b, phi->bb()) &&
-                                        dom.dominates(a, b))
-                                        deadInput.insert(a);
-                                });
-                            }
-                        });
-                        phi->removeInputs(deadInput);
-                    }
-                }
-            }
-        });
     }
 
     for (auto bb : toDelete)

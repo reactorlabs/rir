@@ -203,6 +203,12 @@ struct PirType {
         return PirType(RType::logical).notObject().scalar();
     }
 
+    static constexpr PirType simpleScalar() {
+        return (PirType(RType::integer) | RType::real | RType::logical)
+            .notObject()
+            .scalar();
+    }
+
     static constexpr PirType promiseWrappedVal() {
         return val().orPromiseWrapped();
     }
@@ -312,6 +318,10 @@ struct PirType {
         return PirType(t_.r, flags_ | TypeFlags::maybeObject);
     }
 
+    PirType constexpr notLazy() const {
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
+    }
+
     PirType constexpr forced() const {
         assert(isRType());
         FlagSet notPromised =
@@ -331,6 +341,13 @@ struct PirType {
     RIR_INLINE void setScalar(RType rtype) {
         setScalar();
         t_.r = RTypeSet(rtype);
+    }
+
+    bool isVoid() const {
+        if (isRType())
+            return t_.r.empty();
+        else
+            return t_.n.empty();
     }
 
     static const PirType voyd() { return PirType(NativeTypeSet()); }
@@ -364,7 +381,7 @@ struct PirType {
         return t_.r.includes(o.t_.r);
     }
 
-    void print(std::ostream& out = std::cout);
+    void print(std::ostream& out = std::cout) const;
 };
 
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {
