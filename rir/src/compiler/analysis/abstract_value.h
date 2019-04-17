@@ -101,7 +101,7 @@ struct AbstractPirValue {
     typedef std::function<void(const ValOrig&)> ValOrigMaybe;
     typedef std::function<bool(const ValOrig&)> ValOrigMaybePredicate;
 
-    void ifSingleValue(ValMaybe known) {
+    void ifSingleValue(ValMaybe known) const {
         if (!unknown && vals.size() == 1)
             known((*vals.begin()).val);
     }
@@ -334,6 +334,17 @@ class AbstractREnvironmentHierarchy {
     AbstractLoad superGet(Value* env, SEXP e) const;
 
     std::unordered_set<Value*> potentialParents(Value* env) const;
+
+    AbstractResult taintLeaked() {
+        AbstractResult res;
+        for (auto e : envs) {
+            if (e.second.leaked) {
+                e.second.taint();
+                res.taint();
+            }
+        }
+        return res;
+    }
 };
 
 template <typename Kind>

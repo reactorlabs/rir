@@ -152,6 +152,33 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                     continue;
                 }
 
+                auto availableAssumptions = call->inferAvailableAssumptions();
+
+                // We picked up more assumptions, let's compile a better
+                // version. Maybe we should limit this at some point, to avoid
+                // version explosion.
+                if (availableAssumptions.includes(
+                        Assumption::NoReflectiveArgument) &&
+                    !version->assumptions().includes(
+                        Assumption::NoReflectiveArgument)) {
+                    auto newVersion = cls->cloneWithAssumptions(
+                        version, availableAssumptions,
+                        [&](ClosureVersion* newCls) {
+                            Visitor::run(newCls->entry, [&](Instruction* i) {
+                                if (auto f = Force::Cast(i)) {
+                                    if (LdArg::Cast(f)) {
+                                        f->elideEnv();
+                                        f->effects.reset();
+                                    }
+                                }
+                            });
+                        });
+                    call->hint = newVersion;
+                    assert(call->tryDispatch() == newVersion);
+                    ip = next;
+                    continue;
+                }
+
                 bool allEager = version->properties.includes(
                     ClosureVersion::Property::IsEager);
                 if (!allEager &&
@@ -199,7 +226,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 // below.
                 todo.insert(args.begin(), args.end());
 
-                Assumptions newAssumptions = call->inferAvailableAssumptions();
+                Assumptions newAssumptions = availableAssumptions;
                 for (size_t i = 0; i < call->nCallArgs(); ++i) {
                     if (!newAssumptions.isEager(i) && isEager(i))
                         newAssumptions.setEager(i);
