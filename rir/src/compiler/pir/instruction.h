@@ -119,6 +119,13 @@ enum class Controlflow : uint8_t {
     Branch,
 };
 
+// How an instruction modifies visibility
+enum class VisibilityFlag : uint8_t {
+    On,
+    Off,
+    Unknown,
+};
+
 class Instruction : public Value {
   public:
     struct InstructionUID : public std::pair<unsigned, unsigned> {
@@ -133,7 +140,13 @@ class Instruction : public Value {
 
     Effects effects;
 
-  private:
+  public:
+    void clearEffects() { effects.reset(); }
+    void clearVisibility() { effects.reset(Effect::Visibility); }
+    void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
+    bool hasEffect() const { return !effects.empty(); }
+    bool hasVisibility() const { return effects.contains(Effect::Visibility); }
+
     Effects getObservableEffects() const {
         auto e = effects;
         // Those are effects, and we are required to have them in the correct
@@ -145,12 +158,9 @@ class Instruction : public Value {
         return e;
     }
 
-  public:
-    void clearEffects() { effects.reset(); }
-    void clearVisibility() { effects.reset(Effect::Visibility); }
-    void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
-    bool hasEffect() const { return !effects.empty(); }
-    bool hasVisibility() const { return effects.contains(Effect::Visibility); }
+    bool hasObservableEffects() const {
+        return !getObservableEffects().empty();
+    }
 
     bool hasImpureEffects() const {
         auto e = getObservableEffects();
@@ -158,10 +168,6 @@ class Instruction : public Value {
         // it wrong is not a strong correctness issue.
         e.reset(Effect::Visibility);
         return !e.empty();
-    }
-
-    bool hasObservableEffects() const {
-        return !getObservableEffects().empty();
     }
 
     bool isDeoptBarrier() const { return hasImpureEffects(); }
@@ -230,6 +236,7 @@ class Instruction : public Value {
         return effects & ~(Effects(Effect::Error) | Effect::Warn |
                            Effect::Visibility | Effect::Force);
     }
+
     virtual size_t gvnBase() const = 0;
 
     virtual bool mayHaveEnv() const = 0;
@@ -237,6 +244,7 @@ class Instruction : public Value {
     virtual bool exits() const = 0;
     virtual bool branches() const = 0;
     virtual bool branchOrExit() const = 0;
+    virtual VisibilityFlag visibilityFlag() const = 0;
 
     virtual size_t nargs() const = 0;
 
@@ -382,6 +390,9 @@ class InstructionImplementation : public Instruction {
     bool exits() const override final { return CF == Controlflow::Exit; }
     bool branches() const override final { return CF == Controlflow::Branch; }
     bool branchOrExit() const override final { return branches() || exits(); }
+    VisibilityFlag visibilityFlag() const override {
+        return VisibilityFlag::Unknown;
+    }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -1128,11 +1139,17 @@ class FLI(LdFunctionEnv, 0, Effects::None()) {
 class FLI(Visible, 0, Effect::Visibility) {
   public:
     explicit Visible() : FixedLenInstruction(PirType::voyd()) {}
+    VisibilityFlag visibilityFlag() const override {
+        return VisibilityFlag::On;
+    }
 };
 
 class FLI(Invisible, 0, Effect::Visibility) {
   public:
     explicit Invisible() : FixedLenInstruction(PirType::voyd()) {}
+    VisibilityFlag visibilityFlag() const override {
+        return VisibilityFlag::Off;
+    }
 };
 
 class FLI(PirCopy, 1, Effects::None()) {
@@ -1166,6 +1183,16 @@ class FLIE(Colon, 3, Effects::Any()) {
                                          {{PirType::val(), PirType::val()}},
                                          {{lhs, rhs}}, env, srcIdx) {}
     void updateType() override final {}
+    VisibilityFlag visibilityFlag() const override {
+        if (lhs()->type.isA(PirType::simpleScalar()) &&
+            rhs()->type.isA(PirType::simpleScalar())) {
+            return VisibilityFlag::On;
+        } else {
+            return VisibilityFlag::Unknown;
+        }
+    }
+    Value* lhs() const { return arg<0>().val(); }
+    Value* rhs() const { return arg<1>().val(); }
 };
 
 #define V(NESTED, name, Name)                                                  \
@@ -1183,6 +1210,14 @@ SIMPLE_INSTRUCTIONS(V, _)
             : FixedLenInstructionWithEnvSlot(                                  \
                   PirType::valOrLazy(), {{PirType::val(), PirType::val()}},    \
                   {{lhs, rhs}}, env, srcIdx) {}                                \
+        VisibilityFlag visibilityFlag() const override {                       \
+            if (lhs()->type.isA(PirType::num().notObject()) &&                 \
+                rhs()->type.isA(PirType::num().notObject())) {                 \
+                return VisibilityFlag::On;                                     \
+            } else {                                                           \
+                return VisibilityFlag::Unknown;                                \
+            }                                                                  \
+        }                                                                      \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(Type);                              \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
@@ -1229,6 +1264,13 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
             : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),             \
                                              {{PirType::val()}}, {{v}}, env,   \
                                              srcIdx) {}                        \
+        VisibilityFlag visibilityFlag() const override {                       \
+            if (arg<0>().val()->type.isA(PirType::num().notObject())) {        \
+                return VisibilityFlag::On;                                     \
+            } else {                                                           \
+                return VisibilityFlag::Unknown;                                \
+            }                                                                  \
+        }                                                                      \
         void updateType() override final {                                     \
             maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
@@ -1503,6 +1545,8 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
         return hash_combine(InstructionImplementation::gvnBase(), blt);
     }
 
+    VisibilityFlag visibilityFlag() const override;
+
   private:
     CallBuiltin(Value * callerEnv, SEXP builtin,
                 const std::vector<Value*>& args, unsigned srcIdx);
@@ -1534,6 +1578,8 @@ class VLI(CallSafeBuiltin,
     size_t gvnBase() const override {
         return hash_combine(InstructionImplementation::gvnBase(), blt);
     }
+
+    VisibilityFlag visibilityFlag() const override;
 };
 
 class BuiltinCallFactory {
