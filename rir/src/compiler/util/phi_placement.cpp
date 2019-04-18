@@ -68,13 +68,14 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
         });
 
         if (phis.includes(target))
-            targetPhi = target;
+            targetPhiPosition = target;
         else if (pendingInput.count(target))
-            targetPhi = pendingInput.at(target).otherPhi;
+            targetPhiPosition = pendingInput.at(target).otherPhi;
 
-        if (!targetPhi)
+        if (!targetPhiPosition)
             return;
     }
+    assert(placement.count(targetPhiPosition));
 
     // Cleanup the resulting phi graph
     bool changed = true;
@@ -92,9 +93,11 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
             }
             if (ci->second.size() == 0) {
                 ci = placement.erase(ci);
-            } else if (ci->second.size() == 1) {
+            } else if (ci->second.size() == 1 &&
+                       targetPhiPosition != ci->first) {
                 // Remove single input phis
                 auto input1 = *ci->second.begin();
+                assert(input1.otherPhi != ci->first);
                 // update all other phis which have us as input
                 for (auto& c : placement) {
                     for (auto in : c.second) {
@@ -105,8 +108,6 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
                         }
                     }
                 }
-                if (targetPhi == ci->first)
-                    targetPhi = input1.otherPhi;
                 ci = placement.erase(ci);
             } else {
                 ci++;
@@ -125,6 +126,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
             return;
         }
     }
+    assert(placement.count(targetPhiPosition));
 
     success = !placement.empty();
 }

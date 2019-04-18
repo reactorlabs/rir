@@ -13,8 +13,8 @@
 #include <array>
 #include <vector>
 
-#include "ir/RuntimeFeedback.h"
 #include "runtime/Assumptions.h"
+#include "runtime/TypeFeedback.h"
 
 #include "BC_noarg_list.h"
 
@@ -138,7 +138,7 @@ class BC {
         NumLocals loc;
         LocalsCopy loc_cpy;
         ObservedCallees callFeedback;
-        ObservedValues binopFeedback[2];
+        ObservedValues typeFeedback;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
@@ -327,6 +327,7 @@ BC_NOARGS(V, _)
 #undef V
     inline static BC recordCall();
     inline static BC recordBinop();
+    inline static BC recordType();
     inline static BC popn(unsigned n);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
@@ -364,6 +365,7 @@ BC_NOARGS(V, _)
     inline static BC pick(uint32_t);
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
+    inline static BC is(TypeChecks);
     inline static BC deopt(SEXP);
     inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast,
                                   const Assumptions& given);
@@ -663,8 +665,8 @@ BC_NOARGS(V, _)
         case Opcode::record_call_:
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;
-        case Opcode::record_binop_:
-            memcpy(&immediate.binopFeedback, pc, sizeof(ObservedValues) * 2);
+        case Opcode::record_type_:
+            memcpy(&immediate.typeFeedback, pc, sizeof(ObservedValues));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)

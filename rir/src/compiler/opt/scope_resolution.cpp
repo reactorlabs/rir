@@ -51,7 +51,7 @@ class TheScopeResolution {
         };
 
         auto tryInsertPhis = [&](AbstractPirValue res, BB* bb,
-                                 BB::Instrs::iterator& iter) -> Instruction* {
+                                 BB::Instrs::iterator& iter) -> Value* {
             if (res.isUnknown())
                 return nullptr;
 
@@ -138,7 +138,7 @@ class TheScopeResolution {
             for (auto& phi : thePhis)
                 phi.second->updateType();
 
-            return thePhis.at(pl.targetPhi);
+            return thePhis.at(pl.targetPhiPosition);
         };
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -262,8 +262,11 @@ class TheScopeResolution {
                     }
                 }
 
-                analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
+                analysis.lookupAt(after, i, [&](const AbstractLoad& aLoad) {
                     auto& res = aLoad.result;
+
+                    bool isActualLoad =
+                        LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
 
                     // In case the scope analysis is sure that this is
                     // actually the same as some other PIR value. So let's just
@@ -271,6 +274,14 @@ class TheScopeResolution {
                     if (res.isSingleValue()) {
                         if (auto val = getSingleLocalValue(res)) {
                             if (val->type.isA(i->type)) {
+                                if (isActualLoad && val->type.maybeMissing()) {
+                                    // LdVar checks for missingness, so we need
+                                    // to preserve this.
+                                    auto chk = new ChkMissing(val);
+                                    ip = bb->insert(ip, chk);
+                                    ip++;
+                                    val = chk;
+                                }
                                 replacedValue[i] = val;
                                 i->replaceUsesWith(val);
                                 next = bb->remove(ip);
@@ -297,12 +308,19 @@ class TheScopeResolution {
                     // the same phi twice (e.g. if a force returns the result
                     // of a load, we will resolve the load and the force) which
                     // ends up being rather painful.
-                    bool isActualLoad =
-                        LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
                     if (!res.isUnknown() && isActualLoad) {
                         if (auto resPhi = tryInsertPhis(res, bb, ip)) {
-                            i->replaceUsesWith(resPhi);
-                            replacedValue[i] = resPhi;
+                            Value* val = resPhi;
+                            if (val->type.maybeMissing()) {
+                                // LdVar checks for missingness, so we need
+                                // to preserve this.
+                                auto chk = new ChkMissing(val);
+                                ip = bb->insert(ip, chk);
+                                ip++;
+                                val = chk;
+                            }
+                            i->replaceUsesWith(val);
+                            replacedValue[i] = val;
                             next = bb->remove(ip);
                             return;
                         }
@@ -341,12 +359,15 @@ class TheScopeResolution {
                             // TODO: if !guess->maybe(closure) we know that the
                             // guess is wrong and could try the next binding.
                             if (!guess->type.isA(PirType::closure())) {
-                                analysis.lookup(
-                                    before, guess,
-                                    [&](const AbstractPirValue& res) {
-                                        if (auto val = getSingleLocalValue(res))
-                                            guess = val;
-                                    });
+                                if (auto i = Instruction::Cast(guess)) {
+                                    analysis.lookupAt(
+                                        before, i,
+                                        [&](const AbstractPirValue& res) {
+                                            if (auto val =
+                                                    getSingleLocalValue(res))
+                                                guess = val;
+                                        });
+                                }
                             }
                             if (guess->type.isA(PirType::closure()) &&
                                 guess->validIn(function)) {

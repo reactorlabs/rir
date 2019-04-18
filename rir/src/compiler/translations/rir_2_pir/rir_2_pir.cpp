@@ -93,9 +93,7 @@ void State::mergeIn(const State& incom, BB* incomBB) {
         Phi* p = Phi::Cast(stack.at(i));
         assert(p);
         Value* in = incom.stack.at(i);
-        if (in != p) {
-            p->addInput(incomBB, in);
-        }
+        p->addInput(incomBB, in);
     }
     incomBB->setNext(entryBB);
 }
@@ -292,9 +290,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::record_binop_: {
-        at(0)->typeFeedback.merge(bc.immediate.binopFeedback[0]);
-        at(1)->typeFeedback.merge(bc.immediate.binopFeedback[1]);
+    case Opcode::record_type_: {
+        if (bc.immediate.typeFeedback.numTypes)
+            at(0)->typeFeedback.merge(bc.immediate.typeFeedback);
         break;
     }
 
@@ -322,7 +320,24 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // currently it does not pay off to put any deopts in there.
         if (callTargetFeedback.count(callee)) {
             auto& feedback = callTargetFeedback.at(callee);
-            if (feedback.numTargets == 1)
+            // If this call was never executed. Might as well compile an
+            // unconditional deopt
+            if (!inPromise() && srcCode->funInvocationCount > 1 &&
+                feedback.taken == 0) {
+                // To avoid deoptimization loops, we must ensure that on
+                // deoptimization we actually record the new call target.
+                // We do this by jumping back, before the record call bc.
+                auto deoptPos = pos - BC::recordCall().size();
+                if (*deoptPos == Opcode::record_call_) {
+                    auto fs =
+                        insert.registerFrameState(srcCode, deoptPos, stack);
+                    insert(new Deopt(fs));
+                    stack.clear();
+                    break;
+                }
+            }
+
+            if (feedback.taken > 1 && feedback.numTargets == 1)
                 monomorphic = feedback.getTarget(srcCode, 0);
         }
 
@@ -731,7 +746,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::put_: {
         x = top();
-        for (size_t i = 0; i < bc.immediate.i - 1; ++i)
+        for (size_t i = 0; i < bc.immediate.i; ++i)
             set(i, at(i + 1));
         set(bc.immediate.i, x);
         break;
@@ -1045,6 +1060,19 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 log.failed("Abort r2p due to unsupported bc");
                 return nullptr;
             }
+
+            if (!inPromise() && !insert.getCurrentBB()->isEmpty()) {
+                auto last = insert.getCurrentBB()->last();
+
+                if (Deopt::Cast(last)) {
+                    finger = end;
+                    continue;
+                }
+
+                if (last->isDeoptBarrier())
+                    addCheckpoint(srcCode, nextPos, cur.stack, insert);
+            }
+
             if (cur.stack.size() != size - bc.popCount() + bc.pushCount()) {
                 srcCode->print(std::cerr);
                 std::cerr << "After interpreting '";
@@ -1054,12 +1082,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                           << size << " to " << cur.stack.size() << "\n";
                 assert(false);
                 return nullptr;
-            }
-
-            if (!inPromise() && !insert.getCurrentBB()->isEmpty()) {
-                auto last = insert.getCurrentBB()->last();
-                if (last->isDeoptBarrier())
-                    addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
         }
     }

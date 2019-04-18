@@ -4,9 +4,10 @@
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
+#include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
-#include "ir/RuntimeFeedback_inl.h"
+#include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
 #include "utils/Pool.h"
 
@@ -572,6 +573,7 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                 }
             } else if (arg == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
+                isEager = false;
             }
             if (isObject(arg)) {
                 notObj = false;
@@ -683,7 +685,7 @@ static Function* dispatch(const CallContext& call, DispatchTable* vt) {
     return fun;
 };
 
-static unsigned PIR_WARMUP =
+unsigned pir::Parameter::RIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
 
 // Call a RIR function. Arguments are still untouched.
@@ -697,7 +699,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!fun->unoptimizable && fun->invocationCount() % PIR_WARMUP == 0) {
+    if (!fun->unoptimizable &&
+        fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -1074,6 +1077,7 @@ static SEXPREC createFakeCONS(SEXP cdr) {
         DO_FAST_BINOP(op, op2);                                                \
         if (res_type) {                                                        \
             STORE_BINOP(res_type, int_res, real_res);                          \
+            R_Visible = (Rboolean) true;                                       \
         } else {                                                               \
             BINOP_FALLBACK(#op);                                               \
             ostack_pop(ctx);                                                   \
@@ -1140,6 +1144,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         if (IS_SIMPLE_SCALAR(val, REALSXP)) {                                  \
             res = Rf_allocVector(REALSXP, 1);                                  \
             *REAL(res) = (*REAL(val) == NA_REAL) ? NA_REAL : op * REAL(val);   \
+            R_Visible = (Rboolean) true;                                       \
         } else if (IS_SIMPLE_SCALAR(val, INTSXP)) {                            \
             Rboolean naflag = FALSE;                                           \
             res = Rf_allocVector(INTSXP, 1);                                   \
@@ -1152,6 +1157,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
                 break;                                                         \
             }                                                                  \
             CHECK_INTEGER_OVERFLOW(res, naflag);                               \
+            R_Visible = (Rboolean) true;                                       \
         } else {                                                               \
             UNOP_FALLBACK(#op);                                                \
         }                                                                      \
@@ -1730,6 +1736,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP loc = cachedGetBindingCell(env, id, ctx, bindingCache);
             bool isLocal = loc;
+            SEXP res = nullptr;
 
             if (isLocal) {
                 res = CAR(loc);
@@ -1756,12 +1763,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 res = promiseValue(res, ctx);
 
             if (res != R_NilValue) {
-                if (isLocal) {
+                if (isLocal)
                     ENSURE_NAMED(res);
-                } else {
-                    if (NAMED(res) < 2)
-                        SET_NAMED(res, 2);
-                }
+                else if (NAMED(res) < 2)
+                    SET_NAMED(res, 2);
             }
 
             ostack_push(ctx, res);
@@ -1994,13 +1999,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(record_binop_) {
+        INSTRUCTION(record_type_) {
             ObservedValues* feedback = (ObservedValues*)pc;
-            SEXP l = ostack_at(ctx, 1);
-            SEXP r = ostack_top(ctx);
-            feedback[0].record(l);
-            feedback[1].record(r);
-            pc += 2 * sizeof(ObservedValues);
+            SEXP t = ostack_top(ctx);
+            feedback->record(t);
+            pc += sizeof(ObservedValues);
             NEXT();
         }
 
@@ -2127,22 +2130,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                              given, ctx);
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
-            bool dispatchFail = !matches(call, fun->signature());
-            if (fun->invocationCount() % PIR_WARMUP == 0) {
+            bool dispatchFail = !fun->dead && !matches(call, fun->signature());
+            if (fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
-                if (assumptions != fun->signature().assumptions) {
+                if (assumptions != fun->signature().assumptions)
                     // We have more assumptions available, let's recompile
                     dispatchFail = true;
-
-#ifdef DEBUG_DISPATCH
-                    std::cout << "Optimizing static for new context:";
-                    std::cout << given << " vs " << fun->signature().assumptions
-                              << "\n";
-#endif
-                    SEXP name = CAR(call.ast);
-                    ctx->closureOptimizer(callee, assumptions, name);
-                }
             }
 
             if (dispatchFail) {
@@ -2150,7 +2144,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 fun = dispatch(call, dt);
                 // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
-                assert(fun != dt->baseline());
             }
             advanceImmediate();
 
@@ -2571,7 +2564,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 rhs = PRVALUE(rhs);
             if (TYPEOF(lhs) == PROMSXP && PRVALUE(lhs) != R_UnboundValue)
                 lhs = PRVALUE(lhs);
-            ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
+            // Special case for closures: (level 1) deep compare with body
+            // expression instead of body object, to ensure that a compiled
+            // closure is equal to the uncompiled one
+            if (lhs != rhs && TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP &&
+                CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
+                BODY_EXPR(lhs) == BODY_EXPR(rhs))
+                ostack_push(ctx, R_TrueValue);
+            else
+                ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
+
             NEXT();
         }
 
@@ -2742,6 +2744,19 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             case LISTSXP:
                 res = TYPEOF(val) == LISTSXP || TYPEOF(val) == NILSXP;
+                break;
+
+            case static_cast<Immediate>(TypeChecks::RealNonObject):
+                res = TYPEOF(val) == REALSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, REALSXP);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+                res = TYPEOF(val) == INTSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, INTSXP);
                 break;
 
             default:
@@ -2955,6 +2970,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
+            R_Visible = (Rboolean) true;
             NEXT();
 
         // ---------
@@ -3333,6 +3349,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 #endif
 
+            if (!pir::Parameter::DEOPT_CHAOS) {
+                // TODO: this version is still reachable from static call inline
+                // caches. Thus we need to preserve it forever. We need some
+                // dependency management here.
+                Pool::insert(c->container());
+                // remove the deoptimized function. Unless on deopt chaos,
+                // always recompiling would just blow testing time...
+                auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
+                dt->remove(c);
+            }
             assert(m->numFrames >= 1);
             size_t stackHeight = 0;
             for (size_t i = 0; i < m->numFrames; ++i)
@@ -3434,7 +3460,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
-            if (res == NULL) {
+            if (res != NULL) {
+                R_Visible = (Rboolean) true;
+            } else {
                 BINOP_FALLBACK(":");
             }
 
@@ -3588,7 +3616,8 @@ SEXP rirExpr(SEXP s) {
     return s;
 }
 
-SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
+SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
+                     SEXP suppliedvars) {
     auto ctx = globalContext();
 
     RList args(arglist);
@@ -3604,6 +3633,21 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
     }
     if (!names.empty()) {
         names.resize(nargs);
+    }
+    // Add extra arguments from object dispatching
+    if (suppliedvars != R_NilValue) {
+        auto extra = RList(suppliedvars);
+        for (auto a = extra.begin(); a != extra.end(); ++a) {
+            if (a.hasTag()) {
+                auto var = Pool::insert(a.tag());
+                if (std::find(names.begin(), names.end(), var) == names.end()) {
+                    ostack_push(ctx, *a);
+                    names.resize(nargs + 1);
+                    names[nargs] = var;
+                    nargs++;
+                }
+            }
+        }
     }
 
     CallContext call(nullptr, op, nargs, ast, ostack_cell_at(ctx, nargs - 1),

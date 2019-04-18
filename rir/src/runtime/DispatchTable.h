@@ -44,6 +44,22 @@ struct DispatchTable
         return false;
     }
 
+    void remove(Code* funCode) {
+        size_t i = 1;
+        for (; i < size(); ++i) {
+            if (get(i)->body() == funCode)
+                break;
+        }
+        if (i == size())
+            return;
+        get(i)->dead = true;
+        for (; i < size() - 1; ++i) {
+            setEntry(i, getEntry(i + 1));
+        }
+        setEntry(i, nullptr);
+        size_--;
+    }
+
     // insert function ordered by increasing number of assumptions
     void insert(Function* fun) {
         // TODO: we might need to grow the DT here!

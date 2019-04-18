@@ -1,11 +1,13 @@
 #include "pir_2_rir.h"
 #include "../../analysis/last_env.h"
 #include "../../pir/pir_impl.h"
+#include "../../pir/value_list.h"
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
+#include "compiler/parameter.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -858,6 +860,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::push(R_TrueValue));
                     } else if (what == False::instance()) {
                         cb.add(BC::push(R_FalseValue));
+                    } else if (what == NaLogical::instance()) {
+                        cb.add(BC::push(R_LogicalNAValue));
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the arg ";
@@ -962,9 +966,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
                 if (needsLdVarForUpdate.count(instr))
-                    cb.add(BC::ldvarNoForce(ldvar->varName));
-                else
                     cb.add(BC::ldvarForUpdate(ldvar->varName));
+                else
+                    cb.add(BC::ldvarNoForce(ldvar->varName));
                 break;
             }
 
@@ -1034,6 +1038,28 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Is: {
                 auto is = Is::Cast(instr);
                 cb.add(BC::is(is->sexpTag));
+                break;
+            }
+
+            case Tag::IsType: {
+                auto is = IsType::Cast(instr);
+                auto t = is->typeTest;
+                assert(!t.isVoid() && !t.maybeObj() && !t.maybeLazy() &&
+                       !t.maybePromiseWrapped());
+
+                if (t.isA(RType::integer)) {
+                    if (t.isScalar())
+                        cb.add(BC::is(TypeChecks::IntegerSimpleScalar));
+                    else
+                        cb.add(BC::is(TypeChecks::IntegerNonObject));
+                } else if (t.isA(RType::real)) {
+                    if (t.isScalar())
+                        cb.add(BC::is(TypeChecks::RealSimpleScalar));
+                    else
+                        cb.add(BC::is(TypeChecks::RealNonObject));
+                } else {
+                    assert(false);
+                }
                 break;
             }
 
@@ -1274,13 +1300,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             // Values, not instructions
-            case Tag::Tombstone:
-            case Tag::MissingArg:
-            case Tag::UnboundValue:
-            case Tag::Env:
-            case Tag::Nil:
-            case Tag::False:
-            case Tag::True: {
+#define V(Value) case Tag::Value:
+            COMPILER_VALUES(V) {
+#undef V
                 break;
             }
 
@@ -1321,16 +1343,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     return res;
 }
 
-static bool DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
-                           0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
-static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
-                          0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
-static bool DEOPT_CHAOS_SEED = getenv("PIR_DEOPT_CHAOS_SEED")
-                                   ? atoi(getenv("PIR_DEOPT_CHAOS_SEED"))
-                                   : std::random_device()();
-
 static bool coinFlip() {
-    static std::mt19937 gen(DEOPT_CHAOS_SEED);
+    static std::mt19937 gen(Parameter::DEOPT_CHAOS_SEED);
     static std::bernoulli_distribution coin(0.03);
     return coin(gen);
 };
@@ -1358,12 +1372,12 @@ void Pir2Rir::lower(Code* code) {
                 bb->replace(it, newDeopt);
             } else if (auto expect = Assume::Cast(*it)) {
                 auto condition = expect->condition();
-                if (DEOPT_CHAOS && coinFlip()) {
+                if (Parameter::DEOPT_CHAOS && coinFlip()) {
                     condition = expect->assumeTrue ? (Value*)False::instance()
                                                    : (Value*)True::instance();
                 }
                 std::string debugMessage;
-                if (DEBUG_DEOPTS) {
+                if (Parameter::DEBUG_DEOPTS) {
                     std::stringstream dump;
                     debugMessage = "DEOPT, assumption ";
                     expect->condition()->printRef(dump);
@@ -1506,6 +1520,14 @@ rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, bool dryRun) {
     }
     return fun;
 }
+
+bool Parameter::DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
+                               0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
+bool Parameter::DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
+                              0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
+bool Parameter::DEOPT_CHAOS_SEED = getenv("PIR_DEOPT_CHAOS_SEED")
+                                       ? atoi(getenv("PIR_DEOPT_CHAOS_SEED"))
+                                       : std::random_device()();
 
 } // namespace pir
 } // namespace rir
