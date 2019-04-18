@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "R/r_incl.h"
-#include "ir/RuntimeFeedback.h"
 #include "runtime/Assumptions.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/EnumSet.h"
 
 namespace rir {

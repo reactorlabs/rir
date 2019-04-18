@@ -73,6 +73,7 @@
     V(Inc)                                                                     \
     V(Dec)                                                                     \
     V(Is)                                                                      \
+    V(IsType)                                                                  \
     V(Plus)                                                                    \
     V(Minus)                                                                   \
     V(Identical)                                                               \

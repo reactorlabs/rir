@@ -320,9 +320,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         compileExpr(ctx, args[0]);
         compileExpr(ctx, args[1]);
 
-        if (Compiler::profile) {
-            cs << BC::recordBinop();
-        }
         if (fun == symbol::Add)
             cs << BC::add();
         else if (fun == symbol::Sub)
@@ -355,6 +352,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
 
         if (voidContext)
             cs << BC::pop();
+        else if (Compiler::profile)
+            cs << BC::recordType();
+
         return true;
     }
 
@@ -551,16 +551,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         cs << (superAssign ? BC::ldvarSuper(target)
                            : BC::ldvarForUpdate(target));
 
+        if (Compiler::profile)
+            cs << BC::recordType();
+
         // And index
         compileExpr(ctx, *idx);
         if (is2d) {
             compileExpr(ctx, *idx2);
         }
 
-        // do the thing
-        if (Compiler::profile) {
-            cs << BC::recordBinop();
-        }
         if (is2d) {
             if (fun2 == symbol::DoubleBracket) {
                 cs << BC::subassign2_2();
@@ -707,27 +706,24 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         compileExpr(ctx, *idx);
         if (is2d) {
             compileExpr(ctx, *(idx + 1));
-            if (Compiler::profile) {
-                cs << BC::recordBinop();
-            }
             if (fun == symbol::DoubleBracket)
                 cs << BC::extract2_2();
             else
                 cs << BC::extract1_2();
         } else {
-            if (Compiler::profile) {
-                cs << BC::recordBinop();
-            }
             if (fun == symbol::DoubleBracket)
                 cs << BC::extract2_1();
             else
                 cs << BC::extract1_1();
         }
         cs.addSrc(ast);
-        if (!voidContext)
+        if (!voidContext) {
+            if (Compiler::profile)
+                cs << BC::recordType();
             cs << BC::visible();
-        else
+        } else {
             cs << BC::pop();
+        }
         return true;
     }
 
@@ -1048,6 +1044,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidC
     }
     if (voidContext)
         cs << BC::pop();
+    else if (Compiler::profile)
+        cs << BC::recordType();
 }
 
 // Lookup
@@ -1058,6 +1056,8 @@ void compileGetvar(CodeStream& cs, SEXP name, bool needsVisible = true) {
         cs << BC::push(R_MissingArg);
     } else {
         cs << BC::ldvar(name);
+        if (Compiler::profile)
+            cs << BC::recordType();
     }
     if (needsVisible)
         cs << BC::visible();

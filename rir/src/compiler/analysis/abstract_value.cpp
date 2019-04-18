@@ -46,8 +46,6 @@ void AbstractREnvironment::print(std::ostream& out, bool tty) const {
 }
 
 AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
-    assert(other.type != PirType::bottom());
-
     if (unknown)
         return AbstractResult::None;
     if (type == PirType::bottom()) {
