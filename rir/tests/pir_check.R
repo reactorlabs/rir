@@ -230,6 +230,79 @@ stopifnot(pir.check(function(x) x == 3, OneEq))
 stopifnot(!pir.check(function(x) x == 3 || x == 4, NoEq))
 stopifnot(!pir.check(function(x) x == 3 || x == 4, OneEq))
 # Ok
+
+# More constantfolding
+
+stopifnot(pir.check(function() {
+  if (!FALSE)
+    42L
+  else
+    41L
+}, Returns42L))
+stopifnot(pir.check(function() {
+  if (!TRUE)
+    41L
+  else
+    42L
+}, Returns42L))
+stopifnot(pir.check(function() {
+  x <- FALSE
+  y <- 41L
+  if (!x == TRUE)
+    y + 1L
+  else
+    y - 1L
+}, Returns42L))
+stopifnot(!pir.check(function() {
+  x <- NA
+  y <- 41L
+  if (!x == NA)
+    y + 1L
+  else
+    y - 1L
+}, Returns42L))
+stopifnot(pir.check(function() {
+  x <- NA
+  y <- 41L
+  if (!x == NA)
+    y + 1L
+  else
+    y - 1L
+}, NoEq))
+stopifnot(pir.check(function(x) {
+  if ((x == 1) == TRUE)
+    5
+  else
+    4
+}, OneEq, warmup=list(3)))
+stopifnot(pir.check(function(x) {
+  if ((x == 1) == FALSE)
+    5
+  else
+    4
+}, OneEq, warmup=list(4L)))
+stopifnot(pir.check(function(x, y) {
+  a <- y == 1 # This is the one eq
+  (x == 1) == NA
+}, OneEq, warmup=list(5.7, "")))
+# Relies on better visibility
+# stopifnot(pir.check(function(x) !!!!!x, OneNot, warmup=list(1)))
+# Testing NoAsInt itself
+stopifnot(!pir.check(function(n) {
+  x <- 0
+  for (i in 1:n)
+    x <- x + i
+  x
+}, NoAsInt))
+# Ok
+stopifnot(pir.check(function() {
+  x <- 0
+  for (i in 1:10)
+    x <- x + i
+  x
+}, NoAsInt))
+                     
+# More dead instruction removal
 stopifnot(!pir.check(function(x) {
   x == 4
   x
@@ -241,5 +314,5 @@ stopifnot(pir.check(function(x) {
 stopifnot(pir.check(function(x, y) {
   x == 3+7i
   y == NA
-  x
+  x + y
 }, NoEq, warmup=list(5L, 2L)))

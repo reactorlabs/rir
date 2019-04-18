@@ -107,6 +107,11 @@ static bool testReturns42L(ClosureVersion* f) {
     return true;
 };
 
+static bool testNoAsInt(ClosureVersion* f) {
+    return Visitor::check(f->entry,
+                          [&](Instruction* i) { return !AsInt::Cast(i); });
+}
+
 static bool testNoEq(ClosureVersion* f) {
     return Visitor::check(f->entry,
                           [&](Instruction* i) { return !Eq::Cast(i); });
@@ -119,6 +124,15 @@ static bool testOneEq(ClosureVersion* f) {
             numEqs++;
     });
     return numEqs == 1;
+}
+
+static bool testOneNot(ClosureVersion* f) {
+    int numNots = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (Not::Cast(i))
+            numNots++;
+    });
+    return numNots == 1;
 }
 
 PirCheck::Type PirCheck::parseType(const char* str) {
