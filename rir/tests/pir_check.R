@@ -151,8 +151,8 @@ stopifnot(pir.check(function() {
   f(x, y(), z)
 }, NoEnv, warmup=list()))
 
-mandelbrot <- function() {
-    size = 30
+mandelbrot <- function(size) {
+    size = size
     sum = 0
     byteAcc = 0
     bitNum  = 0
@@ -198,9 +198,14 @@ mandelbrot <- function() {
     }
     return (sum)
 }
+# ensure that this trampoline function is small. otherwise we fail on
+# small MAX_PIR_INPUT, because the caller of mandelbrot won't be compiled
+mandelbrot_tramp <- function(x)
+  mandelbrot(x)
+
 # This can't be run if PIR_MAX_INPUT_SIZE is too low
 stopifnot(
-  pir.check(mandelbrot, NoExternalCalls, NoPromise, NoStore, warmup=list())
+  pir.check(mandelbrot_tramp, NoExternalCalls, NoPromise, NoStore, warmup=list(16))
 )
 
 # New tests
