@@ -365,12 +365,13 @@ const Value* Instruction::cFollowCastsAndForce() const {
 
 bool Instruction::envOnlyForObj() {
 #define V(Name)                                                                \
-    if (Name::Cast(this)) {                                                    \
+    if (Tag::Name == tag) {                                                    \
         return true;                                                           \
     }
     BINOP_INSTRUCTIONS(V)
-    VECTOR_RW_INSTRUCTIONS(V)
 #undef V
+    if (tag == Tag::Extract1_1D || tag == Tag::Extract2_1D)
+        return true;
     return false;
 }
 
