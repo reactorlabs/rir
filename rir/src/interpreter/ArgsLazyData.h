@@ -3,7 +3,7 @@
 
 #include "RirDataWrapper.h"
 
-#include "interp_incl.h"
+#include "interp.h"
 
 #include <cassert>
 #include <cstdint>

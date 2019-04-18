@@ -1,7 +1,8 @@
 #ifndef RIR_INTERP_BUILTINS_H
 #define RIR_INTERP_BUILTINS_H
 
-#include "interp_incl.h"
+#include "call_context.h"
+#include "instance.h"
 
 namespace rir {
 

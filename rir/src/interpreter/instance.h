@@ -5,8 +5,6 @@
 #include "ir/BC_inc.h"
 #include "runtime/Assumptions.h"
 
-#include "interp_incl.h"
-
 #include <stdio.h>
 
 #include <assert.h>
@@ -66,6 +64,8 @@ struct InterpreterInstance {
     ClosureCompiler closureCompiler;
     ClosureOptimizer closureOptimizer;
 };
+
+InterpreterInstance* globalContext();
 
 // --- Resizable List
 
@@ -145,6 +145,19 @@ typedef union {
     double dval;
     int ival;
 } scalar_value_t;
+
+static R_INLINE bool FIND_ON_STACK(SEXP x, R_bcstack_t* base, int skip) {
+    /* Check whether the value is on the stack before modifying.  If
+       'skip' is true the top value on the stack is ignored. LT */
+    R_bcstack_t* checktop = skip ? R_BCNodeStackTop - 1 : R_BCNodeStackTop;
+    for (R_bcstack_t* p = base; p < checktop; p++) {
+        if (p->tag == RAWMEM_TAG)
+            p += p->u.ival;
+        else if (p->u.sxpval == x && p->tag == 0)
+            return true;
+    }
+    return false;
+}
 
 RIR_INLINE R_bcstack_t intStackObj(int x) {
     R_bcstack_t res;
@@ -298,6 +311,10 @@ RIR_INLINE SEXP stackObjAsSexp(R_bcstack_t* stackCell) {
         return asBoxed(stackCell);
     }
 #endif
+    return stackCell->u.sxpval;
+}
+
+RIR_INLINE SEXP stackSexp(R_bcstack_t* stackCell) {
     return stackCell->u.sxpval;
 }
 
@@ -733,6 +750,13 @@ RIR_INLINE void setInPlace(SEXP old, R_bcstack_t* val) {
         stk->tag = STACK_OBJ_SEXP;                                             \
     } while (0)
 
+#define ostackSetSexpCache(cacheStart, i, v)                                   \
+    do {                                                                       \
+        R_bcstack_t* stk = cacheStart + (i);                                   \
+        stk->u.sxpval = (v);                                                   \
+        stk->tag = STACK_OBJ_SEXP;                                             \
+    } while (0)
+
 #define ostackPopn(c, p)                                                       \
     do {                                                                       \
         R_BCNodeStackTop -= (p);                                               \
@@ -804,17 +828,33 @@ class Locals final {
     R_bcstack_t* base;
     unsigned localsCount;
     bool existingLocals;
+    R_bcstack_t* cacheStart;
 
   public:
-    explicit Locals(R_bcstack_t* base, unsigned count, bool existingLocals)
-        : base(base), localsCount(count), existingLocals(existingLocals) {
-        if (!existingLocals)
+    explicit Locals(R_bcstack_t* base, unsigned count, bool existingLocals,
+                    R_bcstack_t* cacheStart)
+        : base(base), localsCount(count), existingLocals(existingLocals),
+          cacheStart(cacheStart) {
+        if (!existingLocals) {
+#ifdef TYPED_STACK
+            // Zero the region of the locals to avoid keeping stuff alive and to
+            // zero all the type tags. Note: this trick does not work with the
+            // stack in general, since there intermediate callees might set the
+            // type tags to something else.
+            memset(R_BCNodeStackTop, 0,
+                   sizeof(*R_BCNodeStackTop) * localsCount);
+#endif
             R_BCNodeStackTop += localsCount;
+        }
     }
 
     ~Locals() {
-        if (!existingLocals)
-            R_BCNodeStackTop -= localsCount;
+        if (cacheStart)
+            R_BCNodeStackTop = cacheStart;
+        else {
+            if (!existingLocals)
+                R_BCNodeStackTop -= localsCount;
+        }
     }
 
     R_bcstack_t load(unsigned offset) {

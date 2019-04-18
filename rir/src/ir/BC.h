@@ -8,7 +8,7 @@
 #include "BC_inc.h"
 #include "R/Protect.h"
 #include "R/r.h"
-#include "interpreter/instance.h"
+#include "interpreter/interp.h"
 #include "ir/Deoptimization.h"
 #include "runtime/Code.h"
 #include "runtime/Function.h"
@@ -18,8 +18,8 @@ namespace rir {
 
 class CodeStream;
 
-#define V(NESTED, name, name_)\
-BC BC::name() { return BC(Opcode::name_##_); }
+#define V(NESTED, name, name_)                                                 \
+    BC BC::name() { return BC(Opcode::name_##_); }
 BC_NOARGS(V, _)
 #undef V
 BC BC::recordCall() { return BC(Opcode::record_call_); }

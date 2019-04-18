@@ -12,8 +12,14 @@
 #include "R/r.h"
 
 #include "instance.h"
-#include "interp_incl.h"
 #include "safe_force.h"
+
+// Indicates an argument is missing
+#define MISSING_ARG_IDX ((unsigned)-1)
+// Indicates an argument does not correspond to a valid CodeObject
+#define DOTS_ARG_IDX ((unsigned)-2)
+// Maximum valid entry for a CodeObject offset/idx entry
+#define MAX_ARG_IDX ((unsigned)-3)
 
 namespace rir {
 
