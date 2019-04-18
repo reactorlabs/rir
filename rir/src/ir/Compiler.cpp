@@ -151,7 +151,7 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
-                  std::function<void()> compileBody) {
+                  std::function<void()> compileBody, bool doWhile = false) {
     CodeStream& cs = ctx.cs();
 
     BC::Label loopBranch = cs.mkLabel();
@@ -163,10 +163,17 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
 
     cs << BC::beginloop(nextBranch) << loopBranch;
 
-    compileCond();
-    cs << BC::brfalse(nextBranch);
+    if (!doWhile) {
+        compileCond();
+        cs << BC::brfalse(nextBranch);
+    }
 
     compileBody();
+
+    if (doWhile) {
+        compileCond();
+        cs << BC::brfalse(nextBranch);
+    }
     cs << BC::br(loopBranch) << nextBranch;
 
     if (ctx.loopNeedsContext()) {
@@ -741,12 +748,22 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
 
         cs << BC::guardNamePrimitive(fun);
 
+        BC::Label doLoop = cs.mkLabel();
+        BC::Label skipLoop = cs.mkLabel();
+
+        compileExpr(ctx, cond);
+        cs << BC::asbool() << BC::brtrue(doLoop) << BC::br(skipLoop);
+
+        cs << doLoop;
+
         compileWhile(ctx,
                      [&ctx, &cs, &cond]() {
                          compileExpr(ctx, cond);
                          cs << BC::asbool();
                      },
-                     [&ctx, &body]() { compileExpr(ctx, body, true); });
+                     [&ctx, &body]() { compileExpr(ctx, body, true); }, true);
+
+        cs << skipLoop;
 
         if (!voidContext)
             cs << BC::push(R_NilValue) << BC::invisible();
