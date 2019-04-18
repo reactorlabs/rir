@@ -11,7 +11,6 @@
 #include "compiler/translations/pir_2_rir/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
-#include "interpreter/interp_incl.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 
@@ -221,26 +220,27 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Rir2PirCompiler cmp(m, logger);
-    cmp.compileClosure(what, name, assumptions,
-                       [&](pir::ClosureVersion* c) {
-                           logger.flush();
-                           cmp.optimizeModule();
+    cmp.compileClosure(
+        what, name, assumptions,
+        [&](pir::ClosureVersion* c) {
+            logger.flush();
+            cmp.optimizeModule();
 
-                           // compile back to rir
-                           pir::Pir2RirCompiler p2r(logger);
-                           auto fun = p2r.compile(c, dryRun);
+            // compile back to rir
+            pir::Pir2RirCompiler p2r(logger);
+            auto fun = p2r.compile(c, dryRun);
 
-                           // Install
-                           if (dryRun)
-                               return;
+            // Install
+            if (dryRun)
+                return;
 
-                           Protect p(fun->container());
-                           DispatchTable::unpack(BODY(what))->insert(fun);
-                       },
-                       [&]() {
-                           if (debug.includes(pir::DebugFlag::ShowWarnings))
-                               std::cerr << "Compilation failed\n";
-                       });
+            Protect p(fun->container());
+            DispatchTable::unpack(BODY(what))->insert(fun);
+        },
+        [&]() {
+            if (debug.includes(pir::DebugFlag::ShowWarnings))
+                std::cerr << "Compilation failed\n";
+        });
 
     delete m;
     UNPROTECT(1);

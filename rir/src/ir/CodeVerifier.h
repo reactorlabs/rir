@@ -1,8 +1,6 @@
 #ifndef CODE_VERIFIER_H
 #define CODE_VERIFIER_H
 
-#include "interpreter/interp_incl.h"
-
 namespace rir {
 
 /** Various verifications of the ::Code and ::Function objects.

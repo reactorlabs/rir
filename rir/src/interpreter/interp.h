@@ -2,10 +2,8 @@
 #define RIR_INTERPRETER_C_H
 
 #include "R/r.h"
-#include "builtins.h"
 #include "call_context.h"
 #include "instance.h"
-#include "interp_incl.h"
 #include "ir/BC_inc.h"
 
 #include <R/r.h>
@@ -27,8 +25,6 @@ struct InterpreterInstance;
 struct Code;
 struct CallContext;
 class Configurations;
-
-bool isValidClosureSEXP(SEXP closure);
 
 void initializeRuntime();
 

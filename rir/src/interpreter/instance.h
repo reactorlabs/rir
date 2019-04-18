@@ -15,7 +15,7 @@
 namespace rir {
 
 // --- Misc Declarations
-
+bool isValidClosureSEXP(SEXP closure);
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 
 /** Compiler API. Given a language object, compiles it and returns the

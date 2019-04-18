@@ -5,6 +5,7 @@
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "binding_cache.h"
+#include "builtins.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "fast_arithmetics.h"
 #include "ir/Deoptimization.h"

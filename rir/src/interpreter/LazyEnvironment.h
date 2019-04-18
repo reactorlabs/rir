@@ -3,7 +3,6 @@
 
 #include "../ir/BC_inc.h"
 #include "RirDataWrapper.h"
-#include "interp_incl.h"
 
 #include <cassert>
 #include <cstdint>

@@ -132,10 +132,10 @@ bool PirCheck::run(SEXP f) {
         break;
                 LIST_OF_PIR_CHECKS(V)
 #undef V
-        default:
-            assert(false);
+            default:
+                assert(false);
+            }
         }
-    }
     }
     Rir2PirCompiler::MAX_INPUT_SIZE = oldconfig;
     if (!success)
