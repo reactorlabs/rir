@@ -4,8 +4,9 @@ ROOT=$1
 
 git diff --exit-code > /dev/null && git diff --cached --exit-code > /dev/null
 if test "$?" -ne 0; then
-  echo "please commit or stash your changes before pushing."
-  exit 1
+  echo "warning: repository is dirty"
+  git status -s
+  sleep 2
 fi
 
 . "${ROOT}/tools/script_include.sh"
