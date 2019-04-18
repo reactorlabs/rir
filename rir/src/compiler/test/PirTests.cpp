@@ -705,7 +705,7 @@ namespace rir {
 
 void PirTests::run() {
     size_t oldconfig = pir::Parameter::MAX_INPUT_SIZE;
-    pir::Parameter::MAX_INPUT_SIZE = 3000;
+    pir::Parameter::MAX_INPUT_SIZE = 3500;
     for (auto t : tests) {
         std::cout << "> " << t.first << "\n";
         if (!t.second()) {
