@@ -8,7 +8,7 @@
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "fastArithmetics.h"
 #include "ir/Deoptimization.h"
-#include "ir/RuntimeFeedback_inl.h"
+#include "runtime/TypeFeedback.h"
 #include "safe_force.h"
 #include "utils/Pool.h"
 
@@ -1731,13 +1731,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(record_binop_) {
+        INSTRUCTION(record_type_) {
             ObservedValues* feedback = (ObservedValues*)pc;
-            R_bcstack_t* l = ostackCellAt(ctx, 1);
-            R_bcstack_t* r = ostackCellAt(ctx, 0);
-            feedback[0].record(l);
-            feedback[1].record(r);
-            pc += 2 * sizeof(ObservedValues);
+            R_bcstack_t* t = ostackCellTop(ctx);
+            feedback->record(t);
+            pc += sizeof(ObservedValues);
             NEXT();
         }
 
@@ -2416,6 +2414,19 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             case LISTSXP:
                 logical_res = type == LISTSXP || type == NILSXP;
+                break;
+
+            case static_cast<Immediate>(TypeChecks::RealNonObject):
+                logical_res = type == REALSXP && !stackObjIsObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+                logical_res = stackObjIsSimpleScalar(val, REALSXP);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+                logical_res = type == INTSXP && !stackObjIsObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+                logical_res = stackObjIsSimpleScalar(val, INTSXP);
                 break;
 
             default:

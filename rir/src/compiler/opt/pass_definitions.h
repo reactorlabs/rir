@@ -131,6 +131,8 @@ class PASS(LoadElision);
 
 class PASS(TypeInference);
 
+class PASS(TypeSpeculation);
+
 class PhaseMarker : public PirTranslator {
   public:
     explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}

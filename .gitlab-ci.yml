@@ -28,8 +28,10 @@ sanity:
 tests_release:
   script:
     - cd build_release
-    - bin/gnur-make-tests test-all-devel && ../tools/check-gnur-make-tests-error
-    - bin/gnur-make-tests check-recommended && ../tools/check-gnur-make-tests-error
+    - bin/gnur-make-tests test-all-devel
+    - ../tools/check-gnur-make-tests-error
+    - bin/gnur-make-tests check-recommended
+    - ../tools/check-gnur-make-tests-error
 
 tests_release_2:
   script:
@@ -51,7 +53,8 @@ tests_debug:
     - PIR_ENABLE=off ./bin/tests
     - PIR_ENABLE=force ./bin/tests
     - for i in `seq 1 5`; do PIR_DEOPT_CHAOS_SEED=$i PIR_DEOPT_CHAOS=1 ./bin/tests ; done
-    - ./bin/gnur-make-tests check-devel && ../tools/check-gnur-make-tests-error
+    - ./bin/gnur-make-tests check-devel
+    - ../tools/check-gnur-make-tests-error
 
 test_sanitize:
   script:

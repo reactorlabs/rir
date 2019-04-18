@@ -28,10 +28,25 @@ class TheCleanup {
                 Instruction* i = *ip;
                 auto next = ip + 1;
                 bool removed = false;
-                if (!i->branchOrExit() && !i->hasObservableEffects() &&
-                    i->unused()) {
+                bool dead = i->unused() && !i->branchOrExit();
+                if (dead && !i->hasObservableEffects()) {
                     removed = true;
                     next = bb->remove(ip);
+                } else if (dead &&
+                           i->getObservableEffects() == Effect::Visibility &&
+                           i->visibilityFlag() != VisibilityFlag::Unknown &&
+                           !Visible::Cast(i) && !Invisible::Cast(i)) {
+                    removed = true;
+                    switch (i->visibilityFlag()) {
+                    case VisibilityFlag::On:
+                        bb->replace(ip, new Visible());
+                        break;
+                    case VisibilityFlag::Off:
+                        bb->replace(ip, new Invisible());
+                        break;
+                    default:
+                        assert(false);
+                    }
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
                     // Missing args produce error.
@@ -76,6 +91,20 @@ class TheCleanup {
                     } else {
                         used_p.insert(arg->prom()->id);
                         todo.push_back(arg->prom());
+                    }
+                } else if (auto tt = IsType::Cast(i)) {
+                    auto arg = tt->arg<0>().val();
+                    if (arg->type.isA(tt->typeTest)) {
+                        tt->replaceUsesWith(True::instance());
+                        removed = true;
+                        next = bb->remove(ip);
+                    }
+                } else if (auto tt = CastType::Cast(i)) {
+                    auto arg = tt->arg<0>().val();
+                    if (arg->type == tt->type) {
+                        tt->replaceUsesWith(arg);
+                        removed = true;
+                        next = bb->remove(ip);
                     }
                 } else if (auto asInt = AsInt::Cast(i)) {
                     auto arg = asInt->arg<0>().val();

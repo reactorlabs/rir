@@ -91,8 +91,14 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
 }
 
 void PirType::merge(const ObservedValues& other) {
-    if (!other.numTypes)
+    assert(other.numTypes);
+
+    if (other.numTypes == ObservedValues::MaxTypes) {
+        merge(any());
+        flags_.set(TypeFlags::maybeObject);
+        flags_.set(TypeFlags::maybeNotScalar);
         return;
+    }
 
     if (other.numTypes == ObservedValues::MaxTypes) {
         merge(any());

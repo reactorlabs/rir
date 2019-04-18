@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "R/r_incl.h"
-#include "ir/RuntimeFeedback.h"
 #include "runtime/Assumptions.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/EnumSet.h"
 
 namespace rir {
@@ -201,6 +201,12 @@ struct PirType {
 
     static constexpr PirType simpleScalarLogical() {
         return PirType(RType::logical).notObject().scalar();
+    }
+
+    static constexpr PirType simpleScalar() {
+        return (PirType(RType::integer) | RType::real | RType::logical)
+            .notObject()
+            .scalar();
     }
 
     static constexpr PirType promiseWrappedVal() {

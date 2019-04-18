@@ -1,6 +1,7 @@
 #include "pir_2_rir.h"
 #include "../../analysis/last_env.h"
 #include "../../pir/pir_impl.h"
+#include "../../pir/value_list.h"
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
@@ -859,6 +860,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::push(R_TrueValue));
                     } else if (what == False::instance()) {
                         cb.add(BC::push(R_FalseValue));
+                    } else if (what == NaLogical::instance()) {
+                        cb.add(BC::push(R_LogicalNAValue));
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the arg ";
@@ -1035,6 +1038,28 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Is: {
                 auto is = Is::Cast(instr);
                 cb.add(BC::is(is->sexpTag));
+                break;
+            }
+
+            case Tag::IsType: {
+                auto is = IsType::Cast(instr);
+                auto t = is->typeTest;
+                assert(!t.isVoid() && !t.maybeObj() && !t.maybeLazy() &&
+                       !t.maybePromiseWrapped());
+
+                if (t.isA(RType::integer)) {
+                    if (t.isScalar())
+                        cb.add(BC::is(TypeChecks::IntegerSimpleScalar));
+                    else
+                        cb.add(BC::is(TypeChecks::IntegerNonObject));
+                } else if (t.isA(RType::real)) {
+                    if (t.isScalar())
+                        cb.add(BC::is(TypeChecks::RealSimpleScalar));
+                    else
+                        cb.add(BC::is(TypeChecks::RealNonObject));
+                } else {
+                    assert(false);
+                }
                 break;
             }
 
@@ -1275,14 +1300,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             // Values, not instructions
-            case Tag::Tombstone:
-            case Tag::MissingArg:
-            case Tag::UnboundValue:
-            case Tag::Env:
-            case Tag::Nil:
-            case Tag::False:
-            case Tag::True: {
-                break;
+#define V(Value) case Tag::Value:
+                COMPILER_VALUES(V) {
+#undef V
+                    break;
             }
 
             // Dummy sentinel enum item

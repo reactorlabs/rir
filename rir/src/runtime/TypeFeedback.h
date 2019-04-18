@@ -27,7 +27,7 @@ struct ObservedCallees {
     uint32_t numTargets : TargetBits;
     uint32_t taken : CounterBits;
 
-    RIR_INLINE void record(Code* caller, SEXP callee);
+    void record(Code* caller, SEXP callee);
     SEXP getTarget(const Code* code, size_t pos) const;
 
     std::array<unsigned, MaxTargets> targets;
@@ -58,12 +58,12 @@ struct ObservedValues {
 
     ObservedValues() : numTypes(0) {}
 
-    void record(R_bcstack_t* e) {
+    RIR_INLINE void record(R_bcstack_t* e) {
         ObservedType type(e);
         record(type);
     }
 
-    void record(SEXP e) {
+    RIR_INLINE void record(SEXP e) {
         ObservedType type(e);
         record(type);
     }
@@ -83,6 +83,14 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 #pragma pack(pop)
+
+enum class TypeChecks : uint32_t {
+    // Must be bigger than smallest sexptype
+    IntegerNonObject = 3330,
+    IntegerSimpleScalar = 3331,
+    RealNonObject = 3332,
+    RealSimpleScalar = 3334,
+};
 
 } // namespace rir
 #endif

@@ -1,4 +1,4 @@
-#include "RuntimeFeedback.h"
+#include "TypeFeedback.h"
 #include "../interpreter/instance.h"
 #include "R/r.h"
 #include "runtime/Code.h"
@@ -6,6 +6,7 @@
 #include <cassert>
 
 namespace rir {
+
 ObservedType::ObservedType(R_bcstack_t* s)
     : sexptype((uint8_t)stackObjTypeof(s)), scalar(stackObjIsScalar(s)),
       object(s->tag == STACK_OBJ_SEXP && OBJECT(s->u.sxpval)),
@@ -17,6 +18,21 @@ ObservedType::ObservedType(SEXP s)
 SEXP ObservedCallees::getTarget(const Code* code, size_t pos) const {
     assert(pos < numTargets);
     return code->getExtraPoolEntry(targets[pos]);
+}
+
+void ObservedCallees::record(Code* caller, SEXP callee) {
+    if (taken < CounterOverflow)
+        taken++;
+    if (numTargets < MaxTargets) {
+        int i = 0;
+        for (; i < numTargets; ++i)
+            if (caller->getExtraPoolEntry(targets[i]) == callee)
+                break;
+        if (i == numTargets) {
+            auto idx = caller->addExtraPoolEntry(callee);
+            targets[numTargets++] = idx;
+        }
+    }
 }
 
 } // namespace rir

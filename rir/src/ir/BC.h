@@ -23,7 +23,7 @@ BC BC::name() { return BC(Opcode::name_##_); }
 BC_NOARGS(V, _)
 #undef V
 BC BC::recordCall() { return BC(Opcode::record_call_); }
-BC BC::recordBinop() { return BC(Opcode::record_binop_); }
+BC BC::recordType() { return BC(Opcode::record_type_); }
 BC BC::popn(unsigned n) {
     ImmediateArguments i;
     i.i = n;
@@ -216,6 +216,7 @@ BC BC::pick(uint32_t i) {
     im.i = i;
     return BC(Opcode::pick_, im);
 }
+BC BC::is(TypeChecks i) { return BC::is(static_cast<uint32_t>(i)); }
 BC BC::is(uint32_t i) {
     ImmediateArguments im;
     im.i = i;

@@ -530,6 +530,26 @@ RIR_INLINE bool stackObjIsVector(R_bcstack_t* stackCell) {
     }
 }
 
+RIR_INLINE bool stackObjIsObject(R_bcstack_t* stackCell) {
+#ifdef PROFILE_TYPED_STACK
+    TSPROFILE.mark("stack access");
+#endif
+    switch (stackCell->tag) {
+    case STACK_OBJ_INT:
+    case STACK_OBJ_REAL:
+    case STACK_OBJ_LOGICAL:
+        return false;
+    case STACK_OBJ_SEXP:
+#ifdef PROFILE_TYPED_STACK
+        TSPROFILE.mark("stack access boxed");
+#endif
+        return isObject(stackCell->u.sxpval);
+    default:
+        assert(false);
+        return false;
+    }
+}
+
 RIR_INLINE bool stackObjsIdentical(R_bcstack_t* x, R_bcstack_t* y) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");

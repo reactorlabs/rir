@@ -365,12 +365,13 @@ const Value* Instruction::cFollowCastsAndForce() const {
 
 bool Instruction::envOnlyForObj() {
 #define V(Name)                                                                \
-    if (Name::Cast(this)) {                                                    \
+    if (Tag::Name == tag) {                                                    \
         return true;                                                           \
     }
     BINOP_INSTRUCTIONS(V)
-    VECTOR_RW_INSTRUCTIONS(V)
 #undef V
+    if (tag == Tag::Extract1_1D || tag == Tag::Extract2_1D)
+        return true;
     return false;
 }
 
@@ -472,9 +473,19 @@ void Is::printArgs(std::ostream& out, bool tty) const {
     out << ", " << Rf_type2char(sexpTag);
 }
 
+void IsType::printArgs(std::ostream& out, bool tty) const {
+    arg<0>().val()->printRef(out);
+    out << " isA ";
+    typeTest.print(out);
+}
+
 void Phi::updateType() {
     type = arg(0).val()->type;
     eachArg([&](BB*, Value* v) -> void { type = type | v->type; });
+    typeFeedback = arg(0).val()->type;
+    eachArg([&](BB*, Value* v) -> void {
+        typeFeedback = typeFeedback | v->typeFeedback;
+    });
 }
 
 void Phi::printArgs(std::ostream& out, bool tty) const {
@@ -530,6 +541,28 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
         return new CallSafeBuiltin(builtin, args, srcIdx);
     else
         return new CallBuiltin(callerEnv, builtin, args, srcIdx);
+}
+
+VisibilityFlag CallBuiltin::visibilityFlag() const {
+    switch (getFlag(builtinId)) {
+    case 0:
+        return VisibilityFlag::On;
+    case 1:
+        return VisibilityFlag::Off;
+    default:
+        return VisibilityFlag::Unknown;
+    }
+}
+
+VisibilityFlag CallSafeBuiltin::visibilityFlag() const {
+    switch (getFlag(builtinId)) {
+    case 0:
+        return VisibilityFlag::On;
+    case 1:
+        return VisibilityFlag::Off;
+    default:
+        return VisibilityFlag::Unknown;
+    }
 }
 
 static void printCallArgs(std::ostream& out, const CallInstruction* call) {
