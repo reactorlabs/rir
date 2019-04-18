@@ -46,16 +46,16 @@ stopifnot(pir.check(function(depth) {
     1
   else
     0
-}, NoEnvSpec, warmup=list(1)))
+}, NoEnvSpec, warmup=function(f){cat(".\n"); f(0)}))
 
 xxx <- 12
 stopifnot(pir.check(function() {
   1 + xxx
-}, NoEnvForAdd, warmup=list()))
+}, NoEnvForAdd, warmup=function(f) f()))
 yyy = 0
 stopifnot(pir.check(function() {
   1 + yyy
-}, NoEnvForAdd, warmup=list()))
+}, NoEnvForAdd, warmup=function(f) f()))
 stopifnot(pir.check(function(x) {
   y <- 2
 }, NoStore))
@@ -139,7 +139,7 @@ stopifnot(pir.check(function() {
   b <- function() 1L
   f <- function(x, y) x() + y
   f(a, b())
-}, Returns42L, warmup=list()))
+}, Returns42L, warmup=function(f)f()))
 stopifnot(pir.check(function() {
   x <- function() 32
   y <- function() 31
@@ -149,7 +149,7 @@ stopifnot(pir.check(function() {
       42L
   }
   f(x, y(), z)
-}, NoEnv, warmup=list()))
+}, NoEnv, warmup=function(f)f()))
 
 mandelbrot <- function(size) {
     size = size
@@ -198,14 +198,9 @@ mandelbrot <- function(size) {
     }
     return (sum)
 }
-# ensure that this trampoline function is small. otherwise we fail on
-# small MAX_PIR_INPUT, because the caller of mandelbrot won't be compiled
-mandelbrot_tramp <- function(x)
-  mandelbrot(x)
-
 # This can't be run if PIR_MAX_INPUT_SIZE is too low
 stopifnot(
-  pir.check(mandelbrot_tramp, NoExternalCalls, NoPromise, NoStore, warmup=list(16))
+  pir.check(mandelbrot, NoExternalCalls, NoPromise, NoStore, warmup=function(f)f(16))
 )
 
 # New tests
@@ -215,13 +210,13 @@ stopifnot(pir.check(function() {
   while (x < 10)
     x <- x + 1
   x
-}, NoLoad, NoStore, warmup=list()))
+}, NoLoad, NoStore, warmup=function(f)f()))
 stopifnot(pir.check(function(n) {
   x <- 1
   while (x < n)
     x <- x + 1
   x
-}, NoLoad, NoStore, warmup=list(10)))
+}, NoLoad, NoStore, warmup=function(f)f(10)))
 
 # Negative Test
 
@@ -279,19 +274,19 @@ stopifnot(pir.check(function(x) {
     5
   else
     4
-}, OneEq, warmup=list(3)))
+}, OneEq, warmup=function(f)f(3)))
 stopifnot(pir.check(function(x) {
   if ((x == 1) == FALSE)
     5
   else
     4
-}, OneEq, warmup=list(4L)))
+}, OneEq, warmup=function(f)f(4L)))
 stopifnot(pir.check(function(x, y) {
   a <- y == 1 # This is the one eq
   (x == 1) == NA
-}, OneEq, warmup=list(5.7, "")))
+}, OneEq, warmup=function(f)f(5.7, "")))
 # Relies on better visibility
-# stopifnot(pir.check(function(x) !!!!!x, OneNot, warmup=list(1)))
+# stopifnot(pir.check(function(x) !!!!!x, OneNot, warmup=function(f)f(1)))
 # Testing NoAsInt itself
 stopifnot(!pir.check(function(n) {
   x <- 0
@@ -315,9 +310,9 @@ stopifnot(!pir.check(function(x) {
 stopifnot(pir.check(function(x) {
   x == 4
   x
-}, NoEq, warmup=list(5)))
+}, NoEq, warmup=function(f)f(5)))
 stopifnot(pir.check(function(x, y) {
   x == 3+7i
   y == NA
   x + y
-}, NoEq, warmup=list(5L, 2L)))
+}, NoEq, warmup=function(f)f(5L, 2L)))
