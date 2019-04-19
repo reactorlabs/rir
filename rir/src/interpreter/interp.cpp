@@ -1614,8 +1614,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
             auto names = (Immediate*)pc;
@@ -1659,8 +1659,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostackSexpAt(ctx, 0), n, ast, arguments, env,
@@ -1685,6 +1685,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
+<<<<<<< HEAD
             Assumptions given(readImmediate());
             advanceImmediate();
             CallContext call(c, ostackSexpAt(ctx, n), n, ast,
@@ -1692,6 +1693,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP res = doCall(call, ctx);
             ostackPopn(ctx, call.passedArgs + 1);
             ostackPushSexp(ctx, res);
+=======
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
+            CallContext call(c, ostack_at(ctx, n), n, ast,
+                             ostack_cell_at(ctx, n - 1), env, given, ctx);
+            res = doCall(call, ctx);
+            ostack_popn(ctx, call.passedArgs + 1);
+            ostack_push(ctx, res);
+
+>>>>>>> 6a2bd9b42ba631230344cf287810c82ef86ef7b4
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostackLength(ctx));
             NEXT();
@@ -1708,8 +1719,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostackSexpAt(ctx, n), n, ast,
@@ -1759,8 +1770,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());

@@ -6,6 +6,7 @@
 
 #include "api.h"
 
+#include "compiler/parameter.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "compiler/translations/pir_2_rir/pir_2_rir.h"
@@ -288,6 +289,24 @@ REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags,
 
 REXPORT SEXP pir_tests() {
     PirTests::run();
+    return R_NilValue;
+}
+
+static size_t oldMaxInput = 0;
+static size_t oldInlinerMax = 0;
+
+REXPORT SEXP pir_check_warmup_begin(SEXP f, SEXP checksSxp, SEXP env) {
+    if (oldMaxInput == 0) {
+        oldMaxInput = pir::Parameter::MAX_INPUT_SIZE;
+        oldInlinerMax = pir::Parameter::INLINER_MAX_SIZE;
+    }
+    pir::Parameter::MAX_INPUT_SIZE = 3500;
+    pir::Parameter::INLINER_MAX_SIZE = 4000;
+    return R_NilValue;
+}
+REXPORT SEXP pir_check_warmup_end(SEXP f, SEXP checksSxp, SEXP env) {
+    pir::Parameter::MAX_INPUT_SIZE = oldMaxInput;
+    pir::Parameter::INLINER_MAX_SIZE = oldInlinerMax;
     return R_NilValue;
 }
 

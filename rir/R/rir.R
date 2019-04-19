@@ -69,12 +69,17 @@ pir.check <- function(f, ..., warmup=NULL) {
         as.pairlist(lapply(lapply(as.list(substitute(...())), as.character), as.name))
     if (length(checks) == 0)
         stop("pir.check: needs at least 1 check")
+
+    .Call("pir_check_warmup_begin")
     rir.compile(f)
-    if (is.list(warmup)) {
+    if (!is.null(warmup)) {
+        rir.compile(warmup)
+        pir.compile(warmup)
         for (i in 1:as.numeric(Sys.getenv("PIR_WARMUP", unset="3")))
-            do.call(f, warmup)
+            warmup(f)
     }
     .Call("pir_check", f, checks)
+    #.Call("pir_check_warmup_end")
 }
 
 # creates a bitset with pir debug options

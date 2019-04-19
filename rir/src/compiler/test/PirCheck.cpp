@@ -15,7 +15,7 @@ namespace rir {
 
 using namespace pir;
 
-static ClosureVersion* compilePir(SEXP f, Module* m) {
+static ClosureVersion* recompilePir(SEXP f, Module* m) {
     if (TYPEOF(f) != CLOSXP) {
         Rf_warning("pir check failed: not a closure");
         return nullptr;
@@ -146,12 +146,8 @@ PirCheck::Type PirCheck::parseType(const char* str) {
 }
 
 bool PirCheck::run(SEXP f) {
-    size_t oldMaxInput = pir::Parameter::MAX_INPUT_SIZE;
-    size_t oldInlinerMax = pir::Parameter::INLINER_MAX_SIZE;
-    pir::Parameter::MAX_INPUT_SIZE = 3000;
-    pir::Parameter::INLINER_MAX_SIZE = 3000;
     Module m;
-    ClosureVersion* pir = compilePir(f, &m);
+    ClosureVersion* pir = recompilePir(f, &m);
     bool success = pir;
     if (success) {
         for (PirCheck::Type type : types) {
@@ -168,10 +164,9 @@ bool PirCheck::run(SEXP f) {
             }
         }
     }
-    pir::Parameter::MAX_INPUT_SIZE = oldMaxInput;
-    pir::Parameter::INLINER_MAX_SIZE = oldInlinerMax;
     if (!success)
         m.print(std::cout, false);
     return success;
 }
+
 } // namespace rir
