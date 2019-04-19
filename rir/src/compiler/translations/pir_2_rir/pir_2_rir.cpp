@@ -1,11 +1,13 @@
 #include "pir_2_rir.h"
 #include "../../analysis/last_env.h"
 #include "../../pir/pir_impl.h"
+#include "../../pir/value_list.h"
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
+#include "compiler/parameter.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -701,13 +703,57 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             order.push_back(bb->id);
     });
 
-    std::unordered_map<Instruction*, AUses::Kind> needsRefcount;
+    std::unordered_set<Instruction*> needsEnsureNamed;
+    std::unordered_set<Instruction*> needsSetShared;
+    std::unordered_set<Instruction*> needsLdVarForUpdate;
+    bool refcountAnalysisOverflow = false;
     {
+        Visitor::run(code->entry, [&](Instruction* i) {
+            switch (i->tag) {
+            case Tag::ForSeqSize:
+                if (auto arg = Instruction::Cast(i->arg(0).val()))
+                    if (arg->minReferenceCount() < Value::MAX_REFCOUNT)
+                        needsSetShared.insert(arg);
+                break;
+            case Tag::Subassign1_1D:
+            case Tag::Subassign2_1D:
+            case Tag::Subassign1_2D:
+            case Tag::Subassign2_2D:
+                // Subassigns override the vector, even if the named count
+                // is 1. This is only valid, if we are sure that the vector
+                // is local, ie. vector and subassign operation come from
+                // the same lexical scope.
+                if (auto vec = Instruction::Cast(
+                        i->arg(1).val()->followCastsAndForce())) {
+                    if (auto ld = LdVar::Cast(vec)) {
+                        if (auto su = vec->hasSingleUse()) {
+                            if (auto st = StVar::Cast(su)) {
+                                if (ld->env() != st->env())
+                                    needsLdVarForUpdate.insert(vec);
+                                break;
+                            }
+                        }
+                        if (ld->env() != i->env())
+                            needsLdVarForUpdate.insert(vec);
+                    } else {
+                        if (vec->minReferenceCount() < 2 &&
+                            !vec->hasSingleUse())
+                            needsSetShared.insert(vec);
+                    }
+                }
+                break;
+            default: {}
+            }
+        });
+
         StaticReferenceCount analysis(cls, log);
-        for (auto& u : analysis.result().uses) {
-            if (u.second > AUses::Once)
-                needsRefcount[u.first] = u.second;
-        }
+        if (analysis.result().overflow)
+            refcountAnalysisOverflow = true;
+        else
+            for (auto& u : analysis.result().uses) {
+                if (u.second == AUses::Multiple)
+                    needsEnsureNamed.insert(u.first);
+            }
     }
 
     CodeBuffer cb(ctx.cs());
@@ -814,6 +860,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::push(R_TrueValue));
                     } else if (what == False::instance()) {
                         cb.add(BC::push(R_FalseValue));
+                    } else if (what == NaLogical::instance()) {
+                        cb.add(BC::push(R_LogicalNAValue));
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the arg ";
@@ -917,7 +965,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
-                cb.add(BC::ldvarNoForce(ldvar->varName));
+                if (needsLdVarForUpdate.count(instr))
+                    cb.add(BC::ldvarForUpdate(ldvar->varName));
+                else
+                    cb.add(BC::ldvarNoForce(ldvar->varName));
                 break;
             }
 
@@ -987,6 +1038,28 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Is: {
                 auto is = Is::Cast(instr);
                 cb.add(BC::is(is->sexpTag));
+                break;
+            }
+
+            case Tag::IsType: {
+                auto is = IsType::Cast(instr);
+                auto t = is->typeTest;
+                assert(!t.isVoid() && !t.maybeObj() && !t.maybeLazy() &&
+                       !t.maybePromiseWrapped());
+
+                if (t.isA(RType::integer)) {
+                    if (t.isScalar())
+                        cb.add(BC::is(TypeChecks::IntegerSimpleScalar));
+                    else
+                        cb.add(BC::is(TypeChecks::IntegerNonObject));
+                } else if (t.isA(RType::real)) {
+                    if (t.isScalar())
+                        cb.add(BC::is(TypeChecks::RealSimpleScalar));
+                    else
+                        cb.add(BC::is(TypeChecks::RealNonObject));
+                } else {
+                    assert(false);
+                }
                 break;
             }
 
@@ -1227,13 +1300,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             // Values, not instructions
-            case Tag::Tombstone:
-            case Tag::MissingArg:
-            case Tag::UnboundValue:
-            case Tag::Env:
-            case Tag::Nil:
-            case Tag::False:
-            case Tag::True: {
+#define V(Value) case Tag::Value:
+            COMPILER_VALUES(V) {
+#undef V
                 break;
             }
 
@@ -1243,12 +1312,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
-            if (instr->needsReferenceCount()) {
-                if (needsRefcount[instr] == AUses::Multiple)
-                    cb.add(BC::ensureNamed());
-                else if (needsRefcount[instr] == AUses::Destructive)
-                    cb.add(BC::setShared());
-            }
+            if (instr->minReferenceCount() < 2 && needsSetShared.count(instr))
+                cb.add(BC::setShared());
+            else if (instr->minReferenceCount() < 1 &&
+                     (refcountAnalysisOverflow ||
+                      needsEnsureNamed.count(instr)))
+                cb.add(BC::ensureNamed());
 
             // Store the result
             if (alloc.sa.dead(instr)) {
@@ -1274,16 +1343,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     return res;
 }
 
-static bool DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
-                           0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
-static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
-                          0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
-static bool DEOPT_CHAOS_SEED = getenv("PIR_DEOPT_CHAOS_SEED")
-                                   ? atoi(getenv("PIR_DEOPT_CHAOS_SEED"))
-                                   : std::random_device()();
-
 static bool coinFlip() {
-    static std::mt19937 gen(DEOPT_CHAOS_SEED);
+    static std::mt19937 gen(Parameter::DEOPT_CHAOS_SEED);
     static std::bernoulli_distribution coin(0.03);
     return coin(gen);
 };
@@ -1311,12 +1372,12 @@ void Pir2Rir::lower(Code* code) {
                 bb->replace(it, newDeopt);
             } else if (auto expect = Assume::Cast(*it)) {
                 auto condition = expect->condition();
-                if (DEOPT_CHAOS && coinFlip()) {
+                if (Parameter::DEOPT_CHAOS && coinFlip()) {
                     condition = expect->assumeTrue ? (Value*)False::instance()
                                                    : (Value*)True::instance();
                 }
                 std::string debugMessage;
-                if (DEBUG_DEOPTS) {
+                if (Parameter::DEBUG_DEOPTS) {
                     std::stringstream dump;
                     debugMessage = "DEOPT, assumption ";
                     expect->condition()->printRef(dump);
@@ -1459,6 +1520,14 @@ rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, bool dryRun) {
     }
     return fun;
 }
+
+bool Parameter::DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
+                               0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
+bool Parameter::DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
+                              0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
+bool Parameter::DEOPT_CHAOS_SEED = getenv("PIR_DEOPT_CHAOS_SEED")
+                                       ? atoi(getenv("PIR_DEOPT_CHAOS_SEED"))
+                                       : std::random_device()();
 
 } // namespace pir
 } // namespace rir

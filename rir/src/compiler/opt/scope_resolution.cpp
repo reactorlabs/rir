@@ -33,10 +33,25 @@ class TheScopeResolution {
         if (finalState.noReflection())
             function->properties.set(ClosureVersion::Property::NoReflection);
 
-        std::unordered_map<Value*, Value*> alreadyReplaced;
+        std::unordered_map<Value*, Value*> replacedValue;
+        auto getReplacedValue = [&](Value* val) {
+            while (replacedValue.count(val))
+                val = replacedValue.at(val);
+            return val;
+        };
+        auto getSingleLocalValue =
+            [&](const AbstractPirValue& result) -> Value* {
+            if (!result.isSingleValue())
+                return nullptr;
+            if (result.singleValue().recursionLevel != 0)
+                return nullptr;
+            auto val = getReplacedValue(result.singleValue().val);
+            assert(val->validIn(function));
+            return val;
+        };
 
         auto tryInsertPhis = [&](AbstractPirValue res, BB* bb,
-                                 BB::Instrs::iterator& iter) -> Instruction* {
+                                 BB::Instrs::iterator& iter) -> Value* {
             if (res.isUnknown())
                 return nullptr;
 
@@ -104,14 +119,10 @@ class TheScopeResolution {
 
                 assert(computed.second.size() > 1);
                 for (auto& p : computed.second) {
-                    if (p.aValue) {
-                        auto val = p.aValue;
-                        while (alreadyReplaced.count(val))
-                            val = alreadyReplaced.at(val);
-                        phi->addInput(p.inputBlock, val);
-                    } else {
+                    if (p.aValue)
+                        phi->addInput(p.inputBlock, getReplacedValue(p.aValue));
+                    else
                         phi->addInput(p.inputBlock, thePhis.at(p.otherPhi));
-                    }
                 };
 
                 pos->insert(pos->begin(), phi);
@@ -127,7 +138,7 @@ class TheScopeResolution {
             for (auto& phi : thePhis)
                 phi.second->updateType();
 
-            return thePhis.at(pl.targetPhi);
+            return thePhis.at(pl.targetPhiPosition);
         };
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -164,7 +175,7 @@ class TheScopeResolution {
                         auto r = new StVar(sts->varName, sts->val(), aLoad.env);
                         bb->replace(ip, r);
                         sts->replaceUsesWith(r);
-                        alreadyReplaced[sts] = r;
+                        replacedValue[sts] = r;
                     }
                     ip = next;
                     continue;
@@ -193,15 +204,17 @@ class TheScopeResolution {
                                     initiallyMissing = val->type.maybeMissing();
                             });
                             if (!initiallyMissing) {
-                                missing->replaceUsesAndSwapWith(
-                                    new LdConst(R_FalseValue), ip);
+                                auto theFalse = new LdConst(R_FalseValue);
+                                missing->replaceUsesAndSwapWith(theFalse, ip);
+                                replacedValue[missing] = theFalse;
                             }
                         }
                     } else {
                         res.result.ifSingleValue([&](Value* v) {
                             if (v == MissingArg::instance()) {
-                                missing->replaceUsesAndSwapWith(
-                                    new LdConst(R_TrueValue), ip);
+                                auto theTruth = new LdConst(R_TrueValue);
+                                missing->replaceUsesAndSwapWith(theTruth, ip);
+                                replacedValue[missing] = theTruth;
                             }
                         });
                     }
@@ -225,13 +238,8 @@ class TheScopeResolution {
                                             names.push_back(e.first);
                                             if (e.second.isUnknown())
                                                 return;
-                                            if (e.second.isSingleValue()) {
-                                                auto val =
-                                                    e.second.singleValue().val;
-                                                while (
-                                                    alreadyReplaced.count(val))
-                                                    val =
-                                                        alreadyReplaced.at(val);
+                                            if (auto val = getSingleLocalValue(
+                                                    e.second)) {
                                                 values.push_back(val);
                                             } else {
                                                 auto phi = tryInsertPhis(
@@ -244,8 +252,9 @@ class TheScopeResolution {
                                         auto deoptEnv =
                                             new MkEnv(mk->lexicalEnv(), names,
                                                       values.data());
-                                        next = bb->insert(ip, deoptEnv);
-                                        next++;
+                                        ip = bb->insert(ip, deoptEnv);
+                                        ip++;
+                                        next = ip + 1;
                                         mk->replaceUsesWithLimits(deoptEnv, bb);
                                     });
                             }
@@ -253,23 +262,31 @@ class TheScopeResolution {
                     }
                 }
 
-                analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
+                analysis.lookupAt(after, i, [&](const AbstractLoad& aLoad) {
                     auto& res = aLoad.result;
+
+                    bool isActualLoad =
+                        LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
 
                     // In case the scope analysis is sure that this is
                     // actually the same as some other PIR value. So let's just
                     // replace it.
                     if (res.isSingleValue()) {
-                        auto value = res.singleValue();
-                        if (value.val->type.isA(i->type) &&
-                            value.recursionLevel == 0) {
-                            auto val = value.val;
-                            while (alreadyReplaced.count(val))
-                                val = alreadyReplaced.at(val);
-                            alreadyReplaced[i] = val;
-                            i->replaceUsesWith(val);
-                            next = bb->remove(ip);
-                            return;
+                        if (auto val = getSingleLocalValue(res)) {
+                            if (val->type.isA(i->type)) {
+                                if (isActualLoad && val->type.maybeMissing()) {
+                                    // LdVar checks for missingness, so we need
+                                    // to preserve this.
+                                    auto chk = new ChkMissing(val);
+                                    ip = bb->insert(ip, chk);
+                                    ip++;
+                                    val = chk;
+                                }
+                                replacedValue[i] = val;
+                                i->replaceUsesWith(val);
+                                next = bb->remove(ip);
+                                return;
+                            }
                         }
                     }
 
@@ -291,12 +308,19 @@ class TheScopeResolution {
                     // the same phi twice (e.g. if a force returns the result
                     // of a load, we will resolve the load and the force) which
                     // ends up being rather painful.
-                    bool isActualLoad =
-                        LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
                     if (!res.isUnknown() && isActualLoad) {
                         if (auto resPhi = tryInsertPhis(res, bb, ip)) {
-                            i->replaceUsesWith(resPhi);
-                            alreadyReplaced[i] = resPhi;
+                            Value* val = resPhi;
+                            if (val->type.maybeMissing()) {
+                                // LdVar checks for missingness, so we need
+                                // to preserve this.
+                                auto chk = new ChkMissing(val);
+                                ip = bb->insert(ip, chk);
+                                ip++;
+                                val = chk;
+                            }
+                            i->replaceUsesWith(val);
+                            replacedValue[i] = val;
                             next = bb->remove(ip);
                             return;
                         }
@@ -310,7 +334,7 @@ class TheScopeResolution {
                             auto r = new LdVar(lds->varName, e);
                             bb->replace(ip, r);
                             lds->replaceUsesWith(r);
-                            alreadyReplaced[lds] = r;
+                            replacedValue[lds] = r;
                         }
                         return;
                     }
@@ -335,19 +359,21 @@ class TheScopeResolution {
                             // TODO: if !guess->maybe(closure) we know that the
                             // guess is wrong and could try the next binding.
                             if (!guess->type.isA(PirType::closure())) {
-                                analysis.lookup(
-                                    before, guess,
-                                    [&](const AbstractPirValue& res) {
-                                        if (res.isSingleValue())
-                                            guess = res.singleValue().val;
-                                    });
+                                if (auto i = Instruction::Cast(guess)) {
+                                    analysis.lookupAt(
+                                        before, i,
+                                        [&](const AbstractPirValue& res) {
+                                            if (auto val =
+                                                    getSingleLocalValue(res))
+                                                guess = val;
+                                        });
+                                }
                             }
                             if (guess->type.isA(PirType::closure()) &&
                                 guess->validIn(function)) {
-                                while (alreadyReplaced.count(guess))
-                                    guess = alreadyReplaced.at(guess);
+                                guess = getReplacedValue(guess);
                                 ldfun->replaceUsesWith(guess);
-                                alreadyReplaced[ldfun] = guess;
+                                replacedValue[ldfun] = guess;
                                 next = bb->remove(ip);
                                 return;
                             }
@@ -356,15 +382,11 @@ class TheScopeResolution {
                                 analysis
                                     .load(before, ldfun->varName, ldfun->env())
                                     .result;
-                            if (res.isSingleValue()) {
-                                auto firstBinding = res.singleValue().val;
-                                if (firstBinding->validIn(function)) {
-                                    ip =
-                                        bb->insert(ip, new Force(firstBinding,
-                                                                 ldfun->env()));
-                                    ldfun->guessedBinding(*ip);
-                                    next = ip + 2;
-                                }
+                            if (auto firstBinding = getSingleLocalValue(res)) {
+                                ip = bb->insert(
+                                    ip, new Force(firstBinding, ldfun->env()));
+                                ldfun->guessedBinding(*ip);
+                                next = ip + 2;
                                 return;
                             }
                         }
@@ -401,7 +423,7 @@ class TheScopeResolution {
                             new CallSafeBuiltin(b->blt, args, b->srcIdx);
                         b->replaceUsesWith(safe);
                         bb->replace(ip, safe);
-                        alreadyReplaced[b] = safe;
+                        replacedValue[b] = safe;
                     }
                 }
 

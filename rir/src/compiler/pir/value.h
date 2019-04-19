@@ -50,8 +50,10 @@ class Value {
                (type.isRType() || type == NativeType::test);
     }
 
-    virtual bool needsReferenceCount() const {
-        return type.maybeReferenceCounted();
+    static constexpr int MAX_REFCOUNT = 2;
+
+    virtual int minReferenceCount() const {
+        return type.maybeReferenceCounted() ? 0 : MAX_REFCOUNT;
     }
 };
 

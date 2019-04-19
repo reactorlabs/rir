@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "R/r_incl.h"
-#include "ir/RuntimeFeedback.h"
 #include "runtime/Assumptions.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/EnumSet.h"
 
 namespace rir {
@@ -179,6 +179,9 @@ struct PirType {
         return PirType(RType::logical) | RType::integer | RType::real |
                RType::cplx;
     }
+    static constexpr PirType atomOrSimpleVec() {
+        return num() | RType::sym | RType::chr | RType::str | RType::code;
+    }
     static constexpr PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
@@ -198,6 +201,12 @@ struct PirType {
 
     static constexpr PirType simpleScalarLogical() {
         return PirType(RType::logical).notObject().scalar();
+    }
+
+    static constexpr PirType simpleScalar() {
+        return (PirType(RType::integer) | RType::real | RType::logical)
+            .notObject()
+            .scalar();
     }
 
     static constexpr PirType promiseWrappedVal() {
@@ -232,6 +241,9 @@ struct PirType {
     }
     RIR_INLINE constexpr bool isRType() const {
         return flags_.includes(TypeFlags::rtype);
+    }
+    RIR_INLINE bool isRType(const RType& o) const {
+        return isRType() && t_.r == o;
     }
     RIR_INLINE constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
@@ -306,6 +318,10 @@ struct PirType {
         return PirType(t_.r, flags_ | TypeFlags::maybeObject);
     }
 
+    PirType constexpr notLazy() const {
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
+    }
+
     PirType constexpr forced() const {
         assert(isRType());
         FlagSet notPromised =
@@ -327,12 +343,15 @@ struct PirType {
         t_.r = RTypeSet(rtype);
     }
 
+    bool isVoid() const {
+        if (isRType())
+            return t_.r.empty();
+        else
+            return t_.n.empty();
+    }
+
     static const PirType voyd() { return PirType(NativeTypeSet()); }
     static const PirType bottom() { return optimistic(); }
-
-    RIR_INLINE bool operator==(const RType& o) const {
-        return isRType() && t_.r == o;
-    }
 
     RIR_INLINE bool operator==(const NativeType& o) const {
         return !isRType() && t_.n == o;
@@ -362,7 +381,7 @@ struct PirType {
         return t_.r.includes(o.t_.r);
     }
 
-    void print(std::ostream& out = std::cout);
+    void print(std::ostream& out = std::cout) const;
 };
 
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {

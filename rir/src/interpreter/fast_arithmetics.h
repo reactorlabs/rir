@@ -7,6 +7,26 @@
 #define GOODIPROD(x, y, z) ((double)(x) * (double)(y) == (z))
 #define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
 
+static SEXPREC createFakeSEXP(SEXPTYPE t) {
+    SEXPREC res;
+    res.attrib = R_NilValue;
+    res.gengc_next_node = R_NilValue;
+    res.gengc_prev_node = R_NilValue;
+    res.sxpinfo.gcgen = 1;
+    res.sxpinfo.mark = 1;
+    res.sxpinfo.named = 2;
+    res.sxpinfo.type = t;
+    return res;
+}
+
+static SEXPREC createFakeCONS(SEXP cdr) {
+    auto res = createFakeSEXP(LISTSXP);
+    res.u.listsxp.carval = R_NilValue;
+    res.u.listsxp.tagval = R_NilValue;
+    res.u.listsxp.cdrval = cdr;
+    return res;
+}
+
 #define DO_UNOP(op)                                                            \
     do {                                                                       \
         scalar_value_t scalarOp;                                               \
@@ -146,20 +166,24 @@
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
+        if (flag < 2)                                                          \
+            R_Visible = static_cast<Rboolean>(flag != 1);                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
-        PROTECT(call);                                                         \
         SEXP lhsSexp = ostackSexpAt(ctx, 1);                                   \
-        PROTECT(lhsSexp);                                                      \
         SEXP rhsSexp = ostackSexpAt(ctx, 0);                                   \
-        SEXP argslist = CONS_NR(lhsSexp, CONS_NR(rhsSexp, R_NilValue));        \
-        UNPROTECT(2);                                                          \
-        ostackPushSexp(ctx, argslist);                                         \
-        if (flag < 2)                                                          \
-            R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        SEXP res = blt(call, prim, argslist, env);                             \
-        if (flag < 2)                                                          \
-            R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        ostackPopn(ctx, 3);                                                    \
+        if (!env || !(isObject(lhsSexp) || isObject(rhsSexp))) {               \
+            SEXPREC arglist2 = createFakeCONS(R_NilValue);                     \
+            SEXPREC arglist = createFakeCONS(&arglist2);                       \
+            arglist.u.listsxp.carval = lhsSexp;                                \
+            arglist2.u.listsxp.carval = rhsSexp;                               \
+            res = blt(call, prim, &arglist, env);                              \
+            ostackPopn(ctx, 2);                                                \
+        } else {                                                               \
+            SEXP argslist = CONS_NR(lhsSexp, CONS_NR(rhsSexp, R_NilValue));    \
+            ostackPushSexp(ctx, argslist);                                     \
+            res = blt(call, prim, argslist, env);                              \
+            ostackPopn(ctx, 3);                                                \
+        }                                                                      \
         ostackPushSexp(ctx, res);                                              \
     } while (false)
 

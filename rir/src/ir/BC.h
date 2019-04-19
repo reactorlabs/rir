@@ -23,7 +23,7 @@ class CodeStream;
 BC_NOARGS(V, _)
 #undef V
 BC BC::recordCall() { return BC(Opcode::record_call_); }
-BC BC::recordBinop() { return BC(Opcode::record_binop_); }
+BC BC::recordType() { return BC(Opcode::record_type_); }
 BC BC::popn(unsigned n) {
     ImmediateArguments i;
     i.i = n;
@@ -69,6 +69,13 @@ BC BC::ldvar(SEXP sym) {
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_, i);
+}
+BC BC::ldvarForUpdate(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::ldvar_for_update_, i);
 }
 BC BC::ldvarNoForce(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
@@ -209,6 +216,7 @@ BC BC::pick(uint32_t i) {
     im.i = i;
     return BC(Opcode::pick_, im);
 }
+BC BC::is(TypeChecks i) { return BC::is(static_cast<uint32_t>(i)); }
 BC BC::is(uint32_t i) {
     ImmediateArguments im;
     im.i = i;

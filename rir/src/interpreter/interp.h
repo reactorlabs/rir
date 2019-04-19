@@ -18,9 +18,6 @@ const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
 
 namespace rir {
 
-static unsigned PIR_WARMUP =
-    getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
-
 struct InterpreterInstance;
 struct Code;
 struct CallContext;
@@ -46,7 +43,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 SEXP rirExpr(SEXP f);
 
 SEXP rirEval_f(SEXP f, SEXP env);
-SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP);
+SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP, SEXP);
 
 SEXP argsLazyCreation(void* rirDataWrapper);
 

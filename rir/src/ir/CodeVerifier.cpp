@@ -110,6 +110,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
@@ -170,7 +171,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::lgl_and_:
     case Opcode::lgl_or_:
     case Opcode::record_call_:
-    case Opcode::record_binop_:
+    case Opcode::record_type_:
     case Opcode::deopt_:
     case Opcode::pop_context_:
     case Opcode::push_context_:

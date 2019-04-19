@@ -6,10 +6,11 @@
 #include "R/Symbols.h"
 #include "binding_cache.h"
 #include "builtins.h"
+#include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "fast_arithmetics.h"
 #include "ir/Deoptimization.h"
-#include "ir/RuntimeFeedback_inl.h"
+#include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
 #include "utils/Pool.h"
 
@@ -550,8 +551,7 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-static void addDynamicAssumptionsFromContext(CallContext& call,
-                                             InterpreterInstance* ctx) {
+static void addDynamicAssumptionsFromContext(CallContext& call) {
     Assumptions& given = call.givenAssumptions;
 
     if (!call.hasNames())
@@ -573,11 +573,12 @@ static void addDynamicAssumptionsFromContext(CallContext& call,
                     notObj = false;
                     isEager = false;
                 }
-            } else if (arg->tag == STACK_OBJ_SEXP && isObject(arg->u.sxpval)) {
-                notObj = false;
-            } else if (arg->tag == STACK_OBJ_SEXP &&
-                       arg->u.sxpval == R_MissingArg) {
+            } else if (stackObjIsBoxed(arg) && stackSexp(arg) == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
+                isEager = false;
+            }
+            if (stackObjIsObject(arg)) {
+                notObj = false;
             }
             if (isEager)
                 given.setEager(i);
@@ -686,6 +687,9 @@ static Function* dispatch(const CallContext& call, DispatchTable* vt) {
     return fun;
 };
 
+unsigned pir::Parameter::RIR_WARMUP =
+    getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
+
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
@@ -693,11 +697,12 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
-    addDynamicAssumptionsFromContext(call, ctx);
+    addDynamicAssumptionsFromContext(call);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!fun->unoptimizable && fun->invocationCount() % PIR_WARMUP == 0) {
+    if (!fun->unoptimizable &&
+        fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -1221,9 +1226,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             PROTECT(parent);
             bool hasMissing = false;
             for (long i = n - 1; i >= 0; --i) {
-                PROTECT(arglist);
                 SEXP val = ostackPopSexp(ctx);
-                UNPROTECT(1);
+                ENSURE_NAMED(val);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
@@ -1284,8 +1288,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto names = pc;
             advanceImmediateN(n);
             std::vector<SEXP>* args = new std::vector<SEXP>();
-            for (size_t i = 0; i < n; ++i)
-                args->push_back(ostackPopSexp(ctx));
+            for (size_t i = 0; i < n; ++i) {
+                SEXP val = ostackPopSexp(ctx);
+                ENSURE_NAMED(val);
+                args->push_back(val);
+            }
             auto envStub =
                 new LazyEnvironment(args, parent, names, ctx, localsBase);
             envStubs.push_back(envStub);
@@ -1341,6 +1348,48 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             default:
                 Rf_error("attempt to apply non-function");
             }
+            ostackPushSexp(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_for_update_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            SEXP loc = cachedGetBindingCell(env, id, ctx, bindingCache);
+            bool isLocal = loc;
+            SEXP res = nullptr;
+
+            if (isLocal) {
+                res = CAR(loc);
+                if (res == R_UnboundValue)
+                    isLocal = false;
+            }
+
+            if (!isLocal) {
+                SEXP sym = cp_pool_at(ctx, id);
+                res = Rf_findVar(sym, env);
+            }
+
+            if (res == R_UnboundValue) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            }
+
+            // if promise, evaluate & return
+            if (TYPEOF(res) == PROMSXP)
+                res = promiseValue(res, ctx);
+
+            if (res != R_NilValue) {
+                if (isLocal)
+                    ENSURE_NAMED(res);
+                else if (NAMED(res) < 2)
+                    SET_NAMED(res, 2);
+            }
+
             ostackPushSexp(ctx, res);
             NEXT();
         }
@@ -1590,13 +1639,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(record_binop_) {
+        INSTRUCTION(record_type_) {
             ObservedValues* feedback = (ObservedValues*)pc;
-            R_bcstack_t* l = ostackCellAt(ctx, 1);
-            R_bcstack_t* r = ostackCellAt(ctx, 0);
-            feedback[0].record(l);
-            feedback[1].record(r);
-            pc += 2 * sizeof(ObservedValues);
+            R_bcstack_t* t = ostackCellAt(ctx, 0);
+            feedback->record(t);
+            pc += sizeof(ObservedValues);
             NEXT();
         }
 
@@ -1721,24 +1768,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
                              given, ctx);
             auto fun = Function::unpack(version);
-            SEXP res;
-            addDynamicAssumptionsFromContext(call, ctx);
-            bool dispatchFail = !matches(call, fun->signature());
-            if (fun->invocationCount() % PIR_WARMUP == 0) {
+            addDynamicAssumptionsFromContext(call);
+            bool dispatchFail = !fun->dead && !matches(call, fun->signature());
+            if (fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
-                if (assumptions != fun->signature().assumptions) {
+                if (assumptions != fun->signature().assumptions)
                     // We have more assumptions available, let's recompile
                     dispatchFail = true;
-
-#ifdef DEBUG_DISPATCH
-                    std::cout << "Optimizing static for new context:";
-                    std::cout << given << " vs " << fun->signature().assumptions
-                              << "\n";
-#endif
-                    SEXP name = CAR(call.ast);
-                    ctx->closureOptimizer(callee, assumptions, name);
-                }
             }
 
             if (dispatchFail) {
@@ -2213,19 +2250,23 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(asbool_) {
             R_bcstack_t* val = ostackCellPop(ctx);
-            if (stackObjIsBoxed(val)) {
-                if (XLENGTH(val->u.sxpval) > 1)
-                    Rf_warningcall(getSrcAt(c, pc - 1, ctx),
-                                   "the condition has length > 1 and "
-                                   "only the first "
-                                   "element will be used");
-
-                if (XLENGTH(val->u.sxpval) == 0)
-                    Rf_errorcall(getSrcAt(c, pc - 1, ctx),
-                                 "missing value where "
-                                 "TRUE/FALSE needed");
+            R_xlen_t length = stackObjLength(val);
+            if (length > 1) {
+                Rf_warningcall(getSrcAt(c, pc - 1, ctx),
+                               "the condition has length > 1 and "
+                               "only the first "
+                               "element will be used");
+            } else if (length == 1) {
+                ostackPushLogical(ctx, stackObjAsLglScalar(val));
+            } else {
+                const char* msg =
+                    length
+                        ? (stackObjIsLogical(val)
+                               ? ("missing value where TRUE/FALSE needed")
+                               : ("argument is not interpretable as logical"))
+                        : ("argument is of length zero");
+                Rf_errorcall(getSrcAt(c, pc - 1, ctx), msg);
             }
-            ostackPushLogical(ctx, stackObjAsLglScalar(val));
             NEXT();
         }
 
@@ -2273,6 +2314,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             case LISTSXP:
                 logical_res = type == LISTSXP || type == NILSXP;
+                break;
+
+            case static_cast<Immediate>(TypeChecks::RealNonObject):
+                logical_res =
+                    stackObjTypeof(val) == REALSXP && !stackObjIsObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+                logical_res = stackObjIsSimpleScalar(val, REALSXP);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+                logical_res =
+                    stackObjTypeof(val) == INTSXP && !stackObjIsObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+                logical_res = stackObjIsSimpleScalar(val, INTSXP);
                 break;
 
             default:
@@ -2764,6 +2820,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 #endif
 
+            if (!pir::Parameter::DEOPT_CHAOS) {
+                // TODO: this version is still reachable from static call inline
+                // caches. Thus we need to preserve it forever. We need some
+                // dependency management here.
+                Pool::insert(c->container());
+                // remove the deoptimized function. Unless on deopt chaos,
+                // always recompiling would just blow testing time...
+                auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
+                dt->remove(c);
+            }
             assert(m->numFrames >= 1);
             size_t stackHeight = 0;
             for (size_t i = 0; i < m->numFrames; ++i)
@@ -2867,6 +2933,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             if (res) {
+                R_Visible = (Rboolean) true;
                 ostackPopn(ctx, 2);
                 ostackPushSexp(ctx, res);
             } else {
@@ -3034,7 +3101,8 @@ SEXP rirExpr(SEXP s) {
     return s;
 }
 
-SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
+SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
+                     SEXP suppliedvars) {
     auto ctx = globalContext();
 
     RList args(arglist);
@@ -3050,6 +3118,21 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
     }
     if (!names.empty()) {
         names.resize(nargs);
+    }
+    // Add extra arguments from object dispatching
+    if (suppliedvars != R_NilValue) {
+        auto extra = RList(suppliedvars);
+        for (auto a = extra.begin(); a != extra.end(); ++a) {
+            if (a.hasTag()) {
+                auto var = Pool::insert(a.tag());
+                if (std::find(names.begin(), names.end(), var) == names.end()) {
+                    ostackPushSexp(ctx, *a);
+                    names.resize(nargs + 1);
+                    names[nargs] = var;
+                    nargs++;
+                }
+            }
+        }
     }
 
     CallContext call(nullptr, op, nargs, ast, ostackCellAt(ctx, nargs - 1),

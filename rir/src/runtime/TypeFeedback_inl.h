@@ -1,10 +1,19 @@
 #ifndef RIR_RUNTIME_FEEDBACK_INL_H
 #define RIR_RUNTIME_FEEDBACK_INL_H
 
-#include "RuntimeFeedback.h"
-#include "runtime/Code.h"
+#include "Code.h"
+#include "TypeFeedback.h"
 
 namespace rir {
+
+ObservedType::ObservedType(SEXP s)
+    : sexptype((uint8_t)TYPEOF(s)), scalar(IS_SCALAR(s, TYPEOF(s))),
+      object(OBJECT(s)), attribs(ATTRIB(s) != R_NilValue) {}
+
+ObservedType::ObservedType(R_bcstack_t* s)
+    : sexptype((uint8_t)stackObjTypeof(s)), scalar(stackObjIsScalar(s)),
+      object(s->tag == STACK_OBJ_SEXP && OBJECT(s->u.sxpval)),
+      attribs(s->tag == STACK_OBJ_SEXP && ATTRIB(s->u.sxpval) != R_NilValue) {}
 
 void ObservedCallees::record(Code* caller, SEXP callee) {
     if (taken < CounterOverflow)

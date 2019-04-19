@@ -6,6 +6,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/parameter.h"
 #include "pass_definitions.h"
 #include "utils/Pool.h"
 
@@ -21,14 +22,10 @@ class TheInliner {
     ClosureVersion* version;
     explicit TheInliner(ClosureVersion* version) : version(version) {}
 
-    static const size_t MAX_SIZE;
-    static const size_t MAX_INLINEE_SIZE;
-    static const size_t INITIAL_FUEL;
-
     void operator()() {
-        size_t fuel = INITIAL_FUEL;
+        size_t fuel = Parameter::INLINER_INITIAL_FUEL;
 
-        if (version->size() > MAX_SIZE)
+        if (version->size() > Parameter::INLINER_MAX_SIZE)
             return;
 
         Visitor::run(version->entry, [&](BB* bb) {
@@ -119,7 +116,8 @@ class TheInliner {
                 // No recursive inlining
                 if (inlinee->owner() == version->owner()) {
                     continue;
-                } else if (inlinee->size() > MAX_INLINEE_SIZE) {
+                } else if (inlinee->size() >
+                           Parameter::INLINER_MAX_INLINEE_SIZE) {
                     inlineeCls->rirFunction()->uninlinable = true;
                     continue;
                 } else {
@@ -225,8 +223,8 @@ class TheInliner {
                                                           ->type.forced()
                                                           .orPromiseWrapped()
                                                     : ld->type;
-                                    auto cast =
-                                        new CastType(a, RType::prom, type);
+                                    auto cast = new CastType(a, RType::prom,
+                                                             type.notMissing());
                                     ip = bb->insert(ip + 1, cast);
                                     ip--;
                                     a = cast;
@@ -319,24 +317,24 @@ class TheInliner {
     }
 };
 
-// TODO: maybe implement something more resonable to pass in those constants.
-// For now it seems a simple env variable is just fine.
-const size_t TheInliner::MAX_SIZE = getenv("PIR_INLINER_MAX_SIZE")
-                                        ? atoi(getenv("PIR_INLINER_MAX_SIZE"))
-                                        : 4000;
-const size_t TheInliner::MAX_INLINEE_SIZE =
-    getenv("PIR_INLINER_MAX_INLINEE_SIZE")
-        ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
-        : 100;
-const size_t TheInliner::INITIAL_FUEL =
-    getenv("PIR_INLINER_INITIAL_FUEL")
-        ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
-        : 5;
-
 } // namespace
 
 namespace rir {
 namespace pir {
+
+// TODO: maybe implement something more resonable to pass in those constants.
+// For now it seems a simple env variable is just fine.
+size_t Parameter::INLINER_MAX_SIZE = getenv("PIR_INLINER_MAX_SIZE")
+                                         ? atoi(getenv("PIR_INLINER_MAX_SIZE"))
+                                         : 4000;
+size_t Parameter::INLINER_MAX_INLINEE_SIZE =
+    getenv("PIR_INLINER_MAX_INLINEE_SIZE")
+        ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
+        : 100;
+size_t Parameter::INLINER_INITIAL_FUEL =
+    getenv("PIR_INLINER_INITIAL_FUEL")
+        ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
+        : 5;
 
 void Inline::apply(RirCompiler&, ClosureVersion* version, LogStream&) const {
     TheInliner s(version);

@@ -75,10 +75,10 @@ void Configurations::defaultOptimizations() {
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
-    optimizations.push_back(new pir::ElideEnvSpec());
+    optimizations.push_back(new pir::TypeSpeculation());
     optimizations.push_back(new pir::ElideEnvSpec());
     addDefaultOpt();
-    optimizations.push_back(new pir::ElideEnvSpec());
+    optimizations.push_back(new pir::TypeSpeculation());
     optimizations.push_back(new pir::ElideEnvSpec());
 
     phasemarker("Phase 2: Env speculation");

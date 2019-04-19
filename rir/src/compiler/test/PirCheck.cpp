@@ -7,6 +7,7 @@
 #include "../translations/rir_2_pir/rir_2_pir.h"
 #include "../util/visitor.h"
 #include "api.h"
+#include "compiler/parameter.h"
 #include <string>
 #include <vector>
 
@@ -106,6 +107,34 @@ static bool testReturns42L(ClosureVersion* f) {
     return true;
 };
 
+static bool testNoAsInt(ClosureVersion* f) {
+    return Visitor::check(f->entry,
+                          [&](Instruction* i) { return !AsInt::Cast(i); });
+}
+
+static bool testNoEq(ClosureVersion* f) {
+    return Visitor::check(f->entry,
+                          [&](Instruction* i) { return !Eq::Cast(i); });
+}
+
+static bool testOneEq(ClosureVersion* f) {
+    int numEqs = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (Eq::Cast(i))
+            numEqs++;
+    });
+    return numEqs == 1;
+}
+
+static bool testOneNot(ClosureVersion* f) {
+    int numNots = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (Not::Cast(i))
+            numNots++;
+    });
+    return numNots == 1;
+}
+
 PirCheck::Type PirCheck::parseType(const char* str) {
 #define V(Check)                                                               \
     if (strcmp(str, #Check) == 0)                                              \
@@ -117,8 +146,10 @@ PirCheck::Type PirCheck::parseType(const char* str) {
 }
 
 bool PirCheck::run(SEXP f) {
-    size_t oldconfig = Rir2PirCompiler::MAX_INPUT_SIZE;
-    Rir2PirCompiler::MAX_INPUT_SIZE = 3000;
+    size_t oldMaxInput = pir::Parameter::MAX_INPUT_SIZE;
+    size_t oldInlinerMax = pir::Parameter::INLINER_MAX_SIZE;
+    pir::Parameter::MAX_INPUT_SIZE = 3000;
+    pir::Parameter::INLINER_MAX_SIZE = 3000;
     Module m;
     ClosureVersion* pir = compilePir(f, &m);
     bool success = pir;
@@ -137,10 +168,10 @@ bool PirCheck::run(SEXP f) {
             }
         }
     }
-    Rir2PirCompiler::MAX_INPUT_SIZE = oldconfig;
+    pir::Parameter::MAX_INPUT_SIZE = oldMaxInput;
+    pir::Parameter::INLINER_MAX_SIZE = oldInlinerMax;
     if (!success)
         m.print(std::cout, false);
     return success;
 }
-
 } // namespace rir

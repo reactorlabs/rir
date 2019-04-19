@@ -547,6 +547,23 @@ RIR_INLINE bool stackObjIsVector(R_bcstack_t* stackCell) {
     }
 }
 
+RIR_INLINE bool stackObjIsObject(R_bcstack_t* stackCell) {
+#ifdef PROFILE_TYPED_STACK
+    TSPROFILE.mark("stack access");
+#endif
+    switch (stackCell->tag) {
+    case STACK_OBJ_INT:
+    case STACK_OBJ_REAL:
+    case STACK_OBJ_LOGICAL:
+        return false;
+    case STACK_OBJ_SEXP:
+        return isObject(stackObjAsSexp(stackCell));
+    default:
+        assert(false);
+        return false;
+    }
+}
+
 RIR_INLINE bool stackObjsIdentical(R_bcstack_t* x, R_bcstack_t* y) {
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("stack access");
@@ -561,11 +578,20 @@ RIR_INLINE bool stackObjsIdentical(R_bcstack_t* x, R_bcstack_t* y) {
         return x->u.ival == y->u.ival;
     case STACK_OBJ_REAL:
         return x->u.dval == y->u.dval;
-    case STACK_OBJ_SEXP:
+    case STACK_OBJ_SEXP: {
 #ifdef PROFILE_TYPED_STACK
         TSPROFILE.mark("stack access boxed");
 #endif
+        if (y->tag)
+            return false;
+        SEXP xVal = x->u.sxpval;
+        SEXP yVal = y->u.sxpval;
+        if (xVal != yVal && TYPEOF(xVal) == CLOSXP && TYPEOF(yVal) == CLOSXP &&
+            CLOENV(xVal) == CLOENV(yVal) && FORMALS(xVal) == FORMALS(yVal) &&
+            BODY_EXPR(xVal) == BODY_EXPR(yVal))
+            return true;
         return x->u.sxpval == y->u.sxpval;
+    }
     default:
         assert(false);
         return false;
