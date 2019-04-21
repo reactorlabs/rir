@@ -995,6 +995,8 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* idx() { return arg(2).val(); }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
+        if (!lhs()->type.isA(PirType::num() | RType::str))
+            type = type.orObject();
     }
 };
 
@@ -1056,11 +1058,15 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        auto t = arg<0>().val()->type;
-        if (arg<1>().val()->type.isScalar())
+        auto t = vec()->type;
+        if (idx()->type.isScalar())
             t.setScalar();
         maskEffectsAndTypeOnNonObjects(t);
+        if (!t.isA(PirType::num() | RType::str))
+            type = type.orObject();
     }
 };
 
@@ -1070,8 +1076,12 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
+        maskEffectsAndTypeOnNonObjects(vec()->type.scalar());
+        if (!vec()->type.isA(PirType::num() | RType::str))
+            type = type.orObject();
     }
 };
 
@@ -1083,11 +1093,16 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx1() { return arg(1).val(); }
+    Value* idx2() { return arg(2).val(); }
     void updateType() override final {
-        auto t = arg<0>().val()->type;
-        if (arg<1>().val()->type.isScalar())
+        auto t = vec()->type;
+        if (idx1()->type.isScalar() && idx2()->type.isScalar())
             t.setScalar();
         maskEffectsAndTypeOnNonObjects(t);
+        if (!t.isA(PirType::num() | RType::str))
+            type = type.orObject();
     }
 };
 
@@ -1099,8 +1114,13 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx1() { return arg(1).val(); }
+    Value* idx2() { return arg(2).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
+        maskEffectsAndTypeOnNonObjects(vec()->type.scalar());
+        if (!vec()->type.isA(PirType::num() | RType::str))
+            type = type.orObject();
     }
 };
 

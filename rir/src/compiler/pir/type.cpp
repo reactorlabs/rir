@@ -80,7 +80,7 @@ void PirType::merge(SEXPTYPE sexptype) {
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     merge(TYPEOF(e));
 
-    if (!Rf_isObject(e)) {
+    if (!isObject(e)) {
         flags_.reset(TypeFlags::maybeObject);
     }
 
