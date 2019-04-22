@@ -305,6 +305,13 @@ RIR_INLINE SEXP stackObjToSexp(R_bcstack_t* stackCell) {
     return stackCell->u.sxpval;
 }
 
+RIR_INLINE void stackObjSetSexp(R_bcstack_t* stackCell, SEXP value) {
+#ifdef USE_TYPED_STACK
+    assert(stackCell->tag == STACK_OBJ_SEXP);
+#endif
+    stackCell->u.sxpval = value;
+}
+
 RIR_INLINE SEXP stackObjAsSexp(R_bcstack_t* stackCell) {
 #ifdef USE_TYPED_STACK
     if (stackCell->tag != STACK_OBJ_SEXP) {
