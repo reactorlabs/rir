@@ -22,15 +22,17 @@ void readArgTypeFromAssumptions(const Assumptions& assumptions, PirType& type,
 }
 
 void writeArgTypeToAssumptions(Assumptions& assumptions, Value* arg, int i) {
-    auto mk = MkArg::Cast(arg);
-    if (mk && mk->isEager()) {
-        if (mk->eagerArg() == MissingArg::instance())
-            assumptions.remove(Assumption::NoExplicitlyMissingArgs);
-        else
-            assumptions.setEager(i);
-    }
-    Value* value = arg->followCastsAndForce();
-    if (!MkArg::Cast(value)) {
+    if (auto mk = MkArg::Cast(arg)) {
+        if (mk->isEager()) {
+            if (mk->eagerArg() == MissingArg::instance())
+                assumptions.remove(Assumption::NoExplicitlyMissingArgs);
+            else
+                assumptions.setEager(i);
+        }
+        // if (!mk->noReflection)
+        //    assumptions.remove(Assumption::NoReflectiveArgument);
+    } else {
+        Value* value = arg->followCastsAndForce();
         if (!value->type.maybeObj())
             assumptions.setNotObj(i);
         if (assumptions.isEager(i) && assumptions.isNotObj(i) &&

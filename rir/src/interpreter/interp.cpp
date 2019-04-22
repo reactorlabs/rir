@@ -1706,8 +1706,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
             auto names = (Immediate*)pc;
@@ -1751,8 +1751,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostackSexpAt(ctx, 0), n, ast, arguments, env,
@@ -1777,8 +1777,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             CallContext call(c, ostackSexpAt(ctx, n), n, ast,
                              ostackCellAt(ctx, n - 1), env, given, ctx);
             SEXP res = doCall(call, ctx);
@@ -1800,8 +1800,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostackSexpAt(ctx, n), n, ast,
@@ -1851,8 +1851,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
