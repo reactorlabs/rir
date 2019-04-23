@@ -413,7 +413,10 @@ void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
     eagerArg()->printRef(out);
-    out << ", " << *prom() << ", ";
+    out << ", " << *prom();
+    if (noReflection)
+        out << " (!refl)";
+    out << ", ";
 }
 
 void Missing::printArgs(std::ostream& out, bool tty) const {
@@ -761,6 +764,7 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
 
     // Make some optimistic assumptions, they might be reset below...
     given.add(Assumption::NoExplicitlyMissingArgs);
+    given.add(Assumption::NoReflectiveArgument);
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {

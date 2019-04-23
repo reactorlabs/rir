@@ -223,6 +223,15 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                    });
         }
 
+        if (!handled && LdArg::Cast(arg) &&
+            closure->assumptions().includes(Assumption::NoReflectiveArgument)) {
+            // Forcing an argument can only affect local envs by reflection.
+            // Otherwise only leaked envs can be affected
+            effect.max(state.envs.taintLeaked());
+            updateReturnValue(AbstractPirValue::tainted());
+            handled = true;
+        }
+
         if (!handled && depth < MAX_DEPTH && force->strict) {
             if (auto ld = LdArg::Cast(arg)) {
                 if (ld->id < args.size())
@@ -233,11 +242,18 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             // through the argument and see if we find a promise. If so, we
             // will analyze it.
             if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
-                ScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(), state,
-                                   globalState, depth + 1, log);
+                auto stateCopy = state;
+                stateCopy.mayUseReflection = false;
+                ScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(),
+                                   stateCopy, globalState, depth + 1, log);
                 prom();
-                state.mergeCall(code, prom.result());
-                updateReturnValue(prom.result().returnValue);
+
+                auto res = prom.result();
+                if (!res.mayUseReflection)
+                    mkarg->noReflection = true;
+
+                state.mergeCall(code, res);
+                updateReturnValue(res.returnValue);
                 handled = true;
                 effect.update();
                 effect.keepSnapshot = true;
@@ -322,8 +338,12 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             if (CallSafeBuiltin::Cast(i) || safe) {
                 handled = true;
             } else {
-                state.mayUseReflection = true;
-                effect.lostPrecision();
+                if (!CallBuiltin::Cast(i) ||
+                    !SafeBuiltinsList::forInline(
+                        CallBuiltin::Cast(i)->builtinId)) {
+                    state.mayUseReflection = true;
+                    effect.lostPrecision();
+                }
             }
         }
         if (!handled) {
@@ -367,6 +387,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             // If an instruction does arbitrary changes to the environment, we
             // need to consider it tainted.
             if (envIsNeeded && i->changesEnv()) {
+                state.envs.taintLeaked();
                 state.envs[i->env()].taint();
                 effect.taint();
             }
