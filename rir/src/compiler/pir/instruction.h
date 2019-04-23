@@ -995,8 +995,6 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* idx() { return arg(2).val(); }
     void updateType() override final {
         maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
-        if (!lhs()->type.isA(PirType::num() | RType::str))
-            type = type.orObject();
     }
 };
 
@@ -1064,9 +1062,9 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
         auto t = vec()->type;
         if (idx()->type.isScalar())
             t.setScalar();
+        if (PirType(RType::vec).isA(t))
+            t = t.orObject();
         maskEffectsAndTypeOnNonObjects(t);
-        if (!t.isA(PirType::num() | RType::str))
-            type = type.orObject();
     }
 };
 
@@ -1079,9 +1077,10 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
     Value* vec() { return arg(0).val(); }
     Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(vec()->type.scalar());
-        if (!vec()->type.isA(PirType::num() | RType::str))
-            type = type.orObject();
+        auto t = vec()->type.scalar();
+        if (PirType(RType::vec).isA(t))
+            t = t.orObject();
+        maskEffectsAndTypeOnNonObjects(t);
     }
 };
 
