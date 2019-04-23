@@ -106,9 +106,7 @@ struct DispatchTable
                       << "\n";
         }
         std::cout << "\n";
-#endif
 
-#ifdef DEBUG_DISPATCH
         for (size_t i = 0; i < size() - 1; ++i) {
             assert(get(i)->signature().assumptions <
                    get(i + 1)->signature().assumptions);

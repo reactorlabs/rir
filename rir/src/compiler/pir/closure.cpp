@@ -55,8 +55,8 @@ ClosureVersion*
 Closure::findCompatibleVersion(const OptimizationContext& ctx) const {
     // ordered by number of assumptions
     for (auto c = versions.rbegin(); c != versions.rend(); c++) {
-        auto candidate = *c;
-        auto candidateCtx = candidate.first;
+        const auto& candidate = *c;
+        const auto& candidateCtx = candidate.first;
         if (candidateCtx.subtype(OptimizationContext(ctx.assumptions)))
             return candidate.second;
     }
