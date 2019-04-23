@@ -133,6 +133,8 @@ class PASS(TypeInference);
 
 class PASS(TypeSpeculation);
 
+class PASS(HoistInstruction);
+
 class PhaseMarker : public PirTranslator {
   public:
     explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}

@@ -105,6 +105,14 @@ BB::Instrs::iterator BB::remove(Instrs::iterator it) {
     return instrs.erase(it);
 }
 
+BB::Instrs::iterator BB::moveToLast(Instrs::iterator it, BB* other) {
+    if (other->isJmp())
+        other->append(*it);
+    else
+        other->insert(other->end() - 1, *it);
+    return instrs.erase(it);
+}
+
 BB::Instrs::iterator BB::moveToEnd(Instrs::iterator it, BB* other) {
     other->append(*it);
     return instrs.erase(it);
