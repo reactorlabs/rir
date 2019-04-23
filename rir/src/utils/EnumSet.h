@@ -48,6 +48,16 @@ class EnumSet {
     static_assert(!std::is_same<Element, Store>::value, "That is confusing");
     constexpr EnumSet(const Store& s) : set_(s) {}
 
+    RIR_INLINE Element max() const {
+        for (size_t i = static_cast<size_t>(Element::LAST) - 1;
+             i >= static_cast<size_t>(Element::FIRST); i--) {
+            Element e = static_cast<Element>(i);
+            if (contains(e))
+                return e;
+        }
+        assert(false && "EnumSet has no max because it's empty");
+    }
+
     RIR_INLINE bool contains(const Element& e) const {
         assert(boundscheck(e));
         return set_ & EnumSet(e);
@@ -69,7 +79,7 @@ class EnumSet {
         return !EnumSet(s.set_ & set_).empty();
     }
 
-    RIR_INLINE bool includes(const EnumSet& s) const {
+    RIR_INLINE bool constexpr includes(const EnumSet& s) const {
         return (s.set_ & set_) == s.set_;
     }
 
@@ -79,6 +89,10 @@ class EnumSet {
 
     RIR_INLINE bool operator==(const EnumSet& s) const {
         return set_ == s.set_;
+    }
+
+    constexpr RIR_INLINE EnumSet operator~() const {
+        return EnumSet(~set_ & Any());
     }
 
     RIR_INLINE bool operator<(const EnumSet& s) const { return set_ < s.set_; }
@@ -91,6 +105,10 @@ class EnumSet {
 
     RIR_INLINE bool operator!=(const Element& t) const {
         return EnumSet(t) != set_;
+    }
+
+    constexpr RIR_INLINE EnumSet operator&(const EnumSet& s) const {
+        return EnumSet(s.set_ & set_);
     }
 
     constexpr RIR_INLINE EnumSet operator|(const EnumSet& s) const {

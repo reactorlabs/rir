@@ -132,6 +132,14 @@ class PASS(DeadStoreRemoval);
  */
 class PASS(LoopInvariant);
 
+class PASS(GVN);
+
+class PASS(LoadElision);
+
+class PASS(TypeInference);
+
+class PASS(TypeSpeculation);
+
 class PhaseMarker : public PirTranslator {
   public:
     explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}

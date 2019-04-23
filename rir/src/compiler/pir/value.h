@@ -40,14 +40,24 @@ class Value {
             const_cast<const Value*>(this)->cFollowCastsAndForce());
     }
     virtual bool validIn(Code* code) const { return true; }
-    virtual SEXP asRValue() const { assert(false && "Not a singleton"); }
+    virtual SEXP asRValue() const {
+        assert(false && "Not a singleton");
+        return nullptr;
+    }
 
     bool producesRirResult() const {
-        return type != PirType::voyd() && type != NativeType::context;
+        return type != PirType::voyd() &&
+               (type.isRType() || type == NativeType::test);
+    }
+
+    static constexpr int MAX_REFCOUNT = 2;
+
+    virtual int minReferenceCount() const {
+        return type.maybeReferenceCounted() ? 0 : MAX_REFCOUNT;
     }
 };
 
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

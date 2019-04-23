@@ -50,14 +50,17 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::EagerCalls());
         optimizations.push_back(new pir::Constantfold());
         optimizations.push_back(new pir::Cleanup());
-        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::DelayInstr());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
         optimizations.push_back(new pir::Cleanup());
         optimizations.push_back(new pir::Inline());
         optimizations.push_back(new pir::OptimizeContexts());
+        optimizations.push_back(new pir::LoadElision());
+        optimizations.push_back(new pir::GVN());
+        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::Cleanup());
+        optimizations.push_back(new pir::TypeInference());
     };
 
     phasemarker("Initial");
@@ -72,10 +75,10 @@ void Configurations::defaultOptimizations() {
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
-    optimizations.push_back(new pir::ElideEnvSpec());
+    optimizations.push_back(new pir::TypeSpeculation());
     optimizations.push_back(new pir::ElideEnvSpec());
     addDefaultOpt();
-    optimizations.push_back(new pir::ElideEnvSpec());
+    optimizations.push_back(new pir::TypeSpeculation());
     optimizations.push_back(new pir::ElideEnvSpec());
 
     phasemarker("Phase 2: Env speculation");

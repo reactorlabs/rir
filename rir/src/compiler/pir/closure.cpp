@@ -53,7 +53,7 @@ ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
 
 ClosureVersion*
 Closure::findCompatibleVersion(const OptimizationContext& ctx) const {
-    // Reverse since they are ordered by number of assumptions
+    // ordered by number of assumptions
     for (auto c = versions.rbegin(); c != versions.rend(); c++) {
         auto candidate = *c;
         auto candidateCtx = candidate.first;

@@ -104,11 +104,13 @@ static Sources hasSources(Opcode bc) {
         return Sources::Required;
 
     case Opcode::inc_:
+    case Opcode::dec_:
     case Opcode::identical_noforce_:
     case Opcode::push_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
@@ -149,13 +151,13 @@ static Sources hasSources(Opcode bc) {
     case Opcode::set_names_:
     case Opcode::force_:
     case Opcode::pop_:
+    case Opcode::popn_:
     case Opcode::close_:
     case Opcode::asast_:
     case Opcode::dup_:
     case Opcode::dup2_:
     case Opcode::for_seq_size_:
     case Opcode::swap_:
-    case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::ensure_named_:
     case Opcode::return_:
@@ -169,10 +171,12 @@ static Sources hasSources(Opcode bc) {
     case Opcode::lgl_and_:
     case Opcode::lgl_or_:
     case Opcode::record_call_:
-    case Opcode::record_binop_:
+    case Opcode::record_type_:
     case Opcode::deopt_:
     case Opcode::pop_context_:
     case Opcode::push_context_:
+    case Opcode::ceil_:
+    case Opcode::floor_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:
@@ -235,7 +239,8 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
 }
 
 void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
-    assert(TYPEOF(sexp) == EXTERNALSXP and "Invalid SEXPTYPE");
+    if (TYPEOF(sexp) != EXTERNALSXP)
+        Rf_error("RIR Verifier: Invalid SEXPTYPE");
     Function* f = Function::unpack(sexp);
 
     // get the code objects
@@ -245,38 +250,44 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
         if (f->defaultArg(i))
             objs.push_back(f->defaultArg(i));
 
-    assert(f->size <= XLENGTH(sexp) and
-           "Reported size must be smaller than the size of the vector");
+    if (f->size > XLENGTH(sexp))
+        Rf_error("RIR Verifier: Reported size must be smaller than the size of "
+                 "the vector");
 
     // check that the call instruction has proper arguments and number of
     // instructions is valid
-    bool sawReturnOrBackjump = false;
     while (!objs.empty()) {
         auto c = objs.back();
         objs.pop_back();
 
-        assert(c->info.magic == CODE_MAGIC and "Invalid code magic number");
-        assert(c->src != 0 and "Code must have AST");
+        if (c->info.magic != CODE_MAGIC)
+            Rf_error("RIR Verifier: Invalid code magic number");
+        if (c->src == 0)
+            Rf_error("RIR Verifier: Code must have AST");
         unsigned oldo = c->stackLength;
         calculateAndVerifyStack(c);
-        assert(oldo == c->stackLength and "Invalid stack layout reported");
+        if (oldo != c->stackLength)
+            Rf_error("RIR Verifier: Invalid stack layout reported");
 
-        assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
-                   c->srcLength * sizeof(Code::SrclistEntry) &&
-               "Invalid code length reported");
+        if (((uintptr_t)(c + 1) + pad4(c->codeSize) +
+             c->srcLength * sizeof(Code::SrclistEntry)) == 0)
+            Rf_error("RIR Verifier: Invalid code length reported");
 
         Opcode* cptr = c->code();
         Opcode* start = cptr;
         Opcode* end = start + c->codeSize;
         while (true) {
-            assert(cptr < end);
+            if (cptr > end)
+                Rf_error("RIR Verifier: Bytecode overflow");
             BC cur = BC::decode(cptr, c);
             switch (hasSources(cur.bc)) {
             case Sources::Required:
-                assert(c->getSrcIdxAt(cptr, true) != 0);
+                if (c->getSrcIdxAt(cptr, true) == 0)
+                    Rf_error("RIR Verifier: Source required but not found");
                 break;
             case Sources::NotNeeded:
-                assert(c->getSrcIdxAt(cptr, true) == 0);
+                if (c->getSrcIdxAt(cptr, true) != 0)
+                    Rf_error("RIR Verifier: Sources not needed but stored");
                 break;
             case Sources::May: {
             }
@@ -284,16 +295,19 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
             if (*cptr == Opcode::br_ || *cptr == Opcode::brobj_ ||
                 *cptr == Opcode::brtrue_ || *cptr == Opcode::brfalse_) {
                 int off = *reinterpret_cast<int*>(cptr + 1);
-                assert(cptr + cur.size() + off >= start &&
-                       cptr + cur.size() + off < end);
+                if (cptr + cur.size() + off < start ||
+                    cptr + cur.size() + off > end)
+                    Rf_error("RIR Verifier: Branch outside closure");
             }
             if (*cptr == Opcode::ldvar_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
-                assert(*argsIndex < cp_pool_length(ctx) and
-                       "Invalid arglist index");
+                if (*argsIndex >= cp_pool_length(ctx))
+                    Rf_error("RIR Verifier: Invalid arglist index");
                 SEXP sym = cp_pool_at(ctx, *argsIndex);
-                assert(TYPEOF(sym) == SYMSXP);
-                assert(strlen(CHAR(PRINTNAME(sym))));
+                if (TYPEOF(sym) != SYMSXP)
+                    Rf_error("RIR Verifier: LdVar binding not a symbol");
+                if (!(strlen(CHAR(PRINTNAME(sym)))))
+                    Rf_error("RIR Verifier: LdVar empty binding name");
             }
             if (*cptr == Opcode::promise_) {
                 unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
@@ -301,7 +315,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
             }
             if (*cptr == Opcode::ldarg_) {
                 unsigned idx = *reinterpret_cast<Immediate*>(cptr + 1);
-                assert(idx < MAX_ARG_IDX);
+                if (idx >= MAX_ARG_IDX)
+                    Rf_error("RIR Verifier: Loading out of index argument");
             }
             if (*cptr == Opcode::call_implicit_ ||
                 *cptr == Opcode::named_call_implicit_) {
@@ -318,8 +333,9 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                         uint32_t offset = cur.callExtra().callArgumentNames[i];
                         if (offset) {
                             SEXP name = cp_pool_at(ctx, offset);
-                            assert(TYPEOF(name) == SYMSXP ||
-                                   name == R_NilValue);
+                            if (TYPEOF(name) != SYMSXP && name != R_NilValue)
+                                Rf_error("RIR Verifier: Calling target not a "
+                                         "symbol");
                         }
                     }
                 }
@@ -330,7 +346,9 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                     uint32_t offset = cur.callExtra().callArgumentNames[i];
                     if (offset) {
                         SEXP name = cp_pool_at(ctx, offset);
-                        assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
+                        if (TYPEOF(name) != SYMSXP && name != R_NilValue)
+                            Rf_error(
+                                "RIR Verifier: Calling target not a symbol");
                     }
                 }
             }
@@ -339,22 +357,21 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = cur.mkEnvExtra().names[i];
                     SEXP name = cp_pool_at(ctx, offset);
-                    assert(TYPEOF(name) == SYMSXP);
+                    if (TYPEOF(name) != SYMSXP)
+                        Rf_error(
+                            "RIR Verifier: environment argument not a symbol");
                 }
             }
 
-            if ((cur.isJmp() && cur.immediate.offset < 0) || cur.isExit())
-                sawReturnOrBackjump = true;
-            else if (cur.bc != Opcode::nop_)
-                sawReturnOrBackjump = false;
-
             cptr += cur.size();
             if (cptr == start + c->codeSize) {
-                assert(sawReturnOrBackjump);
+                if (!(cur.isJmp() && cur.immediate.offset < 0) &&
+                    !(cur.isExit()))
+                    Rf_error("RIR Verifier: Last opcode should jump backwards "
+                             "or exit");
                 break;
             }
         }
     }
 }
-
 } // namespace rir

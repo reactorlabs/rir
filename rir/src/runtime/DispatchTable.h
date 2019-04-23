@@ -27,6 +27,7 @@ struct DispatchTable
     }
 
     Function* baseline() { return Function::unpack(getEntry(0)); }
+    Function* best() { return get(size() - 1); }
 
     void baseline(Function* f) {
         assert(f->signature().optimization ==
@@ -43,6 +44,22 @@ struct DispatchTable
         return false;
     }
 
+    void remove(Code* funCode) {
+        size_t i = 1;
+        for (; i < size(); ++i) {
+            if (get(i)->body() == funCode)
+                break;
+        }
+        if (i == size())
+            return;
+        get(i)->dead = true;
+        for (; i < size() - 1; ++i) {
+            setEntry(i, getEntry(i + 1));
+        }
+        setEntry(i, nullptr);
+        size_--;
+    }
+
     // insert function ordered by increasing number of assumptions
     void insert(Function* fun) {
         // TODO: we might need to grow the DT here!
@@ -50,18 +67,31 @@ struct DispatchTable
         assert(fun->signature().optimization !=
                FunctionSignature::OptimizationLevel::Baseline);
         auto assumptions = fun->signature().assumptions;
-        assert(size() < capacity());
         size_t i = 1;
         for (; i < size(); ++i) {
             if (get(i)->signature().assumptions == assumptions) {
                 setEntry(i, fun->container());
                 return;
             }
-            if (!(assumptions < get(i)->signature().assumptions)) {
+            if (!(get(i)->signature().assumptions < assumptions)) {
                 break;
             }
         }
-        SLOWASSERT(!contains(fun->signature().assumptions));
+        assert(!contains(fun->signature().assumptions));
+        if (size() == capacity()) {
+            std::cout << "Tried to insert into a full Dispatch table. Have: \n";
+            for (size_t i = 0; i < size(); ++i) {
+                auto e = getEntry(i);
+                std::cout << "* "
+                          << Function::unpack(e)->signature().assumptions
+                          << "\n";
+            }
+            std::cout << "\n";
+            std::cout << "Tried to insert: " << assumptions << "\n";
+            Rf_error("failed");
+            return;
+        }
+
         size_++;
         for (size_t j = size() - 1; j > i; --j) {
             setEntry(j, getEntry(j - 1));
@@ -77,10 +107,19 @@ struct DispatchTable
         }
         std::cout << "\n";
 #endif
-        SLOWASSERT(contains(fun->signature().assumptions));
+
+#ifdef DEBUG_DISPATCH
+        for (size_t i = 0; i < size() - 1; ++i) {
+            assert(get(i)->signature().assumptions <
+                   get(i + 1)->signature().assumptions);
+            assert(!(get(i + 1)->signature().assumptions <
+                     get(i)->signature().assumptions));
+        }
+        assert(contains(fun->signature().assumptions));
+#endif
     }
 
-    static DispatchTable* create(size_t capacity = 10) {
+    static DispatchTable* create(size_t capacity = 20) {
         size_t size =
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
         SEXP s = Rf_allocVector(EXTERNALSXP, size);

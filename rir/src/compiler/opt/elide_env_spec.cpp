@@ -19,7 +19,10 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     auto nonObjectArgs = [&](Instruction* i) {
         auto answer = true;
         i->eachArg([&](Value* arg) {
-            if (arg->type.maybeObj() && arg->typeFeedback.maybeObj())
+            if (i->env() == arg)
+                return;
+            if (arg->type.maybeObj() &&
+                (arg->typeFeedback.isVoid() || arg->typeFeedback.maybeObj()))
                 answer = false;
         });
         return answer;
@@ -36,7 +39,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
             if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which
-                // both operators are primitive values
+                // all operators are primitive values
                 if (checkpoint.at(i) && i->envOnlyForObj() &&
                     nonObjectArgs(i)) {
                     i->elideEnv();

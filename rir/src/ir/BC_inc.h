@@ -13,8 +13,8 @@
 #include <array>
 #include <vector>
 
-#include "ir/RuntimeFeedback.h"
 #include "runtime/Assumptions.h"
+#include "runtime/TypeFeedback.h"
 
 #include "BC_noarg_list.h"
 
@@ -138,7 +138,7 @@ class BC {
         NumLocals loc;
         LocalsCopy loc_cpy;
         ObservedCallees callFeedback;
-        ObservedValues binopFeedback[2];
+        ObservedValues typeFeedback;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
@@ -203,6 +203,8 @@ class BC {
             return immediate.callBuiltinFixedArgs.nargs;
         if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
             return immediate.mkEnvFixedArgs.nargs + 1;
+        if (bc == Opcode::popn_)
+            return immediate.i;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -279,7 +281,7 @@ class BC {
         switch (bc) {
         // First handle the varlength BCs. In all three cases the number of
         // call arguments is the 2nd immediate argument and the
-        // instructions have 2 fixed length immediates. After that there are
+        // instructions have 4 fixed length immediates. After that there are
         // narg varlen immediates for the first two and 2*narg varlen
         // immediates in the last case.
         case Opcode::call_implicit_:
@@ -287,13 +289,13 @@ class BC {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (3 + nargs) * sizeof(Immediate);
+            return 1 + (4 + nargs) * sizeof(Immediate);
         }
         case Opcode::named_call_implicit_: {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (3 + 2 * nargs) * sizeof(Immediate);
+            return 1 + (4 + 2 * nargs) * sizeof(Immediate);
         }
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
@@ -325,6 +327,8 @@ BC_NOARGS(V, _)
 #undef V
     inline static BC recordCall();
     inline static BC recordBinop();
+    inline static BC recordType();
+    inline static BC popn(unsigned n);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
@@ -332,6 +336,7 @@ BC_NOARGS(V, _)
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
+    inline static BC ldvarForUpdate(SEXP sym);
     inline static BC ldvarNoForce(SEXP sym);
     inline static BC ldvarSuper(SEXP sym);
     inline static BC ldvarNoForceSuper(SEXP sym);
@@ -346,6 +351,7 @@ BC_NOARGS(V, _)
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
+    inline static BC asint(bool ceil);
     inline static BC pushContext(Jmp);
     inline static BC beginloop(Jmp);
     inline static BC brtrue(Jmp);
@@ -359,6 +365,7 @@ BC_NOARGS(V, _)
     inline static BC pick(uint32_t);
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
+    inline static BC is(TypeChecks);
     inline static BC deopt(SEXP);
     inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast,
                                   const Assumptions& given);
@@ -592,6 +599,7 @@ BC_NOARGS(V, _)
         case Opcode::push_:
         case Opcode::ldfun_:
         case Opcode::ldvar_:
+        case Opcode::ldvar_for_update_:
         case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldvar_noforce_super_:
@@ -636,6 +644,7 @@ BC_NOARGS(V, _)
         case Opcode::push_context_:
             memcpy(&immediate.offset, pc, sizeof(Jmp));
             break;
+        case Opcode::popn_:
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
@@ -656,8 +665,8 @@ BC_NOARGS(V, _)
         case Opcode::record_call_:
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;
-        case Opcode::record_binop_:
-            memcpy(&immediate.binopFeedback, pc, sizeof(ObservedValues) * 2);
+        case Opcode::record_type_:
+            memcpy(&immediate.typeFeedback, pc, sizeof(ObservedValues));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)

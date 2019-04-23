@@ -7,35 +7,26 @@ namespace pir {
 AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
                                          Instruction* i) const {
     AbstractResult res;
-    auto isVisibilityChanging = [&]() {
-        if (vis.last != i) {
-            vis.last = i;
-            vis.observable.clear();
-            res.update();
-        }
-    };
-    switch (i->tag) {
-    case Tag::Invisible:
-    case Tag::Visible:
-        isVisibilityChanging();
-        break;
-    case Tag::CallBuiltin:
-    case Tag::CallSafeBuiltin:
-        int builtinId;
-        if (auto c = CallBuiltin::Cast(i)) {
-            builtinId = c->builtinId;
-        } else {
-            builtinId = CallSafeBuiltin::Cast(i)->builtinId;
-        }
-
-        if (builtinUpdatesVisibility(builtinId)) {
-            isVisibilityChanging();
-        }
-        break;
-    default:
-        if (i->exits() && vis.last) {
-            vis.observable.insert(vis.last);
-            res.update();
+    if (i->effects.contains(Effect::Visibility)) {
+        switch (i->visibilityFlag()) {
+        case VisibilityFlag::On:
+        case VisibilityFlag::Off:
+            // Always changes visibility, overrides previous changes
+            if (vis.observable.size() != 1 || *vis.observable.begin() != i) {
+                vis.observable.clear();
+                vis.observable.insert(i);
+                res.update();
+            }
+            break;
+        case VisibilityFlag::Unknown:
+            // Maybe changes visibility, need to keep previous if it doesn't
+            if (!vis.observable.count(i)) {
+                vis.observable.insert(i);
+                res.update();
+            }
+            break;
+        default:
+            assert(false);
         }
     }
     return res;

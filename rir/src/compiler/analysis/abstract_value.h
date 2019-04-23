@@ -3,6 +3,7 @@
 
 #include "../pir/pir.h"
 #include "abstract_result.h"
+#include "utils/Set.h"
 
 #include <functional>
 #include <set>
@@ -31,6 +32,7 @@ struct ValOrig {
         return val == other.val && origin == other.origin &&
                recursionLevel == other.recursionLevel;
     }
+    bool operator!=(const ValOrig& other) const { return !(*this == other); }
 };
 }
 }
@@ -99,7 +101,7 @@ struct AbstractPirValue {
     typedef std::function<void(const ValOrig&)> ValOrigMaybe;
     typedef std::function<bool(const ValOrig&)> ValOrigMaybePredicate;
 
-    void ifSingleValue(ValMaybe known) {
+    void ifSingleValue(ValMaybe known) const {
         if (!unknown && vals.size() == 1)
             known((*vals.begin()).val);
     }
@@ -127,6 +129,17 @@ struct AbstractPirValue {
     }
 
     void print(std::ostream& out, bool tty = false) const;
+
+    bool operator==(const AbstractPirValue& other) const {
+        if (unknown && other.unknown)
+            return true;
+        return type == other.type && vals == other.vals &&
+               unknown == other.unknown;
+    }
+
+    bool operator!=(const AbstractPirValue& other) const {
+        return !(*this == other);
+    }
 };
 
 /*
@@ -255,6 +268,14 @@ struct AbstractLoad {
         : env(env), result(val) {
         assert(env);
     }
+
+    bool operator==(const AbstractLoad& other) const {
+        return env == other.env && result == other.result;
+    }
+
+    bool operator!=(const AbstractLoad& other) const {
+        return !(*this == other);
+    }
 };
 
 class AbstractREnvironmentHierarchy {
@@ -313,6 +334,17 @@ class AbstractREnvironmentHierarchy {
     AbstractLoad superGet(Value* env, SEXP e) const;
 
     std::unordered_set<Value*> potentialParents(Value* env) const;
+
+    AbstractResult taintLeaked() {
+        AbstractResult res;
+        for (auto e : envs) {
+            if (e.second.leaked) {
+                e.second.taint();
+                res.taint();
+            }
+        }
+        return res;
+    }
 };
 
 template <typename Kind>
@@ -351,6 +383,36 @@ class AbstractUnique {
             out << "?";
         out << "\n";
     };
+};
+
+template <typename T>
+struct IntersectionSet {
+    SmallSet<T> available;
+
+    AbstractResult mergeExit(const IntersectionSet& other) {
+        return merge(other);
+    }
+
+    AbstractResult merge(const IntersectionSet& other) {
+        AbstractResult res;
+        for (auto it = available.cbegin(); it != available.cend();) {
+            if (other.available.includes(*it)) {
+                it++;
+            } else {
+                it = available.erase(it);
+                res.update();
+            }
+        }
+        return res;
+    }
+
+    void print(std::ostream& out, bool tty) {
+        for (auto& a : available) {
+            a.print(out, tty);
+            out << " ";
+        }
+        out << "\n";
+    }
 };
 }
 }

@@ -23,8 +23,6 @@ class TheVerifier {
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
             f->print(std::cerr, true);
-            assert(false);
-            return;
         }
 
         f->eachPromise([&](Promise* p) {
@@ -39,9 +37,12 @@ class TheVerifier {
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
                 p->printCode(std::cerr, true, false);
-                return;
             }
         });
+
+        if (!ok) {
+            Rf_error("");
+        }
     }
 
     const CFG& cfg(Code* c) {
@@ -123,7 +124,6 @@ class TheVerifier {
                     ok = false;
                 }
             } else {
-                assert(!last->branchOrExit());
                 if (bb->falseBranch()) {
                     std::cerr << "bb" << bb->id
                               << " has false branch but no branch instr\n";
@@ -163,7 +163,11 @@ class TheVerifier {
 
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
-            assert(p->owner->promise(p->id) == p);
+            if (p->owner->promise(p->id) != p) {
+                std::cerr
+                    << "PIR Verifier: Promise code out of current closure";
+                ok = false;
+            }
             if (p->owner != f) {
                 mk->printRef(std::cerr);
                 std::cerr << " is referencing a promise from another function "
@@ -173,23 +177,16 @@ class TheVerifier {
         }
 
         if (i->branchOrExit())
-            assert(i == bb->last() &&
-                   "Only last instruction of BB can have controlflow");
+            if (i != bb->last()) {
+                std::cerr
+                    << "PIR Verifier: Only last instruction of BB can have "
+                       "controlflow";
+                ok = false;
+            }
 
         if (auto phi = Phi::Cast(i)) {
             phi->eachArg([&](BB* input, Value* v) {
                 if (auto iv = Instruction::Cast(v)) {
-                    if (iv == phi) {
-                        // Note: can happen in a one-block loop, but only if it
-                        // is not edge-split
-                        std::cerr << "Error at instruction '";
-                        i->print(std::cerr);
-                        std::cerr << "': input '";
-                        iv->printRef(std::cerr);
-                        std::cerr << "' phi has itself as input\n";
-                        ok = false;
-                    }
-
                     if (input == phi->bb()) {
                         // Note: can happen in a one-block loop, but only if it
                         // is not edge-split
@@ -319,10 +316,9 @@ class TheVerifier {
 namespace rir {
 namespace pir {
 
-bool Verify::apply(ClosureVersion* f, bool slow) {
+void Verify::apply(ClosureVersion* f, bool slow) {
     TheVerifier v(f, slow);
     v();
-    return v.ok;
 }
 } // namespace pir
 } // namespace rir

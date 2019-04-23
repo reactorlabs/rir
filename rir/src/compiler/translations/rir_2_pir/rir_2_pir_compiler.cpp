@@ -3,6 +3,8 @@
 #include "R/RList.h"
 #include "rir_2_pir.h"
 
+#include "compiler/parameter.h"
+
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
 #include "../../opt/pass_definitions.h"
@@ -103,7 +105,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         return fail();
     }
 
-    if (closure->rirFunction()->body()->codeSize > MAX_INPUT_SIZE) {
+    if (closure->rirFunction()->body()->codeSize > Parameter::MAX_INPUT_SIZE) {
         logger.warn("skipping huge function");
         return fail();
     }
@@ -154,10 +156,9 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 
     if (rir2pir.tryCompile(builder)) {
         log.compilationEarlyPir(version);
-        if (Verify::apply(version)) {
-            log.flush();
-            return success(version);
-        }
+        Verify::apply(version);
+        log.flush();
+        return success(version);
 
         log.failed("rir2pir failed to verify");
         log.flush();
@@ -201,7 +202,7 @@ void Rir2PirCompiler::optimizeModule() {
                 log.pirOptimizations(v, translation);
 
 #ifdef ENABLE_SLOWASSERT
-                assert(Verify::apply(v));
+                Verify::apply(v);
 #endif
             });
         });
@@ -213,9 +214,11 @@ void Rir2PirCompiler::optimizeModule() {
         c->eachVersion([&](ClosureVersion* v) {
             logger.get(v).pirOptimizationsFinished(v);
 #ifdef ENABLE_SLOWASSERT
-            assert(Verify::apply(v, true));
+            Verify::apply(v, true);
 #else
-            assert(Verify::apply(v));
+#ifndef NDEBUG
+            Verify::apply(v);
+#endif
 #endif
         });
     });
@@ -229,7 +232,7 @@ void Rir2PirCompiler::optimizeModule() {
     logger.flush();
 }
 
-const size_t Rir2PirCompiler::MAX_INPUT_SIZE =
+size_t Parameter::MAX_INPUT_SIZE =
     getenv("PIR_MAX_INPUT_SIZE") ? atoi(getenv("PIR_MAX_INPUT_SIZE")) : 3500;
 
 } // namespace pir

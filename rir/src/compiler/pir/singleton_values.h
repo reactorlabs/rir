@@ -85,6 +85,18 @@ class False : public SingletonValue<False> {
     False() : SingletonValue(NativeType::test, Tag::False) {}
 };
 
+class NaLogical : public SingletonValue<NaLogical> {
+  public:
+    void printRef(std::ostream& out) const override final { out << "na-lgl"; }
+
+    SEXP asRValue() const override final { return R_LogicalNAValue; }
+
+  private:
+    friend class SingletonValue;
+    NaLogical()
+        : SingletonValue(PirType::simpleScalarLogical(), Tag::NaLogical) {}
+};
+
 class Tombstone : public Value {
   public:
     void printRef(std::ostream& out) const override final {
@@ -106,12 +118,13 @@ class Tombstone : public Value {
     }
     SEXP asRValue() const override final {
         assert(false && "This value is dead");
+        return nullptr;
     }
 
   private:
     explicit Tombstone(PirType t) : Value(t, Tag::Tombstone) {}
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

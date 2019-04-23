@@ -22,11 +22,13 @@ class PhiPlacement {
         }
     };
     typedef std::unordered_map<BB*, SmallSet<PhiInput>> Phis;
+    bool success = false;
+    BB* targetPhiPosition = nullptr;
+    Phis placement;
 
-    static Phis compute(ClosureVersion* cls,
-                        const std::unordered_map<BB*, Value*>& inputs,
-                        const CFG& cfg, const DominanceGraph& dom,
-                        const DominanceFrontier&);
+    PhiPlacement(ClosureVersion* cls, BB* target,
+                 const std::unordered_map<BB*, Value*>& inputs, const CFG& cfg,
+                 const DominanceGraph& dom, const DominanceFrontier&);
 };
 
 } // namespace pir

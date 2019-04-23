@@ -49,6 +49,7 @@
     V(Phi)                                                                     \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
+    V(AsInt)                                                                   \
     V(IsObject)                                                                \
     V(IsEnvStub)                                                               \
     V(Return)                                                                  \
@@ -68,9 +69,11 @@
     V(LdFunctionEnv)                                                           \
     V(LAnd)                                                                    \
     V(LOr)                                                                     \
-    V(Inc)                                                                     \
     V(Not)                                                                     \
+    V(Inc)                                                                     \
+    V(Dec)                                                                     \
     V(Is)                                                                      \
+    V(IsType)                                                                  \
     V(Plus)                                                                    \
     V(Minus)                                                                   \
     V(Identical)                                                               \
@@ -83,7 +86,6 @@
     V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \
     V(CastType)                                                                \
-    V(SetShared)                                                               \
     V(Missing)                                                                 \
     V(Visible)                                                                 \
     V(Invisible)                                                               \
