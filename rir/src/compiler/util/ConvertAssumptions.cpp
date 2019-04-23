@@ -29,8 +29,8 @@ void writeArgTypeToAssumptions(Assumptions& assumptions, Value* arg, int i) {
             else
                 assumptions.setEager(i);
         }
-        // if (!mk->noReflection)
-        //    assumptions.remove(Assumption::NoReflectiveArgument);
+        if (!mk->noReflection)
+            assumptions.remove(Assumption::NoReflectiveArgument);
     } else {
         Value* value = arg->followCastsAndForce();
         if (!value->type.maybeObj())
