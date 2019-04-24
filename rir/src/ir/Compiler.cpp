@@ -3,11 +3,12 @@
 #include "BC.h"
 #include "CodeStream.h"
 
-#include "R/r.h"
+#include "../interpreter/safe_force.h"
+#include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Sexp.h"
 #include "R/Symbols.h"
-#include "R/Funtab.h"
+#include "R/r.h"
 
 #include "../interpreter/safe_force.h"
 #include "utils/Pool.h"
@@ -989,9 +990,11 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidC
         }
 
         // (1) Arguments are wrapped as Promises:
-        //     create a new Code object for the promise
+        //     create a new Code object for the promise,
+        //     and an AST version to allow strong safe forces
         Code* prom = compilePromise(ctx, *arg);
-        size_t idx = cs.addPromise(prom);
+        SEXP ast = *arg;
+        size_t idx = cs.addPromise(prom, ast);
         callArgs.push_back(idx);
 
         // (2) remember if the argument had a name associated
@@ -1000,7 +1003,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidC
             hasNames = true;
 
         // (3) "safe force" the argument to get static assumptions
-        SEXP known = safeEval(*arg, nullptr);
+        SEXP known = safeEval(*arg, nullptr, false);
         // TODO: If we add more assumptions should probably abstract with
         // testArg in interp.cpp. For now they're both much different though
         if (known != R_UnboundValue) {

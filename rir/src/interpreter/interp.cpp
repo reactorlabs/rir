@@ -556,16 +556,30 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
         given.add(Assumption::CorrectOrderOfArguments);
 
     given.add(Assumption::NoExplicitlyMissingArgs);
-    if (call.hasStackArgs()) {
-        // Always true in this case, since we will pad missing args on the stack
-        // later with R_MissingArg's
-        given.add(Assumption::NotTooFewArguments);
+    if (!call.hasStackArgs()) {
+        for (size_t i = 0; i < call.suppliedArgs; ++i) {
+            if (call.missingArg(i))
+                given.remove(Assumption::NoExplicitlyMissingArgs);
+        }
+    }
 
-        auto testArg = [&](size_t i) {
-            SEXP arg = call.stackArg(i);
+    // Always true in this case, since we will pad missing args on the stack
+    // later with R_MissingArg's
+    given.add(Assumption::NotTooFewArguments);
+
+    if (call.hasStackArgs() || pir::Parameter::RIR_STRONG_SAFE_FORCE) {
+        for (size_t i = 0; i < call.suppliedArgs; ++i) {
+            SEXP arg = call.argSexp(i);
             bool notObj = true;
             bool isEager = true;
-            if (TYPEOF(arg) == PROMSXP) {
+            if (!call.hasStackArgs()) {
+                arg = safeEval(arg, call.callerEnv, true);
+                if (arg == R_UnboundValue) {
+                    notObj = false;
+                    isEager = false;
+                }
+                // callImplicit already handles missing
+            } else if (TYPEOF(arg) == PROMSXP) {
                 arg = PRVALUE(arg);
                 if (arg == R_UnboundValue) {
                     notObj = false;
@@ -586,15 +600,6 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                 given.setSimpleReal(i);
             if (isEager && notObj && IS_SIMPLE_SCALAR(arg, INTSXP))
                 given.setSimpleInt(i);
-        };
-
-        for (size_t i = 0; i < call.suppliedArgs; ++i) {
-            testArg(i);
-        }
-    } else {
-        for (size_t i = 0; i < call.suppliedArgs; ++i) {
-            if (call.missingArg(i))
-                given.remove(Assumption::NoExplicitlyMissingArgs);
         }
     }
 }
@@ -687,6 +692,10 @@ static Function* dispatch(const CallContext& call, DispatchTable* vt) {
 
 unsigned pir::Parameter::RIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
+bool pir::Parameter::RIR_STRONG_SAFE_FORCE =
+    getenv("RIR_STRONG_SAFE_FORCE")
+        ? (bool)atoi(getenv("RIR_STRONG_SAFE_FORCE"))
+        : false;
 
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
@@ -782,7 +791,8 @@ class SlowcaseCounter {
         if (call.suppliedArgs > 0) {
             auto arg = call.stackArg(0);
             if (TYPEOF(arg) == PROMSXP)
-                arg = safeForcePromise(arg);
+                arg = safeForcePromise(arg,
+                                       pir::Parameter::RIR_STRONG_SAFE_FORCE);
             if (arg == R_UnboundValue)
                 message << "arg0 lazy";
             else if (arg == R_MissingArg)
