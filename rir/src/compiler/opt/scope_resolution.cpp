@@ -15,6 +15,68 @@
 namespace {
 
 using namespace rir::pir;
+
+// Checks (using the local state of the caller) if forcing a promise can have
+// reflective effects
+static bool noReflection(Code* code, Value* callEnv, ScopeAnalysis& analysis,
+                         ScopeAnalysisState& state) {
+    auto entry = code->entry;
+    assert(!entry->isEmpty());
+    auto funEnv = LdFunctionEnv::Cast(*entry->begin());
+
+    return Visitor::check(code->entry, [&](Instruction* i) {
+        if (CallSafeBuiltin::Cast(i))
+            return true;
+        if (auto b = CallBuiltin::Cast(i))
+            return SafeBuiltinsList::forInline(b->builtinId);
+
+        auto anyReflection = [&](AbstractPirValue& res) -> bool {
+            bool anyReflection = false;
+            res.eachSource([&](ValOrig vo) {
+                if (auto j = Instruction::Cast(vo.val)) {
+                    if (j->effects.includes(Effect::Reflection)) {
+                        anyReflection = true;
+                    }
+                }
+            });
+            return anyReflection;
+        };
+
+        if (auto ld = LdVar::Cast(i)) {
+            auto e = ld->env() == funEnv ? callEnv : ld->env();
+            auto res = analysis.load(state, ld->varName, e);
+            if (anyReflection(res.result))
+                return false;
+            return true;
+        }
+
+        if (auto ld = LdVarSuper::Cast(i)) {
+            auto e = ld->env() == funEnv ? callEnv : ld->env();
+            auto res = analysis.superLoad(state, ld->varName, e);
+            if (anyReflection(res.result))
+                return false;
+            return true;
+        }
+
+        if (auto ld = LdFun::Cast(i)) {
+            auto e = ld->env() == funEnv ? callEnv : ld->env();
+            auto res = analysis.loadFun(state, ld->varName, e);
+            if (anyReflection(res.result))
+                return false;
+            return true;
+        }
+
+        if (auto force = Force::Cast(i)) {
+            auto arg = force->arg<0>().val();
+            // Handled above
+            if (LdFun::Cast(arg) || LdVar::Cast(arg) || LdVarSuper::Cast(arg))
+                return true;
+        }
+
+        return !i->effects.includes(Effect::Reflection);
+    });
+};
+
 class TheScopeResolution {
   public:
     ClosureVersion* function;
@@ -160,6 +222,40 @@ class TheScopeResolution {
                     }
                     if (after.envNotEscaped(i->env())) {
                         i->effects.reset(Effect::LeaksEnv);
+                    }
+                }
+
+                if (auto call = CallInstruction::CastCall(i)) {
+                    call->eachCallArg([&](Value* v) {
+                        if (auto mk = MkArg::Cast(v)) {
+                            if (!mk->noReflection)
+                                if (noReflection(mk->prom(),
+                                                 i->hasEnv() ? i->env()
+                                                             : Env::notClosed(),
+                                                 analysis, before))
+                                    mk->noReflection = true;
+                        }
+                    });
+                }
+
+                // If no reflective argument is passed to us, then forcing an
+                // argument cannot see our environment
+                if (function->assumptions().includes(
+                        rir::Assumption::NoReflectiveArgument)) {
+                    if (auto force = Force::Cast(i)) {
+                        if (force->hasEnv()) {
+                            auto arg =
+                                force->arg<0>().val()->followCastsAndForce();
+                            analysis.lookup(
+                                arg, [&](const AbstractPirValue& res) {
+                                    res.ifSingleValue(
+                                        [&](Value* val) { arg = val; });
+                                });
+                            if (LdArg::Cast(arg)) {
+                                force->elideEnv();
+                                force->effects.reset(Effect::Reflection);
+                            }
+                        }
                     }
                 }
 

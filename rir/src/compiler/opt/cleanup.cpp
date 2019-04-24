@@ -1,4 +1,5 @@
 #include "../pir/pir_impl.h"
+#include "../transform/bb.h"
 #include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
@@ -250,19 +251,8 @@ class TheCleanup {
             delete bb;
         }
 
-        auto renumberBBs = [&](Code* code) {
-            // Renumber in dominance order. This ensures that controlflow always
-            // goes from smaller id to bigger id, except for back-edges.
-            DominanceGraph dom(code);
-            code->nextBBId = 0;
-            DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
-                code->entry, [&](BB* bb) {
-                    bb->unsafeSetId(code->nextBBId++);
-                    bb->gc();
-                });
-        };
-        renumberBBs(function);
-        function->eachPromise(renumberBBs);
+        BBTransform::renumber(function);
+        function->eachPromise(BBTransform::renumber);
     }
 };
 } // namespace

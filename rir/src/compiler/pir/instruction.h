@@ -837,17 +837,21 @@ class FLIE(MkArg, 2, Effects::None()) {
     Promise* prom_;
 
   public:
+    bool noReflection = false;
+
     MkArg(Promise* prom, Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
           prom_(prom) {
         assert(eagerArg() == v);
+        noReflection = isEager();
     }
     MkArg(Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
           prom_(nullptr) {
         assert(eagerArg() == v);
+        noReflection = isEager();
     }
 
     Value* eagerArg() const { return arg(0).val(); }
@@ -1710,7 +1714,7 @@ class VLI(Phi, Effects::None()) {
         SLOWASSERT(std::find(input.begin(), input.end(), in) == input.end() &&
                    "Duplicate PHI input block");
         input.push_back(in);
-        args_.push_back(InstrArg(arg, PirType::any()));
+        args_.push_back(InstrArg(arg, arg->type));
     }
     BB* inputAt(size_t i) const { return input.at(i); }
     void updateInputAt(size_t i, BB* bb) {

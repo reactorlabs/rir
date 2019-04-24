@@ -36,15 +36,16 @@ enum class Assumption {
                              //  supplied >= (nargs - missing)
                              //  Note: can still have explicitly missing args
     NotTooManyArguments,     // The number of args supplied is <= nargs
+    NoReflectiveArgument,    // Argument promises are not reflective
 
     FIRST = Arg0IsEager_,
-    LAST = NotTooManyArguments
+    LAST = NoReflectiveArgument
 };
 
 #pragma pack(push)
 #pragma pack(1)
 struct Assumptions {
-    typedef EnumSet<Assumption, uint16_t> Flags;
+    typedef EnumSet<Assumption, uint32_t> Flags;
 
     constexpr static size_t MAX_MISSING = 255;
     // # of args with type assumptions
@@ -56,10 +57,11 @@ struct Assumptions {
     explicit constexpr Assumptions(const Flags& flags) : flags(flags) {}
     constexpr Assumptions(const Flags& flags, uint8_t missing)
         : flags(flags), missing(missing) {}
-    explicit Assumptions(uint32_t i) {
+    explicit Assumptions(void* pos) {
         // Silences unused warning:
         (void)unused;
-        memcpy(this, &i, sizeof(i));
+        (void)unused2;
+        memcpy(this, pos, sizeof(*this));
     }
 
     RIR_INLINE void add(Assumption a) { flags.set(a); }
@@ -109,10 +111,18 @@ struct Assumptions {
 
     RIR_INLINE bool operator<(const Assumptions& other) const {
         // Order by number of assumptions! Important for dispatching.
+        if (*this != other) {
+            if (subtype(other))
+                return true;
+            if (other.subtype(*this))
+                return false;
+        }
+
+        // we need a complete order, subtype is only partial
         if (missing != other.missing)
-            return missing > other.missing;
+            return missing < other.missing;
         if (flags.count() != other.flags.count())
-            return flags.count() > other.flags.count();
+            return flags.count() < other.flags.count();
         return flags < other.flags;
     }
 
@@ -136,13 +146,15 @@ struct Assumptions {
   private:
     Flags flags;
     uint8_t missing = 0;
+
     uint8_t unused = 0;
+    uint16_t unused2 = 0;
 };
 #pragma pack(pop)
 
 typedef uint32_t Immediate;
-static_assert(sizeof(Assumptions) == sizeof(Immediate),
-              "Assumptions needs to be one immediate arg size");
+static_assert(sizeof(Assumptions) == 2 * sizeof(Immediate),
+              "Assumptions needs to be 2 immediate args long");
 
 std::ostream& operator<<(std::ostream& out, Assumption a);
 

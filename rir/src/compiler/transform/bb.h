@@ -16,6 +16,7 @@ class BBTransform {
     static BB* splitEdge(size_t next_id, BB* from, BB* to, Code* target);
     static BB* split(size_t next_id, BB* src, BB::Instrs::iterator,
                      Code* target);
+    static void splitCriticalEdges(Code* fun);
     static std::pair<Value*, BB*> forInline(BB* inlinee, BB* cont);
     static BB* lowerExpect(Code* closure, BB* src,
                            BB::Instrs::iterator position, Value* condition,
@@ -26,6 +27,9 @@ class BBTransform {
                              bool assumePositive);
     static void insertAssume(Value* condition, Checkpoint* cp,
                              bool assumePositive);
+    // Renumber in dominance order. This ensures that controlflow always goes
+    // from smaller id to bigger id, except for back-edges.
+    static void renumber(Code* fun);
 };
 
 } // namespace pir
