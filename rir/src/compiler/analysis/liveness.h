@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <vector>
 
+// #define DEBUG_LIVENESS
+
 /*
  * The liveness analysis _does not_ use the static analysis framework. This is
  * intentional:
@@ -46,6 +48,7 @@ namespace pir {
 
 struct BBLiveness {
     uint8_t live = false;
+    uint8_t liveAtEntry = false;
     unsigned begin = -1;
     unsigned end = -1;
 };
@@ -55,8 +58,19 @@ class LivenessIntervals {
 
   public:
     LivenessIntervals(unsigned bbsSize, CFG const& cfg);
+
+    // Returns true if `what` is live *immediately after* `where`.
+    // This function cannot tell you if a value is live *before* the first
+    // instruction of a BB; instead, use `liveAtBBEntry`.
     bool live(Instruction* where, Value* what) const;
+
+    // Two values interfere iff there is a BB where they are both live and their
+    // intervals overlap.
     bool interfere(Value* v1, Value* v2) const;
+
+    // Returns true if `what` is live at the beginning of `bb`.
+    bool liveAtBBEntry(BB* bb, Value* what) const;
+
     size_t count(Value* v) const { return intervals.count(v); }
 };
 

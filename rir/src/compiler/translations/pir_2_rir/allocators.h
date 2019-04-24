@@ -15,7 +15,7 @@ namespace pir {
  * 3. For now, just put everything on stack. (step 4 is thus skipped...)
  * 4. Assign the remaining Instructions to local RIR variable numbers
  *    (see computeAllocation):
- *    1. Coalesc all remaining phi with their inputs. This is save since we are
+ *    1. Coalesce all remaining phi with their inputs. This is save since we are
  *       already in CSSA. Directly allocate a register on the fly, such that.
  *    2. Traverse the dominance tree and eagerly allocate the remaining ones
  * 5. For debugging, verify the assignment with a static analysis that simulates
@@ -42,6 +42,12 @@ class SSAAllocator {
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId),
           livenessIntervals(bbsSize, cfg),
           sa(cls, code, log, livenessIntervals) {
+#ifdef DEBUG_LIVENESS
+        std::cerr << "^^^^^^^^^^ "
+                  << "SSAAllocator ran liveness analysis"
+                  << " ^^^^^^^^^^\n";
+        code->printGraphCode(std::cerr, false);
+#endif
 
         computeStackAllocation();
         computeAllocation();
