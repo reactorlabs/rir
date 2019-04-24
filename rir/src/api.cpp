@@ -294,19 +294,23 @@ REXPORT SEXP pir_tests() {
 
 static size_t oldMaxInput = 0;
 static size_t oldInlinerMax = 0;
+static bool oldRirStrongSafeForce = false;
 
 REXPORT SEXP pir_check_warmup_begin(SEXP f, SEXP checksSxp, SEXP env) {
     if (oldMaxInput == 0) {
         oldMaxInput = pir::Parameter::MAX_INPUT_SIZE;
         oldInlinerMax = pir::Parameter::INLINER_MAX_SIZE;
+        oldRirStrongSafeForce = pir::Parameter::RIR_STRONG_SAFE_FORCE;
     }
     pir::Parameter::MAX_INPUT_SIZE = 3500;
     pir::Parameter::INLINER_MAX_SIZE = 4000;
+    pir::Parameter::RIR_STRONG_SAFE_FORCE = true;
     return R_NilValue;
 }
 REXPORT SEXP pir_check_warmup_end(SEXP f, SEXP checksSxp, SEXP env) {
     pir::Parameter::MAX_INPUT_SIZE = oldMaxInput;
     pir::Parameter::INLINER_MAX_SIZE = oldInlinerMax;
+    pir::Parameter::RIR_STRONG_SAFE_FORCE = oldRirStrongSafeForce;
     return R_NilValue;
 }
 
