@@ -1,6 +1,7 @@
 #ifndef PIR_PARAMETER_H
 #define PIR_PARAMETER_H
 
+#include "../common.h"
 #include <stddef.h>
 
 namespace rir {
@@ -16,6 +17,8 @@ struct Parameter {
     static size_t INLINER_MAX_SIZE;
     static size_t INLINER_MAX_INLINEE_SIZE;
     static size_t INLINER_INITIAL_FUEL;
+
+    static bool RIR_STRONG_SAFE_FORCE;
 };
 } // namespace pir
 } // namespace rir

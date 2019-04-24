@@ -14,11 +14,17 @@
 namespace rir {
 
 class CodeStream {
+    struct Promise {
+        Code* code;
+        SEXP ast;
+
+        Promise(Code* code, SEXP ast) : code(code), ast(ast) {}
+    };
 
     friend class Compiler;
 
     std::vector<char>* code;
-    std::vector<Code*> promises;
+    std::vector<Promise> promises;
 
     typedef unsigned PcOffset;
     PcOffset pos = 0;
@@ -51,10 +57,10 @@ class CodeStream {
     CodeStream(const CodeStream& other) = delete;
     CodeStream& operator=(const CodeStream& other) = delete;
 
-    size_t addPromise(Code* code) {
+    size_t addPromise(Code* code, SEXP ast = R_UnboundValue) {
         preserve(code->container());
         auto s = promises.size();
-        promises.push_back(code);
+        promises.push_back(Promise(code, ast));
         return s;
     }
 
@@ -153,8 +159,12 @@ class CodeStream {
                                        patchpoints, labels, localsCnt, nops);
         assert(res->extraPoolSize == 0 &&
                "promise indices and src pool idx need to be aligned");
-        for (auto c : promises)
+        for (Promise p : promises) {
+            Code* c = p.code;
+            SEXP ast = p.ast;
             res->addExtraPoolEntry(c->container());
+            res->addExtraPoolEntry(ast);
+        }
 
         labels.clear();
         patchpoints.clear();

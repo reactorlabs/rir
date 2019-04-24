@@ -116,7 +116,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     Code* getPromise(size_t idx) const {
-        return unpack(getExtraPoolEntry(idx));
+        return unpack(getExtraPoolEntry(idx * 2));
+    }
+
+    SEXP getPromiseAst(size_t idx) const {
+        return getExtraPoolEntry((idx * 2) + 1);
     }
 
     size_t size() const {

@@ -89,9 +89,27 @@ struct CallContext {
         return caller->getPromise(implicitArgIdx(i));
     }
 
+    SEXP implicitArgAst(unsigned i) const {
+        assert(caller);
+        unsigned idx = implicitArgIdx(i);
+        if (idx == MISSING_ARG_IDX || idx == DOTS_ARG_IDX)
+            // Should not return R_MissingArg - missing args are explicitly
+            // handled elsewhere
+            return R_UnboundValue;
+        else
+            return caller->getPromiseAst(idx);
+    }
+
     SEXP stackArg(unsigned i) const {
         assert(stackArgs && i < passedArgs);
         return ostack_at_cell(stackArgs + i);
+    }
+
+    SEXP argSexp(unsigned i) const {
+        if (hasStackArgs())
+            return stackArg(i);
+        else
+            return implicitArgAst(i);
     }
 
     SEXP name(unsigned i, InterpreterInstance* ctx) const {
@@ -104,7 +122,7 @@ struct CallContext {
         for (unsigned i = 0; i < passedArgs; i++) {
             SEXP arg = stackArg(i);
             if (TYPEOF(arg) == PROMSXP) {
-                safeForcePromise(arg);
+                safeForcePromise(arg, false);
             }
         }
     }
