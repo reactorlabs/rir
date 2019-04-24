@@ -11,6 +11,7 @@ AbstractPirValue::AbstractPirValue() : type(PirType::bottom()) {}
 AbstractPirValue::AbstractPirValue(Value* v, Instruction* o,
                                    unsigned recursionLevel)
     : type(v->type) {
+    assert(o || v == UnboundValue::instance());
     vals.insert(ValOrig(v, o, recursionLevel));
 }
 
@@ -124,7 +125,12 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
         auto aenv = envs.at(env);
         if (!aenv.absent(e)) {
             const AbstractPirValue& res = aenv.get(e);
-            return AbstractLoad(env, res);
+            // UnboundValue has fall-through semantics which cause lookup to
+            // fall through.
+            if (res.maybeUnboundValue())
+                return AbstractLoad(env, AbstractPirValue::tainted());
+            if (!res.isUnboundValue())
+                return AbstractLoad(env, res);
         }
         auto parent = envs.at(env).parentEnv();
         assert(parent);
@@ -158,6 +164,9 @@ AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
             // If it might be a closure, we can neither be sure, nor exclude
             // this binding...
             if (res.type.maybe(RType::closure))
+                return AbstractLoad(env, AbstractPirValue::tainted());
+
+            if (res.maybeUnboundValue())
                 return AbstractLoad(env, AbstractPirValue::tainted());
         }
         auto parent = envs.at(env).parentEnv();

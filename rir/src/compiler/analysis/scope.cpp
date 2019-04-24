@@ -416,11 +416,13 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
         //       StVar (StArg) x, ...
         // in this case starg must be preserved, since it does not override the
         // missing flag on the environment binding
-        auto maybeMissing = e.second.checkEachSource([&](const ValOrig& src) {
+        auto maybeStarg = e.second.checkEachSource([&](const ValOrig& src) {
+            if (!src.origin)
+                return false;
             auto st = StVar::Cast(src.origin);
             return st && st->isStArg;
         });
-        if (maybeMissing)
+        if (maybeStarg)
             return;
         theEnv[e.first] = e.second;
     }

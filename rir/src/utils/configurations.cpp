@@ -107,12 +107,10 @@ void Configurations::defaultOptimizations() {
     phasemarker("Phase 3: Cleanup Checkpoints");
 
     // ==== Phase 4) Final round of default opts
-    for (size_t i = 0; i < 2; ++i)
+    for (size_t i = 0; i < 3; ++i) {
         addDefaultOpt();
-
-    // Our backend really does not like unused checkpoints, so be sure to remove
-    // all of them here already.
-    optimizations.push_back(new pir::CleanupCheckpoints());
+        optimizations.push_back(new pir::CleanupCheckpoints());
+    }
 
     phasemarker("Phase 4: finished");
 }
