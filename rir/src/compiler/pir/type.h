@@ -334,6 +334,17 @@ struct PirType {
         return PirType(t_.r);
     }
 
+    // Type of an element, assuming this is a vector
+    PirType constexpr elem() const {
+        assert(isRType());
+        if (isA(PirType::num()))
+            return this;
+        else if (isA(RType::str))
+            return RType::chr;
+        else
+            return PirType::val();
+    }
+
     RIR_INLINE void setNotMissing() { *this = notMissing(); }
     RIR_INLINE void setNotObject() { *this = notObject(); }
     RIR_INLINE void setScalar() { *this = scalar(); }

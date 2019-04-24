@@ -1067,10 +1067,7 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
     Value* vec() { return arg(0).val(); }
     Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        auto t = vec()->type;
-        if (PirType(RType::vec).isA(t))
-            t = t.orObject();
-        maskEffectsAndTypeOnNonObjects(t);
+        maskEffectsAndTypeOnNonObjects(vec()->type.elem());
     }
 };
 
@@ -1083,10 +1080,7 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
     Value* vec() { return arg(0).val(); }
     Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        auto t = vec()->type;
-        if (PirType(RType::vec).isA(t))
-            t = t.orObject();
-        maskEffectsAndTypeOnNonObjects(t);
+        maskEffectsAndTypeOnNonObjects(vec()->type.elem());
     }
 };
 
@@ -1102,10 +1096,7 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
     Value* idx1() { return arg(1).val(); }
     Value* idx2() { return arg(2).val(); }
     void updateType() override final {
-        auto t = vec()->type;
-        if (PirType(RType::vec).isA(t))
-            t = t.orObject();
-        maskEffectsAndTypeOnNonObjects(t);
+        maskEffectsAndTypeOnNonObjects(vec()->type.elem());
     }
 };
 
@@ -1121,10 +1112,7 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
     Value* idx1() { return arg(1).val(); }
     Value* idx2() { return arg(2).val(); }
     void updateType() override final {
-        auto t = vec()->type;
-        if (PirType(RType::vec).isA(t))
-            t = t.orObject();
-        maskEffectsAndTypeOnNonObjects(t);
+        maskEffectsAndTypeOnNonObjects(vec()->type.elem());
     }
 };
 
