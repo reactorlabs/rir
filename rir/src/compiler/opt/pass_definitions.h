@@ -133,6 +133,9 @@ class PASS(TypeInference);
 
 class PASS(TypeSpeculation);
 
+/*
+ * Loop Invariant Code motion
+ */
 class PASS(HoistInstruction);
 
 class PhaseMarker : public PirTranslator {

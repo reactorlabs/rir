@@ -21,10 +21,31 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
         if (bb->isEmpty())
             return;
 
-        // Currently mostly loop invariant code motion
+        /*
+         * Currently mostly loop invariant code motion
+         *
+         * The general idea is the following.
+         *
+         * Given an instruction i and its source BB b
+         * 1. identify a target block t, such that the end of that block is
+         *    * dominated by all inputs
+         *    * strictly dominates b
+         * 2. hoist the instruction to t if any of those applies
+         *    * i has no effects and is free to execute
+         *    * i has no effects and hoisting it does not incur
+         *      unnecessary computation. This is checked by verifying that
+         *      none of the intermediate blocks between t and b branch off, to
+         *      an unrelated trace.
+         *    * i has an effect, but there is no conflicting effect between t
+         *      and b, thus reordering is not observable.
+         *
+         * TODO: compute loop boundaries for placement instead of taking the
+         *       whatever block happens to be dominated by all inputs.
+         */
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto i = *ip;
+            auto next = ip + 1;
 
             // Those are hoisted even if they have effects, but needs expensive
             // effect reordering checks
@@ -44,55 +65,66 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
             if (!i->effects.empty() || i->branchOrExit() ||
                 blacklist.count(i->tag))
                 if (!whitelist.count(i->tag)) {
-                    ip++;
+                    ip = next;
                     continue;
                 }
 
-            auto next = ip + 1;
+            BB* target = nullptr;
+            {
+                bool success = true;
+                i->eachArg([&](Value* a) {
+                    // cppcheck-suppress knownConditionTrueFalse
+                    if (!success)
+                        return;
 
-            BB* trg = nullptr;
-            bool success = true;
+                    auto arg = Instruction::Cast(a);
+                    if (!arg)
+                        return;
 
-            i->eachArg([&](Value* a) {
-                auto arg = Instruction::Cast(a);
-                // cppcheck-suppress knownConditionTrueFalse
-                if (!success || !arg)
-                    return;
-
-                // Try to find a hoisting candidate that is dominated by all
-                // arguments to i
-                // cppcheck-suppress knownConditionTrueFalse
-                if (!trg)
-                    trg = arg->bb();
-                if (trg != arg->bb()) {
-                    if (dom.dominates(arg->bb(), trg)) {
-                        // nothing to do
-                    } else if (dom.dominates(trg, arg->bb())) {
-                        trg = arg->bb();
-                    } else {
-                        success = false;
+                    // Try to find a hoisting candidate that is dominated by all
+                    // arguments to i
+                    // cppcheck-suppress knownConditionTrueFalse
+                    if (!target)
+                        target = arg->bb();
+                    if (target != arg->bb()) {
+                        if (dom.dominates(arg->bb(), target)) {
+                            // nothing to do
+                        } else if (dom.dominates(target, arg->bb())) {
+                            target = arg->bb();
+                        } else {
+                            success = false;
+                        }
                     }
-                }
 
-                // !trg->isBranch, is a cheap heuristic to avoid moving
-                // something from the loop body to the loop header, which is
-                // usually not great.
-                if (!success || trg == bb || trg->isBranch() ||
-                    !dom.dominates(trg, bb)) {
-                    success = false;
-                    return;
-                }
+                    if (target == bb || !dom.dominates(target, bb))
+                        success = false;
+                });
+                if (!success || !target)
+                    target = nullptr;
+                else
+                    // both branches dominate bb, then we should move target
+                    // forward until they join again
+                    while (target->next0 && target->next0 != bb &&
+                           dom.dominates(target->next0, bb) &&
+                           (!target->next1 || dom.dominates(target->next1, bb)))
+                        target = target->next0;
+            }
 
-                std::function<bool(BB*)> doesNotReorderEffects = [&](BB* x) {
-                    // empty or loop
-                    if (!x || x == trg)
+            if (!target) {
+                ip = next;
+                continue;
+            }
+
+            auto doesNotReorderEffects = [&](BB* x) {
+                std::function<bool(BB*)> compute = [&](BB* x) {
+                    if (!x || x == target)
                         return true;
                     // done, check cur bb for effects
                     if (x == bb) {
                         for (auto& j : *bb) {
                             if (i == j)
                                 return true;
-                            if (j->hasObservableEffects())
+                            if (j->hasStrongEffects())
                                 return false;
                         }
                         assert(false);
@@ -107,21 +139,45 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                         }
                     }
 
-                    for (auto& j : *bb) {
-                        if (j->hasObservableEffects())
+                    for (auto& j : *bb)
+                        if (j->hasStrongEffects())
                             return false;
-                    }
 
-                    return doesNotReorderEffects(x->next0) &&
-                           doesNotReorderEffects(x->next1);
+                    return compute(x->next0) && compute(x->next1);
                 };
+                return compute(x->next0) && compute(x->next1);
+            };
 
-                success =
-                    !i->hasObservableEffects() || doesNotReorderEffects(trg);
-            });
+            auto noUnneccessaryComputation = [&](BB* x, unsigned exceptions) {
+                std::function<bool(BB*)> compute = [&](BB* x) {
+                    if (!x || x == bb || x == target)
+                        return true;
+                    if (!x->isEmpty()) {
+                        // If we hoist over a branch, but one of the
+                        // branches does not need the value, then this will
+                        // waste computation
+                        if (x->last()->branches()) {
+                            if (!dom.dominates(x->trueBranch(), bb) ||
+                                !dom.dominates(x->falseBranch(), bb)) {
+                                if (exceptions == 0)
+                                    return false;
+                                exceptions--;
+                            }
+                        }
+                    }
+                    return compute(x->next0) && compute(x->next1);
+                };
+                return compute(x->next0) && compute(x->next1);
+            };
 
-            if (trg && success && trg != bb)
-                next = bb->moveToLast(ip, trg);
+            bool success = true;
+            if (i->hasObservableEffects())
+                success = doesNotReorderEffects(target);
+            else if (i->cost() > 0)
+                success = noUnneccessaryComputation(target, 1);
+
+            if (success)
+                next = bb->moveToLast(ip, target);
 
             ip = next;
         }
