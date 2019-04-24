@@ -22,8 +22,8 @@ class Rir2Pir {
         return tryCompile(srcFunction->body(), insert);
     }
 
-    Value* tryCreateArg(rir::Code* prom, Builder& insert, bool eager) const
-        __attribute__((warn_unused_result));
+    Value* tryCreateArg(rir::Code* promise, SEXP promiseAst, Builder& insert,
+                        bool eager) const __attribute__((warn_unused_result));
 
   private:
     Value* tryTranslatePromise(rir::Code* srcCode, Builder& insert) const

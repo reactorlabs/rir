@@ -2213,7 +2213,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
-            SET_PRVALUE(prom, ostack_pop(ctx));
+            SEXP promAst = ostack_pop(ctx);
+            if (promAst == R_UnboundValue &&
+                pir::Parameter::RIR_STRONG_SAFE_FORCE) {
+                promAst = safeEval(c->getPromiseAst(id), env, true);
+            }
+            SET_PRVALUE(prom, promAst);
             ostack_push(ctx, prom);
             NEXT();
         }
@@ -3664,7 +3669,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
                      nullptr, names.empty() ? nullptr : names.data(), rho,
                      Assumptions(), ctx);
     call.arglist = arglist;
-    call.safeForceArgs();
+    call.safeForceArgs(pir::Parameter::RIR_STRONG_SAFE_FORCE);
 
     auto res = rirCall(call, ctx);
     ostack_popn(ctx, call.passedArgs);

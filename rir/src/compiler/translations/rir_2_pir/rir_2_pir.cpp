@@ -1,6 +1,7 @@
 #include "rir_2_pir.h"
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
+#include "../../parameter.h"
 #include "../../pir/pir_impl.h"
 #include "../../transform/insert_cast.h"
 #include "../../util/ConvertAssumptions.h"
@@ -142,8 +143,8 @@ Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
     return insert.emitCheckpoint(srcCode, pos, stack);
 }
 
-Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
-                             bool eager) const {
+Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, SEXP promiseAst,
+                             Builder& insert, bool eager) const {
     Promise* prom = insert.function->createProm(promiseCode->src);
     {
         Builder promiseBuilder(insert.function, prom);
@@ -165,7 +166,7 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
             theArg = eagerVal;
     }
     if (!theArg) {
-        theArg = insert(new MkArg(prom, eagerVal, insert.env));
+        theArg = insert(new MkArg(prom, promiseAst, eagerVal, insert.env));
     }
     return theArg;
 }
@@ -408,8 +409,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     given.remove(Assumption::NoExplicitlyMissingArgs);
                 } else {
                     rir::Code* promiseCode = srcCode->getPromise(argi);
+                    SEXP promiseAst = srcCode->getPromiseAst(argi);
                     bool eager = monomorphicBuiltin;
-                    auto arg = tryCreateArg(promiseCode, insert, eager);
+                    auto arg =
+                        tryCreateArg(promiseCode, promiseAst, insert, eager);
                     if (!arg)
                         return false;
                     writeArgTypeToAssumptions(given, arg, i);
@@ -489,6 +492,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::promise_: {
         unsigned promi = bc.immediate.i;
         rir::Code* promiseCode = srcCode->getPromise(promi);
+        SEXP promAst = srcCode->getPromiseAst(promi);
         Value* val = pop();
         Promise* prom = insert.function->createProm(promiseCode->src);
         {
@@ -498,7 +502,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 return false;
             }
         }
-        push(insert(new MkArg(prom, val, env)));
+        push(insert(new MkArg(prom, promAst, val, env)));
         break;
     }
 

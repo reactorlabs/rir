@@ -1010,8 +1010,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             case Tag::MkArg: {
-                auto p = MkArg::Cast(instr)->prom();
-                unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
+                auto mkarg = MkArg::Cast(instr);
+                unsigned id = ctx.cs().addPromise(
+                    getPromise(ctx, mkarg->prom()), mkarg->promAst());
                 cb.add(BC::promise(id));
                 break;
             }

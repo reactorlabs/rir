@@ -420,8 +420,9 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                                 f->replaceUsesWith(promRes);
                                 split->remove(split->begin());
 
-                                MkArg* fixedMkArg = new MkArg(
-                                    mkarg->prom(), promRes, mkarg->promEnv());
+                                MkArg* fixedMkArg =
+                                    new MkArg(mkarg->prom(), R_UnboundValue,
+                                              promRes, mkarg->promEnv());
                                 next =
                                     split->insert(split->begin(), fixedMkArg);
                                 forcedMkArg[mkarg] = fixedMkArg;

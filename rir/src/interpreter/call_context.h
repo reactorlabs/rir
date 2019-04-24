@@ -117,12 +117,12 @@ struct CallContext {
         return cp_pool_at(ctx, names[i]);
     }
 
-    void safeForceArgs() const {
+    void safeForceArgs(bool strong) const {
         assert(hasStackArgs());
         for (unsigned i = 0; i < passedArgs; i++) {
             SEXP arg = stackArg(i);
             if (TYPEOF(arg) == PROMSXP) {
-                safeForcePromise(arg, false);
+                safeForcePromise(arg, strong);
             }
         }
     }

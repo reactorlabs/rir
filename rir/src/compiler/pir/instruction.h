@@ -835,32 +835,36 @@ class Return
 class Promise;
 class FLIE(MkArg, 2, Effects::None()) {
     Promise* prom_;
+    SEXP promAst_;
 
   public:
     bool noReflection = false;
 
-    MkArg(Promise* prom, Value* v, Value* env)
+    MkArg(Promise* prom, SEXP promAst, Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
-          prom_(prom) {
+          prom_(prom), promAst_(promAst) {
         assert(eagerArg() == v);
         noReflection = isEager();
     }
     MkArg(Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
-          prom_(nullptr) {
+          prom_(nullptr), promAst_(R_UnboundValue) {
         assert(eagerArg() == v);
         noReflection = isEager();
     }
 
     Value* eagerArg() const { return arg(0).val(); }
     void eagerArg(Value* eager) { arg(0).val() = eager; }
-
-    void updatePromise(Promise* p) { prom_ = p; }
-    Promise* prom() const { return prom_; }
-
     bool isEager() const { return eagerArg() != UnboundValue::instance(); }
+
+    void updatePromise(Promise* p) {
+        prom_ = p;
+        promAst_ = R_UnboundValue;
+    }
+    Promise* prom() const { return prom_; }
+    SEXP promAst() const { return promAst_; }
 
     void printArgs(std::ostream& out, bool tty) const override;
 
