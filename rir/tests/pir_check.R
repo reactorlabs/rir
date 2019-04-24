@@ -316,3 +316,20 @@ stopifnot(pir.check(function(x, y) {
   y == NA
   x + y
 }, NoEq, warmup=function(f)f(5L, 2L)))
+
+# Strong safe force
+x <- 10
+stopifnot(pir.check(function(n) {
+  x <- 1
+  while (x < n)
+    x <- x + 1
+  x
+}, NoEnv, warmup=function(f)f(x)))
+class(x) <- "something"
+stopifnot(!pir.check(function(n) {
+  x <- 1
+  while (x < n)
+    x <- x + 1
+  x
+}, NoEnv, warmup=function(f)f(x)))
+
