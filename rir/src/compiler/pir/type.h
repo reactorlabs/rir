@@ -335,10 +335,10 @@ struct PirType {
     }
 
     // Type of an element, assuming this is a vector
-    PirType constexpr elem() const {
+    PirType elem() const {
         assert(isRType());
         if (isA(PirType::num()))
-            return this;
+            return *this;
         else if (isA(RType::str))
             return RType::chr;
         else
