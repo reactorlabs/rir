@@ -337,12 +337,12 @@ struct PirType {
     // Type of an element, assuming this is a vector
     PirType elem() const {
         assert(isRType());
-        if (isA(PirType::num()))
+        if (isA(num()))
             return *this;
         else if (isA(RType::str))
             return RType::chr;
         else
-            return PirType::val();
+            return val();
     }
 
     RIR_INLINE void setNotMissing() { *this = notMissing(); }
