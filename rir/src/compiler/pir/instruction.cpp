@@ -414,8 +414,15 @@ void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
 void MkArg::printArgs(std::ostream& out, bool tty) const {
     eagerArg()->printRef(out);
     out << ", " << *prom();
+    std::string past;
+    {
+        CaptureOut rec;
+        Rf_PrintValue(promAst());
+        past = rec.oneline(5);
+    }
+    out << " " << past;
     if (noReflection)
-        out << " (!refl)";
+        out << "(!refl)";
     out << ", ";
 }
 

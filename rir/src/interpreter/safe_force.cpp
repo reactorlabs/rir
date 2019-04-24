@@ -76,6 +76,10 @@ SEXP safeForcePromise(SEXP e, bool strong) {
         }
         return val;
     } else {
+#ifdef DEBUG_SAFE_EVAL
+        std::cout << "promise known: ";
+        Rf_PrintValue(PRVALUE(e));
+#endif
         return PRVALUE(e);
     }
 }

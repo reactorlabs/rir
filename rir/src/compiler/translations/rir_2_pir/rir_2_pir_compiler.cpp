@@ -127,17 +127,19 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
             auto arg = closure->formals().defaultArgs()[i];
             if (arg != R_MissingArg) {
                 Value* res = nullptr;
+                SEXP argAst = R_UnboundValue;
                 if (TYPEOF(arg) != EXTERNALSXP) {
                     // A bit of a hack to compile default args, which somehow
                     // are not compiled.
                     // TODO: why are they sometimes not compiled??
                     auto funexp = rir::Compiler::compileExpression(arg);
                     protect(funexp);
+                    argAst = arg;
                     arg = Function::unpack(funexp)->body()->container();
                 }
                 if (rir::Code::check(arg)) {
                     auto code = rir::Code::unpack(arg);
-                    res = rir2pir.tryCreateArg(code, builder, false);
+                    res = rir2pir.tryCreateArg(code, argAst, builder, false);
                     if (!res) {
                         logger.warn("Failed to compile default arg");
                         return fail();
