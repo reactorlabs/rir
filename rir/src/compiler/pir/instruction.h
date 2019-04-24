@@ -883,7 +883,7 @@ class FLI(Seq, 3, Effects::None()) {
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{start, end, step}}) {}
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::num().notObject());
+        maskEffectsAndTypeOnNonObjects(PirType::num().notObject().notMissing());
     }
 };
 
@@ -1241,7 +1241,7 @@ SIMPLE_INSTRUCTIONS(V, _)
             }                                                                  \
         }                                                                      \
         void updateType() override final {                                     \
-            maskEffectsAndTypeOnNonObjects(Type);                              \
+            maskEffectsAndTypeOnNonObjects(Type.notMissing());                 \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
             maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
             updateScalarOnScalarInputs();                                      \
@@ -1294,7 +1294,7 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
             }                                                                  \
         }                                                                      \
         void updateType() override final {                                     \
-            maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
+            maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.notMissing()); \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
             maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
             updateScalarOnScalarInputs();                                      \

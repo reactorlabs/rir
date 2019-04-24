@@ -2,6 +2,7 @@
 #include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "R/Funtab.h"
 
 #include "../analysis/abstract_value.h"
 
@@ -24,6 +25,19 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                 if (!i->producesRirResult())
                     return;
 
+                auto getType = [&](Value* v) {
+                    if (auto arg = Instruction::Cast(v)) {
+                        if (types.count(arg)) {
+                            return types.at(arg);
+                        } else {
+                            done = false;
+                        }
+                    } else {
+                        return v->type;
+                    }
+                    return PirType::bottom();
+                };
+
                 PirType infered = PirType::bottom();
                 switch (i->tag) {
                 case Tag::Mul:
@@ -40,33 +54,25 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     i->eachArg([&](Value* v) {
                         if (i->mayHaveEnv() && v == i->env())
                             return;
-                        if (auto arg = Instruction::Cast(v)) {
-                            if (types.count(arg))
-                                infered = infered | types.at(arg);
-                            else
-                                done = false;
-                        } else {
-                            infered = infered | v->type;
-                        }
+                        infered = infered | getType(v);
                     });
                     if (i->tag == Tag::Div && infered.isA(RType::integer)) {
                         infered = infered | RType::real;
                     }
                     break;
                 }
-                case Tag::Assume: {
-                    auto assumption = Assume::Cast(i);
-                    if (!assumption->assumeTrue)
-                        if (auto isO = IsObject::Cast(assumption->condition()))
-                            if (auto val =
-                                    Instruction::Cast(isO->arg<0>().val())) {
-                                if (types.count(val))
-                                    infered = types.at(val).notObject();
-                                else
-                                    infered = val->type.notObject();
-                            }
-                    break;
+                case Tag::CallSafeBuiltin: {
+                    auto c = CallSafeBuiltin::Cast(i);
+                    std::string name = getBuiltinName(getBuiltinNr(c->blt));
+                    if ("bitwiseXor" == name || "bitwiseShiftL" == name) {
+                        infered = PirType(RType::integer);
+                        if (getType(c->arg(0).val()).isScalar() &&
+                            getType(c->arg(1).val()).isScalar())
+                            infered.setScalar();
+                        break;
+                    }
                 }
+                // fall through
                 default:
                     infered = i->type;
                 }
