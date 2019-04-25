@@ -1301,9 +1301,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             // Values, not instructions
 #define V(Value) case Tag::Value:
-                COMPILER_VALUES(V) {
+            COMPILER_VALUES(V) {
 #undef V
-                    break;
+                break;
             }
 
             // Dummy sentinel enum item

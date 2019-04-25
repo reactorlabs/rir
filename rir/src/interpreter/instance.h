@@ -818,8 +818,7 @@ RIR_INLINE void ostackEnsureSize(InterpreterInstance* ctx, unsigned minFree) {
 
 class Locals final {
     // NOTE: must not own any resources, because the destructor is not
-    // called
-    //       if there is a longjmp from the evalRirCode call
+    // called if there is a longjmp from the evalRirCode call
   private:
     R_bcstack_t* base;
     unsigned localsCount;

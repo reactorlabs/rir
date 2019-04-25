@@ -3,11 +3,11 @@
 #include "BC.h"
 #include "CodeStream.h"
 
-#include "R/Funtab.h"
+#include "R/r.h"
 #include "R/RList.h"
 #include "R/Sexp.h"
 #include "R/Symbols.h"
-#include "R/r.h"
+#include "R/Funtab.h"
 
 #include "../interpreter/safe_force.h"
 #include "utils/Pool.h"
@@ -54,7 +54,10 @@ class CompilerContext {
         CodeContext(SEXP ast, SEXP env, FunctionWriter& fun, CodeContext* p)
             : cs(fun, ast), env(env), parent(p) {}
         virtual ~CodeContext() {}
-        bool inLoop() { return !loops.empty() || (parent && parent->inLoop()); }
+        bool inLoop() {
+            return !loops.empty() ||
+                    (parent && parent->inLoop());
+        }
         BC::Label loopNext() {
             assert(!loops.empty());
             return loops.top().next_;
@@ -70,8 +73,7 @@ class CompilerContext {
                 loops.top().context_needed_ = true;
         }
         virtual bool loopIsLocal() {
-            if (loops.empty())
-                return false;
+            if (loops.empty()) return false;
             return true;
         }
     };
@@ -111,7 +113,9 @@ class CompilerContext {
         return code.top()->loops.top().context_needed_;
     }
 
-    bool loopIsLocal() { return code.top()->loopIsLocal(); }
+    bool loopIsLocal() {
+        return code.top()->loopIsLocal();
+    }
 
     BC::Label loopNext() { return code.top()->loopNext(); }
 
@@ -128,10 +132,7 @@ class CompilerContext {
                                   code.empty() ? nullptr : code.top()));
     }
 
-    void pushPromiseContext(SEXP ast) {
-        code.push(
-            new PromiseContext(ast, fun, code.empty() ? nullptr : code.top()));
-    }
+    void pushPromiseContext(SEXP ast) { code.push(new PromiseContext(ast, fun, code.empty() ? nullptr : code.top())); }
 
     Code* pop() {
         Code* res = cs().finalize(0);
@@ -147,8 +148,7 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp);
 // context, but `b` is not. In `while(...) {...}` all loop body expressions are
 // in a void context, since the loop as an expression is always nil.
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
-void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
-                 bool voidContext);
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
                   std::function<void()> compileBody) {
@@ -281,8 +281,7 @@ assert(false);
 // Inline some specials
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
-bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
-                        bool voidContext) {
+bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bool voidContext) {
     // `true` if an argument isn't missing, labeled, or `...`.
     auto isRegularArg = [](RListIter& arg) {
         return *arg != R_DotsSymbol && *arg != R_MissingArg && !arg.hasTag();
@@ -302,11 +301,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     }
 
     if (args.length() == 2 &&
-        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Mul ||
-         fun == symbol::Div || fun == symbol::Idiv || fun == symbol::Mod ||
-         fun == symbol::Pow || fun == symbol::Lt || fun == symbol::Gt ||
-         fun == symbol::Le || fun == symbol::Ge || fun == symbol::Eq ||
-         fun == symbol::Ne || fun == symbol::Colon)) {
+        (fun == symbol::Add || fun == symbol::Sub ||
+         fun == symbol::Mul || fun == symbol::Div || fun == symbol::Idiv ||
+         fun == symbol::Mod || fun == symbol::Pow ||
+         fun == symbol::Lt || fun == symbol::Gt ||
+         fun == symbol::Le || fun == symbol::Ge ||
+         fun == symbol::Eq || fun == symbol::Ne ||
+         fun == symbol::Colon)) {
         cs << BC::guardNamePrimitive(fun);
 
         compileExpr(ctx, args[0]);
@@ -351,7 +352,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     }
 
     if (args.length() == 1 &&
-        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Not)) {
+        (fun == symbol::Add || fun == symbol::Sub ||
+         fun == symbol::Not)) {
         cs << BC::guardNamePrimitive(fun);
 
         compileExpr(ctx, args[0]);
@@ -378,7 +380,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << BC::asLogical();
         cs.addSrc(args[0]);
-        cs << BC::dup() << BC::brfalse(nextBranch);
+        cs << BC::dup()
+           << BC::brfalse(nextBranch);
 
         compileExpr(ctx, args[1]);
 
@@ -402,7 +405,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << BC::asLogical();
         cs.addSrc(args[0]);
-        cs << BC::dup() << BC::brtrue(nextBranch);
+        cs << BC::dup()
+           << BC::brtrue(nextBranch);
 
         compileExpr(ctx, args[1]);
 
@@ -424,8 +428,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         return true;
     }
 
-    if (fun == symbol::Assign || fun == symbol::Assign2 ||
-        fun == symbol::SuperAssign) {
+    if (fun == symbol::Assign || fun == symbol::Assign2 || fun == symbol::SuperAssign) {
         assert(args.length() == 2);
 
         bool superAssign = fun == symbol::SuperAssign;
@@ -455,16 +458,18 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
 
         // 2) Specialcalse normal assignment (ie. "i <- expr")
-        Match(lhs){Case(SYMSXP){cs << BC::guardNamePrimitive(fun);
-        compileExpr(ctx, rhs);
-        if (!voidContext) {
-            // No ensureNamed needed, stvar already ensures named
-            cs << BC::dup() << BC::invisible();
-        }
-        cs << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs));
-        return true;
-    }
-    Else(break)
+        Match(lhs) {
+            Case(SYMSXP) {
+                cs << BC::guardNamePrimitive(fun);
+                compileExpr(ctx, rhs);
+                if (!voidContext) {
+                    // No ensureNamed needed, stvar already ensures named
+                    cs << BC::dup() << BC::invisible();
+                }
+                cs << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs));
+                return true;
+            }
+            Else(break)
         }
 
         // Find all parts of the lhs
@@ -759,7 +764,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         unsigned beginLoopPos = cs.currentPos();
 
-        cs << BC::beginloop(nextBranch) << loopBranch;
+        cs << BC::beginloop(nextBranch)
+           << loopBranch;
 
         compileExpr(ctx, body, true);
         cs << BC::br(loopBranch) << nextBranch;
@@ -805,7 +811,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs << BC::forSeqSize() << BC::push((int)0);
 
         unsigned int beginLoopPos = cs.currentPos();
-        cs << BC::beginloop(breakBranch) << loopBranch;
+        cs << BC::beginloop(breakBranch)
+           << loopBranch;
 
         cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
         // We know this is an int and won't do dispatch.
@@ -853,7 +860,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
 
         if (ctx.loopIsLocal()) {
-            cs << BC::guardNamePrimitive(fun) << BC::br(ctx.loopNext())
+            cs << BC::guardNamePrimitive(fun)
+               << BC::br(ctx.loopNext())
                << BC::push(R_NilValue);
             return true;
         }
@@ -868,7 +876,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
 
         if (ctx.loopIsLocal()) {
-            cs << BC::guardNamePrimitive(fun) << BC::br(ctx.loopBreak())
+            cs << BC::guardNamePrimitive(fun)
+               << BC::br(ctx.loopBreak())
                << BC::push(R_NilValue);
             return true;
         }
@@ -926,21 +935,20 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     //     return true;
     // }
 
-#define V(NESTED, name, Name)                                                  \
-    if (fun == symbol::name) {                                                 \
-        cs << BC::push(R_NilValue) << BC::name();                              \
-        cs.addSrc(ast);                                                        \
-        return true;                                                           \
+#define V(NESTED, name, Name)\
+    if (fun == symbol::name) {\
+        cs << BC::push(R_NilValue) << BC::name();\
+        cs.addSrc(ast);\
+        return true;\
     }
-    SIMPLE_INSTRUCTIONS(V, _)
+SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
     return false;
 }
 
 // function application
-void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
-                 bool voidContext) {
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext) {
     CodeStream& cs = ctx.cs();
 
     // application has the form:
@@ -1048,9 +1056,7 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
-        Case(LANGSXP, fun, args) {
-            compileCall(ctx, exp, fun, args, voidContext);
-        }
+        Case(LANGSXP, fun, args) { compileCall(ctx, exp, fun, args, voidContext); }
         // Variable lookup
         Case(SYMSXP) {
             compileGetvar(ctx.cs(), exp, !voidContext);
@@ -1073,8 +1079,12 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
                 ctx.cs().addSrc(expr);
             }
         }
-        Case(BCODESXP) { assert(false); }
-        Case(EXTERNALSXP) { assert(false); }
+        Case(BCODESXP) {
+            assert(false);
+        }
+        Case(EXTERNALSXP) {
+            assert(false);
+        }
         // TODO : some code (eg. serialize.c:2154) puts closures into asts...
         //        not sure how we want to handle it...
         // Case(CLOSXP) {
@@ -1093,7 +1103,7 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp) {
     return ctx.pop();
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 SEXP Compiler::finalize() {
     FunctionWriter function;
@@ -1132,3 +1142,4 @@ bool Compiler::profile =
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 } // namespace rir
+%☲!㵇8䉌<㥃6㈽.㈼-☲㡂4☳ 㡃4㈼-⸺(ⰴ*㐴3☦&☦&☦&☦&☦&☦&☦&☦&☦&☦&☦&☦&〷,捝h☦&祼t啓Y屡Z浪p敤e汭j块X屙^䱎L獱r剒R扥`之P䩌I煱q䡇J☧&㨻8䡆J☦&䭋J婠U字_協R嵟Z䵋O彡]䭋N
