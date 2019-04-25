@@ -10,14 +10,15 @@
 namespace rir {
 // cppcheck-suppress uninitMemberVar symbol=data
 Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
-           size_t localsCnt)
+           size_t localsCnt, size_t bindingsCnt)
     : RirRuntimeObject(
           // GC area starts just after the header
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
       funInvocationCount(0), src(src), stackLength(0), localsCount(localsCnt),
-      codeSize(cs), srcLength(sourceLength), extraPoolSize(0) {
+      bindingsCount(bindingsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
 }
 

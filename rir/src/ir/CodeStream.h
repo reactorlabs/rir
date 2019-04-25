@@ -124,13 +124,9 @@ class CodeStream {
 
     void addSrcIdx(unsigned idx) { sources[pos] = idx; }
 
-    unsigned currentPos() const {
-        return pos;
-    }
+    unsigned currentPos() const { return pos; }
 
-    unsigned currentSourcesSize() const {
-        return sources.size();
-    }
+    unsigned currentSourcesSize() const { return sources.size(); }
 
     void remove(unsigned pc) {
 
@@ -148,9 +144,10 @@ class CodeStream {
         sources.erase(pc + bcSize);
     }
 
-    Code* finalize(size_t localsCnt) {
-        Code* res = function.writeCode(ast, &(*code)[0], pos, sources,
-                                       patchpoints, labels, localsCnt, nops);
+    Code* finalize(size_t localsCnt, size_t bindingsCnt) {
+        Code* res =
+            function.writeCode(ast, &(*code)[0], pos, sources, patchpoints,
+                               labels, localsCnt, nops, bindingsCnt);
         assert(res->extraPoolSize == 0 &&
                "promise indices and src pool idx need to be aligned");
         for (auto c : promises)

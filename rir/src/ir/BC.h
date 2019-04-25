@@ -70,12 +70,21 @@ BC BC::ldvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_, i);
 }
-BC BC::ldvarForUpdate(SEXP sym) {
+BC BC::ldvarCache(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::ldvar_for_update_, i);
+    i.poolAndCache.poolIndex = Pool::insert(sym);
+    i.poolAndCache.cacheIndex = cacheSlot;
+    return BC(Opcode::ldvar_cache_, i);
+}
+BC BC::ldvarForUpdateCache(SEXP sym, uint32_t cacheSlot) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.poolAndCache.poolIndex = Pool::insert(sym);
+    i.poolAndCache.cacheIndex = cacheSlot;
+    return BC(Opcode::ldvar_for_update_cache_, i);
 }
 BC BC::ldvarNoForce(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
@@ -83,6 +92,14 @@ BC BC::ldvarNoForce(SEXP sym) {
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_noforce_, i);
+}
+BC BC::ldvarNoForceCache(SEXP sym, uint32_t cacheSlot) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.poolAndCache.poolIndex = Pool::insert(sym);
+    i.poolAndCache.cacheIndex = cacheSlot;
+    return BC(Opcode::ldvar_noforce_cache_, i);
 }
 BC BC::ldvarSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
@@ -150,12 +167,13 @@ BC BC::missing(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
-BC BC::starg(SEXP sym) {
+BC BC::stargCache(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::starg_, i);
+    i.poolAndCache.poolIndex = Pool::insert(sym);
+    i.poolAndCache.cacheIndex = cacheSlot;
+    return BC(Opcode::starg_cache_, i);
 }
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
@@ -163,6 +181,14 @@ BC BC::stvar(SEXP sym) {
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_, i);
+}
+BC BC::stvarCache(SEXP sym, uint32_t cacheSlot) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.poolAndCache.poolIndex = Pool::insert(sym);
+    i.poolAndCache.cacheIndex = cacheSlot;
+    return BC(Opcode::stvar_cache_, i);
 }
 BC BC::stvarSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
