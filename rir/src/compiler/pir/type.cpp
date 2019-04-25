@@ -1,4 +1,5 @@
 #include "type.h"
+#include "../../interpreter/LazyEnvironment.h"
 #include "R/r.h"
 
 extern "C" Rboolean(Rf_isObject)(SEXP s);
@@ -90,6 +91,11 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     }
 }
 
+PirType::PirType(const void* pos) : PirType() {
+    memcpy(this, pos, sizeof(*this));
+    assert((isRType() || !t_.n.empty()) && "corrupted pir type");
+}
+
 void PirType::merge(const ObservedValues& other) {
     assert(other.numTypes);
 
@@ -115,6 +121,23 @@ void PirType::merge(const ObservedValues& other) {
             flags_.set(TypeFlags::maybeNotScalar);
 
         merge(record.sexptype);
+    }
+}
+
+bool PirType::hasInstance(SEXP val) const {
+    if (isRType()) {
+        if (TYPEOF(val) == PROMSXP)
+            return maybePromiseWrapped() || maybeLazy() ||
+                   PirType(RType::prom).isA(*this);
+        if (LazyEnvironment::cast(val))
+            return PirType(RType::env).isA(*this);
+        return PirType(val).isA(*this | RType::missing);
+    } else if (*this == NativeType::test) {
+        return IS_SIMPLE_SCALAR(val, LGLSXP) && *LOGICAL(val) != NA_LOGICAL;
+    } else {
+        std::cerr << "can't check val is instance of " << *this << ", value:\n";
+        Rf_PrintValue(val);
+        assert(false);
     }
 }
 }

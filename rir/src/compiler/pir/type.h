@@ -79,7 +79,7 @@ enum class NativeType : uint8_t {
     context,
 
     FIRST = test,
-    LAST = frameState,
+    LAST = context,
 };
 
 enum class TypeFlags : uint8_t {
@@ -111,9 +111,9 @@ enum class TypeFlags : uint8_t {
  */
 
 struct PirType {
-    typedef EnumSet<RType> RTypeSet;
-    typedef EnumSet<NativeType> NativeTypeSet;
-    typedef EnumSet<TypeFlags> FlagSet;
+    typedef EnumSet<RType, uint32_t> RTypeSet;
+    typedef EnumSet<NativeType, uint32_t> NativeTypeSet;
+    typedef EnumSet<TypeFlags, uint32_t> FlagSet;
 
     FlagSet flags_;
 
@@ -156,6 +156,7 @@ struct PirType {
     explicit PirType(SEXP);
     constexpr PirType(const PirType& other)
         : flags_(other.flags_), t_(other.t_) {}
+    explicit PirType(const void* pos);
 
     constexpr PirType& operator=(const PirType& o) {
         flags_ = o.flags_;
@@ -430,8 +431,15 @@ struct PirType {
         return t_.r.includes(o.t_.r);
     }
 
+    // Is val an instance of this type?
+    bool hasInstance(SEXP val) const;
+
     void print(std::ostream& out = std::cout) const;
 };
+
+typedef uint32_t Immediate;
+static_assert(sizeof(PirType) == sizeof(Immediate) * 2,
+              "PirType must fit in 2 immediates, or change assert_type_ size");
 
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     switch (t) {
@@ -447,7 +455,7 @@ inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     case NativeType::frameState:
         out << "fs";
         break;
-    case NativeType::_UNUSED_:
+    default:
         assert(false);
         break;
     }

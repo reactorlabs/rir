@@ -19,6 +19,7 @@ struct Parameter {
     static size_t INLINER_INITIAL_FUEL;
 
     static bool RIR_STRONG_SAFE_FORCE;
+    static bool RIR_CHECK_PIR_TYPES;
 };
 } // namespace pir
 } // namespace rir

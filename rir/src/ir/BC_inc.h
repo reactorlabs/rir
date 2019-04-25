@@ -7,6 +7,7 @@
 #include <cstring>
 #include <memory>
 
+#include "../compiler/pir/type.h"
 #include "R/r.h"
 #include "common.h"
 
@@ -140,6 +141,10 @@ class BC {
         ObservedCallees callFeedback;
         ObservedValues typeFeedback;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
+        pir::PirType pirType() const { return pir::PirType(this); }
+        void setPirType(pir::PirType typ) {
+            memcpy(this, &typ, sizeof(pir::PirType));
+        }
     };
 
     static Immediate readImmediate(Opcode** pc) {
@@ -378,9 +383,9 @@ BC_NOARGS(V, _)
     inline static BC staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
                                 SEXP targetVersion, const Assumptions& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
-
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
+    inline static BC assertType(pir::PirType typ);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -671,6 +676,9 @@ BC_NOARGS(V, _)
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)
 #undef V
+            break;
+        case Opcode::assert_type_:
+            immediate.setPirType(pir::PirType(pc));
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

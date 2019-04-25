@@ -1320,6 +1320,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                       needsEnsureNamed.count(instr)))
                 cb.add(BC::ensureNamed());
 
+            // Check the return type
+            if (pir::Parameter::RIR_CHECK_PIR_TYPES &&
+                instr->type != PirType::voyd() &&
+                instr->type != NativeType::context) {
+                cb.add(BC::assertType(instr->type));
+            }
+
             // Store the result
             if (alloc.sa.dead(instr)) {
                 cb.add(BC::pop());

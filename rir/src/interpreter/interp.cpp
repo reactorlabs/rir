@@ -696,6 +696,9 @@ bool pir::Parameter::RIR_STRONG_SAFE_FORCE =
     getenv("RIR_STRONG_SAFE_FORCE")
         ? (bool)atoi(getenv("RIR_STRONG_SAFE_FORCE"))
         : false;
+bool pir::Parameter::RIR_CHECK_PIR_TYPES =
+    getenv("RIR_CHECK_PIR_TYPES") ? (bool)atoi(getenv("RIR_CHECK_PIR_TYPES"))
+                                  : IS_SLOWASSERT;
 
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
@@ -3595,6 +3598,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(printInvocation_) {
             printf("Invocation count: %d\n", c->funInvocationCount);
+            NEXT();
+        }
+
+        INSTRUCTION(assert_type_) {
+            assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
+            SEXP val = ostack_top(ctx);
+            pir::PirType typ(pc);
+            pc += sizeof(pir::PirType);
+            if (!typ.hasInstance(val)) {
+                std::cerr << "type assert failed: type " << typ
+                          << " not accurate for value (" << pir::PirType(val)
+                          << "):\n";
+                Rf_PrintValue(val);
+                assert(false);
+            }
             NEXT();
         }
 

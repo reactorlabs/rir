@@ -128,6 +128,10 @@ BC_NOARGS(V, _)
         cs.insert(immediate.loc_cpy);
         return;
 
+    case Opcode::assert_type_:
+        cs.insert(immediate.pirType());
+        return;
+
     case Opcode::invalid_:
     case Opcode::num_of:
         assert(false);
@@ -325,6 +329,9 @@ BC_NOARGS(V, _)
     case Opcode::brfalse_:
     case Opcode::br_:
         out << immediate.offset;
+        break;
+    case Opcode::assert_type_:
+        out << immediate.pirType();
         break;
     }
     out << "\n";

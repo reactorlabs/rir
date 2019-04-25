@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 
+#include "../compiler/pir/type.h"
 #include "BC_inc.h"
 #include "R/Protect.h"
 #include "R/r.h"
@@ -316,6 +317,12 @@ BC BC::deopt(SEXP deoptMetadata) {
     ImmediateArguments i;
     i.pool = Pool::insert(deoptMetadata);
     return BC(Opcode::deopt_, i);
+}
+
+BC BC::assertType(pir::PirType typ) {
+    ImmediateArguments i;
+    i.setPirType(typ);
+    return BC(Opcode::assert_type_, i);
 }
 
 } // namespace rir
