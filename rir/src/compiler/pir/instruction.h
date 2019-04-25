@@ -1059,7 +1059,10 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
     Value* vec() { return arg(0).val(); }
     Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(vec()->type.elem());
+        PirType t = vec()->type.elem();
+        if (!idx()->type.isScalar())
+            t = t.orNotScalar();
+        maskEffectsAndTypeOnNonObjects(t);
     }
 };
 
@@ -1088,7 +1091,11 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
     Value* idx1() { return arg(1).val(); }
     Value* idx2() { return arg(2).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(vec()->type.elem());
+        PirType t = vec()->type.elem();
+        // Technically throws error so it doesn't matter
+        if (!idx1()->type.isScalar() || !idx2()->type.isScalar())
+            t = t.orNotScalar();
+        maskEffectsAndTypeOnNonObjects(t);
     }
 };
 

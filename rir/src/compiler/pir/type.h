@@ -302,6 +302,11 @@ struct PirType {
         return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNotScalar));
     }
 
+    RIR_INLINE constexpr PirType orNotScalar() const {
+        assert(isRType());
+        return PirType(t_.r, flags_ | TypeFlags::maybeNotScalar);
+    }
+
     RIR_INLINE constexpr PirType orPromiseWrapped() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
@@ -337,10 +342,8 @@ struct PirType {
     // Type of an element, assuming this is a vector
     PirType elem() const {
         assert(isRType());
-        if (isA(num()))
+        if (isA(num() | RType::str))
             return *this;
-        else if (isA(RType::str))
-            return RType::chr;
         else
             return val();
     }
