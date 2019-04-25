@@ -1140,6 +1140,4 @@ SEXP Compiler::finalize() {
 bool Compiler::profile =
     !(getenv("RIR_PROFILING") &&
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
-
 } // namespace rir
-%☲!㵇8䉌<㥃6㈽.㈼-☲㡂4☳ 㡃4㈼-⸺(ⰴ*㐴3☦&☦&☦&☦&☦&☦&☦&☦&☦&☦&☦&☦&〷,捝h☦&祼t啓Y屡Z浪p敤e汭j块X屙^䱎L獱r剒R扥`之P䩌I煱q䡇J☧&㨻8䡆J☦&䭋J婠U字_協R嵟Z䵋O彡]䭋N
