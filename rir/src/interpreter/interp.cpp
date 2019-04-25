@@ -2297,15 +2297,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(lgl_or_) {
             R_bcstack_t* rhs = ostackCellPop(ctx);
             R_bcstack_t* lhs = ostackCellPop(ctx);
-#ifdef USE_TYPED_STACK
             assert(stackObjTypeof(lhs) == LGLSXP &&
                    stackObjTypeof(rhs) == LGLSXP);
             int x1 = tryStackObjToLogicalNa(lhs);
             int x2 = tryStackObjToLogicalNa(rhs);
-#else
-            int x1 = *LOGICAL(lhs->u.sxpval);
-            int x2 = *LOGICAL(rhs->u.sxpval);
-#endif
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
             int logical_res;
@@ -2323,15 +2318,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(lgl_and_) {
             R_bcstack_t* rhs = ostackCellPop(ctx);
             R_bcstack_t* lhs = ostackCellPop(ctx);
-#ifdef USE_TYPED_STACK
             assert(stackObjTypeof(lhs) == LGLSXP &&
                    stackObjTypeof(rhs) == LGLSXP);
             int x1 = tryStackObjToLogicalNa(lhs);
             int x2 = tryStackObjToLogicalNa(rhs);
-#else
-            int x1 = *LOGICAL(lhs->u.sxpval);
-            int x2 = *LOGICAL(rhs->u.sxpval);
-#endif
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
             int logical_res;

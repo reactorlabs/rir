@@ -105,7 +105,6 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
 
 // Determines whether simple scalars are represented unboxed
 // Otherwise they'll be STACK_OBJ_SEXPs like other expressions
-#define USE_TYPED_STACK
 
 #ifdef PROFILE_TYPED_STACK
 
@@ -146,70 +145,36 @@ typedef union {
     int ival;
 } scalar_value_t;
 
-RIR_INLINE SEXP intAsSexp(int x) {
-    SEXP res = Rf_allocVector(INTSXP, 1);
-    *INTEGER(res) = x;
-    return res;
-}
-
 RIR_INLINE R_bcstack_t intStackObj(int x) {
     R_bcstack_t res;
-#ifdef USE_TYPED_STACK
     res.tag = STACK_OBJ_INT;
     res.u.ival = x;
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("int stack object created");
 #endif
-#else
-    res.tag = STACK_OBJ_SEXP;
-    res.u.sxpval = intAsSexp(x);
-#endif
-    return res;
-}
-
-RIR_INLINE SEXP realAsSexp(double x) {
-    SEXP res = Rf_allocVector(REALSXP, 1);
-    *REAL(res) = x;
     return res;
 }
 
 RIR_INLINE R_bcstack_t realStackObj(double x) {
     R_bcstack_t res;
-#ifdef USE_TYPED_STACK
     res.tag = STACK_OBJ_REAL;
     res.u.dval = x;
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("real stack object created");
 #endif
-#else
-    res.tag = STACK_OBJ_SEXP;
-    res.u.sxpval = realAsSexp(x);
-#endif
-    return res;
-}
-
-RIR_INLINE SEXP logicalAsSexp(int x) {
-    SEXP res = Rf_allocVector(LGLSXP, 1);
-    *LOGICAL(res) = x;
     return res;
 }
 
 RIR_INLINE R_bcstack_t logicalStackObj(int x) {
     R_bcstack_t res;
-#ifdef USE_TYPED_STACK
     res.tag = STACK_OBJ_LOGICAL;
     res.u.ival = x;
 #ifdef PROFILE_TYPED_STACK
     TSPROFILE.mark("logical stack object created");
 #endif
-#else
-    res.tag = STACK_OBJ_SEXP;
-    res.u.sxpval = logicalAsSexp(x);
-#endif
     return res;
 }
 
-// Para borrar?
 RIR_INLINE R_bcstack_t sexpStackObj(SEXP value) {
     R_bcstack_t res;
     res.tag = STACK_OBJ_SEXP;
@@ -217,7 +182,6 @@ RIR_INLINE R_bcstack_t sexpStackObj(SEXP value) {
     return res;
 }
 
-// Revisar
 RIR_INLINE R_bcstack_t sexpStackObjTryUnbox(SEXP x) {
     R_bcstack_t res;
     bool tryUnbox = x != loopTrampolineMarker && MAYBE_SHARED(x);
@@ -283,21 +247,17 @@ RIR_INLINE SEXP asBoxed(R_bcstack_t* stackCell) {
 }
 
 RIR_INLINE SEXP stackObjToSexp(R_bcstack_t* stackCell) {
-#ifdef USE_TYPED_STACK
     if (stackCell->tag != STACK_OBJ_SEXP) {
         stackCell->u.sxpval = asBoxed(stackCell);
         stackCell->tag = STACK_OBJ_SEXP;
     }
-#endif
     return stackCell->u.sxpval;
 }
 
 RIR_INLINE SEXP stackObjAsSexp(R_bcstack_t* stackCell) {
-#ifdef USE_TYPED_STACK
     if (stackCell->tag != STACK_OBJ_SEXP) {
         return asBoxed(stackCell);
     }
-#endif
     return stackCell->u.sxpval;
 }
 
