@@ -38,7 +38,17 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     return PirType::bottom();
                 };
 
-                PirType infered = PirType::bottom();
+                auto mergedArgumentType = [&]() {
+                    PirType inferred = PirType::bottom();
+                    i->eachArg([&](Value* v) {
+                        if (i->mayHaveEnv() && v == i->env())
+                            return;
+                        inferred = inferred | getType(v);
+                    });
+                    return inferred;
+                };
+
+                PirType inferred = PirType::bottom();
                 switch (i->tag) {
                 case Tag::Mul:
                 case Tag::Div:
@@ -51,35 +61,66 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                 case Tag::Plus:
                 case Tag::Minus:
                 case Tag::Phi: {
-                    i->eachArg([&](Value* v) {
-                        if (i->mayHaveEnv() && v == i->env())
-                            return;
-                        infered = infered | getType(v);
-                    });
-                    if (i->tag == Tag::Div && infered.isA(RType::integer)) {
-                        infered = infered | RType::real;
+                    inferred = mergedArgumentType();
+                    if (i->tag == Tag::Div && inferred.isA(RType::integer)) {
+                        inferred = inferred | RType::real;
                     }
                     break;
                 }
                 case Tag::CallSafeBuiltin: {
                     auto c = CallSafeBuiltin::Cast(i);
                     std::string name = getBuiltinName(getBuiltinNr(c->blt));
-                    if ("bitwiseXor" == name || "bitwiseShiftL" == name) {
-                        infered = PirType(RType::integer);
+
+                    static const std::unordered_set<std::string> bitwise = {
+                        "bitwiseXor", "bitwiseShiftL", "bitwiseShiftLR",
+                        "bitwiseAnd", "bitwiseNot",    "bitwiseOr"};
+                    if (bitwise.count(name)) {
+                        inferred = PirType(RType::integer);
                         if (getType(c->arg(0).val()).isScalar() &&
                             getType(c->arg(1).val()).isScalar())
-                            infered.setScalar();
+                            inferred.setScalar();
                         break;
                     }
-                }
-                // fall through
-                default:
-                    infered = i->type;
+
+                    if ("typeof" == name) {
+                        inferred = PirType(RType::str).scalar();
+                        break;
+                    }
+
+                    static const std::unordered_set<std::string> tests = {
+                        "is.vector",   "is.null",      "is.integer",
+                        "is.double",   "is.complex",   "is.character",
+                        "is.symbol",   "is.name",      "is.environment",
+                        "is.list",     "is.pairlist",  "is.expression",
+                        "is.raw",      "is.object",    "isS4",
+                        "is.numeric",  "is.matrix",    "is.array",
+                        "is.atomic",   "is.recursive", "is.call",
+                        "is.language", "is.function",  "is.single",
+                        "is.na",       "is.nan",       "is.finite",
+                        "is.infinite"};
+                    if (tests.count(name)) {
+                        inferred = PirType(RType::logical).scalar();
+                        break;
+                    }
+
+                    if ("c" == name) {
+                        inferred = mergedArgumentType();
+                        if (c->nCallArgs() > 1)
+                            inferred.setNotScalar();
+                        break;
+                    }
+
+                    inferred = i->type;
+                    break;
                 }
 
-                if (!types.count(i) || types.at(i) != infered) {
+                default:
+                    inferred = i->type;
+                }
+
+                if (!types.count(i) || types.at(i) != inferred) {
                     done = false;
-                    types[i] = infered;
+                    types[i] = inferred;
                 }
             });
         };

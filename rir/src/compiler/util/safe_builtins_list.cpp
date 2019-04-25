@@ -23,7 +23,6 @@ bool SafeBuiltinsList::always(int builtin) {
 
         // do_bitwise
         findBuiltin("bitwiseAnd"),
-        findBuiltin("bitwiseAnd"),
         findBuiltin("bitwiseNot"),
         findBuiltin("bitwiseOr"),
         findBuiltin("bitwiseXor"),

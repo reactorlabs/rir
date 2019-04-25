@@ -383,6 +383,7 @@ struct PirType {
         }
     }
 
+    RIR_INLINE void setNotScalar() { *this = orNotScalar(); }
     RIR_INLINE void setNotMissing() { *this = notMissing(); }
     RIR_INLINE void setNotObject() { *this = notObject(); }
     RIR_INLINE void setScalar() { *this = scalar(); }

@@ -386,6 +386,10 @@ LdConst::LdConst(int num)
 SEXP LdConst::c() const { return Pool::get(idx); }
 
 void LdConst::printArgs(std::ostream& out, bool tty) const {
+    if (c() == R_UnboundValue) {
+        out << "unboundValue";
+        return;
+    }
     std::string val;
     {
         CaptureOut rec;
