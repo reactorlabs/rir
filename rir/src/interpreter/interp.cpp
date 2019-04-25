@@ -2286,7 +2286,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (logical_res > -1) {
                 ostackCellPop(ctx);
-                ostackPushSexp(ctx, logicalAsSexp(logical_res));
+                ostackPushLogical(ctx, logical_res);
             } else {
                 UNOP_FALLBACK("!");
             }
