@@ -192,20 +192,19 @@ struct PirType {
     static constexpr PirType closure() { return RType::closure; }
 
     static constexpr PirType simpleScalarInt() {
-        return PirType(RType::integer).notObject().scalar();
+        return PirType(RType::integer).scalar();
     }
 
     static constexpr PirType simpleScalarReal() {
-        return PirType(RType::real).notObject().scalar();
+        return PirType(RType::real).scalar();
     }
 
     static constexpr PirType simpleScalarLogical() {
-        return PirType(RType::logical).notObject().scalar();
+        return PirType(RType::logical).scalar();
     }
 
     static constexpr PirType simpleScalar() {
         return (PirType(RType::integer) | RType::real | RType::logical)
-            .notObject()
             .scalar();
     }
 
@@ -339,13 +338,49 @@ struct PirType {
         return PirType(t_.r);
     }
 
-    // Type of an element, assuming this is a vector
-    PirType elem() const {
+    // Type of <this>[<idx>] or <this>[<idx>, <idx>]
+    PirType subsetType(PirType idx) const {
         assert(isRType());
-        if (isA(num() | RType::str))
-            return *this;
-        else
-            return val();
+        if (isA(RType::nil)) {
+            // NULL
+            return RType::nil;
+        }
+        if (isA(num() | RType::str | RType::cons | RType::code)) {
+            PirType t = *this;
+            if (idx.isScalar())
+                t.setScalar();
+            else
+                t = t.orNotScalar();
+            return t;
+        } else if (isA(RType::vec)) {
+            return RType::vec;
+        } else if (!maybeObj() && !PirType(RType::prom).isA(*this)) {
+            // Something else
+            return val().notMissing();
+        } else {
+            // Possible object
+            return valOrLazy();
+        }
+    }
+
+    // Type of <this>[[<idx>]] or <this>[[<idx>, <idx>]]
+    PirType extractType(PirType idx) const {
+        assert(isRType());
+        if (isA(RType::nil)) {
+            // NULL
+            return RType::nil;
+        }
+        if (isA(num() | RType::str | RType::cons | RType::code)) {
+            return scalar();
+        } else if (isA(RType::vec)) {
+            return val().notMissing();
+        } else if (!maybeObj() && !PirType(RType::prom).isA(*this)) {
+            // Something else
+            return val().notMissing();
+        } else {
+            // Possible object
+            return valOrLazy();
+        }
     }
 
     RIR_INLINE void setNotMissing() { *this = notMissing(); }
@@ -389,7 +424,7 @@ struct PirType {
         }
         if ((!maybeLazy() && o.maybeLazy()) ||
             (!maybePromiseWrapped() && o.maybePromiseWrapped()) ||
-            (isScalar() && !o.isScalar())) {
+            (!maybeObj() && o.maybeObj()) || (isScalar() && !o.isScalar())) {
             return false;
         }
         return t_.r.includes(o.t_.r);

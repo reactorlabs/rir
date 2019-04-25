@@ -526,6 +526,27 @@ bool testCfg() {
     return true;
 }
 
+bool testTypeRules() {
+    PirType r = RType::vec;
+    PirType r2 = RType::logical;
+    assert(r.subsetType(PirType::any()).isA(RType::vec));
+    assert(!r.subsetType(PirType::any()).maybeObj());
+    assert(!r.orObject().subsetType(PirType::bottom()).isA(RType::vec));
+    assert(!r.orObject().subsetType(PirType::bottom()).isA(PirType::val()));
+    assert(r.extractType(PirType::any()).isA(PirType::val()));
+    assert(!r.extractType(PirType::bottom()).isScalar());
+    assert(!r.extractType(PirType::bottom()).maybeMissing());
+    assert(!r.extractType(PirType::bottom()).isA(RType::vec));
+    assert(r.orObject().extractType(PirType::bottom()).maybeMissing());
+    assert(r2.subsetType(RType::real).isA(RType::logical));
+    assert(!r2.subsetType(RType::integer).isScalar());
+    assert(!r2.scalar().subsetType(RType::integer).isScalar());
+    assert(r2.subsetType(PirType(RType::integer).scalar()).isScalar());
+    assert(r2.extractType(RType::integer).isScalar());
+    assert(!r2.subsetType(PirType::any()).maybeObj());
+    return true;
+}
+
 static Test tests[] = {
     Test("test cfg", &testCfg),
     Test("test_42L", []() { return test42("42L"); }),
@@ -697,7 +718,7 @@ static Test tests[] = {
              return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
          }),
     Test("Test dead store analysis", &testDeadStore),
-};
+    Test("Test type rules", &testTypeRules)};
 
 } // namespace
 
