@@ -79,7 +79,7 @@ enum class NativeType : uint8_t {
     context,
 
     FIRST = test,
-    LAST = frameState,
+    LAST = context,
 };
 
 enum class TypeFlags : uint8_t {
