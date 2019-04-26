@@ -162,7 +162,7 @@ class Instruction : public Value {
         return !getObservableEffects().empty();
     }
 
-    bool hasImpureEffects() const {
+    bool hasStrongEffects() const {
         auto e = getObservableEffects();
         // Yes visibility is a global effect. We try to preserve it. But geting
         // it wrong is not a strong correctness issue.
@@ -170,7 +170,7 @@ class Instruction : public Value {
         return !e.empty();
     }
 
-    bool isDeoptBarrier() const { return hasImpureEffects(); }
+    bool isDeoptBarrier() const { return hasStrongEffects(); }
     // TODO: Add verify, then replace with effects.includes(Effect::LeakArg)
     bool leaksArg(Value* val) const {
         return leaksEnv() || effects.includes(Effect::LeakArg);
@@ -237,6 +237,7 @@ class Instruction : public Value {
                            Effect::Visibility | Effect::Force);
     }
 
+    virtual unsigned cost() const { return 1; }
     virtual size_t gvnBase() const = 0;
 
     virtual bool mayHaveEnv() const = 0;
@@ -941,6 +942,7 @@ class FLIE(Force, 2, Effects::Any()) {
 
 class FLI(CastType, 1, Effects::None()) {
   public:
+    unsigned cost() const override final { return 0; }
     CastType(Value* in, PirType from, PirType to)
         : FixedLenInstruction(to, {{from}}, {{in}}) {}
 };

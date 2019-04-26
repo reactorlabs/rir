@@ -137,7 +137,7 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
             return;
 
         assert(bb->next1 == nullptr);
-        if (Deopt::Cast(bb->last()))
+        if (bb->isDeopt())
             return;
 
         ret = Return::Cast(bb->last());
