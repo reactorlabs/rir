@@ -37,7 +37,8 @@ void PirType::merge(SEXPTYPE sexptype) {
         break;
     case EXPRSXP:
         t_.r.set(RType::ast);
-        // fall through
+        t_.r.set(RType::code);
+        break;
     case LANGSXP:
         t_.r.set(RType::code);
         break;

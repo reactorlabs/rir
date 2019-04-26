@@ -225,6 +225,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         }
         assert(false);
+        break;
     }
 
     case 136: { // "which"
@@ -354,6 +355,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         }
         assert(false);
+        break;
     }
 
     case 399: { // "is.vector"
