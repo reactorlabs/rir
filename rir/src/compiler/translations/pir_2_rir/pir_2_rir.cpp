@@ -260,8 +260,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
     alloc.verify();
 
-    CachePositionAllocator cachePositions(code);
-
     auto isJumpThrough = [&](BB* bb) {
         return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
                                  alloc.sa.toDrop(bb->last()).empty());
@@ -336,6 +334,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
     }
 
+    CachePositionAllocator cachePositions(code);
     CodeBuffer cb(ctx.cs());
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
@@ -559,8 +558,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                                                 ldvar->varName, ldvar->env())));
                     else
                         cb.add(BC::ldvarNoForce(ldvar->varName));
-                    break;
                 }
+                break;
             }
 
             case Tag::ForSeqSize: {
