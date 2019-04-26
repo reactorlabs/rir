@@ -51,6 +51,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::Constantfold());
         optimizations.push_back(new pir::Cleanup());
         optimizations.push_back(new pir::DelayInstr());
+        optimizations.push_back(new pir::HoistInstruction());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
         optimizations.push_back(new pir::Cleanup());
