@@ -120,7 +120,7 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
             for (const auto& in : accumulatedPhiInput) {
                 auto& inBB = in.first;
                 auto& inLive = in.second;
-                if (bb == inBB || cfg.isPredecessor(inBB, bb)) {
+                if (bb == inBB) {
                     merge(bb, inLive);
                 }
             }
