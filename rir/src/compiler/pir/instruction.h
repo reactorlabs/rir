@@ -1062,11 +1062,10 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        auto t = arg<0>().val()->type;
-        if (arg<1>().val()->type.isScalar())
-            t.setScalar();
-        maskEffectsAndTypeOnNonObjects(t);
+        maskEffectsAndTypeOnNonObjects(vec()->type.subsetType(idx()->type));
     }
 };
 
@@ -1076,8 +1075,10 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
+        maskEffectsAndTypeOnNonObjects(vec()->type.extractType(idx()->type));
     }
 };
 
@@ -1089,11 +1090,12 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx1() { return arg(1).val(); }
+    Value* idx2() { return arg(2).val(); }
     void updateType() override final {
-        auto t = arg<0>().val()->type;
-        if (arg<1>().val()->type.isScalar())
-            t.setScalar();
-        maskEffectsAndTypeOnNonObjects(t);
+        maskEffectsAndTypeOnNonObjects(
+            vec()->type.subsetType(idx1()->type | idx2()->type));
     }
 };
 
@@ -1105,8 +1107,12 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx1() { return arg(1).val(); }
+    Value* idx2() { return arg(2).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
+        maskEffectsAndTypeOnNonObjects(
+            vec()->type.extractType(idx1()->type | idx2()->type));
     }
 };
 
