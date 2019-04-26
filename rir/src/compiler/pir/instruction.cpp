@@ -485,8 +485,7 @@ void Is::printArgs(std::ostream& out, bool tty) const {
 
 void IsType::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
-    out << " isA ";
-    typeTest.print(out);
+    out << " isA " << typeTest;
 }
 
 void Phi::updateType() {

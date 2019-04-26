@@ -36,7 +36,7 @@ bool Query::noEnvSpec(Code* c) {
 
 bool Query::pure(Code* c) {
     return Visitor::check(
-        c->entry, [&](Instruction* i) { return !i->hasImpureEffects(); });
+        c->entry, [&](Instruction* i) { return !i->hasStrongEffects(); });
 }
 
 std::unordered_set<Value*> Query::returned(Code* c) {
