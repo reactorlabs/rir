@@ -42,6 +42,7 @@ class LogStream {
     void CSSA(Code*);
     void finalPIR(ClosureVersion*);
     void finalRIR(Function*);
+
     void unsupportedBC(const std::string&, const rir::BC&);
     void failed(const std::string& msg);
     void warn(const std::string& msg);

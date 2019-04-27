@@ -34,7 +34,7 @@ static ClosureVersion* recompilePir(SEXP f, Module* m) {
 
     StreamLogger logger(PirDebug);
     logger.title("Pir Check");
-    Rir2PirCompiler cmp(m, logger);
+    Rir2PirCompiler cmp(m, logger, Measure);
     ClosureVersion* res = nullptr;
     cmp.compileClosure(
         f, "pir_check", assumptions, [&](ClosureVersion* r) { res = r; },
@@ -118,12 +118,8 @@ static bool testNoEq(ClosureVersion* f) {
 }
 
 static bool testOneEq(ClosureVersion* f) {
-    int numEqs = 0;
-    Visitor::run(f->entry, [&](Instruction* i) {
-        if (Eq::Cast(i))
-            numEqs++;
-    });
-    return numEqs == 1;
+    return Visitor::count(f->entry,
+                          [](Instruction* i) { return Eq::Cast(i); }) == 1;
 }
 
 static bool testOneNot(ClosureVersion* f) {

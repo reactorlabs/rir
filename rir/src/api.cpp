@@ -22,6 +22,8 @@
 
 using namespace rir;
 
+extern Rboolean R_Visible;
+
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
@@ -34,6 +36,24 @@ bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #undef V
     {
         return false;
+    }
+}
+
+MeasureFlag parseMeasureFlag(const char* str) {
+#define V(flag)                                                                \
+    if (strcmp(str, #flag) == 0) {                                             \
+        return MeasureFlag::flag;                                              \
+    } else
+    LIST_OF_RIR_MEASURE_FLAGS(V)
+#undef V
+    {
+        std::cerr << "Unknown PIR measure flag " << str << "\n"
+                  << "Valid flags are:\n";
+#define V(flag) std::cerr << "- " << #flag << "\n";
+        LIST_OF_RIR_MEASURE_FLAGS(V)
+#undef V
+        Rf_error("Unkown PIR measure flag");
+        return MeasureFlag::Envs;
     }
 }
 
@@ -192,9 +212,37 @@ static pir::DebugStyle getInitialDebugStyle() {
     return style;
 }
 
+static MeasureFlags getMeasureFlags() {
+    auto verb = getenv("RIR_MEASURE");
+    if (!verb)
+        return MeasureFlags::None();
+    std::istringstream in(verb);
+
+    MeasureFlags flags;
+    while (!in.fail()) {
+        std::string opt;
+        std::getline(in, opt, ',');
+        if (opt.empty())
+            continue;
+
+        MeasureFlag flag = parseMeasureFlag(opt.c_str());
+        flags = flags | flag;
+    }
+    return flags;
+}
+
+static std::string getMeasureFile() {
+    auto str = getenv("RIR_MEASURE_FILE");
+    if (str)
+        return std::string(str);
+    else
+        return std::string("");
+}
+
 pir::DebugOptions PirDebug = {
     getInitialDebugFlags(), getInitialDebugPassFilter(),
     getInitialDebugFunctionFilter(), getInitialDebugStyle()};
+Measurer Measure(getMeasureFlags(), getMeasureFile());
 
 REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
@@ -221,7 +269,7 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
     pir::Module* m = new pir::Module;
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
-    pir::Rir2PirCompiler cmp(m, logger);
+    pir::Rir2PirCompiler cmp(m, logger, Measure);
     cmp.compileClosure(what, name, assumptions,
                        [&](pir::ClosureVersion* c) {
                            logger.flush();
@@ -358,6 +406,21 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
                           PirDebug | pir::DebugFlag::DryRun);
     else
         return closure;
+}
+
+SEXP rir_getMeasure(SEXP flagSexp) {
+    if (TYPEOF(flagSexp) != SYMSXP)
+        Rf_error("rir_getMeasure expects a symbol as first parameter");
+    MeasureFlag flag = parseMeasureFlag(CHAR(PRINTNAME(flagSexp)));
+    std::stringstream buf;
+    Measure.table(flag).writeCsv(buf);
+    return Rf_mkString(buf.str().c_str());
+}
+
+SEXP rir_resetMeasure() {
+    Measure.reset();
+    R_Visible = (Rboolean) false;
+    return R_NilValue;
 }
 
 bool startup() {

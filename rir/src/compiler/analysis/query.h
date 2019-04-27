@@ -19,6 +19,9 @@ class Query {
     static bool noEnvSpec(Code* c);
     static bool noDeopt(Code* c);
     static std::unordered_set<Value*> returned(Code* c);
+    static unsigned mkEnvs(Code* c);
+    static unsigned envVars(Code* c);
+    static unsigned lazyArgs(Code* c);
 };
 } // namespace pir
 } // namespace rir

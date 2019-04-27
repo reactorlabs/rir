@@ -83,10 +83,6 @@ class PASS(Inline);
 class PASS(ElideEnvSpec);
 
 /*
- *
- */
-
-/*
  * Constantfolding and dead branch removal.
  */
 class PASS(Constantfold);
