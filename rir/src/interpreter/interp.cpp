@@ -1232,7 +1232,7 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-#define BINDING_CACHE_SIZE 32
+#define BINDING_CACHE_SIZE 8
 // must be a power of 2 for modulus using & CACHE_MASK to work
 #define CACHE_MASK (BINDING_CACHE_SIZE - 1)
 
@@ -1253,7 +1253,8 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
     if (smallCache)
         cidx = cacheIdx;
     else
-        cidx = cacheIdx & CACHE_MASK;
+        // Slot zero not used
+        cidx = (cacheIdx & CACHE_MASK) | 1;
 
     if (bindingCache[cidx].idx == cacheIdx) {
         return bindingCache[cidx].loc;

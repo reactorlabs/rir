@@ -451,7 +451,7 @@ class CachePositionAllocator {
   public:
     typedef size_t SlotNumber;
 
-    CachePositionAllocator(Code* code) : code(code) {
+    explicit CachePositionAllocator(Code* code) : code(code) {
         uniqueNumberForLdsAndSts();
     }
 
