@@ -35,6 +35,8 @@ struct MeasureRow {
     unsigned optimized;
 
     MeasureRow(unsigned initial) : initial(initial), optimized(initial) {}
+    MeasureRow(unsigned initial, unsigned optimized)
+        : initial(initial), optimized(optimized) {}
 
     void recordNew(unsigned o) { optimized = o; }
 };

@@ -3,6 +3,7 @@
 #include "compiler/pir/pir_impl.h"
 #include <fstream>
 #include <sstream>
+#include <stdio>
 
 namespace rir {
 
@@ -19,7 +20,35 @@ MeasureTable::MeasureTable(std::function<unsigned(ClosureVersion*)> measureFunc,
 }
 
 void MeasureTable::readCsv(std::istream& in) {
-    // TODO
+    // Remove header
+    std::string head;
+    std::getline(in, head, '\n');
+    if (head.empty()) {
+        std::cerr << "invalid csv file: " << fileName << "\n";
+        assert(false);
+    }
+
+    while (in.peek() != EOF) {
+        std::string key;
+        unsigned initial;
+        unsigned optimized;
+        std::getline(in, key, ',');
+        // From
+        // https://stackoverflow.com/questions/1798112/removing-leading-and-trailing-spaces-from-a-string
+        key.erase(std::find_if(key.rbegin(), key.rend(),
+                               std::bind1st(std::not_equal_to<char>(), ' '))
+                      .base(),
+                  key.end());
+        in >> std::ws >> initial;
+        char delim = in.get();
+        assert(delim == ',');
+        in >> std::ws >> optimized;
+        delim = in.get();
+        assert(delim == '\n');
+
+        MeasureRow row(initial, optimized);
+        rows.emplace(key, row);
+    }
 }
 
 void MeasureTable::writeCsv(std::ostream& out) const {
@@ -73,6 +102,7 @@ void MeasureTable::reset() {
 
 void MeasureTable::update() {
     if (!fileName.empty()) {
+        FILE* out = fopen(fileName.c_str(), "w");
         std::ofstream out(fileName.c_str(), std::ios_base::trunc);
         writeCsv(out);
     }
