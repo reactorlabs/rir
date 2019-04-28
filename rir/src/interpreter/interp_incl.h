@@ -54,6 +54,7 @@ SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
 
 SEXP materialize(void* rirDataWrapper);
 SEXP* keepAliveSEXPs(void* rirDataWrapper);
+
 } // namespace rir
 
 #endif

@@ -277,10 +277,6 @@ SEXP lazyPromargsCreation(void* rirDataWrapper) {
     return ArgsLazyData::cast(rirDataWrapper)->createArgsLists();
 }
 
-SEXP lazyEnvCreation(void* rirDataWrapper) {
-    return LazyEnvironment::cast(rirDataWrapper)->create();
-}
-
 static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
                                                 InterpreterInstance* ctx) {
     if (call.hasStackArgs()) {
@@ -304,6 +300,7 @@ SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
                  R_bcstack_t* = nullptr);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
+    ctx->measurer.recordClosureStart(code, CAR(call.ast), false);
     if ((SETJMP(cntxt.cjmpbuf))) {
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
@@ -413,6 +410,7 @@ static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
     };
 
     // execute the inlined function
+    ctx->measurer.recordClosureStart(c, CAR(ast), true); // Env always delayed
     auto res = trampoline();
     endClosureContext(&cntxt, res);
     return res;
@@ -738,6 +736,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             arglist = createLegacyLazyArgsList(call, ctx);
         PROTECT(arglist);
         SEXP env = closureArgumentAdaptor(call, arglist, R_NilValue);
+        ctx->measurer.recordClosureMkEnv(fun->body(), true, CAR(call.ast));
         PROTECT(env);
         result = rirCallTrampoline(call, fun, env, arglist, ctx);
         UNPROTECT(2);
@@ -1402,7 +1401,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                             const CallContext* callCtxt,
                             DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight,
-                            bool outerHasContext) {
+                            bool outerHasContext, Code* measCode) {
     size_t excessStack = stackHeight;
 
     FrameInfo& f = deoptData->frames[pos];
@@ -1435,6 +1434,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 
     if (auto stub = LazyEnvironment::cast(deoptEnv)) {
         deoptEnv = stub->create();
+        ctx->measurer.recordClosureMkEnv(measCode);
         cntxt->cloenv = deoptEnv;
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
@@ -1471,7 +1471,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         // 2. Execute the inner frames
         if (!innermostFrame) {
             deoptFramesWithContext(ctx, callCtxt, deoptData, deoptEnv, pos - 1,
-                                   stackHeight, originalCntxt);
+                                   stackHeight, originalCntxt, measCode);
         }
 
         // 3. Execute our frame
@@ -1614,6 +1614,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
             }
             res = Rf_NewEnvironment(R_NilValue, arglist, parent);
+            ctx->measurer.recordClosureMkEnv(c);
 
             if (contextPos > 0) {
                 if (auto cptr = getFunctionContext(contextPos - 1)) {
@@ -1916,8 +1917,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
-            if (auto stub = LazyEnvironment::cast(env))
+            if (auto stub = LazyEnvironment::cast(env)) {
+                ctx->measurer.recordClosureMkEnv(c);
                 env = stub->create();
+            }
             cachedSetVar(val, env, id, ctx, bindingCache);
 
             NEXT();
@@ -1928,8 +1931,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
-            if (auto stub = LazyEnvironment::cast(env))
+            if (auto stub = LazyEnvironment::cast(env)) {
+                ctx->measurer.recordClosureMkEnv(c);
                 env = stub->create();
+            }
             cachedSetVar(val, env, id, ctx, bindingCache, true);
 
             NEXT();
@@ -2149,6 +2154,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (fun->signature().envCreation ==
                 FunctionSignature::Environment::CallerProvided) {
+                if (TYPEOF(call.callee) != EXTERNALSXP)
+                    ctx->measurer.recordClosureMkEnv(fun->body(), true,
+                                                     CAR(call.ast));
                 res = doCall(call, ctx);
             } else {
                 ArgsLazyData lazyArgs(&call, ctx);
@@ -3364,7 +3372,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             for (size_t i = 0; i < m->numFrames; ++i)
                 stackHeight += m->frames[i].stackSize + 1;
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
-                                   m->numFrames - 1, stackHeight, true);
+                                   m->numFrames - 1, stackHeight, true, c);
             assert(false);
         }
 

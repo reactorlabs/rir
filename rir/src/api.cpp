@@ -242,7 +242,7 @@ static std::string getMeasureFile() {
 pir::DebugOptions PirDebug = {
     getInitialDebugFlags(), getInitialDebugPassFilter(),
     getInitialDebugFunctionFilter(), getInitialDebugStyle()};
-Measurer Measure(getMeasureFlags(), getMeasureFile());
+Measurer Measure(MeasureData(getMeasureFlags(), getMeasureFile()));
 
 REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
@@ -412,13 +412,15 @@ SEXP rir_getMeasure(SEXP flagSexp) {
     if (TYPEOF(flagSexp) != SYMSXP)
         Rf_error("rir_getMeasure expects a symbol as first parameter");
     MeasureFlag flag = parseMeasureFlag(CHAR(PRINTNAME(flagSexp)));
+    if (!Measure.data.hasTable(flag))
+        Rf_error("not measuring this flag");
     std::stringstream buf;
-    Measure.table(flag).writeCsv(buf);
+    Measure.data.table(flag).writeCsv(buf);
     return Rf_mkString(buf.str().c_str());
 }
 
 SEXP rir_resetMeasure() {
-    Measure.reset();
+    Measure.data.reset();
     R_Visible = (Rboolean) false;
     return R_NilValue;
 }

@@ -159,7 +159,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         log.compilationEarlyPir(version);
         Verify::apply(version);
         log.flush();
-        measure.recordInitial(version);
+        measure.recordCompiled(version);
         return success(version);
     }
 
@@ -217,7 +217,7 @@ void Rir2PirCompiler::optimizeModule() {
             Verify::apply(v);
 #endif
 #endif
-            measure.recordNew(v);
+            measure.recordOptimized(v);
         });
     });
 
