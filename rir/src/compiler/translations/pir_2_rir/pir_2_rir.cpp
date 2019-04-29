@@ -1323,7 +1323,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             // Check the return type
             if (pir::Parameter::RIR_CHECK_PIR_TYPES &&
                 instr->type != PirType::voyd() &&
-                instr->type != NativeType::context) {
+                instr->type != NativeType::context && !CastType::Cast(instr)) {
                 cb.add(BC::assertType(instr->type));
             }
 
