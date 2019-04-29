@@ -1569,7 +1569,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                "Expected an environment");
         if (e != env) {
             env = e;
-            memset(&bindingCache, 0, sizeof(bindingCache));
         }
     };
     R_Visible = TRUE;
