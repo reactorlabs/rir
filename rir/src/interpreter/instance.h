@@ -63,6 +63,7 @@ struct InterpreterInstance {
     ClosureOptimizer closureOptimizer = nullptr;
     Measurer& measurer;
 
+    // cppcheck-suppress uninitMemberVar
     explicit InterpreterInstance(Measurer& measurer) : measurer(measurer) {}
 };
 
