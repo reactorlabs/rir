@@ -67,6 +67,7 @@ struct MeasureTable {
 
     MeasureRow& row(pir::ClosureVersion* code, bool create);
     MeasureRow& row(Code* code, SEXP ast, bool create);
+    MeasureRow& row(const char* name, void* entry, bool create);
     void reset();
 
     void flush() const;
@@ -96,6 +97,7 @@ struct Measurer {
     explicit Measurer(MeasureData data) : data(data) {}
 
     void recordClosureStart(Code* code, SEXP ast, bool isInline);
+    void recordInlineClosureStart(const char* name, void* entry);
     void recordClosureMkEnv(Code* code, bool beforeStart = false,
                             SEXP ast = NULL);
     void recordCompiled(pir::ClosureVersion* code);

@@ -3591,6 +3591,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(record_inline_) {
+            const char* name = *(const char**)pc;
+            pc += sizeof(const char*);
+            Opcode* entry = *(Opcode**)pc;
+            pc += sizeof(Opcode*);
+            ctx->measurer.recordInlineClosureStart(name, (void*)entry);
+            NEXT();
+        }
+
         LASTOP;
     }
 

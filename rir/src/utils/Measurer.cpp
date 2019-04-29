@@ -9,7 +9,7 @@
 namespace rir {
 
 MeasureRow& MeasureTable::row(pir::ClosureVersion* code, bool create) {
-    Opcode* key = code->owner()->rirFunction()->body()->code();
+    void* key = code->owner()->rirFunction()->body()->code();
     if (!rows.count(key)) {
         if (!create)
             assert(false);
@@ -20,7 +20,7 @@ MeasureRow& MeasureTable::row(pir::ClosureVersion* code, bool create) {
 }
 
 MeasureRow& MeasureTable::row(Code* code, SEXP ast, bool create) {
-    Opcode* key = code->code();
+    void* key = code->code();
     if (!rows.count(key)) {
         if (!create)
             assert(false);
@@ -31,6 +31,16 @@ MeasureRow& MeasureTable::row(Code* code, SEXP ast, bool create) {
             str = rec.oneline(30);
         }
         MeasureRow row(str);
+        rows.emplace(key, row);
+    }
+    return rows.at(key);
+}
+
+MeasureRow& MeasureTable::row(const char* name, void* key, bool create) {
+    if (!rows.count(key)) {
+        if (!create)
+            assert(false);
+        MeasureRow row(name);
         rows.emplace(key, row);
     }
     return rows.at(key);
@@ -125,11 +135,21 @@ void Measurer::recordClosureStart(Code* code, SEXP ast, bool isInline) {
     }
 }
 
+void Measurer::recordInlineClosureStart(const char* name, void* entry) {
+    if (data.hasTable(MeasureFlag::Envs)) {
+        MeasureTable& table = data.table(MeasureFlag::Envs);
+        MeasureRow& row = table.row(name, entry, true);
+        row.second++;
+        table.flush();
+    }
+}
+
 void Measurer::recordClosureMkEnv(Code* code, bool beforeStart, SEXP ast) {
     if (data.hasTable(MeasureFlag::Envs)) {
         MeasureTable& table = data.table(MeasureFlag::Envs);
         MeasureRow& row = table.row(code, ast, beforeStart);
         row.first++;
+        assert(row.first <= row.second);
         table.flush();
     }
 }

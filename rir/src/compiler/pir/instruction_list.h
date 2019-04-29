@@ -90,6 +90,7 @@
     V(Visible)                                                                 \
     V(Invisible)                                                               \
     V(PirCopy)                                                                 \
+    V(RecordInline)                                                            \
     V(Nop)
 
 #endif
