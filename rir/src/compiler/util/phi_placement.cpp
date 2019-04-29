@@ -57,9 +57,10 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
                     return;
                 if (!input.otherPhi && !input.aValue)
                     return;
-                if (phis.includes(next))
+
+                if (phis.includes(next)) {
                     placement[next].insert(input);
-                else
+                } else
                     pendingInput[next] = input;
             };
 
@@ -97,14 +98,15 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
                        targetPhiPosition != ci->first) {
                 // Remove single input phis
                 auto input1 = *ci->second.begin();
-                assert(input1.otherPhi != ci->first);
-                // update all other phis which have us as input
-                for (auto& c : placement) {
-                    for (auto in : c.second) {
-                        if (in.otherPhi == ci->first) {
-                            in.otherPhi = input1.otherPhi;
-                            in.aValue = input1.aValue;
-                            changed = true;
+                if (input1.otherPhi != ci->first) {
+                    // update all other phis which have us as input
+                    for (auto& c : placement) {
+                        for (auto& in : c.second) {
+                            if (in.otherPhi == ci->first) {
+                                in.otherPhi = input1.otherPhi;
+                                in.aValue = input1.aValue;
+                                changed = true;
+                            }
                         }
                     }
                 }

@@ -430,8 +430,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                 auto loadArg = [&](Value* what, size_t argNumber) {
                     if (what == UnboundValue::instance()) {
-                        assert(MkArg::Cast(instr) &&
-                               "only mkarg supports R_UnboundValue");
                         cb.add(BC::push(R_UnboundValue));
                     } else if (what == MissingArg::instance()) {
                         cb.add(BC::push(R_MissingArg));
