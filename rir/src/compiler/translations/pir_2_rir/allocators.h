@@ -494,7 +494,7 @@ class CachePositionAllocator {
                     std::pair<SEXP, Value*>(varName, environment);
 
                 if (!uniqueNumbers.count(key)) {
-                    uniqueNumbers.emplace(key, uniqueNumbers.size() + 1);
+                    uniqueNumbers.emplace(key, uniqueNumbers.size());
                 }
             }
         });

@@ -3,11 +3,11 @@
 #include "BC.h"
 #include "CodeStream.h"
 
-#include "R/r.h"
+#include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Sexp.h"
 #include "R/Symbols.h"
-#include "R/Funtab.h"
+#include "R/r.h"
 
 #include "../interpreter/safe_force.h"
 #include "utils/Pool.h"
@@ -76,8 +76,7 @@ class CompilerContext {
             if (loadsSlotInCache.count(name)) {
                 return loadsSlotInCache.at(name);
             } else {
-                return loadsSlotInCache
-                    .emplace(name, loadsSlotInCache.size() + 1)
+                return loadsSlotInCache.emplace(name, loadsSlotInCache.size())
                     .first->second;
             }
         }

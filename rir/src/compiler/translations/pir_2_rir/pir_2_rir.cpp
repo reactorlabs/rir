@@ -599,10 +599,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::stvarCache(
                             stvar->varName, cachePositions.slotFor(
                                                 stvar->varName, stvar->env())));
-                    else {
-                        std::cout << "entre aca\n";
+                    else
                         cb.add(BC::stvar(stvar->varName));
-                    }
                 }
                 break;
             }

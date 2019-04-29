@@ -1253,10 +1253,9 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
     if (smallCache)
         cidx = cacheIdx;
     else
-        // Slot zero not used
-        cidx = (cacheIdx & CACHE_MASK) | 1;
+        cidx = cacheIdx & CACHE_MASK;
 
-    if (bindingCache[cidx].idx == cacheIdx) {
+    if (bindingCache[cidx].idx == poolIdx) {
         return bindingCache[cidx].loc;
     }
 
@@ -1265,7 +1264,7 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
     R_varloc_t loc = R_findVarLocInFrame(env, sym);
     if (!R_VARLOC_IS_NULL(loc)) {
         bindingCache[cidx].loc = loc.cell;
-        bindingCache[cidx].idx = cacheIdx;
+        bindingCache[cidx].idx = poolIdx;
         return loc.cell;
     }
     return NULL;
@@ -1539,8 +1538,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     bool existingLocals = localsBase;
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
-    bool smallCache = c->bindingsCount < BINDING_CACHE_SIZE;
-    // if (env != symbol::delayedEnv || existingLocals)
+    bool smallCache = c->bindingsCount <= BINDING_CACHE_SIZE;
     memset(&bindingCache, 0, sizeof(bindingCache));
 
     if (!existingLocals) {
@@ -1570,6 +1568,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                "Expected an environment");
         if (e != env) {
             env = e;
+            memset(&bindingCache, 0, sizeof(bindingCache));
         }
     };
     R_Visible = TRUE;
