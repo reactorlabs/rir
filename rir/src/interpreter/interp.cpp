@@ -1539,7 +1539,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     bool smallCache = c->bindingsCount <= BINDING_CACHE_SIZE;
-    memset(&bindingCache, 0, sizeof(bindingCache));
+    if (env != symbol::delayedEnv)
+        memset(&bindingCache, 0, sizeof(bindingCache));
 
     if (!existingLocals) {
 #ifdef TYPED_STACK
@@ -1658,7 +1659,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     }
                 }
             }
-
+            memset(&bindingCache, 0, sizeof(bindingCache));
             ostack_push(ctx, res);
             UNPROTECT(1);
             NEXT();
