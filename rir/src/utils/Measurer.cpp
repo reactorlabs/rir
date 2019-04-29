@@ -70,6 +70,7 @@ void MeasureTable::writeCsv(std::ostream& out) const {
     out.flush();
 }
 
+// cppcheck-suppress passedByValue
 MeasureData::MeasureData(MeasureFlags flags, std::string fileBase) {
     for (MeasureFlag flag : flags) {
         switch (flag) {

@@ -55,12 +55,12 @@ typedef struct {
  */
 
 struct InterpreterInstance {
-    SEXP list;
-    ResizeableList cp;
-    ResizeableList src;
-    ExprCompiler exprCompiler;
-    ClosureCompiler closureCompiler;
-    ClosureOptimizer closureOptimizer;
+    SEXP list = nullptr;
+    ResizeableList cp = {nullptr, 0};
+    ResizeableList src = {nullptr, 0};
+    ExprCompiler exprCompiler = nullptr;
+    ClosureCompiler closureCompiler = nullptr;
+    ClosureOptimizer closureOptimizer = nullptr;
     Measurer& measurer;
 
     explicit InterpreterInstance(Measurer& measurer) : measurer(measurer) {}

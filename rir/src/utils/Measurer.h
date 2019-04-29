@@ -39,6 +39,7 @@ struct MeasureHeader {
     std::string first;
     std::string second;
 
+    // cppcheck-suppress passedByValue
     MeasureHeader(std::string name, std::string first, std::string second)
         : name(name), first(first), second(second) {}
 };
@@ -49,7 +50,8 @@ struct MeasureRow {
     unsigned first = 0;
     unsigned second = 0;
 
-    MeasureRow(std::string name) : name(name) {}
+    // cppcheck-suppress passedByValue
+    explicit MeasureRow(std::string name) : name(name) {}
 };
 
 // Keeps track of one type of measurement
@@ -59,6 +61,7 @@ struct MeasureTable {
     const std::string fileBase;
     const MeasureHeader header;
 
+    // cppcheck-suppress passedByValue
     MeasureTable(std::string fileBase, MeasureHeader header)
         : fileBase(fileBase), header(header) {}
 
@@ -89,7 +92,8 @@ struct MeasureData {
 struct Measurer {
     MeasureData data;
 
-    Measurer(MeasureData data) : data(data) {}
+    // cppcheck-suppress passedByValue
+    explicit Measurer(MeasureData data) : data(data) {}
 
     void recordClosureStart(Code* code, SEXP ast, bool isInline);
     void recordClosureMkEnv(Code* code, bool beforeStart = false,
