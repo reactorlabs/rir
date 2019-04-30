@@ -4,6 +4,7 @@
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
+#include "cache.h"
 #include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
@@ -1232,89 +1233,6 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-#define BINDING_CACHE_SIZE 8
-// must be a power of 2 for modulus using & CACHE_MASK to work
-#define CACHE_MASK (BINDING_CACHE_SIZE - 1)
-
-typedef struct {
-    SEXP loc;
-    Immediate idx;
-} BindingCache;
-
-static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
-                                            Immediate cacheIdx,
-                                            InterpreterInstance* ctx,
-                                            BindingCache* bindingCache,
-                                            bool smallCache) {
-    if (env == R_BaseEnv || env == R_BaseNamespace)
-        return NULL;
-
-    Immediate cidx;
-    if (smallCache)
-        cidx = cacheIdx;
-    else
-        cidx = cacheIdx & CACHE_MASK;
-
-    if (bindingCache[cidx].idx == poolIdx) {
-        return bindingCache[cidx].loc;
-    }
-
-    SEXP sym = cp_pool_at(ctx, poolIdx);
-    SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    R_varloc_t loc = R_findVarLocInFrame(env, sym);
-    if (!R_VARLOC_IS_NULL(loc)) {
-        bindingCache[cidx].loc = loc.cell;
-        bindingCache[cidx].idx = poolIdx;
-        return loc.cell;
-    }
-    return NULL;
-}
-
-static SEXP cachedGetVar(SEXP env, Immediate poolIdx, Immediate cacheIdx,
-                         InterpreterInstance* ctx, BindingCache* bindingCache,
-                         bool smallCache) {
-    SEXP loc = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx, bindingCache,
-                                    smallCache);
-    if (loc) {
-        SEXP res = CAR(loc);
-        if (res != R_UnboundValue)
-            return res;
-    }
-    SEXP sym = cp_pool_at(ctx, poolIdx);
-    SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    return Rf_findVar(sym, env);
-}
-
-#define ACTIVE_BINDING_MASK (1 << 15)
-#define BINDING_LOCK_MASK (1 << 14)
-#define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
-#define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
-static void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
-                         Immediate cacheIdx, InterpreterInstance* ctx,
-                         BindingCache* bindingCache, bool smallCache,
-                         bool keepMissing = false) {
-    SEXP loc = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx, bindingCache,
-                                    smallCache);
-    if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
-        SEXP cur = CAR(loc);
-        if (cur == val)
-            return;
-        INCREMENT_NAMED(val);
-        SETCAR(loc, val);
-        if (!keepMissing && MISSING(loc)) {
-            SET_MISSING(loc, 0);
-        }
-        return;
-    }
-
-    SEXP sym = cp_pool_at(ctx, poolIdx);
-    SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    INCREMENT_NAMED(val);
-    PROTECT(val);
-    Rf_defineVar(sym, val, env);
-    UNPROTECT(1);
-}
-
 RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
                                InterpreterInstance* ctx) {
     SEXP val = ostack_top(ctx);
@@ -1536,11 +1454,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     assert(c->info.magic == CODE_MAGIC);
     bool existingLocals = localsBase;
-
-    BindingCache bindingCache[BINDING_CACHE_SIZE];
-    bool smallCache = c->bindingsCount <= BINDING_CACHE_SIZE;
+    bool smallCache = c->bindingsCount <= MAX_CACHE_SIZE;
+    size_t cacheSize = smallCache ? c->bindingsCount : MAX_CACHE_SIZE;
+    BindingCache* bindingCache =
+        (BindingCache*)(alloca(sizeof(BindingCache) * cacheSize));
     if (env != symbol::delayedEnv || existingLocals)
-        memset(&bindingCache, 0, sizeof(bindingCache));
+        clearCache(bindingCache, cacheSize);
 
     if (!existingLocals) {
 #ifdef TYPED_STACK
@@ -1569,7 +1488,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                "Expected an environment");
         if (e != env) {
             if (env == symbol::delayedEnv)
-                memset(&bindingCache, 0, sizeof(bindingCache));
+                clearCache(bindingCache, cacheSize);
             env = e;
         }
     };
@@ -1660,7 +1579,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     }
                 }
             }
-            memset(&bindingCache, 0, sizeof(bindingCache));
+            clearCache(bindingCache, cacheSize);
             ostack_push(ctx, res);
             UNPROTECT(1);
             NEXT();
