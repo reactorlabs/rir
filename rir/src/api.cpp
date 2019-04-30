@@ -366,3 +366,5 @@ bool startup() {
 }
 
 bool startup_ok = startup();
+
+void rirCleanup() {}

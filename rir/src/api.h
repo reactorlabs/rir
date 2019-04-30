@@ -25,4 +25,6 @@ extern SEXP rirOptDefaultOpts(SEXP closure, const rir::Assumptions&, SEXP name);
 extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Assumptions&,
                                     SEXP name);
 
+REXPORT void rirCleanup();
+
 #endif // API_H_
