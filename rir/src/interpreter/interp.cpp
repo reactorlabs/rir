@@ -1539,7 +1539,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     bool smallCache = c->bindingsCount <= BINDING_CACHE_SIZE;
-    if (env != symbol::delayedEnv)
+    if (env != symbol::delayedEnv || existingLocals)
         memset(&bindingCache, 0, sizeof(bindingCache));
 
     if (!existingLocals) {
