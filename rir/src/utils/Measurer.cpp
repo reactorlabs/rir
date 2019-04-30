@@ -126,12 +126,17 @@ void MeasureData::reset() {
     }
 }
 
+void MeasureData::flush() const {
+    for (auto it = tables.begin(); it != tables.end(); it++) {
+        it->second.flush();
+    }
+}
+
 void Measurer::recordClosureStart(Code* code, SEXP ast, bool isInline) {
     if (data.hasTable(MeasureFlag::Envs)) {
         MeasureTable& table = data.table(MeasureFlag::Envs);
         MeasureRow& row = table.row(code, ast, true);
         row.second++;
-        table.flush();
     }
 }
 
@@ -140,7 +145,6 @@ void Measurer::recordInlineClosureStart(const char* name, void* entry) {
         MeasureTable& table = data.table(MeasureFlag::Envs);
         MeasureRow& row = table.row(name, entry, true);
         row.second++;
-        table.flush();
     }
 }
 
@@ -149,8 +153,6 @@ void Measurer::recordClosureMkEnv(Code* code, bool beforeStart, SEXP ast) {
         MeasureTable& table = data.table(MeasureFlag::Envs);
         MeasureRow& row = table.row(code, ast, beforeStart);
         row.first++;
-        assert(row.first <= row.second);
-        table.flush();
     }
 }
 
@@ -177,7 +179,6 @@ void Measurer::recordCompiled(pir::ClosureVersion* code) {
         MeasureRow& row = table.row(code, true);
         row.second = pirMeasurement(flag, code);
         row.first = row.second;
-        table.flush();
     }
 }
 
@@ -188,7 +189,6 @@ void Measurer::recordOptimized(pir::ClosureVersion* code) {
         MeasureTable& table = data.table(flag);
         MeasureRow& row = table.row(code, true);
         row.first = pirMeasurement(flag, code);
-        table.flush();
     }
 }
 

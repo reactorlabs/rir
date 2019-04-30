@@ -432,4 +432,4 @@ bool startup() {
 
 bool startup_ok = startup();
 
-void rirCleanup() {}
+void rirCleanup() { Measure.data.flush(); }

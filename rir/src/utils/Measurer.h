@@ -20,7 +20,8 @@ class ClosureVersion;
 #define LIST_OF_RIR_MEASURE_FLAGS(V)                                           \
     V(Envs)                                                                    \
     V(Vars)                                                                    \
-    V(LazyArgs)
+    V(LazyArgs)                                                                \
+    // V(UseEnv)
 
 // A type of measurement
 enum class MeasureFlag : uint8_t {
@@ -29,7 +30,7 @@ enum class MeasureFlag : uint8_t {
 #undef V
 
         FIRST = Envs,
-    LAST = LazyArgs,
+    LAST = Reflection,
 };
 typedef EnumSet<MeasureFlag> MeasureFlags;
 
@@ -85,6 +86,8 @@ struct MeasureData {
     MeasureTable& table(MeasureFlag flag);
     void reset();
 
+    void flush() const;
+
   private:
     std::unordered_map<MeasureFlag, MeasureTable> tables;
 };
@@ -102,6 +105,7 @@ struct Measurer {
                             SEXP ast = NULL);
     void recordCompiled(pir::ClosureVersion* code);
     void recordOptimized(pir::ClosureVersion* code);
+    // void recordUseEnv(Code* code);
 };
 
 }; // namespace rir
