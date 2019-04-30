@@ -1568,6 +1568,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
                "Expected an environment");
         if (e != env) {
+            if (env == symbol::delayedEnv)
+                memset(&bindingCache, 0, sizeof(bindingCache));
             env = e;
         }
     };
