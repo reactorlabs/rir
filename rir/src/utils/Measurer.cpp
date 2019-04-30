@@ -91,6 +91,18 @@ MeasureData::MeasureData(MeasureFlags flags, std::string fileBase) {
             tables.emplace(flag, table);
             break;
         }
+        case MeasureFlag::Load: {
+            MeasureTable table(fileBase.empty() ? "" : fileBase + "_load",
+                               MeasureHeader("Closure", "PIR", "RIR"));
+            tables.emplace(flag, table);
+            break;
+        }
+        case MeasureFlag::Store: {
+            MeasureTable table(fileBase.empty() ? "" : fileBase + "_store",
+                               MeasureHeader("Closure", "PIR", "RIR"));
+            tables.emplace(flag, table);
+            break;
+        }
         case MeasureFlag::Vars: {
             MeasureTable table(
                 fileBase.empty() ? "" : fileBase + "_vars",
@@ -132,17 +144,25 @@ void MeasureData::flush() const {
     }
 }
 
+static MeasureFlags CLOSURE_FLAGS = MeasureFlags(MeasureFlag::Envs);
+static MeasureFlags PIR_FLAGS =
+    MeasureFlags(MeasureFlag::Vars) | MeasureFlag::LazyArgs;
+
 void Measurer::recordClosureStart(Code* code, SEXP ast, bool isInline) {
-    if (data.hasTable(MeasureFlag::Envs)) {
-        MeasureTable& table = data.table(MeasureFlag::Envs);
+    for (MeasureFlag flag : CLOSURE_FLAGS) {
+        if (!data.hasTable(flag))
+            continue;
+        MeasureTable& table = data.table(flag);
         MeasureRow& row = table.row(code, ast, true);
         row.second++;
     }
 }
 
 void Measurer::recordInlineClosureStart(const char* name, void* entry) {
-    if (data.hasTable(MeasureFlag::Envs)) {
-        MeasureTable& table = data.table(MeasureFlag::Envs);
+    for (MeasureFlag flag : CLOSURE_FLAGS) {
+        if (!data.hasTable(flag))
+            continue;
+        MeasureTable& table = data.table(flag);
         MeasureRow& row = table.row(name, entry, true);
         row.second++;
     }
@@ -156,8 +176,14 @@ void Measurer::recordClosureMkEnv(Code* code, bool beforeStart, SEXP ast) {
     }
 }
 
-static MeasureFlags PIR_FLAGS =
-    MeasureFlags(MeasureFlag::Vars) | MeasureFlag::LazyArgs;
+void Measurer::recordClosureUseEnv(Code* code, MeasureFlag way) {
+    if (data.hasTable(flag)) {
+        MeasureTable& table = data.table(flag);
+        MeasureRow& row = table.row(code, NULL, false);
+        // TODO: Increment first if in PIR
+        row.second++;
+    }
+}
 
 static unsigned pirMeasurement(MeasureFlag flag, pir::ClosureVersion* code) {
     switch (flag) {

@@ -19,9 +19,10 @@ class ClosureVersion;
 // !!! important: when adding a new flag, update MeasureFlag::LAST !!!
 #define LIST_OF_RIR_MEASURE_FLAGS(V)                                           \
     V(Envs)                                                                    \
-    V(Vars)                                                                    \
+    V(Load)                                                                    \
+    V(Store)                                                                   \
     V(LazyArgs)                                                                \
-    // V(UseEnv)
+    V(Vars)
 
 // A type of measurement
 enum class MeasureFlag : uint8_t {
@@ -103,9 +104,9 @@ struct Measurer {
     void recordInlineClosureStart(const char* name, void* entry);
     void recordClosureMkEnv(Code* code, bool beforeStart = false,
                             SEXP ast = NULL);
+    void recordClosureUseEnv(Code* code, MeasureFlag way);
     void recordCompiled(pir::ClosureVersion* code);
     void recordOptimized(pir::ClosureVersion* code);
-    // void recordUseEnv(Code* code);
 };
 
 }; // namespace rir
