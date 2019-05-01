@@ -37,7 +37,8 @@ void PirType::merge(SEXPTYPE sexptype) {
         break;
     case EXPRSXP:
         t_.r.set(RType::ast);
-        // fall through
+        t_.r.set(RType::code);
+        break;
     case LANGSXP:
         t_.r.set(RType::code);
         break;
@@ -78,7 +79,12 @@ void PirType::merge(SEXPTYPE sexptype) {
 }
 
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
-    merge(TYPEOF(e));
+    if (e == R_MissingArg)
+        t_.r.set(RType::missing);
+    else if (e == R_UnboundValue)
+        t_.r.set(RType::unbound);
+    else
+        merge(TYPEOF(e));
 
     if (!Rf_isObject(e)) {
         flags_.reset(TypeFlags::maybeObject);

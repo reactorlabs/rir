@@ -2,6 +2,7 @@
 #define PIR_ABSTRACT_VALUE_H
 
 #include "../pir/pir.h"
+#include "../pir/singleton_values.h"
 #include "abstract_result.h"
 #include "utils/Set.h"
 
@@ -118,6 +119,24 @@ struct AbstractPirValue {
         return true;
     }
 
+    bool isUnboundValue() const {
+        if (vals.empty())
+            return false;
+        for (auto& v : vals)
+            if (v.val != UnboundValue::instance())
+                return false;
+        return true;
+    }
+
+    bool maybeUnboundValue() const {
+        if (vals.empty())
+            return false;
+        for (auto& v : vals)
+            if (v.val == UnboundValue::instance())
+                return true;
+        return false;
+    }
+
     AbstractResult merge(const ValOrig& other) {
         return merge(
             AbstractPirValue(other.val, other.origin, other.recursionLevel));
@@ -207,17 +226,18 @@ struct AbstractREnvironment {
         for (auto& entry : other.entries) {
             auto name = entry.first;
             if (!entries.count(name)) {
-                entries[name].taint();
-                res.lostPrecision();
+                entries[name] = other.get(name);
+                res.max(entries.at(name).merge(
+                    AbstractPirValue(UnboundValue::instance(), nullptr, 0)));
             } else {
-                res.max(entries[name].merge(other.get(name)));
+                res.max(entries.at(name).merge(other.get(name)));
             }
         }
         for (auto& entry : entries) {
             auto name = entry.first;
             if (!other.entries.count(name) && !entries.at(name).isUnknown()) {
-                entries.at(name).taint();
-                res.lostPrecision();
+                res.max(entries.at(name).merge(
+                    AbstractPirValue(UnboundValue::instance(), nullptr, 0)));
             }
         }
 

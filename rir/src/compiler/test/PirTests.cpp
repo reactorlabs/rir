@@ -66,11 +66,12 @@ ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         auto fun = *f;
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
-            cmp.compileClosure(fun, "test_function",
-                               [&](pir::ClosureVersion* cls) {
-                                   results[CHAR(PRINTNAME(f.tag()))] = cls;
-                               },
-                               []() { assert(false); });
+            cmp.compileClosure(
+                fun, "test_function",
+                [&](pir::ClosureVersion* cls) {
+                    results[CHAR(PRINTNAME(f.tag()))] = cls;
+                },
+                []() { assert(false); });
         }
     }
 
@@ -162,14 +163,6 @@ bool testCondition(const std::string& input,
     m.eachPirClosureVersion(condition);
     // m.print(std::cout);
     return t;
-}
-
-bool lookupOutOfLoop(const std::string& input) {
-    auto t = true;
-    auto condition = [&](pir::ClosureVersion* f) {
-        t = t && Query::lookupOutOfLoopEnv(f);
-    };
-    return testCondition(input, condition) && t;
 }
 
 bool canRemoveEnvironment(const std::string& input) {
@@ -534,6 +527,27 @@ bool testCfg() {
     return true;
 }
 
+bool testTypeRules() {
+    PirType r = RType::vec;
+    PirType r2 = RType::logical;
+    assert(r.subsetType(PirType::any()).isA(RType::vec));
+    assert(!r.subsetType(PirType::any()).maybeObj());
+    assert(!r.orObject().subsetType(PirType::bottom()).isA(RType::vec));
+    assert(!r.orObject().subsetType(PirType::bottom()).isA(PirType::val()));
+    assert(r.extractType(PirType::any()).isA(PirType::val()));
+    assert(!r.extractType(PirType::bottom()).isScalar());
+    assert(!r.extractType(PirType::bottom()).maybeMissing());
+    assert(!r.extractType(PirType::bottom()).isA(RType::vec));
+    assert(r.orObject().extractType(PirType::bottom()).maybeMissing());
+    assert(r2.subsetType(RType::real).isA(RType::logical));
+    assert(!r2.subsetType(RType::integer).isScalar());
+    assert(!r2.scalar().subsetType(RType::integer).isScalar());
+    assert(r2.subsetType(PirType(RType::integer).scalar()).isScalar());
+    assert(r2.extractType(RType::integer).isScalar());
+    assert(!r2.subsetType(PirType::any()).maybeObj());
+    return true;
+}
+
 static Test tests[] = {
     Test("test cfg", &testCfg),
     Test("test_42L", []() { return test42("42L"); }),
@@ -705,17 +719,7 @@ static Test tests[] = {
              return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
          }),
     Test("Test dead store analysis", &testDeadStore),
-    Test("hoistLdFun",
-         []() {
-             return lookupOutOfLoop("f <- function(){\n"
-                                    "j <- 0\n"
-                                    "while (j < 2) {\n"
-                                    "c(j)\n"
-                                    "j <- j + 1\n"
-                                    "}\n"
-                                    "}");
-         }),
-};
+    Test("Test type rules", &testTypeRules)};
 } // namespace
 
 namespace rir {

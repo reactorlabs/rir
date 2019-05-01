@@ -165,7 +165,7 @@ class Instruction : public Value {
         return !getObservableEffects().empty();
     }
 
-    bool hasImpureEffects() const {
+    bool hasStrongEffects() const {
         auto e = getObservableEffects();
         // Yes visibility is a global effect. We try to preserve it. But geting
         // it wrong is not a strong correctness issue.
@@ -173,7 +173,7 @@ class Instruction : public Value {
         return !e.empty();
     }
 
-    bool isDeoptBarrier() const { return hasImpureEffects(); }
+    bool isDeoptBarrier() const { return hasStrongEffects(); }
     // TODO: Add verify, then replace with effects.includes(Effect::LeakArg)
     bool leaksArg(Value* val) const {
         return leaksEnv() || effects.includes(Effect::LeakArg);
@@ -240,6 +240,7 @@ class Instruction : public Value {
                            Effect::Visibility | Effect::Force);
     }
 
+    virtual unsigned cost() const { return 1; }
     virtual size_t gvnBase() const = 0;
 
     virtual bool mayHaveEnv() const = 0;
@@ -886,7 +887,7 @@ class FLI(Seq, 3, Effects::None()) {
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{start, end, step}}) {}
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::num().notObject());
+        maskEffectsAndTypeOnNonObjects(PirType::num().notObject().notMissing());
     }
 };
 
@@ -941,6 +942,7 @@ class FLIE(Force, 2, Effects::Any()) {
 
 class FLI(CastType, 1, Effects::None()) {
   public:
+    unsigned cost() const override final { return 0; }
     CastType(Value* in, PirType from, PirType to)
         : FixedLenInstruction(to, {{from}}, {{in}}) {}
 };
@@ -1064,11 +1066,10 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        auto t = arg<0>().val()->type;
-        if (arg<1>().val()->type.isScalar())
-            t.setScalar();
-        maskEffectsAndTypeOnNonObjects(t);
+        maskEffectsAndTypeOnNonObjects(vec()->type.subsetType(idx()->type));
     }
 };
 
@@ -1078,8 +1079,10 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx() { return arg(1).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
+        maskEffectsAndTypeOnNonObjects(vec()->type.extractType(idx()->type));
     }
 };
 
@@ -1091,11 +1094,12 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx1() { return arg(1).val(); }
+    Value* idx2() { return arg(2).val(); }
     void updateType() override final {
-        auto t = arg<0>().val()->type;
-        if (arg<1>().val()->type.isScalar())
-            t.setScalar();
-        maskEffectsAndTypeOnNonObjects(t);
+        maskEffectsAndTypeOnNonObjects(
+            vec()->type.subsetType(idx1()->type | idx2()->type));
     }
 };
 
@@ -1107,8 +1111,12 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
+    Value* vec() { return arg(0).val(); }
+    Value* idx1() { return arg(1).val(); }
+    Value* idx2() { return arg(2).val(); }
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.scalar());
+        maskEffectsAndTypeOnNonObjects(
+            vec()->type.extractType(idx1()->type | idx2()->type));
     }
 };
 
@@ -1237,7 +1245,7 @@ SIMPLE_INSTRUCTIONS(V, _)
             }                                                                  \
         }                                                                      \
         void updateType() override final {                                     \
-            maskEffectsAndTypeOnNonObjects(Type);                              \
+            maskEffectsAndTypeOnNonObjects(Type.notMissing());                 \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
             maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
             updateScalarOnScalarInputs();                                      \
@@ -1290,7 +1298,7 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
             }                                                                  \
         }                                                                      \
         void updateType() override final {                                     \
-            maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
+            maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.notMissing()); \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
             maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
             updateScalarOnScalarInputs();                                      \
@@ -1702,7 +1710,7 @@ class VLI(Phi, Effects::None()) {
         SLOWASSERT(std::find(input.begin(), input.end(), in) == input.end() &&
                    "Duplicate PHI input block");
         input.push_back(in);
-        args_.push_back(InstrArg(arg, PirType::any()));
+        args_.push_back(InstrArg(arg, arg->type));
     }
     BB* inputAt(size_t i) const { return input.at(i); }
     void updateInputAt(size_t i, BB* bb) {

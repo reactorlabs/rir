@@ -135,6 +135,15 @@ static bool testOneNot(ClosureVersion* f) {
     return numNots == 1;
 }
 
+static bool testLookupOutOfLoop(ClosureVersion* f) {
+    for (auto instruction : *f->entry) {
+        if (LdFun::Cast(instruction)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 PirCheck::Type PirCheck::parseType(const char* str) {
 #define V(Check)                                                               \
     if (strcmp(str, #Check) == 0)                                              \
