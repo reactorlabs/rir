@@ -37,8 +37,6 @@ SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env);
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callContext);
 
-SEXP rirExpr(SEXP f);
-
 SEXP rirEval_f(SEXP f, SEXP env);
 SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP, SEXP);
 
@@ -51,6 +49,11 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
 SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
                        const Opcode* pc, InterpreterInstance* ctx,
                        R_bcstack_t* localsBase, SEXP stub);
+
+SEXP rirDecompile(SEXP s);
+
+void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out);
+SEXP deserializeRir(SEXP refTable, R_inpstream_t inp);
 
 SEXP materialize(void* rirDataWrapper);
 SEXP* keepAliveSEXPs(void* rirDataWrapper);

@@ -114,10 +114,12 @@ pir.setDebugFlags <- function(debugFlags = pir.debugFlags()) {
 }
 
 # compiles code of the given file and returns the list of compiled version.
-rir.compile.program <- function(file) {
+pir.program <- function(file) {
   contents <- readChar(file, file.info(file)$size)
   expr <- eval(parse(text = paste("function() {", contents, "}", sep = "\n")))
   rir.compile(expr)
+  for (i in 1:as.numeric(Sys.getenv("PIR_WARMUP", unset="3")))
+    expr()
 }
 
 rir.eval <- function(what, env = globalenv()) {

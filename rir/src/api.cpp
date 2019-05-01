@@ -206,7 +206,6 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
 
 SEXP pirCompile(SEXP what, const Assumptions& assumptions,
                 const std::string& name, const pir::DebugOptions& debug) {
-
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
     }
@@ -358,6 +357,26 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
                           PirDebug | pir::DebugFlag::DryRun);
     else
         return closure;
+}
+
+REXPORT SEXP rir_serialize(SEXP closure, SEXP fileSexp) {
+    Rf_error("TODO");
+    /*const char* file = NULL;
+    if (TYPEOF(fileSexp) == STRSXP)
+        file = CHAR(fileSexp);
+    if (!isValidClosureSEXP(closure)) {
+        Rf_error("not a compiled closure");
+    }
+    auto fun = DispatchTable::unpack(closure)->best();
+    if (file != NULL) {
+        std::ofstream out(file);
+        fun->serialize(out);
+        return R_NilValue;
+    } else {
+        std::stringstream out;
+        fun->serialize(out);
+        return Rf_mkString(out.str().c_str());
+    }*/
 }
 
 bool startup() {
