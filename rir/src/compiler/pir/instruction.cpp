@@ -386,6 +386,10 @@ LdConst::LdConst(int num)
 SEXP LdConst::c() const { return Pool::get(idx); }
 
 void LdConst::printArgs(std::ostream& out, bool tty) const {
+    if (c() == R_UnboundValue) {
+        out << "unboundValue";
+        return;
+    }
     std::string val;
     {
         CaptureOut rec;
@@ -478,8 +482,7 @@ void Is::printArgs(std::ostream& out, bool tty) const {
 
 void IsType::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
-    out << " isA ";
-    typeTest.print(out);
+    out << " isA " << typeTest;
 }
 
 void Phi::updateType() {
@@ -509,8 +512,9 @@ void PirCopy::print(std::ostream& out, bool tty) const {
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                                  unsigned srcIdx)
-    : VarLenInstruction(PirType::val().notObject(), srcIdx), blt(builtin),
-      builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
+    : VarLenInstruction(PirType::val().notObject().notMissing(), srcIdx),
+      blt(builtin), builtin(getBuiltin(builtin)),
+      builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
 }

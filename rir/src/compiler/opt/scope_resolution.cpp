@@ -112,8 +112,9 @@ class TheScopeResolution {
             return val;
         };
 
-        auto tryInsertPhis = [&](AbstractPirValue res, BB* bb,
-                                 BB::Instrs::iterator& iter) -> Value* {
+        auto tryInsertPhis = [&](Value* env, AbstractPirValue res, BB* bb,
+                                 BB::Instrs::iterator& iter,
+                                 bool allowUnbound) -> Value* {
             if (res.isUnknown())
                 return nullptr;
 
@@ -129,12 +130,25 @@ class TheScopeResolution {
             std::unordered_map<BB*, Value*> inputs;
             bool fail = false;
             res.eachSource([&](ValOrig v) {
-                auto i = Instruction::Cast(v.val);
                 if (fail)
                     return;
-                if (!i || inputs.count(v.origin->bb()))
-                    fail = true;
-                inputs[v.origin->bb()] = i;
+                if (!v.origin)
+                    assert(v.val == UnboundValue::instance());
+                if (v.val == UnboundValue::instance()) {
+                    if (allowUnbound) {
+                        auto initialBB = Instruction::Cast(env)
+                                             ? Instruction::Cast(env)->bb()
+                                             : function->entry;
+                        inputs[initialBB] = UnboundValue::instance();
+                    } else {
+                        fail = true;
+                    }
+                } else {
+                    if (inputs.count(v.origin->bb()))
+                        fail = true;
+                    else
+                        inputs[v.origin->bb()] = v.val;
+                }
             });
             if (fail)
                 return nullptr;
@@ -339,7 +353,7 @@ class TheScopeResolution {
                                                 values.push_back(val);
                                             } else {
                                                 auto phi = tryInsertPhis(
-                                                    e.second, bb, ip);
+                                                    mk, e.second, bb, ip, true);
                                                 if (!phi)
                                                     return;
                                                 values.push_back(phi);
@@ -405,7 +419,8 @@ class TheScopeResolution {
                     // of a load, we will resolve the load and the force) which
                     // ends up being rather painful.
                     if (!res.isUnknown() && isActualLoad) {
-                        if (auto resPhi = tryInsertPhis(res, bb, ip)) {
+                        if (auto resPhi =
+                                tryInsertPhis(i->env(), res, bb, ip, false)) {
                             Value* val = resPhi;
                             if (val->type.maybeMissing()) {
                                 // LdVar checks for missingness, so we need

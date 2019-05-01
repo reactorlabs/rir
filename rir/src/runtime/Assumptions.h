@@ -121,6 +121,8 @@ struct Assumptions {
         // we need a complete order, subtype is only partial
         if (missing != other.missing)
             return missing < other.missing;
+        if (flags.count() != other.flags.count())
+            return flags.count() < other.flags.count();
         return flags < other.flags;
     }
 
@@ -152,7 +154,7 @@ struct Assumptions {
 
 typedef uint32_t Immediate;
 static_assert(sizeof(Assumptions) == 2 * sizeof(Immediate),
-              "Assumptions needs to be one immediate arg size");
+              "Assumptions needs to be 2 immediate args long");
 
 std::ostream& operator<<(std::ostream& out, Assumption a);
 

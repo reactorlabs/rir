@@ -78,8 +78,9 @@ pir.check <- function(f, ..., warmup=NULL) {
         for (i in 1:as.numeric(Sys.getenv("PIR_WARMUP", unset="3")))
             warmup(f)
     }
-    .Call("pir_check", f, checks)
-    #.Call("pir_check_warmup_end")
+    res = .Call("pir_check", f, checks)
+    .Call("pir_check_warmup_end")
+    res
 }
 
 # creates a bitset with pir debug options

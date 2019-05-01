@@ -137,7 +137,7 @@ const DominanceGraph::BBList& DominanceGraph::dominators(BB* bb) const {
 
 void DominanceGraph::dominatorTreeNext(
     BB* bb, const std::function<void(BB*)>& apply) const {
-    Visitor::run(bb, [&](BB* b) {
+    BreadthFirstVisitor::run(bb, [&](BB* b) {
         if (immediatelyDominates(bb, b))
             apply(b);
     });
