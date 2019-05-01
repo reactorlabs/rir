@@ -1460,9 +1460,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     bool smallCache = c->bindingsCount <= MAX_CACHE_SIZE;
     size_t cacheSize = smallCache ? c->bindingsCount : MAX_CACHE_SIZE;
     BindingCache* bindingCache;
-    if (cache)
+    if (cache) {
         bindingCache = cache;
-    else {
+    } else {
         bindingCache =
             (BindingCache*)(alloca(sizeof(BindingCache) * cacheSize));
         if (env != symbol::delayedEnv)

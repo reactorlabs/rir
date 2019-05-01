@@ -23,35 +23,7 @@ static RIR_INLINE Immediate cacheIndex(Immediate index, bool smallCache) {
 }
 
 #ifdef CACHE_ON_R_STACK
-typedef R_bcstack_t Cache;
-static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
-                                            Immediate cacheIdx,
-                                            InterpreterInstance* ctx,
-                                            BindingCache* bindingCache,
-                                            Cache* cache, bool smallCache) {
-    if (env == R_BaseEnv || env == R_BaseNamespace)
-        return NULL;
-
-    Immediate cidx;
-    if (smallCache)
-        cidx = cacheIdx;
-    else
-        cidx = cacheIdx & CACHE_MASK;
-
-    if (bindingCache[cidx].idx == poolIdx) {
-        return bindingCache[cidx].loc;
-    }
-
-    SEXP sym = cp_pool_at(ctx, poolIdx);
-    SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    R_varloc_t loc = R_findVarLocInFrame(env, sym);
-    if (!R_VARLOC_IS_NULL(loc)) {
-        bindingCache[cidx].loc = loc.cell;
-        bindingCache[cidx].idx = poolIdx;
-        return loc.cell;
-    }
-    return NULL;
-}
+// TODO: Create a version with a cache on the R_stack instead of the C stack
 #else
 typedef struct {
     SEXP loc;
