@@ -96,9 +96,6 @@ class LoopDetection {
     const_iterator end() const { return loops.end(); }
 
   private:
-    Code* code;
-    CFG cfg;
-    DominanceGraph dom;
     std::vector<Loop> loops;
 };
 

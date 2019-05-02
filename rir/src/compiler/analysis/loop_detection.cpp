@@ -13,8 +13,9 @@ bool LoopDetection::Loop::comesBefore(Instruction* a, Instruction* b) const {
     }
 }
 
-LoopDetection::LoopDetection(Code* code, bool determineNesting)
-    : code(code), cfg(code), dom(code) {
+LoopDetection::LoopDetection(Code* code, bool determineNesting) {
+    CFG cfg(code);
+    DominanceGraph dom(code);
     // map of header nodes to tail nodes
     std::unordered_map<BB*, BBList> tailNodes;
 
