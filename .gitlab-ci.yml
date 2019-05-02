@@ -33,9 +33,12 @@ tests_release:
     - bin/gnur-make-tests check-recommended
     - ../tools/check-gnur-make-tests-error
 
-tests_release_2:
+tests_releasefullverifier:
   script:
-    - cd build_release
+    - mkdir build_releasefullverifier && cd build_releasefullverifier
+    - cmake -DCMAKE_BUILD_TYPE=releasefullverifier -GNinja ..
+    - ninja -j 3
+    - bin/tests
     - bin/gnur-make-tests check
     - PIR_WARMUP=4 ./bin/gnur-make-tests check
     - PIR_ENABLE=force ./bin/gnur-make-tests check
