@@ -77,6 +77,10 @@ struct NaturalLoop {
         return answer;
     }
 
+    /*
+      TODO: This just finds a preheader when there is already one.
+      We should create a preheader when there is non.
+    */
     BB* outOfLoopPredecessor(const CFG& cfg) {
         std::vector<BB*> diff;
         std::set_difference(cfg.immediatePredecessors(header).begin(),
@@ -84,7 +88,11 @@ struct NaturalLoop {
                             body.begin(), body.end(),
                             std::inserter(diff, diff.end()));
 
-        return diff.front();
+        if (diff.size() != 1) {
+            return nullptr;
+        } else {
+            return diff.front();
+        }
     }
 };
 
@@ -128,8 +136,8 @@ void addNaturalLoop(const CFG& cfg, std::vector<size_t>& nesting,
 }
 
 void tryHoistingFnLookups(const CFG& cfg, NaturalLoop& loop) {
-    if (loop.isSafeToHoistLoads()) {
-        BB* targetBB = loop.outOfLoopPredecessor(cfg);
+    BB* targetBB = loop.outOfLoopPredecessor(cfg);
+    if (targetBB && loop.isSafeToHoistLoads()) {
         for (auto bb : loop.body) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
