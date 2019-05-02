@@ -138,17 +138,18 @@ BC_NOARGS(V, _)
 
 SEXP BC::immediateConst() const { return Pool::get(immediate.pool); }
 
-void BC::deserialize(R_inpstream_t inp, Opcode* code, size_t codeSize) {
+void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
+                     size_t codeSize) {
     while (codeSize > 0) {
         *code = (Opcode)InChar(inp);
         unsigned size = BC::fixedSize(*code);
+        ImmediateArguments& i = *(ImmediateArguments*)(code + 1);
         switch (*code) {
 #define V(NESTED, name, name_) case Opcode::name_##_:
             BC_NOARGS(V, _)
 #undef V
+            assert(*code != Opcode::nop_);
             break;
-        case Opcode::record_call_:
-        case Opcode::record_type_:
         case Opcode::push_:
         case Opcode::deopt_:
         case Opcode::ldfun_:
@@ -162,7 +163,15 @@ void BC::deserialize(R_inpstream_t inp, Opcode* code, size_t codeSize) {
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
+            i.pool = Pool::insert(ReadItem(refTable, inp));
+            break;
         case Opcode::guard_fun_:
+            i.guard_fun_args.name = Pool::insert(ReadItem(refTable, inp));
+            i.guard_fun_args.expected = Pool::insert(ReadItem(refTable, inp));
+            i.guard_fun_args.id = InInteger(inp);
+            break;
+        case Opcode::record_call_:
+        case Opcode::record_type_:
         case Opcode::call_implicit_:
         case Opcode::named_call_implicit_:
         case Opcode::call_:
@@ -204,18 +213,19 @@ void BC::deserialize(R_inpstream_t inp, Opcode* code, size_t codeSize) {
     }
 }
 
-void BC::serialize(R_outpstream_t out, const Opcode* code, size_t codeSize) {
+void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
+                   size_t codeSize) {
     while (codeSize > 0) {
         const BC bc = BC::decodeShallow((Opcode*)code);
         OutChar(out, (int)*code);
         unsigned size = bc.size();
+        ImmediateArguments i = bc.immediate;
         switch (*code) {
 #define V(NESTED, name, name_) case Opcode::name_##_:
             BC_NOARGS(V, _)
 #undef V
+            assert(*code != Opcode::nop_);
             break;
-        case Opcode::record_call_:
-        case Opcode::record_type_:
         case Opcode::push_:
         case Opcode::deopt_:
         case Opcode::ldfun_:
@@ -229,7 +239,15 @@ void BC::serialize(R_outpstream_t out, const Opcode* code, size_t codeSize) {
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
+            WriteItem(Pool::get(i.pool), refTable, out);
+            break;
         case Opcode::guard_fun_:
+            WriteItem(Pool::get(i.guard_fun_args.name), refTable, out);
+            WriteItem(Pool::get(i.guard_fun_args.expected), refTable, out);
+            OutInteger(out, i.guard_fun_args.id);
+            break;
+        case Opcode::record_call_:
+        case Opcode::record_type_:
         case Opcode::call_implicit_:
         case Opcode::named_call_implicit_:
         case Opcode::call_:

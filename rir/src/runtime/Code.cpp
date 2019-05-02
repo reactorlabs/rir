@@ -79,9 +79,14 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->extraPoolSize = InInteger(inp);
 
     // Bytecode
+    BC::deserialize(refTable, inp, code->code(), code->codeSize);
+
     // Srclist
-    BC::deserialize(inp, code->code(), code->codeSize);
-    InBytes(inp, code->srclist(), code->srcLength * sizeof(SrclistEntry));
+    for (unsigned i = 0; i < code->srcLength; i++) {
+        code->srclist()[i].pcOffset = InInteger(inp);
+        code->srclist()[i].srcIdx =
+            src_pool_add(globalContext(), ReadItem(refTable, inp));
+    }
     return code;
 }
 
@@ -97,9 +102,14 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, extraPoolSize);
 
     // Bytecode
+    BC::serialize(refTable, out, code(), codeSize);
+
     // Srclist
-    BC::serialize(out, code(), codeSize);
-    OutBytes(out, srclist(), srcLength * sizeof(SrclistEntry));
+    for (unsigned i = 0; i < srcLength; i++) {
+        OutInteger(out, srclist()[i].pcOffset);
+        WriteItem(src_pool_at(globalContext(), srclist()[i].srcIdx), refTable,
+                  out);
+    }
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {

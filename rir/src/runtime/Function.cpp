@@ -12,6 +12,8 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
         if ((bool)InInteger(inp))
             defaultArgs.push_back(
                 Code::deserialize(refTable, inp)->container());
+        else
+            defaultArgs.push_back(nullptr);
     }
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
     SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
