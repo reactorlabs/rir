@@ -8,6 +8,7 @@
 #include "R/Funtab.h"
 #include "R/Printing.h"
 #include "R/RList.h"
+#include "R/Serialize.h"
 #include "R/r.h"
 
 namespace rir {
@@ -136,6 +137,140 @@ BC_NOARGS(V, _)
 }
 
 SEXP BC::immediateConst() const { return Pool::get(immediate.pool); }
+
+void BC::deserialize(R_inpstream_t inp, Opcode* code, size_t codeSize) {
+    while (codeSize > 0) {
+        *code = (Opcode)InChar(inp);
+        unsigned size = BC::fixedSize(*code);
+        switch (*code) {
+#define V(NESTED, name, name_) case Opcode::name_##_:
+            BC_NOARGS(V, _)
+#undef V
+            break;
+        case Opcode::record_call_:
+        case Opcode::record_type_:
+        case Opcode::push_:
+        case Opcode::deopt_:
+        case Opcode::ldfun_:
+        case Opcode::ldddvar_:
+        case Opcode::ldvar_:
+        case Opcode::ldvar_for_update_:
+        case Opcode::ldvar_noforce_:
+        case Opcode::ldvar_super_:
+        case Opcode::ldvar_noforce_super_:
+        case Opcode::starg_:
+        case Opcode::stvar_:
+        case Opcode::stvar_super_:
+        case Opcode::missing_:
+        case Opcode::guard_fun_:
+        case Opcode::call_implicit_:
+        case Opcode::named_call_implicit_:
+        case Opcode::call_:
+        case Opcode::named_call_:
+        case Opcode::static_call_:
+        case Opcode::call_builtin_:
+        case Opcode::promise_:
+        case Opcode::push_code_:
+        case Opcode::mk_stub_env_:
+        case Opcode::mk_env_:
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::beginloop_:
+        case Opcode::push_context_:
+        case Opcode::brobj_:
+        case Opcode::brfalse_:
+        case Opcode::popn_:
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::alloc_:
+        case Opcode::ldarg_:
+        case Opcode::ldloc_:
+        case Opcode::stloc_:
+        case Opcode::movloc_:
+            assert((size - 1) % 4 == 0);
+            InBytes(inp, code, size - 1);
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+        default:
+            assert(false);
+            break;
+        }
+        assert(codeSize >= size);
+        code += size;
+        codeSize -= size;
+    }
+}
+
+void BC::serialize(R_outpstream_t out, const Opcode* code, size_t codeSize) {
+    while (codeSize > 0) {
+        const BC bc = BC::decodeShallow((Opcode*)code);
+        OutChar(out, (int)*code);
+        unsigned size = bc.size();
+        switch (*code) {
+#define V(NESTED, name, name_) case Opcode::name_##_:
+            BC_NOARGS(V, _)
+#undef V
+            break;
+        case Opcode::record_call_:
+        case Opcode::record_type_:
+        case Opcode::push_:
+        case Opcode::deopt_:
+        case Opcode::ldfun_:
+        case Opcode::ldddvar_:
+        case Opcode::ldvar_:
+        case Opcode::ldvar_for_update_:
+        case Opcode::ldvar_noforce_:
+        case Opcode::ldvar_super_:
+        case Opcode::ldvar_noforce_super_:
+        case Opcode::starg_:
+        case Opcode::stvar_:
+        case Opcode::stvar_super_:
+        case Opcode::missing_:
+        case Opcode::guard_fun_:
+        case Opcode::call_implicit_:
+        case Opcode::named_call_implicit_:
+        case Opcode::call_:
+        case Opcode::named_call_:
+        case Opcode::static_call_:
+        case Opcode::call_builtin_:
+        case Opcode::promise_:
+        case Opcode::push_code_:
+        case Opcode::mk_stub_env_:
+        case Opcode::mk_env_:
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::beginloop_:
+        case Opcode::push_context_:
+        case Opcode::brobj_:
+        case Opcode::brfalse_:
+        case Opcode::popn_:
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::alloc_:
+        case Opcode::ldarg_:
+        case Opcode::ldloc_:
+        case Opcode::stloc_:
+        case Opcode::movloc_:
+            assert((size - 1) % 4 == 0);
+            if (size != 0)
+                OutBytes(out, code, size - 1);
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+        default:
+            assert(false);
+            break;
+        }
+        assert(codeSize >= size);
+        code += size;
+        codeSize -= size;
+    }
+}
 
 void BC::printImmediateArgs(std::ostream& out) const {
     out << "[";

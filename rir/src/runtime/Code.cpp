@@ -80,7 +80,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
 
     // Bytecode
     // Srclist
-    InBytes(inp, code->code(), pad4(code->codeSize));
+    BC::deserialize(inp, code->code(), code->codeSize);
     InBytes(inp, code->srclist(), code->srcLength * sizeof(SrclistEntry));
     return code;
 }
@@ -98,7 +98,7 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
 
     // Bytecode
     // Srclist
-    OutBytes(out, code(), pad4(codeSize));
+    BC::serialize(out, code(), codeSize);
     OutBytes(out, srclist(), srcLength * sizeof(SrclistEntry));
 }
 

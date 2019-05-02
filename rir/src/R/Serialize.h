@@ -23,6 +23,14 @@ REXPORT void OutRefIndex(R_outpstream_t stream, int i);
 REXPORT int InRefIndex(R_inpstream_t stream, int flags);
 REXPORT void OutStringVec(R_outpstream_t stream, SEXP s, SEXP ref_table);
 
+static inline void OutChar(R_outpstream_t stream, int chr) {
+    stream->OutChar(stream, chr);
+}
+
+static inline int InChar(R_inpstream_t stream) {
+    return stream->InChar(stream);
+}
+
 static inline void OutBytes(R_outpstream_t stream, const void* buf,
                             int length) {
     stream->OutBytes(stream, (void*)buf, length);
