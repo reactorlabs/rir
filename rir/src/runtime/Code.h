@@ -48,7 +48,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     static constexpr size_t NumLocals = 1;
 
     Code() = delete;
-
     Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,
          size_t localsCnt);
 
@@ -129,7 +128,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    void serialize(std::ostream& out) const;
+    static Code* deserialize(SEXP refTable, R_inpstream_t inp);
+    void serialize(SEXP refTable, R_outpstream_t out) const;
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;

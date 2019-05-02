@@ -1,5 +1,6 @@
 #pragma once
 
+#include "R/Serialize.h"
 #include "R/r.h"
 
 #include "runtime/Assumptions.h"
@@ -46,6 +47,16 @@ struct FunctionSignature {
                    length == other.length;
         }
 
+        static ArgumentType deserialize(SEXP refTable, R_inpstream_t inp) {
+            ArgumentType x;
+            InBytes(inp, &x, sizeof(ArgumentType));
+            return x;
+        }
+
+        void serialize(SEXP refTable, R_outpstream_t out) const {
+            OutBytes(out, this, sizeof(ArgumentType));
+        }
+
         void print(std::ostream& out = std::cout) const {
             if (isEvaluated)
                 out << "eager ";
@@ -59,6 +70,26 @@ struct FunctionSignature {
     }
 
     void pushArgument(ArgumentType arg) { arguments.emplace_back(arg); }
+
+    static FunctionSignature deserialize(SEXP refTable, R_inpstream_t inp) {
+        Environment envc = (Environment)InInteger(inp);
+        OptimizationLevel opt = (OptimizationLevel)InInteger(inp);
+        const Assumptions as = Assumptions::deserialize(refTable, inp);
+        FunctionSignature sig(envc, opt, as);
+        int numArgs = InInteger(inp);
+        for (int i = 0; i < numArgs; i++)
+            sig.pushArgument(ArgumentType::deserialize(refTable, inp));
+        return sig;
+    }
+
+    void serialize(SEXP refTable, R_outpstream_t out) const {
+        OutInteger(out, (int)envCreation);
+        OutInteger(out, (int)optimization);
+        assumptions.serialize(refTable, out);
+        OutInteger(out, arguments.size());
+        for (ArgumentType arg : arguments)
+            arg.serialize(refTable, out);
+    }
 
     void print(std::ostream& out = std::cout) const {
         if (formalNargs() > 0) {
@@ -79,6 +110,7 @@ struct FunctionSignature {
         }
     }
 
+  public:
     FunctionSignature() = delete;
     FunctionSignature(Environment envCreation, OptimizationLevel optimization)
         : envCreation(envCreation), optimization(optimization) {}

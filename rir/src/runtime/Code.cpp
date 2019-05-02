@@ -1,6 +1,7 @@
 #include "Code.h"
 #include "Function.h"
 #include "R/Printing.h"
+#include "R/Serialize.h"
 #include "ir/BC.h"
 #include "utils/Pool.h"
 
@@ -58,6 +59,47 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     SLOWASSERT(allowMissing || sidx);
 
     return sidx;
+}
+
+Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
+    size_t size = InInteger(inp);
+    SEXP store = Rf_allocVector(EXTERNALSXP, size);
+    Code* code = (Code*)DATAPTR(store);
+    // Header
+    code->info = {// GC area starts just after the header
+                  (intptr_t)&code->locals_ - (intptr_t)code,
+                  // GC area has only 1 pointer
+                  NumLocals, CODE_MAGIC};
+    code->funInvocationCount = InInteger(inp);
+    code->src = InInteger(inp);
+    code->stackLength = InInteger(inp);
+    code->localsCount = InInteger(inp);
+    code->codeSize = InInteger(inp);
+    code->srcLength = InInteger(inp);
+    code->extraPoolSize = InInteger(inp);
+
+    // Bytecode
+    // Srclist
+    InBytes(inp, code->code(), pad4(code->codeSize));
+    InBytes(inp, code->srclist(), code->srcLength * sizeof(SrclistEntry));
+    return code;
+}
+
+void Code::serialize(SEXP refTable, R_outpstream_t out) const {
+    OutInteger(out, size());
+    // Header
+    OutInteger(out, funInvocationCount);
+    OutInteger(out, src);
+    OutInteger(out, stackLength);
+    OutInteger(out, localsCount);
+    OutInteger(out, codeSize);
+    OutInteger(out, srcLength);
+    OutInteger(out, extraPoolSize);
+
+    // Bytecode
+    // Srclist
+    OutBytes(out, code(), pad4(codeSize));
+    OutBytes(out, srclist(), srcLength * sizeof(SrclistEntry));
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
