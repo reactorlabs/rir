@@ -1565,7 +1565,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     ostack_ensureSize(ctx, c->stackLength + 5);
 
     Opcode* pc = initialPC ? initialPC : c->code();
-    SEXP lastEnvCreated;
+    SEXP lastEnvCreated = nullptr;
     SEXP res;
 
     std::vector<LazyEnvironment*> envStubs;
