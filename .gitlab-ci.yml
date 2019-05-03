@@ -33,10 +33,10 @@ tests_release:
     - bin/gnur-make-tests check-recommended
     - ../tools/check-gnur-make-tests-error
 
-tests_releasefullverifier:
+tests_fullverifier:
   script:
-    - mkdir build_releasefullverifier && cd build_releasefullverifier
-    - cmake -DCMAKE_BUILD_TYPE=releasefullverifier -GNinja ..
+    - mkdir build_fullverifier && cd build_fullverifier
+    - cmake -DCMAKE_BUILD_TYPE=fullverifier -GNinja ..
     - ninja -j 3
     - bin/tests
     - bin/gnur-make-tests check
