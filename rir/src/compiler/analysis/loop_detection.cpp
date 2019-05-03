@@ -4,29 +4,20 @@
 namespace rir {
 namespace pir {
 
-bool LoopDetection::Loop::comesBefore(Instruction* a, Instruction* b) const {
-    if (a->bb() == b->bb()) {
-        return a->id().idx() < b->id().idx();
-    } else {
-        // ordering vector is reversed: larger means precedes
-        return ordering_.at(a->bb()) > ordering_.at(b->bb());
-    }
-}
-
 LoopDetection::LoopDetection(Code* code, bool determineNesting) {
     CFG cfg(code);
     DominanceGraph dom(code);
     // map of header nodes to tail nodes
     std::unordered_map<BB*, BBList> tailNodes;
 
-    // find back edges, i.e. edges n->h where h dominates n
+    // find back edges, i.e. edges tail->header where header dominates tail
     Visitor::run(code->entry, [&](BB* maybeHeader) {
-        for (const auto& n : cfg.immediatePredecessors(maybeHeader)) {
-            if (dom.dominates(maybeHeader, n)) {
+        for (const auto& maybeTail : cfg.immediatePredecessors(maybeHeader)) {
+            if (dom.dominates(maybeHeader, maybeTail)) {
                 if (tailNodes.count(maybeHeader)) {
-                    tailNodes[maybeHeader].push_back(n);
+                    tailNodes[maybeHeader].push_back(maybeTail);
                 } else {
-                    tailNodes.emplace(maybeHeader, BBList({n}));
+                    tailNodes.emplace(maybeHeader, BBList({maybeTail}));
                 }
             }
         }
@@ -36,8 +27,6 @@ LoopDetection::LoopDetection(Code* code, bool determineNesting) {
     for (auto& l : tailNodes) {
         const auto& header = l.first;
         auto& todo = l.second;
-        std::unordered_map<BB*, size_t> ordering;
-        size_t counter = 0;
         BBSet body = {header}; // header is part of loop body
 
 #ifdef DEBUG_LOOP_DETECTION
@@ -59,16 +48,13 @@ LoopDetection::LoopDetection(Code* code, bool determineNesting) {
             todo.pop_back();
             if (!body.count(cur)) {
                 body.insert(cur);
-                ordering[cur] = counter++;
                 for (const auto& p : cfg.immediatePredecessors(cur)) {
                     todo.push_back(p);
                 }
             }
         }
 
-        // header node is topologically last
-        ordering[header] = counter++;
-        loops.emplace_back(Loop{header, body, ordering});
+        loops.emplace_back(Loop{header, body});
     }
 
     // reconstruct the loop hierarchy

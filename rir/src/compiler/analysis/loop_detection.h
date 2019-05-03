@@ -2,7 +2,6 @@
 #define PIR_LOOP_DETECTION_H
 
 #include "../pir/pir.h"
-#include "../util/cfg.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -44,32 +43,25 @@ class LoopDetection {
         Loop* outer_;
         // true if this loop does not contain another loop
         bool isInnermost_;
-        // topological ordering of nodes
-        std::unordered_map<BB*, size_t> ordering_;
 
       public:
-        Loop(BB* header, const BBSet& body,
-             const std::unordered_map<BB*, size_t>& ordering)
+        Loop(BB* header, const BBSet& body)
             : header_(header), body_(std::move(body)), outer_(nullptr),
-              isInnermost_(true), ordering_(std::move(ordering)) {}
+              isInnermost_(true) {}
 
         Loop(const Loop&) = delete;
         Loop& operator=(const Loop&) = delete;
         Loop(Loop&&) = default;
         Loop& operator=(Loop&&) = default;
 
-        RIR_INLINE BB* header() const { return header_; }
-        RIR_INLINE size_t size() const { return body_.size(); }
-        RIR_INLINE bool contains(BB* node) const { return body_.count(node); }
-        RIR_INLINE bool isInnermost() const { return isInnermost_; }
-        RIR_INLINE void setOuterLoop(Loop* o) {
+        BB* header() const { return header_; }
+        size_t size() const { return body_.size(); }
+        bool contains(BB* node) const { return body_.count(node); }
+        bool isInnermost() const { return isInnermost_; }
+        void setOuterLoop(Loop* o) {
             outer_ = o;
             o->isInnermost_ = false;
         }
-
-        // Returns true if a comes before b in the loop (without going through
-        // a back edge)
-        bool comesBefore(Instruction* a, Instruction* b) const;
 
         typedef BBSet::iterator iterator;
         typedef BBSet::const_iterator const_iterator;
