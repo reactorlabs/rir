@@ -27,9 +27,13 @@ class BBTransform {
                              bool assumePositive);
     static void insertAssume(Value* condition, Checkpoint* cp,
                              bool assumePositive);
+
     // Renumber in dominance order. This ensures that controlflow always goes
     // from smaller id to bigger id, except for back-edges.
     static void renumber(Code* fun);
+
+    // Remove dead instructions (instead of waiting until the cleanup pass)
+    static void removeDeadInstrs(Code* fun);
 };
 
 } // namespace pir
