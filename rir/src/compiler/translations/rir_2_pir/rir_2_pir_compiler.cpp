@@ -156,7 +156,13 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 
     if (rir2pir.tryCompile(builder)) {
         log.compilationEarlyPir(version);
+#ifdef FULLVERIFIER
+        Verify::apply(version, true);
+#else
+#ifndef NDEBUG
         Verify::apply(version);
+#endif
+#endif
         log.flush();
         return success(version);
 
@@ -201,13 +207,11 @@ void Rir2PirCompiler::optimizeModule() {
 
                 log.pirOptimizations(v, translation);
 
+#ifdef FULLVERIFIER
+                Verify::apply(v, true);
+#else
 #ifdef ENABLE_SLOWASSERT
                 Verify::apply(v);
-#else
-#ifdef FULLVERIFIER
-                // even slower than SLOWASSERT, so make sure this only runs
-                // under a release build and only for CI
-                Verify::apply(v, true);
 #endif
 #endif
             });

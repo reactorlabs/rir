@@ -673,8 +673,12 @@ class Pir2Rir {
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     lower(code);
     toCSSA(code);
-#ifdef ENABLE_SLOWASSERT
+#ifdef FULLVERIFIER
     Verify::apply(cls, true);
+#else
+#ifdef ENABLE_SLOWASSERT
+    Verify::apply(cls);
+#endif
 #endif
     log.CSSA(code);
 
