@@ -334,7 +334,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
     }
 
-    CachePositionAllocator cachePositions(code);
+    CachePositionAllocator cachePositions;
     CodeBuffer cb(ctx.cs());
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))

@@ -1255,7 +1255,7 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
     else
         cidx = cacheIdx & CACHE_MASK;
 
-    if (bindingCache[cidx].idx == poolIdx) {
+    if (bindingCache[cidx].idx == cacheIdx) {
         return bindingCache[cidx].loc;
     }
 
@@ -1264,7 +1264,7 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
     R_varloc_t loc = R_findVarLocInFrame(env, sym);
     if (!R_VARLOC_IS_NULL(loc)) {
         bindingCache[cidx].loc = loc.cell;
-        bindingCache[cidx].idx = poolIdx;
+        bindingCache[cidx].idx = cacheIdx;
         return loc.cell;
     }
     return NULL;
@@ -1538,7 +1538,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     bool existingLocals = localsBase;
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
-    bool smallCache = c->bindingsCount <= BINDING_CACHE_SIZE;
+    // Position zero is not counted for smallcache because we can not
+    // distinguish slot zero from uninit.
+    bool smallCache = c->bindingsCount < BINDING_CACHE_SIZE;
     /*
      * In case we are entering the executing of a PIR optimized function
      * we delay the cache cleaning until we know we are actually requiring
