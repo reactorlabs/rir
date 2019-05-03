@@ -934,8 +934,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     });
     cb.flush();
 
-    auto res =
-        ctx.finalizeCode(alloc.slots(), cachePositions.numberOfBindings());
+    auto localsCnt = alloc.slots();
+    auto res = ctx.finalizeCode(localsCnt, cachePositions.numberOfBindings());
     return res;
 }
 

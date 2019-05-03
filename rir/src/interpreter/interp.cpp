@@ -1539,7 +1539,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     bool smallCache = c->bindingsCount <= BINDING_CACHE_SIZE;
-    if (env != symbol::delayedEnv || existingLocals)
+    /*
+     * In case we are entering the executing of a PIR optimized function
+     * we delay the cache cleaning until we know we are actually requiring
+     * an environment (mk_env).
+     */
+    if (env != symbol::delayedEnv)
         memset(&bindingCache, 0, sizeof(bindingCache));
 
     if (!existingLocals) {
@@ -1560,6 +1565,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     ostack_ensureSize(ctx, c->stackLength + 5);
 
     Opcode* pc = initialPC ? initialPC : c->code();
+    SEXP lastEnvCreated;
     SEXP res;
 
     std::vector<LazyEnvironment*> envStubs;
@@ -1568,7 +1574,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
                "Expected an environment");
         if (e != env) {
-            if (env == symbol::delayedEnv)
+            // Only in a PIR function that before creating any environment
+            // sets a preexistent environment we need to init cache.
+            if (env == symbol::delayedEnv && env != lastEnvCreated)
                 memset(&bindingCache, 0, sizeof(bindingCache));
             env = e;
         }
@@ -1661,6 +1669,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
             memset(&bindingCache, 0, sizeof(bindingCache));
+            lastEnvCreated = res;
             ostack_push(ctx, res);
             UNPROTECT(1);
             NEXT();
