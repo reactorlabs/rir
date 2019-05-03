@@ -24,23 +24,22 @@ set(CMAKE_C_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
 
-SET(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_DEBUGOPT} -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
-SET(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_DEBUGOPT} -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
+set(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_DEBUGOPT} -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
+set(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_DEBUGOPT} -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
+
 MARK_AS_ADVANCED(
-    CMAKE_CXX_FLAGS_DEBUGOPT,
-    CMAKE_C_FLAGS_DEBUGOPT,
     CMAKE_CXX_FLAGS_SANITIZE
     CMAKE_C_FLAGS_SANITIZE
-    CMAKE_CXX_FLAGS_RELEASEASSERT
-    CMAKE_C_FLAGS_RELEASEASSERT
-    )
+    CMAKE_CXX_FLAGS_RELEASENOASSERT
+    CMAKE_C_FLAGS_RELEASENOASSERT
+    CMAKE_CXX_FLAGS_FULLVERIFIER
+    CMAKE_C_FLAGS_FULLVERIFIER
+)
 
 # Update the documentation string of CMAKE_BUILD_TYPE for GUIs
 SET( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING
-    "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel DebugOpt ReleaseAssert."
+    "Choose the type of build, options are: None Release DebugOpt Debug."
     FORCE )
-
-
 
 # Take from https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 option(FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." FALSE)
@@ -72,7 +71,6 @@ endif(NOT DEFINED NO_LOCAL_CONFIG)
 if(${NO_LOCAL_CONFIG})
     message(STATUS "Local configuration files ignored")
 endif(${NO_LOCAL_CONFIG})
-
 
 include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rir/src)
