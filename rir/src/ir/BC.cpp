@@ -138,8 +138,10 @@ BC_NOARGS(V, _)
 
 SEXP BC::immediateConst() const { return Pool::get(immediate.pool); }
 
+// #define DEBUG_SERIAL
+
 void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
-                     size_t codeSize) {
+                     size_t codeSize, Code* container) {
     while (codeSize > 0) {
         *code = (Opcode)InChar(inp);
         unsigned size = BC::fixedSize(*code);
@@ -170,18 +172,58 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             i.guard_fun_args.expected = Pool::insert(ReadItem(refTable, inp));
             i.guard_fun_args.id = InInteger(inp);
             break;
+        case Opcode::mk_stub_env_:
+        case Opcode::mk_env_: {
+            InBytes(inp, code + 1, sizeof(MkEnvFixedArgs));
+            BC::PoolIdx* names =
+                (BC::PoolIdx*)(code + 1 + sizeof(MkEnvFixedArgs));
+            for (unsigned j = 0; j < i.mkEnvFixedArgs.nargs; j++)
+                names[j] = Pool::insert(ReadItem(refTable, inp));
+            break;
+        }
+        case Opcode::call_:
+        case Opcode::call_implicit_:
+        case Opcode::named_call_:
+        case Opcode::named_call_implicit_: {
+            i.callFixedArgs.nargs = InInteger(inp);
+            i.callFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
+            InBytes(inp, &i.callFixedArgs.given, sizeof(Assumptions));
+            Opcode* c = code + 1 + sizeof(CallFixedArgs);
+            // Read implicit promise argument offsets
+            if (*code == Opcode::call_implicit_ ||
+                *code == Opcode::named_call_implicit_) {
+                ArgIdx* immArgs = (ArgIdx*)c;
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
+                    immArgs[j] = InInteger(inp);
+                c += i.callFixedArgs.nargs * sizeof(ArgIdx);
+            }
+            // Read named arguments
+            if (*code == Opcode::named_call_ ||
+                *code == Opcode::named_call_implicit_) {
+                PoolIdx* names = (PoolIdx*)c;
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
+                    names[j] = Pool::insert(ReadItem(refTable, inp));
+            }
+            break;
+        }
+        case Opcode::call_builtin_:
+            i.callFixedArgs.nargs = InInteger(inp);
+            i.callFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
+            i.callBuiltinFixedArgs.builtin = InInteger(inp);
+            break;
+        case Opcode::static_call_:
+            i.callFixedArgs.nargs = InInteger(inp);
+            i.callFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
+            InBytes(inp, &i.callFixedArgs.given, sizeof(Assumptions));
+            i.staticCallFixedArgs.targetClosure =
+                Pool::insert(ReadItem(refTable, inp));
+            i.staticCallFixedArgs.versionHint =
+                Pool::insert(ReadItem(refTable, inp));
+            break;
         case Opcode::record_call_:
         case Opcode::record_type_:
-        case Opcode::call_implicit_:
-        case Opcode::named_call_implicit_:
-        case Opcode::call_:
-        case Opcode::named_call_:
-        case Opcode::static_call_:
-        case Opcode::call_builtin_:
         case Opcode::promise_:
         case Opcode::push_code_:
-        case Opcode::mk_stub_env_:
-        case Opcode::mk_env_:
         case Opcode::br_:
         case Opcode::brtrue_:
         case Opcode::beginloop_:
@@ -199,7 +241,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::stloc_:
         case Opcode::movloc_:
             assert((size - 1) % 4 == 0);
-            InBytes(inp, code, size - 1);
+            InBytes(inp, code + 1, size - 1);
             break;
         case Opcode::invalid_:
         case Opcode::num_of:
@@ -207,6 +249,10 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             assert(false);
             break;
         }
+        size = BC::size(code);
+#ifdef DEBUG_SERIAL
+        std::cout << "deserialized " << (int)*code << " size " << size << "\n";
+#endif
         assert(codeSize >= size);
         code += size;
         codeSize -= size;
@@ -214,11 +260,11 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
 }
 
 void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
-                   size_t codeSize) {
+                   size_t codeSize, const Code* container) {
     while (codeSize > 0) {
-        const BC bc = BC::decodeShallow((Opcode*)code);
+        const BC bc = BC::decode((Opcode*)code, container);
         OutChar(out, (int)*code);
-        unsigned size = bc.size();
+        unsigned size = BC::fixedSize(*code);
         ImmediateArguments i = bc.immediate;
         switch (*code) {
 #define V(NESTED, name, name_) case Opcode::name_##_:
@@ -246,18 +292,51 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             WriteItem(Pool::get(i.guard_fun_args.expected), refTable, out);
             OutInteger(out, i.guard_fun_args.id);
             break;
-        case Opcode::record_call_:
-        case Opcode::record_type_:
-        case Opcode::call_implicit_:
-        case Opcode::named_call_implicit_:
-        case Opcode::call_:
-        case Opcode::named_call_:
-        case Opcode::static_call_:
-        case Opcode::call_builtin_:
-        case Opcode::promise_:
-        case Opcode::push_code_:
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_:
+            OutBytes(out, code + 1, sizeof(MkEnvFixedArgs));
+            for (unsigned j = 0; j < i.mkEnvFixedArgs.nargs; j++)
+                WriteItem(Pool::get(bc.mkEnvExtra().names[j]), refTable, out);
+            break;
+        case Opcode::call_:
+        case Opcode::call_implicit_:
+        case Opcode::named_call_:
+        case Opcode::named_call_implicit_:
+            OutInteger(out, i.callFixedArgs.nargs);
+            WriteItem(Pool::get(i.callFixedArgs.ast), refTable, out);
+            OutBytes(out, &i.callFixedArgs.given, sizeof(Assumptions));
+            // Write implicit promise argument offsets
+            if (*code == Opcode::call_implicit_ ||
+                *code == Opcode::named_call_implicit_) {
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
+                    OutInteger(out, bc.callExtra().immediateCallArguments[j]);
+            }
+            // Write named arguments
+            if (*code == Opcode::named_call_ ||
+                *code == Opcode::named_call_implicit_) {
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
+                    WriteItem(Pool::get(bc.callExtra().callArgumentNames[j]),
+                              refTable, out);
+            }
+            break;
+        case Opcode::call_builtin_:
+            OutInteger(out, i.callBuiltinFixedArgs.nargs);
+            WriteItem(Pool::get(i.callBuiltinFixedArgs.ast), refTable, out);
+            OutInteger(out, i.callBuiltinFixedArgs.builtin);
+            break;
+        case Opcode::static_call_:
+            OutInteger(out, i.staticCallFixedArgs.nargs);
+            WriteItem(Pool::get(i.staticCallFixedArgs.ast), refTable, out);
+            OutBytes(out, &i.staticCallFixedArgs.given, sizeof(Assumptions));
+            WriteItem(Pool::get(i.staticCallFixedArgs.targetClosure), refTable,
+                      out);
+            WriteItem(Pool::get(i.staticCallFixedArgs.versionHint), refTable,
+                      out);
+            break;
+        case Opcode::record_call_:
+        case Opcode::record_type_:
+        case Opcode::promise_:
+        case Opcode::push_code_:
         case Opcode::br_:
         case Opcode::brtrue_:
         case Opcode::beginloop_:
@@ -276,7 +355,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::movloc_:
             assert((size - 1) % 4 == 0);
             if (size != 0)
-                OutBytes(out, code, size - 1);
+                OutBytes(out, code + 1, size - 1);
             break;
         case Opcode::invalid_:
         case Opcode::num_of:
@@ -284,6 +363,10 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             assert(false);
             break;
         }
+        size = bc.size();
+#ifdef DEBUG_SERIAL
+        std::cout << "serialized " << (int)bc.bc << " size " << size << "\n";
+#endif
         assert(codeSize >= size);
         code += size;
         codeSize -= size;

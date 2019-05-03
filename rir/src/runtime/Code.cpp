@@ -77,9 +77,10 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
+    code->setEntry(0, ReadItem(refTable, inp));
 
     // Bytecode
-    BC::deserialize(refTable, inp, code->code(), code->codeSize);
+    BC::deserialize(refTable, inp, code->code(), code->codeSize, code);
 
     // Srclist
     for (unsigned i = 0; i < code->srcLength; i++) {
@@ -100,9 +101,10 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, codeSize);
     OutInteger(out, srcLength);
     OutInteger(out, extraPoolSize);
+    WriteItem(getEntry(0), refTable, out);
 
     // Bytecode
-    BC::serialize(refTable, out, code(), codeSize);
+    BC::serialize(refTable, out, code(), codeSize, this);
 
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
