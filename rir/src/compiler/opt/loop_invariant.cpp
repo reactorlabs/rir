@@ -78,12 +78,12 @@ struct NaturalLoop {
     }
 
     /*
-    * TODO: This just finds a preheader when there is one.
-    * We should create a preheader when there is non.
-    */
+     * TODO: This just finds a preheader when there is one.
+     * We should create a preheader when there is non.
+     */
     BB* outOfLoopPredecessor(const CFG& cfg) {
         std::vector<BB*> outOfLoopPredecessor;
-        for (auto pred : cfg.immediatePredecessors(header)){
+        for (auto pred : cfg.immediatePredecessors(header)) {
             if (!body.count(pred))
                 outOfLoopPredecessor.push_back(pred);
         }
