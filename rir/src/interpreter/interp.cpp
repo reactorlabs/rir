@@ -1249,14 +1249,12 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
     if (env == R_BaseEnv || env == R_BaseNamespace)
         return NULL;
 
-    Immediate cidx;
-    if (smallCache)
-        cidx = cacheIdx;
-    else
-        cidx = cacheIdx & CACHE_MASK;
-
-    if (bindingCache[cidx].idx == cacheIdx) {
-        return bindingCache[cidx].loc;
+    if (smallCache) {
+        return bindingCache[cacheIdx].loc;
+    } else {
+        Immediate cidx = cacheIdx & CACHE_MASK;
+        if (bindingCache[cidx].idx == cacheIdx)
+            return bindingCache[cidx].loc;
     }
 
     SEXP sym = cp_pool_at(ctx, poolIdx);
