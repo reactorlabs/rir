@@ -18,7 +18,9 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
     SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
     void* payload = DATAPTR(store);
-    return new (payload) Function(functionSize, body, defaultArgs, sig);
+    Function* fun =
+        new (payload) Function(functionSize, body, defaultArgs, sig);
+    return fun;
 }
 
 void Function::serialize(SEXP refTable, R_outpstream_t out) const {

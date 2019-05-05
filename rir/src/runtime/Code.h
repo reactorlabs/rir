@@ -3,6 +3,7 @@
 
 #include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
+#include "utils/UUID.h"
 
 #include <cassert>
 #include <cstdint>
@@ -47,9 +48,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class CodeVerifier;
     static constexpr size_t NumLocals = 1;
 
+    static Code* withUid(UUID uid);
+
     Code() = delete;
     Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,
          size_t localsCnt);
+    ~Code();
 
   private:
     /*
@@ -64,6 +68,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;
     }
+
+    // UID for persistence when serializing/deserializing
+    UUID uid;
+
     // number of invocations. only incremented if this code object is the body
     // of a function
     unsigned funInvocationCount;

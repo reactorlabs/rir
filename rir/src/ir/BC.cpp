@@ -153,7 +153,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             assert(*code != Opcode::nop_);
             break;
         case Opcode::push_:
-        case Opcode::deopt_:
         case Opcode::ldfun_:
         case Opcode::ldddvar_:
         case Opcode::ldvar_:
@@ -207,9 +206,10 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             break;
         }
         case Opcode::call_builtin_:
-            i.callFixedArgs.nargs = InInteger(inp);
-            i.callFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
-            i.callBuiltinFixedArgs.builtin = InInteger(inp);
+            i.callBuiltinFixedArgs.nargs = InInteger(inp);
+            i.callBuiltinFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
+            i.callBuiltinFixedArgs.builtin =
+                Pool::insert(ReadItem(refTable, inp));
             break;
         case Opcode::static_call_:
             i.callFixedArgs.nargs = InInteger(inp);
@@ -220,6 +220,17 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             i.staticCallFixedArgs.versionHint =
                 Pool::insert(ReadItem(refTable, inp));
             break;
+        case Opcode::deopt_: {
+            DeoptMetadata* meta =
+                DeoptMetadata::deserialize(code, refTable, inp);
+            size_t size =
+                sizeof(DeoptMetadata) + meta->numFrames * sizeof(FrameInfo);
+            SEXP store = Rf_allocVector(RAWSXP, size);
+            memcpy(DATAPTR(store), meta, size);
+            i.pool = Pool::insert(store);
+            delete meta;
+            break;
+        }
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::promise_:
@@ -273,7 +284,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             assert(*code != Opcode::nop_);
             break;
         case Opcode::push_:
-        case Opcode::deopt_:
         case Opcode::ldfun_:
         case Opcode::ldddvar_:
         case Opcode::ldvar_:
@@ -322,7 +332,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::call_builtin_:
             OutInteger(out, i.callBuiltinFixedArgs.nargs);
             WriteItem(Pool::get(i.callBuiltinFixedArgs.ast), refTable, out);
-            OutInteger(out, i.callBuiltinFixedArgs.builtin);
+            WriteItem(Pool::get(i.callBuiltinFixedArgs.builtin), refTable, out);
             break;
         case Opcode::static_call_:
             OutInteger(out, i.staticCallFixedArgs.nargs);
@@ -333,6 +343,11 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             WriteItem(Pool::get(i.staticCallFixedArgs.versionHint), refTable,
                       out);
             break;
+        case Opcode::deopt_: {
+            DeoptMetadata* meta = (DeoptMetadata*)DATAPTR(Pool::get(i.pool));
+            meta->serialize(code, refTable, out);
+            break;
+        }
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::promise_:

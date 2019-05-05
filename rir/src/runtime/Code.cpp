@@ -9,6 +9,10 @@
 #include <sstream>
 
 namespace rir {
+std::unordered_map<UUID, Code*> allCodes;
+
+Code* Code::withUid(UUID uid) { return allCodes.at(uid); }
+
 // cppcheck-suppress uninitMemberVar symbol=data
 Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
            size_t localsCnt)
@@ -17,9 +21,17 @@ Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      funInvocationCount(0), src(src), stackLength(0), localsCount(localsCnt),
-      codeSize(cs), srcLength(sourceLength), extraPoolSize(0) {
+      uid(UUID::random()), funInvocationCount(0), src(src), stackLength(0),
+      localsCount(localsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
+    allCodes.emplace(uid, this);
+}
+
+Code::~Code() {
+    // TODO: Not sure if this is actually called
+    // Otherwise the pointer will leak a few bytes
+    allCodes.erase(uid);
 }
 
 unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
@@ -70,6 +82,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
                   (intptr_t)&code->locals_ - (intptr_t)code,
                   // GC area has only 1 pointer
                   NumLocals, CODE_MAGIC};
+    code->uid = UUID::deserialize(refTable, inp);
     code->funInvocationCount = InInteger(inp);
     code->src = InInteger(inp);
     code->stackLength = InInteger(inp);
@@ -78,6 +91,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
     code->setEntry(0, ReadItem(refTable, inp));
+    allCodes.emplace(code->uid, code);
 
     // Bytecode
     BC::deserialize(refTable, inp, code->code(), code->codeSize, code);
@@ -94,6 +108,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
 void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, size());
     // Header
+    uid.serialize(refTable, out);
     OutInteger(out, funInvocationCount);
     OutInteger(out, src);
     OutInteger(out, stackLength);
