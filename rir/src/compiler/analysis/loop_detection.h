@@ -2,6 +2,8 @@
 #define PIR_LOOP_DETECTION_H
 
 #include "../pir/pir.h"
+#include "../transform/bb.h"
+#include "../util/cfg.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -30,6 +32,7 @@ class LoopDetection {
   public:
     typedef std::vector<BB*> BBList;
     typedef std::unordered_set<BB*> BBSet;
+    typedef std::function<bool(Instruction*)> InstrActionPredicate;
 
     // A natural loop is defined by a header h, and a back edge n->h where h
     // dominates n. If there are multiple back edges to the same header, the
@@ -61,6 +64,35 @@ class LoopDetection {
         void setOuterLoop(Loop* o) {
             outer_ = o;
             o->isInnermost_ = false;
+        }
+
+        /*
+         * TODO: finds a preheader when there is one.
+         * We should create a preheader when there is non.
+         */
+        BB* preheader(const CFG& cfg) {
+            std::vector<BB*> outOfLoopPredecessor;
+            for (auto pred : cfg.immediatePredecessors(header())) {
+                if (!body_.count(pred))
+                    outOfLoopPredecessor.push_back(pred);
+            }
+
+            return outOfLoopPredecessor.size() != 1
+                       ? nullptr
+                       : outOfLoopPredecessor.front();
+        }
+
+        bool holdsPropery(const InstrActionPredicate& action) {
+            auto answer = true;
+            for (auto bb : body_) {
+                for (auto instruction : *bb) {
+                    if (!action(instruction)) {
+                        answer = false;
+                        break;
+                    }
+                }
+            }
+            return answer;
         }
 
         typedef BBSet::iterator iterator;
