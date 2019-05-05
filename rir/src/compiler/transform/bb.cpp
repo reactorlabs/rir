@@ -217,5 +217,20 @@ void BBTransform::renumber(Code* fun) {
         });
 }
 
+void BBTransform::removeDeadInstrs(Code* fun) {
+    Visitor::run(fun->entry, [&](BB* bb) {
+        auto ip = bb->begin();
+        while (ip != bb->end()) {
+            Instruction* i = *ip;
+            auto next = ip + 1;
+            if (i->unused() && !i->branchOrExit() &&
+                !i->hasObservableEffects()) {
+                next = bb->remove(ip);
+            }
+            ip = next;
+        }
+    });
+}
+
 } // namespace pir
 } // namespace rir

@@ -1,5 +1,6 @@
 #include "../pir/pir.h"
 #include "../pir/pir_impl.h"
+#include "../transform/bb.h"
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -196,6 +197,10 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
             }
         }
     }
+
+    // Remove dead instructions here, instead of deferring to the cleanup pass.
+    // Sometimes a dead instruction will trip the verifier.
+    BBTransform::removeDeadInstrs(cls);
 }
 
 } // namespace pir
