@@ -425,7 +425,11 @@ SEXP rir_resetMeasure() {
     return R_NilValue;
 }
 
-void rir_flushMeasure() { Measure.data.flush(); }
+SEXP rir_flushMeasure() {
+    Measure.data.flush();
+    R_Visible = (Rboolean) false;
+    return R_NilValue;
+}
 
 bool startup() {
     initializeRuntime();

@@ -28,6 +28,6 @@ extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Assumptions&,
                                     SEXP name);
 REXPORT SEXP rir_getMeasure(SEXP flag);
 REXPORT SEXP rir_resetMeasure();
-REXPORT void rir_flushMeasure();
+REXPORT SEXP rir_flushMeasure();
 
 #endif // API_H_
