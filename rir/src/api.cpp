@@ -425,11 +425,11 @@ SEXP rir_resetMeasure() {
     return R_NilValue;
 }
 
+void rir_flushMeasure() { Measure.data.flush(); }
+
 bool startup() {
     initializeRuntime();
     return true;
 }
 
 bool startup_ok = startup();
-
-void rirCleanup() { Measure.data.flush(); }

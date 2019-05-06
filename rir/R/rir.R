@@ -142,9 +142,14 @@ rir.getMeasure <- function(type) {
     read.csv(text=.Call("rir_getMeasure", type));
 }
 
-# Resets all elision measurements, discarding previous functions
+# Resets all measurements, discarding previous functions
 rir.resetMeasure <- function() {
     .Call("rir_resetMeasure");
+}
+
+# Writes the current measurements to RIR_MEASURE_FILE
+rir.flushMeasure <- function() {
+    .Call("rir_flushMeasure");
 }
 
 # prints invocation during evaluation
@@ -160,3 +165,5 @@ rir.resetMeasure <- function() {
 .int3 <- function() {
     stop("missed breakpoint, did you re-compile RIR?")
 }
+
+onexit(rir.flushMeasure(), add=TRUE)
