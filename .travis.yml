@@ -146,3 +146,7 @@ cache:
     - external
     # cache homebrew formulas
     - /usr/local/Homebrew/Library/Taps/homebrew/homebrew-core
+
+branches:
+  only:
+  - master
