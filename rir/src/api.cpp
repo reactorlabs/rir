@@ -3,9 +3,11 @@
  */
 
 #include <cassert>
+#include <cstdio>
 
 #include "api.h"
 
+#include "R/Serialize.h"
 #include "compiler/parameter.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
@@ -359,24 +361,24 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
         return closure;
 }
 
-REXPORT SEXP rir_serialize(SEXP closure, SEXP fileSexp) {
-    Rf_error("TODO");
-    /*const char* file = NULL;
-    if (TYPEOF(fileSexp) == STRSXP)
-        file = CHAR(fileSexp);
-    if (!isValidClosureSEXP(closure)) {
-        Rf_error("not a compiled closure");
-    }
-    auto fun = DispatchTable::unpack(closure)->best();
-    if (file != NULL) {
-        std::ofstream out(file);
-        fun->serialize(out);
-        return R_NilValue;
-    } else {
-        std::stringstream out;
-        fun->serialize(out);
-        return Rf_mkString(out.str().c_str());
-    }*/
+REXPORT void rir_serialize(SEXP data, SEXP fileSexp) {
+    if (TYPEOF(fileSexp) != STRSXP)
+        Rf_error("must provide a string path");
+    FILE* file = fopen(CHAR(fileSexp), "w");
+    if (file == NULL)
+        Rf_error("couldn't open file at path");
+    R_SaveToFile(data, file, 0);
+    R_Visible = (Rboolean) false;
+    return R_NilValue;
+}
+
+REXPORT SEXP rir_deserialize(SEXP fileSexp) {
+    if (TYPEOF(fileSexp) != STRSXP)
+        Rf_error("must provide a string path");
+    FILE* file = fopen(CHAR(fileSexp), "r");
+    if (file == NULL)
+        Rf_error("couldn't open file at path");
+    return R_LoadFromFile(file, 0);
 }
 
 bool startup() {

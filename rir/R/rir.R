@@ -144,3 +144,13 @@ rir.body <- function(f) {
 .int3 <- function() {
     stop("missed breakpoint, did you re-compile RIR?")
 }
+
+# Serializes the SEXP, preserving RIR/PIR-compiled closures, to the given path
+rir.serialize <- function(data, path) {
+    .Call("rir_serialize", data, path)
+}
+
+# Deserializes and returns the SEXP at the given path
+rir.deserialize <- function(path) {
+    .Call("rir_deserialize", path)
+}
