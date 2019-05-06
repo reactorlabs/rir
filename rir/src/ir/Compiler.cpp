@@ -76,7 +76,8 @@ class CompilerContext {
             if (loadsSlotInCache.count(name)) {
                 return loadsSlotInCache.at(name);
             } else {
-                return loadsSlotInCache.emplace(name, loadsSlotInCache.size())
+                return loadsSlotInCache
+                    .emplace(name, loadsSlotInCache.size() + 1)
                     .first->second;
             }
         }
