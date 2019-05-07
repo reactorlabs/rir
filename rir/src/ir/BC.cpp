@@ -29,16 +29,16 @@ BC_NOARGS(V, _)
         cs.insert(immediate.callFeedback);
         return;
 
-    case Opcode::record_binop_:
-        cs.insert(immediate.binopFeedback[0]);
-        cs.insert(immediate.binopFeedback[1]);
-        return;
+    case Opcode::record_type_:
+        cs.insert(immediate.typeFeedback);
+        break;
 
     case Opcode::push_:
     case Opcode::deopt_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
@@ -106,6 +106,7 @@ BC_NOARGS(V, _)
         cs.patchpoint(immediate.offset);
         return;
 
+    case Opcode::popn_:
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::is_:
@@ -164,8 +165,22 @@ void BC::printOpcode(std::ostream& out) const { out << name(bc) << "  "; }
 
 void BC::print(std::ostream& out) const {
     out << "   ";
-    if (bc != Opcode::record_call_ && bc != Opcode::record_binop_)
+    if (bc != Opcode::record_call_ && bc != Opcode::record_type_)
         printOpcode(out);
+
+    auto printTypeFeedback = [&](const ObservedValues& prof) {
+        if (prof.numTypes) {
+            for (size_t i = 0; i < prof.numTypes; ++i) {
+                auto t = prof.seen[i];
+                out << Rf_type2char(t.sexptype) << "(" << (t.object ? "o" : "")
+                    << (t.attribs ? "a" : "") << (t.scalar ? "s" : "") << ")";
+                if (i != (unsigned)prof.numTypes - 1)
+                    out << ", ";
+            }
+        } else {
+            out << "<?>";
+        }
+    };
 
     switch (bc) {
     case Opcode::invalid_:
@@ -232,6 +247,7 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
@@ -248,6 +264,7 @@ void BC::print(std::ostream& out) const {
             << " == " << Pool::get(immediate.guard_fun_args.expected);
         break;
     }
+    case Opcode::popn_:
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::put_:
@@ -268,7 +285,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::alloc_:
         out << type2char(immediate.i);
         break;
-
     case Opcode::record_call_: {
         ObservedCallees prof = immediate.callFeedback;
         out << "[ ";
@@ -287,25 +303,9 @@ void BC::print(std::ostream& out) const {
         break;
     }
 
-    case Opcode::record_binop_: {
-        auto prof = immediate.binopFeedback;
+    case Opcode::record_type_: {
         out << "[ ";
-        for (size_t j = 0; j < 2; ++j) {
-            if (prof[j].numTypes) {
-                for (size_t i = 0; i < prof[j].numTypes; ++i) {
-                    auto t = prof[j].seen[i];
-                    out << Rf_type2char(t.sexptype) << "("
-                        << (t.object ? "o" : "") << (t.attribs ? "a" : "")
-                        << (t.scalar ? "s" : "") << ")";
-                    if (i != (unsigned)prof[j].numTypes - 1)
-                        out << ", ";
-                }
-            } else {
-                out << "<?>";
-            }
-            if (j == 0)
-                out << " x ";
-        }
+        printTypeFeedback(immediate.typeFeedback);
         out << " ]";
         break;
     }

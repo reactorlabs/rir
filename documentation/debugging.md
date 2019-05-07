@@ -1,4 +1,6 @@
-## Debugging PIR
+# Debugging PIR
+
+## Command Line
 
 PIR comes with a variety of options to analyze the output of the compiler in different
 stages. To manage the different options we use environment variables. For instance
@@ -76,10 +78,54 @@ completely disables the PIR optimizer. As follows are the different Options avai
 * `!ObjN` : Argument `N` is not an object
 * `CooOrd`: Arguments are passed in the correct order (ie. callee reorders)
 
-#### Types Annotations (aka type flags)
+#### Type Annotations (aka type flags)
 
 * `$` : Is scalar
 * `^` : May be lazy (and wrapped in a promise)
 * `~` : May be wrapped in a promise (but evaluated)
 * `?` : May be missing
 * `'` : May not be an object
+
+#### Effects
+
+* `v` : Visibility
+* `w` : Warn
+* `e` : Error
+* `f` : Force
+* `r` : Reflection
+* `l` : LeakArg
+* `C` : ChangesContexts
+* `R` : ReadsEnv
+* `W` : WritesEnv
+* `L` : LeaksEnv
+* `D` : TriggerDeopt
+* `X` : ExecuteCode
+
+`!` means that an instruction has all effects *except* the following. e.g. `!r`
+means an instruction has all effects but reflection, just `!` means it has all
+effects.
+
+## Within R
+
+PIR also adds some functions to the global environment, for the sole purpose of
+debugging:
+
+* `rir.markOptimize`: Tells the compiler to optimize the function
+* `rir.isValidFunction`: Returns TRUE if the argument is a rir-compiled closure
+* `rir.disassemble`: prints the disassembled rir function
+* `rir.printInvocation`: prints how many times the (optimized) rir function was
+  called
+* `rir.compile`: compiles the given closure or expression, returns the compiled
+  version
+* `pir.compile`: expects a rir-compiled closure, optimizes it
+* `pir.tests`: runs some internal regression tests
+* `pir.check`: returns TRUE if f, when PIR compiled, satisfies the given checks.
+* `pir.debugFlags`: creates a bitset with pir debug options
+* `pir.setDebugFlags`: sets the default debug options for pir compiler
+* `rir.compile.program`: compiles code of the given file all in a function, and
+  returns the functon
+* `rir.eval`: evaluates the code in RIR
+* `rir.body`: returns the body of rir-compiled function. The body is the vector
+  containing its ast maps and code objects
+* `.printInvocation`: prints invocation during evaluation
+* `.int3`: breakpoint during evaluation

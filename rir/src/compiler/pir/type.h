@@ -7,7 +7,8 @@
 #include <vector>
 
 #include "R/r_incl.h"
-#include "ir/RuntimeFeedback.h"
+#include "runtime/Assumptions.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/EnumSet.h"
 
 namespace rir {
@@ -78,7 +79,7 @@ enum class NativeType : uint8_t {
     context,
 
     FIRST = test,
-    LAST = frameState,
+    LAST = context,
 };
 
 enum class TypeFlags : uint8_t {
@@ -86,7 +87,7 @@ enum class TypeFlags : uint8_t {
 
     lazy,
     promiseWrapped,
-    isScalar,
+    maybeNotScalar,
     maybeObject,
     rtype,
 
@@ -119,42 +120,44 @@ struct PirType {
     union Type {
         RTypeSet r;
         NativeTypeSet n;
-        Type(RTypeSet r) : r(r) {}
-        Type(NativeTypeSet n) : n(n) {}
+        constexpr Type(RTypeSet r) : r(r) {}
+        constexpr Type(NativeTypeSet n) : n(n) {}
     };
     Type t_;
 
-    static FlagSet defaultRTypeFlags() {
-        return FlagSet() | TypeFlags::rtype | TypeFlags::maybeObject;
+    static constexpr FlagSet defaultRTypeFlags() {
+        return FlagSet() | TypeFlags::maybeNotScalar | TypeFlags::rtype;
     }
 
-    static FlagSet defaultLazyRTypeFlags() {
-        return defaultRTypeFlags() | TypeFlags::lazy |
-               TypeFlags::promiseWrapped;
+    static constexpr FlagSet topRTypeFlags() {
+        return FlagSet() | TypeFlags::lazy | TypeFlags::promiseWrapped |
+               TypeFlags::maybeObject | TypeFlags::maybeNotScalar |
+               TypeFlags::rtype;
     }
-    static FlagSet optimisticRTypeFlags() {
-        return FlagSet() | TypeFlags::rtype | TypeFlags::isScalar;
+    static constexpr FlagSet optimisticRTypeFlags() {
+        return FlagSet() | TypeFlags::rtype;
     }
 
-    static PirType optimistic() {
+    static constexpr PirType optimistic() {
         PirType t;
         t.flags_ = optimisticRTypeFlags();
         return t;
     }
 
-    PirType() : flags_(defaultLazyRTypeFlags()), t_(RTypeSet()) {}
+    constexpr PirType() : flags_(topRTypeFlags()), t_(RTypeSet()) {}
     // cppcheck-suppress noExplicitConstructor
-    PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    constexpr PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
     // cppcheck-suppress noExplicitConstructor
-    PirType(const NativeType& t) : t_(t) {}
+    constexpr PirType(const NativeType& t) : t_(t) {}
     // cppcheck-suppress noExplicitConstructor
-    PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
-    // cppcheck-suppress noExplicitConstructor
-    PirType(const NativeTypeSet& t) : t_(t) {}
+    constexpr PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    constexpr PirType(const RTypeSet& t, const FlagSet& f) : flags_(f), t_(t) {}
+    explicit constexpr PirType(const NativeTypeSet& t) : t_(t) {}
     explicit PirType(SEXP);
-    PirType(const PirType& other) : flags_(other.flags_), t_(other.t_) {}
+    constexpr PirType(const PirType& other)
+        : flags_(other.flags_), t_(other.t_) {}
 
-    PirType& operator=(const PirType& o) {
+    constexpr PirType& operator=(const PirType& o) {
         flags_ = o.flags_;
         if (isRType())
             t_.r = o.t_.r;
@@ -172,116 +175,233 @@ struct PirType {
     void merge(const ObservedValues& other);
     void merge(SEXPTYPE t);
 
-    static PirType num() {
+    static constexpr PirType num() {
         return PirType(RType::logical) | RType::integer | RType::real |
                RType::cplx;
     }
-    static PirType val() {
+    static constexpr PirType atomOrSimpleVec() {
+        return num() | RType::sym | RType::chr | RType::str | RType::code;
+    }
+    static constexpr PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
-                       RType::missing | RType::unbound | RType::ast);
+                       RType::missing | RType::unbound | RType::ast)
+            .orObject();
     }
-    static PirType vecs() { return num() | RType::str | RType::vec; }
-    static PirType closure() { return RType::closure; }
+    static constexpr PirType vecs() { return num() | RType::str | RType::vec; }
+    static constexpr PirType closure() { return RType::closure; }
 
-    static PirType promiseWrappedVal() { return val().orPromiseWrapped(); }
-    static PirType valOrLazy() { return val().orLazy(); }
-    static PirType list() { return PirType(RType::cons) | RType::nil; }
-    static PirType any() { return val().orLazy(); }
+    static constexpr PirType simpleScalarInt() {
+        return PirType(RType::integer).scalar();
+    }
+
+    static constexpr PirType simpleScalarReal() {
+        return PirType(RType::real).scalar();
+    }
+
+    static constexpr PirType simpleScalarLogical() {
+        return PirType(RType::logical).scalar();
+    }
+
+    static constexpr PirType simpleScalar() {
+        return (PirType(RType::integer) | RType::real | RType::logical)
+            .scalar();
+    }
+
+    static constexpr PirType promiseWrappedVal() {
+        return val().orPromiseWrapped();
+    }
+
+    static constexpr PirType valOrLazy() { return val().orLazy(); }
+    static constexpr PirType list() {
+        return PirType(RType::cons) | RType::nil;
+    }
+    static constexpr PirType any() { return val().orLazy(); }
 
     RIR_INLINE bool maybeMissing() const {
+        if (!isRType())
+            return false;
         return t_.r.includes(RType::missing);
     }
     RIR_INLINE bool maybeLazy() const {
+        if (!isRType())
+            return false;
         return flags_.includes(TypeFlags::lazy);
     }
     RIR_INLINE bool maybePromiseWrapped() const {
+        if (!isRType())
+            return false;
         return flags_.includes(TypeFlags::promiseWrapped);
     }
-    RIR_INLINE bool isScalar() const {
-        return flags_.includes(TypeFlags::isScalar);
+    RIR_INLINE constexpr bool isScalar() const {
+        if (!isRType())
+            return true;
+        return !flags_.includes(TypeFlags::maybeNotScalar);
     }
-    RIR_INLINE bool isRType() const {
+    RIR_INLINE constexpr bool isRType() const {
         return flags_.includes(TypeFlags::rtype);
     }
-    RIR_INLINE bool maybe(RType type) const {
+    RIR_INLINE bool isRType(const RType& o) const {
+        return isRType() && t_.r == o;
+    }
+    RIR_INLINE constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
-    RIR_INLINE bool maybeObj() const {
+    RIR_INLINE constexpr bool maybeObj() const {
+        if (!isRType())
+            return false;
         return isRType() && flags_.includes(TypeFlags::maybeObject);
     }
 
-    PirType notObject() const {
-        assert(isRType());
-        PirType t = *this;
-        t.flags_.reset(TypeFlags::maybeObject);
-        return t;
-    }
-
-    PirType notMissing() const {
-        assert(isRType());
-        PirType t = *this;
-        t.t_.r.reset(RType::missing);
-        return t;
-    }
-
-    RIR_INLINE PirType scalar() const {
-        assert(isRType());
-        PirType t = *this;
-        t.flags_.set(TypeFlags::isScalar);
-        return t;
-    }
-
-    RIR_INLINE PirType orPromiseWrapped() const {
-        assert(isRType());
-        PirType t = *this;
-        t.flags_.set(TypeFlags::promiseWrapped);
-        return t;
-    }
-
-    RIR_INLINE PirType orLazy() const {
-        assert(isRType());
-        PirType t = *this;
-        t.flags_.set(TypeFlags::lazy);
-        t.flags_.set(TypeFlags::promiseWrapped);
-        return t;
-    }
-
-    PirType forced() const {
-        assert(isRType());
-        PirType t = *this;
-        t.flags_.reset(TypeFlags::promiseWrapped);
-        t.flags_.reset(TypeFlags::lazy);
-        return t;
-    }
-
-    RIR_INLINE PirType baseType() const {
-        assert(isRType());
-        return PirType(t_.r);
-    }
-
-    RIR_INLINE void setNotMissing() { *this = notMissing(); }
-    RIR_INLINE void setNotObject() { *this = notObject(); }
-    RIR_INLINE void setScalar() { *this = scalar(); }
-
-    static const PirType voyd() { return NativeTypeSet(); }
-    static const PirType bottom() { return PirType(RTypeSet()); }
-
-    RIR_INLINE PirType operator|(const PirType& o) const {
+    RIR_INLINE constexpr PirType operator|(const PirType& o) const {
         assert(isRType() == o.isRType());
 
         PirType r;
         if (isRType())
             r = t_.r | o.t_.r;
         else
-            r = t_.n | o.t_.n;
+            r = RTypeSet(t_.n | o.t_.n);
 
         r.flags_ = flags_ | o.flags_;
-        if (!(isScalar() && o.isScalar()))
-            r.flags_.reset(TypeFlags::isScalar);
-
         return r;
     }
+
+    RIR_INLINE constexpr PirType operator&(const PirType& o) const {
+        assert(isRType() == o.isRType());
+
+        PirType r;
+        if (isRType())
+            r = t_.r & o.t_.r;
+        else
+            r = RTypeSet(t_.n & o.t_.n);
+
+        r.flags_ = flags_ & o.flags_;
+        return r;
+    }
+
+    bool maybeReferenceCounted() const {
+        static constexpr RTypeSet refcount =
+            RTypeSet() | RType::logical | RType::integer | RType::real |
+            RType::str | RType::vec | RType::cplx;
+        return isRType() && t_.r.intersects(refcount);
+    }
+
+    PirType constexpr notObject() const {
+        assert(isRType());
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeObject));
+    }
+
+    PirType constexpr notMissing() const {
+        assert(isRType());
+        return PirType(t_.r & ~RTypeSet(RType::missing), flags_);
+    }
+
+    RIR_INLINE constexpr PirType scalar() const {
+        assert(isRType());
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNotScalar));
+    }
+
+    RIR_INLINE constexpr PirType orNotScalar() const {
+        assert(isRType());
+        return PirType(t_.r, flags_ | TypeFlags::maybeNotScalar);
+    }
+
+    RIR_INLINE constexpr PirType orPromiseWrapped() const {
+        assert(isRType());
+        return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
+    }
+
+    RIR_INLINE constexpr PirType orLazy() const {
+        assert(isRType());
+        return PirType(t_.r,
+                       flags_ | TypeFlags::lazy | TypeFlags::promiseWrapped);
+    }
+
+    RIR_INLINE constexpr PirType orObject() const {
+        assert(isRType());
+        return PirType(t_.r, flags_ | TypeFlags::maybeObject);
+    }
+
+    PirType constexpr notLazy() const {
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
+    }
+
+    PirType constexpr forced() const {
+        assert(isRType());
+        FlagSet notPromised =
+            ~(FlagSet() | TypeFlags::promiseWrapped | TypeFlags::lazy);
+        return PirType(t_.r, flags_ & notPromised);
+    }
+
+    RIR_INLINE constexpr PirType baseType() const {
+        assert(isRType());
+        return PirType(t_.r);
+    }
+
+    // Type of <this>[<idx>] or <this>[<idx>, <idx>]
+    PirType subsetType(PirType idx) const {
+        assert(isRType());
+        if (isA(RType::nil)) {
+            // NULL
+            return RType::nil;
+        }
+        if (isA(num() | RType::str | RType::cons | RType::code)) {
+            PirType t = *this;
+            if (idx.isScalar())
+                t.setScalar();
+            else
+                t = t.orNotScalar();
+            return t;
+        } else if (isA(RType::vec)) {
+            return RType::vec;
+        } else if (!maybeObj() && !PirType(RType::prom).isA(*this)) {
+            // Something else
+            return val().notMissing();
+        } else {
+            // Possible object
+            return valOrLazy();
+        }
+    }
+
+    // Type of <this>[[<idx>]] or <this>[[<idx>, <idx>]]
+    PirType extractType(PirType idx) const {
+        assert(isRType());
+        if (isA(RType::nil)) {
+            // NULL
+            return RType::nil;
+        }
+        if (isA(num() | RType::str | RType::cons | RType::code)) {
+            return scalar();
+        } else if (isA(RType::vec)) {
+            return val().notMissing();
+        } else if (!maybeObj() && !PirType(RType::prom).isA(*this)) {
+            // Something else
+            return val().notMissing();
+        } else {
+            // Possible object
+            return valOrLazy();
+        }
+    }
+
+    RIR_INLINE void setNotScalar() { *this = orNotScalar(); }
+    RIR_INLINE void setNotMissing() { *this = notMissing(); }
+    RIR_INLINE void setNotObject() { *this = notObject(); }
+    RIR_INLINE void setScalar() { *this = scalar(); }
+
+    RIR_INLINE void setScalar(RType rtype) {
+        setScalar();
+        t_.r = RTypeSet(rtype);
+    }
+
+    bool isVoid() const {
+        if (isRType())
+            return t_.r.empty();
+        else
+            return t_.n.empty();
+    }
+
+    static const PirType voyd() { return PirType(NativeTypeSet()); }
+    static const PirType bottom() { return optimistic(); }
 
     RIR_INLINE bool operator==(const NativeType& o) const {
         return !isRType() && t_.n == o;
@@ -305,13 +425,13 @@ struct PirType {
         }
         if ((!maybeLazy() && o.maybeLazy()) ||
             (!maybePromiseWrapped() && o.maybePromiseWrapped()) ||
-            (isScalar() && !o.isScalar())) {
+            (!maybeObj() && o.maybeObj()) || (isScalar() && !o.isScalar())) {
             return false;
         }
         return t_.r.includes(o.t_.r);
     }
 
-    void print(std::ostream& out = std::cout);
+    void print(std::ostream& out = std::cout) const;
 };
 
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {
@@ -418,10 +538,10 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
     }
 
     // If the base type is at least a value, then it's a value
-    if (t.isRType() && PirType::val() == t.baseType().forced()) {
-        out << "val?";
-    } else if (t.isRType() && PirType::val().notMissing() == t.baseType()) {
+    if (t.isRType() && PirType::val().notMissing().baseType() == t.baseType()) {
         out << "val";
+    } else if (t.isRType() && PirType::val().baseType() == t.baseType()) {
+        out << "val?";
     } else {
         if (t.t_.r.count() > 1)
             out << "(";

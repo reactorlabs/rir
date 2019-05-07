@@ -55,6 +55,12 @@ DEF_INSTR(ldfun_, 1, 0, 1, 0)
 DEF_INSTR(ldvar_, 1, 0, 1, 0)
 
 /**
+ * ldvar_:: like ldvar.
+ * Additionally Increment named count if the variable is not local.
+ */
+DEF_INSTR(ldvar_for_update_, 1, 0, 1, 0)
+
+/**
  * ldvar_noforce_:: like ldvar_ but don't force if promise or fail if missing
  */
 DEF_INSTR(ldvar_noforce_, 1, 0, 1, 1)
@@ -121,21 +127,21 @@ DEF_INSTR(movloc_, 2, 0, 0, 1)
  *                  THIS IS A VARIABLE LENGTH INSTRUCTION
  *                  the actual number of immediates is 3 + nargs
  */
-DEF_INSTR(call_implicit_, 3, 1, 1, 0)
+DEF_INSTR(call_implicit_, 4, 1, 1, 0)
 /*
  * Same as above, but with names for the arguments as immediates
  *
  *                  THIS IS A VARIABLE LENGTH INSTRUCTION
  *                  the actual number of immediates is 3 + 2 * nargs
  */
-DEF_INSTR(named_call_implicit_, 3, 1, 1, 0)
+DEF_INSTR(named_call_implicit_, 4, 1, 1, 0)
 
 /**
  * call_:: Like call_implicit_, but expects arguments on stack
  *         on top of the callee; these arguments can be both
  *         values and promises (even preseeded w/ a value)
  */
-DEF_INSTR(call_, 3, -1, 1, 0)
+DEF_INSTR(call_, 4, -1, 1, 0)
 
 /*
  * Same as above, but with names for the arguments as immediates
@@ -143,13 +149,13 @@ DEF_INSTR(call_, 3, -1, 1, 0)
  *                  THIS IS A VARIABLE LENGTH INSTRUCTION
  *                  the actual number of immediates is 3 + nargs
  */
-DEF_INSTR(named_call_, 3, -1, 1, 0)
+DEF_INSTR(named_call_, 4, -1, 1, 0)
 
 /**
  * static_call_:: Like call_, but the callee is statically known
  *                and is accessed via the immediate callsite
  */
-DEF_INSTR(static_call_, 5, -1, 1, 0)
+DEF_INSTR(static_call_, 6, -1, 1, 0)
 
 /**
  * call_builtin_:: Like static call, but calls a builtin
@@ -205,6 +211,11 @@ DEF_INSTR(dup2_, 0, 2, 4, 1)
 DEF_INSTR(pop_, 0, 1, 0, 1)
 
 /**
+ * popn_:: pop n elements from object stack
+ */
+DEF_INSTR(popn_, 1, -1, 0, 1)
+
+/**
  * swap_:: swap two elements tos
  */
 DEF_INSTR(swap_, 0, 2, 2, 1)
@@ -240,6 +251,11 @@ DEF_INSTR(uplus_, 0, 1, 1, 0)
  * inc_ :: increment tos integer
  */
 DEF_INSTR(inc_, 0, 1, 1, 1)
+
+/**
+ * dec_ :: decrement tos integer
+ */
+DEF_INSTR(dec_, 0, 1, 1, 1)
 
 DEF_INSTR(sub_, 0, 2, 1, 0)
 DEF_INSTR(uminus_, 0, 1, 1, 0)
@@ -285,6 +301,14 @@ DEF_INSTR(aslogical_, 0, 1, 1, 0)
  * asbool_:: pop object stack, convert to Logical vector of size 1 and push on object stack. Throws an error if the result would be NA.
  */
 DEF_INSTR(asbool_, 0, 1, 1, 0)
+
+/**
+ * ceil_ / floor_ :: pop object stack, convert to integer scalar and push. Ceils
+ *                   or floors if real, 0 or 1 if logical, throws an NA error if
+ *                   another type. For simple ranges.
+ */
+DEF_INSTR(ceil_, 0, 1, 1, 1)
+DEF_INSTR(floor_, 0, 1, 1, 1)
 
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack
@@ -350,11 +374,23 @@ DEF_INSTR(extract1_2_, 0, 3, 1, 1)
 
 /**
  * subassign1_1_ :: a[b] <- c
+ *
+ * this instruction creates the rhs part of a <- `[<-(a,b,c)` and still needs
+ * to be assigned.
+ *
+ * Warning: on named == 1 it updates the array in-place! This is not the same
+ * as GNUR's subassign, and it's not equivalent to `[<-(a,b,c)` itself
  */
 DEF_INSTR(subassign1_1_, 0, 3, 1, 1)
 
 /**
  * subassign1_2_ :: a[b,c] <- d
+ *
+ * this instruction creates the rhs part of a <- `[<-(a,b,c,d)` and still needs
+ * to be assigned.
+ *
+ * Warning: on named == 1 it updates the array in-place! This is not the same
+ * as GNUR's subassign, and it's not equivalent to `[<-(a,b,c, d)` itself
  */
 DEF_INSTR(subassign1_2_, 0, 4, 1, 1)
 
@@ -370,11 +406,23 @@ DEF_INSTR(extract2_2_, 0, 3, 1, 1)
 
 /**
  * subassign2_1 :: a[[b]] <- c
+ *
+ * this instruction creates the rhs part of a <- `[[<-(a,b,c)` and still needs
+ * to be assigned.
+ *
+ * Warning: on named == 1 it updates the array in-place! This is not the same
+ * as GNUR's subassign, and it's not equivalent to `[[<-(a,b,c)` itself
  */
 DEF_INSTR(subassign2_1_, 0, 3, 1, 1)
 
 /**
  * subassign2_2_ :: a[[b,c]] <- d
+ *
+ * this instruction creates the rhs part of a <- `[[<-(a,b,c,d)` and still needs
+ * to be assigned.
+ *
+ * Warning: on named == 1 it updates the array in-place! This is not the same
+ * as GNUR's subassign, and it's not equivalent to `[[<-(a,b,c,d)` itself
  */
 DEF_INSTR(subassign2_2_, 0, 4, 1, 1)
 
@@ -429,7 +477,7 @@ DEF_INSTR(visible_, 0, 0, 0, 1)
 DEF_INSTR(invisible_, 0, 0, 0, 1)
 
 /**
- * set_shared_:: marks tos to be shared (ie. named = 2)
+ * set_shared:: ensures tos has named >= 2
  */
 DEF_INSTR(set_shared_, 0, 1, 1, 1)
 
@@ -437,11 +485,6 @@ DEF_INSTR(set_shared_, 0, 1, 1, 1)
  * ensure_named_:: ensures tos has named >= 1
  */
 DEF_INSTR(ensure_named_, 0, 1, 1, 1)
-
-/**
- * make_unique_:: duplicates tos if it is shared (ie. named > 1)
- */
-DEF_INSTR(make_unique_, 0, 1, 1, 1)
 
 /**
  * beginloop_:: begins loop context, break and continue target immediate (this is the target for break and next long jumps)
@@ -475,7 +518,7 @@ DEF_INSTR(deopt_, 1, -1, 0, 0)
  * heavy in size.
  */
 DEF_INSTR(record_call_, 4, 1, 1, 0)
-DEF_INSTR(record_binop_, 2, 2, 2, 0)
+DEF_INSTR(record_type_, 1, 1, 1, 0)
 
 DEF_INSTR(int3_, 0, 0, 0, 0)
 DEF_INSTR(printInvocation_, 0, 0, 0, 0)

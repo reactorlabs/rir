@@ -2,9 +2,21 @@
 
 ROOT=$1
 
+git diff --exit-code > /dev/null && git diff --cached --exit-code > /dev/null
+if test "$?" -ne 0; then
+  echo "warning: repository is dirty"
+  git status -s
+  sleep 2
+fi
+
 . "${ROOT}/tools/script_include.sh"
 
-build ${ROOT}/tests/build_push_hook ${ROOT} debugopt
+build ${ROOT}/tests/build_push_hook ${ROOT} release
+
+if test "$?" -ne 0; then
+  echo "build failed. Please fix first."
+  exit 1
+fi
 
 cd ${ROOT}/tests/build_push_hook
 

@@ -4,38 +4,14 @@ namespace rir {
 
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
+    case Assumption::NoReflectiveArgument:
+        out << "!RefA";
+        break;
     case Assumption::NoExplicitlyMissingArgs:
         out << "!ExpMi";
         break;
-    case Assumption::Arg1IsEager_:
-        out << "Eager1";
-        break;
-    case Assumption::Arg2IsEager_:
-        out << "Eager2";
-        break;
-    case Assumption::Arg3IsEager_:
-        out << "Eager3";
-        break;
-    case Assumption::Arg4IsEager_:
-        out << "Eager4";
-        break;
-    case Assumption::Arg0IsEager_:
-        out << "Eager0";
-        break;
     case Assumption::CorrectOrderOfArguments:
         out << "CorrOrd";
-        break;
-    case Assumption::Arg1IsNonObj_:
-        out << "!Obj1";
-        break;
-    case Assumption::Arg2IsNonObj_:
-        out << "!Obj2";
-        break;
-    case Assumption::Arg3IsNonObj_:
-        out << "!Obj3";
-        break;
-    case Assumption::Arg0IsNonObj_:
-        out << "!Obj0";
         break;
     case Assumption::NotTooManyArguments:
         out << "!TMany";
@@ -43,6 +19,20 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
     case Assumption::NotTooFewArguments:
         out << "!TFew";
         break;
+#define TYPE_ASSUMPTIONS(Type, Msg)                                            \
+    case Assumption::Arg0Is##Type##_:                                          \
+        out << Msg << "0";                                                     \
+        break;                                                                 \
+    case Assumption::Arg1Is##Type##_:                                          \
+        out << Msg << "1";                                                     \
+        break;                                                                 \
+    case Assumption::Arg2Is##Type##_:                                          \
+        out << Msg << "2";                                                     \
+        break;
+        TYPE_ASSUMPTIONS(Eager, "Eager");
+        TYPE_ASSUMPTIONS(NotObj, "!Obj");
+        TYPE_ASSUMPTIONS(SimpleInt, "SimpleInt");
+        TYPE_ASSUMPTIONS(SimpleReal, "SimpleReal");
     }
     return out;
 };
@@ -58,7 +48,13 @@ std::ostream& operator<<(std::ostream& out, const Assumptions& a) {
     return out;
 }
 
-constexpr std::array<Assumption, 5> Assumptions::ObjAssumptions;
-constexpr std::array<Assumption, 4> Assumptions::EagerAssumptions;
+constexpr std::array<Assumption, Assumptions::NUM_ARGS>
+    Assumptions::EagerAssumptions;
+constexpr std::array<Assumption, Assumptions::NUM_ARGS>
+    Assumptions::NotObjAssumptions;
+constexpr std::array<Assumption, Assumptions::NUM_ARGS>
+    Assumptions::SimpleIntAssumptions;
+constexpr std::array<Assumption, Assumptions::NUM_ARGS>
+    Assumptions::SimpleRealAssumptions;
 
 } // namespace rir

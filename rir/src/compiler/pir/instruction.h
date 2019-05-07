@@ -81,8 +81,6 @@ struct InstrArg {
 enum class HasEnvSlot : uint8_t { Yes, No };
 
 // Effect that can be produced by an instruction.
-// This is a trivial lattice, any effect with higher order contains all the
-// lower order effects.
 enum class Effect : uint8_t {
     // Changes R_Visible
     Visibility,
@@ -121,6 +119,13 @@ enum class Controlflow : uint8_t {
     Branch,
 };
 
+// How an instruction modifies visibility
+enum class VisibilityFlag : uint8_t {
+    On,
+    Off,
+    Unknown,
+};
+
 class Instruction : public Value {
   public:
     struct InstructionUID : public std::pair<unsigned, unsigned> {
@@ -135,9 +140,13 @@ class Instruction : public Value {
 
     Effects effects;
 
+  public:
+    void clearEffects() { effects.reset(); }
+    void clearVisibility() { effects.reset(Effect::Visibility); }
+    void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
     bool hasEffect() const { return !effects.empty(); }
+    bool hasVisibility() const { return effects.contains(Effect::Visibility); }
 
-  private:
     Effects getObservableEffects() const {
         auto e = effects;
         // Those are effects, and we are required to have them in the correct
@@ -149,8 +158,11 @@ class Instruction : public Value {
         return e;
     }
 
-  public:
-    bool hasImpureEffects() const {
+    bool hasObservableEffects() const {
+        return !getObservableEffects().empty();
+    }
+
+    bool hasStrongEffects() const {
         auto e = getObservableEffects();
         // Yes visibility is a global effect. We try to preserve it. But geting
         // it wrong is not a strong correctness issue.
@@ -158,33 +170,54 @@ class Instruction : public Value {
         return !e.empty();
     }
 
-    bool hasObservableEffects() const {
-        return !getObservableEffects().empty();
-    }
-
-    bool isDeoptBarrier() const { return !getObservableEffects().empty(); }
-    bool mightChangeVisibility() const {
-        return effects.includes(Effect::Visibility);
-    }
-    bool mayUseReflection() const {
-        return effects.includes(Effect::Reflection);
-    }
-    bool mayForcePromises() const { return effects.includes(Effect::Force); }
+    bool isDeoptBarrier() const { return hasStrongEffects(); }
+    // TODO: Add verify, then replace with effects.includes(Effect::LeakArg)
     bool leaksArg(Value* val) const {
         return leaksEnv() || effects.includes(Effect::LeakArg);
     }
 
-    void maskEffectsOnNonObjects(Effects mask = Effects(Effect::Error) |
-                                                Effect::Warn |
-                                                Effect::Visibility) {
+    void maskEffectsAndTypeOnNonObjects(PirType tmask,
+                                        Effects mask = Effects(Effect::Error) |
+                                                       Effect::Warn |
+                                                       Effect::Visibility) {
         bool maybeObj = false;
         eachArg([&](Value* v) {
+            if (mayHaveEnv() && env() == v)
+                return;
             if (v->type.maybeObj())
                 maybeObj = true;
         });
         if (!maybeObj) {
             effects = effects & mask;
+            type = type & tmask;
         }
+    }
+
+    // Removes e if all arguments are argt
+    void maskEffect(PirType argt, Effect e) {
+        bool mask = true;
+        eachArg([&](Value* v) {
+            if (mayHaveEnv() && env() == v)
+                return;
+            if (!v->type.isA(argt))
+                mask = false;
+        });
+        if (mask)
+            effects.reset(e);
+    }
+
+    void updateScalarOnScalarInputs() {
+        if (type.maybeObj())
+            return;
+        bool scalar = true;
+        eachArg([&](Value* v) {
+            if (mayHaveEnv() && env() == v)
+                return;
+            if (!v->type.isScalar())
+                scalar = false;
+        });
+        if (scalar)
+            type.setScalar();
     }
 
     bool readsEnv() const {
@@ -197,11 +230,22 @@ class Instruction : public Value {
         return hasEnv() && effects.includes(Effect::LeaksEnv);
     }
 
+    // Instructions can be deduplicated if they have different effects,
+    // unless these effects are different
+    Effects gvnEffects() const {
+        return effects & ~(Effects(Effect::Error) | Effect::Warn |
+                           Effect::Visibility | Effect::Force);
+    }
+
+    virtual unsigned cost() const { return 1; }
+    virtual size_t gvnBase() const = 0;
+
     virtual bool mayHaveEnv() const = 0;
     virtual bool hasEnv() const = 0;
     virtual bool exits() const = 0;
     virtual bool branches() const = 0;
     virtual bool branchOrExit() const = 0;
+    virtual VisibilityFlag visibilityFlag() const = 0;
 
     virtual size_t nargs() const = 0;
 
@@ -241,10 +285,11 @@ class Instruction : public Value {
 
     virtual void updateType(){};
 
-    virtual void printEnv(std::ostream& out, bool tty) const;
+    virtual void printEffects(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
     virtual void printGraphArgs(std::ostream& out, bool tty) const;
     virtual void printGraphBranches(std::ostream& out, size_t bbId) const;
+    virtual void printEnv(std::ostream& out, bool tty) const;
     virtual void print(std::ostream& out, bool tty = false) const;
     void printGraph(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
@@ -335,6 +380,10 @@ class InstructionImplementation : public Instruction {
         return new Base(*static_cast<const Base*>(this));
     }
 
+    size_t gvnBase() const override {
+        return hash_combine((size_t)ITAG, gvnEffects().to_i());
+    };
+
     bool mayHaveEnv() const override final { return ENV == HasEnvSlot::Yes; }
     bool hasEnv() const override final {
         return mayHaveEnv() && env() != Env::elided();
@@ -342,6 +391,9 @@ class InstructionImplementation : public Instruction {
     bool exits() const override final { return CF == Controlflow::Exit; }
     bool branches() const override final { return CF == Controlflow::Branch; }
     bool branchOrExit() const override final { return branches() || exits(); }
+    VisibilityFlag visibilityFlag() const override {
+        return VisibilityFlag::Unknown;
+    }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -574,7 +626,12 @@ class FLI(LdConst, 0, Effects::None()) {
     SEXP c() const;
     LdConst(SEXP c, PirType t);
     explicit LdConst(SEXP c);
+    explicit LdConst(int i);
     void printArgs(std::ostream& out, bool tty) const override;
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), c());
+    }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLIE(LdFun, 2, Effects::Any()) {
@@ -604,12 +661,17 @@ class FLIE(LdFun, 2, Effects::Any()) {
     }
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
+
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
   public:
     SEXP varName;
-    bool fusedWithForce = false;
 
     LdVar(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::any(), env),
@@ -620,6 +682,12 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     }
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
+
+    int minReferenceCount() const override { return 1; }
 };
 
 class FLI(ForSeqSize, 1, Effect::Error) {
@@ -636,21 +704,30 @@ class FLI(LdArg, 0, Effects::None()) {
     explicit LdArg(size_t id) : FixedLenInstruction(PirType::any()), id(id) {}
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), id);
+    }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
   public:
     SEXP varName;
     explicit Missing(SEXP varName, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::logical, env),
+        : FixedLenInstructionWithEnvSlot(PirType::simpleScalarLogical(), env),
           varName(varName) {}
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
 };
 
 class FLI(ChkMissing, 1, Effect::Warn) {
   public:
     explicit ChkMissing(Value* in)
-        : FixedLenInstruction(in->type.notMissing(), {{PirType::val()}},
+        : FixedLenInstruction(in->type.notMissing(), {{PirType::any()}},
                               {{in}}) {}
 };
 
@@ -677,6 +754,10 @@ class FLIE(StVarSuper, 2, Effects() | Effect::ReadsEnv | Effect::WritesEnv) {
     using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
 };
 
 class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
@@ -691,6 +772,12 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     SEXP varName;
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
+
+    int minReferenceCount() const override { return 1; }
 };
 
 class FLIE(StVar, 2, Effect::WritesEnv) {
@@ -711,6 +798,10 @@ class FLIE(StVar, 2, Effect::WritesEnv) {
     using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), varName);
+    }
 };
 
 // Pseudo Instruction. Is actually a StVar with a flag set.
@@ -747,17 +838,21 @@ class FLIE(MkArg, 2, Effects::None()) {
     Promise* prom_;
 
   public:
+    bool noReflection = false;
+
     MkArg(Promise* prom, Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
           prom_(prom) {
         assert(eagerArg() == v);
+        noReflection = isEager();
     }
     MkArg(Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
           prom_(nullptr) {
         assert(eagerArg() == v);
+        noReflection = isEager();
     }
 
     Value* eagerArg() const { return arg(0).val(); }
@@ -771,16 +866,25 @@ class FLIE(MkArg, 2, Effects::None()) {
     void printArgs(std::ostream& out, bool tty) const override;
 
     Value* promEnv() const { return env(); }
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), prom_);
+    }
+
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLI(Seq, 3, Effects::None()) {
   public:
     Seq(Value* start, Value* end, Value* step)
         : FixedLenInstruction(
-              PirType::num(),
+              PirType::any(),
               // TODO: require scalars, but this needs some cast support
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{start, end, step}}) {}
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(PirType::num().notObject().notMissing());
+    }
 };
 
 class FLIE(MkCls, 4, Effects::None()) {
@@ -791,6 +895,8 @@ class FLIE(MkCls, 4, Effects::None()) {
               {{fml, code, src}}, lexicalEnv) {}
 
     Value* lexicalEnv() const { return env(); }
+
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 
   private:
     using FixedLenInstructionWithEnvSlot::env;
@@ -804,6 +910,12 @@ class FLIE(MkFunCls, 1, Effects::None()) {
     void printArgs(std::ostream&, bool tty) const override;
 
     Value* lexicalEnv() const { return env(); }
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), cls);
+    }
+
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLIE(Force, 2, Effects::Any()) {
@@ -821,25 +933,59 @@ class FLIE(Force, 2, Effects::Any()) {
             effects.reset();
         }
     }
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLI(CastType, 1, Effects::None()) {
   public:
+    unsigned cost() const override final { return 0; }
     CastType(Value* in, PirType from, PirType to)
         : FixedLenInstruction(to, {{from}}, {{in}}) {}
 };
 
-class FLI(AsLogical, 1, Effect::Warn) {
+class FLI(AsLogical, 1, Effect::Error) {
   public:
+    Value* val() { return arg<0>().val(); }
+
     AsLogical(Value* in, unsigned srcIdx)
-        : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}},
-                              srcIdx) {}
+        : FixedLenInstruction(PirType::simpleScalarLogical(),
+                              {{PirType::val()}}, {{in}}, srcIdx) {}
+
+    void updateType() override final {
+        if (val()->type.isA((PirType() | RType::logical | RType::integer |
+                             RType::real | RType::str | RType::cplx)
+                                .notObject())) {
+            effects.reset(Effect::Error);
+        }
+    }
 };
 
-class FLI(AsTest, 1, Effect::Error) {
+class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
   public:
+    Value* val() { return arg<0>().val(); }
+
     explicit AsTest(Value* in)
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}) {}
+
+    void updateType() override final {
+        if (val()->type.isScalar())
+            effects.reset(Effect::Warn);
+        // Error on NA, hard to exclude
+    }
+};
+
+class FLI(AsInt, 1, Effect::Error) {
+  public:
+    bool ceil;
+
+    explicit AsInt(Value* in, bool ceil_)
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType::any()}}, {{in}}),
+          ceil(ceil_) {}
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), ceil);
+    }
 };
 
 class FLIE(Subassign1_1D, 4, Effects::Any()) {
@@ -847,13 +993,15 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::val(),
+              PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
     Value* rhs() { return arg(0).val(); }
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
+    }
 };
 
 class FLIE(Subassign2_1D, 4, Effects::Any()) {
@@ -861,20 +1009,22 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::val(),
+              PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
     Value* rhs() { return arg(0).val(); }
     Value* lhs() { return arg(1).val(); }
     Value* idx() { return arg(2).val(); }
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
+    }
 };
 
 class FLIE(Subassign1_2D, 5, Effects::Any()) {
   public:
     Subassign1_2D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* env,
                   unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val(),
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val(),
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
@@ -883,14 +1033,16 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
+    }
 };
 
 class FLIE(Subassign2_2D, 5, Effects::Any()) {
   public:
     Subassign2_2D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* env,
                   unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val(),
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val(),
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
@@ -899,25 +1051,35 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* lhs() { return arg(1).val(); }
     Value* idx1() { return arg(2).val(); }
     Value* idx2() { return arg(3).val(); }
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
+    }
 };
 
 class FLIE(Extract1_1D, 3, Effects::Any()) {
   public:
     Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val(),
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    Value* vec() { return arg(0).val(); }
+    Value* idx() { return arg(1).val(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(vec()->type.subsetType(idx()->type));
+    }
 };
 
 class FLIE(Extract2_1D, 3, Effects::Any()) {
   public:
     Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val().scalar(),
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    Value* vec() { return arg(0).val(); }
+    Value* idx() { return arg(1).val(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(vec()->type.extractType(idx()->type));
+    }
 };
 
 class FLIE(Extract1_2D, 4, Effects::Any()) {
@@ -925,10 +1087,16 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
     Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::val(),
+              PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    Value* vec() { return arg(0).val(); }
+    Value* idx1() { return arg(1).val(); }
+    Value* idx2() { return arg(2).val(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(
+            vec()->type.subsetType(idx1()->type | idx2()->type));
+    }
 };
 
 class FLIE(Extract2_2D, 4, Effects::Any()) {
@@ -936,10 +1104,16 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
     Extract2_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::val().scalar(),
+              PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
-    void updateType() override final { maskEffectsOnNonObjects(); }
+    Value* vec() { return arg(0).val(); }
+    Value* idx1() { return arg(1).val(); }
+    Value* idx2() { return arg(2).val(); }
+    void updateType() override final {
+        maskEffectsAndTypeOnNonObjects(
+            vec()->type.extractType(idx1()->type | idx2()->type));
+    }
 };
 
 class FLI(Inc, 1, Effects::None()) {
@@ -950,13 +1124,31 @@ class FLI(Inc, 1, Effects::None()) {
                               {{v}}) {}
 };
 
+class FLI(Dec, 1, Effects::None()) {
+  public:
+    explicit Dec(Value* v)
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType(RType::integer).scalar().notObject()}},
+                              {{v}}) {}
+};
+
 class FLI(Is, 1, Effects::None()) {
   public:
     Is(uint32_t sexpTag, Value* v)
-        : FixedLenInstruction(PirType(RType::logical).scalar(),
+        : FixedLenInstruction(PirType::simpleScalarLogical(),
                               {{PirType::val()}}, {{v}}),
           sexpTag(sexpTag) {}
     uint32_t sexpTag;
+
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
+class FLI(IsType, 1, Effects::None()) {
+  public:
+    const PirType typeTest;
+    IsType(PirType type, Value* v)
+        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
+          typeTest(type) {}
 
     void printArgs(std::ostream& out, bool tty) const override;
 };
@@ -966,21 +1158,20 @@ class FLI(LdFunctionEnv, 0, Effects::None()) {
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
 };
 
-class FLI(SetShared, 1, Effects::None()) {
-  public:
-    explicit SetShared(Value* v)
-        : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
-    void updateType() override final { type = arg<0>().val()->type; }
-};
-
 class FLI(Visible, 0, Effect::Visibility) {
   public:
     explicit Visible() : FixedLenInstruction(PirType::voyd()) {}
+    VisibilityFlag visibilityFlag() const override {
+        return VisibilityFlag::On;
+    }
 };
 
 class FLI(Invisible, 0, Effect::Visibility) {
   public:
     explicit Invisible() : FixedLenInstruction(PirType::voyd()) {}
+    VisibilityFlag visibilityFlag() const override {
+        return VisibilityFlag::Off;
+    }
 };
 
 class FLI(PirCopy, 1, Effects::None()) {
@@ -989,6 +1180,9 @@ class FLI(PirCopy, 1, Effects::None()) {
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void print(std::ostream& out, bool tty) const override;
     void updateType() override final { type = arg<0>().val()->type; }
+    int minReferenceCount() const override {
+        return arg<0>().val()->minReferenceCount();
+    }
 };
 
 // Effects::Any() prevents this instruction from being optimized away
@@ -1004,6 +1198,25 @@ class FLI(Identical, 2, Effects::None()) {
                               {{PirType::any(), PirType::any()}}, {{a, b}}) {}
 };
 
+class FLIE(Colon, 3, Effects::Any()) {
+  public:
+    Colon(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+                                         {{PirType::val(), PirType::val()}},
+                                         {{lhs, rhs}}, env, srcIdx) {}
+    void updateType() override final {}
+    VisibilityFlag visibilityFlag() const override {
+        if (lhs()->type.isA(PirType::simpleScalar()) &&
+            rhs()->type.isA(PirType::simpleScalar())) {
+            return VisibilityFlag::On;
+        } else {
+            return VisibilityFlag::Unknown;
+        }
+    }
+    Value* lhs() const { return arg<0>().val(); }
+    Value* rhs() const { return arg<1>().val(); }
+};
+
 #define V(NESTED, name, Name)                                                  \
     class FLI(Name, 0, Effects::Any()) {                                       \
       public:                                                                  \
@@ -1012,30 +1225,44 @@ class FLI(Identical, 2, Effects::None()) {
 SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
-#define BINOP(Name, Type)                                                      \
+#define BINOP(Name, Type, SafeType)                                            \
     class FLIE(Name, 3, Effects::Any()) {                                      \
       public:                                                                  \
         Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
             : FixedLenInstructionWithEnvSlot(                                  \
-                  Type, {{PirType::val(), PirType::val()}}, {{lhs, rhs}}, env, \
-                  srcIdx) {}                                                   \
-        void updateType() override final { maskEffectsOnNonObjects(); }        \
+                  PirType::valOrLazy(), {{PirType::val(), PirType::val()}},    \
+                  {{lhs, rhs}}, env, srcIdx) {}                                \
+        VisibilityFlag visibilityFlag() const override {                       \
+            if (lhs()->type.isA(PirType::num().notObject()) &&                 \
+                rhs()->type.isA(PirType::num().notObject())) {                 \
+                return VisibilityFlag::On;                                     \
+            } else {                                                           \
+                return VisibilityFlag::Unknown;                                \
+            }                                                                  \
+        }                                                                      \
+        void updateType() override final {                                     \
+            maskEffectsAndTypeOnNonObjects(Type.notMissing());                 \
+            maskEffect(SafeType.notObject(), Effect::Warn);                    \
+            maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
+            updateScalarOnScalarInputs();                                      \
+        }                                                                      \
+        Value* lhs() const { return arg<0>().val(); }                          \
+        Value* rhs() const { return arg<1>().val(); }                          \
     }
 
-BINOP(Mul, PirType::val());
-BINOP(Div, PirType::val());
-BINOP(IDiv, PirType::val());
-BINOP(Mod, PirType::val());
-BINOP(Add, PirType::val());
-BINOP(Colon, PirType::val());
-BINOP(Pow, PirType::val());
-BINOP(Sub, PirType::val());
-BINOP(Gte, RType::logical);
-BINOP(Lte, RType::logical);
-BINOP(Gt, RType::logical);
-BINOP(Lt, RType::logical);
-BINOP(Neq, RType::logical);
-BINOP(Eq, RType::logical);
+BINOP(Mul, lhs()->type | rhs()->type, PirType::num());
+BINOP(Div, PirType::val().notObject(), PirType::num());
+BINOP(IDiv, lhs()->type | rhs()->type, PirType::num());
+BINOP(Mod, lhs()->type | rhs()->type, PirType::num());
+BINOP(Add, lhs()->type | rhs()->type, PirType::num());
+BINOP(Pow, lhs()->type | rhs()->type, PirType::num());
+BINOP(Sub, lhs()->type | rhs()->type, PirType::num());
+BINOP(Gte, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Lte, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Gt, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Lt, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Neq, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+BINOP(Eq, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
 
 #undef BINOP
 
@@ -1047,26 +1274,45 @@ BINOP(Eq, RType::logical);
                                   {{lhs, rhs}}) {}                             \
     }
 
-BINOP_NOENV(LAnd, RType::logical);
-BINOP_NOENV(LOr, RType::logical);
+BINOP_NOENV(LAnd, PirType::simpleScalarLogical());
+BINOP_NOENV(LOr, PirType::simpleScalarLogical());
 
 #undef BINOP_NOENV
 
-#define UNOP(Name)                                                             \
+#define UNOP(Name, SafeType)                                                   \
     class FLIE(Name, 2, Effects::Any()) {                                      \
       public:                                                                  \
         Name(Value* v, Value* env, unsigned srcIdx)                            \
-            : FixedLenInstructionWithEnvSlot(                                  \
-                  PirType::val(), {{PirType::val()}}, {{v}}, env, srcIdx) {}   \
-        void updateType() override final { maskEffectsOnNonObjects(); }        \
+            : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),             \
+                                             {{PirType::val()}}, {{v}}, env,   \
+                                             srcIdx) {}                        \
+        VisibilityFlag visibilityFlag() const override {                       \
+            if (arg<0>().val()->type.isA(PirType::num().notObject())) {        \
+                return VisibilityFlag::On;                                     \
+            } else {                                                           \
+                return VisibilityFlag::Unknown;                                \
+            }                                                                  \
+        }                                                                      \
+        void updateType() override final {                                     \
+            maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.notMissing()); \
+            maskEffect(SafeType.notObject(), Effect::Warn);                    \
+            maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
+            updateScalarOnScalarInputs();                                      \
+        }                                                                      \
     }
 
-UNOP(Not);
-UNOP(Plus);
-UNOP(Minus);
-UNOP(Length);
+UNOP(Not, PirType::num());
+UNOP(Plus, PirType::num());
+UNOP(Minus, PirType::num());
 
 #undef UNOP
+
+class FLI(Length, 1, Effects::None()) {
+  public:
+    explicit Length(Value* v)
+        : FixedLenInstruction(PirType::simpleScalarInt(), {{PirType::val()}},
+                              {{v}}) {}
+};
 
 struct RirStack {
   private:
@@ -1155,6 +1401,8 @@ class VLIE(FrameState, Effect::LeaksEnv) {
 
     void printArgs(std::ostream& out, bool tty) const override;
     void printEnv(std::ostream& out, bool tty) const override final{};
+
+    size_t gvnBase() const override { return (size_t)this; }
 };
 
 // Common interface to all call instructions
@@ -1288,6 +1536,10 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     ClosureVersion* tryDispatch() const;
 
     ClosureVersion* tryOptimisticDispatch() const;
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), cls_);
+    }
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
@@ -1310,6 +1562,12 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     }
     void printArgs(std::ostream & out, bool tty) const override;
     Value* callerEnv() { return env(); }
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), blt);
+    }
+
+    VisibilityFlag visibilityFlag() const override;
 
   private:
     CallBuiltin(Value * callerEnv, SEXP builtin,
@@ -1338,6 +1596,12 @@ class VLI(CallSafeBuiltin,
 
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned srcIdx);
+
+    size_t gvnBase() const override {
+        return hash_combine(InstructionImplementation::gvnBase(), blt);
+    }
+
+    VisibilityFlag visibilityFlag() const override;
 };
 
 class BuiltinCallFactory {
@@ -1383,6 +1647,10 @@ class VLIE(MkEnv, Effects::None()) {
     const char* name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
+
+    size_t gvnBase() const override { return (size_t)this; }
+
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLI(IsObject, 1, Effects::None()) {
@@ -1438,7 +1706,7 @@ class VLI(Phi, Effects::None()) {
         SLOWASSERT(std::find(input.begin(), input.end(), in) == input.end() &&
                    "Duplicate PHI input block");
         input.push_back(in);
-        args_.push_back(InstrArg(arg, PirType::any()));
+        args_.push_back(InstrArg(arg, arg->type));
     }
     BB* inputAt(size_t i) const { return input.at(i); }
     void updateInputAt(size_t i, BB* bb) {

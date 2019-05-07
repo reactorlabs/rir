@@ -49,7 +49,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     Code() = delete;
 
-    Code(FunctionSEXP fun, SEXP ast, unsigned codeSize, unsigned sourceSize,
+    Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,
          size_t localsCnt);
 
   private:

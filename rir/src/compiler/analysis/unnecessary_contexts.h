@@ -33,9 +33,8 @@ struct UnnecessaryContextsState : public AbstractUnique<PushContext> {
 
 class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
   public:
-    ClosureVersion* code;
     UnnecessaryContexts(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("UnnecessaryContexts", cls, cls, log), code(cls) {}
+        : StaticAnalysis("UnnecessaryContexts", cls, cls, log) {}
 
     AbstractResult apply(UnnecessaryContextsState& state,
                          Instruction* i) const override {
@@ -89,13 +88,15 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
         // Affected are all envs between push and pop, which includes envs that
         // are in a deopt branch.
         foreach
-            <PositioningStyle::BeforeInstruction>([&](
-                const UnnecessaryContextsState& state, Instruction* i) {
-                if (i == pop)
-                    res.insert(state.affected.begin(), state.affected.end());
-                else if (Deopt::Cast(i) && state.get() == push)
-                    res.insert(state.affected.begin(), state.affected.end());
-            });
+            <PositioningStyle::BeforeInstruction>(
+                [&](const UnnecessaryContextsState& state, Instruction* i) {
+                    if (i == pop)
+                        res.insert(state.affected.begin(),
+                                   state.affected.end());
+                    else if (Deopt::Cast(i) && state.get() == push)
+                        res.insert(state.affected.begin(),
+                                   state.affected.end());
+                });
         return res;
     }
 };

@@ -105,6 +105,14 @@ BB::Instrs::iterator BB::remove(Instrs::iterator it) {
     return instrs.erase(it);
 }
 
+BB::Instrs::iterator BB::moveToLast(Instrs::iterator it, BB* other) {
+    if (other->isJmp())
+        other->append(*it);
+    else
+        other->insert(other->end() - 1, *it);
+    return instrs.erase(it);
+}
+
 BB::Instrs::iterator BB::moveToEnd(Instrs::iterator it, BB* other) {
     other->append(*it);
     return instrs.erase(it);
@@ -161,6 +169,18 @@ void BB::gc() {
         delete i;
     deleted.clear();
 }
+
+bool BB::before(Instruction* a, Instruction* b) const {
+    assert(a->bb() == b->bb() && a->bb() == this);
+    for (const auto& i : instrs) {
+        if (i == b)
+            return false;
+        if (i == a)
+            return true;
+    }
+    assert(false);
+    return false;
+};
 
 void BB::collectDominated(std::unordered_set<BB*>& subs, DominanceGraph& dom) {
     Visitor::run(this, [&](BB* child) {

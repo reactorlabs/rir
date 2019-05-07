@@ -1,15 +1,16 @@
-#include "pir_tests.h"
+#include "PirTests.h"
+#include "../../ir/Compiler.h"
+#include "../analysis/query.h"
+#include "../analysis/verifier.h"
+#include "../pir/pir_impl.h"
+#include "../translations/pir_2_rir/pir_2_rir.h"
+#include "../translations/rir_2_pir/rir_2_pir.h"
+#include "../util/visitor.h"
 #include "R/Protect.h"
 #include "R/RList.h"
 #include "R_ext/Parse.h"
-#include "analysis/query.h"
-#include "analysis/verifier.h"
 #include "api.h"
-#include "ir/Compiler.h"
-#include "pir/pir_impl.h"
-#include "translations/pir_2_rir/pir_2_rir.h"
-#include "translations/rir_2_pir/rir_2_pir.h"
-#include "util/visitor.h"
+#include "compiler/parameter.h"
 #include <string>
 #include <vector>
 
@@ -46,9 +47,9 @@ SEXP compileToRir(const std::string& context, const std::string& expr,
     eval(expr, env);
     return env;
 }
-typedef std::unordered_map<std::string, pir::ClosureVersion*> closuresByName;
+typedef std::unordered_map<std::string, pir::ClosureVersion*> ClosuresByName;
 
-closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
+ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::StreamLogger logger({pir::DebugOptions::DebugFlags() |
                                   // pir::DebugFlag::PrintIntoStdout |
                                   // pir::DebugFlag::PrintEarlyPir |
@@ -59,7 +60,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::Rir2PirCompiler cmp(m, logger);
 
     // Compile every function in the environment
-    closuresByName results;
+    ClosuresByName results;
     auto envlist = RList(FRAME(env));
     for (auto f = envlist.begin(); f != envlist.end(); ++f) {
         auto fun = *f;
@@ -78,7 +79,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     return results;
 }
 
-closuresByName compile(const std::string& context, const std::string& expr,
+ClosuresByName compile(const std::string& context, const std::string& expr,
                        pir::Module* m, SEXP super = R_GlobalEnv) {
     SEXP env = compileToRir(context, expr, super);
     return compileRir2Pir(env, m);
@@ -150,72 +151,8 @@ bool compileAndVerify(const std::string& input) {
     return compileAndVerify("", input);
 }
 
-void insertTypeFeedbackForBinops(rir::Function* srcFunction,
-                                 std::array<SEXP, 2> typeFeedback) {
-    auto function = srcFunction->body();
-    Opcode* end = function->endCode();
-    Opcode* finger = function->code();
-    while (finger != end) {
-        Opcode* prev = finger;
-        BC bc = BC::advance(&finger, function);
-        if (bc.bc == Opcode::record_binop_) {
-            prev++;
-            ObservedValues* feedback = (ObservedValues*)prev;
-            feedback[0].record(typeFeedback[0]);
-            feedback[1].record(typeFeedback[1]);
-        }
-    }
-}
-
 extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 SEXP parseCompileToRir(std::string);
-
-static bool envOfAddElided(pir::Code* c) {
-    bool hasAdd = false;
-
-    bool res = Visitor::check(c->entry, [&](BB* bb) -> bool {
-        for (auto& i : *bb) {
-            if (auto a = Add::Cast(i)) {
-                hasAdd = true;
-                if (a->env() != Env::elided())
-                    return false;
-            }
-        }
-        return true;
-    });
-    return hasAdd && res;
-}
-
-bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
-    Protect p;
-    std::array<SEXP, 2> types;
-
-    // Set type feedback to primitive int vectors
-    SEXP res = p(Rf_allocVector(INTSXP, 1));
-    INTEGER(res)[0] = 1;
-    types[0] = res;
-    types[1] = res;
-
-    // Parser and compile the input
-    auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
-    auto rirFun = p(parseCompileToRir(input));
-    SET_CLOENV(rirFun, execEnv);
-    Rf_defineVar(Rf_install("removeEnvInBinopTest"), rirFun, execEnv);
-    rir::Function* srcFunction =
-        DispatchTable::unpack(BODY(rirFun))->baseline();
-    assert(srcFunction != nullptr);
-    insertTypeFeedbackForBinops(srcFunction, types);
-
-    // Test if there is an environment in the resulted function
-    pir::Module m;
-    compileRir2Pir(execEnv, &m);
-    bool t = verify(&m);
-    m.eachPirClosureVersion(
-        [&t](pir::ClosureVersion* f) { t = t && envOfAddElided(f); });
-    if (!t)
-        m.print(std::cout, true);
-    return t;
-}
 
 bool testCondition(const std::string& input,
                    std::function<void(pir::ClosureVersion*)> condition) {
@@ -231,24 +168,6 @@ bool canRemoveEnvironment(const std::string& input) {
     auto t = true;
     auto condition = [&t](pir::ClosureVersion* f) { t = t && Query::noEnv(f); };
     return testCondition(input, condition) && t;
-}
-
-bool canRemoveEnvironmentSpec(const std::string& input) {
-    auto t = true;
-    auto condition = [&t](pir::ClosureVersion* f) {
-        t = t && Query::noEnvSpec(f);
-    };
-    return testCondition(input, condition) && t;
-}
-
-bool canRemoveEnvironmentIfNonTypeFeedback(const std::string& input) {
-    pir::Module m;
-    compile("", input, &m);
-    bool t = verify(&m);
-    m.eachPirClosureVersion([&t](pir::ClosureVersion* f) {
-        t = t && (Query::noEnv(f) || envOfAddElided(f));
-    });
-    return t;
 }
 
 bool testDeadStore() {
@@ -607,6 +526,27 @@ bool testCfg() {
     return true;
 }
 
+bool testTypeRules() {
+    PirType r = RType::vec;
+    PirType r2 = RType::logical;
+    assert(r.subsetType(PirType::any()).isA(RType::vec));
+    assert(!r.subsetType(PirType::any()).maybeObj());
+    assert(!r.orObject().subsetType(PirType::bottom()).isA(RType::vec));
+    assert(!r.orObject().subsetType(PirType::bottom()).isA(PirType::val()));
+    assert(r.extractType(PirType::any()).isA(PirType::val()));
+    assert(!r.extractType(PirType::bottom()).isScalar());
+    assert(!r.extractType(PirType::bottom()).maybeMissing());
+    assert(!r.extractType(PirType::bottom()).isA(RType::vec));
+    assert(r.orObject().extractType(PirType::bottom()).maybeMissing());
+    assert(r2.subsetType(RType::real).isA(RType::logical));
+    assert(!r2.subsetType(RType::integer).isScalar());
+    assert(!r2.scalar().subsetType(RType::integer).isScalar());
+    assert(r2.subsetType(PirType(RType::integer).scalar()).isScalar());
+    assert(r2.extractType(RType::integer).isScalar());
+    assert(!r2.subsetType(PirType::any()).maybeObj());
+    return true;
+}
+
 static Test tests[] = {
     Test("test cfg", &testCfg),
     Test("test_42L", []() { return test42("42L"); }),
@@ -636,25 +576,6 @@ static Test tests[] = {
          }),
     Test("context_load",
          []() { return canRemoveEnvironment("f <- function() 123"); }),
-    Test("force_nonreflective",
-         []() {
-             return canRemoveEnvironmentSpec("f <- function(depth){\n"
-                                             "   if (depth == 0)\n"
-                                             "      1\n"
-                                             "   else\n"
-                                             "      0\n"
-                                             "}");
-         }),
-    Test("binop_nonobjects",
-         []() {
-             return canRemoveEnvironmentIfTypeFeedback(
-                 "f <- function() 1 + xxx");
-         }),
-    Test("binop_nonobjects_nofeedback",
-         []() {
-             return canRemoveEnvironmentIfNonTypeFeedback(
-                 "f <- function() 1 + xxx");
-         }),
     Test("super_assign", &testSuperAssign),
     Test("loop",
          []() {
@@ -796,27 +717,16 @@ static Test tests[] = {
          []() {
              return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
          }),
-    Test("Inlining promises and closures with Constantfolding",
-         []() {
-             return test42("{a<- function() 41L; b<- function() 1L; f <- "
-                           "function(x,y) x()+y; f(a,b())}");
-         }),
-    Test("more cf",
-         []() {
-             return test42("{x <- function() 42;"
-                           " y <- function() 41;"
-                           " z <- 1;"
-                           " f <- function(a,b,c) if (a() == (b+c)) 42L;"
-                           " f(x,y(),z)}");
-         }),
     Test("Test dead store analysis", &testDeadStore),
-};
+    Test("Test type rules", &testTypeRules)};
 
 } // namespace
 
 namespace rir {
 
 void PirTests::run() {
+    size_t oldconfig = pir::Parameter::MAX_INPUT_SIZE;
+    pir::Parameter::MAX_INPUT_SIZE = 3500;
     for (auto t : tests) {
         std::cout << "> " << t.first << "\n";
         if (!t.second()) {
@@ -824,5 +734,6 @@ void PirTests::run() {
             exit(1);
         }
     }
+    pir::Parameter::MAX_INPUT_SIZE = oldconfig;
 }
 } // namespace rir

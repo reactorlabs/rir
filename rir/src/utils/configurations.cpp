@@ -50,14 +50,18 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::EagerCalls());
         optimizations.push_back(new pir::Constantfold());
         optimizations.push_back(new pir::Cleanup());
-        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::DelayInstr());
+        optimizations.push_back(new pir::HoistInstruction());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
         optimizations.push_back(new pir::Cleanup());
         optimizations.push_back(new pir::Inline());
         optimizations.push_back(new pir::OptimizeContexts());
+        optimizations.push_back(new pir::LoadElision());
+        optimizations.push_back(new pir::GVN());
+        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::Cleanup());
+        optimizations.push_back(new pir::TypeInference());
     };
 
     phasemarker("Initial");
@@ -72,10 +76,10 @@ void Configurations::defaultOptimizations() {
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
-    optimizations.push_back(new pir::ElideEnvSpec());
+    optimizations.push_back(new pir::TypeSpeculation());
     optimizations.push_back(new pir::ElideEnvSpec());
     addDefaultOpt();
-    optimizations.push_back(new pir::ElideEnvSpec());
+    optimizations.push_back(new pir::TypeSpeculation());
     optimizations.push_back(new pir::ElideEnvSpec());
 
     phasemarker("Phase 2: Env speculation");
@@ -103,12 +107,10 @@ void Configurations::defaultOptimizations() {
     phasemarker("Phase 3: Cleanup Checkpoints");
 
     // ==== Phase 4) Final round of default opts
-    for (size_t i = 0; i < 2; ++i)
+    for (size_t i = 0; i < 3; ++i) {
         addDefaultOpt();
-
-    // Our backend really does not like unused checkpoints, so be sure to remove
-    // all of them here already.
-    optimizations.push_back(new pir::CleanupCheckpoints());
+        optimizations.push_back(new pir::CleanupCheckpoints());
+    }
 
     phasemarker("Phase 4: finished");
 }

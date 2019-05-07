@@ -2,7 +2,9 @@
 #define PIR_ABSTRACT_VALUE_H
 
 #include "../pir/pir.h"
+#include "../pir/singleton_values.h"
 #include "abstract_result.h"
+#include "utils/Set.h"
 
 #include <functional>
 #include <set>
@@ -31,6 +33,7 @@ struct ValOrig {
         return val == other.val && origin == other.origin &&
                recursionLevel == other.recursionLevel;
     }
+    bool operator!=(const ValOrig& other) const { return !(*this == other); }
 };
 }
 }
@@ -99,7 +102,7 @@ struct AbstractPirValue {
     typedef std::function<void(const ValOrig&)> ValOrigMaybe;
     typedef std::function<bool(const ValOrig&)> ValOrigMaybePredicate;
 
-    void ifSingleValue(ValMaybe known) {
+    void ifSingleValue(ValMaybe known) const {
         if (!unknown && vals.size() == 1)
             known((*vals.begin()).val);
     }
@@ -116,6 +119,24 @@ struct AbstractPirValue {
         return true;
     }
 
+    bool isUnboundValue() const {
+        if (vals.empty())
+            return false;
+        for (auto& v : vals)
+            if (v.val != UnboundValue::instance())
+                return false;
+        return true;
+    }
+
+    bool maybeUnboundValue() const {
+        if (vals.empty())
+            return false;
+        for (auto& v : vals)
+            if (v.val == UnboundValue::instance())
+                return true;
+        return false;
+    }
+
     AbstractResult merge(const ValOrig& other) {
         return merge(
             AbstractPirValue(other.val, other.origin, other.recursionLevel));
@@ -127,6 +148,17 @@ struct AbstractPirValue {
     }
 
     void print(std::ostream& out, bool tty = false) const;
+
+    bool operator==(const AbstractPirValue& other) const {
+        if (unknown && other.unknown)
+            return true;
+        return type == other.type && vals == other.vals &&
+               unknown == other.unknown;
+    }
+
+    bool operator!=(const AbstractPirValue& other) const {
+        return !(*this == other);
+    }
 };
 
 /*
@@ -194,17 +226,18 @@ struct AbstractREnvironment {
         for (auto& entry : other.entries) {
             auto name = entry.first;
             if (!entries.count(name)) {
-                entries[name].taint();
-                res.lostPrecision();
+                entries[name] = other.get(name);
+                res.max(entries.at(name).merge(
+                    AbstractPirValue(UnboundValue::instance(), nullptr, 0)));
             } else {
-                res.max(entries[name].merge(other.get(name)));
+                res.max(entries.at(name).merge(other.get(name)));
             }
         }
         for (auto& entry : entries) {
             auto name = entry.first;
             if (!other.entries.count(name) && !entries.at(name).isUnknown()) {
-                entries.at(name).taint();
-                res.lostPrecision();
+                res.max(entries.at(name).merge(
+                    AbstractPirValue(UnboundValue::instance(), nullptr, 0)));
             }
         }
 
@@ -254,6 +287,14 @@ struct AbstractLoad {
     AbstractLoad(Value* env, const AbstractPirValue& val)
         : env(env), result(val) {
         assert(env);
+    }
+
+    bool operator==(const AbstractLoad& other) const {
+        return env == other.env && result == other.result;
+    }
+
+    bool operator!=(const AbstractLoad& other) const {
+        return !(*this == other);
     }
 };
 
@@ -313,6 +354,17 @@ class AbstractREnvironmentHierarchy {
     AbstractLoad superGet(Value* env, SEXP e) const;
 
     std::unordered_set<Value*> potentialParents(Value* env) const;
+
+    AbstractResult taintLeaked() {
+        AbstractResult res;
+        for (auto e : envs) {
+            if (e.second.leaked) {
+                e.second.taint();
+                res.taint();
+            }
+        }
+        return res;
+    }
 };
 
 template <typename Kind>
@@ -351,6 +403,36 @@ class AbstractUnique {
             out << "?";
         out << "\n";
     };
+};
+
+template <typename T>
+struct IntersectionSet {
+    SmallSet<T> available;
+
+    AbstractResult mergeExit(const IntersectionSet& other) {
+        return merge(other);
+    }
+
+    AbstractResult merge(const IntersectionSet& other) {
+        AbstractResult res;
+        for (auto it = available.cbegin(); it != available.cend();) {
+            if (other.available.includes(*it)) {
+                it++;
+            } else {
+                it = available.erase(it);
+                res.update();
+            }
+        }
+        return res;
+    }
+
+    void print(std::ostream& out, bool tty) {
+        for (auto& a : available) {
+            a.print(out, tty);
+            out << " ";
+        }
+        out << "\n";
+    }
 };
 }
 }

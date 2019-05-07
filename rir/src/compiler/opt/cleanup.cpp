@@ -1,4 +1,5 @@
 #include "../pir/pir_impl.h"
+#include "../transform/bb.h"
 #include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
@@ -28,10 +29,25 @@ class TheCleanup {
                 Instruction* i = *ip;
                 auto next = ip + 1;
                 bool removed = false;
-                if (!i->branchOrExit() && !i->hasObservableEffects() &&
-                    i->unused()) {
+                bool dead = i->unused() && !i->branchOrExit();
+                if (dead && !i->hasObservableEffects()) {
                     removed = true;
                     next = bb->remove(ip);
+                } else if (dead &&
+                           i->getObservableEffects() == Effect::Visibility &&
+                           i->visibilityFlag() != VisibilityFlag::Unknown &&
+                           !Visible::Cast(i) && !Invisible::Cast(i)) {
+                    removed = true;
+                    switch (i->visibilityFlag()) {
+                    case VisibilityFlag::On:
+                        bb->replace(ip, new Visible());
+                        break;
+                    case VisibilityFlag::Off:
+                        bb->replace(ip, new Invisible());
+                        break;
+                    default:
+                        assert(false);
+                    }
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
                     // Missing args produce error.
@@ -57,7 +73,10 @@ class TheCleanup {
                     }
                 } else if (auto phi = Phi::Cast(i)) {
                     std::unordered_set<Value*> phin;
-                    phi->eachArg([&](BB*, Value* v) { phin.insert(v); });
+                    phi->eachArg([&](BB*, Value* v) {
+                        if (v != phi)
+                            phin.insert(v);
+                    });
                     if (phin.size() == 1) {
                         removed = true;
                         phi->replaceUsesWith(*phin.begin());
@@ -74,10 +93,25 @@ class TheCleanup {
                         used_p.insert(arg->prom()->id);
                         todo.push_back(arg->prom());
                     }
-                } else if (auto lgl = AsLogical::Cast(i)) {
-                    auto arg = lgl->arg<0>().val();
-                    if (arg->type.isA(RType::logical)) {
-                        lgl->replaceUsesWith(arg);
+                } else if (auto tt = IsType::Cast(i)) {
+                    auto arg = tt->arg<0>().val();
+                    if (arg->type.isA(tt->typeTest)) {
+                        tt->replaceUsesWith(True::instance());
+                        removed = true;
+                        next = bb->remove(ip);
+                    }
+                } else if (auto tt = CastType::Cast(i)) {
+                    auto arg = tt->arg<0>().val();
+                    if (arg->type == tt->type) {
+                        tt->replaceUsesWith(arg);
+                        removed = true;
+                        next = bb->remove(ip);
+                    }
+                } else if (auto asInt = AsInt::Cast(i)) {
+                    auto arg = asInt->arg<0>().val();
+                    if (arg->type.isA(
+                            PirType(RType::integer).scalar().notObject())) {
+                        asInt->replaceUsesWith(arg);
                         removed = true;
                         next = bb->remove(ip);
                     }
@@ -217,19 +251,8 @@ class TheCleanup {
             delete bb;
         }
 
-        auto renumberBBs = [&](Code* code) {
-            // Renumber in dominance order. This ensures that controlflow always
-            // goes from smaller id to bigger id, except for back-edges.
-            DominanceGraph dom(code);
-            code->nextBBId = 0;
-            DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
-                code->entry, [&](BB* bb) {
-                    bb->unsafeSetId(code->nextBBId++);
-                    bb->gc();
-                });
-        };
-        renumberBBs(function);
-        function->eachPromise(renumberBBs);
+        BBTransform::renumber(function);
+        function->eachPromise(BBTransform::renumber);
     }
 };
 } // namespace

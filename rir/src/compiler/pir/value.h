@@ -46,7 +46,14 @@ class Value {
     }
 
     bool producesRirResult() const {
-        return type != PirType::voyd() && type != NativeType::context;
+        return type != PirType::voyd() &&
+               (type.isRType() || type == NativeType::test);
+    }
+
+    static constexpr int MAX_REFCOUNT = 2;
+
+    virtual int minReferenceCount() const {
+        return type.maybeReferenceCounted() ? 0 : MAX_REFCOUNT;
     }
 };
 

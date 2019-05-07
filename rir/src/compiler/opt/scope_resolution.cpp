@@ -15,6 +15,68 @@
 namespace {
 
 using namespace rir::pir;
+
+// Checks (using the local state of the caller) if forcing a promise can have
+// reflective effects
+static bool noReflection(Code* code, Value* callEnv, ScopeAnalysis& analysis,
+                         ScopeAnalysisState& state) {
+    auto entry = code->entry;
+    assert(!entry->isEmpty());
+    auto funEnv = LdFunctionEnv::Cast(*entry->begin());
+
+    return Visitor::check(code->entry, [&](Instruction* i) {
+        if (CallSafeBuiltin::Cast(i))
+            return true;
+        if (auto b = CallBuiltin::Cast(i))
+            return SafeBuiltinsList::forInline(b->builtinId);
+
+        auto anyReflection = [&](AbstractPirValue& res) -> bool {
+            bool anyReflection = false;
+            res.eachSource([&](ValOrig vo) {
+                if (auto j = Instruction::Cast(vo.val)) {
+                    if (j->effects.includes(Effect::Reflection)) {
+                        anyReflection = true;
+                    }
+                }
+            });
+            return anyReflection;
+        };
+
+        if (auto ld = LdVar::Cast(i)) {
+            auto e = ld->env() == funEnv ? callEnv : ld->env();
+            auto res = analysis.load(state, ld->varName, e);
+            if (anyReflection(res.result))
+                return false;
+            return true;
+        }
+
+        if (auto ld = LdVarSuper::Cast(i)) {
+            auto e = ld->env() == funEnv ? callEnv : ld->env();
+            auto res = analysis.superLoad(state, ld->varName, e);
+            if (anyReflection(res.result))
+                return false;
+            return true;
+        }
+
+        if (auto ld = LdFun::Cast(i)) {
+            auto e = ld->env() == funEnv ? callEnv : ld->env();
+            auto res = analysis.loadFun(state, ld->varName, e);
+            if (anyReflection(res.result))
+                return false;
+            return true;
+        }
+
+        if (auto force = Force::Cast(i)) {
+            auto arg = force->arg<0>().val();
+            // Handled above
+            if (LdFun::Cast(arg) || LdVar::Cast(arg) || LdVarSuper::Cast(arg))
+                return true;
+        }
+
+        return !i->effects.includes(Effect::Reflection);
+    });
+};
+
 class TheScopeResolution {
   public:
     ClosureVersion* function;
@@ -33,10 +95,26 @@ class TheScopeResolution {
         if (finalState.noReflection())
             function->properties.set(ClosureVersion::Property::NoReflection);
 
-        std::unordered_map<Value*, Value*> alreadyReplaced;
+        std::unordered_map<Value*, Value*> replacedValue;
+        auto getReplacedValue = [&](Value* val) {
+            while (replacedValue.count(val))
+                val = replacedValue.at(val);
+            return val;
+        };
+        auto getSingleLocalValue =
+            [&](const AbstractPirValue& result) -> Value* {
+            if (!result.isSingleValue())
+                return nullptr;
+            if (result.singleValue().recursionLevel != 0)
+                return nullptr;
+            auto val = getReplacedValue(result.singleValue().val);
+            assert(val->validIn(function));
+            return val;
+        };
 
-        auto tryInsertPhis = [&](AbstractPirValue res, BB* bb,
-                                 BB::Instrs::iterator& iter) -> Instruction* {
+        auto tryInsertPhis = [&](Value* env, AbstractPirValue res, BB* bb,
+                                 BB::Instrs::iterator& iter,
+                                 bool allowUnbound) -> Value* {
             if (res.isUnknown())
                 return nullptr;
 
@@ -52,56 +130,75 @@ class TheScopeResolution {
             std::unordered_map<BB*, Value*> inputs;
             bool fail = false;
             res.eachSource([&](ValOrig v) {
-                auto i = Instruction::Cast(v.val);
-                if (fail || !i || inputs.count(i->bb())) {
-                    fail = true;
+                if (fail)
+                    return;
+                if (!v.origin)
+                    assert(v.val == UnboundValue::instance());
+                if (v.val == UnboundValue::instance()) {
+                    if (allowUnbound) {
+                        auto initialBB = Instruction::Cast(env)
+                                             ? Instruction::Cast(env)->bb()
+                                             : function->entry;
+                        inputs[initialBB] = UnboundValue::instance();
+                    } else {
+                        fail = true;
+                    }
+                } else {
+                    if (inputs.count(v.origin->bb()))
+                        fail = true;
+                    else
+                        inputs[v.origin->bb()] = v.val;
                 }
-                inputs[i->bb()] = i;
             });
             if (fail)
                 return nullptr;
 
-            auto placement =
-                PhiPlacement::compute(function, inputs, cfg, dom, dfront);
-            auto dominators = dom.dominators(bb);
-            int maxDom = 0;
-            BB* resPhiPos = nullptr;
-            for (auto& phi : placement) {
-                if (phi.first == bb) {
-                    resPhiPos = bb;
-                } else {
-                    auto pos = std::find(dominators.begin(), dominators.end(),
-                                         phi.first);
-                    if (pos != dominators.end()) {
-                        if (pos - dominators.begin() > maxDom)
-                            maxDom = pos - dominators.begin();
-                    }
-                }
-            }
-            if (!resPhiPos)
-                resPhiPos = dominators[maxDom];
-
-            if (placement.size() == 0)
+            auto pl = PhiPlacement(function, bb, inputs, cfg, dom, dfront);
+            if (!pl.success)
                 return nullptr;
 
-            std::unordered_map<BB*, Phi*> thePhis;
-            for (auto& phi : placement)
-                thePhis[phi.first] = new Phi;
+            auto findExistingPhi =
+                [&](BB* pos,
+                    const rir::SmallSet<PhiPlacement::PhiInput>& inps) -> Phi* {
+                for (auto i : *pos) {
+                    if (auto candidate = Phi::Cast(i)) {
+                        if (candidate->nargs() == inps.size()) {
+                            rir::SmallSet<PhiPlacement::PhiInput> candidateInp;
+                            // This only works for value inputs, not for phi
+                            // inputs. I am not sure how it could be extended...
+                            candidate->eachArg([&](BB* inbb, Value* inval) {
+                                candidateInp.insert({inbb, nullptr, inval});
+                            });
+                            if (candidateInp == inps)
+                                return candidate;
+                        };
+                    }
+                }
+                return nullptr;
+            };
 
-            for (auto& computed : placement) {
+            std::unordered_map<BB*, Phi*> thePhis;
+            for (auto& phi : pl.placement) {
+                if (auto p = findExistingPhi(phi.first, phi.second))
+                    thePhis[phi.first] = p;
+                else
+                    thePhis[phi.first] = new Phi;
+            }
+
+            for (auto& computed : pl.placement) {
                 auto& pos = computed.first;
                 auto& phi = thePhis.at(pos);
 
+                // Existing phi
+                if (phi->nargs() > 0)
+                    continue;
+
                 assert(computed.second.size() > 1);
                 for (auto& p : computed.second) {
-                    if (p.aValue) {
-                        auto val = p.aValue;
-                        if (alreadyReplaced.count(val))
-                            val = alreadyReplaced.at(val);
-                        phi->addInput(p.inputBlock, val);
-                    } else {
+                    if (p.aValue)
+                        phi->addInput(p.inputBlock, getReplacedValue(p.aValue));
+                    else
                         phi->addInput(p.inputBlock, thePhis.at(p.otherPhi));
-                    }
                 };
 
                 pos->insert(pos->begin(), phi);
@@ -117,7 +214,7 @@ class TheScopeResolution {
             for (auto& phi : thePhis)
                 phi.second->updateType();
 
-            return thePhis.at(resPhiPos);
+            return thePhis.at(pl.targetPhiPosition);
         };
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -142,6 +239,40 @@ class TheScopeResolution {
                     }
                 }
 
+                if (auto call = CallInstruction::CastCall(i)) {
+                    call->eachCallArg([&](Value* v) {
+                        if (auto mk = MkArg::Cast(v)) {
+                            if (!mk->noReflection)
+                                if (noReflection(mk->prom(),
+                                                 i->hasEnv() ? i->env()
+                                                             : Env::notClosed(),
+                                                 analysis, before))
+                                    mk->noReflection = true;
+                        }
+                    });
+                }
+
+                // If no reflective argument is passed to us, then forcing an
+                // argument cannot see our environment
+                if (function->assumptions().includes(
+                        rir::Assumption::NoReflectiveArgument)) {
+                    if (auto force = Force::Cast(i)) {
+                        if (force->hasEnv()) {
+                            auto arg =
+                                force->arg<0>().val()->followCastsAndForce();
+                            analysis.lookup(
+                                arg, [&](const AbstractPirValue& res) {
+                                    res.ifSingleValue(
+                                        [&](Value* val) { arg = val; });
+                                });
+                            if (LdArg::Cast(arg)) {
+                                force->elideEnv();
+                                force->effects.reset(Effect::Reflection);
+                            }
+                        }
+                    }
+                }
+
                 // StVarSuper where the parent environment is known and
                 // local, can be replaced by simple StVar, if the variable
                 // exists in the super env.
@@ -154,7 +285,7 @@ class TheScopeResolution {
                         auto r = new StVar(sts->varName, sts->val(), aLoad.env);
                         bb->replace(ip, r);
                         sts->replaceUsesWith(r);
-                        alreadyReplaced[sts] = r;
+                        replacedValue[sts] = r;
                     }
                     ip = next;
                     continue;
@@ -183,37 +314,89 @@ class TheScopeResolution {
                                     initiallyMissing = val->type.maybeMissing();
                             });
                             if (!initiallyMissing) {
-                                missing->replaceUsesAndSwapWith(
-                                    new LdConst(R_FalseValue), ip);
+                                auto theFalse = new LdConst(R_FalseValue);
+                                missing->replaceUsesAndSwapWith(theFalse, ip);
+                                replacedValue[missing] = theFalse;
                             }
                         }
                     } else {
                         res.result.ifSingleValue([&](Value* v) {
                             if (v == MissingArg::instance()) {
-                                missing->replaceUsesAndSwapWith(
-                                    new LdConst(R_TrueValue), ip);
+                                auto theTruth = new LdConst(R_TrueValue);
+                                missing->replaceUsesAndSwapWith(theTruth, ip);
+                                replacedValue[missing] = theTruth;
                             }
                         });
                     }
                 }
 
-                analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
+                if (bb->isDeopt()) {
+                    if (auto fs = FrameState::Cast(i)) {
+                        if (auto mk = MkEnv::Cast(fs->env())) {
+                            if (mk->context == 1 && !mk->stub &&
+                                mk->bb() != bb &&
+                                mk->usesAreOnly(
+                                    function->entry,
+                                    {Tag::FrameState, Tag::StVar})) {
+                                analysis.tryMaterializeEnv(
+                                    before, mk,
+                                    [&](const std::unordered_map<
+                                        SEXP, AbstractPirValue>& env) {
+                                        std::vector<SEXP> names;
+                                        std::vector<Value*> values;
+                                        for (auto& e : env) {
+                                            names.push_back(e.first);
+                                            if (e.second.isUnknown())
+                                                return;
+                                            if (auto val = getSingleLocalValue(
+                                                    e.second)) {
+                                                values.push_back(val);
+                                            } else {
+                                                auto phi = tryInsertPhis(
+                                                    mk, e.second, bb, ip, true);
+                                                if (!phi)
+                                                    return;
+                                                values.push_back(phi);
+                                            }
+                                        }
+                                        auto deoptEnv =
+                                            new MkEnv(mk->lexicalEnv(), names,
+                                                      values.data());
+                                        ip = bb->insert(ip, deoptEnv);
+                                        ip++;
+                                        next = ip + 1;
+                                        mk->replaceUsesWithLimits(deoptEnv, bb);
+                                    });
+                            }
+                        }
+                    }
+                }
+
+                analysis.lookupAt(after, i, [&](const AbstractLoad& aLoad) {
                     auto& res = aLoad.result;
+
+                    bool isActualLoad =
+                        LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
 
                     // In case the scope analysis is sure that this is
                     // actually the same as some other PIR value. So let's just
                     // replace it.
                     if (res.isSingleValue()) {
-                        auto value = res.singleValue();
-                        if (value.val->type.isA(i->type) &&
-                            value.recursionLevel == 0) {
-                            auto val = value.val;
-                            if (alreadyReplaced.count(val))
-                                val = alreadyReplaced.at(val);
-                            alreadyReplaced[i] = val;
-                            i->replaceUsesWith(val);
-                            next = bb->remove(ip);
-                            return;
+                        if (auto val = getSingleLocalValue(res)) {
+                            if (val->type.isA(i->type)) {
+                                if (isActualLoad && val->type.maybeMissing()) {
+                                    // LdVar checks for missingness, so we need
+                                    // to preserve this.
+                                    auto chk = new ChkMissing(val);
+                                    ip = bb->insert(ip, chk);
+                                    ip++;
+                                    val = chk;
+                                }
+                                replacedValue[i] = val;
+                                i->replaceUsesWith(val);
+                                next = bb->remove(ip);
+                                return;
+                            }
                         }
                     }
 
@@ -235,12 +418,20 @@ class TheScopeResolution {
                     // the same phi twice (e.g. if a force returns the result
                     // of a load, we will resolve the load and the force) which
                     // ends up being rather painful.
-                    bool isActualLoad =
-                        LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
                     if (!res.isUnknown() && isActualLoad) {
-                        if (auto resPhi = tryInsertPhis(res, bb, ip)) {
-                            i->replaceUsesWith(resPhi);
-                            alreadyReplaced[i] = resPhi;
+                        if (auto resPhi =
+                                tryInsertPhis(i->env(), res, bb, ip, false)) {
+                            Value* val = resPhi;
+                            if (val->type.maybeMissing()) {
+                                // LdVar checks for missingness, so we need
+                                // to preserve this.
+                                auto chk = new ChkMissing(val);
+                                ip = bb->insert(ip, chk);
+                                ip++;
+                                val = chk;
+                            }
+                            i->replaceUsesWith(val);
+                            replacedValue[i] = val;
                             next = bb->remove(ip);
                             return;
                         }
@@ -254,7 +445,7 @@ class TheScopeResolution {
                             auto r = new LdVar(lds->varName, e);
                             bb->replace(ip, r);
                             lds->replaceUsesWith(r);
-                            alreadyReplaced[lds] = r;
+                            replacedValue[lds] = r;
                         }
                         return;
                     }
@@ -279,16 +470,21 @@ class TheScopeResolution {
                             // TODO: if !guess->maybe(closure) we know that the
                             // guess is wrong and could try the next binding.
                             if (!guess->type.isA(PirType::closure())) {
-                                analysis.lookup(
-                                    before, guess,
-                                    [&](const AbstractPirValue& res) {
-                                        if (res.isSingleValue())
-                                            guess = res.singleValue().val;
-                                    });
+                                if (auto i = Instruction::Cast(guess)) {
+                                    analysis.lookupAt(
+                                        before, i,
+                                        [&](const AbstractPirValue& res) {
+                                            if (auto val =
+                                                    getSingleLocalValue(res))
+                                                guess = val;
+                                        });
+                                }
                             }
                             if (guess->type.isA(PirType::closure()) &&
                                 guess->validIn(function)) {
+                                guess = getReplacedValue(guess);
                                 ldfun->replaceUsesWith(guess);
+                                replacedValue[ldfun] = guess;
                                 next = bb->remove(ip);
                                 return;
                             }
@@ -297,15 +493,11 @@ class TheScopeResolution {
                                 analysis
                                     .load(before, ldfun->varName, ldfun->env())
                                     .result;
-                            if (res.isSingleValue()) {
-                                auto firstBinding = res.singleValue().val;
-                                if (firstBinding->validIn(function)) {
-                                    ip =
-                                        bb->insert(ip, new Force(firstBinding,
-                                                                 ldfun->env()));
-                                    ldfun->guessedBinding(*ip);
-                                    next = ip + 2;
-                                }
+                            if (auto firstBinding = getSingleLocalValue(res)) {
+                                ip = bb->insert(
+                                    ip, new Force(firstBinding, ldfun->env()));
+                                ldfun->guessedBinding(*ip);
+                                next = ip + 2;
                                 return;
                             }
                         }
@@ -342,7 +534,7 @@ class TheScopeResolution {
                             new CallSafeBuiltin(b->blt, args, b->srcIdx);
                         b->replaceUsesWith(safe);
                         bb->replace(ip, safe);
-                        alreadyReplaced[b] = safe;
+                        replacedValue[b] = safe;
                     }
                 }
 

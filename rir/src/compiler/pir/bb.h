@@ -71,10 +71,13 @@ class BB {
 
     Instrs::iterator atPosition(Instruction* i);
     Instrs::iterator remove(Instrs::iterator it);
+    Instrs::iterator moveToLast(Instrs::iterator it, BB* other);
     Instrs::iterator moveToEnd(Instrs::iterator it, BB* other);
     Instrs::iterator moveToBegin(Instrs::iterator it, BB* other);
 
     void swapWithNext(Instrs::iterator);
+
+    bool before(Instruction*, Instruction*) const;
 
     void print(std::ostream&, bool tty);
     void printGraph(std::ostream&, bool omitDeoptBranches);

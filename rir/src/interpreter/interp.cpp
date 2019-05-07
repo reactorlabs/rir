@@ -4,9 +4,11 @@
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
+#include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
-#include "ir/RuntimeFeedback_inl.h"
+#include "runtime/TypeFeedback_inl.h"
+#include "safe_force.h"
 #include "utils/Pool.h"
 
 #include <assert.h>
@@ -578,21 +580,26 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             bool notObj = true;
             bool isEager = true;
             if (TYPEOF(arg) == PROMSXP) {
-                if (PRVALUE(arg) == R_UnboundValue) {
+                arg = PRVALUE(arg);
+                if (arg == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
-                } else if (isObject(PRVALUE(arg))) {
-                    notObj = false;
                 }
-            } else if (isObject(arg)) {
-                notObj = false;
             } else if (arg == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
+                isEager = false;
+            }
+            if (isObject(arg)) {
+                notObj = false;
             }
             if (isEager)
                 given.setEager(i);
             if (notObj)
                 given.setNotObj(i);
+            if (isEager && notObj && IS_SIMPLE_SCALAR(arg, REALSXP))
+                given.setSimpleReal(i);
+            if (isEager && notObj && IS_SIMPLE_SCALAR(arg, INTSXP))
+                given.setSimpleInt(i);
         };
 
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
@@ -692,7 +699,7 @@ static Function* dispatch(const CallContext& call, DispatchTable* vt) {
     return fun;
 };
 
-static unsigned PIR_WARMUP =
+unsigned pir::Parameter::RIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
 
 // Call a RIR function. Arguments are still untouched.
@@ -706,7 +713,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!fun->unoptimizable && fun->invocationCount() % PIR_WARMUP == 0) {
+    if (!fun->unoptimizable &&
+        fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -788,7 +796,7 @@ class SlowcaseCounter {
         if (call.suppliedArgs > 0) {
             auto arg = call.stackArg(0);
             if (TYPEOF(arg) == PROMSXP)
-                arg = PRVALUE(arg);
+                arg = safeForcePromise(arg);
             if (arg == R_UnboundValue)
                 message << "arg0 lazy";
             else if (arg == R_MissingArg)
@@ -942,6 +950,26 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
 enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
 #define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
 
+static SEXPREC createFakeSEXP(SEXPTYPE t) {
+    SEXPREC res;
+    res.attrib = R_NilValue;
+    res.gengc_next_node = R_NilValue;
+    res.gengc_prev_node = R_NilValue;
+    res.sxpinfo.gcgen = 1;
+    res.sxpinfo.mark = 1;
+    res.sxpinfo.named = 2;
+    res.sxpinfo.type = t;
+    return res;
+}
+
+static SEXPREC createFakeCONS(SEXP cdr) {
+    auto res = createFakeSEXP(LISTSXP);
+    res.u.listsxp.carval = R_NilValue;
+    res.u.listsxp.tagval = R_NilValue;
+    res.u.listsxp.cdrval = cdr;
+    return res;
+}
+
 #define CHECK_INTEGER_OVERFLOW(ans, naflag)                                    \
     do {                                                                       \
         if (naflag) {                                                          \
@@ -962,15 +990,26 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
+                                                                               \
+        if (flag < 2)                                                          \
+            R_Visible = static_cast<Rboolean>(flag != 1);                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
-        SEXP argslist = CONS_NR(lhs, CONS_NR(rhs, R_NilValue));                \
-        ostack_push(ctx, argslist);                                            \
+                                                                               \
+        if (!env || !(isObject(lhs) || isObject(rhs))) {                       \
+            SEXPREC arglist2 = createFakeCONS(R_NilValue);                     \
+            SEXPREC arglist = createFakeCONS(&arglist2);                       \
+            arglist.u.listsxp.carval = lhs;                                    \
+            arglist2.u.listsxp.carval = rhs;                                   \
+            res = blt(call, prim, &arglist, env);                              \
+        } else {                                                               \
+            SEXP arglist = CONS_NR(lhs, CONS_NR(rhs, R_NilValue));             \
+            ostack_push(ctx, arglist);                                         \
+            res = blt(call, prim, arglist, env);                               \
+            ostack_pop(ctx);                                                   \
+        }                                                                      \
+                                                                               \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        res = blt(call, prim, argslist, env);                                  \
-        if (flag < 2)                                                          \
-            R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        ostack_pop(ctx);                                                       \
     } while (false)
 
 #define DO_FAST_BINOP(op, op2)                                                 \
@@ -1021,11 +1060,13 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
     do {                                                                       \
         SEXP a = ostack_at(ctx, 0);                                            \
         SEXP b = ostack_at(ctx, 1);                                            \
-        if (TYPEOF(a) == res_type && NO_REFERENCES(a)) {                       \
+        if (NO_REFERENCES(a)) {                                                \
+            TYPEOF(a) = res_type;                                              \
             res = a;                                                           \
             ostack_pop(ctx);                                                   \
             ostack_at(ctx, 0) = a;                                             \
-        } else if (TYPEOF(b) == res_type && NO_REFERENCES(b)) {                \
+        } else if (NO_REFERENCES(b)) {                                         \
+            TYPEOF(b) = res_type;                                              \
             res = b;                                                           \
             ostack_pop(ctx);                                                   \
         } else {                                                               \
@@ -1050,6 +1091,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
         DO_FAST_BINOP(op, op2);                                                \
         if (res_type) {                                                        \
             STORE_BINOP(res_type, int_res, real_res);                          \
+            R_Visible = (Rboolean) true;                                       \
         } else {                                                               \
             BINOP_FALLBACK(#op);                                               \
             ostack_pop(ctx);                                                   \
@@ -1116,6 +1158,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         if (IS_SIMPLE_SCALAR(val, REALSXP)) {                                  \
             res = Rf_allocVector(REALSXP, 1);                                  \
             *REAL(res) = (*REAL(val) == NA_REAL) ? NA_REAL : op * REAL(val);   \
+            R_Visible = (Rboolean) true;                                       \
         } else if (IS_SIMPLE_SCALAR(val, INTSXP)) {                            \
             Rboolean naflag = FALSE;                                           \
             res = Rf_allocVector(INTSXP, 1);                                   \
@@ -1128,6 +1171,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
                 break;                                                         \
             }                                                                  \
             CHECK_INTEGER_OVERFLOW(res, naflag);                               \
+            R_Visible = (Rboolean) true;                                       \
         } else {                                                               \
             UNOP_FALLBACK(#op);                                                \
         }                                                                      \
@@ -1270,36 +1314,94 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx,
     UNPROTECT(1);
 }
 
+RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
+                               InterpreterInstance* ctx) {
+    SEXP val = ostack_top(ctx);
+    // Scalar integers (already done)
+    if (IS_SIMPLE_SCALAR(val, INTSXP) && *INTEGER(val) != NA_INTEGER) {
+        return;
+    } else if (IS_SIMPLE_SCALAR(val, REALSXP) && NO_REFERENCES(val) &&
+               !ISNAN(*REAL(val))) {
+        double r = *REAL(val);
+        TYPEOF(val) = INTSXP;
+        *INTEGER(val) = (int)(ceil_ ? ceil(r) : floor(r));
+        return;
+    } else if (IS_SIMPLE_SCALAR(val, LGLSXP) && NO_REFERENCES(val) &&
+               *LOGICAL(val) != NA_LOGICAL) {
+        TYPEOF(val) = INTSXP;
+        return;
+    }
+    int x = -20;
+    bool isNaOrNan = false;
+    if (TYPEOF(val) == INTSXP || TYPEOF(val) == REALSXP ||
+        TYPEOF(val) == LGLSXP) {
+        if (XLENGTH(val) == 0) {
+            Rf_errorcall(getSrcAt(c, pc - 1, ctx), "argument of length 0");
+            x = NA_INTEGER;
+            isNaOrNan = false;
+        } else {
+            switch (TYPEOF(val)) {
+            case INTSXP: {
+                int i = *INTEGER(val);
+                if (i == NA_INTEGER) {
+                    x = NA_INTEGER;
+                    isNaOrNan = true;
+                } else {
+                    x = i;
+                    isNaOrNan = false;
+                }
+                break;
+            }
+            case REALSXP: {
+                double r = *REAL(val);
+                if (ISNAN(r)) {
+                    x = NA_INTEGER;
+                    isNaOrNan = true;
+                } else {
+                    x = (int)(ceil_ ? ceil(r) : floor(r));
+                    isNaOrNan = false;
+                }
+                break;
+            }
+            case LGLSXP: {
+                int l = *LOGICAL(val);
+                if (l == NA_LOGICAL) {
+                    x = NA_INTEGER;
+                    isNaOrNan = true;
+                } else {
+                    x = (int)l;
+                    isNaOrNan = false;
+                }
+                break;
+            }
+            default:
+                assert(false);
+            }
+            if (XLENGTH(val) > 1) {
+                Rf_warningcall(getSrcAt(c, pc - 1, ctx),
+                               "numerical expression has multiple "
+                               "elements: only the first used");
+            }
+        }
+    } else { // Everything else
+        x = NA_INTEGER;
+        isNaOrNan = true;
+    }
+    if (isNaOrNan) {
+        Rf_errorcall(getSrcAt(c, pc - 1, ctx), "NA/NaN argument");
+    }
+    SEXP res = Rf_allocVector(INTSXP, 1);
+    *INTEGER(res) = x;
+    ostack_pop(ctx);
+    ostack_push(ctx, res);
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
 // This happens since enabling -fno-exceptions, but the error message is
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
-
-RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION) {
-            if (pos == 0)
-                return cptr;
-            pos--;
-        }
-        cptr = cptr->nextcontext;
-    }
-    assert(false);
-    return nullptr;
-}
-
-RCNTXT* findFunctionContextFor(SEXP e) {
-    auto cptr = R_GlobalContext;
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION && cptr->cloenv == e) {
-            return cptr;
-        }
-        cptr = cptr->nextcontext;
-    }
-    return nullptr;
-}
 
 /*
  * This function takes some deopt metadata and stack frame contents on the
@@ -1520,6 +1622,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             bool hasMissing = false;
             for (long i = n - 1; i >= 0; --i) {
                 SEXP val = ostack_pop(ctx);
+                ENSURE_NAMED(val);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
@@ -1579,8 +1682,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto names = pc;
             advanceImmediateN(n);
             std::vector<SEXP>* args = new std::vector<SEXP>();
-            for (size_t i = 0; i < n; ++i)
-                args->push_back(ostack_pop(ctx));
+            for (size_t i = 0; i < n; ++i) {
+                SEXP val = ostack_pop(ctx);
+                ENSURE_NAMED(val);
+                args->push_back(val);
+            }
             auto envStub =
                 new LazyEnvironment(args, parent, names, ctx, localsBase);
             envStubs.push_back(envStub);
@@ -1637,6 +1743,48 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             default:
                 Rf_error("attempt to apply non-function");
             }
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_for_update_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            SEXP loc = cachedGetBindingCell(env, id, ctx, bindingCache);
+            bool isLocal = loc;
+            SEXP res = nullptr;
+
+            if (isLocal) {
+                res = CAR(loc);
+                if (res == R_UnboundValue)
+                    isLocal = false;
+            }
+
+            if (!isLocal) {
+                SEXP sym = cp_pool_at(ctx, id);
+                res = Rf_findVar(sym, env);
+            }
+
+            if (res == R_UnboundValue) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            }
+
+            // if promise, evaluate & return
+            if (TYPEOF(res) == PROMSXP)
+                res = promiseValue(res, ctx);
+
+            if (res != R_NilValue) {
+                if (isLocal)
+                    ENSURE_NAMED(res);
+                else if (NAMED(res) < 2)
+                    SET_NAMED(res, 2);
+            }
+
             ostack_push(ctx, res);
             NEXT();
         }
@@ -1842,8 +1990,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
             auto names = (Immediate*)pc;
@@ -1867,13 +2015,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(record_binop_) {
+        INSTRUCTION(record_type_) {
             ObservedValues* feedback = (ObservedValues*)pc;
-            SEXP l = ostack_at(ctx, 1);
-            SEXP r = ostack_top(ctx);
-            feedback[0].record(l);
-            feedback[1].record(r);
-            pc += 2 * sizeof(ObservedValues);
+            SEXP t = ostack_top(ctx);
+            feedback->record(t);
+            pc += sizeof(ObservedValues);
             NEXT();
         }
 
@@ -1889,8 +2035,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostack_top(ctx), n, ast, arguments, env, given,
@@ -1915,8 +2061,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             CallContext call(c, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), env, given, ctx);
             res = doCall(call, ctx);
@@ -1939,8 +2085,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostack_at(ctx, n), n, ast,
@@ -1991,8 +2137,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
@@ -2000,19 +2146,20 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                              given, ctx);
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
-            bool dispatchFail = !matches(call, fun->signature());
-            if (fun->invocationCount() % PIR_WARMUP == 0)
-                if (addDynamicAssumptionsForOneTarget(call, fun->signature()) !=
-                    fun->signature().assumptions)
+            bool dispatchFail = !fun->dead && !matches(call, fun->signature());
+            if (fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
+                Assumptions assumptions =
+                    addDynamicAssumptionsForOneTarget(call, fun->signature());
+                if (assumptions != fun->signature().assumptions)
                     // We have more assumptions available, let's recompile
                     dispatchFail = true;
+            }
 
             if (dispatchFail) {
                 auto dt = DispatchTable::unpack(BODY(callee));
                 fun = dispatch(call, dt);
                 // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
-                assert(fun != dt->baseline());
             }
             advanceImmediate();
 
@@ -2118,6 +2265,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(popn_) {
+            Immediate i = readImmediate();
+            advanceImmediate();
+            ostack_popn(ctx, i);
+            NEXT();
+        }
+
         INSTRUCTION(swap_) {
             SEXP lhs = ostack_pop(ctx);
             SEXP rhs = ostack_pop(ctx);
@@ -2193,15 +2347,30 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(inc_) {
             SEXP val = ostack_top(ctx);
-            assert(TYPEOF(val) == INTSXP);
-            int i = INTEGER(val)[0];
-            if (MAYBE_SHARED(val)) {
+            SLOWASSERT(TYPEOF(val) == INTSXP);
+            if (MAYBE_REFERENCED(val)) {
+                int i = INTEGER(val)[0];
                 ostack_pop(ctx);
                 SEXP n = Rf_allocVector(INTSXP, 1);
                 INTEGER(n)[0] = i + 1;
                 ostack_push(ctx, n);
             } else {
                 INTEGER(val)[0]++;
+            }
+            NEXT();
+        }
+
+        INSTRUCTION(dec_) {
+            SEXP val = ostack_top(ctx);
+            SLOWASSERT(TYPEOF(val) == INTSXP);
+            if (MAYBE_REFERENCED(val)) {
+                int i = INTEGER(val)[0];
+                ostack_pop(ctx);
+                SEXP n = Rf_allocVector(INTSXP, 1);
+                INTEGER(n)[0] = i - 1;
+                ostack_push(ctx, n);
+            } else {
+                INTEGER(val)[0]--;
             }
             NEXT();
         }
@@ -2411,7 +2580,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 rhs = PRVALUE(rhs);
             if (TYPEOF(lhs) == PROMSXP && PRVALUE(lhs) != R_UnboundValue)
                 lhs = PRVALUE(lhs);
-            ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
+            // Special case for closures: (level 1) deep compare with body
+            // expression instead of body object, to ensure that a compiled
+            // closure is equal to the uncompiled one
+            if (lhs != rhs && TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP &&
+                CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
+                BODY_EXPR(lhs) == BODY_EXPR(rhs))
+                ostack_push(ctx, R_TrueValue);
+            else
+                ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
+
             NEXT();
         }
 
@@ -2539,6 +2717,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(ceil_) {
+            castInt(true, c, pc, ctx);
+            NEXT();
+        }
+
+        INSTRUCTION(floor_) {
+            castInt(false, c, pc, ctx);
+            NEXT();
+        }
+
         INSTRUCTION(asast_) {
             SEXP val = ostack_pop(ctx);
             assert(TYPEOF(val) == PROMSXP);
@@ -2572,6 +2760,19 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             case LISTSXP:
                 res = TYPEOF(val) == LISTSXP || TYPEOF(val) == NILSXP;
+                break;
+
+            case static_cast<Immediate>(TypeChecks::RealNonObject):
+                res = TYPEOF(val) == REALSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, REALSXP);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+                res = TYPEOF(val) == INTSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, INTSXP);
                 break;
 
             default:
@@ -2763,8 +2964,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = val;                                                         \
-        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx) &&                  \
-                   TYPEOF(idx) == vectype) {                                   \
+        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx)) {                  \
+            TYPEOF(idx) = vectype;                                             \
             res = idx;                                                         \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \
@@ -2790,6 +2991,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
+            R_Visible = (Rboolean) true;
             NEXT();
 
         // ---------
@@ -2844,6 +3046,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP vec = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
@@ -2882,6 +3087,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP mtx = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 3);
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
@@ -2962,6 +3170,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             INTEGER(vec)[idx_] = *INTEGER(val);
                             break;
                         case VECSXP:
+                            // Avoid recursive vectors
+                            if (val == vec)
+                                val = Rf_shallow_duplicate(val);
                             SET_VECTOR_ELT(vec, idx_, val);
                             break;
                         }
@@ -2973,6 +3184,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
                 ostack_set(ctx, 1, vec);
@@ -3070,6 +3284,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             INTEGER(mtx)[idx_] = *INTEGER(val);
                             break;
                         case VECSXP:
+                            // Avoid recursive vectors
+                            if (val == mtx)
+                                val = Rf_shallow_duplicate(val);
                             SET_VECTOR_ELT(mtx, idx_, val);
                             break;
                         }
@@ -3081,6 +3298,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
@@ -3150,6 +3370,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 #endif
 
+            if (!pir::Parameter::DEOPT_CHAOS) {
+                // TODO: this version is still reachable from static call inline
+                // caches. Thus we need to preserve it forever. We need some
+                // dependency management here.
+                Pool::insert(c->container());
+                // remove the deoptimized function. Unless on deopt chaos,
+                // always recompiling would just blow testing time...
+                auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
+                dt->remove(c);
+            }
             assert(m->numFrames >= 1);
             size_t stackHeight = 0;
             for (size_t i = 0; i < m->numFrames; ++i)
@@ -3251,7 +3481,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
 
-            if (res == NULL) {
+            if (res != NULL) {
+                R_Visible = (Rboolean) true;
+            } else {
                 BINOP_FALLBACK(":");
             }
 
@@ -3334,17 +3566,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(set_shared_) {
             SEXP val = ostack_top(ctx);
-            INCREMENT_NAMED(val);
-            NEXT();
-        }
-
-        INSTRUCTION(make_unique_) {
-            SEXP val = ostack_top(ctx);
-            if (MAYBE_SHARED(val)) {
-                val = Rf_shallow_duplicate(val);
-                ostack_set(ctx, 0, val);
-                SET_NAMED(val, 1);
-            }
+            if (NAMED(val) < 2)
+                SET_NAMED(val, 2);
             NEXT();
         }
 
@@ -3415,7 +3638,8 @@ SEXP rirExpr(SEXP s) {
     return s;
 }
 
-SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
+SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
+                     SEXP suppliedvars) {
     auto ctx = globalContext();
 
     RList args(arglist);
@@ -3432,11 +3656,27 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
     if (!names.empty()) {
         names.resize(nargs);
     }
+    // Add extra arguments from object dispatching
+    if (suppliedvars != R_NilValue) {
+        auto extra = RList(suppliedvars);
+        for (auto a = extra.begin(); a != extra.end(); ++a) {
+            if (a.hasTag()) {
+                auto var = Pool::insert(a.tag());
+                if (std::find(names.begin(), names.end(), var) == names.end()) {
+                    ostack_push(ctx, *a);
+                    names.resize(nargs + 1);
+                    names[nargs] = var;
+                    nargs++;
+                }
+            }
+        }
+    }
 
     CallContext call(nullptr, op, nargs, ast, ostack_cell_at(ctx, nargs - 1),
                      nullptr, names.empty() ? nullptr : names.data(), rho,
                      Assumptions(), ctx);
     call.arglist = arglist;
+    call.safeForceArgs();
 
     auto res = rirCall(call, ctx);
     ostack_popn(ctx, call.passedArgs);

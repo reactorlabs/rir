@@ -57,7 +57,7 @@ struct ObservedValues {
 
     ObservedValues() : numTypes(0) {}
 
-    void record(SEXP e) {
+    RIR_INLINE void record(SEXP e) {
         ObservedType type(e);
         if (numTypes < MaxTypes) {
             int i = 0;
@@ -73,6 +73,14 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 #pragma pack(pop)
+
+enum class TypeChecks : uint32_t {
+    // Must be bigger than smallest sexptype
+    IntegerNonObject = 3330,
+    IntegerSimpleScalar = 3331,
+    RealNonObject = 3332,
+    RealSimpleScalar = 3334,
+};
 
 } // namespace rir
 #endif

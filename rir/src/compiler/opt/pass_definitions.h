@@ -125,6 +125,19 @@ class PASS(OptimizeContexts);
 
 class PASS(DeadStoreRemoval);
 
+class PASS(GVN);
+
+class PASS(LoadElision);
+
+class PASS(TypeInference);
+
+class PASS(TypeSpeculation);
+
+/*
+ * Loop Invariant Code motion
+ */
+class PASS(HoistInstruction);
+
 class PhaseMarker : public PirTranslator {
   public:
     explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}

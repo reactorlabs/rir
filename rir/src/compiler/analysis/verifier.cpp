@@ -3,6 +3,18 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
+/*
+ * When does the verifier run, and is it the fast or slow version?
+ *
+ *                        FULLVERIFIER   ENABLE_SLOWASSERT   Release   NDEBUG
+ * After RIR to PIR          slow             fast            fast       x
+ * After each PIR pass       slow             fast            x          x
+ * After all PIR opts        [1]              slow            fast       x
+ * Before PIR to RIR         slow             fast            x          x
+ *
+ * [1] Not run, subsumed by running the full verifier after each PIR pass.
+ */
+
 namespace {
 using namespace rir::pir;
 
@@ -187,17 +199,6 @@ class TheVerifier {
         if (auto phi = Phi::Cast(i)) {
             phi->eachArg([&](BB* input, Value* v) {
                 if (auto iv = Instruction::Cast(v)) {
-                    if (iv == phi) {
-                        // Note: can happen in a one-block loop, but only if it
-                        // is not edge-split
-                        std::cerr << "Error at instruction '";
-                        i->print(std::cerr);
-                        std::cerr << "': input '";
-                        iv->printRef(std::cerr);
-                        std::cerr << "' phi has itself as input\n";
-                        ok = false;
-                    }
-
                     if (input == phi->bb()) {
                         // Note: can happen in a one-block loop, but only if it
                         // is not edge-split

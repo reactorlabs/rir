@@ -6,7 +6,7 @@ extern "C" Rboolean(Rf_isObject)(SEXP s);
 namespace rir {
 namespace pir {
 
-void PirType::print(std::ostream& out) { out << *this << "\n"; }
+void PirType::print(std::ostream& out) const { out << *this << "\n"; }
 
 void PirType::merge(SEXPTYPE sexptype) {
     assert(isRType());
@@ -31,11 +31,14 @@ void PirType::merge(SEXPTYPE sexptype) {
         t_.r.set(RType::env);
         break;
     case PROMSXP:
-        t_.r.set(RType::prom);
+        flags_.set(TypeFlags::lazy);
+        flags_.set(TypeFlags::promiseWrapped);
+        t_.r = RTypeSet::Any();
         break;
     case EXPRSXP:
         t_.r.set(RType::ast);
-        // fall through
+        t_.r.set(RType::code);
+        break;
     case LANGSXP:
         t_.r.set(RType::code);
         break;
@@ -76,7 +79,12 @@ void PirType::merge(SEXPTYPE sexptype) {
 }
 
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
-    merge(TYPEOF(e));
+    if (e == R_MissingArg)
+        t_.r.set(RType::missing);
+    else if (e == R_UnboundValue)
+        t_.r.set(RType::unbound);
+    else
+        merge(TYPEOF(e));
 
     if (!Rf_isObject(e)) {
         flags_.reset(TypeFlags::maybeObject);
@@ -84,20 +92,33 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
 
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
-            flags_.set(TypeFlags::isScalar);
+            flags_.reset(TypeFlags::maybeNotScalar);
     }
 }
 
 void PirType::merge(const ObservedValues& other) {
-    if (other.numTypes == 0 || other.numTypes == ObservedValues::MaxTypes)
+    assert(other.numTypes);
+
+    if (other.numTypes == ObservedValues::MaxTypes) {
+        merge(any());
+        flags_.set(TypeFlags::maybeObject);
+        flags_.set(TypeFlags::maybeNotScalar);
         return;
+    }
+
+    if (other.numTypes == ObservedValues::MaxTypes) {
+        merge(any());
+        flags_.set(TypeFlags::maybeObject);
+        flags_.set(TypeFlags::maybeNotScalar);
+        return;
+    }
 
     for (size_t i = 0; i < other.numTypes; ++i) {
         const auto& record = other.seen[i];
         if (record.object)
             flags_.set(TypeFlags::maybeObject);
         if (!record.scalar)
-            flags_.reset(TypeFlags::isScalar);
+            flags_.set(TypeFlags::maybeNotScalar);
 
         merge(record.sexptype);
     }

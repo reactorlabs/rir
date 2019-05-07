@@ -104,11 +104,13 @@ static Sources hasSources(Opcode bc) {
         return Sources::Required;
 
     case Opcode::inc_:
+    case Opcode::dec_:
     case Opcode::identical_noforce_:
     case Opcode::push_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
@@ -149,13 +151,13 @@ static Sources hasSources(Opcode bc) {
     case Opcode::set_names_:
     case Opcode::force_:
     case Opcode::pop_:
+    case Opcode::popn_:
     case Opcode::close_:
     case Opcode::asast_:
     case Opcode::dup_:
     case Opcode::dup2_:
     case Opcode::for_seq_size_:
     case Opcode::swap_:
-    case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::ensure_named_:
     case Opcode::return_:
@@ -169,10 +171,12 @@ static Sources hasSources(Opcode bc) {
     case Opcode::lgl_and_:
     case Opcode::lgl_or_:
     case Opcode::record_call_:
-    case Opcode::record_binop_:
+    case Opcode::record_type_:
     case Opcode::deopt_:
     case Opcode::pop_context_:
     case Opcode::push_context_:
+    case Opcode::ceil_:
+    case Opcode::floor_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

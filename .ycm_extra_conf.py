@@ -43,7 +43,7 @@ flags = [
     '-DENABLE_SLOWASSERT',
     '-I'+DirectoryOfThisScript()+'/external/custom-r/include',
     '-I'+DirectoryOfThisScript()+'/rir/src',
-    '-Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wctor-dtor-privacy -Wmissing-include-dirs -Wstrict-overflow=5 -Werror -fno-rtti -fno-exceptions',
+    '-Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wctor-dtor-privacy -Wmissing-include-dirs -Wstrict-overflow=5 -Werror -fno-rtti -fno-exceptions -Wimplicit-fallthrough',
     '-std=c++14',
 ]
 

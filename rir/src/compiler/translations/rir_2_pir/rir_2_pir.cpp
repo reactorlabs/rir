@@ -3,6 +3,7 @@
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
 #include "../../transform/insert_cast.h"
+#include "../../util/ConvertAssumptions.h"
 #include "../../util/arg_match.h"
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
@@ -92,9 +93,7 @@ void State::mergeIn(const State& incom, BB* incomBB) {
         Phi* p = Phi::Cast(stack.at(i));
         assert(p);
         Value* in = incom.stack.at(i);
-        if (in != p) {
-            p->addInput(incomBB, in);
-        }
+        p->addInput(incomBB, in);
     }
     incomBB->setNext(entryBB);
 }
@@ -201,7 +200,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
         v = insert(new LdVar(bc.immediateConst(), env));
+        // Checkpoint might be useful if we end up inlining this force
+        if (!inPromise())
+            addCheckpoint(srcCode, pos, stack, insert);
         push(insert(new Force(v, env)));
         break;
 
@@ -231,6 +234,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::aslogical_:
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
+
+    case Opcode::ceil_: {
+        push(insert(new AsInt(pop(), true)));
+        break;
+    }
+
+    case Opcode::floor_: {
+        push(insert(new AsInt(pop(), false)));
+        break;
+    }
 
     case Opcode::ldfun_:
         push(insert(new LdFun(bc.immediateConst(), env)));
@@ -271,9 +284,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         pop();
         break;
 
-    case Opcode::record_binop_: {
-        at(0)->typeFeedback.merge(bc.immediate.binopFeedback[0]);
-        at(1)->typeFeedback.merge(bc.immediate.binopFeedback[1]);
+    case Opcode::popn_: {
+        for (int i = bc.immediate.i; i > 0; --i)
+            pop();
+        break;
+    }
+
+    case Opcode::record_type_: {
+        if (bc.immediate.typeFeedback.numTypes)
+            at(0)->typeFeedback.merge(bc.immediate.typeFeedback);
         break;
     }
 
@@ -301,7 +320,24 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // currently it does not pay off to put any deopts in there.
         if (callTargetFeedback.count(callee)) {
             auto& feedback = callTargetFeedback.at(callee);
-            if (feedback.numTargets == 1)
+            // If this call was never executed. Might as well compile an
+            // unconditional deopt
+            if (!inPromise() && srcCode->funInvocationCount > 1 &&
+                feedback.taken == 0) {
+                // To avoid deoptimization loops, we must ensure that on
+                // deoptimization we actually record the new call target.
+                // We do this by jumping back, before the record call bc.
+                auto deoptPos = pos - BC::recordCall().size();
+                if (*deoptPos == Opcode::record_call_) {
+                    auto fs =
+                        insert.registerFrameState(srcCode, deoptPos, stack);
+                    insert(new Deopt(fs));
+                    stack.clear();
+                    break;
+                }
+            }
+
+            if (feedback.taken > 1 && feedback.numTargets == 1)
                 monomorphic = feedback.getTarget(srcCode, 0);
         }
 
@@ -376,16 +412,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto arg = tryCreateArg(promiseCode, insert, eager);
                     if (!arg)
                         return false;
-
-                    auto mk = MkArg::Cast(arg);
-                    if (mk && mk->isEager()) {
-                        given.setEager(i);
-                        if (mk->eagerArg() == MissingArg::instance())
-                            given.remove(Assumption::NoExplicitlyMissingArgs);
-                    }
-                    Value* value = arg->followCastsAndForce();
-                    if (!MkArg::Cast(value) && !value->type.maybeObj())
-                        given.setNotObj(i);
+                    writeArgTypeToAssumptions(given, arg, i);
 
                     args.push_back(arg);
                 }
@@ -505,8 +532,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         SEXP target = rir::Pool::get(bc.immediate.callBuiltinFixedArgs.builtin);
 
         std::vector<Value*> args(n);
-        for (size_t i = 0; i < n; ++i)
+        for (size_t i = 0; i < n; ++i) {
             args[n - i - 1] = pop();
+        }
 
         assert(TYPEOF(target) == BUILTINSXP);
         push(insert(BuiltinCallFactory::New(env, target, args, ast)));
@@ -682,16 +710,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         UNOP(Plus, uplus_);
         UNOP(Minus, uminus_);
         UNOP(Not, not_);
-        UNOP(Length, length_);
 #undef UNOP
 
 #define UNOP_NOENV(Name, Op)                                                   \
     case Opcode::Op: {                                                         \
-        v = pop();                                                             \
-        push(insert(new Name(v)));                                             \
+        push(insert(new Name(pop())));                                         \
         break;                                                                 \
     }
+        UNOP_NOENV(Length, length_);
         UNOP_NOENV(Inc, inc_);
+        UNOP_NOENV(Dec, dec_);
 #undef UNOP_NOENV
 
     case Opcode::missing_:
@@ -718,18 +746,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::put_: {
         x = top();
-        for (size_t i = 0; i < bc.immediate.i - 1; ++i)
+        for (size_t i = 0; i < bc.immediate.i; ++i)
             set(i, at(i + 1));
         set(bc.immediate.i, x);
         break;
     }
 
     case Opcode::ensure_named_:
-        // Recomputed automatically in the backend
-        break;
-
     case Opcode::set_shared_:
-        push(insert(new SetShared(pop())));
+        // Recomputed automatically in the backend
         break;
 
     case Opcode::invisible_:
@@ -758,7 +783,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::push_code_:
     case Opcode::set_names_:
     case Opcode::names_:
-    case Opcode::make_unique_:
 
     // Invalid opcodes:
     case Opcode::invalid_:
@@ -1036,6 +1060,19 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 log.failed("Abort r2p due to unsupported bc");
                 return nullptr;
             }
+
+            if (!inPromise() && !insert.getCurrentBB()->isEmpty()) {
+                auto last = insert.getCurrentBB()->last();
+
+                if (Deopt::Cast(last)) {
+                    finger = end;
+                    continue;
+                }
+
+                if (last->isDeoptBarrier())
+                    addCheckpoint(srcCode, nextPos, cur.stack, insert);
+            }
+
             if (cur.stack.size() != size - bc.popCount() + bc.pushCount()) {
                 srcCode->print(std::cerr);
                 std::cerr << "After interpreting '";
@@ -1045,11 +1082,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                           << size << " to " << cur.stack.size() << "\n";
                 assert(false);
                 return nullptr;
-            }
-
-            if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->isDeoptBarrier()) {
-                addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
         }
     }
