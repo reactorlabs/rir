@@ -58,7 +58,7 @@ DEF_INSTR(ldvar_, 1, 0, 1, 0)
  * ldvar_:: like ldvar.
  * Stores an additional immediate with a unique number for the cache bindings.
  */
-DEF_INSTR(ldvar_cache_, 2, 0, 1, 0)
+DEF_INSTR(ldvar_cached_, 2, 0, 1, 0)
 
 /**
  * ldvar_:: like ldvar.
@@ -75,7 +75,7 @@ DEF_INSTR(ldvar_noforce_, 1, 0, 1, 1)
  * ldvar_noforce_cache:: like ldvar_cache but additionaly stores a unique cache
  * binding number.
  */
-DEF_INSTR(ldvar_noforce_cache_, 2, 0, 1, 1)
+DEF_INSTR(ldvar_noforce_cached_, 2, 0, 1, 1)
 
 /**
  * ldvar_super_:: take immediate CP index of symbol, finding binding in
@@ -107,7 +107,7 @@ DEF_INSTR(ldloc_, 1, 0, 1, 1)
 /**
  * stvar_:: assign tos to the immediate symbol. May be in cache
  */
-DEF_INSTR(starg_cache_, 2, 1, 0, 0)
+DEF_INSTR(starg_cached_, 2, 1, 0, 0)
 
 /**
  * stvar_:: assign tos to the immediate symbol. We know it was not previously
@@ -118,7 +118,7 @@ DEF_INSTR(stvar_, 1, 1, 0, 0)
 /**
  * stvar_cache:: like stvar but the var may be in the cache.
  */
-DEF_INSTR(stvar_cache_, 2, 1, 0, 0)
+DEF_INSTR(stvar_cached_, 2, 1, 0, 0)
 
 /**
  * stvar_super_:: assign tos to the immediate symbol, lookup starts in the

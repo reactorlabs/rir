@@ -1825,7 +1825,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(ldvar_cache_) {
+        INSTRUCTION(ldvar_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -1872,7 +1872,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(ldvar_noforce_cache_) {
+        INSTRUCTION(ldvar_noforce_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -2003,7 +2003,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(stvar_cache_) {
+        INSTRUCTION(stvar_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -2018,7 +2018,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(starg_cache_) {
+        INSTRUCTION(starg_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -3414,11 +3414,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(guard_fun_) {
-#ifndef UNSOUND_OPTS
             SEXP sym = readConst(ctx, readImmediate());
-#else
-            readConst(ctx, readImmediate());
-#endif
             advanceImmediate();
             res = readConst(ctx, readImmediate());
             advanceImmediate();

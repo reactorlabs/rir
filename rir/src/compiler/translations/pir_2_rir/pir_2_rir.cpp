@@ -167,7 +167,7 @@ class Pir2Rir {
                         next = code.erase(it, plus(next, 1));
                         next = code.emplace(next, BC::ldvar(arg), noSource);
                         changed = true;
-                    } else if (bc.is(rir::Opcode::ldvar_noforce_cache_) &&
+                    } else if (bc.is(rir::Opcode::ldvar_noforce_cached_) &&
                                next != code.end() &&
                                next->first.is(rir::Opcode::force_)) {
                         auto arg =

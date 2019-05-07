@@ -439,30 +439,20 @@ class SSAAllocator {
     }
 };
 
-struct nameAndEnvHash {
-  public:
-    template <typename T, typename U>
-    std::size_t operator()(const std::pair<T, U>& x) const {
-        return std::hash<T>()(x.first) ^ std::hash<U>()(x.second);
-    }
-};
-
 class CachePositionAllocator {
   public:
     typedef size_t SlotNumber;
 
     size_t numberOfBindings() { return uniqueNumbers.size(); }
     SlotNumber slotFor(SEXP varName, Value* environment) {
-        std::pair<SEXP, Value*> key =
-            std::pair<SEXP, Value*>(varName, environment);
+        NameAndEnv key = NameAndEnv(varName, environment);
         return uniqueNumbers.emplace(key, uniqueNumbers.size() + 1)
             .first->second;
     }
 
   private:
-    typedef std::pair<SEXP, Value*> nameAndEnv;
-
-    std::unordered_map<nameAndEnv, SlotNumber, nameAndEnvHash> uniqueNumbers;
+    typedef std::pair<SEXP, Value*> NameAndEnv;
+    std::unordered_map<NameAndEnv, SlotNumber, pairhash> uniqueNumbers;
 };
 
 } // namespace pir

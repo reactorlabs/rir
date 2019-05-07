@@ -618,11 +618,11 @@ BC_NOARGS(V, _)
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
-        case Opcode::ldvar_noforce_cache_:
-        case Opcode::ldvar_cache_:
+        case Opcode::ldvar_noforce_cached_:
+        case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
-        case Opcode::stvar_cache_:
-        case Opcode::starg_cache_:
+        case Opcode::stvar_cached_:
+        case Opcode::starg_cached_:
             memcpy(&immediate.poolAndCache, pc, sizeof(PoolAndCacheIdxs));
             break;
         case Opcode::call_implicit_:
