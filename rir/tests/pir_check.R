@@ -12,7 +12,7 @@ stopifnot(pir.check(
     c(j)
     j <- j + 1
     }
-  }, LookupOutOfLoop, warmup=function(f) f()))
+  }, LdFunInFirstBB, warmup=function(f) f()))
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
 stopifnot(!pir.check(function(x = 4) {
   print("PIR doesn't support default args")

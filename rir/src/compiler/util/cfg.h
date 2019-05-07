@@ -23,7 +23,6 @@ class CFG {
     bool isMergeBlock(BB* a) const;
     const BBList& immediatePredecessors(BB* a) const;
     const BBList& exits() const { return exits_; }
-    size_t size() const { return predecessors_.size(); }
 };
 
 class DominanceGraph {

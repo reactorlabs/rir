@@ -51,6 +51,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::Constantfold());
         optimizations.push_back(new pir::Cleanup());
         optimizations.push_back(new pir::DelayInstr());
+        optimizations.push_back(new pir::LoopInvariant());
         optimizations.push_back(new pir::HoistInstruction());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
@@ -109,11 +110,8 @@ void Configurations::defaultOptimizations() {
     // ==== Phase 4) Final round of default opts
     for (size_t i = 0; i < 3; ++i) {
         addDefaultOpt();
-
         optimizations.push_back(new pir::CleanupCheckpoints());
-        optimizations.push_back(new pir::LoopInvariant());
-
-        phasemarker("Phase 4: finished");
     }
+    phasemarker("Phase 4: finished");
 }
 } // namespace rir

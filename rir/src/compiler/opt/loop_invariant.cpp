@@ -1,40 +1,33 @@
 #include "../analysis/loop_detection.h"
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
 #include "../util/cfg.h"
 #include "../util/safe_builtins_list.h"
-#include "../util/visitor.h"
-#include "R/r.h"
 #include "pass_definitions.h"
 
 namespace rir {
 namespace pir {
 
-typedef std::pair<BB*, BB*> BackEdge;
-typedef std::function<bool(Instruction*)> InstrActionPredicate;
+bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
+    auto noEnvironmentTainting = [](Instruction* i) {
+        if (LdFun::Cast(i))
+            return true;
 
-auto noEnvironmentTainting = [](Instruction* i) {
-    if (LdFun::Cast(i))
-        return true;
+        if (auto call = CallBuiltin::Cast(i))
+            return SafeBuiltinsList::nonObject(call->builtinId);
 
-    if (auto call = CallBuiltin::Cast(i))
-        return SafeBuiltinsList::nonObject(call->builtinId);
+        if (CallSafeBuiltin::Cast(i))
+            return true;
 
-    if (CallSafeBuiltin::Cast(i))
-        return true;
+        if (CallInstruction::CastCall(i))
+            return false;
 
-    if (CallInstruction::CastCall(i))
-        return false;
-
-    return !(i->mayUseReflection());
-};
-
-bool isSafeToHoistLoads(LoopDetection::Loop& loop) {
-    return loop.holdsPropery(noEnvironmentTainting);
+        return !(i->mayUseReflection());
+    };
+    return loop.check(noEnvironmentTainting);
 }
 
 bool overwritesBinding(LoopDetection::Loop& loop, SEXP binding) {
-    auto overwrites =
+    return loop.check(
         [binding](Instruction* i) {
             SEXP varName = nullptr;
             if (auto store = StVar::Cast(i))
@@ -58,9 +51,7 @@ bool overwritesBinding(LoopDetection::Loop& loop, SEXP binding) {
             }
 
             return false;
-        };
-
-    return loop.holdsPropery(overwrites);
+        });
 }
 
 void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,

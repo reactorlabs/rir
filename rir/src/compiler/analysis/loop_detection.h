@@ -71,8 +71,8 @@ class LoopDetection {
          * We should create a preheader when there is non.
          */
         BB* preheader(const CFG& cfg) {
-            std::vector<BB*> outOfLoopPredecessor;
-            for (auto pred : cfg.immediatePredecessors(header())) {
+            BBList outOfLoopPredecessor;
+            for (const auto& pred : cfg.immediatePredecessors(header())) {
                 if (!body_.count(pred))
                     outOfLoopPredecessor.push_back(pred);
             }
@@ -82,7 +82,7 @@ class LoopDetection {
                        : outOfLoopPredecessor.front();
         }
 
-        bool holdsPropery(const InstrActionPredicate& action) {
+        bool check(const InstrActionPredicate& action) const {
             auto answer = true;
             for (auto bb : body_) {
                 for (auto instruction : *bb) {
