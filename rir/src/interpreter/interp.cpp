@@ -360,6 +360,20 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
     return rirCallTrampoline(call, fun, symbol::delayedEnv, arglist, ctx);
 }
 
+#define UI_COUNT_DELTA 1000
+
+static unsigned int count = 0;
+
+// Interrupt Signal Checker - Allows for Ctrl - C functionality to exit out
+// of infinite loops
+void checkUserInterrupt() {
+    if (++count > UI_COUNT_DELTA) {
+        R_CheckUserInterrupt();
+        R_RunPendingFinalizers();
+        count = 0;
+    }
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
@@ -1558,6 +1572,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
     };
     R_Visible = TRUE;
+
+    checkUserInterrupt();
 
     // main loop
     BEGIN_MACHINE {
@@ -2825,8 +2841,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(brobj_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();
-            if (isObject(ostack_top(ctx)))
+            if (isObject(ostack_top(ctx))) {
+                checkUserInterrupt();
                 pc += offset;
+            }
             PC_BOUNDSCHECK(pc, c);
             NEXT();
         }
@@ -2835,6 +2853,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_TrueValue) {
+                checkUserInterrupt();
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2845,6 +2864,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_FalseValue) {
+                checkUserInterrupt();
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2854,6 +2874,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(br_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();
+            checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
             NEXT();
@@ -3556,6 +3577,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceJump();
             loopTrampoline(c, ctx, env, callCtxt, pc, localsBase);
             pc += offset;
+            checkUserInterrupt();
             assert(*pc == Opcode::endloop_);
             advanceOpcode();
             NEXT();
