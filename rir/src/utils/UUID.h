@@ -18,6 +18,7 @@ class UUID {
     void serialize(SEXP refTable, R_outpstream_t out) const;
 
     bool operator==(const UUID& other) const;
+    UUID operator^(const UUID& other) const;
     friend struct std::hash<UUID>;
 };
 

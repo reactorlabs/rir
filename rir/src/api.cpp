@@ -370,17 +370,22 @@ REXPORT SEXP rir_serialize(SEXP data, SEXP fileSexp) {
     if (file == NULL)
         Rf_error("couldn't open file at path");
     R_SaveToFile(data, file, 0);
+    fclose(file);
     R_Visible = (Rboolean) false;
     return R_NilValue;
 }
 
 REXPORT SEXP rir_deserialize(SEXP fileSexp) {
+    // Alternatively, could be a hook from R_LoadFromFile
+    Code::rehashDeserializedUids();
     if (TYPEOF(fileSexp) != STRSXP)
         Rf_error("must provide a string path");
     FILE* file = fopen(CHAR(Rf_asChar(fileSexp)), "r");
     if (file == NULL)
         Rf_error("couldn't open file at path");
-    return R_LoadFromFile(file, 0);
+    SEXP res = R_LoadFromFile(file, 0);
+    fclose(file);
+    return res;
 }
 
 bool startup() {

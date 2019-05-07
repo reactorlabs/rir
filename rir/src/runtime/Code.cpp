@@ -9,9 +9,12 @@
 #include <sstream>
 
 namespace rir {
+UUID uidHash = UUID::random();
 std::unordered_map<UUID, Code*> allCodes;
 
-Code* Code::withUid(UUID uid) { return allCodes.at(uid); }
+void Code::rehashDeserializedUids() { uidHash = UUID::random(); }
+
+Code* Code::withUid(UUID uid) { return allCodes.at(uid ^ uidHash); }
 
 // cppcheck-suppress uninitMemberVar symbol=data
 Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
@@ -82,7 +85,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
                   (intptr_t)&code->locals_ - (intptr_t)code,
                   // GC area has only 1 pointer
                   NumLocals, CODE_MAGIC};
-    code->uid = UUID::deserialize(refTable, inp);
+    code->uid = UUID::deserialize(refTable, inp) ^ uidHash;
     code->funInvocationCount = InInteger(inp);
     code->src = InInteger(inp);
     code->stackLength = InInteger(inp);

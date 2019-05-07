@@ -33,4 +33,12 @@ bool UUID::operator==(const UUID& other) const {
     return true;
 }
 
+UUID UUID::operator^(const UUID& other) const {
+    UUID uuid;
+    for (int i = 0; i < UUID_SIZE; i++) {
+        uuid.data[i] = data[i] ^ other.data[i];
+    }
+    return uuid;
+}
+
 }; // namespace rir

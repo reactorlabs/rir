@@ -16,6 +16,8 @@ struct Parameter {
     static size_t INLINER_MAX_SIZE;
     static size_t INLINER_MAX_INLINEE_SIZE;
     static size_t INLINER_INITIAL_FUEL;
+
+    static bool FREEZE_PARAMS;
 };
 } // namespace pir
 } // namespace rir
