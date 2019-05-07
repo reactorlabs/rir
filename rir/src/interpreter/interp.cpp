@@ -45,12 +45,12 @@ static RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc,
 #define INSTRUCTION(name)                                                      \
     op_##name: /* debug(c, pc, #name, ostack_length(ctx) - bp, ctx); */
 #define NEXT()                                                                 \
-    (__extension__({                                                           \
-        goto* opAddr[static_cast<uint8_t>(advanceOpcode())]; }))
+    (__extension__({ goto* opAddr[static_cast<uint8_t>(advanceOpcode())]; }))
 #define LASTOP                                                                 \
     {}
 #else
 #define BEGIN_MACHINE                                                          \
+    loop:                                                                      \
     switch (advanceOpcode())
 #define INSTRUCTION(name)                                                      \
     case Opcode::name:                                                         \
@@ -358,17 +358,22 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
     return rirCallTrampoline(call, fun, symbol::delayedEnv, arglist, ctx);
 }
 
-int count = 0;
+#define UI_COUNT_DELTA 1000
+
+static unsigned int count = 0;
 
 // Interrupt Signal Checker - Allows for Ctrl - C functionality to exit out
 // of infinite loops
-void checkuserinterrupt() {
-    if (++count > 1000) {
+void checkUserInterrupt() {
+    if (++count > UI_COUNT_DELTA) {
         R_CheckUserInterrupt();
+        R_RunPendingFinalizers();
         count = 0;
     }
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
                            const CallContext* callCtxt, Opcode* pc,
@@ -1466,7 +1471,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     };
     R_Visible = TRUE;
 
-    checkuserinterrupt();
+    checkUserInterrupt();
 
     // main loop
     BEGIN_MACHINE {
@@ -2636,7 +2641,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (isObject(ostack_top(ctx))) {
-                checkuserinterrupt();
+                checkUserInterrupt();
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2647,7 +2652,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_TrueValue) {
-                checkuserinterrupt();
+                checkUserInterrupt();
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2658,7 +2663,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_FalseValue) {
-                checkuserinterrupt();
+                checkUserInterrupt();
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2668,7 +2673,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(br_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();
-            checkuserinterrupt();
+            checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
             NEXT();
@@ -3349,7 +3354,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceJump();
             loopTrampoline(c, ctx, env, callCtxt, pc, localsBase);
             pc += offset;
-            checkuserinterrupt();
+            checkUserInterrupt();
             assert(*pc == Opcode::endloop_);
             advanceOpcode();
             NEXT();
