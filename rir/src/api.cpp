@@ -24,6 +24,8 @@
 
 using namespace rir;
 
+extern "C" Rboolean R_Visible;
+
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
@@ -361,10 +363,10 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
         return closure;
 }
 
-REXPORT void rir_serialize(SEXP data, SEXP fileSexp) {
+REXPORT SEXP rir_serialize(SEXP data, SEXP fileSexp) {
     if (TYPEOF(fileSexp) != STRSXP)
         Rf_error("must provide a string path");
-    FILE* file = fopen(CHAR(fileSexp), "w");
+    FILE* file = fopen(CHAR(Rf_asChar(fileSexp)), "w");
     if (file == NULL)
         Rf_error("couldn't open file at path");
     R_SaveToFile(data, file, 0);
@@ -375,7 +377,7 @@ REXPORT void rir_serialize(SEXP data, SEXP fileSexp) {
 REXPORT SEXP rir_deserialize(SEXP fileSexp) {
     if (TYPEOF(fileSexp) != STRSXP)
         Rf_error("must provide a string path");
-    FILE* file = fopen(CHAR(fileSexp), "r");
+    FILE* file = fopen(CHAR(Rf_asChar(fileSexp)), "r");
     if (file == NULL)
         Rf_error("couldn't open file at path");
     return R_LoadFromFile(file, 0);
