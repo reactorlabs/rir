@@ -1036,21 +1036,22 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
             inner << (pos - srcCode->code());
 
-            compiler.compileFunction(function, inner.str(), formals, srcRef,
-                                     [&](ClosureVersion* innerF) {
-                                         cur.stack.push(insert(new MkFunCls(
-                                             innerF->owner(), dt, insert.env)));
+            compiler.compileFunction(
+                function, inner.str(), formals, srcRef,
+                [&](ClosureVersion* innerF) {
+                    cur.stack.push(
+                        insert(new MkFunCls(innerF->owner(), dt, insert.env)));
 
-                                         // Skip those instructions
-                                         finger = pc;
-                                         skip = true;
-                                     },
-                                     []() {
-                                         // If the closure does not compile, we
-                                         // can still call the unoptimized
-                                         // version (which is what happens on
-                                         // `tryRunCurrentBC` below)
-                                     });
+                    // Skip those instructions
+                    finger = pc;
+                    skip = true;
+                },
+                []() {
+                    // If the closure does not compile, we
+                    // can still call the unoptimized
+                    // version (which is what happens on
+                    // `tryRunCurrentBC` below)
+                });
         });
 
         if (!skip) {

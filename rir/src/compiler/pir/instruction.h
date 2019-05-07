@@ -146,6 +146,9 @@ class Instruction : public Value {
     void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
     bool hasEffect() const { return !effects.empty(); }
     bool hasVisibility() const { return effects.contains(Effect::Visibility); }
+    bool mayUseReflection() const {
+        return effects.contains(Effect::Reflection);
+    }
 
     Effects getObservableEffects() const {
         auto e = effects;
@@ -336,7 +339,8 @@ class Instruction : public Value {
             COMPILER_INSTRUCTIONS(V)
 #undef V
             return static_cast<Instruction*>(v);
-        default: {}
+        default: {
+        }
         }
         return nullptr;
     }

@@ -84,8 +84,6 @@ LoopDetection::LoopDetection(Code* code, bool determineNesting) {
             }
         }
     }
-
-    // TODO: compute or add the loop preheader
 }
 
 } // namespace pir
