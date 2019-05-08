@@ -52,7 +52,9 @@ rir.compile(function(){
 
 # inlined frameStates:
 
-if (Sys.getenv("PIR_DEOPT_CHAOS") != "1" && Sys.getenv("PIR_WARMUP") != "2") {
+if (Sys.getenv("PIR_DEOPT_CHAOS") != "1" &&
+    Sys.getenv("PIR_WARMUP") != "2" &&
+    Sys.getenv("RIR_SERIALIZE_CHAOS") == 0) {
     f <- pir.compile(rir.compile(function(x) g(x)))
     g <- rir.compile(function(x) h(x))
     h <- rir.compile(function(x) 1+i(x))
@@ -97,7 +99,7 @@ h <- pir.compile(h)
 stopifnot(h(3) == 3)
 
 
-if (Sys.getenv("PIR_ENABLE") == "") {
+if (Sys.getenv("PIR_ENABLE") == "" && Sys.getenv("RIR_SERIALIZE_CHAOS") == 0) {
   require(compiler)
   old <- compiler::enableJIT(3)
   # test that we generate multiple versions

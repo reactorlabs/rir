@@ -129,11 +129,13 @@ struct DispatchTable
 
     static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp) {
         DispatchTable* table = create();
+        PROTECT(table->container());
         table->size_ = InInteger(inp);
         for (size_t i = 0; i < table->size(); i++) {
             table->setEntry(i,
                             Function::deserialize(refTable, inp)->container());
         }
+        UNPROTECT(1);
         return table;
     }
 

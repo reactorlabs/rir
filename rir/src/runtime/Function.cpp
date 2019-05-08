@@ -6,13 +6,17 @@ namespace rir {
 Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     size_t functionSize = InInteger(inp);
     SEXP body = Code::deserialize(refTable, inp)->container();
+    PROTECT(body);
     std::vector<SEXP> defaultArgs;
     int numArgs = InInteger(inp);
+    int protectCount = 1;
     for (int i = 0; i < numArgs; i++) {
-        if ((bool)InInteger(inp))
-            defaultArgs.push_back(
-                Code::deserialize(refTable, inp)->container());
-        else
+        if ((bool)InInteger(inp)) {
+            SEXP arg = Code::deserialize(refTable, inp)->container();
+            PROTECT(arg);
+            protectCount++;
+            defaultArgs.push_back(arg);
+        } else
             defaultArgs.push_back(nullptr);
     }
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
@@ -20,6 +24,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     void* payload = DATAPTR(store);
     Function* fun =
         new (payload) Function(functionSize, body, defaultArgs, sig);
+    UNPROTECT(protectCount);
     return fun;
 }
 

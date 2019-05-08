@@ -78,13 +78,7 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
 
 Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     size_t size = InInteger(inp);
-    SEXP store = Rf_allocVector(EXTERNALSXP, size);
-    Code* code = (Code*)DATAPTR(store);
-    // Header
-    code->info = {// GC area starts just after the header
-                  (intptr_t)&code->locals_ - (intptr_t)code,
-                  // GC area has only 1 pointer
-                  NumLocals, CODE_MAGIC};
+    Code* code = (Code*)malloc(size);
     code->uid = UUID::deserialize(refTable, inp) ^ uidHash;
     code->funInvocationCount = InInteger(inp);
     code->src = InInteger(inp);
@@ -93,8 +87,8 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
-    code->setEntry(0, ReadItem(refTable, inp));
-    allCodes.emplace(code->uid, code);
+    SEXP extraPool = ReadItem(refTable, inp);
+    PROTECT(extraPool);
 
     // Bytecode
     BC::deserialize(refTable, inp, code->code(), code->codeSize, code);
@@ -105,6 +99,19 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
         code->srclist()[i].srcIdx =
             src_pool_add(globalContext(), ReadItem(refTable, inp));
     }
+    SEXP store = Rf_allocVector(EXTERNALSXP, size);
+    memcpy(DATAPTR(store), code, size);
+    Code* old = code;
+    code = (Code*)DATAPTR(store);
+    delete old;
+    code->info = {// GC area starts just after the header
+                  (intptr_t)&code->locals_ - (intptr_t)code,
+                  // GC area has only 1 pointer
+                  NumLocals, CODE_MAGIC};
+    code->setEntry(0, extraPool);
+    UNPROTECT(1);
+    allCodes.emplace(code->uid, code);
+
     return code;
 }
 

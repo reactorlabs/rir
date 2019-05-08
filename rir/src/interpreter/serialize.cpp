@@ -7,8 +7,10 @@ namespace rir {
 
 bool pir::Parameter::RIR_PRESERVE =
     getenv("RIR_PRESERVE") ? atoi(getenv("RIR_PRESERVE")) : false;
-bool pir::Parameter::RIR_SERIALIZE_CHAOS =
-    getenv("RIR_SERIALIZE_CHAOS") ? atoi(getenv("RIR_SERIALIZE_CHAOS")) : false;
+unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
+    getenv("RIR_SERIALIZE_CHAOS") ? atoi(getenv("RIR_SERIALIZE_CHAOS")) : 0;
+
+static bool oldPreserve = false;
 
 // Will serialize s if it's an instance of CLS
 template <typename CLS>
@@ -52,6 +54,20 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
         assert(false);
         return nullptr;
     }
+}
+
+SEXP copyBySerial(SEXP x) {
+    if (!pir::Parameter::RIR_SERIALIZE_CHAOS)
+        return x;
+
+    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    pir::Parameter::RIR_PRESERVE = true;
+    SEXP data = R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue);
+    PROTECT(data);
+    SEXP copy = R_unserialize(data, R_NilValue);
+    UNPROTECT(1);
+    pir::Parameter::RIR_PRESERVE = oldPreserve;
+    return copy;
 }
 
 }; // namespace rir

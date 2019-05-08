@@ -54,6 +54,8 @@ SEXP rirDecompile(SEXP s);
 
 void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out);
 SEXP deserializeRir(SEXP refTable, R_inpstream_t inp);
+// Will serialize and deserialize the SEXP, returning a deep copy.
+SEXP copyBySerial(SEXP x);
 
 SEXP materialize(void* rirDataWrapper);
 SEXP* keepAliveSEXPs(void* rirDataWrapper);

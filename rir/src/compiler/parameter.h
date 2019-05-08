@@ -18,7 +18,7 @@ struct Parameter {
     static size_t INLINER_INITIAL_FUEL;
 
     static bool RIR_PRESERVE;
-    static bool RIR_SERIALIZE_CHAOS;
+    static unsigned RIR_SERIALIZE_CHAOS;
 };
 } // namespace pir
 } // namespace rir

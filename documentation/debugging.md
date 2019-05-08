@@ -74,8 +74,8 @@ completely disables the PIR optimizer. As follows are the different Options avai
                    compiled closure from a prior session even if this is off
 
     RIR_SERIALIZE_CHAOS=
-        1          serialize and deserialize every compiled closure,
-                   for debugging
+        n          serialize and deserialize the dispatch table on every `n`th
+                   RIR call. WARNING: This sometimes prevents optimization
 
 ### Disassembly annotations
 

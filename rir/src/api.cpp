@@ -31,6 +31,7 @@ int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 static size_t oldMaxInput = 0;
 static size_t oldInlinerMax = 0;
 static bool oldPreserve = false;
+static unsigned oldSerializeChaos = false;
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
@@ -212,17 +213,6 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     return R_NilValue;
 }
 
-static SEXP serializeAndDeserialize(SEXP x) {
-    oldPreserve = pir::Parameter::RIR_PRESERVE;
-    pir::Parameter::RIR_PRESERVE = true;
-    SEXP data = R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue);
-    PROTECT(data);
-    SEXP copy = R_unserialize(data, R_NilValue);
-    UNPROTECT(1);
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
-    return copy;
-}
-
 SEXP pirCompile(SEXP what, const Assumptions& assumptions,
                 const std::string& name, const pir::DebugOptions& debug) {
     if (!isValidClosureSEXP(what)) {
@@ -248,10 +238,6 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);
                            auto fun = p2r.compile(c, dryRun);
-
-                           if (pir::Parameter::RIR_SERIALIZE_CHAOS)
-                               fun = Function::unpack(
-                                   serializeAndDeserialize(fun->container()));
 
                            // Install
                            if (dryRun)
@@ -318,14 +304,17 @@ REXPORT SEXP pir_check_warmup_begin(SEXP f, SEXP checksSxp, SEXP env) {
     if (oldMaxInput == 0) {
         oldMaxInput = pir::Parameter::MAX_INPUT_SIZE;
         oldInlinerMax = pir::Parameter::INLINER_MAX_SIZE;
+        oldSerializeChaos = pir::Parameter::RIR_SERIALIZE_CHAOS;
     }
     pir::Parameter::MAX_INPUT_SIZE = 3500;
     pir::Parameter::INLINER_MAX_SIZE = 4000;
+    pir::Parameter::RIR_SERIALIZE_CHAOS = 0;
     return R_NilValue;
 }
 REXPORT SEXP pir_check_warmup_end(SEXP f, SEXP checksSxp, SEXP env) {
     pir::Parameter::MAX_INPUT_SIZE = oldMaxInput;
     pir::Parameter::INLINER_MAX_SIZE = oldInlinerMax;
+    pir::Parameter::RIR_SERIALIZE_CHAOS = oldSerializeChaos;
     return R_NilValue;
 }
 

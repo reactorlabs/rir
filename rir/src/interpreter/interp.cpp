@@ -687,9 +687,21 @@ static Function* dispatch(const CallContext& call, DispatchTable* vt) {
 unsigned pir::Parameter::RIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
 
+static unsigned serializeCounter = 0;
+
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
+    bool bodyPreserved = false;
+    if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
+        serializeCounter++;
+        if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
+            body = copyBySerial(body);
+            PROTECT(body);
+            bodyPreserved = true;
+            serializeCounter = 0;
+        }
+    }
     assert(DispatchTable::check(body));
 
     auto table = DispatchTable::unpack(body);
@@ -727,6 +739,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             }
         }
     }
+
+    if (bodyPreserved)
+        UNPROTECT(1);
 
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
