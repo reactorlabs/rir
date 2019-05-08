@@ -67,6 +67,16 @@ completely disables the PIR optimizer. As follows are the different Options avai
     PIR_INLINER_MAX_SIZE=
         n          max instruction count for callers
 
+#### Serialize flgas
+
+    RIR_PRESERVE=
+        1          serialize RIR closures on exit. NOTE: will deserialize a
+                   compiled closure from a prior session even if this is off
+
+    RIR_SERIALIZE_CHAOS=
+        1          serialize and deserialize every compiled closure,
+                   for debugging
+
 ### Disassembly annotations
 
 #### Assumptions

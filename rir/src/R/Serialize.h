@@ -4,6 +4,11 @@
 
 #define REXPORT extern "C"
 
+REXPORT SEXP R_serialize(SEXP object, SEXP icon, SEXP ascii, SEXP Sversion,
+                         SEXP fun);
+REXPORT SEXP R_unserialize(SEXP icon, SEXP fun);
+REXPORT void R_SaveToFile(SEXP, FILE*, int);
+REXPORT SEXP R_LoadFromFile(FILE*, int);
 REXPORT void WriteItem(SEXP s, SEXP ref_table, R_outpstream_t stream);
 REXPORT SEXP ReadItem(SEXP ref_table, R_inpstream_t stream);
 REXPORT void OutStringVec(R_outpstream_t stream, SEXP s, SEXP ref_table);

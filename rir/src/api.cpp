@@ -28,6 +28,10 @@ extern "C" Rboolean R_Visible;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
+static size_t oldMaxInput = 0;
+static size_t oldInlinerMax = 0;
+static bool oldPreserve = false;
+
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
     if (strcmp(str, #style) == 0) {                                            \
@@ -208,6 +212,17 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     return R_NilValue;
 }
 
+static SEXP serializeAndDeserialize(SEXP x) {
+    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    pir::Parameter::RIR_PRESERVE = true;
+    SEXP data = R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue);
+    PROTECT(data);
+    SEXP copy = R_unserialize(data, R_NilValue);
+    UNPROTECT(1);
+    pir::Parameter::RIR_PRESERVE = oldPreserve;
+    return copy;
+}
+
 SEXP pirCompile(SEXP what, const Assumptions& assumptions,
                 const std::string& name, const pir::DebugOptions& debug) {
     if (!isValidClosureSEXP(what)) {
@@ -233,6 +248,10 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);
                            auto fun = p2r.compile(c, dryRun);
+
+                           if (pir::Parameter::RIR_SERIALIZE_CHAOS)
+                               fun = Function::unpack(
+                                   serializeAndDeserialize(fun->container()));
 
                            // Install
                            if (dryRun)
@@ -294,9 +313,6 @@ REXPORT SEXP pir_tests() {
     PirTests::run();
     return R_NilValue;
 }
-
-static size_t oldMaxInput = 0;
-static size_t oldInlinerMax = 0;
 
 REXPORT SEXP pir_check_warmup_begin(SEXP f, SEXP checksSxp, SEXP env) {
     if (oldMaxInput == 0) {
@@ -364,6 +380,8 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
 }
 
 REXPORT SEXP rir_serialize(SEXP data, SEXP fileSexp) {
+    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    pir::Parameter::RIR_PRESERVE = true;
     if (TYPEOF(fileSexp) != STRSXP)
         Rf_error("must provide a string path");
     FILE* file = fopen(CHAR(Rf_asChar(fileSexp)), "w");
@@ -372,10 +390,13 @@ REXPORT SEXP rir_serialize(SEXP data, SEXP fileSexp) {
     R_SaveToFile(data, file, 0);
     fclose(file);
     R_Visible = (Rboolean) false;
+    pir::Parameter::RIR_PRESERVE = oldPreserve;
     return R_NilValue;
 }
 
 REXPORT SEXP rir_deserialize(SEXP fileSexp) {
+    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    pir::Parameter::RIR_PRESERVE = true;
     // Alternatively, could be a hook from R_LoadFromFile
     Code::rehashDeserializedUids();
     if (TYPEOF(fileSexp) != STRSXP)
@@ -385,6 +406,7 @@ REXPORT SEXP rir_deserialize(SEXP fileSexp) {
         Rf_error("couldn't open file at path");
     SEXP res = R_LoadFromFile(file, 0);
     fclose(file);
+    pir::Parameter::RIR_PRESERVE = oldPreserve;
     return res;
 }
 

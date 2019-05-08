@@ -1,10 +1,14 @@
+#include "compiler/parameter.h"
 #include "interp_incl.h"
 #include "runtime/DispatchTable.h"
 #include <R/r.h>
 
-#define SERIALIZE_RIR
-
 namespace rir {
+
+bool pir::Parameter::RIR_PRESERVE =
+    getenv("RIR_PRESERVE") ? atoi(getenv("RIR_PRESERVE")) : false;
+bool pir::Parameter::RIR_SERIALIZE_CHAOS =
+    getenv("RIR_SERIALIZE_CHAOS") ? atoi(getenv("RIR_SERIALIZE_CHAOS")) : false;
 
 // Will serialize s if it's an instance of CLS
 template <typename CLS>
@@ -19,21 +23,21 @@ static bool trySerialize(SEXP s, SEXP refTable, R_outpstream_t out) {
 }
 
 void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out) {
-#ifdef SERIALIZE_RIR
-    if (!trySerialize<DispatchTable>(s, refTable, out) &&
-        !trySerialize<Code>(s, refTable, out) &&
-        !trySerialize<Function>(s, refTable, out)) {
-        std::cerr << "couldn't deserialize EXTERNALSXP: ";
-        Rf_PrintValue(s);
-        assert(false);
+    if (pir::Parameter::RIR_PRESERVE) {
+        OutInteger(out, EXTERNALSXP);
+        if (!trySerialize<DispatchTable>(s, refTable, out) &&
+            !trySerialize<Code>(s, refTable, out) &&
+            !trySerialize<Function>(s, refTable, out)) {
+            std::cerr << "couldn't deserialize EXTERNALSXP: ";
+            Rf_PrintValue(s);
+            assert(false);
+        }
+    } else {
+        WriteItem(rirDecompile(s), refTable, out);
     }
-#else
-    WriteItem(rirDecompile(s), refTable, out);
-#endif
 }
 
 SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
-#ifdef SERIALIZE_RIR
     unsigned code = InInteger(inp);
     switch (code) {
     case DISPATCH_TABLE_MAGIC:
@@ -48,9 +52,6 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
         assert(false);
         return nullptr;
     }
-#else
-    return ReadItem(refTable, inp);
-#endif
 }
 
 }; // namespace rir
