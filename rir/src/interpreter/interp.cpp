@@ -740,9 +740,6 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         }
     }
 
-    if (bodyPreserved)
-        UNPROTECT(1);
-
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
     SEXP result = nullptr;
@@ -773,6 +770,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             UNPROTECT(1);
         }
     }
+
+    if (bodyPreserved)
+        UNPROTECT(1);
 
     assert(result);
 
