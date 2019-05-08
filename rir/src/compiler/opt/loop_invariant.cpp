@@ -9,11 +9,21 @@ namespace pir {
 
 bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
     auto noEnvironmentTainting = [](Instruction* i) {
-        if (LdFun::Cast(i))
+        // For this instructions we test later they not change the particular
+        // binding
+        if (StVar::Cast(i) || StVarSuper::Cast(i) || MkEnv::Cast(i))
             return true;
 
-        if (auto call = CallBuiltin::Cast(i))
-            return SafeBuiltinsList::nonObject(call->builtinId);
+        if (auto call = CallBuiltin::Cast(i)) {
+            if (SafeBuiltinsList::nonObject(call->builtinId)) {
+                auto safe = true;
+                call->eachCallArg([&](Value* arg) {
+                    if (arg->type.maybeObj())
+                        safe = false;
+                });
+                return safe;
+            }
+        }
 
         if (CallSafeBuiltin::Cast(i))
             return true;
@@ -21,7 +31,7 @@ bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
         if (CallInstruction::CastCall(i))
             return false;
 
-        return !(i->mayUseReflection());
+        return !(i->changesEnv());
     };
     return loop.check(noEnvironmentTainting);
 }

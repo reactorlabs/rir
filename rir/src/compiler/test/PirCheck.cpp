@@ -135,9 +135,9 @@ static bool testOneNot(ClosureVersion* f) {
     return numNots == 1;
 }
 
-static bool testLdFunInFirstBB(ClosureVersion* f) {
+static bool testLdVarInFirstBB(ClosureVersion* f) {
     for (auto instruction : *f->entry) {
-        if (LdFun::Cast(instruction)) {
+        if (LdVar::Cast(instruction)) {
             return true;
         }
     }
