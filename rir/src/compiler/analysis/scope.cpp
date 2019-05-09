@@ -126,11 +126,12 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
     if (auto ret = Return::Cast(i)) {
         // We keep track of the result of function returns.
         auto res = ret->arg<0>().val();
-        lookup(res->followCasts(),
-               [&](const AbstractPirValue& analysisRes) {
-                   state.returnValue.merge(analysisRes);
-               },
-               [&]() { state.returnValue.merge(ValOrig(res, i, depth)); });
+        lookup(
+            res->followCasts(),
+            [&](const AbstractPirValue& analysisRes) {
+                state.returnValue.merge(analysisRes);
+            },
+            [&]() { state.returnValue.merge(ValOrig(res, i, depth)); });
         effect.update();
     } else if (Deopt::Cast(i)) {
         // who knows what the deopt target will return...
@@ -323,15 +324,16 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 if (SafeBuiltinsList::nonObject(builtin->blt)) {
                     safe = true;
                     builtin->eachCallArg([&](Value* arg) {
-                        lookup(arg->followCasts(),
-                               [&](const AbstractPirValue& analysisRes) {
-                                   if (analysisRes.type.maybeObj())
-                                       safe = false;
-                               },
-                               [&]() {
-                                   if (arg->type.maybeObj())
-                                       safe = false;
-                               });
+                        lookup(
+                            arg->followCasts(),
+                            [&](const AbstractPirValue& analysisRes) {
+                                if (analysisRes.type.maybeObj())
+                                    safe = false;
+                            },
+                            [&]() {
+                                if (arg->type.maybeObj())
+                                    safe = false;
+                            });
                     });
                 }
             }
@@ -369,12 +371,13 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                         return false;
 
                     bool maybeObj = false;
-                    lookup(v,
-                           [&](const AbstractPirValue& analysisRes) {
-                               if (analysisRes.type.maybeObj())
-                                   maybeObj = true;
-                           },
-                           [&]() { maybeObj = true; });
+                    lookup(
+                        v,
+                        [&](const AbstractPirValue& analysisRes) {
+                            if (analysisRes.type.maybeObj())
+                                maybeObj = true;
+                        },
+                        [&]() { maybeObj = true; });
                     return maybeObj;
                 });
             }

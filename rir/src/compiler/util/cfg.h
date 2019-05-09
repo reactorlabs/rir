@@ -40,7 +40,6 @@ class DominanceGraph {
     std::vector<DomTree> dominating;
 
   public:
-
     size_t size() const { return dominating.size(); }
     explicit DominanceGraph(Code*);
 
@@ -63,7 +62,7 @@ class DominanceFrontier {
     DominanceFrontier(Code* code, const CFG&, const DominanceGraph&);
     const BBList& at(BB* bb) const;
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

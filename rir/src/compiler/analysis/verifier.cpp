@@ -3,6 +3,18 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
+/*
+ * When does the verifier run, and is it the fast or slow version?
+ *
+ *                        FULLVERIFIER   ENABLE_SLOWASSERT   Release   NDEBUG
+ * After RIR to PIR          slow             fast            fast       x
+ * After each PIR pass       slow             fast            x          x
+ * After all PIR opts        [1]              slow            fast       x
+ * Before PIR to RIR         slow             fast            x          x
+ *
+ * [1] Not run, subsumed by running the full verifier after each PIR pass.
+ */
+
 namespace {
 using namespace rir::pir;
 
