@@ -18,15 +18,15 @@ Code* Code::withUid(UUID uid) { return allCodes.at(uid ^ uidHash); }
 
 // cppcheck-suppress uninitMemberVar symbol=data
 Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
-           size_t localsCnt)
+           size_t localsCnt, size_t bindingsCnt)
     : RirRuntimeObject(
           // GC area starts just after the header
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
       uid(UUID::random()), funInvocationCount(0), src(src), stackLength(0),
-      localsCount(localsCnt), codeSize(cs), srcLength(sourceLength),
-      extraPoolSize(0) {
+      localsCount(localsCnt), bindingsCount(bindingsCnt), codeSize(cs),
+      srcLength(sourceLength), extraPoolSize(0) {
     setEntry(0, R_NilValue);
     allCodes.emplace(uid, this);
 }
@@ -83,7 +83,8 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->funInvocationCount = InInteger(inp);
     code->src = InInteger(inp);
     code->stackLength = InInteger(inp);
-    code->localsCount = InInteger(inp);
+    *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
+    *const_cast<unsigned*>(&code->bindingsCount) = InInteger(inp);
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
@@ -123,6 +124,7 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, src);
     OutInteger(out, stackLength);
     OutInteger(out, localsCount);
+    OutInteger(out, bindingsCount);
     OutInteger(out, codeSize);
     OutInteger(out, srcLength);
     OutInteger(out, extraPoolSize);

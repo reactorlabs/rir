@@ -719,7 +719,6 @@ static Test tests[] = {
          }),
     Test("Test dead store analysis", &testDeadStore),
     Test("Test type rules", &testTypeRules)};
-
 } // namespace
 
 namespace rir {

@@ -39,15 +39,21 @@ BC_NOARGS(V, _)
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
-    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
-    case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
         cs.insert(immediate.pool);
+        return;
+
+    case Opcode::ldvar_cached_:
+    case Opcode::ldvar_noforce_cached_:
+    case Opcode::ldvar_for_update_cache_:
+    case Opcode::stvar_cached_:
+    case Opcode::starg_cached_:
+        cs.insert(immediate.poolAndCache);
         return;
 
     case Opcode::guard_fun_:
@@ -136,7 +142,12 @@ BC_NOARGS(V, _)
     }
 }
 
-SEXP BC::immediateConst() const { return Pool::get(immediate.pool); }
+SEXP BC::immediateConst() const {
+    if (is(Opcode::ldvar_cached_) || is(Opcode::stvar_cached_))
+        return Pool::get(immediate.poolAndCache.poolIndex);
+    else
+        return Pool::get(immediate.pool);
+}
 
 // #define DEBUG_SERIAL
 
@@ -156,15 +167,21 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::ldfun_:
         case Opcode::ldddvar_:
         case Opcode::ldvar_:
-        case Opcode::ldvar_for_update_:
         case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldvar_noforce_super_:
-        case Opcode::starg_:
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
             i.pool = Pool::insert(ReadItem(refTable, inp));
+            break;
+        case Opcode::ldvar_cached_:
+        case Opcode::ldvar_noforce_cached_:
+        case Opcode::ldvar_for_update_cache_:
+        case Opcode::stvar_cached_:
+        case Opcode::starg_cached_:
+            i.poolAndCache.poolIndex = Pool::insert(ReadItem(refTable, inp));
+            i.poolAndCache.cacheIndex = InInteger(inp);
             break;
         case Opcode::guard_fun_:
             i.guard_fun_args.name = Pool::insert(ReadItem(refTable, inp));
@@ -287,15 +304,21 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::ldfun_:
         case Opcode::ldddvar_:
         case Opcode::ldvar_:
-        case Opcode::ldvar_for_update_:
         case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldvar_noforce_super_:
-        case Opcode::starg_:
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
             WriteItem(Pool::get(i.pool), refTable, out);
+            break;
+        case Opcode::ldvar_cached_:
+        case Opcode::ldvar_noforce_cached_:
+        case Opcode::ldvar_for_update_cache_:
+        case Opcode::stvar_cached_:
+        case Opcode::starg_cached_:
+            WriteItem(Pool::get(i.poolAndCache.poolIndex), refTable, out);
+            OutInteger(out, i.poolAndCache.cacheIndex);
             break;
         case Opcode::guard_fun_:
             WriteItem(Pool::get(i.guard_fun_args.name), refTable, out);
@@ -498,16 +521,22 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
-    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
     case Opcode::ldddvar_:
-    case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
         out << CHAR(PRINTNAME(immediateConst()));
+        break;
+    case Opcode::ldvar_cached_:
+    case Opcode::ldvar_noforce_cached_:
+    case Opcode::ldvar_for_update_cache_:
+    case Opcode::stvar_cached_:
+    case Opcode::starg_cached_:
+        out << CHAR(PRINTNAME(immediateConst())) << "{"
+            << immediate.poolAndCache.cacheIndex << "}";
         break;
     case Opcode::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
