@@ -11,6 +11,8 @@ REXPORT void R_SaveToFile(SEXP, FILE*, int);
 REXPORT SEXP R_LoadFromFile(FILE*, int);
 REXPORT void WriteItem(SEXP s, SEXP ref_table, R_outpstream_t stream);
 REXPORT SEXP ReadItem(SEXP ref_table, R_inpstream_t stream);
+REXPORT void HashAdd(SEXP obj, SEXP ht);
+REXPORT void AddReadRef(SEXP table, SEXP value);
 REXPORT void OutStringVec(R_outpstream_t stream, SEXP s, SEXP ref_table);
 REXPORT void WriteBC(SEXP s, SEXP ref_table, R_outpstream_t stream);
 REXPORT SEXP ReadBC(SEXP ref_table, R_inpstream_t stream);
