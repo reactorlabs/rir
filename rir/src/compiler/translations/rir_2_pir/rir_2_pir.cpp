@@ -121,9 +121,9 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 
     std::unordered_set<Opcode*> mergepoints;
     // Create mergepoints
-    // for (auto m : incom)
-    //    if (std::get<1>(m).size() > 1)
-    //        mergepoints.insert(m.first);
+    for (auto m : incom)
+        if (std::get<1>(m).size() > 1)
+            mergepoints.insert(m.first);
     return mergepoints;
 }
 
