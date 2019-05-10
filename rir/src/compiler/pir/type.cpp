@@ -1,11 +1,16 @@
 #include "type.h"
 #include "../../interpreter/LazyEnvironment.h"
+#include "../parameter.h"
 #include "R/r.h"
 
 extern "C" Rboolean(Rf_isObject)(SEXP s);
 
 namespace rir {
 namespace pir {
+
+bool Parameter::RIR_CHECK_PIR_TYPES =
+    getenv("RIR_CHECK_PIR_TYPES") ? (bool)atoi(getenv("RIR_CHECK_PIR_TYPES"))
+                                  : IS_SLOWASSERT;
 
 void PirType::print(std::ostream& out) const { out << *this << "\n"; }
 
@@ -38,7 +43,7 @@ void PirType::merge(SEXPTYPE sexptype) {
         break;
     case EXPRSXP:
         t_.r.set(RType::ast);
-        // fall through
+        break;
     case LANGSXP:
         t_.r.set(RType::code);
         break;
@@ -75,6 +80,9 @@ void PirType::merge(SEXPTYPE sexptype) {
     case WEAKREFSXP:
     case S4SXP:
         t_.r = val().t_.r;
+        break;
+    default:
+        break;
     }
 }
 
