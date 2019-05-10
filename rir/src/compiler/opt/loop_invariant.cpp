@@ -25,12 +25,6 @@ bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
             }
         }
 
-        if (CallSafeBuiltin::Cast(i))
-            return true;
-
-        if (CallInstruction::CastCall(i))
-            return false;
-
         return !(i->changesEnv());
     };
     return loop.check(noEnvironmentTainting);

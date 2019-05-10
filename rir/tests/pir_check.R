@@ -12,7 +12,7 @@ stopifnot(pir.check(
     vector("integer",0)
     j <- j + 1
     }
-  }, LdVarInFirstBB, warmup=function(f) f()))
+  }, LdVarVectorInFirstBB, warmup=function(f) f()))
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
 stopifnot(!pir.check(function(x = 4) {
   print("PIR doesn't support default args")

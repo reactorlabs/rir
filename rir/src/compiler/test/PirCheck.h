@@ -21,7 +21,7 @@ namespace rir {
     V(NoEq)                                                                    \
     V(OneEq)                                                                   \
     V(OneNot)                                                                  \
-    V(LdVarInFirstBB)
+    V(LdVarVectorInFirstBB)
 
 struct PirCheck {
     enum class Type : unsigned {

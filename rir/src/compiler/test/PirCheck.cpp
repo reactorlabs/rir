@@ -135,10 +135,11 @@ static bool testOneNot(ClosureVersion* f) {
     return numNots == 1;
 }
 
-static bool testLdVarInFirstBB(ClosureVersion* f) {
+static bool testLdVarVectorInFirstBB(ClosureVersion* f) {
     for (auto instruction : *f->entry) {
-        if (LdVar::Cast(instruction)) {
-            return true;
+        if (auto ldvar = LdVar::Cast(instruction)) {
+            return std::string(CHAR(PRINTNAME(ldvar->varName)))
+                       .compare("vector") == 0;
         }
     }
     return false;
