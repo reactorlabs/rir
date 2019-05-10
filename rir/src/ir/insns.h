@@ -18,7 +18,7 @@ DEF_INSTR(push_context_, 1, 2, 0, 0)
 DEF_INSTR(pop_context_, 0, 1, 0, 0)
 
 /**
- * make_env_:: create a new environment with the parent and all locals taken
+ * mk_env_:: create a new environment with the parent and all locals taken
  * from stack and the argument names as immediates.
  */
 DEF_INSTR(mk_env_, 2, -1, 1, 0)
@@ -558,5 +558,10 @@ DEF_INSTR(record_type_, 1, 1, 1, 0)
 
 DEF_INSTR(int3_, 0, 0, 0, 0)
 DEF_INSTR(printInvocation_, 0, 0, 0, 0)
+
+/*
+ * assert_type_ :: asserts that tos has the immediate PIR type
+ */
+DEF_INSTR(assert_type_, 2, 1, 1, 1)
 
 #undef DEF_INSTR

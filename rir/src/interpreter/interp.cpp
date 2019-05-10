@@ -3686,6 +3686,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(assert_type_) {
+            assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
+            SEXP val = ostack_top(ctx);
+            pir::PirType typ(pc);
+            pc += sizeof(pir::PirType);
+            if (!typ.hasInstance(val)) {
+                std::cerr << "type assert failed: type " << typ
+                          << " not accurate for value (" << pir::PirType(val)
+                          << "):\n";
+                Rf_PrintValue(val);
+                assert(false);
+            }
+            NEXT();
+        }
+
         LASTOP;
     }
 

@@ -365,6 +365,12 @@ BC BC::deopt(SEXP deoptMetadata) {
     return BC(Opcode::deopt_, i);
 }
 
+BC BC::assertType(pir::PirType typ) {
+    ImmediateArguments i;
+    i.setPirType(typ);
+    return BC(Opcode::assert_type_, i);
+}
+
 } // namespace rir
 
 #endif
