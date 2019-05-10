@@ -167,7 +167,7 @@ class Pir2Rir {
                         next = code.erase(it, plus(next, 1));
                         next = code.emplace(next, BC::ldvar(arg), noSource);
                         changed = true;
-                    } else if (bc.is(rir::Opcode::ldvar_noforce_cache_) &&
+                    } else if (bc.is(rir::Opcode::ldvar_noforce_cached_) &&
                                next != code.end() &&
                                next->first.is(rir::Opcode::force_)) {
                         auto arg =
@@ -251,8 +251,12 @@ class Pir2Rir {
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     lower(code);
     toCSSA(code);
-#ifdef ENABLE_SLOWASSERT
+#ifdef FULLVERIFIER
     Verify::apply(cls, true);
+#else
+#ifdef ENABLE_SLOWASSERT
+    Verify::apply(cls);
+#endif
 #endif
     log.CSSA(code);
 
@@ -334,7 +338,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
     }
 
-    CachePositionAllocator cachePositions(code);
+    CachePositionAllocator cachePositions;
     CodeBuffer cb(ctx.cs());
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
@@ -934,8 +938,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     });
     cb.flush();
 
-    auto res =
-        ctx.finalizeCode(alloc.slots(), cachePositions.numberOfBindings());
+    auto localsCnt = alloc.slots();
+    auto res = ctx.finalizeCode(localsCnt, cachePositions.numberOfBindings());
     return res;
 }
 

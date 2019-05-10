@@ -47,11 +47,11 @@ BC_NOARGS(V, _)
         cs.insert(immediate.pool);
         return;
 
-    case Opcode::ldvar_cache_:
-    case Opcode::ldvar_noforce_cache_:
+    case Opcode::ldvar_cached_:
+    case Opcode::ldvar_noforce_cached_:
     case Opcode::ldvar_for_update_cache_:
-    case Opcode::stvar_cache_:
-    case Opcode::starg_cache_:
+    case Opcode::stvar_cached_:
+    case Opcode::starg_cached_:
         cs.insert(immediate.poolAndCache);
         return;
 
@@ -142,7 +142,7 @@ BC_NOARGS(V, _)
 }
 
 SEXP BC::immediateConst() const {
-    if (is(Opcode::ldvar_cache_) || is(Opcode::stvar_cache_))
+    if (is(Opcode::ldvar_cached_) || is(Opcode::stvar_cached_))
         return Pool::get(immediate.poolAndCache.poolIndex);
     else
         return Pool::get(immediate.pool);
@@ -267,11 +267,11 @@ void BC::print(std::ostream& out) const {
     case Opcode::missing_:
         out << CHAR(PRINTNAME(immediateConst()));
         break;
-    case Opcode::ldvar_cache_:
-    case Opcode::ldvar_noforce_cache_:
+    case Opcode::ldvar_cached_:
+    case Opcode::ldvar_noforce_cached_:
     case Opcode::ldvar_for_update_cache_:
-    case Opcode::stvar_cache_:
-    case Opcode::starg_cache_:
+    case Opcode::stvar_cached_:
+    case Opcode::starg_cached_:
         out << CHAR(PRINTNAME(immediateConst())) << "{"
             << immediate.poolAndCache.cacheIndex << "}";
         break;

@@ -146,6 +146,9 @@ class Instruction : public Value {
     void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
     bool hasEffect() const { return !effects.empty(); }
     bool hasVisibility() const { return effects.contains(Effect::Visibility); }
+    bool mayUseReflection() const {
+        return effects.contains(Effect::Reflection);
+    }
 
     Effects getObservableEffects() const {
         auto e = effects;
@@ -336,7 +339,8 @@ class Instruction : public Value {
             COMPILER_INSTRUCTIONS(V)
 #undef V
             return static_cast<Instruction*>(v);
-        default: {}
+        default: {
+        }
         }
         return nullptr;
     }
@@ -886,7 +890,7 @@ class FLI(Seq, 3, Effects::None()) {
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{start, end, step}}) {}
     void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::num().notObject());
+        maskEffectsAndTypeOnNonObjects(PirType::num().notObject().notMissing());
     }
 };
 
@@ -1244,7 +1248,7 @@ SIMPLE_INSTRUCTIONS(V, _)
             }                                                                  \
         }                                                                      \
         void updateType() override final {                                     \
-            maskEffectsAndTypeOnNonObjects(Type);                              \
+            maskEffectsAndTypeOnNonObjects(Type.notMissing());                 \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
             maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
             updateScalarOnScalarInputs();                                      \
@@ -1297,7 +1301,7 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
             }                                                                  \
         }                                                                      \
         void updateType() override final {                                     \
-            maskEffectsAndTypeOnNonObjects(arg<0>().val()->type);              \
+            maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.notMissing()); \
             maskEffect(SafeType.notObject(), Effect::Warn);                    \
             maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
             updateScalarOnScalarInputs();                                      \

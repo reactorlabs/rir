@@ -361,6 +361,20 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
     return rirCallTrampoline(call, fun, symbol::delayedEnv, arglist, ctx);
 }
 
+#define UI_COUNT_DELTA 1000
+
+static unsigned int count = 0;
+
+// Interrupt Signal Checker - Allows for Ctrl - C functionality to exit out
+// of infinite loops
+void checkUserInterrupt() {
+    if (++count > UI_COUNT_DELTA) {
+        R_CheckUserInterrupt();
+        R_RunPendingFinalizers();
+        count = 0;
+    }
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
@@ -1457,17 +1471,25 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     assert(c->info.magic == CODE_MAGIC);
     bool existingLocals = localsBase;
-    bool smallCache = c->bindingsCount <= MAX_CACHE_SIZE;
-    size_t cacheSize = smallCache ? c->bindingsCount : MAX_CACHE_SIZE;
+
+    bool smallCache = c->bindingsCount < MAX_CACHE_SIZE;
+    size_t cacheSize = smallCache ? c->bindingsCount + 1 : MAX_CACHE_SIZE;
     BindingCache* bindingCache;
     if (cache) {
         bindingCache = cache;
     } else {
         bindingCache =
             (BindingCache*)(alloca(sizeof(BindingCache) * cacheSize));
+        /*
+        * In case we are entering the executing of a PIR optimized function
+        * we delay the cache cleaning until we know we are actually requiring
+        * an environment (mk_env).
+        */    
         if (env != symbol::delayedEnv)
             clearCache(bindingCache, cacheSize);
     }
+    clearCache(bindingCache, cacheSize);
+    std::cout << "cache size: " << cacheSize << "\n";
 
     if (!existingLocals) {
 #ifdef TYPED_STACK
@@ -1487,6 +1509,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     ostack_ensureSize(ctx, c->stackLength + 5);
 
     Opcode* pc = initialPC ? initialPC : c->code();
+    SEXP lastEnvCreated = nullptr;
     SEXP res;
 
     std::vector<LazyEnvironment*> envStubs;
@@ -1495,12 +1518,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
                "Expected an environment");
         if (e != env) {
-            if (env == symbol::delayedEnv)
+            if (env == symbol::delayedEnv && env != lastEnvCreated)
                 clearCache(bindingCache, cacheSize);
             env = e;
         }
     };
     R_Visible = TRUE;
+
+    checkUserInterrupt();
 
     // main loop
     BEGIN_MACHINE {
@@ -1588,6 +1613,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 }
             }
             clearCache(bindingCache, cacheSize);
+            lastEnvCreated = res;
             ostack_push(ctx, res);
             UNPROTECT(1);
             NEXT();
@@ -1742,7 +1768,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(ldvar_cache_) {
+        INSTRUCTION(ldvar_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -1789,7 +1815,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(ldvar_noforce_cache_) {
+        INSTRUCTION(ldvar_noforce_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -1920,7 +1946,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(stvar_cache_) {
+        INSTRUCTION(stvar_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -1935,7 +1961,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(starg_cache_) {
+        INSTRUCTION(starg_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -2840,8 +2866,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(brobj_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();
-            if (isObject(ostack_top(ctx)))
+            if (isObject(ostack_top(ctx))) {
+                checkUserInterrupt();
                 pc += offset;
+            }
             PC_BOUNDSCHECK(pc, c);
             NEXT();
         }
@@ -2850,6 +2878,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_TrueValue) {
+                checkUserInterrupt();
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2860,6 +2889,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_FalseValue) {
+                checkUserInterrupt();
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2869,6 +2899,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(br_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();
+            checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
             NEXT();
@@ -3575,6 +3606,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceJump();
             loopTrampoline(c, ctx, env, callCtxt, pc, localsBase, bindingCache);
             pc += offset;
+            checkUserInterrupt();
             assert(*pc == Opcode::endloop_);
             advanceOpcode();
             NEXT();

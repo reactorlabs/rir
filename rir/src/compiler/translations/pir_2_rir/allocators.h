@@ -439,66 +439,20 @@ class SSAAllocator {
     }
 };
 
-struct nameAndEnvHash {
-  public:
-    template <typename T, typename U>
-    std::size_t operator()(const std::pair<T, U>& x) const {
-        return std::hash<T>()(x.first) ^ std::hash<U>()(x.second);
-    }
-};
-
 class CachePositionAllocator {
   public:
     typedef size_t SlotNumber;
 
-    explicit CachePositionAllocator(Code* code) : code(code) {
-        uniqueNumberForLdsAndSts();
-    }
-
     size_t numberOfBindings() { return uniqueNumbers.size(); }
     SlotNumber slotFor(SEXP varName, Value* environment) {
-        std::pair<SEXP, Value*> key =
-            std::pair<SEXP, Value*>(varName, environment);
-        assert(uniqueNumbers.count(key));
-        return uniqueNumbers.at(key);
+        NameAndEnv key = NameAndEnv(varName, environment);
+        return uniqueNumbers.emplace(key, uniqueNumbers.size() + 1)
+            .first->second;
     }
 
   private:
-    typedef std::pair<SEXP, Value*> nameAndEnv;
-
-    Code* code;
-    std::unordered_map<nameAndEnv, SlotNumber, nameAndEnvHash> uniqueNumbers;
-
-    void uniqueNumberForLdsAndSts() {
-        Visitor::run(code->entry, [&](Instruction* i) {
-            bool needsCacheSlot = false;
-            SEXP varName = nullptr;
-            Value* environment = nullptr;
-
-            if (auto ldVar = LdVar::Cast(i)) {
-                if (ldVar->usesCache) {
-                    varName = ldVar->varName;
-                    environment = ldVar->env();
-                    needsCacheSlot = true;
-                }
-            } else if (auto stVar = StVar::Cast(i)) {
-                if (stVar->usesCache) {
-                    varName = stVar->varName;
-                    environment = stVar->env();
-                    needsCacheSlot = true;
-                }
-            }
-
-            if (needsCacheSlot) {
-                std::pair<SEXP, Value*> key =
-                    std::pair<SEXP, Value*>(varName, environment);
-
-                if (!uniqueNumbers.count(key)) {
-                    uniqueNumbers.emplace(key, uniqueNumbers.size());
-                }
-            }
-        });
-    }
+    typedef std::pair<SEXP, Value*> NameAndEnv;
+    std::unordered_map<NameAndEnv, SlotNumber, pairhash> uniqueNumbers;
 };
 
 } // namespace pir

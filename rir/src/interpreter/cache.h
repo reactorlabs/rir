@@ -6,7 +6,7 @@
 namespace rir {
 
 // must be a power of 2 for modulus using & CACHE_MASK to work
-#define MAX_CACHE_SIZE 64
+#define MAX_CACHE_SIZE 128
 #define CACHE_MASK (MAX_CACHE_SIZE - 1)
 #define ACTIVE_BINDING_MASK (1 << 15)
 #define BINDING_LOCK_MASK (1 << 14)
@@ -31,43 +31,36 @@ typedef struct {
 } BindingCache;
 typedef BindingCache Cache;
 
+
 static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
                                             Immediate cacheIdx,
                                             InterpreterInstance* ctx,
-                                            BindingCache* bindingCache,
+                                            Cache* cache,
                                             bool smallCache) {
 
     Immediate cidx = cacheIndex(cacheIdx, smallCache);
 
-    if (bindingCache[cidx].idx == poolIdx) {
-        return bindingCache[cidx].loc;
+    if (cache[cidx].idx == cacheIdx) {
+        std::cout << "Encontre posicion: " << cacheIdx;
+        return cache[cidx].loc;
     }
 
-    SEXP sym = cp_pool_at(ctx, poolIdx);
-    SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    R_varloc_t loc = R_findVarLocInFrame(env, sym);
-    if (!R_VARLOC_IS_NULL(loc)) {
-        bindingCache[cidx].loc = loc.cell;
-        bindingCache[cidx].idx = poolIdx;
-        return loc.cell;
-    }
     return NULL;
 }
 
-static RIR_INLINE void cachedSetBindingCell(Immediate poolIdx,
-                                            Immediate cacheIdx, Cache* cache,
+static RIR_INLINE void cachedSetBindingCell(Immediate cacheIdx, Cache* cache,
                                             bool smallCache, R_varloc_t loc) {
     Immediate cidx = cacheIndex(cacheIdx, smallCache);
     cache[cidx].loc = loc.cell;
-    cache[cidx].idx = poolIdx;
+    cache[cidx].idx = cacheIdx;
 }
 
 static RIR_INLINE void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
                                     Immediate cacheIdx,
                                     InterpreterInstance* ctx,
-                                    BindingCache* bindingCache, bool smallCache,
+                                    Cache* cache, bool smallCache,
                                     bool keepMissing = false) {
-    SEXP loc = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx, bindingCache,
+    SEXP loc = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx, cache,
                                     smallCache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
@@ -89,9 +82,9 @@ static RIR_INLINE void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
     UNPROTECT(1);
 }
 
-static RIR_INLINE void clearCache(BindingCache* bindingCache,
+static RIR_INLINE void clearCache(Cache* cache,
                                   size_t cacheSize) {
-    memset(bindingCache, 0, sizeof(BindingCache) * cacheSize);
+    memset(cache, 0, sizeof(cache) * cacheSize);
 }
 
 #endif
@@ -101,21 +94,23 @@ static RIR_INLINE SEXP cachedGetVar(SEXP env, Immediate poolIdx,
                                     InterpreterInstance* ctx, Cache* cache,
                                     bool smallCache) {
     if (env != R_BaseEnv && env != R_BaseNamespace) {
-
-        SEXP cacheCell = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx,
+        SEXP cell = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx,
                                               cache, smallCache);
-        if (cacheCell) {
-            SEXP res = CAR(cacheCell);
-            if (res != R_UnboundValue)
-                return res;
+        if (!cell) {
+            SEXP sym = cp_pool_at(ctx, poolIdx);
+            SLOWASSERT(TYPEOF(sym) == SYMSXP);
+            R_varloc_t loc = R_findVarLocInFrame(env, sym);
+            if (!R_VARLOC_IS_NULL(loc)){ 
+                //cachedSetBindingCell(cacheIdx, cache, smallCache, loc);
+                cell = loc.cell;
+            }
         }
 
-        SEXP sym = cp_pool_at(ctx, poolIdx);
-        SLOWASSERT(TYPEOF(sym) == SYMSXP);
-        R_varloc_t loc = R_findVarLocInFrame(env, sym);
-        if (!R_VARLOC_IS_NULL(loc)) {
-            cachedSetBindingCell(poolIdx, cacheIdx, cache, smallCache, loc);
-            return loc.cell;
+        if (cell) {
+            std::cout << "entro aca\n";
+            SEXP res = CAR(cell);
+            if (res != R_UnboundValue)
+                return res;
         }
     }
     SEXP sym = cp_pool_at(ctx, poolIdx);
