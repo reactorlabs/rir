@@ -3435,17 +3435,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(guard_fun_) {
-#ifndef UNSOUND_OPTS
             SEXP sym = readConst(ctx, readImmediate());
-#endif
             advanceImmediate();
             res = readConst(ctx, readImmediate());
             advanceImmediate();
             advanceImmediate();
-#ifndef UNSOUND_OPTS
             if (res != Rf_findFun(sym, env))
                 Rf_error("Invalid Callee");
-#endif
             NEXT();
         }
 
