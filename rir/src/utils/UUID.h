@@ -28,7 +28,7 @@ namespace std {
 template <>
 struct hash<rir::UUID> {
     std::size_t operator()(const rir::UUID& v) const {
-        return *(size_t*)v.data;
+        return *(size_t*)v;
     }
 };
 } // namespace std
