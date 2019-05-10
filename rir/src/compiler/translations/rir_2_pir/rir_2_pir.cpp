@@ -121,9 +121,9 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 
     std::unordered_set<Opcode*> mergepoints;
     // Create mergepoints
-    for (auto m : incom)
-        if (std::get<1>(m).size() > 1)
-            mergepoints.insert(m.first);
+    // for (auto m : incom)
+    //    if (std::get<1>(m).size() > 1)
+    //        mergepoints.insert(m.first);
     return mergepoints;
 }
 
@@ -880,7 +880,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
         worklist.push_back(State(cur, false, bb, pos));
     };
 
+#define HANG_CHECK_LIMIT 1000000
+    static unsigned hangCounter;
+    hangCounter = 0;
     while (finger != end || !worklist.empty()) {
+        hangCounter++;
+        if (hangCounter > HANG_CHECK_LIMIT)
+            assert(false && "infinite loop in translator, maybe caused by "
+                            "missing mergepoint");
         if (finger == end)
             finger = popWorklist();
         assert(finger != end);
