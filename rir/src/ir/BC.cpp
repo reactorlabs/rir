@@ -150,6 +150,8 @@ SEXP BC::immediateConst() const {
 }
 
 // #define DEBUG_SERIAL
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
 
 void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
                      size_t codeSize, Code* container) {
@@ -410,6 +412,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         codeSize -= size;
     }
 }
+
+#pragma GCC diagnostic pop
 
 void BC::printImmediateArgs(std::ostream& out) const {
     out << "[";
