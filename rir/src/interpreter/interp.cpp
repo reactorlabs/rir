@@ -215,7 +215,6 @@ static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
         // flatten the ellipsis
         if (argi == DOTS_ARG_IDX) {
             SEXP ellipsis = Rf_findVar(R_DotsSymbol, call.callerEnv);
-            ctx->measurer.recordClosureUseEnv(call.caller, MeasureFlag::Load);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
@@ -1708,7 +1707,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldfun_) {
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Load);
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findFun(sym, env);
@@ -1735,7 +1733,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_for_update_) {
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Load);
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP loc = cachedGetBindingCell(env, id, ctx, bindingCache);
@@ -1778,7 +1775,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_) {
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Load);
             Immediate id = readImmediate();
             advanceImmediate();
             res = cachedGetVar(env, id, ctx, bindingCache);
@@ -1804,7 +1800,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_noforce_) {
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Load);
             Immediate id = readImmediate();
             advanceImmediate();
             res = cachedGetVar(env, id, ctx, bindingCache);
@@ -1826,7 +1821,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_super_) {
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Load);
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, ENCLOS(env));
@@ -1850,7 +1844,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_noforce_super_) {
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Load);
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, ENCLOS(env));
@@ -1870,7 +1863,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldddvar_) {
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Load);
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_ddfindVar(sym, env);
@@ -1930,7 +1922,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 env = stub->create();
             }
             cachedSetVar(val, env, id, ctx, bindingCache);
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Store);
 
             NEXT();
         }
@@ -1945,7 +1936,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 env = stub->create();
             }
             cachedSetVar(val, env, id, ctx, bindingCache, true);
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Store);
 
             NEXT();
         }
@@ -1957,7 +1947,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_pop(ctx);
             INCREMENT_NAMED(val);
             Rf_setVar(sym, val, ENCLOS(env));
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Store);
             NEXT();
         }
 
@@ -2807,7 +2796,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SLOWASSERT(!DDVAL(sym));
             assert(env);
             SEXP val = R_findVarLocInFrame(env, sym).cell;
-            ctx->measurer.recordClosureUseEnv(c, MeasureFlag::Load);
             if (val == NULL)
                 Rf_errorcall(getSrcAt(c, pc - 1, ctx),
                              "'missing' can only be used for arguments");

@@ -166,4 +166,4 @@ rir.flushMeasure <- function() {
     stop("missed breakpoint, did you re-compile RIR?")
 }
 
-onexit(rir.flushMeasure(), add=TRUE)
+on.exit(rir.flushMeasure, add=TRUE)

@@ -100,6 +100,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         unsigned srcIdx;
     };
 
+    SEXP ast() const;
+
     /** Returns a pointer to the instructions in c.  */
     Opcode* code() const { return (Opcode*)data; }
     Opcode* endCode() const { return (Opcode*)((uintptr_t)code() + codeSize); }

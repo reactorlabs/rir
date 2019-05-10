@@ -21,6 +21,8 @@ Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
     setEntry(0, R_NilValue);
 }
 
+SEXP Code::ast() const { return src_pool_at(globalContext(), src); }
+
 unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     if (srcLength == 0) {
         assert(allowMissing);

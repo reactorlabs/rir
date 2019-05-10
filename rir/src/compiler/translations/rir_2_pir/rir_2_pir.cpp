@@ -1,4 +1,5 @@
 #include "rir_2_pir.h"
+#include "../../../api.h"
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
@@ -458,6 +459,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     fs = insert.registerFrameState(srcCode, nextPos, stack);
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
+            Measure.recordCallInferFail(srcCode);
         };
         if (monomorphicClosure) {
             std::string name = "";
@@ -475,11 +477,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(
                         new StaticCall(insert.env, f->owner(), args, fs, ast)));
+                    Measure.recordCallInferReg(srcCode);
                 },
                 insertGenericCall);
         } else if (monomorphicBuiltin) {
             pop();
             push(insert(BuiltinCallFactory::New(env, monomorphic, args, ast)));
+            Measure.recordCallInferBuiltin(srcCode);
         } else {
             insertGenericCall();
         }

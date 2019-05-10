@@ -19,10 +19,9 @@ class ClosureVersion;
 // !!! important: when adding a new flag, update MeasureFlag::LAST !!!
 #define LIST_OF_RIR_MEASURE_FLAGS(V)                                           \
     V(Envs)                                                                    \
-    V(Load)                                                                    \
-    V(Store)                                                                   \
-    V(LazyArgs)                                                                \
-    V(Vars)
+    V(InferredFuns)                                                            \
+    V(InferredBuiltins)                                                        \
+    V(LazyArgs)
 
 // A type of measurement
 enum class MeasureFlag : uint8_t {
@@ -31,7 +30,7 @@ enum class MeasureFlag : uint8_t {
 #undef V
 
         FIRST = Envs,
-    LAST = Reflection,
+    LAST = LazyArgs,
 };
 typedef EnumSet<MeasureFlag> MeasureFlags;
 
@@ -68,6 +67,7 @@ struct MeasureTable {
         : fileBase(fileBase), header(header) {}
 
     MeasureRow& row(pir::ClosureVersion* code, bool create);
+    MeasureRow& row(Code* code, bool create);
     MeasureRow& row(Code* code, SEXP ast, bool create);
     MeasureRow& row(const char* name, void* entry, bool create);
     void reset();
@@ -104,7 +104,9 @@ struct Measurer {
     void recordInlineClosureStart(const char* name, void* entry);
     void recordClosureMkEnv(Code* code, bool beforeStart = false,
                             SEXP ast = NULL);
-    void recordClosureUseEnv(Code* code, MeasureFlag way);
+    void recordCallInferReg(Code* code);
+    void recordCallInferBuiltin(Code* code);
+    void recordCallInferFail(Code* code);
     void recordCompiled(pir::ClosureVersion* code);
     void recordOptimized(pir::ClosureVersion* code);
 };

@@ -19,6 +19,10 @@ MeasureRow& MeasureTable::row(pir::ClosureVersion* code, bool create) {
     return rows.at(key);
 }
 
+MeasureRow& MeasureTable::row(Code* code, bool create) {
+    return row(code, code->ast(), create);
+}
+
 MeasureRow& MeasureTable::row(Code* code, SEXP ast, bool create) {
     void* key = code->code();
     if (!rows.count(key)) {
@@ -91,22 +95,15 @@ MeasureData::MeasureData(MeasureFlags flags, std::string fileBase) {
             tables.emplace(flag, table);
             break;
         }
-        case MeasureFlag::Load: {
-            MeasureTable table(fileBase.empty() ? "" : fileBase + "_load",
-                               MeasureHeader("Closure", "PIR", "RIR"));
+        case MeasureFlag::InferredFuns: {
+            MeasureTable table(fileBase.empty() ? "" : fileBase + "_allFuns",
+                               MeasureHeader("Caller", "Inferred", "Calls"));
             tables.emplace(flag, table);
             break;
         }
-        case MeasureFlag::Store: {
-            MeasureTable table(fileBase.empty() ? "" : fileBase + "_store",
-                               MeasureHeader("Closure", "PIR", "RIR"));
-            tables.emplace(flag, table);
-            break;
-        }
-        case MeasureFlag::Vars: {
-            MeasureTable table(
-                fileBase.empty() ? "" : fileBase + "_vars",
-                MeasureHeader("Closure", "Optimized", "Initial"));
+        case MeasureFlag::InferredBuiltins: {
+            MeasureTable table(fileBase.empty() ? "" : fileBase + "_bltFuns",
+                               MeasureHeader("Caller", "Inferred", "Calls"));
             tables.emplace(flag, table);
             break;
         }
@@ -144,25 +141,17 @@ void MeasureData::flush() const {
     }
 }
 
-static MeasureFlags CLOSURE_FLAGS = MeasureFlags(MeasureFlag::Envs);
-static MeasureFlags PIR_FLAGS =
-    MeasureFlags(MeasureFlag::Vars) | MeasureFlag::LazyArgs;
-
 void Measurer::recordClosureStart(Code* code, SEXP ast, bool isInline) {
-    for (MeasureFlag flag : CLOSURE_FLAGS) {
-        if (!data.hasTable(flag))
-            continue;
-        MeasureTable& table = data.table(flag);
+    if (data.hasTable(MeasureFlag::Envs)) {
+        MeasureTable& table = data.table(MeasureFlag::Envs);
         MeasureRow& row = table.row(code, ast, true);
         row.second++;
     }
 }
 
 void Measurer::recordInlineClosureStart(const char* name, void* entry) {
-    for (MeasureFlag flag : CLOSURE_FLAGS) {
-        if (!data.hasTable(flag))
-            continue;
-        MeasureTable& table = data.table(flag);
+    if (data.hasTable(MeasureFlag::Envs)) {
+        MeasureTable& table = data.table(MeasureFlag::Envs);
         MeasureRow& row = table.row(name, entry, true);
         row.second++;
     }
@@ -176,45 +165,53 @@ void Measurer::recordClosureMkEnv(Code* code, bool beforeStart, SEXP ast) {
     }
 }
 
-void Measurer::recordClosureUseEnv(Code* code, MeasureFlag way) {
-    if (data.hasTable(flag)) {
-        MeasureTable& table = data.table(flag);
-        MeasureRow& row = table.row(code, NULL, false);
-        // TODO: Increment first if in PIR
+static MeasureFlags INFER_FUN_FLAGS =
+    MeasureFlags(MeasureFlag::InferredFuns) | MeasureFlag::InferredBuiltins;
+
+void Measurer::recordCallInferReg(Code* code) {
+    if (data.hasTable(MeasureFlag::InferredFuns)) {
+        MeasureTable& table = data.table(MeasureFlag::InferredFuns);
+        MeasureRow& row = table.row(code, true);
+        row.first++;
         row.second++;
     }
 }
 
-static unsigned pirMeasurement(MeasureFlag flag, pir::ClosureVersion* code) {
-    switch (flag) {
-    case MeasureFlag::Vars:
-        return pir::Query::envVars(code);
-    case MeasureFlag::LazyArgs:
-        return pir::Query::lazyArgs(code);
-    default:
-        assert(false);
-        return 0;
-    }
-}
-
-void Measurer::recordCompiled(pir::ClosureVersion* code) {
-    for (MeasureFlag flag : PIR_FLAGS) {
+void Measurer::recordCallInferBuiltin(Code* code) {
+    for (MeasureFlag flag : INFER_FUN_FLAGS) {
         if (!data.hasTable(flag))
             continue;
         MeasureTable& table = data.table(flag);
         MeasureRow& row = table.row(code, true);
-        row.second = pirMeasurement(flag, code);
+        row.first++;
+        row.second++;
+    }
+}
+
+void Measurer::recordCallInferFail(Code* code) {
+    for (MeasureFlag flag : INFER_FUN_FLAGS) {
+        if (!data.hasTable(flag))
+            continue;
+        MeasureTable& table = data.table(flag);
+        MeasureRow& row = table.row(code, true);
+        row.second++;
+    }
+}
+
+void Measurer::recordCompiled(pir::ClosureVersion* code) {
+    if (data.hasTable(MeasureFlag::LazyArgs)) {
+        MeasureTable& table = data.table(MeasureFlag::LazyArgs);
+        MeasureRow& row = table.row(code, true);
+        row.second = pir::Query::lazyArgs(code);
         row.first = row.second;
     }
 }
 
 void Measurer::recordOptimized(pir::ClosureVersion* code) {
-    for (MeasureFlag flag : PIR_FLAGS) {
-        if (!data.hasTable(flag))
-            continue;
-        MeasureTable& table = data.table(flag);
+    if (data.hasTable(MeasureFlag::LazyArgs)) {
+        MeasureTable& table = data.table(MeasureFlag::LazyArgs);
         MeasureRow& row = table.row(code, true);
-        row.first = pirMeasurement(flag, code);
+        row.first = pir::Query::lazyArgs(code);
     }
 }
 
