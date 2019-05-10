@@ -138,8 +138,7 @@ static bool testOneNot(ClosureVersion* f) {
 static bool testLdVarVectorInFirstBB(ClosureVersion* f) {
     for (auto instruction : *f->entry) {
         if (auto ldvar = LdVar::Cast(instruction)) {
-            return std::string(CHAR(PRINTNAME(ldvar->varName)))
-                       .compare("vector") == 0;
+            return ldvar->varName == Rf_install("vector");
         }
     }
     return false;
