@@ -1,4 +1,5 @@
 #include "type.h"
+#include "../../interpreter/LazyEnvironment.h"
 #include "R/r.h"
 
 extern "C" Rboolean(Rf_isObject)(SEXP s);
@@ -37,8 +38,7 @@ void PirType::merge(SEXPTYPE sexptype) {
         break;
     case EXPRSXP:
         t_.r.set(RType::ast);
-        t_.r.set(RType::code);
-        break;
+        // fall through
     case LANGSXP:
         t_.r.set(RType::code);
         break;
@@ -79,12 +79,7 @@ void PirType::merge(SEXPTYPE sexptype) {
 }
 
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
-    if (e == R_MissingArg)
-        t_.r.set(RType::missing);
-    else if (e == R_UnboundValue)
-        t_.r.set(RType::unbound);
-    else
-        merge(TYPEOF(e));
+    merge(TYPEOF(e));
 
     if (!Rf_isObject(e)) {
         flags_.reset(TypeFlags::maybeObject);
@@ -94,6 +89,11 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         if (Rf_length(e) == 1)
             flags_.reset(TypeFlags::maybeNotScalar);
     }
+}
+
+PirType::PirType(const void* pos) : PirType() {
+    memcpy(this, pos, sizeof(*this));
+    assert((isRType() || !t_.n.empty()) && "corrupted pir type");
 }
 
 void PirType::merge(const ObservedValues& other) {
@@ -121,6 +121,23 @@ void PirType::merge(const ObservedValues& other) {
             flags_.set(TypeFlags::maybeNotScalar);
 
         merge(record.sexptype);
+    }
+}
+
+bool PirType::hasInstance(SEXP val) const {
+    if (isRType()) {
+        if (TYPEOF(val) == PROMSXP)
+            return maybePromiseWrapped() || maybeLazy() ||
+                   PirType(RType::prom).isA(*this);
+        if (LazyEnvironment::cast(val))
+            return PirType(RType::env).isA(*this);
+        return PirType(val).isA(*this | RType::missing);
+    } else if (*this == NativeType::test) {
+        return IS_SIMPLE_SCALAR(val, LGLSXP) && *LOGICAL(val) != NA_LOGICAL;
+    } else {
+        std::cerr << "can't check val is instance of " << *this << ", value:\n";
+        Rf_PrintValue(val);
+        assert(false);
     }
 }
 }
