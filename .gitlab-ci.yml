@@ -48,6 +48,7 @@ tests_debug:
     - mkdir build_debugopt && cd build_debugopt
     - cmake -DCMAKE_BUILD_TYPE=debugopt -GNinja ..
     - ninja -j 3
+    - export UNSOUND_OPTS=off
     - bin/tests
     - R_ENABLE_JIT=0 ./bin/tests
     - R_ENABLE_JIT=1 ./bin/tests

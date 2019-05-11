@@ -41,6 +41,7 @@ class Compiler {
 
   public:
     static bool profile;
+    static bool unsoundOpts;
     SEXP finalize();
 
     static SEXP compileExpression(SEXP ast) {

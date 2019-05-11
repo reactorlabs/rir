@@ -410,9 +410,12 @@ void Branch::printGraphArgs(std::ostream& out, bool tty) const {
 }
 
 void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
-    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid()
-        << " [color=green];\n  BB" << bbId << " -> BB"
-        << bb()->falseBranch()->uid() << " [color=red];\n";
+    auto trueBB = bb()->trueBranch();
+    auto falseBB = bb()->falseBranch();
+    out << "  BB" << bbId << " -> BB" << trueBB->uid()
+        << " [color=green];  // -> BB" << trueBB->id << "\n"
+        << "  BB" << bbId << " -> BB" << falseBB->uid()
+        << " [color=red];  // -> BB" << falseBB->id << "\n";
 }
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
@@ -830,8 +833,12 @@ void Checkpoint::printGraphArgs(std::ostream& out, bool tty) const {
 }
 
 void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
-    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid() << ";\n  BB"
-        << bbId << " -> BB" << bb()->falseBranch()->uid() << " [color=red];\n";
+    auto trueBB = bb()->trueBranch();
+    auto falseBB = bb()->falseBranch();
+    out << "  BB" << bbId << " -> BB" << trueBB->uid() << ";  // -> BB"
+        << trueBB->id << "\n"
+        << "  BB" << bbId << " -> BB" << falseBB->uid()
+        << " [color=red];  // -> BB" << falseBB->id << "\n";
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }

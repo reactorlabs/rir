@@ -135,10 +135,10 @@ static bool testOneNot(ClosureVersion* f) {
     return numNots == 1;
 }
 
-static bool testLdFunInFirstBB(ClosureVersion* f) {
+static bool testLdVarVectorInFirstBB(ClosureVersion* f) {
     for (auto instruction : *f->entry) {
-        if (LdFun::Cast(instruction)) {
-            return true;
+        if (auto ldvar = LdVar::Cast(instruction)) {
+            return ldvar->varName == Rf_install("vector");
         }
     }
     return false;

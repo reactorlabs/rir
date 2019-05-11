@@ -116,3 +116,23 @@ f <- function() {a <- r(); b <- a; a[[1]] <- 2; a+b}
 r <- function() 22
 for (i in 1:5)
   stopifnot(f() == 24)
+
+# ensure we do not hoist ldfuns out of loops
+f <- function(j){
+    j <- j
+    while (j < 2) {
+        c(j)
+        j <- j + 1 
+    }   
+}
+g <- function(i) {
+  if (i) 
+    f(0)
+  else
+    f(2)
+}
+g(TRUE)
+g(FALSE)
+g(TRUE)
+delayedAssign("c", fail())
+g(FALSE)  

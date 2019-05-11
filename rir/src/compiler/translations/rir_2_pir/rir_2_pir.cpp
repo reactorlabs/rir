@@ -100,6 +100,8 @@ void State::mergeIn(const State& incom, BB* incomBB) {
 
 std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
+    Opcode* first = srcCode->code();
+
     // Mark incoming jmps
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
         BC bc = BC::decodeShallow(pc);
@@ -122,7 +124,9 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     std::unordered_set<Opcode*> mergepoints;
     // Create mergepoints
     for (auto m : incom)
-        if (std::get<1>(m).size() > 1)
+        // The first position must also be considered a mergepoint in case it
+        // has only one incoming (a jump)
+        if (std::get<0>(m) == first || std::get<1>(m).size() > 1)
             mergepoints.insert(m.first);
     return mergepoints;
 }
