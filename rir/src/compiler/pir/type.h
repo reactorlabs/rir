@@ -342,7 +342,7 @@ struct PirType {
     RIR_INLINE PirType orNotPromise() const {
         assert(isRType());
         if (isRType(RType::prom))
-            return PirType::any().notMissing();
+            return PirType::valOrLazy();
         else
             return *this;
     }
