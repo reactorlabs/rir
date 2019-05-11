@@ -106,7 +106,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code = (Code*)DATAPTR(store);
     delete old;
     code->info = {// GC area starts just after the header
-                  (intptr_t)&code->locals_ - (intptr_t)code,
+                  (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
                   // GC area has only 1 pointer
                   NumLocals, CODE_MAGIC};
     code->setEntry(0, extraPool);
