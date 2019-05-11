@@ -43,7 +43,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     i->eachArg([&](Value* v) {
                         if (i->mayHaveEnv() && v == i->env())
                             return;
-                        inferred = inferred | getType(v).orNotPromise();
+                        inferred = inferred | getType(v).notPromise();
                     });
                     return inferred;
                 };
