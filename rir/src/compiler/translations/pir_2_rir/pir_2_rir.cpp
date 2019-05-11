@@ -936,9 +936,15 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             // Check the return type
             if (pir::Parameter::RIR_CHECK_PIR_TYPES &&
                 instr->type != PirType::voyd() &&
-                instr->type != NativeType::context && !CastType::Cast(instr)) {
+                instr->type != NativeType::context && !CastType::Cast(instr) &&
+                Visitor::check(code->entry, [&](Instruction* i) {
+                    if (auto cast = CastType::Cast(i)) {
+                        if (cast->arg<0>().val() == instr)
+                            return false;
+                    }
+                    return true;
+                }))
                 cb.add(BC::assertType(instr->type));
-            }
 
             // Store the result
             if (alloc.sa.dead(instr)) {
