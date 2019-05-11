@@ -881,8 +881,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopNext())
-               << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
             return true;
         }
     }
@@ -897,8 +896,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopBreak())
-               << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
             return true;
         }
     }
