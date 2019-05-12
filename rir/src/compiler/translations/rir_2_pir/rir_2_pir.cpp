@@ -884,7 +884,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
         worklist.push_back(State(cur, false, bb, pos));
     };
 
+#define HANG_CHECK_LIMIT 100000
+    static unsigned hangCounter;
+    hangCounter = 0;
     while (finger != end || !worklist.empty()) {
+        assert(
+            (hangCounter < HANG_CHECK_LIMIT) &&
+            "infinite loop in translator, maybe caused by missing mergepoint");
+        hangCounter++;
         if (finger == end)
             finger = popWorklist();
         assert(finger != end);
