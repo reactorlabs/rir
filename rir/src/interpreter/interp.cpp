@@ -3360,11 +3360,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(guard_fun_) {
-#ifndef UNSOUND_OPTS
             SEXP sym = readConst(ctx, readImmediate());
-#else
-            readConst(ctx, readImmediate());
-#endif
             advanceImmediate();
             res = readConst(ctx, readImmediate());
             advanceImmediate();

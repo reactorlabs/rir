@@ -31,6 +31,9 @@ typedef struct {
 } BindingCache;
 typedef BindingCache Cache;
 
+static RIR_INLINE void clearCache(Cache* cache, size_t cacheSize) {
+    memset(cache, 0, sizeof(Cache) * cacheSize);
+}
 
 static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
                                             Immediate cacheIdx,
@@ -40,10 +43,8 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
 
     Immediate cidx = cacheIndex(cacheIdx, smallCache);
 
-    if (cache[cidx].idx == cacheIdx) {
-        std::cout << "Encontre posicion: " << cacheIdx;
+    if (cache[cidx].idx == cacheIdx)
         return cache[cidx].loc;
-    }
 
     return NULL;
 }
@@ -55,13 +56,48 @@ static RIR_INLINE void cachedSetBindingCell(Immediate cacheIdx, Cache* cache,
     cache[cidx].idx = cacheIdx;
 }
 
+static RIR_INLINE SEXP getCellFromCache(SEXP env, Immediate poolIdx,
+                                        Immediate cacheIdx,
+                                        InterpreterInstance* ctx, Cache* cache,
+                                        bool smallCache) {
+    if (env != R_BaseEnv && env != R_BaseNamespace) {
+        SEXP cell = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx, cache,
+                                         smallCache);
+        if (!cell) {
+            SEXP sym = cp_pool_at(ctx, poolIdx);
+            SLOWASSERT(TYPEOF(sym) == SYMSXP);
+            R_varloc_t loc = R_findVarLocInFrame(env, sym);
+            if (!R_VARLOC_IS_NULL(loc)) {
+                cachedSetBindingCell(cacheIdx, cache, smallCache, loc);
+                return loc.cell;
+            }
+        }
+    }
+    return nullptr;
+}
+
+static RIR_INLINE SEXP cachedGetVar(SEXP env, Immediate poolIdx,
+                                    Immediate cacheIdx,
+                                    InterpreterInstance* ctx, Cache* cache,
+                                    bool smallCache) {
+    SEXP cell =
+        getCellFromCache(env, poolIdx, cacheIdx, ctx, cache, smallCache);
+    if (cell) {
+        SEXP res = CAR(cell);
+        if (res != R_UnboundValue)
+            return res;
+    }
+    SEXP sym = cp_pool_at(ctx, poolIdx);
+    SLOWASSERT(TYPEOF(sym) == SYMSXP);
+    return Rf_findVar(sym, env);
+}
+
 static RIR_INLINE void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
                                     Immediate cacheIdx,
                                     InterpreterInstance* ctx,
                                     Cache* cache, bool smallCache,
                                     bool keepMissing = false) {
-    SEXP loc = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx, cache,
-                                    smallCache);
+    SEXP loc = getCellFromCache(env, poolIdx, cacheIdx, ctx, cache, smallCache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
         if (cur == val)
@@ -82,39 +118,6 @@ static RIR_INLINE void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
     UNPROTECT(1);
 }
 
-static RIR_INLINE void clearCache(Cache* cache,
-                                  size_t cacheSize) {
-    memset(cache, 0, sizeof(Cache) * cacheSize);
-}
-
 #endif
-
-static RIR_INLINE SEXP cachedGetVar(SEXP env, Immediate poolIdx,
-                                    Immediate cacheIdx,
-                                    InterpreterInstance* ctx, Cache* cache,
-                                    bool smallCache) {
-    if (env != R_BaseEnv && env != R_BaseNamespace) {
-        SEXP cell = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx,
-                                              cache, smallCache);
-        if (!cell) {
-            SEXP sym = cp_pool_at(ctx, poolIdx);
-            SLOWASSERT(TYPEOF(sym) == SYMSXP);
-            R_varloc_t loc = R_findVarLocInFrame(env, sym);
-            if (!R_VARLOC_IS_NULL(loc)){ 
-                cachedSetBindingCell(cacheIdx, cache, smallCache, loc);
-                cell = loc.cell;
-            }
-        }
-
-        if (cell) {
-            SEXP res = CAR(cell);
-            if (res != R_UnboundValue)
-                return res;
-        }
-    }
-    SEXP sym = cp_pool_at(ctx, poolIdx);
-    SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    return Rf_findVar(sym, env);
-}
 } // namespace rir
 #endif
