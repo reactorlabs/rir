@@ -382,7 +382,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // Insert a guard if we want to speculate
         if (monomorphicBuiltin || monomorphicClosure) {
             Value* expected = insert(new LdConst(monomorphic));
-#define UNSOUND_NESTED_CALLS
 #ifdef UNSOUND_NESTED_CALLS
             (void)expected;
 #else
