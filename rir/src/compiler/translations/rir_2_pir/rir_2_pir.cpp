@@ -382,6 +382,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // Insert a guard if we want to speculate
         if (monomorphicBuiltin || monomorphicClosure) {
             Value* expected = insert(new LdConst(monomorphic));
+#define UNSOUND_NESTED_CALLS
+#ifdef UNSOUND_NESTED_CALLS
+            (void)expected;
+#else
             Value* given = callee;
             // We use ldvar instead of ldfun for the guard. The reason is that
             // ldfun can force promises, which is a pain for our optimizer to
@@ -398,6 +402,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             Value* t = insert(new Identical(given, expected));
             auto cp = addCheckpoint(srcCode, pos, stack, insert);
             assumption = insert(new Assume(t, cp));
+#endif
         }
 
         // Compile the arguments (eager for builltins)
