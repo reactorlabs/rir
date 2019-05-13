@@ -1,4 +1,4 @@
-FROM registry.gitlab.com/rirvm/rir_mirror:base
+FROM registry.gitlab.com/rirvm/rir_mirror/base
 ADD . /opt/rir
 RUN cd /opt/rir && tools/sync.sh && tools/build-gnur.sh custom-r && rm -rf external/custom-r/cache_recommended.tar external/custom-r/src .git
 RUN mkdir -p /opt/rir/build/release      && cd /opt/rir/build/release      && cmake -DCMAKE_BUILD_TYPE=release      -GNinja ../.. && ninja && rm -rf build/*/CMakeFiles

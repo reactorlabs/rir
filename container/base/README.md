@@ -4,7 +4,7 @@ This Dockerfile builds the base container with all dependencies preinstalled to 
 
 ## How
 
-To update the container at "registry.gitlab.com/rirvm/rir_mirror:base"
+To update the container at "registry.gitlab.com/rirvm/rir_mirror/base"
 
 First
 
