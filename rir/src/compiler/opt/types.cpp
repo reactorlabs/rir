@@ -5,7 +5,6 @@
 #include "R/Funtab.h"
 
 #include "../analysis/abstract_value.h"
-#include "../analysis/query.h"
 
 #include "pass_definitions.h"
 
@@ -114,10 +113,6 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     inferred = i->type;
                     break;
                 }
-
-                case Tag::StaticCall:
-                    inferred = Query::returnType(StaticCall::Cast(i)->cls());
-                    break;
 
                 default:
                     inferred = i->type;
