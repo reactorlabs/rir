@@ -1488,9 +1488,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         if (env != symbol::delayedEnv)
             clearCache(bindingCache, cacheSize);
     }
-    clearCache(bindingCache, cacheSize);
-    std::cout << "cache size: " << cacheSize << "\n";
-
+    
     if (!existingLocals) {
 #ifdef TYPED_STACK
         // Zero the region of the locals to avoid keeping stuff alive and to

@@ -84,7 +84,7 @@ static RIR_INLINE void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
 
 static RIR_INLINE void clearCache(Cache* cache,
                                   size_t cacheSize) {
-    memset(cache, 0, sizeof(cache) * cacheSize);
+    memset(cache, 0, sizeof(Cache) * cacheSize);
 }
 
 #endif
@@ -101,13 +101,12 @@ static RIR_INLINE SEXP cachedGetVar(SEXP env, Immediate poolIdx,
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             R_varloc_t loc = R_findVarLocInFrame(env, sym);
             if (!R_VARLOC_IS_NULL(loc)){ 
-                //cachedSetBindingCell(cacheIdx, cache, smallCache, loc);
+                cachedSetBindingCell(cacheIdx, cache, smallCache, loc);
                 cell = loc.cell;
             }
         }
 
         if (cell) {
-            std::cout << "entro aca\n";
             SEXP res = CAR(cell);
             if (res != R_UnboundValue)
                 return res;
