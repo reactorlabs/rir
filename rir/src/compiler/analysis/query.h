@@ -19,7 +19,6 @@ class Query {
     static bool noEnvSpec(Code* c);
     static bool noDeopt(Code* c);
     static std::unordered_set<Value*> returned(Code* c);
-    static PirType returnType(Closure* c);
 };
 } // namespace pir
 } // namespace rir

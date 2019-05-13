@@ -48,15 +48,5 @@ std::unordered_set<Value*> Query::returned(Code* c) {
     return returned;
 }
 
-PirType Query::returnType(Closure* c) {
-    PirType t = PirType::bottom();
-    c->eachVersion([&](ClosureVersion* cv) {
-        for (Value* val : Query::returned(cv)) {
-            t = t | val->type;
-        }
-    });
-    return t;
-}
-
 } // namespace pir
 } // namespace rir
