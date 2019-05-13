@@ -21,7 +21,7 @@ before_script:
 
 sanity:
   script:
-    - tools/cppcheck
+    - tools/cppcheck --xml
     - cd build_release
     - bin/tests
 

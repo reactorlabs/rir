@@ -1456,7 +1456,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     ostack_push(ctx, res);
 }
 
-// cppcheck-suppress allocaCalled
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  R_bcstack_t* localsBase, BindingCache* cache) {
