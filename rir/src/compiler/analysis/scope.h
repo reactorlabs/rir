@@ -45,6 +45,10 @@ class ScopeAnalysisState {
             mayUseReflection = true;
             res.lostPrecision();
         }
+        if (!returnValue.isUnknown() && other.returnValue.isUnknown()) {
+            returnValue.taint();
+            res.lostPrecision();
+        }
 
         return res.max(envs.merge(other.envs));
     }
