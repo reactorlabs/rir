@@ -132,7 +132,7 @@ test_benchmarks:
 
 deploy:
   stage: Deploy
-  image: ubuntu:18.04
+  image: docker:stable
   variables:
       GIT_STRATEGY: none
   script:
