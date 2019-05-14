@@ -339,16 +339,6 @@ struct PirType {
         return PirType(t_.r);
     }
 
-    RIR_INLINE PirType orNotPromise() const {
-        assert(isRType());
-        if (isRType(RType::prom))
-            return valOrLazy();
-        else
-            return *this;
-    }
-
-    RIR_INLINE PirType notPromise() const { return orNotPromise().forced(); }
-
     // Type of <this>[<idx>] or <this>[<idx>, <idx>]
     PirType subsetType(PirType idx) const {
         assert(isRType());

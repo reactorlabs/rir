@@ -355,13 +355,10 @@ BC_NOARGS(V, _)
     case Opcode::br_:
         out << immediate.offset;
         break;
-<<<<<<< HEAD
     case Opcode::clear_binding_cache_:
         out << immediate.cacheIdx.start << " " << immediate.cacheIdx.size;
-=======
     case Opcode::assert_type_:
         out << immediate.pirType();
->>>>>>> type assertions without safe force
         break;
     }
     out << "\n";
