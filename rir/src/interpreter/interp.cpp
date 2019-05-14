@@ -1474,6 +1474,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     bool smallCache = c->bindingsCount < MAX_CACHE_SIZE;
     size_t cacheSize = smallCache ? c->bindingsCount + 1 : MAX_CACHE_SIZE;
+    if (cacheSize == 1)
+        cacheSize = 0;
     BindingCache* bindingCache;
     if (cache) {
         bindingCache = cache;
@@ -1481,10 +1483,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         bindingCache =
             (BindingCache*)(alloca(sizeof(BindingCache) * cacheSize));
         /*
-        * In case we are entering the executing of a PIR optimized function
-        * we delay the cache cleaning until we know we are actually requiring
-        * an environment (mk_env).
-        */    
+         * In case we are entering the executing of a PIR optimized function
+         * we delay the cache cleaning until we know we are actually requiring
+         * an environment (mk_env).
+         */
         if (env != symbol::delayedEnv)
             clearCache(bindingCache, cacheSize);
     }
@@ -1703,8 +1705,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
-            SEXP loc = cachedGetBindingCell(env, id, cacheIndex, ctx,
-                                            bindingCache, smallCache);
+            SEXP loc = getCellFromCache(env, id, cacheIndex, ctx, bindingCache,
+                                        smallCache);
             bool isLocal = loc;
             SEXP res = nullptr;
 

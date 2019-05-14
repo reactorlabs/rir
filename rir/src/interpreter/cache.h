@@ -71,6 +71,8 @@ static RIR_INLINE SEXP getCellFromCache(SEXP env, Immediate poolIdx,
                 cachedSetBindingCell(cacheIdx, cache, smallCache, loc);
                 return loc.cell;
             }
+        } else {
+            return cell;
         }
     }
     return nullptr;
