@@ -346,12 +346,10 @@ struct PirType {
             return RType::nil;
         }
         if (isA(num() | RType::str | RType::cons | RType::code)) {
-            PirType t = *this;
             if (idx.isScalar())
-                t.setScalar();
+                return scalar();
             else
-                t = t.orNotScalar();
-            return t;
+                return orNotScalar();
         } else if (isA(RType::vec)) {
             return RType::vec;
         } else if (!maybeObj() && !PirType(RType::prom).isA(*this)) {
@@ -380,6 +378,36 @@ struct PirType {
         } else {
             // Possible object
             return valOrLazy();
+        }
+    }
+
+    // Type of c(<this>, ...numArgs)
+    PirType collectionType(int numArgs) const {
+        assert(isRType());
+        PirType t = *this;
+        if (t.isA(RType::nil)) {
+            return RType::nil;
+        }
+        t.t_.r.reset(RType::nil);
+        if (t.isA(num() | RType::str)) {
+            if (numArgs > 1)
+                t.setNotScalar();
+            RTypeSet r = t.t_.r;
+            if (r.contains(RType::str))
+                t.t_.r = RTypeSet(RType::str);
+            else if (r.contains(RType::cplx))
+                t.t_.r = RTypeSet(RType::cplx);
+            else if (r.contains(RType::real))
+                t.t_.r = RTypeSet(RType::real);
+            else if (r.contains(RType::integer))
+                t.t_.r = RTypeSet(RType::integer);
+            else if (r.contains(RType::logical))
+                t.t_.r = RTypeSet(RType::logical);
+            else
+                assert(false);
+            return t;
+        } else {
+            return RType::vec;
         }
     }
 
