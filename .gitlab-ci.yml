@@ -148,7 +148,7 @@ deploy:
     - docker tag registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA registry.gitlab.com/rirvm/rir_mirror:master
     - docker push registry.gitlab.com/rirvm/rir_mirror:master
     - docker pull registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-    - docker tag registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA registry.gitlab.com/rirvm/rir_mirror:master
+    - docker tag registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA registry.gitlab.com/rirvm/rir_mirror/benchmark:master
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:master
   only:
     - master
