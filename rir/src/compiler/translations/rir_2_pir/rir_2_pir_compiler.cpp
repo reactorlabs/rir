@@ -13,7 +13,7 @@
 
 #include "../../debugging/PerfCounter.h"
 
-#include "utils/configurations.h"
+#include "compiler/opt/pass_scheduler.h"
 
 #include <chrono>
 
@@ -24,13 +24,6 @@ namespace pir {
 // mis-ordered arguments. The caller needs to take care.
 constexpr Assumptions::Flags Rir2PirCompiler::minimalAssumptions;
 constexpr Assumptions Rir2PirCompiler::defaultAssumptions;
-
-Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
-    : RirCompiler(module), logger(logger) {
-    for (auto& optimization : pirConfigurations()->pirOptimizations()) {
-        translations.push_back(optimization);
-    }
-}
 
 void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                                      const Assumptions& assumptions,
@@ -188,11 +181,11 @@ std::unique_ptr<CompilerPerf> PERF = std::unique_ptr<CompilerPerf>(
 void Rir2PirCompiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
-    for (auto& translation : translations) {
+    for (const auto& translation : PassScheduler::instance()) {
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
                 auto& log = logger.get(v);
-                log.pirOptimizationsHeader(v, translation, passnr++);
+                log.pirOptimizationsHeader(v, translation.get(), passnr++);
 
                 if (MEASURE_COMPILER_PERF)
                     startTime = std::chrono::high_resolution_clock::now();
@@ -205,7 +198,7 @@ void Rir2PirCompiler::optimizeModule() {
                     PERF->addTime(translation->getName(), passDuration.count());
                 }
 
-                log.pirOptimizations(v, translation);
+                log.pirOptimizations(v, translation.get());
 
 #ifdef FULLVERIFIER
                 Verify::apply(v, true);

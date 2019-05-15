@@ -90,15 +90,6 @@ add_custom_target(default-gnur
     COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh custom-r
 )
 
-add_custom_target(dependencies-vanilla
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh  --vanilla
-)
-
-add_custom_target(vanilla-gnur
-    DEPENDS dependencies-vanilla
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh vanilla-r
-)
-
 add_custom_target(setup
     DEPENDS dependencies
     DEPENDS default-gnur
