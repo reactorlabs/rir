@@ -68,6 +68,7 @@ void PirType::merge(SEXPTYPE sexptype) {
         t_.r.set(RType::raw);
         break;
     case BCODESXP:
+    case EXTERNALSXP:
         t_.r.set(RType::code);
         break;
     case CPLXSXP:
@@ -79,8 +80,12 @@ void PirType::merge(SEXPTYPE sexptype) {
     case WEAKREFSXP:
     case S4SXP:
         t_.r = val().t_.r;
+        t_.r.reset(RType::missing);
+        t_.r.reset(RType::unbound);
         break;
     default:
+        std::cerr << "unknown type: " << sexptype << "\n";
+        assert(false);
         break;
     }
 }
@@ -138,9 +143,11 @@ void PirType::merge(const ObservedValues& other) {
 
 bool PirType::isInstance(SEXP val) const {
     if (isRType()) {
-        if (TYPEOF(val) == PROMSXP)
+        if (TYPEOF(val) == PROMSXP) {
+            assert(!Rf_isObject(val));
             return maybePromiseWrapped() || maybeLazy() ||
-                   PirType(val).isA(*this);
+                   PirType(RType::prom).isA(*this);
+        }
         if (LazyEnvironment::cast(val))
             return PirType(RType::env).isA(*this);
         return PirType(val).isA(*this);
