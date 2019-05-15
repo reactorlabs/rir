@@ -56,7 +56,8 @@ void BB::printGraph(std::ostream& out, bool omitDeoptBranches) {
     }
     if (isJmp() || printDeoptOnlyDefault) {
         out << "BB" << uid() << " -> "
-            << "BB" << next0->uid() << ";\n";
+            << "BB" << next0->uid() << ";"
+            << "  // -> BB" << next0->id << "\n";
     }
     if (printDeoptOnlyDefault)
         out << "BB" << uid() << " -> d" << next1->id << " [color=red];\n";
@@ -73,7 +74,8 @@ void BB::printBBGraph(std::ostream& out, bool omitDeoptBranches) {
     }
     if (isJmp() || printDeoptOnlyDefault) {
         out << "BB" << uid() << " -> "
-            << "BB" << next0->uid() << ";\n";
+            << "BB" << next0->uid() << ";"
+            << "  // -> BB" << next0->id << "\n";
     }
     if (printDeoptOnlyDefault)
         out << "BB" << uid() << " -> d" << next1->id << " [color=red];\n";
