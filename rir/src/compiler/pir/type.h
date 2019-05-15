@@ -346,12 +346,10 @@ struct PirType {
             return RType::nil;
         }
         if (isA(num() | RType::str | RType::cons | RType::code)) {
-            PirType t = *this;
             if (idx.isScalar())
-                t.setScalar();
+                return scalar();
             else
-                t = t.orNotScalar();
-            return t;
+                return orNotScalar();
         } else if (isA(RType::vec)) {
             return RType::vec;
         } else if (!maybeObj() && !PirType(RType::prom).isA(*this)) {
@@ -380,6 +378,24 @@ struct PirType {
         } else {
             // Possible object
             return valOrLazy();
+        }
+    }
+
+    // Type of c(<this>, ...numArgs)
+    PirType collectionType(int numArgs) const {
+        assert(isRType());
+        if (isA(RType::nil)) {
+            return RType::nil;
+        } else if (isA(num() | RType::str | RType::nil)) {
+            PirType t = *this;
+            t.t_.r.reset(RType::nil);
+            if (numArgs > 1)
+                t.setNotScalar();
+            return t;
+        } else if (t_.r.contains(RType::prom)) {
+            return val();
+        } else {
+            return forced().notObject().orNotScalar() | RType::vec;
         }
     }
 
