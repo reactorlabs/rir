@@ -449,7 +449,7 @@ struct PirType {
     }
 
     // Is val an instance of this type?
-    bool hasInstance(SEXP val) const;
+    bool isInstance(SEXP val) const;
 
     void print(std::ostream& out = std::cout) const;
 };

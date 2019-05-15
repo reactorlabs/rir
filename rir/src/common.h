@@ -12,11 +12,9 @@ extern void printBacktrace();
 
 #ifdef ENABLE_SLOWASSERT
 #define SLOWASSERT(what) assert(what)
-__attribute__((unused)) static bool IS_SLOWASSERT = true;
 #else
 #define SLOWASSERT(what)                                                       \
     {}
-__attribute__((unused)) static bool IS_SLOWASSERT = false;
 #endif
 
 // from boost

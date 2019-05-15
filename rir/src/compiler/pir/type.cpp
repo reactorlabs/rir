@@ -9,8 +9,7 @@ namespace rir {
 namespace pir {
 
 bool Parameter::RIR_CHECK_PIR_TYPES =
-    getenv("RIR_CHECK_PIR_TYPES") ? (bool)atoi(getenv("RIR_CHECK_PIR_TYPES"))
-                                  : IS_SLOWASSERT;
+    getenv("RIR_CHECK_PIR_TYPES") && (bool)atoi(getenv("RIR_CHECK_PIR_TYPES"));
 
 void PirType::print(std::ostream& out) const { out << *this << "\n"; }
 
@@ -87,7 +86,12 @@ void PirType::merge(SEXPTYPE sexptype) {
 }
 
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
-    merge(TYPEOF(e));
+    if (e == R_MissingArg)
+        t_.r.set(RType::missing);
+    else if (e == R_UnboundValue)
+        t_.r.set(RType::unbound);
+    else
+        merge(TYPEOF(e));
 
     if (!Rf_isObject(e)) {
         flags_.reset(TypeFlags::maybeObject);
@@ -132,14 +136,14 @@ void PirType::merge(const ObservedValues& other) {
     }
 }
 
-bool PirType::hasInstance(SEXP val) const {
+bool PirType::isInstance(SEXP val) const {
     if (isRType()) {
         if (TYPEOF(val) == PROMSXP)
             return maybePromiseWrapped() || maybeLazy() ||
-                   PirType(RType::prom).isA(*this);
+                   PirType(val).isA(*this);
         if (LazyEnvironment::cast(val))
             return PirType(RType::env).isA(*this);
-        return PirType(val).isA(*this | RType::missing);
+        return PirType(val).isA(*this);
     } else if (*this == NativeType::test) {
         return IS_SIMPLE_SCALAR(val, LGLSXP) && *LOGICAL(val) != NA_LOGICAL;
     } else {
