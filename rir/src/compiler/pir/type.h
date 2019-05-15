@@ -394,7 +394,7 @@ struct PirType {
                 t.setNotScalar();
             return t;
         } else if (t_.r.contains(RType::prom)) {
-            return val();
+            return PirType::val();
         } else {
             return forced().notObject().orNotScalar() | RType::vec;
         }
