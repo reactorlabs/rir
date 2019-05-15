@@ -96,7 +96,7 @@ test_sanitize:
   script:
     - cd /opt/rir/build/sanitize
     - ENABLE_VALGRIND=1 ./bin/tests
-    - R_GCTORTURE=100 bin/tests
+    - R_GCTORTURE=200 bin/tests
     - R_GCTORTURE=1000 ./bin/gnur-make-tests check
 
 test_big_inline:
@@ -133,6 +133,13 @@ test_benchmarks:
 deploy:
   stage: Deploy
   image: docker:stable
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  services:
+    - docker:dind
+  before_script:
+    - docker info
   variables:
       GIT_STRATEGY: none
   script:
