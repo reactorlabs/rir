@@ -8,8 +8,8 @@ extern "C" Rboolean(Rf_isObject)(SEXP s);
 namespace rir {
 namespace pir {
 
-bool Parameter::RIR_CHECK_PIR_TYPES =
-    getenv("RIR_CHECK_PIR_TYPES") && (bool)atoi(getenv("RIR_CHECK_PIR_TYPES"));
+unsigned Parameter::RIR_CHECK_PIR_TYPES =
+    getenv("RIR_CHECK_PIR_TYPES") ? atoi(getenv("RIR_CHECK_PIR_TYPES")) : 0;
 
 void PirType::print(std::ostream& out) const { out << *this << "\n"; }
 

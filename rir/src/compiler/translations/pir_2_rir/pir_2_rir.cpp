@@ -934,7 +934,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cb.add(BC::ensureNamed());
 
             // Check the return type
-            if (pir::Parameter::RIR_CHECK_PIR_TYPES &&
+            if (pir::Parameter::RIR_CHECK_PIR_TYPES > 0 &&
                 instr->type != PirType::voyd() &&
                 instr->type != NativeType::context && !CastType::Cast(instr) &&
                 Visitor::check(code->entry, [&](Instruction* i) {
@@ -944,10 +944,15 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                     }
                     return true;
                 })) {
-                std::stringstream instrPrint;
-                instr->print(instrPrint, false);
-                // WARNING: Leaks memory
-                char* instrStr = strdup(instrPrint.str().c_str());
+                const char* instrStr;
+                if (pir::Parameter::RIR_CHECK_PIR_TYPES > 1) {
+                    std::stringstream instrPrint;
+                    instr->print(instrPrint, false);
+                    // WARNING: Leaks memory
+                    instrStr = (const char*)strdup(instrPrint.str().c_str());
+                } else {
+                    instrStr = "not generated, set RIR_CHECK_PIR_TYPES=2";
+                }
                 cb.add(BC::assertType(instr->type, instrStr));
             }
 
