@@ -136,6 +136,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
     } else if (Deopt::Cast(i)) {
         // who knows what the deopt target will return...
         state.returnValue.taint();
+        state.mayUseReflection = true;
+        effect.taint();
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
