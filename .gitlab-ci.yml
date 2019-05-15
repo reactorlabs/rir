@@ -136,7 +136,7 @@ test_serialize:
       GIT_STRATEGY: none
   stage: Run tests
   script:
-    - cd opt/rir/build/release
+    - cd /opt/rir/build/release
     - RIR_SERIALIZE_CHAOS=1 bin/gnur-make-tests check-all
     - RIR_SERIALIZE_CHAOS=3 bin/gnur-make-tests check-all
 
