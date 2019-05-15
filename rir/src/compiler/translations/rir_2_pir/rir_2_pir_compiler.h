@@ -19,7 +19,8 @@ class Rir2PirCompiler : public RirCompiler {
                         Assumption::NotTooManyArguments,
                     0);
 
-    Rir2PirCompiler(Module* module, StreamLogger& logger);
+    Rir2PirCompiler(Module* module, StreamLogger& logger)
+        : RirCompiler(module), logger(logger){};
 
     void compileClosure(SEXP cls, const std::string& name, MaybeCls success,
                         Maybe fail) {
