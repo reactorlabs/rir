@@ -141,7 +141,7 @@ BC_NOARGS(V, _)
         return;
 
     case Opcode::assert_type_:
-        cs.insert(immediate.pirType());
+        cs.insert(immediate.assertTypeArgs);
         return;
 
     case Opcode::invalid_:
@@ -358,7 +358,7 @@ BC_NOARGS(V, _)
     case Opcode::clear_binding_cache_:
         out << immediate.cacheIdx.start << " " << immediate.cacheIdx.size;
     case Opcode::assert_type_:
-        out << immediate.pirType();
+        out << immediate.assertTypeArgs.pirType();
         break;
     }
     out << "\n";

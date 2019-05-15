@@ -454,10 +454,6 @@ struct PirType {
     void print(std::ostream& out = std::cout) const;
 };
 
-typedef uint32_t Immediate;
-static_assert(sizeof(PirType) == sizeof(Immediate) * 2,
-              "PirType must fit in 2 immediates, or change assert_type_ size");
-
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     switch (t) {
     case NativeType::context:

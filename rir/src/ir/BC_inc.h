@@ -109,6 +109,19 @@ class BC {
         Immediate expected;
         Immediate id;
     };
+    struct AssertTypeArgs {
+        static_assert(
+            sizeof(pir::PirType) == sizeof(Immediate) * 2,
+            "PirType must fit in 2 immediates, or change assert_type_ size");
+        Immediate typeData1;
+        Immediate typeData2;
+        const char* instr;
+
+        pir::PirType pirType() const { return pir::PirType(&typeData1); }
+        void setPirType(pir::PirType typ) {
+            memcpy(&typeData1, &typ, sizeof(pir::PirType));
+        }
+    };
     typedef Immediate NumLocals;
     struct LocalsCopy {
         Immediate target;
@@ -141,6 +154,7 @@ class BC {
         CallFixedArgs callFixedArgs;
         CallBuiltinFixedArgs callBuiltinFixedArgs;
         GuardFunArgs guard_fun_args;
+        AssertTypeArgs assertTypeArgs;
         PoolIdx pool;
         FunIdx fun;
         ArgIdx arg_idx;
@@ -153,10 +167,6 @@ class BC {
         PoolAndCachePositionRange poolAndCache;
         CachePositionRange cacheIdx;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
-        pir::PirType pirType() const { return pir::PirType(this); }
-        void setPirType(pir::PirType typ) {
-            memcpy(this, &typ, sizeof(pir::PirType));
-        }
     };
 
     static Immediate readImmediate(Opcode** pc) {
@@ -403,7 +413,7 @@ BC_NOARGS(V, _)
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
-    inline static BC assertType(pir::PirType typ);
+    inline static BC assertType(pir::PirType typ, const char* instr);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -707,7 +717,7 @@ BC_NOARGS(V, _)
 #undef V
             break;
         case Opcode::assert_type_:
-            immediate.setPirType(pir::PirType(pc));
+            memcpy(&immediate.assertTypeArgs, pc, sizeof(AssertTypeArgs));
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

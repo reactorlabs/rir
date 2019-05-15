@@ -943,8 +943,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                             return false;
                     }
                     return true;
-                }))
-                cb.add(BC::assertType(instr->type));
+                })) {
+                std::stringstream instrPrint;
+                instr->print(instrPrint, false);
+                // WARNING: Leaks memory
+                char* instrStr = strdup(instrPrint.str().c_str());
+                cb.add(BC::assertType(instr->type, instrStr));
+            }
 
             // Store the result
             if (alloc.sa.dead(instr)) {

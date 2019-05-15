@@ -365,9 +365,10 @@ BC BC::deopt(SEXP deoptMetadata) {
     return BC(Opcode::deopt_, i);
 }
 
-BC BC::assertType(pir::PirType typ) {
+BC BC::assertType(pir::PirType typ, const char* instr) {
     ImmediateArguments i;
-    i.setPirType(typ);
+    i.assertTypeArgs.setPirType(typ);
+    i.assertTypeArgs.instr = instr;
     return BC(Opcode::assert_type_, i);
 }
 

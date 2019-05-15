@@ -588,7 +588,8 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                     notObj = false;
                     isEager = false;
                 }
-            } else if (arg == R_MissingArg) {
+            }
+            if (arg == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
                 isEager = false;
             }
@@ -3691,10 +3692,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_top(ctx);
             pir::PirType typ(pc);
             pc += sizeof(pir::PirType);
+            const char* instr = *(const char**)pc;
+            pc += sizeof(const char*);
             if (!typ.isInstance(val)) {
-                std::cerr << "type assert failed: type " << typ
-                          << " not accurate for value (" << pir::PirType(val)
-                          << "):\n";
+                std::cerr << "type assert failed in:\n" << instr << "\n";
+                std::cerr << "type " << typ << " not accurate for value ("
+                          << pir::PirType(val) << "):\n";
                 Rf_PrintValue(val);
                 assert(false);
             }
