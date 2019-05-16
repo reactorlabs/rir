@@ -18,7 +18,6 @@ namespace rir {
 #else
 typedef struct {
     SEXP loc;
-    Immediate idx;
 } BindingCache;
 typedef BindingCache Cache;
 
@@ -31,16 +30,12 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
                                             InterpreterInstance* ctx,
                                             Cache* cache,
                                             bool smallCache) {
-    if (cache[cacheIdx].idx == cacheIdx)
-        return cache[cacheIdx].loc;
-    else
-        return NULL;
+    return cache[cacheIdx].loc;
 }
 
 static RIR_INLINE void cachedSetBindingCell(Immediate cacheIdx, Cache* cache,
                                             bool smallCache, R_varloc_t loc) {
     cache[cacheIdx].loc = loc.cell;
-    cache[cacheIdx].idx = cacheIdx;
 }
 
 static RIR_INLINE SEXP getCellFromCache(SEXP env, Immediate poolIdx,
