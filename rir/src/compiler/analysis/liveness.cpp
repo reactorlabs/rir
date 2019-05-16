@@ -91,10 +91,13 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
         assert(pos == 0);
 
         // Mark everything that is live at the beginning of the BB.
+        // Note that we need a separate `liveAtEntry` flag; begin = 0 cannot
+        // distinguish between liveness before or after the first instruction.
         auto markLiveEntry = [&](Value* v) {
             assert(count(v));
             auto& liveRange = intervals[v][bb->id];
             assert(liveRange.live);
+            liveRange.liveAtEntry = true;
             liveRange.begin = 0;
         };
         for (const auto& v : accumulated)
@@ -136,6 +139,32 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
             }
         }
     }
+
+#ifdef DEBUG_LIVENESS
+    for (const auto& kv : intervals) {
+        const auto& instr = Instruction::Cast(kv.first);
+        const auto& liveVec = kv.second;
+
+        std::cerr << "========== Liveness info for ";
+        if (instr) {
+            std::cerr << "instr:\n";
+            instr->print(std::cerr, false);
+        } else {
+            std::cerr << "non-instr val:\n";
+            kv.first->printRef(std::cerr);
+        }
+        std::cerr << "\n";
+
+        for (size_t i = 0; i < liveVec.size(); ++i) {
+            const auto& bbl = liveVec[i];
+            if (bbl.live) {
+                std::cerr << "\tLive in BB" << i << ": "
+                          << (bbl.liveAtEntry ? "!" : "") << "[" << bbl.begin
+                          << ", " << bbl.end << ")\n";
+            }
+        }
+    }
+#endif
 }
 
 bool LivenessIntervals::live(Instruction* where, Value* what) const {
@@ -161,6 +190,13 @@ bool LivenessIntervals::interfere(Value* v1, Value* v2) const {
         }
     }
     return false;
+}
+
+bool LivenessIntervals::liveAtBBEntry(BB* bb, Value* what) const {
+    if (count(what) == 0)
+        return false;
+    const auto& bbLiveness = intervals.at(what)[bb->id];
+    return bbLiveness.live && bbLiveness.liveAtEntry;
 }
 
 } // namespace pir

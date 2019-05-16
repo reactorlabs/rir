@@ -28,7 +28,6 @@ class RirCompiler {
     Module* module;
 
   protected:
-    std::vector<const PirTranslator*> translations;
     Preserve preserve_;
 };
 } // namespace pir

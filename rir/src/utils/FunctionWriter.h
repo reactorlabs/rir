@@ -61,7 +61,7 @@ class FunctionWriter {
                     const std::map<PcOffset, BC::PoolIdx>& sources,
                     const std::map<PcOffset, BC::Label>& patchpoints,
                     const std::map<PcOffset, std::vector<BC::Label>>& labels,
-                    size_t localsCnt, size_t nops) {
+                    size_t localsCnt, size_t nops, size_t bindingsCnt) {
         assert(function_ == nullptr &&
                "Trying to add more code after finalizing");
         unsigned codeSize = originalCodeSize - nops;
@@ -70,8 +70,8 @@ class FunctionWriter {
         auto src = src_pool_add(globalContext(), ast);
         SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
         void* payload = DATAPTR(store);
-        Code* code = new (payload)
-            Code(nullptr, src, codeSize, sources.size(), localsCnt);
+        Code* code = new (payload) Code(nullptr, src, codeSize, sources.size(),
+                                        localsCnt, bindingsCnt);
         preserve(store);
 
         size_t numberOfSources = 0;
@@ -191,6 +191,6 @@ class FunctionWriter {
         return code;
     }
 };
-}
+} // namespace rir
 
 #endif

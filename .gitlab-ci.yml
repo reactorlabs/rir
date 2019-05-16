@@ -1,50 +1,82 @@
-image: ubuntu:18.04
-
-cache:
-  key: apt-cache
-  paths:
-    - apt-cache/
-
-before_script:
-  - export DEBIAN_FRONTEND=noninteractive
-  - export APT_CACHE_DIR=`pwd`/apt-cache && mkdir -pv $APT_CACHE_DIR
-  - export PIR_MAX_INPUT_SIZE=99999
-  - export PIR_INLINER_MAX_SIZE=99999
-  - export PIR_DEOPT_CHAOS_SEED=$RANDOM
-  - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
-  - apt-get update -yq && apt-get -o dir::cache::archives="$APT_CACHE_DIR" install -y -qq git libcurl4-openssl-dev texlive-latex-extra texlive-latex-base texlive-fonts-recommended texlive-fonts-extra texlive-latex-recommended texlive-font-utils dvipng cm-super bison ca-certificates-java java-common libbison-dev libcairo-script-interpreter2 libcairo2-dev libjbig-dev libmime-charset-perl libpango1.0-dev libpcsclite1 libpixman-1-dev libsombok3 libtext-unidecode-perl libtiff5-dev libtiffxx5 libunicode-linebreak-perl libxcb-render0-dev libxcb-shm0-dev libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl mpack openjdk-11-jre openjdk-11-jre-headless texinfo g++ xdg-utils gfortran subversion make r-base-dev liblzma-dev sed binutils curl cmake rsync xorg-dev valgrind cppcheck xvfb xauth xfonts-base tk-dev ninja-build python-pip
-  - mkdir build_release && cd build_release
-  - cmake -DCMAKE_BUILD_TYPE=release -GNinja ..
-  - ninja setup
-  - ninja -j 3
-  - cd ..
+stages:
+  - Build container
+  - Sanity Checks
+  - Build benchmark container
+  - Run tests
+  - Deploy
 
 sanity:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Sanity Checks
   script:
-    - tools/cppcheck
-    - cd build_release
-    - bin/tests
+    - /opt/rir/tools/cppcheck
+    - /opt/rir/build/release/bin/tests
+
+rir container:
+  stage: Build container
+  image: docker:stable
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  services:
+    - docker:dind
+  before_script:
+    - docker info
+  script:
+    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
+    - docker build -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
+    - docker push registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+
+benchmark container:
+  stage: Build benchmark container
+  image: docker:stable
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  services:
+    - docker:dind
+  before_script:
+    - docker info
+  script:
+    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
+    - cd container/benchmark
+    - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA .
+    - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
 
 tests_release:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Run tests
   script:
-    - cd build_release
+    - cd /opt/rir/build/release
     - bin/gnur-make-tests test-all-devel
-    - ../tools/check-gnur-make-tests-error
+    - ../../tools/check-gnur-make-tests-error
     - bin/gnur-make-tests check-recommended
-    - ../tools/check-gnur-make-tests-error
+    - ../../tools/check-gnur-make-tests-error
 
-tests_release_2:
+tests_fullverifier:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Run tests
   script:
-    - cd build_release
+    - cd /opt/rir/build/fullverifier
+    - bin/tests
     - bin/gnur-make-tests check
     - PIR_WARMUP=4 ./bin/gnur-make-tests check
     - PIR_ENABLE=force ./bin/gnur-make-tests check
 
 tests_debug:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Run tests
   script:
-    - mkdir build_debugopt && cd build_debugopt
-    - cmake -DCMAKE_BUILD_TYPE=debugopt -GNinja ..
-    - ninja -j 3
+    - cd /opt/rir/build/debugopt
+    - export UNSOUND_OPTS=off
     - bin/tests
     - R_ENABLE_JIT=0 ./bin/tests
     - R_ENABLE_JIT=1 ./bin/tests
@@ -54,39 +86,69 @@ tests_debug:
     - PIR_ENABLE=force ./bin/tests
     - for i in `seq 1 5`; do PIR_DEOPT_CHAOS_SEED=$i PIR_DEOPT_CHAOS=1 ./bin/tests ; done
     - ./bin/gnur-make-tests check-devel
-    - ../tools/check-gnur-make-tests-error
+    - ../../tools/check-gnur-make-tests-error
 
 test_sanitize:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Run tests
   script:
-    - mkdir build_sanitize && cd build_sanitize
-    - cmake -DCMAKE_BUILD_TYPE=sanitize -GNinja ..
-    - ninja -j 3
+    - cd /opt/rir/build/sanitize
     - ENABLE_VALGRIND=1 ./bin/tests
-    - R_GCTORTURE=100 bin/tests
+    - R_GCTORTURE=200 bin/tests
     - R_GCTORTURE=1000 ./bin/gnur-make-tests check
 
 test_big_inline:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Run tests
   script:
-    - cd build_release
+    - cd /opt/rir/build/release
     - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=1000 ./bin/gnur-make-tests check
     - for i in `seq 1 3`; do PIR_INLINER_MAX_INLINEE_SIZE=2000 PIR_DEOPT_CHAOS_SEED=$i PIR_DEOPT_CHAOS=1 ./bin/tests ; done
 
 test_flaky:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Run tests
   retry: 2
   script:
-    - cd build_release
+    - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
 
 test_benchmarks:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Run tests
   script:
-    - git clone https://github.com/charig/ReBench.git -b envVarsSupport && cd ReBench
-    - pip install --user .
-    - export PATH=$HOME/.local/bin:$PATH
-    - cd ..
-    - cd build_release
-    - git clone https://github.com/reactorlabs/rbenchmarking
-    - cd rbenchmarking
-    - ./Setup/run.sh rebench.conf .. ../../external/custom-r Benchmarks e:RIR e:PIR -r -SN -wu 0 --iterations 2
-    - PIR_DEOPT_CHAOS=1 ./Setup/run.sh rebench.conf .. ../../external/custom-r Benchmarks e:RIR e:PIR -r -SN -wu 0 --iterations 2
+    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rir/build/release/ /opt/rir/external/custom-r /opt/rbenchmarking/Benchmarks e:RIR e:PIR -r -SN -wu 0 --iterations 2
+    - PIR_DEOPT_CHAOS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rir/build/release/ /opt/rir/external/custom-r /opt/rbenchmarking/Benchmarks e:RIR e:PIR -r -SN -wu 0 --iterations 2
+
+deploy:
+  stage: Deploy
+  image: docker:stable
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  services:
+    - docker:dind
+  before_script:
+    - docker info
+  variables:
+      GIT_STRATEGY: none
+  script:
+    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
+    - docker pull registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+    - docker tag registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA registry.gitlab.com/rirvm/rir_mirror:master
+    - docker push registry.gitlab.com/rirvm/rir_mirror:master
+    - docker pull registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+    - docker tag registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA registry.gitlab.com/rirvm/rir_mirror/benchmark:master
+    - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:master
+  only:
+    - master

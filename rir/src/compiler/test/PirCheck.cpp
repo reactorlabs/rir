@@ -131,6 +131,15 @@ static bool testOneNot(ClosureVersion* f) {
     return numNots == 1;
 }
 
+static bool testLdVarVectorInFirstBB(ClosureVersion* f) {
+    for (auto instruction : *f->entry) {
+        if (auto ldvar = LdVar::Cast(instruction)) {
+            return ldvar->varName == Rf_install("vector");
+        }
+    }
+    return false;
+}
+
 PirCheck::Type PirCheck::parseType(const char* str) {
 #define V(Check)                                                               \
     if (strcmp(str, #Check) == 0)                                              \

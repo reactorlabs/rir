@@ -101,6 +101,8 @@ void State::mergeIn(const State& incom, BB* incomBB) {
 
 std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
+    Opcode* first = srcCode->code();
+
     // Mark incoming jmps
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
         BC bc = BC::decodeShallow(pc);
@@ -123,7 +125,9 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     std::unordered_set<Opcode*> mergepoints;
     // Create mergepoints
     for (auto m : incom)
-        if (std::get<1>(m).size() > 1)
+        // The first position must also be considered a mergepoint in case it
+        // has only one incoming (a jump)
+        if (std::get<0>(m) == first || std::get<1>(m).size() > 1)
             mergepoints.insert(m.first);
     return mergepoints;
 }
@@ -201,7 +205,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::ldvar_:
-    case Opcode::ldvar_for_update_:
+    case Opcode::ldvar_cached_:
+    case Opcode::ldvar_for_update_cache_:
         v = insert(new LdVar(bc.immediateConst(), env));
         // Checkpoint might be useful if we end up inlining this force
         if (!inPromise())
@@ -209,12 +214,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Force(v, env)));
         break;
 
-    case Opcode::starg_:
+    case Opcode::starg_cached_:
         v = pop();
         insert(new StArg(bc.immediateConst(), v, env));
         break;
 
     case Opcode::stvar_:
+    case Opcode::stvar_cached_:
         v = pop();
         insert(new StVar(bc.immediateConst(), v, env));
         break;
@@ -806,6 +812,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::parent_env_:
     case Opcode::set_env_:
     case Opcode::ldvar_noforce_:
+    case Opcode::ldvar_noforce_cached_:
     case Opcode::ldvar_noforce_super_:
     case Opcode::ldarg_:
     case Opcode::ldloc_:
@@ -1037,21 +1044,22 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
             inner << (pos - srcCode->code());
 
-            compiler.compileFunction(function, inner.str(), formals, srcRef,
-                                     [&](ClosureVersion* innerF) {
-                                         cur.stack.push(insert(new MkFunCls(
-                                             innerF->owner(), dt, insert.env)));
+            compiler.compileFunction(
+                function, inner.str(), formals, srcRef,
+                [&](ClosureVersion* innerF) {
+                    cur.stack.push(
+                        insert(new MkFunCls(innerF->owner(), dt, insert.env)));
 
-                                         // Skip those instructions
-                                         finger = pc;
-                                         skip = true;
-                                     },
-                                     []() {
-                                         // If the closure does not compile, we
-                                         // can still call the unoptimized
-                                         // version (which is what happens on
-                                         // `tryRunCurrentBC` below)
-                                     });
+                    // Skip those instructions
+                    finger = pc;
+                    skip = true;
+                },
+                []() {
+                    // If the closure does not compile, we
+                    // can still call the unoptimized
+                    // version (which is what happens on
+                    // `tryRunCurrentBC` below)
+                });
         });
 
         if (!skip) {

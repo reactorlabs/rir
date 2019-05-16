@@ -41,9 +41,9 @@ bool Query::pure(Code* c) {
 
 std::unordered_set<Value*> Query::returned(Code* c) {
     std::unordered_set<Value*> returned;
-    Visitor::run(c->entry, [&](Instruction* i) {
-        Return::Cast(
-            i, [&](Return* ret) { returned.insert(ret->arg<0>().val()); });
+    Visitor::run(c->entry, [&](BB* bb) {
+        if (!bb->isEmpty() && Return::Cast(bb->last()))
+            returned.insert(bb->last()->arg(0).val());
     });
     return returned;
 }

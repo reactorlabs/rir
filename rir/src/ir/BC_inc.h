@@ -76,6 +76,8 @@ class BC {
     //
     // index into the constant pool
     typedef Immediate PoolIdx;
+    // index into the binding cache
+    typedef Immediate CacheIdx;
     // index into a functions array of code objects
     typedef Immediate FunIdx;
     typedef Immediate NumArgs;
@@ -115,6 +117,10 @@ class BC {
         NumArgs nargs;
         SignedImmediate context;
     };
+    struct PoolAndCacheIdxs {
+        PoolIdx poolIndex;
+        CacheIdx cacheIndex;
+    };
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
@@ -139,6 +145,7 @@ class BC {
         LocalsCopy loc_cpy;
         ObservedCallees callFeedback;
         ObservedValues typeFeedback;
+        PoolAndCacheIdxs poolAndCache;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
@@ -336,8 +343,10 @@ BC_NOARGS(V, _)
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
-    inline static BC ldvarForUpdate(SEXP sym);
+    inline static BC ldvarCache(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarForUpdateCache(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarNoForce(SEXP sym);
+    inline static BC ldvarNoForceCache(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarSuper(SEXP sym);
     inline static BC ldvarNoForceSuper(SEXP sym);
     inline static BC ldddvar(SEXP sym);
@@ -347,7 +356,8 @@ BC_NOARGS(V, _)
     inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC promise(FunIdx prom);
     inline static BC stvar(SEXP sym);
-    inline static BC starg(SEXP sym);
+    inline static BC stvarCache(SEXP sym, uint32_t cacheSlot);
+    inline static BC stargCache(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
@@ -598,16 +608,21 @@ BC_NOARGS(V, _)
         case Opcode::push_:
         case Opcode::ldfun_:
         case Opcode::ldvar_:
-        case Opcode::ldvar_for_update_:
         case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldvar_noforce_super_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
-        case Opcode::starg_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
+            break;
+        case Opcode::ldvar_noforce_cached_:
+        case Opcode::ldvar_cached_:
+        case Opcode::ldvar_for_update_cache_:
+        case Opcode::stvar_cached_:
+        case Opcode::starg_cached_:
+            memcpy(&immediate.poolAndCache, pc, sizeof(PoolAndCacheIdxs));
             break;
         case Opcode::call_implicit_:
         case Opcode::named_call_implicit_:

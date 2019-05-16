@@ -387,6 +387,10 @@ LdConst::LdConst(int num)
 SEXP LdConst::c() const { return Pool::get(idx); }
 
 void LdConst::printArgs(std::ostream& out, bool tty) const {
+    if (c() == R_UnboundValue) {
+        out << "unboundValue";
+        return;
+    }
     std::string val;
     {
         CaptureOut rec;
@@ -407,9 +411,12 @@ void Branch::printGraphArgs(std::ostream& out, bool tty) const {
 }
 
 void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
-    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid()
-        << " [color=green];\n  BB" << bbId << " -> BB"
-        << bb()->falseBranch()->uid() << " [color=red];\n";
+    auto trueBB = bb()->trueBranch();
+    auto falseBB = bb()->falseBranch();
+    out << "  BB" << bbId << " -> BB" << trueBB->uid()
+        << " [color=green];  // -> BB" << trueBB->id << "\n"
+        << "  BB" << bbId << " -> BB" << falseBB->uid()
+        << " [color=red];  // -> BB" << falseBB->id << "\n";
 }
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
@@ -509,8 +516,9 @@ void PirCopy::print(std::ostream& out, bool tty) const {
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                                  unsigned srcIdx)
-    : VarLenInstruction(PirType::val().notObject(), srcIdx), blt(builtin),
-      builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
+    : VarLenInstruction(PirType::val().notObject().notMissing(), srcIdx),
+      blt(builtin), builtin(getBuiltin(builtin)),
+      builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
 }
@@ -743,7 +751,8 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
         return CallSafeBuiltin::Cast(v);
     case Tag::NamedCall:
         return NamedCall::Cast(v);
-    default: {}
+    default: {
+    }
     }
     return nullptr;
 }
@@ -826,8 +835,12 @@ void Checkpoint::printGraphArgs(std::ostream& out, bool tty) const {
 }
 
 void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
-    out << "  BB" << bbId << " -> BB" << bb()->trueBranch()->uid() << ";\n  BB"
-        << bbId << " -> BB" << bb()->falseBranch()->uid() << " [color=red];\n";
+    auto trueBB = bb()->trueBranch();
+    auto falseBB = bb()->falseBranch();
+    out << "  BB" << bbId << " -> BB" << trueBB->uid() << ";  // -> BB"
+        << trueBB->id << "\n"
+        << "  BB" << bbId << " -> BB" << falseBB->uid()
+        << " [color=red];  // -> BB" << falseBB->id << "\n";
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
