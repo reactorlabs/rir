@@ -1286,12 +1286,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 return;
             }
 
-            case Tag::RecordInline: {
-                auto rci = RecordInline::Cast(instr);
-                cb.add(BC::recordInline(rci->funcName(), rci->entry()));
-                break;
-            }
-
             // Invalid, should've been lowered away
             case Tag::FrameState:
             case Tag::Deopt:

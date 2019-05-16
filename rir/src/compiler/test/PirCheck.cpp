@@ -34,7 +34,7 @@ static ClosureVersion* recompilePir(SEXP f, Module* m) {
 
     StreamLogger logger(PirDebug);
     logger.title("Pir Check");
-    Rir2PirCompiler cmp(m, logger, Measure);
+    Rir2PirCompiler cmp(m, logger);
     ClosureVersion* res = nullptr;
     cmp.compileClosure(
         f, "pir_check", assumptions, [&](ClosureVersion* r) { res = r; },

@@ -2,7 +2,6 @@
 #define RIR_2_PIR_COMPILER_H
 
 #include "../../../utils/FormalArgs.h"
-#include "../../../utils/Measurer.h"
 #include "../../debugging/stream_logger.h"
 #include "../rir_compiler.h"
 #include <stack>
@@ -20,7 +19,7 @@ class Rir2PirCompiler : public RirCompiler {
                         Assumption::NotTooManyArguments,
                     0);
 
-    Rir2PirCompiler(Module* module, StreamLogger& logger, Measurer& measure);
+    Rir2PirCompiler(Module* module, StreamLogger& logger);
 
     void compileClosure(SEXP cls, const std::string& name, MaybeCls success,
                         Maybe fail) {
@@ -41,7 +40,6 @@ class Rir2PirCompiler : public RirCompiler {
 
   private:
     StreamLogger& logger;
-    Measurer& measure;
     void compileClosure(Closure* closure, const OptimizationContext& ctx,
                         MaybeCls success, Maybe fail);
 };

@@ -4,14 +4,16 @@
 #include "R/r.h"
 #include "compiler/debugging/debugging.h"
 #include "runtime/Assumptions.h"
-#include "utils/Measurer.h"
+#include "utils/Measure.h"
 #include <stdint.h>
 
 #define REXPORT extern "C"
 
 extern int R_ENABLE_JIT;
 extern rir::pir::DebugOptions PirDebug;
-extern rir::Measurer Measure;
+#ifdef ENABLE_MEASURE
+extern rir::MeasureTable GlobalMeasureTable;
+#endif
 
 REXPORT SEXP rir_invocation_count(SEXP what);
 REXPORT SEXP rir_eval(SEXP exp, SEXP env);
@@ -26,7 +28,7 @@ SEXP pirCompile(SEXP closure, const rir::Assumptions& assumptions,
 extern SEXP rirOptDefaultOpts(SEXP closure, const rir::Assumptions&, SEXP name);
 extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Assumptions&,
                                     SEXP name);
-REXPORT SEXP rir_getMeasure(SEXP flag);
+REXPORT SEXP rir_getMeasure();
 REXPORT SEXP rir_resetMeasure();
 REXPORT SEXP rir_flushMeasure();
 

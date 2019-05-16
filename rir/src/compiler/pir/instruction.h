@@ -1795,19 +1795,6 @@ class ScheduledDeopt
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLI(RecordInline, 0, Effect::Internal) {
-    const char* funcName_;
-    Opcode* entry_;
-
-  public:
-    RecordInline(const char* funcName, Opcode* entry)
-        : FixedLenInstruction(PirType::voyd(), {{}}, {{}}), funcName_(funcName),
-          entry_(entry) {}
-
-    const char* funcName() { return funcName_; }
-    Opcode* entry() { return entry_; }
-};
-
 #undef FLI
 #undef VLI
 #undef FLIE

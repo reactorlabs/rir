@@ -177,7 +177,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::push_context_:
     case Opcode::ceil_:
     case Opcode::floor_:
-    case Opcode::record_inline_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

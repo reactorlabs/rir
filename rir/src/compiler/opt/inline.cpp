@@ -243,11 +243,6 @@ class TheInliner {
                     bb->overrideNext(split);
                     inlineeCls->rirFunction()->uninlinable = true;
                 } else {
-                    if (Measure.data.hasTable(rir::MeasureFlag::Envs)) {
-                        bb->append(new RecordInline(
-                            inlinee->owner()->name().c_str(),
-                            inlinee->owner()->rirFunction()->body()->code()));
-                    }
                     bb->overrideNext(copy);
 
                     // Copy over promises used by the inner version

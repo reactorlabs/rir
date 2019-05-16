@@ -115,10 +115,6 @@ class BC {
         NumArgs nargs;
         SignedImmediate context;
     };
-    struct RecordInlineArgs {
-        const char* name;
-        Opcode* entry;
-    };
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
@@ -134,7 +130,6 @@ class BC {
         CallFixedArgs callFixedArgs;
         CallBuiltinFixedArgs callBuiltinFixedArgs;
         GuardFunArgs guard_fun_args;
-        RecordInlineArgs recordInlineArgs;
         PoolIdx pool;
         FunIdx fun;
         ArgIdx arg_idx;
@@ -385,7 +380,6 @@ BC_NOARGS(V, _)
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
-    inline static BC recordInline(const char* name, Opcode* entry);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -676,9 +670,6 @@ BC_NOARGS(V, _)
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)
 #undef V
-            break;
-        case Opcode::record_inline_:
-            memcpy(&immediate.recordInlineArgs, pc, sizeof(RecordInlineArgs));
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

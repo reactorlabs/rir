@@ -25,9 +25,8 @@ namespace pir {
 constexpr Assumptions::Flags Rir2PirCompiler::minimalAssumptions;
 constexpr Assumptions Rir2PirCompiler::defaultAssumptions;
 
-Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger,
-                                 Measurer& measure)
-    : RirCompiler(module), logger(logger), measure(measure) {
+Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
+    : RirCompiler(module), logger(logger) {
     for (auto& optimization : pirConfigurations()->pirOptimizations()) {
         translations.push_back(optimization);
     }
@@ -159,7 +158,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         log.compilationEarlyPir(version);
         Verify::apply(version);
         log.flush();
-        measure.recordCompiled(version);
         return success(version);
     }
 
@@ -217,7 +215,6 @@ void Rir2PirCompiler::optimizeModule() {
             Verify::apply(v);
 #endif
 #endif
-            measure.recordOptimized(v);
         });
     });
 

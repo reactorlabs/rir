@@ -523,9 +523,4 @@ DEF_INSTR(record_type_, 1, 1, 1, 0)
 DEF_INSTR(int3_, 0, 0, 0, 0)
 DEF_INSTR(printInvocation_, 0, 0, 0, 0)
 
-/*
- * record_inline_ :: Records that we enter an inlined call (for measurement)
- */
-DEF_INSTR(record_inline_, 2 * sizeof(void*) / sizeof(uint32_t), 0, 0, 0)
-
 #undef DEF_INSTR

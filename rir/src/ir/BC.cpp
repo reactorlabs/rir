@@ -128,10 +128,6 @@ BC_NOARGS(V, _)
         cs.insert(immediate.loc_cpy);
         return;
 
-    case Opcode::record_inline_:
-        cs.insert(immediate.recordInlineArgs);
-        return;
-
     case Opcode::invalid_:
     case Opcode::num_of:
         assert(false);
@@ -311,12 +307,6 @@ void BC::print(std::ostream& out) const {
         out << "[ ";
         printTypeFeedback(immediate.typeFeedback);
         out << " ]";
-        break;
-    }
-
-    case Opcode::record_inline_: {
-        RecordInlineArgs a = immediate.recordInlineArgs;
-        out << a.name << "[" << a.entry << "]";
         break;
     }
 

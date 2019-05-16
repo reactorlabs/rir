@@ -21,7 +21,7 @@ SEXP getterPlaceholderSym;
 SEXP quoteSym;
 
 InterpreterInstance* context_create() {
-    InterpreterInstance* c = new InterpreterInstance(Measure);
+    InterpreterInstance* c = new InterpreterInstance;
     c->list = Rf_allocVector(VECSXP, 2);
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);

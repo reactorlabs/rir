@@ -318,12 +318,6 @@ BC BC::deopt(SEXP deoptMetadata) {
     return BC(Opcode::deopt_, i);
 }
 
-BC BC::recordInline(const char* str, Opcode* entry) {
-    ImmediateArguments i;
-    i.recordInlineArgs = {str, entry};
-    return BC(Opcode::record_inline_, i);
-}
-
 } // namespace rir
 
 #endif

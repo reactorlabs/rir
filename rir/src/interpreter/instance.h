@@ -4,7 +4,6 @@
 #include "R/r.h"
 #include "ir/BC_inc.h"
 #include "runtime/Assumptions.h"
-#include "utils/Measurer.h"
 
 #include "interp_incl.h"
 
@@ -61,10 +60,6 @@ struct InterpreterInstance {
     ExprCompiler exprCompiler = nullptr;
     ClosureCompiler closureCompiler = nullptr;
     ClosureOptimizer closureOptimizer = nullptr;
-    Measurer& measurer;
-
-    // cppcheck-suppress uninitMemberVar
-    explicit InterpreterInstance(Measurer& measurer) : measurer(measurer) {}
 };
 
 // TODO we might actually need to do more for the lengths (i.e. true length vs
