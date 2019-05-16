@@ -343,10 +343,10 @@ BC_NOARGS(V, _)
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
-    inline static BC ldvarCache(SEXP sym, uint32_t cacheSlot);
-    inline static BC ldvarForUpdateCache(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarNoForce(SEXP sym);
-    inline static BC ldvarNoForceCache(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarNoForceCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarSuper(SEXP sym);
     inline static BC ldvarNoForceSuper(SEXP sym);
     inline static BC ldddvar(SEXP sym);
@@ -355,9 +355,10 @@ BC_NOARGS(V, _)
     inline static BC stloc(uint32_t offset);
     inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC promise(FunIdx prom);
+    inline static BC starg(SEXP sym);
     inline static BC stvar(SEXP sym);
-    inline static BC stvarCache(SEXP sym, uint32_t cacheSlot);
-    inline static BC stargCache(SEXP sym, uint32_t cacheSlot);
+    inline static BC stargCached(SEXP sym, uint32_t cacheSlot);
+    inline static BC stvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
@@ -614,6 +615,7 @@ BC_NOARGS(V, _)
         case Opcode::ldvar_noforce_super_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
+        case Opcode::starg_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));

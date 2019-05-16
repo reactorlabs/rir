@@ -13,15 +13,6 @@ namespace rir {
 #define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
 #define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
 
-static RIR_INLINE Immediate cacheIndex(Immediate index, bool smallCache) {
-    Immediate cidx;
-    if (smallCache)
-        cidx = index;
-    else
-        cidx = index & CACHE_MASK;
-    return cidx;
-}
-
 #ifdef CACHE_ON_R_STACK
 // TODO: Create a version with a cache on the R_stack instead of the C stack
 #else
@@ -40,20 +31,16 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
                                             InterpreterInstance* ctx,
                                             Cache* cache,
                                             bool smallCache) {
-
-    Immediate cidx = cacheIndex(cacheIdx, smallCache);
-
-    if (cache[cidx].idx == cacheIdx)
-        return cache[cidx].loc;
-
-    return NULL;
+    if (cache[cacheIdx].idx == cacheIdx)
+        return cache[cacheIdx].loc;
+    else
+        return NULL;
 }
 
 static RIR_INLINE void cachedSetBindingCell(Immediate cacheIdx, Cache* cache,
                                             bool smallCache, R_varloc_t loc) {
-    Immediate cidx = cacheIndex(cacheIdx, smallCache);
-    cache[cidx].loc = loc.cell;
-    cache[cidx].idx = cacheIdx;
+    cache[cacheIdx].loc = loc.cell;
+    cache[cacheIdx].idx = cacheIdx;
 }
 
 static RIR_INLINE SEXP getCellFromCache(SEXP env, Immediate poolIdx,

@@ -213,6 +213,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Force(v, env)));
         break;
 
+    case Opcode::starg_:
     case Opcode::starg_cached_:
         v = pop();
         insert(new StArg(bc.immediateConst(), v, env));

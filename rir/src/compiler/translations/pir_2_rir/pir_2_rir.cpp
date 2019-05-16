@@ -175,7 +175,7 @@ class Pir2Rir {
                         auto cacheIndex = bc.immediate.poolAndCache.cacheIndex;
                         next = code.erase(it, plus(next, 1));
                         next = code.emplace(
-                            next, BC::ldvarCache(arg, cacheIndex), noSource);
+                            next, BC::ldvarCached(arg, cacheIndex), noSource);
                         changed = true;
                     } else if (bc.is(rir::Opcode::pop_)) {
                         unsigned n = 1;
@@ -548,14 +548,14 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto ldvar = LdVar::Cast(instr);
                 if (needsLdVarForUpdate.count(instr)) {
                     if (ldvar->usesCache)
-                        cb.add(BC::ldvarForUpdateCache(
+                        cb.add(BC::ldvarForUpdateCached(
                             ldvar->varName, cachePositions.slotFor(
                                                 ldvar->varName, ldvar->env())));
                     else
                         assert(false);
                 } else {
                     if (ldvar->usesCache)
-                        cb.add(BC::ldvarNoForceCache(
+                        cb.add(BC::ldvarNoForceCached(
                             ldvar->varName, cachePositions.slotFor(
                                                 ldvar->varName, ldvar->env())));
                     else
@@ -595,12 +595,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
                 if (stvar->isStArg)
-                    cb.add(BC::stargCache(
+                    cb.add(BC::stargCached(
                         stvar->varName,
                         cachePositions.slotFor(stvar->varName, stvar->env())));
                 else {
                     if (stvar->usesCache)
-                        cb.add(BC::stvarCache(
+                        cb.add(BC::stvarCached(
                             stvar->varName, cachePositions.slotFor(
                                                 stvar->varName, stvar->env())));
                     else
