@@ -1,6 +1,10 @@
 # RIR
 
-# Installation
+To give it a spin try
+
+    docker run -it registry.gitlab.com/rirvm/rir_mirror:master /opt/rir/build/release/bin/R
+
+# Building from Source
 
     git clone https://github.com/reactorlabs/rir
     cd rir
