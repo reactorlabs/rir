@@ -4,7 +4,6 @@
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
-#include "api.h"
 #include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
@@ -282,6 +281,10 @@ SEXP* keepAliveSEXPs(void* rirDataWrapper) {
 
 SEXP lazyPromargsCreation(void* rirDataWrapper) {
     return ArgsLazyData::cast(rirDataWrapper)->createArgsLists();
+}
+
+SEXP lazyEnvCreation(void* rirDataWrapper) {
+    return LazyEnvironment::cast(rirDataWrapper)->create();
 }
 
 static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,

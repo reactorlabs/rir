@@ -11,11 +11,6 @@ namespace pir {
 // !!!  This list of arguments *must* be exactly equal to the   !!!
 // !!!    one in pir.debugFlags in R/rir.R                      !!!
 
-#define LIST_OF_PIR_MEASURING_FLAGS(V)                                         \
-    V(EnvsRemoved)                                                             \
-    V(LiftedVars)                                                              \
-    V(EagerArgs)
-
 #define LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)                                   \
     V(PrintEarlyRir)                                                           \
     V(PrintEarlyPir)                                                           \
@@ -25,10 +20,7 @@ namespace pir {
     V(PrintCSSA)                                                               \
     V(PrintAllocator)                                                          \
     V(PrintFinalPir)                                                           \
-    V(PrintFinalRir)                                                           \
-    V(MeasureEnvsRemoved)                                                      \
-    V(MeasureLiftedVars)                                                       \
-    V(MeasureEagerArgs)
+    V(PrintFinalRir)
 
 #define LIST_OF_PIR_DEBUGGING_FLAGS(V)                                         \
     V(ShowWarnings)                                                            \

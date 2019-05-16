@@ -97,16 +97,12 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            PrintCSSA = FALSE,
                            PrintAllocator = FALSE,
                            PrintFinalPir = FALSE,
-                           PrintFinalRir = FALSE,
-                           MeasureEnvsRemoved = FALSE,
-                           MeasureLiftedVars = FALSE,
-                           MeasureEagerArgs = FALSE) {
+                           PrintFinalRir = FALSE) {
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
     .Call("pir_debugFlags", ShowWarnings, DryRun,
           PrintIntoFiles, PrintIntoStdout, OmitDeoptBranches, PrintEarlyRir, PrintEarlyPir,
           PrintOptimizationPasses, PrintOptimizationPhases, PrintPirAfterOpt, PrintCSSA, PrintAllocator, PrintFinalPir,
-          PrintFinalRir, MeasureEnvsRemoved, MeasureLiftedVars, MeasureEagerArgs,
           # wants a dummy parameter at the end for technical reasons
           NULL)
 }
@@ -133,13 +129,8 @@ rir.body <- function(f) {
 }
 
 # Gets a data frame with the measurements for the given elision type
-rir.getMeasure <- function(type) {
-    type <-
-      if (missing(type))
-        NULL
-      else
-        as.name(as.character(substitute(type)))
-    read.csv(text=.Call("rir_getMeasure", type));
+rir.getMeasure <- function() {
+    read.csv(text=.Call("rir_getMeasure"));
 }
 
 # Resets all measurements, discarding previous functions

@@ -95,7 +95,6 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
     case Effect::Name:                                                         \
         out << Str;                                                            \
         break;
-            CASE(Internal, "i")
             CASE(Visibility, "v")
             CASE(Warn, "w")
             CASE(Error, "e")

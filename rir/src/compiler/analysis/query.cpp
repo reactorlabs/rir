@@ -48,25 +48,5 @@ std::unordered_set<Value*> Query::returned(Code* c) {
     return returned;
 }
 
-unsigned Query::mkEnvs(Code* c) {
-    return Visitor::count(c->entry,
-                          [](Instruction* i) { return MkEnv::Cast(i); });
-}
-
-unsigned Query::envVars(Code* c) {
-    // TODO
-    return 42;
-}
-
-unsigned Query::lazyArgs(Code* c) {
-    return Visitor::count(c->entry, [](Instruction* i) {
-        if (auto mkarg = MkArg::Cast(i)) {
-            if (!mkarg->isEager())
-                return true;
-        }
-        return false;
-    });
-}
-
 } // namespace pir
 } // namespace rir

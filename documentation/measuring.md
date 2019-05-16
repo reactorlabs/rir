@@ -1,19 +1,12 @@
-# Measuring Elision / Simplification
+# Measuring # of Opcodes
 
-Specify what to measure by passing (comma-separated) flags on the command-line:
+**You must compile with `ENABLE_MEASURE` to use these features**
 
-    RIR_MEASURE=
-        Envs        how often a closure creates an env / how often it's called
-        Vars        how many vars have loads (by name) before / after passes
-        LazyArgs    how many lazy MkArgs before / after optimization passes
+RIR will count how many times each opcode is executed for each closure. Each closure has its own row, each opcode has its own column. Additionally, there's a "sum" row and column. Here is an example:
 
-PIR stores each measurement flag in a separate table, where each row is a closures, e.g.
+   <fileName>, invalid_, ... push_, ... Total
+   print              0,        42,       345
+   write              0,        37,     12123
+   Total              0,        79,     12468
 
-    Closure, Optimized, Initial
-    FooFun ,         2,       1
-    Bar    ,         1,       1
-
-There are 2 ways to read these measurements
-
-- **From file:** specify `RIR_MEASURE_FILE` to continuosly export measurements to a file in CSV form. The file will be named `<RIR_MEASURE_FILE>_<flag><pid>.csv`. Useful when measuring `gnur-make-tests`
-- **From R:** Call `rir.getMeasure(flag)` to get a data frame of the current flag's measurements. Call `rir.resetMeasure()` to clear old measurements
+Call `rir.getMeasure()` to get a data frame containing this info. Call `rir.resetMeasure()` to reset measurements. Set the env variable `RIR_MEASURE=<fileName>` to send measurements to `<fileName>.csv` in CSV form.

@@ -118,8 +118,12 @@ static bool testNoEq(ClosureVersion* f) {
 }
 
 static bool testOneEq(ClosureVersion* f) {
-    return Visitor::count(f->entry,
-                          [](Instruction* i) { return Eq::Cast(i); }) == 1;
+    int numEqs = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (Eq::Cast(i))
+            numEqs++;
+    });
+    return numEqs == 1;
 }
 
 static bool testOneNot(ClosureVersion* f) {

@@ -88,7 +88,6 @@ completely disables the PIR optimizer. As follows are the different Options avai
 
 #### Effects
 
-* `i` : Internal
 * `v` : Visibility
 * `w` : Warn
 * `e` : Error

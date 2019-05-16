@@ -130,15 +130,6 @@ class VisitorImplementation {
         });
     }
 
-    static unsigned count(BB* bb, const InstrActionPredicate& pred) {
-        unsigned num = 0;
-        run(bb, [&num, pred](Instruction* i) {
-            if (pred(i))
-                num++;
-        });
-        return num;
-    }
-
     static void run(BB* bb, const InstrBBAction& action) {
         run(bb, [action](BB* bb) {
             for (auto i : *bb)

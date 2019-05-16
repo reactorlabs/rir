@@ -1,5 +1,4 @@
 #include "stream_logger.h"
-#include "../analysis/query.h"
 #include "../pir/pir_impl.h"
 #include "../translations/pir_translator.h"
 #include "runtime/Function.h"

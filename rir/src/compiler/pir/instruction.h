@@ -82,8 +82,6 @@ enum class HasEnvSlot : uint8_t { Yes, No };
 
 // Effect that can be produced by an instruction.
 enum class Effect : uint8_t {
-    // Used by measurement / debugging
-    Internal,
     // Changes R_Visible
     Visibility,
     // Instruction might produce a warning. Example: AsTest warns if the
@@ -109,7 +107,7 @@ enum class Effect : uint8_t {
     // Instruction might execute more R code
     ExecuteCode,
 
-    FIRST = Internal,
+    FIRST = Visibility,
     LAST = ExecuteCode,
 };
 typedef EnumSet<Effect> Effects;
@@ -169,7 +167,6 @@ class Instruction : public Value {
 
     bool hasStrongEffects() const {
         auto e = getObservableEffects();
-        e.reset(Effect::Internal);
         // Yes visibility is a global effect. We try to preserve it. But geting
         // it wrong is not a strong correctness issue.
         e.reset(Effect::Visibility);

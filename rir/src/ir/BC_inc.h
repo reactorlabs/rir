@@ -388,6 +388,7 @@ BC_NOARGS(V, _)
     inline static BC staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
                                 SEXP targetVersion, const Assumptions& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
+
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
 

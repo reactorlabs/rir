@@ -54,12 +54,12 @@ typedef struct {
  */
 
 struct InterpreterInstance {
-    SEXP list = nullptr;
-    ResizeableList cp = {nullptr, 0};
-    ResizeableList src = {nullptr, 0};
-    ExprCompiler exprCompiler = nullptr;
-    ClosureCompiler closureCompiler = nullptr;
-    ClosureOptimizer closureOptimizer = nullptr;
+    SEXP list;
+    ResizeableList cp;
+    ResizeableList src;
+    ExprCompiler exprCompiler;
+    ClosureCompiler closureCompiler;
+    ClosureOptimizer closureOptimizer;
 };
 
 // TODO we might actually need to do more for the lengths (i.e. true length vs

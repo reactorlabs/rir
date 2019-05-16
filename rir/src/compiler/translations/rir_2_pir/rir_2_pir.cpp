@@ -1,5 +1,4 @@
 #include "rir_2_pir.h"
-#include "../../../api.h"
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
