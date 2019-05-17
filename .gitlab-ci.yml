@@ -127,8 +127,8 @@ test_benchmarks:
       GIT_STRATEGY: none
   stage: Run tests
   script:
-    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rir/build/release/ /opt/rir/external/custom-r /opt/rbenchmarking/Benchmarks e:RIR e:PIR -r -SN -wu 0 --iterations 2
-    - PIR_DEOPT_CHAOS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rir/build/release/ /opt/rir/external/custom-r /opt/rbenchmarking/Benchmarks e:RIR e:PIR -r -SN -wu 0 --iterations 2
+    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r e:RIR e:PIR -r -SN -wu 0 --iterations 2
+    - PIR_DEOPT_CHAOS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r e:RIR e:PIR -r -SN -wu 0 --iterations 2
 
 deploy:
   stage: Deploy
