@@ -1,6 +1,7 @@
 #include "../analysis/query.h"
 #include "../analysis/scope.h"
 #include "../pir/pir_impl.h"
+#include "../transform/bb.h"
 #include "../util/cfg.h"
 #include "../util/phi_placement.h"
 #include "../util/safe_builtins_list.h"
@@ -552,6 +553,22 @@ void ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
                             LogStream& log) const {
     TheScopeResolution s(function, log);
     s();
+
+    // Scope resolution can sometimes generate dead phis, so we remove them
+    // here, before they cause errors in later compiler passes. (Sometimes, the
+    // verifier will even catch these errors, but then segfault when trying to
+    // print the offending instruction.)
+    //
+    // This happens because we use the standard phi placement algorithm but in
+    // a different setting. The algorithm assumes it is examining the whole
+    // program and inserting phis for all writes. In our setting, we want to
+    // connect LdVars with StVars, replacing the LdVar with a phi if multiple
+    // stores reach that load.
+    //
+    // However, if there is no LdVar to replace, that means the phi is dead;
+    // none of the successor instructions needs that value. The problem is when
+    // dead phis are malformed.
+    BBTransform::removeDeadInstrs(function);
 }
 
 } // namespace pir
