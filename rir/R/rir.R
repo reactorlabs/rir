@@ -102,7 +102,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
     .Call("pir_debugFlags", ShowWarnings, DryRun,
           PrintIntoFiles, PrintIntoStdout, OmitDeoptBranches, PrintEarlyRir, PrintEarlyPir,
-          PrintOptimizationPasses, PrintOptimizationPhases, PrintPirAfterOpt, PrintCSSA, PrintAllocator, PrintFinalPir,
+          PrintOptimizationPasses, PrintOptimizationPhases, PrintPirAfterOpt, PrintCSSA, PrintAllocator, PrintFinalPir, PrintFinalRir,
           # wants a dummy parameter at the end for technical reasons
           NULL)
 }
