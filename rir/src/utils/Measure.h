@@ -47,7 +47,7 @@ struct MeasureTable {
     const std::string fileName;
 
     // cppcheck-suppress passedByValue
-    MeasureTable(std::string title)
+    explicit MeasureTable(std::string title)
         : title(title), fileName(title + ".csv"), sumRow(MeasureRow("Total")) {}
 
     void record(Opcode op, Code* code);
