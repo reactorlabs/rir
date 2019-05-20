@@ -138,7 +138,7 @@ test_serialize:
   script:
     - cd /opt/rir/build/release
     - RIR_SERIALIZE_CHAOS=1 bin/gnur-make-tests check-all
-    - RIR_SERIALIZE_CHAOS=3 bin/gnur-make-tests check-all
+    - RIR_SERIALIZE_CHAOS=3 bin/tests
 
 deploy:
   stage: Deploy
