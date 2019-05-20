@@ -345,6 +345,7 @@ BC_NOARGS(V, _)
     inline static BC ldvar(SEXP sym);
     inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarForUpdate(SEXP sym);
     inline static BC ldvarNoForce(SEXP sym);
     inline static BC ldvarNoForceCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarSuper(SEXP sym);
@@ -617,6 +618,7 @@ BC_NOARGS(V, _)
         case Opcode::stvar_:
         case Opcode::starg_:
         case Opcode::stvar_super_:
+        case Opcode::ldvar_for_update_:
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;

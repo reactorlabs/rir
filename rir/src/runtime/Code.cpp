@@ -17,7 +17,7 @@ Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
           // GC area has only 1 pointer
           NumLocals),
       funInvocationCount(0), src(src), stackLength(0), localsCount(localsCnt),
-      bindingsCount(bindingsCnt), codeSize(cs), srcLength(sourceLength),
+      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
       extraPoolSize(0) {
     setEntry(0, R_NilValue);
 }

@@ -338,7 +338,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
     }
 
-    CachePositionAllocator cachePositions;
+    CachePosition cache;
     CodeBuffer cb(ctx.cs());
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
@@ -546,20 +546,22 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
+                auto key =
+                    CachePosition::NameAndEnv(ldvar->varName, ldvar->env());
                 if (needsLdVarForUpdate.count(instr)) {
-                    if (ldvar->usesCache)
-                        cb.add(BC::ldvarForUpdateCached(
-                            ldvar->varName, cachePositions.slotFor(
-                                                ldvar->varName, ldvar->env())));
-                    else
-                        assert(false);
+                    if (cache.isCached(key)) {
+                        cb.add(BC::ldvarForUpdateCached(ldvar->varName,
+                                                        cache.indexOf(key)));
+                    } else {
+                        cb.add(BC::ldvarForUpdate(ldvar->varName));
+                    }
                 } else {
-                    if (ldvar->usesCache)
-                        cb.add(BC::ldvarNoForceCached(
-                            ldvar->varName, cachePositions.slotFor(
-                                                ldvar->varName, ldvar->env())));
-                    else
+                    if (cache.isCached(key)) {
+                        cb.add(BC::ldvarNoForceCached(ldvar->varName,
+                                                      cache.indexOf(key)));
+                    } else {
                         cb.add(BC::ldvarNoForce(ldvar->varName));
+                    }
                 }
                 break;
             }
@@ -594,17 +596,22 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
-                if (stvar->isStArg)
-                    cb.add(BC::stargCached(
-                        stvar->varName,
-                        cachePositions.slotFor(stvar->varName, stvar->env())));
-                else {
-                    if (stvar->usesCache)
-                        cb.add(BC::stvarCached(
-                            stvar->varName, cachePositions.slotFor(
-                                                stvar->varName, stvar->env())));
-                    else
+                auto key =
+                    CachePosition::NameAndEnv(stvar->varName, stvar->env());
+                if (stvar->isStArg) {
+                    if (cache.isCached(key)) {
+                        cb.add(BC::stargCached(stvar->varName,
+                                               cache.indexOf(key)));
+                    } else {
+                        cb.add(BC::starg(stvar->varName));
+                    }
+                } else {
+                    if (cache.isCached(key)) {
+                        cb.add(BC::stvarCached(stvar->varName,
+                                               cache.indexOf(key)));
+                    } else {
                         cb.add(BC::stvar(stvar->varName));
+                    }
                 }
                 break;
             }
@@ -939,7 +946,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     cb.flush();
 
     auto localsCnt = alloc.slots();
-    auto res = ctx.finalizeCode(localsCnt, cachePositions.numberOfBindings());
+    auto res = ctx.finalizeCode(localsCnt, cache.size());
     return res;
 }
 
