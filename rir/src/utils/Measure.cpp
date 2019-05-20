@@ -16,7 +16,7 @@ MeasureRow& MeasureTable::row(Code* code) {
         {
             CaptureOut rec;
             Rf_PrintValue(code->ast());
-            str = rec.oneline(30);
+            str = rec.oneline(10);
         }
         MeasureRow row(str);
         rows.emplace(key, row);
@@ -70,14 +70,25 @@ void MeasureTable::writeCsv(std::ostream& out) const {
     for (auto& entry : rows) {
         const MeasureRow& row = entry.second;
         out << std::left << std::setw(pads[0]) << row.name;
-        i = 1;
+        i = 0;
 #define DEF_INSTR(name, ...)                                                   \
-    out << ", " << std::right << std::setw(pads[i]) << row.counts[i];          \
+    out << ", " << std::right << std::setw(pads[i + 1]) << row.counts[i];      \
     i++;
 #include "../ir/insns.h"
 #undef DEF_INSTR
-        out << ", " << std::right << std::setw(pads[i]) << row.total() << "\n";
+        out << ", " << std::right << std::setw(pads[i + 1]) << row.total()
+            << "\n";
     }
+    out << std::left << std::setw(pads[0]) << "Total";
+    i = 0;
+#define DEF_INSTR(name, ...)                                                   \
+    out << ", " << std::right << std::setw(pads[i + 1]) << sumRow.counts[i];   \
+    i++;
+#include "../ir/insns.h"
+#undef DEF_INSTR
+    out << ", " << std::right << std::setw(pads[i + 1]) << sumRow.total()
+        << "\n";
+
     out.flush();
 }
 
