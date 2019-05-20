@@ -116,8 +116,9 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldvar_noforce_cached_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
-    case Opcode::starg_cached_:
+    case Opcode::starg_:
     case Opcode::stvar_:
+    case Opcode::starg_cached_:
     case Opcode::stvar_cached_:
     case Opcode::stvar_super_:
     case Opcode::guard_fun_:

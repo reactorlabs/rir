@@ -11,7 +11,7 @@ sanity:
       GIT_STRATEGY: none
   stage: Sanity Checks
   script:
-    - /opt/rir/tools/cppcheck
+    - /opt/rir/tools/cppcheck --xml
     - /opt/rir/build/release/bin/tests
 
 rir container:

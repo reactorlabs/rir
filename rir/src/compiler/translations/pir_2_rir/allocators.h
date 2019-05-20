@@ -1,6 +1,7 @@
 #ifndef PIR_2_RIR_ALLOC_H
 #define PIR_2_RIR_ALLOC_H
 
+#include "interpreter/cache.h"
 #include "stack_use.h"
 
 namespace rir {
@@ -452,6 +453,8 @@ class CachePositionAllocator {
     size_t numberOfBindings() { return uniqueNumbers.size(); }
     SlotNumber slotFor(SEXP varName, Value* environment) {
         NameAndEnv key = NameAndEnv(varName, environment);
+        if (uniqueNumbers.size() >= MAX_CACHE_SIZE - 1)
+            return 0;
         return uniqueNumbers.emplace(key, uniqueNumbers.size() + 1)
             .first->second;
     }

@@ -105,6 +105,11 @@ DEF_INSTR(ldarg_, 1, 0, 1, 0)
 DEF_INSTR(ldloc_, 1, 0, 1, 1)
 
 /**
+ * stvar_:: assign tos to the immediate symbol.
+ */
+DEF_INSTR(starg_, 1, 1, 0, 0)
+
+/**
  * stvar_:: assign tos to the immediate symbol. May be in cache
  */
 DEF_INSTR(starg_cached_, 2, 1, 0, 0)
