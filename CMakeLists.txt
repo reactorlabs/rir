@@ -14,12 +14,14 @@ add_definitions(-g3)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror")
 set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
+set(CMAKE_CXX_FLAGS_MEASURE "${CMAKE_CXX_FLAGS_RELEASE} -DENABLE_MEASURE")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS "-Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wctor-dtor-privacy -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 set(CMAKE_C_FLAGS_RELEASENOASSERT "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG")
-set(CMAKE_C_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
+set(CMAKE_C_FLAGS_FULLVERIFIER "${CMAKE_C_FLAGS_RELEASE} -DFULLVERIFIER")
+set(CMAKE_CXX_FLAGS_MEASURE "${CMAKE_C_FLAGS_RELEASE} -DENABLE_MEASURE")
 set(CMAKE_C_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
@@ -34,11 +36,13 @@ MARK_AS_ADVANCED(
     CMAKE_C_FLAGS_RELEASENOASSERT
     CMAKE_CXX_FLAGS_FULLVERIFIER
     CMAKE_C_FLAGS_FULLVERIFIER
+    CMAKE_CXX_FLAGS_MEASURE
+    CMAKE_C_FLAGS_MEASURE
 )
 
 # Update the documentation string of CMAKE_BUILD_TYPE for GUIs
 SET( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING
-    "Choose the type of build, options are: None Release DebugOpt Debug."
+	"Choose the type of build, options are: None Release DebugOpt Debug FullVerifier Measure."
     FORCE )
 
 # Take from https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
