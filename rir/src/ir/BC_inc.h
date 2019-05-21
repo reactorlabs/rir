@@ -121,6 +121,10 @@ class BC {
         PoolIdx poolIndex;
         CacheIdx cacheIndex;
     };
+    struct CacheIdxs {
+        CacheIdx start;
+        unsigned size;
+    };
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
@@ -146,6 +150,7 @@ class BC {
         ObservedCallees callFeedback;
         ObservedValues typeFeedback;
         PoolAndCacheIdxs poolAndCache;
+        CacheIdxs cacheIdx;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
@@ -393,6 +398,7 @@ BC_NOARGS(V, _)
 
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
+    inline static BC clearBindingCache(CacheIdx start, unsigned size);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -607,6 +613,9 @@ BC_NOARGS(V, _)
                                                               Opcode* pc) {
         ImmediateArguments immediate;
         switch (bc) {
+        case Opcode::clear_binding_cache_:
+            memcpy(&immediate.cacheIdx, pc, sizeof(CacheIdxs));
+            break;
         case Opcode::deopt_:
         case Opcode::push_:
         case Opcode::ldfun_:

@@ -1480,7 +1480,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                                               sizeof(BindingCacheEntry) *
                                                   c->bindingCacheSize));
         bindingCache->length = c->bindingCacheSize;
-        clearCache(bindingCache);
+        // Optimized functions explicitly manage the cache
+        if (env != symbol::delayedEnv)
+            clearCache(bindingCache);
     }
 
     if (!existingLocals) {
@@ -1600,9 +1602,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     }
                 }
             }
-            clearCache(bindingCache);
             ostack_push(ctx, res);
             UNPROTECT(1);
+            NEXT();
+        }
+
+        INSTRUCTION(clear_binding_cache_) {
+            size_t start = readImmediate();
+            advanceImmediate();
+            size_t len = readImmediate();
+            advanceImmediate();
+            if (len) {
+                SLOWASSERT(start + len <= bindingCache->length);
+                memset(&bindingCache->entry[start], 0,
+                       sizeof(BindingCacheEntry) * len);
+            }
             NEXT();
         }
 
@@ -1694,13 +1708,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             bool isLocal = !R_VARLOC_IS_NULL(loc);
             SEXP res = nullptr;
 
-            if (isLocal) {
+            if (isLocal && CAR(loc.cell) != R_UnboundValue) {
                 res = CAR(loc.cell);
-                if (res == R_UnboundValue)
-                    isLocal = false;
-            }
-
-            if (!isLocal) {
+            } else {
                 SEXP sym = cp_pool_at(ctx, id);
                 res = Rf_findVar(sym, env);
             }
@@ -1738,13 +1748,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             bool isLocal = loc;
             SEXP res = nullptr;
 
-            if (isLocal) {
+            if (isLocal && CAR(loc) != R_UnboundValue) {
                 res = CAR(loc);
-                if (res == R_UnboundValue)
-                    isLocal = false;
-            }
-
-            if (!isLocal) {
+            } else {
                 SEXP sym = cp_pool_at(ctx, id);
                 res = Rf_findVar(sym, env);
             }
@@ -1759,8 +1765,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
-            if (TYPEOF(res) == PROMSXP)
+            if (TYPEOF(res) == PROMSXP) {
                 res = promiseValue(res, ctx);
+            }
 
             if (res != R_NilValue) {
                 if (isLocal)
@@ -1783,11 +1790,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             } else if (res == R_MissingArg) {
                 Rf_error("argument \"%s\" is missing, with no default",
                          CHAR(PRINTNAME(sym)));
-            }
-
-            // if promise, evaluate & return
-            if (TYPEOF(res) == PROMSXP)
+            } else if (TYPEOF(res) == PROMSXP) {
+                // if promise, evaluate & return
                 res = promiseValue(res, ctx);
+            }
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);

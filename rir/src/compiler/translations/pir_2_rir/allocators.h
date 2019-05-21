@@ -451,26 +451,68 @@ class CachePosition {
   public:
     typedef size_t SlotNumber;
     typedef std::pair<SEXP, Value*> NameAndEnv;
+    typedef std::pair<size_t, size_t> StartSize;
 
-    size_t size() { return uniqueNumbers.size(); }
+    explicit CachePosition(Code* code) {
+        std::unordered_map<Value*, std::unordered_set<NameAndEnv, pairhash>>
+            found;
 
-    SlotNumber isCached(const NameAndEnv& key) {
-        // Those are stored directly in symbols
-        if (Env::Cast(key.second) &&
-            (Env::Cast(key.second)->rho == R_BaseEnv ||
-             Env::Cast(key.second)->rho == R_BaseNamespace))
-            return false;
-        if (uniqueNumbers.size() == MAX_CACHE_SIZE)
-            return uniqueNumbers.count(key);
-        return true;
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto ld = LdVar::Cast(i)) {
+                found[ld->env()].emplace(NameAndEnv(ld->varName, ld->env()));
+            } else if (auto st = StVar::Cast(i)) {
+                found[st->env()].emplace(NameAndEnv(st->varName, st->env()));
+            }
+        });
+
+        // First all global envs
+        for (const auto& env : found) {
+            auto e = Env::Cast(env.first);
+            if (e && e->rho != R_BaseEnv && e->rho != R_BaseNamespace) {
+                for (const auto& key : env.second) {
+                    if (uniqueNumbers.size() == MAX_CACHE_SIZE)
+                        break;
+                    uniqueNumbers.emplace(key, uniqueNumbers.size());
+                }
+            }
+        }
+        globalEnvsCacheSize_ = uniqueNumbers.size();
+
+        for (const auto& env : found) {
+            if (!Env::Cast(env.first)) {
+                envCachePositions[env.first].first = uniqueNumbers.size();
+                for (const auto& key : env.second) {
+                    if (uniqueNumbers.size() == MAX_CACHE_SIZE)
+                        break;
+                    uniqueNumbers.emplace(key, uniqueNumbers.size());
+                }
+                envCachePositions[env.first].second =
+                    uniqueNumbers.size() - envCachePositions[env.first].first;
+            }
+        }
     }
 
-    SlotNumber indexOf(const NameAndEnv& key) {
-        return uniqueNumbers.emplace(key, uniqueNumbers.size()).first->second;
+    size_t size() const { return uniqueNumbers.size(); }
+
+    SlotNumber isCached(const NameAndEnv& key) const {
+        return uniqueNumbers.count(key);
+    }
+
+    SlotNumber indexOf(const NameAndEnv& key) const {
+        return uniqueNumbers.at(key);
+    }
+
+    unsigned globalEnvsCacheSize() const { return globalEnvsCacheSize_; }
+
+    void ifCacheRange(MkEnv* env, std::function<void(StartSize)> apply) const {
+        if (!env->stub && envCachePositions.count(env))
+            apply(envCachePositions.at(env));
     }
 
   private:
     std::unordered_map<NameAndEnv, SlotNumber, pairhash> uniqueNumbers;
+    std::unordered_map<Value*, StartSize> envCachePositions;
+    size_t globalEnvsCacheSize_;
 };
 
 } // namespace pir

@@ -182,6 +182,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::push_context_:
     case Opcode::ceil_:
     case Opcode::floor_:
+    case Opcode::clear_binding_cache_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:
@@ -335,6 +336,15 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                     Rf_error(
                         "RIR Verifier: cached load/store with invalid index");
             }
+            if (*cptr == Opcode::clear_binding_cache_) {
+                unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
+                unsigned cacheIdxStart = *(argsIndex);
+                unsigned cacheIdxSize = *(argsIndex + 1);
+                if (cacheIdxStart + cacheIdxSize > c->bindingCacheSize)
+                    Rf_error("RIR Verifier: cached clear_binding_cache_ with "
+                             "invalid index");
+            }
+
             if (*cptr == Opcode::promise_) {
                 unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
                 objs.push_back(c->getPromise(*promidx));

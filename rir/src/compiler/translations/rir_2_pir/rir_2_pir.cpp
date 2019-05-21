@@ -780,8 +780,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
+    // Silently ignored
+    case Opcode::clear_binding_cache_:
     // TODO implement!
-    // (silently ignored)
     case Opcode::isfun_:
         break;
 
