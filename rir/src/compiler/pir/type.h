@@ -327,11 +327,15 @@ struct PirType {
         return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
     }
 
-    PirType constexpr forced() const {
+    PirType forced() const {
         assert(isRType());
-        FlagSet notPromised =
-            ~(FlagSet() | TypeFlags::promiseWrapped | TypeFlags::lazy);
-        return PirType(t_.r, flags_ & notPromised);
+        PirType res = *this;
+        if (res.maybePromiseWrapped()) {
+            res.flags_.reset(TypeFlags::promiseWrapped);
+            res.flags_.reset(TypeFlags::lazy);
+            res.t_.r.set(RType::missing);
+        }
+        return res;
     }
 
     RIR_INLINE constexpr PirType baseType() const {
