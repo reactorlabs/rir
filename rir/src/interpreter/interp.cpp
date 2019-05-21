@@ -1472,25 +1472,17 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     assert(c->info.magic == CODE_MAGIC);
     bool existingLocals = localsBase;
 
-    bool smallCache = c->bindingsCount < MAX_CACHE_SIZE;
-    size_t cacheSize = smallCache ? c->bindingsCount + 1 : MAX_CACHE_SIZE;
-    if (cacheSize == 1)
-        cacheSize = 0;
     BindingCache* bindingCache;
     if (cache) {
         bindingCache = cache;
     } else {
-        bindingCache =
-            (BindingCache*)(alloca(sizeof(BindingCache) * cacheSize));
-        /*
-         * In case we are entering the executing of a PIR optimized function
-         * we delay the cache cleaning until we know we are actually requiring
-         * an environment (mk_env).
-         */
-        if (env != symbol::delayedEnv)
-            clearCache(bindingCache, cacheSize);
+        bindingCache = (BindingCache*)(alloca(sizeof(BindingCache) +
+                                              sizeof(BindingCacheEntry) *
+                                                  c->bindingCacheSize));
+        bindingCache->length = c->bindingCacheSize;
+        clearCache(bindingCache);
     }
-    
+
     if (!existingLocals) {
 #ifdef TYPED_STACK
         // Zero the region of the locals to avoid keeping stuff alive and to
@@ -1509,7 +1501,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     ostack_ensureSize(ctx, c->stackLength + 5);
 
     Opcode* pc = initialPC ? initialPC : c->code();
-    SEXP lastEnvCreated = nullptr;
     SEXP res;
 
     std::vector<LazyEnvironment*> envStubs;
@@ -1517,11 +1508,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     auto changeEnv = [&](SEXP e) {
         assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
                "Expected an environment");
-        if (e != env) {
-            if (env == symbol::delayedEnv && env != lastEnvCreated)
-                clearCache(bindingCache, cacheSize);
+        if (e != env)
             env = e;
-        }
     };
     R_Visible = TRUE;
 
@@ -1612,8 +1600,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     }
                 }
             }
-            clearCache(bindingCache, cacheSize);
-            lastEnvCreated = res;
+            clearCache(bindingCache);
             ostack_push(ctx, res);
             UNPROTECT(1);
             NEXT();
@@ -1700,13 +1687,54 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(ldvar_for_update_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            R_varloc_t loc = R_findVarLocInFrame(env, cp_pool_at(ctx, id));
+            bool isLocal = !R_VARLOC_IS_NULL(loc);
+            SEXP res = nullptr;
+
+            if (isLocal) {
+                res = CAR(loc.cell);
+                if (res == R_UnboundValue)
+                    isLocal = false;
+            }
+
+            if (!isLocal) {
+                SEXP sym = cp_pool_at(ctx, id);
+                res = Rf_findVar(sym, env);
+            }
+
+            if (res == R_UnboundValue) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            }
+
+            // if promise, evaluate & return
+            if (TYPEOF(res) == PROMSXP)
+                res = promiseValue(res, ctx);
+
+            if (res != R_NilValue) {
+                if (isLocal)
+                    ENSURE_NAMED(res);
+                else if (NAMED(res) < 2)
+                    SET_NAMED(res, 2);
+            }
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(ldvar_for_update_cache_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
-            SEXP loc = getCellFromCache(env, id, cacheIndex, ctx, bindingCache,
-                                        smallCache);
+            SEXP loc = getCellFromCache(env, id, cacheIndex, ctx, bindingCache);
             bool isLocal = loc;
             SEXP res = nullptr;
 
@@ -1773,8 +1801,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
-            res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache,
-                               smallCache);
+            res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache);
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1820,8 +1847,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
-            res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache,
-                               smallCache);
+            res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache);
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1935,14 +1961,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
-            SEXP val = ostack_pop(ctx);
+            SEXP val = ostack_top(ctx);
 
             if (auto stub = LazyEnvironment::cast(env))
                 env = stub->create();
 
-            INCREMENT_NAMED(val);
-            PROTECT(val);
-            Rf_defineVar(sym, val, env);
+            rirDefineVarWrapper(sym, val, env);
+            ostack_pop(ctx);
             NEXT();
         }
 
@@ -1955,16 +1980,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (auto stub = LazyEnvironment::cast(env))
                 env = stub->create();
-            cachedSetVar(val, env, id, cacheIndex, ctx, bindingCache,
-                         smallCache);
-
+            cachedSetVar(val, env, id, cacheIndex, ctx, bindingCache);
             NEXT();
         }
 
         INSTRUCTION(starg_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP val = ostack_pop(ctx);
+            SEXP val = ostack_top(ctx);
 
             if (auto stub = LazyEnvironment::cast(env))
                 env = stub->create();
@@ -1981,14 +2004,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         INCREMENT_NAMED(val);
                         SETCAR(loc.cell, val);
                     }
+                    ostack_pop(ctx);
                     NEXT();
                 }
             }
 
-            INCREMENT_NAMED(val);
-            PROTECT(val);
-            Rf_defineVar(sym, val, env);
-            UNPROTECT(1);
+            rirDefineVarWrapper(sym, val, env);
+            ostack_pop(ctx);
 
             NEXT();
         }
@@ -2002,8 +2024,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (auto stub = LazyEnvironment::cast(env))
                 env = stub->create();
-            cachedSetVar(val, env, id, cacheIndex, ctx, bindingCache,
-                         smallCache, true);
+            cachedSetVar(val, env, id, cacheIndex, ctx, bindingCache, true);
 
             NEXT();
         }
@@ -2013,8 +2034,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
-            INCREMENT_NAMED(val);
-            Rf_setVar(sym, val, ENCLOS(env));
+            rirSetVarWrapper(sym, val, ENCLOS(env));
             NEXT();
         }
 

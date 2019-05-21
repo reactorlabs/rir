@@ -65,6 +65,7 @@ DEF_INSTR(ldvar_cached_, 2, 0, 1, 0)
  * Additionally Increment named count if the variable is not local.
  */
 DEF_INSTR(ldvar_for_update_cache_, 2, 0, 1, 0)
+DEF_INSTR(ldvar_for_update_, 1, 0, 1, 0)
 
 /**
  * ldvar_noforce_:: like ldvar_ but don't force if promise or fail if missing

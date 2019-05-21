@@ -3,6 +3,7 @@
 
 #include "interpreter/cache.h"
 #include "stack_use.h"
+#include <set>
 
 namespace rir {
 namespace pir {
@@ -446,21 +447,29 @@ class SSAAllocator {
     }
 };
 
-class CachePositionAllocator {
+class CachePosition {
   public:
     typedef size_t SlotNumber;
+    typedef std::pair<SEXP, Value*> NameAndEnv;
 
-    size_t numberOfBindings() { return uniqueNumbers.size(); }
-    SlotNumber slotFor(SEXP varName, Value* environment) {
-        NameAndEnv key = NameAndEnv(varName, environment);
-        if (uniqueNumbers.size() >= MAX_CACHE_SIZE - 1)
-            return 0;
-        return uniqueNumbers.emplace(key, uniqueNumbers.size() + 1)
-            .first->second;
+    size_t size() { return uniqueNumbers.size(); }
+
+    SlotNumber isCached(const NameAndEnv& key) {
+        // Those are stored directly in symbols
+        if (Env::Cast(key.second) &&
+            (Env::Cast(key.second)->rho == R_BaseEnv ||
+             Env::Cast(key.second)->rho == R_BaseNamespace))
+            return false;
+        if (uniqueNumbers.size() == MAX_CACHE_SIZE)
+            return uniqueNumbers.count(key);
+        return true;
+    }
+
+    SlotNumber indexOf(const NameAndEnv& key) {
+        return uniqueNumbers.emplace(key, uniqueNumbers.size()).first->second;
     }
 
   private:
-    typedef std::pair<SEXP, Value*> NameAndEnv;
     std::unordered_map<NameAndEnv, SlotNumber, pairhash> uniqueNumbers;
 };
 

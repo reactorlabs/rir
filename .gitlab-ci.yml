@@ -5,6 +5,12 @@ stages:
   - Run tests
   - Deploy
 
+before_script:
+  - export PIR_MAX_INPUT_SIZE=99999
+  - export PIR_INLINER_MAX_SIZE=99999
+  - export PIR_DEOPT_CHAOS_SEED=$RANDOM
+  - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
+
 sanity:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:

@@ -676,7 +676,6 @@ class FLIE(LdFun, 2, Effects::Any()) {
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
   public:
     SEXP varName;
-    bool usesCache = true;
 
     LdVar(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::any(), env),
@@ -788,7 +787,6 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
 class FLIE(StVar, 2, Effect::WritesEnv) {
   public:
     bool isStArg = false;
-    bool usesCache = true;
 
     StVar(SEXP name, Value* val, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},

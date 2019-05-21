@@ -38,6 +38,7 @@ BC_NOARGS(V, _)
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
@@ -259,6 +260,7 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:

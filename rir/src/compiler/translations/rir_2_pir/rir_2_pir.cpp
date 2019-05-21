@@ -205,6 +205,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::ldvar_:
     case Opcode::ldvar_cached_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_for_update_cache_:
         v = insert(new LdVar(bc.immediateConst(), env));
         // Checkpoint might be useful if we end up inlining this force
