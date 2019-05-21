@@ -6,7 +6,6 @@
 
 namespace rir {
 
-// makes max cache size fit into 64bytes (with size)
 #define MAX_CACHE_SIZE 63
 #define ACTIVE_BINDING_MASK (1 << 15)
 #define BINDING_LOCK_MASK (1 << 14)
@@ -23,6 +22,11 @@ struct BindingCache {
     size_t length;
     BindingCacheEntry entry[];
 };
+static_assert((sizeof(BindingCache) +
+               sizeof(BindingCacheEntry) * MAX_CACHE_SIZE) %
+                      64 ==
+                  0,
+              "Cache should be cache line sized");
 
 static RIR_INLINE void clearCache(BindingCache* cache) {
     memset(cache->entry, 0, sizeof(BindingCacheEntry) * cache->length);
@@ -144,6 +148,26 @@ static RIR_INLINE void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
     SEXP sym = cp_pool_at(ctx, poolIdx);
     SLOWASSERT(TYPEOF(sym) == SYMSXP);
     rirDefineVarWrapper(sym, val, env);
+}
+
+static inline void rirSetVarWrapper(SEXP sym, SEXP val, SEXP env) {
+    if (env != R_BaseEnv && env != R_BaseNamespace) {
+        R_varloc_t loc = R_findVarLocInFrame(env, sym);
+        if (!R_VARLOC_IS_NULL(loc) && !BINDING_IS_LOCKED(loc.cell) &&
+            !IS_ACTIVE_BINDING(loc.cell)) {
+            SEXP cur = CAR(loc.cell);
+            if (cur == val)
+                return;
+            INCREMENT_NAMED(val);
+            SETCAR(loc.cell, val);
+            SET_MISSING(loc.cell, 0);
+            return;
+        }
+    }
+    PROTECT(val);
+    INCREMENT_NAMED(val);
+    Rf_setVar(sym, val, ENCLOS(env));
+    UNPROTECT(1);
 }
 
 #endif

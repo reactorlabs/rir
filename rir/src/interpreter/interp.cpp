@@ -2034,7 +2034,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
-            Rf_setVar(sym, val, ENCLOS(env));
+            rirSetVarWrapper(sym, val, ENCLOS(env));
             NEXT();
         }
 
