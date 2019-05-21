@@ -454,14 +454,17 @@ class CachePosition {
     typedef std::pair<size_t, size_t> StartSize;
 
     explicit CachePosition(Code* code) {
-        std::unordered_map<Value*, std::unordered_set<NameAndEnv, pairhash>>
+        std::unordered_map<Value*,
+                           std::unordered_map<NameAndEnv, size_t, pairhash>>
             found;
 
+        // Count how many instruction use a binding. We use this as a proxy for
+        // how many times it might get accessed at runtime.
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto ld = LdVar::Cast(i)) {
-                found[ld->env()].emplace(NameAndEnv(ld->varName, ld->env()));
+                found[ld->env()][NameAndEnv(ld->varName, ld->env())]++;
             } else if (auto st = StVar::Cast(i)) {
-                found[st->env()].emplace(NameAndEnv(st->varName, st->env()));
+                found[st->env()][NameAndEnv(st->varName, st->env())]++;
             }
         });
 
@@ -470,21 +473,38 @@ class CachePosition {
             auto e = Env::Cast(env.first);
             if (e && e->rho != R_BaseEnv && e->rho != R_BaseNamespace) {
                 for (const auto& key : env.second) {
+                    if (key.second <= 2)
+                        continue;
                     if (uniqueNumbers.size() == MAX_CACHE_SIZE)
                         break;
-                    uniqueNumbers.emplace(key, uniqueNumbers.size());
+                    uniqueNumbers.emplace(key.first, uniqueNumbers.size());
                 }
             }
         }
         globalEnvsCacheSize_ = uniqueNumbers.size();
 
+        // Heuristic: after how many loads does it pay off to cache a variable?
+        // It depends on the size of the environment, since the smaller the
+        // environment, the faster the lookup.
+        auto minAccessEnvSize = [](size_t s) -> unsigned {
+            if (s == 0)
+                return 99999; // This env seems empty, caching is just a waste.
+            else if (s == 1)
+                return 3;
+            else if (s < 5)
+                return 2;
+            return 1;
+        };
         for (const auto& env : found) {
             if (!Env::Cast(env.first)) {
                 envCachePositions[env.first].first = uniqueNumbers.size();
+                auto limit = minAccessEnvSize(env.second.size());
                 for (const auto& key : env.second) {
+                    if (key.second <= limit)
+                        continue;
                     if (uniqueNumbers.size() == MAX_CACHE_SIZE)
                         break;
-                    uniqueNumbers.emplace(key, uniqueNumbers.size());
+                    uniqueNumbers.emplace(key.first, uniqueNumbers.size());
                 }
                 envCachePositions[env.first].second =
                     uniqueNumbers.size() - envCachePositions[env.first].first;

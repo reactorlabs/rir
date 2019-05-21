@@ -1712,7 +1712,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 res = CAR(loc.cell);
             } else {
                 SEXP sym = cp_pool_at(ctx, id);
-                res = Rf_findVar(sym, env);
+                res = Rf_findVar(sym, ENCLOS(env));
             }
 
             if (res == R_UnboundValue) {
@@ -1752,7 +1752,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 res = CAR(loc);
             } else {
                 SEXP sym = cp_pool_at(ctx, id);
-                res = Rf_findVar(sym, env);
+                res = Rf_findVar(sym, ENCLOS(env));
             }
 
             if (res == R_UnboundValue) {

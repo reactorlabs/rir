@@ -6,7 +6,7 @@
 
 namespace rir {
 
-#define MAX_CACHE_SIZE 63
+#define MAX_CACHE_SIZE 255
 #define ACTIVE_BINDING_MASK (1 << 15)
 #define BINDING_LOCK_MASK (1 << 14)
 #define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
