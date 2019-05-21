@@ -73,8 +73,6 @@ BC BC::ldvar(SEXP sym) {
 BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    if (cacheSlot == 0)
-        return BC::ldvar(sym);
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
@@ -105,8 +103,6 @@ BC BC::ldvarNoForce(SEXP sym) {
 BC BC::ldvarNoForceCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    if (cacheSlot == 0)
-        return BC::ldvarNoForce(sym);
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
@@ -188,8 +184,6 @@ BC BC::starg(SEXP sym) {
 BC BC::stargCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    if (cacheSlot == 0)
-        return BC::starg(sym);
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
@@ -205,8 +199,6 @@ BC BC::stvar(SEXP sym) {
 BC BC::stvarCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    if (cacheSlot == 0)
-        return BC::stvar(sym);
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
