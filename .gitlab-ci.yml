@@ -158,3 +158,12 @@ deploy:
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:master
   only:
     - master
+
+cleanup_registry:
+  stage: Deploy
+  image: ruby:2.5
+  before_script: []
+  script:
+    - echo "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
+  only:
+    - master
