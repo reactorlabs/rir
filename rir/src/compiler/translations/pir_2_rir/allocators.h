@@ -473,6 +473,9 @@ class CachePosition {
             auto e = Env::Cast(env.first);
             if (e && e->rho != R_BaseEnv && e->rho != R_BaseNamespace) {
                 for (const auto& key : env.second) {
+                    // If a binding is used only once, then it does not pay off
+                    // to cache (yes, it could be used in a loop, this is just a
+                    // static approximation).
                     if (key.second <= 2)
                         continue;
                     if (uniqueNumbers.size() == MAX_CACHE_SIZE)
@@ -483,9 +486,11 @@ class CachePosition {
         }
         globalEnvsCacheSize_ = uniqueNumbers.size();
 
-        // Heuristic: after how many loads does it pay off to cache a variable?
-        // It depends on the size of the environment, since the smaller the
-        // environment, the faster the lookup.
+        // At runtime looking up a binding in a local environment is a linear
+        // search. Therefore, the smaller then environment, the faster the
+        // lookup. E.g. looking up in an env of size one is not much slower than
+        // going through the cache. Therefore we will scale the limit on the
+        // size of the environment.
         auto minAccessEnvSize = [](size_t s) -> unsigned {
             if (s == 0)
                 return 99999; // This env seems empty, caching is just a waste.
@@ -497,7 +502,7 @@ class CachePosition {
         };
         for (const auto& env : found) {
             if (!Env::Cast(env.first)) {
-                envCachePositions[env.first].first = uniqueNumbers.size();
+                envCacheRanges[env.first].first = uniqueNumbers.size();
                 auto limit = minAccessEnvSize(env.second.size());
                 for (const auto& key : env.second) {
                     if (key.second <= limit)
@@ -506,8 +511,8 @@ class CachePosition {
                         break;
                     uniqueNumbers.emplace(key.first, uniqueNumbers.size());
                 }
-                envCachePositions[env.first].second =
-                    uniqueNumbers.size() - envCachePositions[env.first].first;
+                envCacheRanges[env.first].second =
+                    uniqueNumbers.size() - envCacheRanges[env.first].first;
             }
         }
     }
@@ -525,13 +530,13 @@ class CachePosition {
     unsigned globalEnvsCacheSize() const { return globalEnvsCacheSize_; }
 
     void ifCacheRange(MkEnv* env, std::function<void(StartSize)> apply) const {
-        if (!env->stub && envCachePositions.count(env))
-            apply(envCachePositions.at(env));
+        if (!env->stub && envCacheRanges.count(env))
+            apply(envCacheRanges.at(env));
     }
 
   private:
     std::unordered_map<NameAndEnv, SlotNumber, pairhash> uniqueNumbers;
-    std::unordered_map<Value*, StartSize> envCachePositions;
+    std::unordered_map<Value*, StartSize> envCacheRanges;
     size_t globalEnvsCacheSize_;
 };
 

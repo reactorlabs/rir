@@ -117,11 +117,11 @@ class BC {
         NumArgs nargs;
         SignedImmediate context;
     };
-    struct PoolAndCacheIdxs {
+    struct PoolAndCachePositionRange {
         PoolIdx poolIndex;
         CacheIdx cacheIndex;
     };
-    struct CacheIdxs {
+    struct CachePositionRange {
         CacheIdx start;
         unsigned size;
     };
@@ -149,8 +149,8 @@ class BC {
         LocalsCopy loc_cpy;
         ObservedCallees callFeedback;
         ObservedValues typeFeedback;
-        PoolAndCacheIdxs poolAndCache;
-        CacheIdxs cacheIdx;
+        PoolAndCachePositionRange poolAndCache;
+        CachePositionRange cacheIdx;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
@@ -614,7 +614,7 @@ BC_NOARGS(V, _)
         ImmediateArguments immediate;
         switch (bc) {
         case Opcode::clear_binding_cache_:
-            memcpy(&immediate.cacheIdx, pc, sizeof(CacheIdxs));
+            memcpy(&immediate.cacheIdx, pc, sizeof(CachePositionRange));
             break;
         case Opcode::deopt_:
         case Opcode::push_:
@@ -636,7 +636,8 @@ BC_NOARGS(V, _)
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
         case Opcode::starg_cached_:
-            memcpy(&immediate.poolAndCache, pc, sizeof(PoolAndCacheIdxs));
+            memcpy(&immediate.poolAndCache, pc,
+                   sizeof(PoolAndCachePositionRange));
             break;
         case Opcode::call_implicit_:
         case Opcode::named_call_implicit_:
