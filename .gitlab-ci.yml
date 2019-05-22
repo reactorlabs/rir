@@ -4,6 +4,7 @@ stages:
   - Build benchmark container
   - Run tests
   - Deploy
+  - Cleanup
 
 before_script:
   - export PIR_MAX_INPUT_SIZE=99999
@@ -160,7 +161,7 @@ deploy:
     - master
 
 cleanup_registry:
-  stage: Deploy
+  stage: Cleanup
   image: ruby:2.5
   before_script: []
   script:
