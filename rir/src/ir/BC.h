@@ -352,6 +352,13 @@ BC BC::mkEnv(const std::vector<SEXP>& names, SignedImmediate contextPos,
     return cur;
 }
 
+BC BC::clearBindingCache(CacheIdx start, unsigned size) {
+    ImmediateArguments im;
+    im.cacheIdx.start = start;
+    im.cacheIdx.size = size;
+    return BC(Opcode::clear_binding_cache_, im);
+}
+
 BC BC::deopt(SEXP deoptMetadata) {
     ImmediateArguments i;
     i.pool = Pool::insert(deoptMetadata);

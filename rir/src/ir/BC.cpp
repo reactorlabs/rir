@@ -20,6 +20,10 @@ BC_NOARGS(V, _)
 #undef V
         return;
 
+    case Opcode::clear_binding_cache_:
+        cs.insert(immediate.cacheIdx);
+        return;
+
     case Opcode::record_call_:
         // Call feedback targets are stored in the code extra pool. We don't
         // have access to them here, so we can't write a call feedback with
@@ -346,6 +350,9 @@ BC_NOARGS(V, _)
     case Opcode::brfalse_:
     case Opcode::br_:
         out << immediate.offset;
+        break;
+    case Opcode::clear_binding_cache_:
+        out << immediate.cacheIdx.start << " " << immediate.cacheIdx.size;
         break;
     }
     out << "\n";

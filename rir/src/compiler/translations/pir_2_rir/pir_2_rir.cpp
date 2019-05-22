@@ -338,8 +338,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
     }
 
-    CachePosition cache;
     CodeBuffer cb(ctx.cs());
+
+    const CachePosition cache(code);
+    if (cache.globalEnvsCacheSize() > 0)
+        cb.add(BC::clearBindingCache(0, cache.globalEnvsCacheSize()));
+
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
             return;
@@ -834,6 +838,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
                 cb.add(BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub));
+                cache.ifCacheRange(mkenv, [&](CachePosition::StartSize range) {
+                    cb.add(BC::clearBindingCache(range.first, range.second));
+                });
                 break;
             }
 
