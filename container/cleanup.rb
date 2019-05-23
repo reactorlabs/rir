@@ -10,8 +10,8 @@ REPOS = {
       560812   # /benchmarks
     ],
     keep: [
-      `git rev-parse HEAD`,                         # current version
-      `git rev-parse HEAD~1`,                       # prev version
+      `git rev-parse HEAD`.chomp,                   # current version
+      `git rev-parse HEAD~1`.chomp,                 # prev version
       'master',
       'c13be9ca843726e3eb3e57e6e6f2a602ae7481eb'    # referenced in paper
     ]},
