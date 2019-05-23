@@ -39,6 +39,7 @@ void PirType::merge(SEXPTYPE sexptype) {
         flags_.set(TypeFlags::lazy);
         flags_.set(TypeFlags::promiseWrapped);
         t_.r = RTypeSet::Any();
+        t_.r.reset(RType::missing);
         break;
     case EXPRSXP:
         t_.r.set(RType::ast);
@@ -79,9 +80,7 @@ void PirType::merge(SEXPTYPE sexptype) {
     case EXTPTRSXP:
     case WEAKREFSXP:
     case S4SXP:
-        t_.r = val().t_.r;
-        t_.r.reset(RType::missing);
-        t_.r.reset(RType::unbound);
+        t_.r.set(RType::other);
         break;
     default:
         std::cerr << "unknown type: " << sexptype << "\n";

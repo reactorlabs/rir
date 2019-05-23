@@ -3692,8 +3692,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_top(ctx);
             pir::PirType typ(pc);
             pc += sizeof(pir::PirType);
-            const char* instr = *(const char**)pc;
-            pc += sizeof(const char*);
+            int instrIdx = readSignedImmediate();
+            const char* instr = NULL;
+            if (instrIdx == -1) {
+                instr = "not generated, set RIR_CHECK_PIR_TYPES=2";
+            } else {
+                instr = CHAR(Rf_asChar(Pool::get((unsigned)instrIdx)));
+            }
+            advanceImmediate();
             if (!typ.isInstance(val)) {
                 std::cerr << "type assert failed in:\n" << instr << "\n";
                 std::cerr << "type " << typ << " not accurate for value ("

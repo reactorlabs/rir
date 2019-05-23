@@ -115,7 +115,7 @@ class BC {
             "PirType must fit in 2 immediates, or change assert_type_ size");
         Immediate typeData1;
         Immediate typeData2;
-        const char* instr;
+        SignedImmediate instr;
 
         pir::PirType pirType() const { return pir::PirType(&typeData1); }
         void setPirType(pir::PirType typ) {
@@ -413,7 +413,7 @@ BC_NOARGS(V, _)
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
-    inline static BC assertType(pir::PirType typ, const char* instr);
+    inline static BC assertType(pir::PirType typ, SignedImmediate instr);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;

@@ -66,8 +66,10 @@ enum class RType : uint8_t {
     env,
     ast,
 
+    other,
+
     FIRST = nil,
-    LAST = ast
+    LAST = other
 };
 
 enum class NativeType : uint8_t {
@@ -186,7 +188,8 @@ struct PirType {
     static constexpr PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
-                       RType::missing | RType::unbound | RType::ast)
+                       RType::missing | RType::unbound | RType::ast |
+                       RType::other)
             .orObject();
     }
     static constexpr PirType vecs() { return num() | RType::str | RType::vec; }
@@ -229,7 +232,7 @@ struct PirType {
             return false;
         return flags_.includes(TypeFlags::lazy);
     }
-    RIR_INLINE bool maybePromiseWrapped() const {
+    RIR_INLINE constexpr bool maybePromiseWrapped() const {
         if (!isRType())
             return false;
         return flags_.includes(TypeFlags::promiseWrapped);
@@ -327,15 +330,12 @@ struct PirType {
         return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
     }
 
-    PirType forced() const {
-        assert(isRType());
-        PirType res = *this;
-        if (res.maybePromiseWrapped()) {
-            res.flags_.reset(TypeFlags::promiseWrapped);
-            res.flags_.reset(TypeFlags::lazy);
-            res.t_.r.set(RType::missing);
-        }
-        return res;
+    PirType constexpr forced() const {
+        if (!maybePromiseWrapped())
+            return *this;
+        return PirType(
+            t_.r | RType::missing,
+            flags_ & ~(FlagSet(TypeFlags::lazy) | TypeFlags::promiseWrapped));
     }
 
     RIR_INLINE constexpr PirType baseType() const {
@@ -531,6 +531,9 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
         break;
     case RType::missing:
         out << "miss";
+        break;
+    case RType::other:
+        out << "other";
         break;
     case RType::unbound:
         out << "_";

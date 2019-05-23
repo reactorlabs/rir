@@ -562,6 +562,6 @@ DEF_INSTR(printInvocation_, 0, 0, 0, 0)
 /*
  * assert_type_ :: asserts that tos has the immediate PIR type
  */
-DEF_INSTR(assert_type_, 4, 1, 1, 1)
+DEF_INSTR(assert_type_, 3, 1, 1, 1)
 
 #undef DEF_INSTR

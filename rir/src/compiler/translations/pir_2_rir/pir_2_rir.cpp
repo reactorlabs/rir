@@ -944,14 +944,14 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                     }
                     return true;
                 })) {
-                const char* instrStr;
+                int instrStr;
                 if (pir::Parameter::RIR_CHECK_PIR_TYPES > 1) {
                     std::stringstream instrPrint;
                     instr->print(instrPrint, false);
-                    // WARNING: Leaks memory
-                    instrStr = (const char*)strdup(instrPrint.str().c_str());
+                    instrStr =
+                        Pool::insert(Rf_mkString(instrPrint.str().c_str()));
                 } else {
-                    instrStr = "not generated, set RIR_CHECK_PIR_TYPES=2";
+                    instrStr = -1;
                 }
                 cb.add(BC::assertType(instr->type, instrStr));
             }

@@ -47,17 +47,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                                                 type.isA(RType::real))
                                                    ? type
                                                    : i->type.notObject();
-                            bool redundant = !Visitor::check(
-                                function->entry, [&](Instruction* i2) {
-                                    if (auto c2 = CastType::Cast(i2)) {
-                                        if (c2->arg<0>().val() == i &&
-                                            c2->type == specType)
-                                            return false;
-                                    }
-                                    return true;
-                                });
-                            if (!redundant)
-                                speculate[cp][i] = specType;
+                            speculate[cp][i] = specType;
+                            // Prevent redundant speculation
+                            i->typeFeedback = i->type;
                         }
                     }
                 }
