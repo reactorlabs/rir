@@ -357,6 +357,7 @@ BC_NOARGS(V, _)
         break;
     case Opcode::clear_binding_cache_:
         out << immediate.cacheIdx.start << " " << immediate.cacheIdx.size;
+        break;
     case Opcode::assert_type_:
         out << immediate.assertTypeArgs.pirType();
         break;
