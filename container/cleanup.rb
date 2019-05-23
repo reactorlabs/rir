@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'json'
+require 'date'
 
 REPOS = {
   '10979413': { # rir_mirror
@@ -8,16 +9,16 @@ REPOS = {
       560429,  # /
       560812   # /benchmarks
     ],
-    keep_recent: 3,
     keep: [
+      `git rev-parse HEAD`,                         # current version
+      `git rev-parse HEAD~1`,                       # prev version
       'master',
-      'c13be9ca843726e3eb3e57e6e6f2a602ae7481eb'
+      'c13be9ca843726e3eb3e57e6e6f2a602ae7481eb'    # referenced in paper
     ]},
   '12325205': {# rir experiments
     repos: [
       562769,  # scope_resolution
     ],
-    keep_recent: 1,
     keep: [
       'c13be9ca843726e3eb3e57e6e6f2a602ae7481eb-210646f2a98099ed48d928b1f5e66e551aa0d92b',
     ]},
@@ -37,24 +38,26 @@ def delete(project, repo, what)
   curl("--request DELETE https://gitlab.com/api/v4/projects/#{project}/registry/repositories/#{repo}/#{what}")
 end
 
-SKIP=3
+MAX_AGE_DAYS=0.6
 
 REPOS.each do |project, repos|
   repos[:repos].each do |repo|
     puts "== #{project} == #{repo} =="
     res = fetch(project, repo, "tags")
-    i = 0
     res.each do |tag|
-      if i < repos[:keep_recent]
-        puts "keep recent #{tag['name']}"
-        i += 1
-        next
-      end
-      unless repos[:keep].include? tag['name']
-        puts "delete #{tag['name']}"
-        puts delete(project, repo, "tags/#{tag['name']}")
+      if repos[:keep].include? tag['name']
+        puts "keeping #{tag['name']} (whitelisted)"
       else
-        puts "keep #{tag['name']}"
+        info = fetch(project, repo, "tags/#{tag['name']}")
+        t = DateTime.parse(info["created_at"])
+        age = DateTime.now - t
+
+        if age > MAX_AGE_DAYS
+          puts "delete #{tag['name']} which is #{age.to_f}d old"
+          puts delete(project, repo, "tags/#{tag['name']}")
+        else
+          puts "keeping #{tag['name']} (less than #{MAX_AGE_DAYS}d old)"
+        end
       end
     end
   end
