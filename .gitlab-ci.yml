@@ -49,7 +49,7 @@ benchmark container:
   script:
     - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
     - cd container/benchmark
-    - docker build -t registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA .
+    - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
 
 tests_release:
