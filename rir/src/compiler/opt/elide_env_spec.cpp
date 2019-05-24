@@ -4,6 +4,7 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
+#include "compiler/util/safe_builtins_list.h"
 #include "pass_definitions.h"
 
 #include <unordered_map>
@@ -28,10 +29,60 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         return answer;
     };
 
-    std::unordered_set<MkEnv*> stubbedEnvs;
-    std::unordered_set<MkEnv*> bannedEnvs;
+    std::unordered_set<Value*> bannedEnvs;
 
-    Visitor::run(function->entry, [&](BB* bb) {
+    // If we only see these (and call instructions) then we stub an environment,
+    // since it can only be accessed reflectively.
+    static std::unordered_set<Tag> allowed{Tag::Force, Tag::FrameState,
+                                           Tag::PushContext, Tag::LdVar};
+
+    Visitor::run(function->entry, [&](Instruction* i) {
+        if (i->hasEnv()) {
+            if (auto mk = MkEnv::Cast(i->env())) {
+                if (mk->stub)
+                    return;
+                // StArg is not implemented for stub envs
+                if (auto st = StVar::Cast(i))
+                    if (!st->isStArg)
+                        return;
+                if (allowed.count(i->tag))
+                    return;
+                if (CallInstruction::CastCall(i)) {
+                    if (auto bt = CallBuiltin::Cast(i)) {
+                        if (SafeBuiltinsList::forInline(bt->builtinId)) {
+                            return;
+                        }
+                        // reflective builtins will trigger deopt, so let's not
+                        // stub those environemtns
+                    } else {
+                        return;
+                    }
+                }
+                bannedEnvs.insert(mk);
+            }
+        }
+    });
+
+    std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
+    Visitor::run(function->entry, [&](Instruction* i) {
+        if (i->hasEnv()) {
+            if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i))
+                return;
+            if (auto mk = MkEnv::Cast(i->env())) {
+                if (bannedEnvs.count(mk))
+                    return;
+                // We can only stub an environment if all uses have a checkpoint
+                // available after every use.
+                if (auto cp = checkpoint.next(i)) {
+                    checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
+                } else {
+                    bannedEnvs.insert(mk);
+                }
+            }
+        }
+    });
+
+    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
@@ -60,50 +111,21 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     i->type.setNotObject();
                     i->effects.reset(Effect::Reflection);
                     i->type = i->type.forced();
-                }
-
-                // Speculatively elide envs on forces that only require them in
-                // case they access promises reflectively
-                if (auto force = Force::Cast(i)) {
-                    if (auto environment = MkEnv::Cast(force->env())) {
-                        if (auto cp = checkpoint.next(i)) {
-                            static std::unordered_set<Tag> forces{
-                                Tag::Force, Tag::FrameState, Tag::PushContext,
-                                // stvar might lead to deopts, but really in
-                                // almost all cases deadStoreRemoval will
-                                // remove it later, once we stubbe the env.
-                                Tag::StVar};
-
-                            if (cp->bb()->trueBranch() == bb) {
-                                bannedEnvs.insert(environment);
-                                ip = next;
-                                continue;
-                            }
-
-                            if (!environment->stub &&
-                                !bannedEnvs.count(environment) &&
-                                (stubbedEnvs.count(environment) ||
-                                 environment->usesAreOnly(function->entry,
-                                                          forces))) {
-
-                                stubbedEnvs.insert(environment);
-                                environment = MkEnv::Cast(force->env());
-                                auto condition = new IsEnvStub(environment);
-                                BBTransform::insertAssume(condition, cp, true);
-                            }
-                        } else {
-                            bannedEnvs.insert(environment);
-                        }
+                } else if (checks.count(i)) {
+                    // Speculatively elide instructions that only require them
+                    // in
+                    // case they access promises reflectively
+                    if (!bannedEnvs.count(i->env())) {
+                        auto env = checks[i].second;
+                        env->stub = true;
+                        auto cp = checks[i].first;
+                        auto condition = new IsEnvStub(env);
+                        BBTransform::insertAssume(condition, cp, true);
                     }
                 }
             }
             ip = next;
         }
-
-        // Stub out all envs where we managed to guard all forces
-        for (auto& e : stubbedEnvs)
-            if (!bannedEnvs.count(e))
-                e->stub = true;
     });
 }
 } // namespace pir

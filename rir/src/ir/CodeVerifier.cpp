@@ -183,6 +183,8 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ceil_:
     case Opcode::floor_:
     case Opcode::clear_binding_cache_:
+    case Opcode::ldvar_noforce_stubbed_:
+    case Opcode::stvar_stubbed_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

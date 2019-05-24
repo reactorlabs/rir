@@ -25,10 +25,10 @@ struct ArgsLazyData : public RirDataWrapper<ArgsLazyData, LAZY_ARGS_MAGIC> {
     ArgsLazyData(const ArgsLazyData&) = delete;
     ArgsLazyData& operator=(const ArgsLazyData&) = delete;
 
-    ArgsLazyData(const CallContext* callCtx, InterpreterInstance* cmpCtx)
+    ArgsLazyData(CallContext* callCtx, InterpreterInstance* cmpCtx)
         : RirDataWrapper(0), callContext(callCtx), compilationContext(cmpCtx){};
 
-    const CallContext* callContext;
+    CallContext* callContext;
     InterpreterInstance* compilationContext;
 
     SEXP createArgsLists() {

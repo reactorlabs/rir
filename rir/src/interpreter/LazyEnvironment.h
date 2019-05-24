@@ -26,7 +26,7 @@ struct LazyEnvironment
 
     LazyEnvironment(SEXP parent, Immediate* names, size_t nargs, void* frameEnd,
                     InterpreterInstance* ctx)
-        : RirRuntimeObject((intptr_t) & this->args - (intptr_t)this, nargs + 1),
+        : RirRuntimeObject(sizeof(LazyEnvironment), nargs + 1),
           frameEnd(frameEnd), nargs(nargs), names(names) {
         setEntry(0, parent);
         for (size_t i = 0; i < nargs; i++) {
@@ -42,9 +42,6 @@ struct LazyEnvironment
     void setArg(size_t i, SEXP val) { setEntry(i + 1, val); }
 
     SEXP getParent() { return getEntry(0); }
-
-  private:
-    SEXP args[];
 };
 } // namespace rir
 

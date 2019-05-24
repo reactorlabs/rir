@@ -63,6 +63,16 @@ BC BC::ldddvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
 }
+BC BC::stvarStubbed(unsigned pos) {
+    ImmediateArguments i;
+    i.i = pos;
+    return BC(Opcode::stvar_stubbed_, i);
+}
+BC BC::ldvarNoForceStubbed(unsigned pos) {
+    ImmediateArguments i;
+    i.i = pos;
+    return BC(Opcode::ldvar_noforce_stubbed_, i);
+}
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));

@@ -96,7 +96,7 @@ reverse_wrapper<T> reverse(T&& iterable) {
 
 enum class Order { Depth, Breadth, Random, Lowering };
 
-template <Order ORDER, class Marker>
+template <Order ORDER, class Marker, bool VISIT_DEOPT_BRANCH = true>
 class VisitorImplementation {
   public:
     typedef std::function<bool(Instruction*)> InstrActionPredicate;
@@ -230,6 +230,9 @@ class VisitorImplementation {
     static bool forwardGenericRun(BB* bb, BB* stop, const ActionKind& action) {
         struct Scheduler {
             RIR_INLINE std::array<BB*, 2> operator()(BB* cur) const {
+                if (!VISIT_DEOPT_BRANCH && !cur->isEmpty())
+                    if (Checkpoint::Cast(cur->last()))
+                        return {{cur->next0}};
                 return {{cur->next0, cur->next1}};
             }
         };
@@ -338,6 +341,10 @@ class VisitorImplementation {
 
 class Visitor
     : public VisitorImplementation<Order::Random, VisitorHelpers::IDMarker> {};
+
+class VisitorNoDeoptBranch
+    : public VisitorImplementation<Order::Random, VisitorHelpers::IDMarker,
+                                   false> {};
 
 class BreadthFirstVisitor
     : public VisitorImplementation<Order::Breadth, VisitorHelpers::IDMarker> {};
