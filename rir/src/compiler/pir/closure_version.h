@@ -38,6 +38,8 @@ class ClosureVersion : public Code {
         friend std::ostream& operator<<(std::ostream& out, const Properties&);
     };
 
+    size_t inlinees = 0;
+
   private:
     Closure* owner_;
     std::vector<Promise*> promises_;

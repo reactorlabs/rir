@@ -7,6 +7,7 @@
 #include "cache.h"
 #include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
+#include "event_counters.h"
 #include "ir/Deoptimization.h"
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
@@ -1462,6 +1463,13 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     ostack_push(ctx, res);
 }
 
+#ifdef ENABLE_EVENT_COUNTERS
+static unsigned EnvAllocated =
+    EventCounters::instance().registerCounter("env allocated");
+static unsigned EnvStubAllocated =
+    EventCounters::instance().registerCounter("envstub allocated");
+#endif
+
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  R_bcstack_t* localsBase, BindingCache* cache) {
@@ -1489,6 +1497,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         // Optimized functions explicitly manage the cache
         if (env != symbol::delayedEnv)
             clearCache(bindingCache);
+
+#ifdef ENABLE_EVENT_COUNTERS
+        if (ENABLE_EVENT_COUNTERS && env != symbol::delayedEnv)
+            EventCounters::instance().count(EnvAllocated);
+#endif
     }
 
     if (!existingLocals) {
@@ -1608,6 +1621,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             ostack_push(ctx, res);
             UNPROTECT(1);
+
+#ifdef ENABLE_EVENT_COUNTERS
+            if (ENABLE_EVENT_COUNTERS)
+                EventCounters::instance().count(EnvAllocated);
+#endif
+
             NEXT();
         }
 
@@ -1650,6 +1669,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     cptr->cloenv = wrapper;
             }
 
+#ifdef ENABLE_EVENT_COUNTERS
+            if (ENABLE_EVENT_COUNTERS)
+                EventCounters::instance().count(EnvStubAllocated);
+#endif
             NEXT();
         }
 
