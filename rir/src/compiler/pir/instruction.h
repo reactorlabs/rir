@@ -850,18 +850,30 @@ class FLIE(MkArg, 2, Effects::None()) {
                                          env),
           prom_(prom) {
         assert(eagerArg() == v);
-        noReflection = isEager();
+        if (isEager()) {
+            noReflection = true;
+            elideEnv();
+        }
     }
     MkArg(Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
           prom_(nullptr) {
         assert(eagerArg() == v);
-        noReflection = isEager();
+        if (isEager()) {
+            noReflection = true;
+            elideEnv();
+        }
     }
 
     Value* eagerArg() const { return arg(0).val(); }
-    void eagerArg(Value* eager) { arg(0).val() = eager; }
+    void eagerArg(Value* eager) {
+        arg(0).val() = eager;
+        assert(isEager());
+        noReflection = true;
+        // Environment is not needed once a promise is evaluated
+        elideEnv();
+    }
 
     void updatePromise(Promise* p) { prom_ = p; }
     Promise* prom() const { return prom_; }
