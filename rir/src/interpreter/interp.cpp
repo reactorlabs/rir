@@ -153,14 +153,14 @@ static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
-SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
-                       const Opcode* pc, InterpreterInstance* ctx,
-                       R_bcstack_t* localsBase, SEXP stub) {
+SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
+    auto wrapper = LazyEnvironment::unpack(wrapper_);
+
     SEXP arglist = R_NilValue;
-    auto names = (Immediate*)pc;
+    auto names = wrapper->names;
     int j = 0;
-    for (long i = args->size() - 1; i >= 0; --i) {
-        SEXP val = args->at(j);
+    for (long i = wrapper->nargs - 1; i >= 0; --i) {
+        SEXP val = wrapper->getArg(j);
         SEXP name = cp_pool_at(ctx, names[i]);
         arglist = CONS_NR(val, arglist);
         SET_TAG(arglist, name);
@@ -168,10 +168,13 @@ SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
         j++;
     }
 
-    SEXP environment = Rf_NewEnvironment(R_NilValue, arglist, parent);
-    for (auto i = 0; i < R_BCNodeStackTop - localsBase; i++) {
-        if (ostack_at(ctx, i) == stub)
-            ostack_set(ctx, i, environment);
+    SEXP environment =
+        Rf_NewEnvironment(R_NilValue, arglist, wrapper->getParent());
+    auto finger = R_BCNodeStackTop;
+    while (finger > wrapper->frameEnd) {
+        if (finger->tag == 0 && finger->u.sxpval == wrapper_)
+            finger->u.sxpval = environment;
+        finger--;
     }
     return environment;
 }
@@ -259,27 +262,20 @@ static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
 SEXP materialize(void* rirDataWrapper) {
     if (auto promargs = ArgsLazyData::cast(rirDataWrapper)) {
         return promargs->createArgsLists();
-    } else if (auto stub = LazyEnvironment::cast(rirDataWrapper)) {
-        return stub->create();
+    } else if (LazyEnvironment::check((SEXP)rirDataWrapper)) {
+        return createEnvironment(globalContext(), (SEXP)rirDataWrapper);
     }
     assert(false);
     return nullptr;
 }
 
 SEXP* keepAliveSEXPs(void* rirDataWrapper) {
-    if (auto env = LazyEnvironment::cast(rirDataWrapper)) {
-        return env->gcData();
-    }
     assert(false);
     return nullptr;
 }
 
 SEXP lazyPromargsCreation(void* rirDataWrapper) {
     return ArgsLazyData::cast(rirDataWrapper)->createArgsLists();
-}
-
-SEXP lazyEnvCreation(void* rirDataWrapper) {
-    return LazyEnvironment::cast(rirDataWrapper)->create();
 }
 
 static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
@@ -1382,8 +1378,8 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                            FRAME(sysparent), R_NilValue);
     }
 
-    if (auto stub = LazyEnvironment::cast(deoptEnv)) {
-        deoptEnv = stub->create();
+    if (LazyEnvironment::check(deoptEnv)) {
+        deoptEnv = createEnvironment(globalContext(), deoptEnv);
         cntxt->cloenv = deoptEnv;
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
@@ -1505,10 +1501,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     Opcode* pc = initialPC ? initialPC : c->code();
     SEXP res;
 
-    std::vector<LazyEnvironment*> envStubs;
-
     auto changeEnv = [&](SEXP e) {
-        assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
+        assert((TYPEOF(e) == ENVSXP || LazyEnvironment::check(e)) &&
                "Expected an environment");
         if (e != env)
             env = e;
@@ -1635,23 +1629,17 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                    "Non-environment used as environment parent.");
             auto names = pc;
             advanceImmediateN(n);
-            std::vector<SEXP>* args = new std::vector<SEXP>();
-            for (size_t i = 0; i < n; ++i) {
-                SEXP val = ostack_pop(ctx);
-                ENSURE_NAMED(val);
-                args->push_back(val);
-            }
-            auto envStub =
-                new LazyEnvironment(args, parent, names, ctx, localsBase);
-            envStubs.push_back(envStub);
-            res = (SEXP)envStub;
+            SEXP wrapper = Rf_allocVector(
+                EXTERNALSXP, sizeof(LazyEnvironment) + 50 + sizeof(SEXP) * n);
+            new (DATAPTR(wrapper))
+                LazyEnvironment(parent, (Immediate*)names, n, localsBase, ctx);
 
+            ostack_push(ctx, wrapper);
             if (contextPos > 0) {
                 if (auto cptr = getFunctionContext(contextPos - 1))
-                    cptr->cloenv = res;
+                    cptr->cloenv = wrapper;
             }
 
-            ostack_push(ctx, res);
             NEXT();
         }
 
@@ -2875,8 +2863,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(isstubenv_) {
             SEXP val = ostack_pop(ctx);
-            ostack_push(ctx, LazyEnvironment::cast(val) ? R_TrueValue
-                                                        : R_FalseValue);
+            ostack_push(
+                ctx, LazyEnvironment::check(val) ? R_TrueValue : R_FalseValue);
             NEXT();
         }
 
