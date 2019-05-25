@@ -200,14 +200,21 @@ pir::DebugOptions PirDebug = {
 
 #ifdef ENABLE_MEASURE
 static std::string getMeasureTitle() {
-    auto str = getenv("RIR_MEASURE");
+    auto str = getenv("RIR_MEASURE_ROW");
+    if (str)
+        return std::string(str);
+    else
+        return std::string("");
+}
+static std::string getMeasureFile() {
+    auto str = getenv("RIR_MEASURE_FILE");
     if (str)
         return std::string(str);
     else
         return std::string("");
 }
 
-MeasureTable GlobalMeasureTable(getMeasureTitle());
+MeasureTable GlobalMeasureTable(getMeasureTitle(), getMeasureFile());
 #endif
 
 REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
@@ -377,7 +384,7 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
 SEXP rir_getMeasure() {
 #ifdef ENABLE_MEASURE
     std::stringstream buf;
-    GlobalMeasureTable.writeCsv(buf);
+    GlobalMeasureTable.writeCsv(true, buf);
     return Rf_mkString(buf.str().c_str());
 #else
     Rf_error("measuring disabled, enable with RIR_MEASURE=<filename>");

@@ -9,85 +9,50 @@
 
 namespace rir {
 
-MeasureRow& MeasureTable::row(Code* code) {
-    void* key = code->code();
-    if (!rows.count(key)) {
-        std::string str;
-        {
-            CaptureOut rec;
-            Rf_PrintValue(code->ast());
-            str = rec.oneline(10);
-        }
-        MeasureRow row(str);
-        rows.emplace(key, row);
-    }
-    return rows.at(key);
-}
-
 void MeasureTable::record(Opcode op, Code* code) {
     assert(op != Opcode::invalid_);
-    row(code).counts[(unsigned)op]++;
     sumRow.counts[(unsigned)op]++;
 }
 
 void MeasureTable::reset() {
-    rows.clear();
     sumRow.reset();
 }
 
 void MeasureTable::flush() const {
     if (!fileName.empty()) {
-        std::ofstream out(fileName.c_str(), std::ios_base::trunc);
-        writeCsv(out);
+        bool header = access(fileName.c_str(), F_OK) == -1;
+        std::ofstream out(fileName.c_str(), std::ios_base::app);
+        writeCsv(header, out);
     }
 }
 
-void MeasureTable::writeCsv(std::ostream& out) const {
+void MeasureTable::writeCsv(bool header, std::ostream& out) const {
     // Padding
     unsigned pads[MeasureRow::ncols];
-    pads[0] = title.size();
-    for (auto& entry : rows) {
-        const MeasureRow& row = entry.second;
-        pads[0] = std::max(pads[0], (unsigned)row.name.size());
-    }
-    pads[0] = std::max(pads[0], (unsigned)sumRow.name.size());
+    pads[0] = 30;
     int i = 1;
 #define DEF_INSTR(name, ...)                                                   \
     pads[i] = strlen(#name);                                                   \
     i++;
 #include "../ir/insns.h"
 #undef DEF_INSTR
-    pads[i] = strlen("Total");
 
-    // Header
-    out << std::left << std::setw(pads[0]) << title;
+    if (header) {
+        out << std::left << std::setw(pads[0]) << fileName;
 #define DEF_INSTR(name, ...) out << ", " << #name;
 #include "../ir/insns.h"
 #undef DEF_INSTR
-    out << ", Total\n";
-
-    // Rows
-    for (auto& entry : rows) {
-        const MeasureRow& row = entry.second;
-        out << std::left << std::setw(pads[0]) << row.name;
-        i = 0;
-#define DEF_INSTR(name, ...)                                                   \
-    out << ", " << std::right << std::setw(pads[i + 1]) << row.counts[i];      \
-    i++;
-#include "../ir/insns.h"
-#undef DEF_INSTR
-        out << ", " << std::right << std::setw(pads[i + 1]) << row.total()
-            << "\n";
+        out << "\n";
     }
-    out << std::left << std::setw(pads[0]) << "Total";
+
+    out << std::left << std::setw(pads[0]) << title;
     i = 0;
 #define DEF_INSTR(name, ...)                                                   \
     out << ", " << std::right << std::setw(pads[i + 1]) << sumRow.counts[i];   \
     i++;
 #include "../ir/insns.h"
 #undef DEF_INSTR
-    out << ", " << std::right << std::setw(pads[i + 1]) << sumRow.total()
-        << "\n";
+    out << "\n";
 
     out.flush();
 }
