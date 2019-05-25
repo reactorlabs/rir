@@ -130,6 +130,15 @@ test_benchmarks:
     - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r e:RIR e:PIR -r -SN -wu 0 --iterations 2
     - PIR_DEOPT_CHAOS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r e:RIR e:PIR -r -SN -wu 0 --iterations 2
 
+test_measure:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Run tests
+  script:
+    - RIR_MEASURE_FILE=results.csv RIR_MEASURE_ROW=File PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/measure/ /opt/rir/external/custom-r e:RIR e:PIR -r -SN -wu 0 --iterations 1
+    - cat results.csv
+
 deploy:
   stage: Deploy
   image: docker:stable
