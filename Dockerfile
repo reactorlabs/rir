@@ -5,3 +5,4 @@ RUN mkdir -p /opt/rir/build/release      && cd /opt/rir/build/release      && cm
 RUN mkdir -p /opt/rir/build/fullverifier && cd /opt/rir/build/fullverifier && cmake -DCMAKE_BUILD_TYPE=fullverifier -GNinja ../.. && ninja && rm -rf build/*/CMakeFiles
 RUN mkdir -p /opt/rir/build/debugopt     && cd /opt/rir/build/debugopt     && cmake -DCMAKE_BUILD_TYPE=debugopt     -GNinja ../.. && ninja && rm -rf build/*/CMakeFiles
 RUN mkdir -p /opt/rir/build/sanitize     && cd /opt/rir/build/sanitize     && cmake -DCMAKE_BUILD_TYPE=sanitize     -GNinja ../.. && ninja && rm -rf build/*/CMakeFiles
+RUN mkdir -p /opt/rir/build/measure && cd /opt/rir/build/measure && cmake -DCMAKE_BUILD_TYPE=measure -GNinja ../.. && ninja && rm -rf build/*/CMakeFiles
