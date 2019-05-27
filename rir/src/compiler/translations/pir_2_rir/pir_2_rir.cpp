@@ -9,6 +9,7 @@
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
 #include "compiler/parameter.h"
+#include "event_counters.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -175,7 +176,7 @@ class Pir2Rir {
                         auto cacheIndex = bc.immediate.poolAndCache.cacheIndex;
                         next = code.erase(it, plus(next, 1));
                         next = code.emplace(
-                            next, BC::ldvarCache(arg, cacheIndex), noSource);
+                            next, BC::ldvarCached(arg, cacheIndex), noSource);
                         changed = true;
                     } else if (bc.is(rir::Opcode::pop_)) {
                         unsigned n = 1;
@@ -248,7 +249,29 @@ class Pir2Rir {
     };
 };
 
+#ifdef ENABLE_EVENT_COUNTERS
+static unsigned MkEnvEmited =
+    EventCounters::instance().registerCounter("mkenv emited");
+static unsigned MkEnvStubEmited =
+    EventCounters::instance().registerCounter("mkenvstub emited");
+static unsigned ClosuresCompiled =
+    EventCounters::instance().registerCounter("closures compiled");
+#endif
+
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS) {
+        VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
+            if (auto mkenv = MkEnv::Cast(i)) {
+                if (mkenv->stub)
+                    EventCounters::instance().count(MkEnvStubEmited);
+                else
+                    EventCounters::instance().count(MkEnvEmited);
+            }
+        });
+    }
+#endif
+
     lower(code);
     toCSSA(code);
 #ifdef FULLVERIFIER
@@ -338,8 +361,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
     }
 
-    CachePositionAllocator cachePositions;
     CodeBuffer cb(ctx.cs());
+
+    const CachePosition cache(code);
+    if (cache.globalEnvsCacheSize() > 0)
+        cb.add(BC::clearBindingCache(0, cache.globalEnvsCacheSize()));
+
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
             return;
@@ -546,20 +573,26 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
-                if (needsLdVarForUpdate.count(instr)) {
-                    if (ldvar->usesCache)
-                        cb.add(BC::ldvarForUpdateCache(
-                            ldvar->varName, cachePositions.slotFor(
-                                                ldvar->varName, ldvar->env())));
-                    else
-                        assert(false);
+                auto key =
+                    CachePosition::NameAndEnv(ldvar->varName, ldvar->env());
+                auto mkenv = MkEnv::Cast(ldvar->env());
+                if (mkenv && mkenv->stub) {
+                    cb.add(BC::ldvarNoForceStubbed(
+                        mkenv->indexOf(ldvar->varName)));
+                } else if (needsLdVarForUpdate.count(instr)) {
+                    if (cache.isCached(key)) {
+                        cb.add(BC::ldvarForUpdateCached(ldvar->varName,
+                                                        cache.indexOf(key)));
+                    } else {
+                        cb.add(BC::ldvarForUpdate(ldvar->varName));
+                    }
                 } else {
-                    if (ldvar->usesCache)
-                        cb.add(BC::ldvarNoForceCache(
-                            ldvar->varName, cachePositions.slotFor(
-                                                ldvar->varName, ldvar->env())));
-                    else
+                    if (cache.isCached(key)) {
+                        cb.add(BC::ldvarNoForceCached(ldvar->varName,
+                                                      cache.indexOf(key)));
+                    } else {
                         cb.add(BC::ldvarNoForce(ldvar->varName));
+                    }
                 }
                 break;
             }
@@ -594,17 +627,26 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
-                if (stvar->isStArg)
-                    cb.add(BC::stargCache(
-                        stvar->varName,
-                        cachePositions.slotFor(stvar->varName, stvar->env())));
-                else {
-                    if (stvar->usesCache)
-                        cb.add(BC::stvarCache(
-                            stvar->varName, cachePositions.slotFor(
-                                                stvar->varName, stvar->env())));
-                    else
+                auto key =
+                    CachePosition::NameAndEnv(stvar->varName, stvar->env());
+                if (stvar->isStArg) {
+                    if (cache.isCached(key)) {
+                        cb.add(BC::stargCached(stvar->varName,
+                                               cache.indexOf(key)));
+                    } else {
+                        cb.add(BC::starg(stvar->varName));
+                    }
+                } else {
+                    auto mkenv = MkEnv::Cast(stvar->env());
+                    if (mkenv && mkenv->stub) {
+                        cb.add(
+                            BC::stvarStubbed(mkenv->indexOf(stvar->varName)));
+                    } else if (cache.isCached(key)) {
+                        cb.add(BC::stvarCached(stvar->varName,
+                                               cache.indexOf(key)));
+                    } else {
                         cb.add(BC::stvar(stvar->varName));
+                    }
                 }
                 break;
             }
@@ -827,6 +869,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
                 cb.add(BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub));
+                cache.ifCacheRange(mkenv, [&](CachePosition::StartSize range) {
+                    cb.add(BC::clearBindingCache(range.first, range.second));
+                });
                 break;
             }
 
@@ -939,7 +984,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     cb.flush();
 
     auto localsCnt = alloc.slots();
-    auto res = ctx.finalizeCode(localsCnt, cachePositions.numberOfBindings());
+    auto res = ctx.finalizeCode(localsCnt, cache.size());
     return res;
 }
 
@@ -964,6 +1009,22 @@ void Pir2Rir::lower(Code* code) {
                 // were not sure it is correct.
                 if (ldfun->guessedBinding())
                     ldfun->clearGuessedBinding();
+            } else if (auto ld = LdVar::Cast(*it)) {
+                while (true) {
+                    auto mk = MkEnv::Cast(ld->env());
+                    if (mk && mk->stub && !mk->contains(ld->varName))
+                        ld->env(mk->lexicalEnv());
+                    else
+                        break;
+                }
+            } else if (auto st = StVar::Cast(*it)) {
+                while (true) {
+                    auto mk = MkEnv::Cast(st->env());
+                    if (mk && mk->stub && !mk->contains(st->varName))
+                        st->env(mk->lexicalEnv());
+                    else
+                        break;
+                }
             } else if (auto deopt = Deopt::Cast(*it)) {
                 // Lower Deopt instructions + their FrameStates to a
                 // ScheduledDeopt.
@@ -1100,6 +1161,10 @@ rir::Function* Pir2Rir::finalize() {
                                        globalContext());
 #endif
     log.finalRIR(function.function());
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS)
+        EventCounters::instance().count(ClosuresCompiled, cls->inlinees + 1);
+#endif
     return function.function();
 }
 

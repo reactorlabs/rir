@@ -47,7 +47,7 @@ struct RirRuntimeObject {
     }
 
     static BASE* unpack(SEXP s) {
-        BASE* b = (BASE*)INTEGER(s);
+        BASE* b = (BASE*)STDVEC_DATAPTR(s);
         assert(
             b->info.magic == MAGIC &&
             "Trying to unpack the wrong type of embedded RIR runtime object.");
@@ -58,7 +58,7 @@ struct RirRuntimeObject {
         if (TYPEOF(s) != EXTERNALSXP) {
             return nullptr;
         }
-        BASE* b = (BASE*)INTEGER(s);
+        BASE* b = (BASE*)STDVEC_DATAPTR(s);
         return b->info.magic == MAGIC ? b : nullptr;
     }
 

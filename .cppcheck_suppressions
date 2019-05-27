@@ -2,3 +2,6 @@
 // enum classes. This just produces false positives for us
 variableHidingEnum
 constStatement
+// We need to suppress alloca obsolote warnings while we
+// use it as a dynamic cache strategy
+allocaCalled

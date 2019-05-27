@@ -209,7 +209,7 @@ bool testDeadStore() {
         pir::Module m;
         auto res = compile("", "f <- function(x) {leak(); y <- 1; y <- 2}", &m);
         auto f = res["f"];
-        CHECK(hasAssign(f) == 1);
+        CHECK(hasAssign(f) == 0);
     }
     {
         // Both updates to "y" are observable. The first by foo, the second by

@@ -205,6 +205,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::ldvar_:
     case Opcode::ldvar_cached_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_for_update_cache_:
         v = insert(new LdVar(bc.immediateConst(), env));
         // Checkpoint might be useful if we end up inlining this force
@@ -213,6 +214,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Force(v, env)));
         break;
 
+    case Opcode::starg_:
     case Opcode::starg_cached_:
         v = pop();
         insert(new StArg(bc.immediateConst(), v, env));
@@ -782,8 +784,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
+    // Silently ignored
+    case Opcode::clear_binding_cache_:
     // TODO implement!
-    // (silently ignored)
     case Opcode::isfun_:
         break;
 
@@ -827,6 +830,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::static_call_:
     case Opcode::pop_context_:
     case Opcode::push_context_:
+    case Opcode::ldvar_noforce_stubbed_:
+    case Opcode::stvar_stubbed_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 

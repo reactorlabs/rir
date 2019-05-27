@@ -63,6 +63,16 @@ BC BC::ldddvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
 }
+BC BC::stvarStubbed(unsigned pos) {
+    ImmediateArguments i;
+    i.i = pos;
+    return BC(Opcode::stvar_stubbed_, i);
+}
+BC BC::ldvarNoForceStubbed(unsigned pos) {
+    ImmediateArguments i;
+    i.i = pos;
+    return BC(Opcode::ldvar_noforce_stubbed_, i);
+}
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -70,7 +80,7 @@ BC BC::ldvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_, i);
 }
-BC BC::ldvarCache(SEXP sym, uint32_t cacheSlot) {
+BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
@@ -78,13 +88,20 @@ BC BC::ldvarCache(SEXP sym, uint32_t cacheSlot) {
     i.poolAndCache.cacheIndex = cacheSlot;
     return BC(Opcode::ldvar_cached_, i);
 }
-BC BC::ldvarForUpdateCache(SEXP sym, uint32_t cacheSlot) {
+BC BC::ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
     return BC(Opcode::ldvar_for_update_cache_, i);
+}
+BC BC::ldvarForUpdate(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::ldvar_for_update_, i);
 }
 BC BC::ldvarNoForce(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
@@ -93,7 +110,7 @@ BC BC::ldvarNoForce(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_noforce_, i);
 }
-BC BC::ldvarNoForceCache(SEXP sym, uint32_t cacheSlot) {
+BC BC::ldvarNoForceCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
@@ -167,7 +184,14 @@ BC BC::missing(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
-BC BC::stargCache(SEXP sym, uint32_t cacheSlot) {
+BC BC::starg(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::starg_, i);
+}
+BC BC::stargCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
@@ -182,7 +206,7 @@ BC BC::stvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_, i);
 }
-BC BC::stvarCache(SEXP sym, uint32_t cacheSlot) {
+BC BC::stvarCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
@@ -336,6 +360,13 @@ BC BC::mkEnv(const std::vector<SEXP>& names, SignedImmediate contextPos,
         cur = BC(Opcode::mk_env_, im);
     cur.mkEnvExtra().names = nameIdxs;
     return cur;
+}
+
+BC BC::clearBindingCache(CacheIdx start, unsigned size) {
+    ImmediateArguments im;
+    im.cacheIdx.start = start;
+    im.cacheIdx.size = size;
+    return BC(Opcode::clear_binding_cache_, im);
 }
 
 BC BC::deopt(SEXP deoptMetadata) {

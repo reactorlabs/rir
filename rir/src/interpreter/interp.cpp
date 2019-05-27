@@ -4,8 +4,10 @@
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
+#include "cache.h"
 #include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
+#include "event_counters.h"
 #include "ir/Deoptimization.h"
 #include "safe_force.h"
 #include "utils/Pool.h"
@@ -151,14 +153,14 @@ static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
-SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
-                       const Opcode* pc, InterpreterInstance* ctx,
-                       R_bcstack_t* localsBase, SEXP stub) {
+SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
+    auto wrapper = LazyEnvironment::unpack(wrapper_);
+
     SEXP arglist = R_NilValue;
-    auto names = (Immediate*)pc;
+    auto names = wrapper->names;
     int j = 0;
-    for (long i = args->size() - 1; i >= 0; --i) {
-        SEXP val = args->at(j);
+    for (long i = wrapper->nargs - 1; i >= 0; --i) {
+        SEXP val = wrapper->getArg(j);
         SEXP name = cp_pool_at(ctx, names[i]);
         arglist = CONS_NR(val, arglist);
         SET_TAG(arglist, name);
@@ -166,16 +168,27 @@ SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
         j++;
     }
 
-    SEXP environment = Rf_NewEnvironment(R_NilValue, arglist, parent);
-    for (auto i = 0; i < R_BCNodeStackTop - localsBase; i++) {
-        if (ostack_at(ctx, i) == stub)
-            ostack_set(ctx, i, environment);
+    SEXP environment =
+        Rf_NewEnvironment(R_NilValue, arglist, wrapper->getParent());
+    auto finger = R_BCNodeStackTop;
+    while (finger > wrapper->frameEnd) {
+        if (finger->tag == 0 && finger->u.sxpval == wrapper_)
+            finger->u.sxpval = environment;
+        finger--;
     }
     return environment;
 }
 
-SEXP createLegacyArgsListFromStackValues(const CallContext& call,
-                                         bool eagerCallee,
+static SEXP materializeCallerEnv(CallContext& callCtx,
+                                 InterpreterInstance* ctx) {
+    if (LazyEnvironment::check(callCtx.callerEnv))
+        callCtx.callerEnv = createEnvironment(ctx, callCtx.callerEnv);
+    SLOWASSERT(callCtx.callerEnv == symbol::delayedEnv ||
+               TYPEOF(callCtx.callerEnv) == ENVSXP);
+    return callCtx.callerEnv;
+}
+
+SEXP createLegacyArgsListFromStackValues(CallContext& call, bool eagerCallee,
                                          InterpreterInstance* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
@@ -187,7 +200,7 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
         SEXP arg = call.stackArg(i);
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
-            arg = Rf_eval(arg, call.callerEnv);
+            arg = Rf_eval(arg, materializeCallerEnv(call, ctx));
         }
         __listAppend(&result, &pos, arg, name);
     }
@@ -198,7 +211,7 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
     return result;
 }
 
-static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
+static SEXP createLegacyArgsList(CallContext& call, bool eagerCallee,
                                  InterpreterInstance* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
@@ -213,19 +226,21 @@ static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
         // and
         // flatten the ellipsis
         if (argi == DOTS_ARG_IDX) {
-            SEXP ellipsis = Rf_findVar(R_DotsSymbol, call.callerEnv);
+            SEXP ellipsis =
+                Rf_findVar(R_DotsSymbol, materializeCallerEnv(call, ctx));
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
                     if (eagerCallee) {
                         SEXP arg = CAR(ellipsis);
                         if (arg != R_MissingArg)
-                            arg = Rf_eval(CAR(ellipsis), call.callerEnv);
+                            arg = Rf_eval(CAR(ellipsis),
+                                          materializeCallerEnv(call, ctx));
                         assert(TYPEOF(arg) != PROMSXP);
                         __listAppend(&result, &pos, arg, name);
                     } else {
-                        SEXP promise =
-                            Rf_mkPROMISE(CAR(ellipsis), call.callerEnv);
+                        SEXP promise = Rf_mkPROMISE(
+                            CAR(ellipsis), materializeCallerEnv(call, ctx));
                         __listAppend(&result, &pos, promise, name);
                     }
                     ellipsis = CDR(ellipsis);
@@ -237,13 +252,14 @@ static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
             __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             if (eagerCallee) {
-                SEXP arg = evalRirCodeExtCaller(call.implicitArg(i), ctx,
-                                                call.callerEnv);
+                SEXP arg = evalRirCodeExtCaller(
+                    call.implicitArg(i), ctx, materializeCallerEnv(call, ctx));
                 assert(TYPEOF(arg) != PROMSXP);
                 __listAppend(&result, &pos, arg, name);
             } else {
                 Code* arg = call.implicitArg(i);
-                SEXP promise = createPromise(arg, call.callerEnv);
+                SEXP promise =
+                    createPromise(arg, materializeCallerEnv(call, ctx));
                 __listAppend(&result, &pos, promise, name);
             }
         }
@@ -257,17 +273,14 @@ static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
 SEXP materialize(void* rirDataWrapper) {
     if (auto promargs = ArgsLazyData::cast(rirDataWrapper)) {
         return promargs->createArgsLists();
-    } else if (auto stub = LazyEnvironment::cast(rirDataWrapper)) {
-        return stub->create();
+    } else if (LazyEnvironment::check((SEXP)rirDataWrapper)) {
+        return createEnvironment(globalContext(), (SEXP)rirDataWrapper);
     }
     assert(false);
     return nullptr;
 }
 
 SEXP* keepAliveSEXPs(void* rirDataWrapper) {
-    if (auto env = LazyEnvironment::cast(rirDataWrapper)) {
-        return env->gcData();
-    }
     assert(false);
     return nullptr;
 }
@@ -276,11 +289,7 @@ SEXP lazyPromargsCreation(void* rirDataWrapper) {
     return ArgsLazyData::cast(rirDataWrapper)->createArgsLists();
 }
 
-SEXP lazyEnvCreation(void* rirDataWrapper) {
-    return LazyEnvironment::cast(rirDataWrapper)->create();
-}
-
-static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
+static RIR_INLINE SEXP createLegacyLazyArgsList(CallContext& call,
                                                 InterpreterInstance* ctx) {
     if (call.hasStackArgs()) {
         return createLegacyArgsListFromStackValues(call, false, ctx);
@@ -289,7 +298,7 @@ static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
     }
 }
 
-static RIR_INLINE SEXP createLegacyArgsList(const CallContext& call,
+static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
                                             InterpreterInstance* ctx) {
     if (call.hasStackArgs()) {
         return createLegacyArgsListFromStackValues(call, call.hasEagerCallee(),
@@ -300,7 +309,7 @@ static RIR_INLINE SEXP createLegacyArgsList(const CallContext& call,
 }
 
 SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
-                 R_bcstack_t* = nullptr);
+                 R_bcstack_t*, BindingCache*);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
     if ((SETJMP(cntxt.cjmpbuf))) {
@@ -378,7 +387,7 @@ void checkUserInterrupt() {
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
                            const CallContext* callCtxt, Opcode* pc,
-                           R_bcstack_t* localsBase) {
+                           R_bcstack_t* localsBase, BindingCache* cache) {
     assert(env);
 
     RCNTXT cntxt;
@@ -395,7 +404,7 @@ static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
     }
 
     // execute the loop body
-    SEXP res = evalRirCode(c, ctx, env, callCtxt, pc, localsBase);
+    SEXP res = evalRirCode(c, ctx, env, callCtxt, pc, localsBase, cache);
     assert(res == loopTrampolineMarker);
     Rf_endcontext(&cntxt);
 }
@@ -404,7 +413,8 @@ static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
 static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
                                     SEXP ast, SEXP sysparent, SEXP op,
                                     InterpreterInstance* ctx, Opcode* pc,
-                                    R_bcstack_t* localsBase) {
+                                    R_bcstack_t* localsBase,
+                                    BindingCache* cache) {
     RCNTXT cntxt;
     // The first env should be the callee env, but that will be done by the
     // callee. We store sysparent there, because our optimizer may actually
@@ -417,12 +427,13 @@ static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
             if (R_ReturnedValue == R_RestartToken) {
                 cntxt.callflag = CTXT_RETURN; /* turn restart off */
                 R_ReturnedValue = R_NilValue; /* remove restart token */
-                return evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc);
+                return evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc, nullptr,
+                                   nullptr);
             } else {
                 return R_ReturnedValue;
             }
         }
-        return evalRirCode(c, ctx, sysparent, callCtx, pc, localsBase);
+        return evalRirCode(c, ctx, sysparent, callCtx, pc, localsBase, cache);
     };
 
     // execute the inlined function
@@ -431,24 +442,23 @@ static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
     return res;
 }
 
-static RIR_INLINE SEXP legacySpecialCall(const CallContext& call,
+static RIR_INLINE SEXP legacySpecialCall(CallContext& call,
                                          InterpreterInstance* ctx) {
     assert(call.ast != R_NilValue);
-    assert(TYPEOF(call.callerEnv) == ENVSXP);
 
     // get the ccode
     CCODE f = getBuiltin(call.callee);
     int flag = getFlag(call.callee);
     R_Visible = static_cast<Rboolean>(flag != 1);
     // call it with the AST only
-    SEXP result = f(call.ast, call.callee, CDR(call.ast), call.callerEnv);
+    SEXP result = f(call.ast, call.callee, CDR(call.ast),
+                    materializeCallerEnv(call, ctx));
     if (flag < 2)
         R_Visible = static_cast<Rboolean>(flag != 1);
     return result;
 }
 
-static RIR_INLINE SEXP legacyCallWithArgslist(const CallContext& call,
-                                              SEXP argslist,
+static RIR_INLINE SEXP legacyCallWithArgslist(CallContext& call, SEXP argslist,
                                               InterpreterInstance* ctx) {
     if (TYPEOF(call.callee) == BUILTINSXP) {
         // get the ccode
@@ -457,7 +467,8 @@ static RIR_INLINE SEXP legacyCallWithArgslist(const CallContext& call,
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         // call it
-        SEXP result = f(call.ast, call.callee, argslist, call.callerEnv);
+        SEXP result =
+            f(call.ast, call.callee, argslist, materializeCallerEnv(call, ctx));
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         return result;
@@ -465,12 +476,11 @@ static RIR_INLINE SEXP legacyCallWithArgslist(const CallContext& call,
 
     assert(TYPEOF(call.callee) == CLOSXP &&
            TYPEOF(BODY(call.callee)) != EXTERNALSXP);
-    return Rf_applyClosure(call.ast, call.callee, argslist, call.callerEnv,
-                           R_NilValue);
+    return Rf_applyClosure(call.ast, call.callee, argslist,
+                           materializeCallerEnv(call, ctx), R_NilValue);
 }
 
-static RIR_INLINE SEXP legacyCall(const CallContext& call,
-                                  InterpreterInstance* ctx) {
+static RIR_INLINE SEXP legacyCall(CallContext& call, InterpreterInstance* ctx) {
     // create the argslist
     SEXP argslist = createLegacyArgsList(call, ctx);
     PROTECT(argslist);
@@ -1260,88 +1270,6 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-#define BINDING_CACHE_SIZE 8
-// must be a power of 2 for modulus using & CACHE_MASK to work
-#define CACHE_MASK (BINDING_CACHE_SIZE - 1)
-
-typedef struct {
-    SEXP loc;
-    Immediate idx;
-} BindingCache;
-
-static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate poolIdx,
-                                            Immediate cacheIdx,
-                                            InterpreterInstance* ctx,
-                                            BindingCache* bindingCache,
-                                            bool smallCache) {
-    if (env == R_BaseEnv || env == R_BaseNamespace)
-        return NULL;
-
-    Immediate cidx;
-    if (smallCache)
-        cidx = cacheIdx;
-    else
-        cidx = cacheIdx & CACHE_MASK;
-
-    if (bindingCache[cidx].idx == cacheIdx)
-        return bindingCache[cidx].loc;
-
-    SEXP sym = cp_pool_at(ctx, poolIdx);
-    SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    R_varloc_t loc = R_findVarLocInFrame(env, sym);
-    if (!R_VARLOC_IS_NULL(loc)) {
-        bindingCache[cidx].loc = loc.cell;
-        bindingCache[cidx].idx = cacheIdx;
-        return loc.cell;
-    }
-    return NULL;
-}
-
-static SEXP cachedGetVar(SEXP env, Immediate poolIdx, Immediate cacheIdx,
-                         InterpreterInstance* ctx, BindingCache* bindingCache,
-                         bool smallCache) {
-    SEXP loc = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx, bindingCache,
-                                    smallCache);
-    if (loc) {
-        SEXP res = CAR(loc);
-        if (res != R_UnboundValue)
-            return res;
-    }
-    SEXP sym = cp_pool_at(ctx, poolIdx);
-    SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    return Rf_findVar(sym, env);
-}
-
-#define ACTIVE_BINDING_MASK (1 << 15)
-#define BINDING_LOCK_MASK (1 << 14)
-#define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
-#define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
-static void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
-                         Immediate cacheIdx, InterpreterInstance* ctx,
-                         BindingCache* bindingCache, bool smallCache,
-                         bool keepMissing = false) {
-    SEXP loc = cachedGetBindingCell(env, poolIdx, cacheIdx, ctx, bindingCache,
-                                    smallCache);
-    if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
-        SEXP cur = CAR(loc);
-        if (cur == val)
-            return;
-        INCREMENT_NAMED(val);
-        SETCAR(loc, val);
-        if (!keepMissing && MISSING(loc)) {
-            SET_MISSING(loc, 0);
-        }
-        return;
-    }
-
-    SEXP sym = cp_pool_at(ctx, poolIdx);
-    SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    INCREMENT_NAMED(val);
-    PROTECT(val);
-    Rf_defineVar(sym, val, env);
-    UNPROTECT(1);
-}
-
 RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
                                InterpreterInstance* ctx) {
     SEXP val = ostack_top(ctx);
@@ -1475,8 +1403,8 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                            FRAME(sysparent), R_NilValue);
     }
 
-    if (auto stub = LazyEnvironment::cast(deoptEnv)) {
-        deoptEnv = stub->create();
+    if (LazyEnvironment::check(deoptEnv)) {
+        deoptEnv = createEnvironment(globalContext(), deoptEnv);
         cntxt->cloenv = deoptEnv;
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
@@ -1530,7 +1458,8 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         if (!innermostFrame)
             ostack_push(ctx, res);
         code->registerInvocation();
-        return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc);
+        return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr,
+                           nullptr);
     };
 
     SEXP res = trampoline();
@@ -1548,9 +1477,16 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     ostack_push(ctx, res);
 }
 
+#ifdef ENABLE_EVENT_COUNTERS
+static unsigned EnvAllocated =
+    EventCounters::instance().registerCounter("env allocated");
+static unsigned EnvStubAllocated =
+    EventCounters::instance().registerCounter("envstub allocated");
+#endif
+
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
-                 R_bcstack_t* localsBase) {
+                 R_bcstack_t* localsBase, BindingCache* cache) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
 #ifdef THREADED_CODE
@@ -1564,17 +1500,23 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     assert(c->info.magic == CODE_MAGIC);
     bool existingLocals = localsBase;
 
-    BindingCache bindingCache[BINDING_CACHE_SIZE];
-    // Position zero is not counted for smallcache because we can not
-    // distinguish slot zero from uninit.
-    bool smallCache = c->bindingsCount < BINDING_CACHE_SIZE;
-    /*
-     * In case we are entering the executing of a PIR optimized function
-     * we delay the cache cleaning until we know we are actually requiring
-     * an environment (mk_env).
-     */
-    if (env != symbol::delayedEnv)
-        memset(&bindingCache, 0, sizeof(bindingCache));
+    BindingCache* bindingCache;
+    if (cache) {
+        bindingCache = cache;
+    } else {
+        bindingCache = (BindingCache*)(alloca(sizeof(BindingCache) +
+                                              sizeof(BindingCacheEntry) *
+                                                  c->bindingCacheSize));
+        bindingCache->length = c->bindingCacheSize;
+        // Optimized functions explicitly manage the cache
+        if (env != symbol::delayedEnv)
+            clearCache(bindingCache);
+
+#ifdef ENABLE_EVENT_COUNTERS
+        if (ENABLE_EVENT_COUNTERS && env != symbol::delayedEnv)
+            EventCounters::instance().count(EnvAllocated);
+#endif
+    }
 
     if (!existingLocals) {
 #ifdef TYPED_STACK
@@ -1594,21 +1536,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     ostack_ensureSize(ctx, c->stackLength + 5);
 
     Opcode* pc = initialPC ? initialPC : c->code();
-    SEXP lastEnvCreated = nullptr;
     SEXP res;
 
-    std::vector<LazyEnvironment*> envStubs;
-
     auto changeEnv = [&](SEXP e) {
-        assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
+        assert((TYPEOF(e) == ENVSXP || LazyEnvironment::check(e)) &&
                "Expected an environment");
-        if (e != env) {
-            // Only in a PIR function that before creating any environment
-            // sets a preexistent environment we need to init cache.
-            if (env == symbol::delayedEnv && env != lastEnvCreated)
-                memset(&bindingCache, 0, sizeof(bindingCache));
+        if (e != env)
             env = e;
-        }
     };
     R_Visible = TRUE;
 
@@ -1624,7 +1558,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(push_context_) {
             SEXP ast = ostack_at(ctx, 1);
             SEXP op = ostack_at(ctx, 0);
-            assert(TYPEOF(env) == ENVSXP);
+            assert(LazyEnvironment::check(env) || TYPEOF(env) == ENVSXP);
             assert(TYPEOF(op) == CLOSXP);
             ostack_popn(ctx, 2);
             int offset = readJumpOffset();
@@ -1633,7 +1567,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // trampoline creates an RCNTXT, and then continues executing the
             // same code.
             inlineContextTrampoline(c, callCtxt, ast, env, op, ctx, pc,
-                                    localsBase);
+                                    localsBase, bindingCache);
             // After returning from the inlined context we need to skip all the
             // instructions inside the context. Otherwise we would execute them
             // twice. Effectively this updates our pc to match the one the
@@ -1699,10 +1633,27 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     }
                 }
             }
-            memset(&bindingCache, 0, sizeof(bindingCache));
-            lastEnvCreated = res;
             ostack_push(ctx, res);
             UNPROTECT(1);
+
+#ifdef ENABLE_EVENT_COUNTERS
+            if (ENABLE_EVENT_COUNTERS)
+                EventCounters::instance().count(EnvAllocated);
+#endif
+
+            NEXT();
+        }
+
+        INSTRUCTION(clear_binding_cache_) {
+            size_t start = readImmediate();
+            advanceImmediate();
+            size_t len = readImmediate();
+            advanceImmediate();
+            if (len) {
+                SLOWASSERT(start + len <= bindingCache->length);
+                memset(&bindingCache->entry[start], 0,
+                       sizeof(BindingCacheEntry) * len);
+            }
             NEXT();
         }
 
@@ -1721,23 +1672,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                    "Non-environment used as environment parent.");
             auto names = pc;
             advanceImmediateN(n);
-            std::vector<SEXP>* args = new std::vector<SEXP>();
-            for (size_t i = 0; i < n; ++i) {
-                SEXP val = ostack_pop(ctx);
-                ENSURE_NAMED(val);
-                args->push_back(val);
-            }
-            auto envStub =
-                new LazyEnvironment(args, parent, names, ctx, localsBase);
-            envStubs.push_back(envStub);
-            res = (SEXP)envStub;
+            SEXP wrapper = Rf_allocVector(
+                EXTERNALSXP, sizeof(LazyEnvironment) + 50 + sizeof(SEXP) * n);
+            new (DATAPTR(wrapper))
+                LazyEnvironment(parent, (Immediate*)names, n, localsBase, ctx);
 
+            ostack_push(ctx, wrapper);
             if (contextPos > 0) {
                 if (auto cptr = getFunctionContext(contextPos - 1))
-                    cptr->cloenv = res;
+                    cptr->cloenv = wrapper;
             }
 
-            ostack_push(ctx, res);
+#ifdef ENABLE_EVENT_COUNTERS
+            if (ENABLE_EVENT_COUNTERS)
+                EventCounters::instance().count(EnvStubAllocated);
+#endif
             NEXT();
         }
 
@@ -1787,25 +1736,18 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(ldvar_for_update_cache_) {
+        INSTRUCTION(ldvar_for_update_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            Immediate cacheIndex = readImmediate();
-            advanceImmediate();
-            SEXP loc = cachedGetBindingCell(env, id, cacheIndex, ctx,
-                                            bindingCache, smallCache);
-            bool isLocal = loc;
+            R_varloc_t loc = R_findVarLocInFrame(env, cp_pool_at(ctx, id));
+            bool isLocal = !R_VARLOC_IS_NULL(loc);
             SEXP res = nullptr;
 
-            if (isLocal) {
-                res = CAR(loc);
-                if (res == R_UnboundValue)
-                    isLocal = false;
-            }
-
-            if (!isLocal) {
+            if (isLocal && CAR(loc.cell) != R_UnboundValue) {
+                res = CAR(loc.cell);
+            } else {
                 SEXP sym = cp_pool_at(ctx, id);
-                res = Rf_findVar(sym, env);
+                res = Rf_findVar(sym, ENCLOS(env));
             }
 
             if (res == R_UnboundValue) {
@@ -1832,6 +1774,71 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(ldvar_for_update_cache_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            Immediate cacheIndex = readImmediate();
+            advanceImmediate();
+            SEXP loc = getCellFromCache(env, id, cacheIndex, ctx, bindingCache);
+            bool isLocal = loc;
+            SEXP res = nullptr;
+
+            if (isLocal && CAR(loc) != R_UnboundValue) {
+                res = CAR(loc);
+            } else {
+                SEXP sym = cp_pool_at(ctx, id);
+                res = Rf_findVar(sym, ENCLOS(env));
+            }
+
+            if (res == R_UnboundValue) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            }
+
+            // if promise, evaluate & return
+            if (TYPEOF(res) == PROMSXP) {
+                res = promiseValue(res, ctx);
+            }
+
+            if (res != R_NilValue) {
+                if (isLocal)
+                    ENSURE_NAMED(res);
+                else if (NAMED(res) < 2)
+                    SET_NAMED(res, 2);
+            }
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_noforce_stubbed_) {
+            unsigned pos = readImmediate();
+            advanceImmediate();
+
+            auto le = LazyEnvironment::check(env);
+            assert(le);
+
+            auto res = le->getArg(pos);
+
+            if (res == R_UnboundValue) {
+                Rf_error("object \"%s\" not found",
+                         CHAR(PRINTNAME(Pool::get(le->names[pos]))));
+            } else if (res == R_MissingArg) {
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(Pool::get(le->names[pos]))));
+            }
+
+            if (res != R_NilValue)
+                ENSURE_NAMED(res);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(ldvar_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
@@ -1842,11 +1849,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             } else if (res == R_MissingArg) {
                 Rf_error("argument \"%s\" is missing, with no default",
                          CHAR(PRINTNAME(sym)));
-            }
-
-            // if promise, evaluate & return
-            if (TYPEOF(res) == PROMSXP)
+            } else if (TYPEOF(res) == PROMSXP) {
+                // if promise, evaluate & return
                 res = promiseValue(res, ctx);
+            }
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -1860,8 +1866,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
-            res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache,
-                               smallCache);
+            res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache);
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -1907,8 +1912,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
-            res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache,
-                               smallCache);
+            res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache);
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -2003,6 +2007,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     res = R_MissingArg;
                 } else {
                     Code* arg = callCtxt->implicitArg(idx);
+                    assert(!LazyEnvironment::check(callCtxt->callerEnv));
                     res = createPromise(arg, callCtxt->callerEnv);
                 }
                 ostack_push(ctx, res);
@@ -2018,18 +2023,28 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(stvar_stubbed_) {
+            unsigned pos = readImmediate();
+            advanceImmediate();
+            SEXP val = ostack_top(ctx);
+
+            auto le = LazyEnvironment::check(env);
+            assert(le);
+            le->setArg(pos, val);
+            ostack_pop(ctx);
+            NEXT();
+        }
+
         INSTRUCTION(stvar_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
-            SEXP val = ostack_pop(ctx);
+            SEXP val = ostack_top(ctx);
 
-            if (auto stub = LazyEnvironment::cast(env))
-                env = stub->create();
+            assert(!LazyEnvironment::check(env));
 
-            INCREMENT_NAMED(val);
-            PROTECT(val);
-            Rf_defineVar(sym, val, env);
+            rirDefineVarWrapper(sym, val, env);
+            ostack_pop(ctx);
             NEXT();
         }
 
@@ -2040,10 +2055,38 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
-            if (auto stub = LazyEnvironment::cast(env))
-                env = stub->create();
-            cachedSetVar(val, env, id, cacheIndex, ctx, bindingCache,
-                         smallCache);
+            assert(!LazyEnvironment::check(env));
+
+            cachedSetVar(val, env, id, cacheIndex, ctx, bindingCache);
+            NEXT();
+        }
+
+        INSTRUCTION(starg_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            SEXP val = ostack_top(ctx);
+
+            assert(!LazyEnvironment::check(env));
+
+            SEXP sym = cp_pool_at(ctx, id);
+            // In case there is a local binding we must honor missingness which
+            // defineVar does not
+            if (env != R_BaseEnv && env != R_BaseNamespace) {
+                R_varloc_t loc = R_findVarLocInFrame(env, sym);
+                if (!R_VARLOC_IS_NULL(loc) && !BINDING_IS_LOCKED(loc.cell) &&
+                    !IS_ACTIVE_BINDING(loc.cell)) {
+                    SEXP cur = CAR(loc.cell);
+                    if (cur != val) {
+                        INCREMENT_NAMED(val);
+                        SETCAR(loc.cell, val);
+                    }
+                    ostack_pop(ctx);
+                    NEXT();
+                }
+            }
+
+            rirDefineVarWrapper(sym, val, env);
+            ostack_pop(ctx);
 
             NEXT();
         }
@@ -2055,10 +2098,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
-            if (auto stub = LazyEnvironment::cast(env))
-                env = stub->create();
-            cachedSetVar(val, env, id, cacheIndex, ctx, bindingCache,
-                         smallCache, true);
+            assert(!LazyEnvironment::check(env));
+            cachedSetVar(val, env, id, cacheIndex, ctx, bindingCache, true);
 
             NEXT();
         }
@@ -2068,8 +2109,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
-            INCREMENT_NAMED(val);
-            Rf_setVar(sym, val, ENCLOS(env));
+            rirSetVarWrapper(sym, val, ENCLOS(env));
             NEXT();
         }
 
@@ -2904,8 +2944,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(isstubenv_) {
             SEXP val = ostack_pop(ctx);
-            ostack_push(ctx, LazyEnvironment::cast(val) ? R_TrueValue
-                                                        : R_FalseValue);
+            ostack_push(
+                ctx, LazyEnvironment::check(val) ? R_TrueValue : R_FalseValue);
             NEXT();
         }
 
@@ -3488,6 +3528,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // remove the deoptimized function. Unless on deopt chaos,
                 // always recompiling would just blow testing time...
                 auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
+                // TODO: report deoptimization reason.
+                // For example if we deopt because of stubenv was materialized
+                // we should prevent pir from stubbing the env in the future.
                 dt->remove(c);
             }
             assert(m->numFrames >= 1);
@@ -3685,7 +3728,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SLOWASSERT(env);
             int offset = readJumpOffset();
             advanceJump();
-            loopTrampoline(c, ctx, env, callCtxt, pc, localsBase);
+            loopTrampoline(c, ctx, env, callCtxt, pc, localsBase, bindingCache);
             pc += offset;
             checkUserInterrupt();
             assert(*pc == Opcode::endloop_);
@@ -3730,7 +3773,7 @@ SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env) {
 
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt) {
-    return evalRirCode(c, ctx, env, callCtxt, nullptr);
+    return evalRirCode(c, ctx, env, callCtxt, nullptr, nullptr, nullptr);
 }
 
 SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,

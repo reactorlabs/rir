@@ -21,6 +21,10 @@ BC_NOARGS(V, _)
 #undef V
         return;
 
+    case Opcode::clear_binding_cache_:
+        cs.insert(immediate.cacheIdx);
+        return;
+
     case Opcode::record_call_:
         // Call feedback targets are stored in the code extra pool. We don't
         // have access to them here, so we can't write a call feedback with
@@ -39,10 +43,12 @@ BC_NOARGS(V, _)
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
     case Opcode::stvar_:
+    case Opcode::starg_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
         cs.insert(immediate.pool);
@@ -119,6 +125,8 @@ BC_NOARGS(V, _)
     case Opcode::is_:
     case Opcode::put_:
     case Opcode::alloc_:
+    case Opcode::stvar_stubbed_:
+    case Opcode::ldvar_noforce_stubbed_:
         cs.insert(immediate.i);
         return;
 
@@ -525,11 +533,13 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
     case Opcode::ldddvar_:
     case Opcode::stvar_:
+    case Opcode::starg_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
         out << CHAR(PRINTNAME(immediateConst()));
@@ -552,6 +562,8 @@ void BC::print(std::ostream& out) const {
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::put_:
+    case Opcode::stvar_stubbed_:
+    case Opcode::ldvar_noforce_stubbed_:
         out << immediate.i;
         break;
     case Opcode::ldarg_:
@@ -609,6 +621,9 @@ BC_NOARGS(V, _)
     case Opcode::brfalse_:
     case Opcode::br_:
         out << immediate.offset;
+        break;
+    case Opcode::clear_binding_cache_:
+        out << immediate.cacheIdx.start << " " << immediate.cacheIdx.size;
         break;
     }
     out << "\n";

@@ -57,7 +57,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     Code() = delete;
     Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,
-         size_t localsCnt, size_t bindingsCnt);
+         size_t localsCnt, size_t bindingsCacheSize);
     ~Code();
 
   private:
@@ -87,7 +87,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     const unsigned localsCount; /// Number of slots for local variables
 
-    const unsigned bindingsCount; /// Number of different(ldVars|stVars)
+    const unsigned bindingCacheSize; /// Number of different(ldVars|stVars)
 
     unsigned codeSize; /// bytes of code (not padded)
 

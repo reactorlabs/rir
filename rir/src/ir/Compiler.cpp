@@ -9,6 +9,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 
+#include "../interpreter/cache.h"
 #include "../interpreter/safe_force.h"
 #include "utils/Pool.h"
 
@@ -72,14 +73,14 @@ class CompilerContext {
             else
                 loops.top().context_needed_ = true;
         }
+        size_t isCached(SEXP name) {
+            assert(loadsSlotInCache.size() <= MAX_CACHE_SIZE);
+            return loadsSlotInCache.size() < MAX_CACHE_SIZE ||
+                   loadsSlotInCache.count(name);
+        }
         size_t cacheSlotFor(SEXP name) {
-            if (loadsSlotInCache.count(name)) {
-                return loadsSlotInCache.at(name);
-            } else {
-                return loadsSlotInCache
-                    .emplace(name, loadsSlotInCache.size() + 1)
-                    .first->second;
-            }
+            return loadsSlotInCache.emplace(name, loadsSlotInCache.size())
+                .first->second;
         }
         virtual bool loopIsLocal() {
             if (loops.empty())
@@ -261,28 +262,31 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
     cs << BC::push(R_FalseValue);
     cs << BC::put(3) << BC::put(2) << startBranch;
     // while
-    compileWhile(ctx,
-                 [&cs]() {
-                     // ((i' > n') ...
-                     cs << BC::dup2() << BC::lt();
-                     cs.addSrc(R_NilValue);
-                     // ... == gt')
-                     cs << BC::pull(4) << BC::eq();
-                     cs.addSrc(R_NilValue);
-                 },
-                 [&ctx, &cs, &sym, &body]() {
-                     // {
-                     // i <- i'
-                     cs << BC::dup()
-                        << BC::stvarCache(sym,
-                                          ctx.code.top()->cacheSlotFor(sym));
-                     // i' <- i' + diff'
-                     cs << BC::pull(2) << BC::add();
-                     cs.addSrc(R_NilValue);
-                     // ...
-                     compileExpr(ctx, body, true);
-                     // }
-                 });
+    compileWhile(
+        ctx,
+        [&cs]() {
+            // ((i' > n') ...
+            cs << BC::dup2() << BC::lt();
+            cs.addSrc(R_NilValue);
+            // ... == gt')
+            cs << BC::pull(4) << BC::eq();
+            cs.addSrc(R_NilValue);
+        },
+        [&ctx, &cs, &sym, &body]() {
+            // {
+            // i <- i'
+            cs << BC::dup();
+            if (ctx.code.top()->isCached(sym))
+                cs << BC::stvarCached(sym, ctx.code.top()->cacheSlotFor(sym));
+            else
+                cs << BC::stvar(sym);
+            // i' <- i' + diff'
+            cs << BC::pull(2) << BC::add();
+            cs.addSrc(R_NilValue);
+            // ...
+            compileExpr(ctx, body, true);
+            // }
+        });
     // } else {
     cs << BC::popn(4);
     if (!voidContext)
@@ -482,10 +486,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
             // No ensureNamed needed, stvar already ensures named
             cs << BC::dup() << BC::invisible();
                 }
-                cs << (superAssign
-                           ? BC::stvarSuper(lhs)
-                           : BC::stvarCache(lhs,
-                                            ctx.code.top()->cacheSlotFor(lhs)));
+                if (superAssign) {
+                    cs << BC::stvarSuper(lhs);
+                } else {
+                    if (ctx.code.top()->isCached(lhs))
+                        cs << BC::stvarCached(
+                            lhs, ctx.code.top()->cacheSlotFor(lhs));
+                    else
+                        cs << BC::stvar(lhs);
+                }
                 return true;
             }
             Else(break)
@@ -560,9 +569,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         // The ldvarForUpdate BC increments the named count if the target is
         // not local to the current environment.
 
-        cs << (superAssign ? BC::ldvarSuper(target)
-                           : BC::ldvarForUpdateCache(
-                                 target, ctx.code.top()->cacheSlotFor(target)));
+        if (superAssign) {
+            cs << BC::ldvarSuper(target);
+        } else {
+            if (ctx.code.top()->isCached(target))
+                cs << BC::ldvarForUpdateCached(
+                    target, ctx.code.top()->cacheSlotFor(target));
+            else
+                cs << BC::ldvar(target);
+        }
 
         if (Compiler::profile)
             cs << BC::recordType();
@@ -589,9 +604,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         cs.addSrc(ast);
 
         // store the result as "target"
-        cs << (superAssign ? BC::stvarSuper(target)
-                           : BC::stvarCache(
-                                 target, ctx.code.top()->cacheSlotFor(target)));
+        if (superAssign) {
+            cs << BC::stvarSuper(target);
+        } else {
+            if (ctx.code.top()->isCached(target))
+                cs << BC::stvarCached(target,
+                                      ctx.code.top()->cacheSlotFor(target));
+            else
+                cs << BC::stvar(target);
+        }
 
         if (!voidContext)
             cs << BC::invisible();
@@ -846,7 +867,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         cs.addSrc(R_NilValue);
 
         // Set the loop variable
-        cs << BC::stvarCache(sym, ctx.code.top()->cacheSlotFor(sym));
+        if (ctx.code.top()->isCached(sym))
+            cs << BC::stvarCached(sym, ctx.code.top()->cacheSlotFor(sym));
+        else
+            cs << BC::stvar(sym);
 
         compileExpr(ctx, body, true);
         cs << BC::br(loopBranch);
@@ -1058,7 +1082,10 @@ void compileGetvar(CompilerContext& ctx, SEXP name, bool needsVisible = true) {
     } else if (name == R_MissingArg) {
         cs << BC::push(R_MissingArg);
     } else {
-        cs << BC::ldvarCache(name, ctx.code.top()->cacheSlotFor(name));
+        if (ctx.code.top()->isCached(name))
+            cs << BC::ldvarCached(name, ctx.code.top()->cacheSlotFor(name));
+        else
+            cs << BC::ldvar(name);
         if (Compiler::profile)
             cs << BC::recordType();
     }

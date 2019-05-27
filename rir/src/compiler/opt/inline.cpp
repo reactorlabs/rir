@@ -131,6 +131,7 @@ class TheInliner {
                 }
 
                 fuel--;
+                version->inlinees++;
 
                 BB* split =
                     BBTransform::split(version->nextBBId++, bb, it, version);
