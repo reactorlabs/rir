@@ -148,7 +148,7 @@ bool PirType::isInstance(SEXP val) const {
             return maybePromiseWrapped() || maybeLazy() ||
                    PirType(RType::prom).isA(*this);
         }
-        if (LazyEnvironment::cast(val))
+        if (LazyEnvironment::check(val))
             return PirType(RType::env).isA(*this);
         return PirType(val).isA(*this);
     } else if (*this == NativeType::test) {
