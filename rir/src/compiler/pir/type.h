@@ -235,7 +235,8 @@ struct PirType {
     RIR_INLINE constexpr bool maybePromiseWrapped() const {
         if (!isRType())
             return false;
-        return flags_.includes(TypeFlags::promiseWrapped);
+        return flags_.includes(TypeFlags::promiseWrapped) ||
+               flags_.includes(TypeFlags::lazy);
     }
     RIR_INLINE constexpr bool isScalar() const {
         if (!isRType())
