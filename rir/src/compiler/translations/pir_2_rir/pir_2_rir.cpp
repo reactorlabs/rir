@@ -9,6 +9,7 @@
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
 #include "compiler/parameter.h"
+#include "event_counters.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -248,7 +249,29 @@ class Pir2Rir {
     };
 };
 
+#ifdef ENABLE_EVENT_COUNTERS
+static unsigned MkEnvEmited =
+    EventCounters::instance().registerCounter("mkenv emited");
+static unsigned MkEnvStubEmited =
+    EventCounters::instance().registerCounter("mkenvstub emited");
+static unsigned ClosuresCompiled =
+    EventCounters::instance().registerCounter("closures compiled");
+#endif
+
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS) {
+        VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
+            if (auto mkenv = MkEnv::Cast(i)) {
+                if (mkenv->stub)
+                    EventCounters::instance().count(MkEnvStubEmited);
+                else
+                    EventCounters::instance().count(MkEnvEmited);
+            }
+        });
+    }
+#endif
+
     lower(code);
     toCSSA(code);
 #ifdef FULLVERIFIER
@@ -1138,6 +1161,10 @@ rir::Function* Pir2Rir::finalize() {
                                        globalContext());
 #endif
     log.finalRIR(function.function());
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS)
+        EventCounters::instance().count(ClosuresCompiled, cls->inlinees + 1);
+#endif
     return function.function();
 }
 
