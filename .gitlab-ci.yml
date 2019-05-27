@@ -144,9 +144,9 @@ test_measure:
   stage: Run tests
   script:
     - cd /opt/rir/build/measure
-    - RIR_MEASURE_FILE=results.csv RIR_MEASURE_ROW=Regression5 ./bin/Rscript /opt/rir/tests/pir_regression5.R > /dev/null
-    - RIR_MEASURE_FILE=results.csv RIR_MEASURE_ROW=Regression6 ./bin/Rscript /opt/rir/tests/pir_regression6.R > /dev/null
-    - RIR_MEASURE_FILE=results.csv RIR_MEASURE_ROW=Regression7 ./bin/Rscript /opt/rir/tests/pir_regression7.R > /dev/null
+    - RIR_MEASURE_FILE=results.csv RIR_MEASURE_ROW=Regression5 ./bin/Rscript /opt/rir/rir/tests/pir_regression5.R > /dev/null
+    - RIR_MEASURE_FILE=results.csv RIR_MEASURE_ROW=Regression6 ./bin/Rscript /opt/rir/rir/tests/pir_regression6.R > /dev/null
+    - RIR_MEASURE_FILE=results.csv RIR_MEASURE_ROW=Regression7 ./bin/Rscript /opt/rir/rir/tests/pir_regression7.R > /dev/null
     - cat results.csv
 
 deploy:
