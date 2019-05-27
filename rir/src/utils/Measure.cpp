@@ -36,6 +36,7 @@ void MeasureTable::writeCsv(bool header, std::ostream& out) const {
     i++;
 #include "../ir/insns.h"
 #undef DEF_INSTR
+    (void)i;
 
     if (header) {
         out << std::left << std::setw(pads[0]) << fileName;
@@ -53,6 +54,7 @@ void MeasureTable::writeCsv(bool header, std::ostream& out) const {
 #include "../ir/insns.h"
 #undef DEF_INSTR
     out << "\n";
+    (void)i;
 
     out.flush();
 }

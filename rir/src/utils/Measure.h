@@ -37,7 +37,7 @@ struct MeasureTable {
 
     // cppcheck-suppress passedByValue
     explicit MeasureTable(std::string title, std::string fileName)
-        : title(title), fileName(fileName) {}
+        : title(title), fileName(fileName), sumRow(MeasureRow()) {}
 
     void record(Opcode op, Code* code);
     void reset();
