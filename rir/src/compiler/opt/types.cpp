@@ -117,6 +117,9 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     inferred = i->type;
                 }
 
+                // inference should never generate less precise type
+                inferred = inferred & i->type;
+
                 if (!types.count(i) || types.at(i) != inferred) {
                     done = false;
                     types[i] = inferred;
