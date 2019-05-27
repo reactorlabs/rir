@@ -2,7 +2,8 @@
 #define LAZY_ENVIRONMENT_H
 
 #include "../ir/BC_inc.h"
-#include "RirDataWrapper.h"
+#include "../runtime/RirRuntimeObject.h"
+#include "instance.h"
 #include "interp_incl.h"
 
 #include <cassert>
@@ -18,37 +19,29 @@ namespace rir {
  * environment lazily.
  */
 struct LazyEnvironment
-    : public RirDataWrapper<LazyEnvironment, LAZY_ENVIRONMENT_MAGIC> {
+    : public RirRuntimeObject<LazyEnvironment, LAZY_ENVIRONMENT_MAGIC> {
     LazyEnvironment() = delete;
     LazyEnvironment(const LazyEnvironment&) = delete;
     LazyEnvironment& operator=(const LazyEnvironment&) = delete;
 
-    LazyEnvironment(std::vector<SEXP>* arguments, SEXP parent, Opcode* opcode,
-                    InterpreterInstance* cmpCtx, R_bcstack_t* localsBase)
-        : RirDataWrapper(arguments->size()), arguments_(arguments),
-          parent_(parent), names_(opcode), cmpCtx_(cmpCtx),
-          localsBase_(localsBase){};
-    ~LazyEnvironment() { delete arguments_; }
-
-    std::vector<SEXP>* arguments() { return arguments_; }
-    const SEXP parent() { return parent_; }
-    const Opcode* names() { return names_; }
-    InterpreterInstance* cmpCtx() { return cmpCtx_; }
-    R_bcstack_t* localsBase() { return localsBase_; }
-
-    SEXP create() {
-        return createEnvironment(arguments(), parent(), names(), cmpCtx(),
-                                 localsBase(), (SEXP)this);
+    LazyEnvironment(SEXP parent, Immediate* names, size_t nargs, void* frameEnd,
+                    InterpreterInstance* ctx)
+        : RirRuntimeObject(sizeof(LazyEnvironment), nargs + 1),
+          frameEnd(frameEnd), nargs(nargs), names(names) {
+        setEntry(0, parent);
+        for (size_t i = 0; i < nargs; i++) {
+            setEntry(i + 1, ostack_pop(ctx));
+        }
     }
 
-    SEXP* gcData() { return arguments_->data(); }
+    void* frameEnd;
+    size_t nargs;
+    Immediate* names;
 
-  private:
-    std::vector<SEXP>* arguments_;
-    const SEXP parent_;
-    const Opcode* names_;
-    InterpreterInstance* cmpCtx_;
-    R_bcstack_t* localsBase_;
+    SEXP getArg(size_t i) { return getEntry(i + 1); }
+    void setArg(size_t i, SEXP val) { setEntry(i + 1, val); }
+
+    SEXP getParent() { return getEntry(0); }
 };
 } // namespace rir
 

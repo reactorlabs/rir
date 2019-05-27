@@ -124,6 +124,8 @@ BC_NOARGS(V, _)
     case Opcode::is_:
     case Opcode::put_:
     case Opcode::alloc_:
+    case Opcode::stvar_stubbed_:
+    case Opcode::ldvar_noforce_stubbed_:
         cs.insert(immediate.i);
         return;
 
@@ -293,6 +295,8 @@ void BC::print(std::ostream& out) const {
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::put_:
+    case Opcode::stvar_stubbed_:
+    case Opcode::ldvar_noforce_stubbed_:
         out << immediate.i;
         break;
     case Opcode::ldarg_:
