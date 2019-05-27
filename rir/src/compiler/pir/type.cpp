@@ -81,7 +81,7 @@ void PirType::merge(SEXPTYPE sexptype) {
     case WEAKREFSXP:
     case S4SXP:
         // These are special types, some of which can impersonate other types.
-        *this = PirType::val();
+        *this = PirType::val().notObject();
         break;
     default:
         std::cerr << "unknown type: " << sexptype << "\n";
