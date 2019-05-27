@@ -850,18 +850,30 @@ class FLIE(MkArg, 2, Effects::None()) {
                                          env),
           prom_(prom) {
         assert(eagerArg() == v);
-        noReflection = isEager();
+        if (isEager()) {
+            noReflection = true;
+            elideEnv();
+        }
     }
     MkArg(Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
           prom_(nullptr) {
         assert(eagerArg() == v);
-        noReflection = isEager();
+        if (isEager()) {
+            noReflection = true;
+            elideEnv();
+        }
     }
 
     Value* eagerArg() const { return arg(0).val(); }
-    void eagerArg(Value* eager) { arg(0).val() = eager; }
+    void eagerArg(Value* eager) {
+        arg(0).val() = eager;
+        assert(isEager());
+        noReflection = true;
+        // Environment is not needed once a promise is evaluated
+        elideEnv();
+    }
 
     void updatePromise(Promise* p) { prom_ = p; }
     Promise* prom() const { return prom_; }
@@ -1656,6 +1668,24 @@ class VLIE(MkEnv, Effects::None()) {
     size_t gvnBase() const override { return (size_t)this; }
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
+
+    bool contains(SEXP name) const {
+        for (const auto& n : varName)
+            if (name == n)
+                return true;
+        return false;
+    }
+
+    unsigned indexOf(SEXP name) const {
+        unsigned i = 0;
+        for (const auto& n : varName) {
+            if (name == n)
+                return i;
+            ++i;
+        }
+        assert(false);
+        return -1;
+    }
 };
 
 class FLI(IsObject, 1, Effects::None()) {
@@ -1664,7 +1694,7 @@ class FLI(IsObject, 1, Effects::None()) {
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
 };
 
-class FLIE(IsEnvStub, 1, Effects::None()) {
+class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
   public:
     explicit IsEnvStub(MkEnv* e)
         : FixedLenInstructionWithEnvSlot(NativeType::test, e) {}

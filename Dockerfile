@@ -1,5 +1,5 @@
-ARG CI_COMMIT_SHA
 FROM registry.gitlab.com/rirvm/rir_mirror/base
+ARG CI_COMMIT_SHA
 ADD . /opt/rir
 RUN echo $CI_COMMIT_SHA > /opt/rir_version
 RUN cd /opt/rir && tools/sync.sh && tools/build-gnur.sh custom-r && rm -rf external/custom-r/cache_recommended.tar .git && find external -type f -name '*.o' -exec rm -f {} \;

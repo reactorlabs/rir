@@ -62,6 +62,11 @@ DEF_INSTR(ldfun_, 1, 0, 1, 0)
 DEF_INSTR(ldvar_, 1, 0, 1, 0)
 
 /**
+ * ldvar_:: load from the stubbed env at a fixed offset
+ */
+DEF_INSTR(ldvar_noforce_stubbed_, 1, 0, 1, 0)
+
+/**
  * ldvar_:: like ldvar.
  * Stores an additional immediate with a unique number for the cache bindings.
  */
@@ -127,6 +132,11 @@ DEF_INSTR(starg_cached_, 2, 1, 0, 0)
  * cached.
  */
 DEF_INSTR(stvar_, 1, 1, 0, 0)
+
+/**
+ * stvar_:: assign tos to the stubbed environment at a fixed offset
+ */
+DEF_INSTR(stvar_stubbed_, 1, 1, 0, 0)
 
 /**
  * stvar_cache:: like stvar but the var may be in the cache.

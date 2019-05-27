@@ -78,7 +78,7 @@ stopifnot(pir.check(function(x) {
   y <- 2
   leak()
 }, NoStore))
-stopifnot(!pir.check(function(x) {
+stopifnot(pir.check(function(x) {
   leak()
   y <- 1
   y <- 2
@@ -126,7 +126,7 @@ stopifnot(pir.check(function() {
   }
   q
 }, NoLoad))
-stopifnot(!pir.check(function(a) {
+stopifnot(pir.check(function(a) {
   if (a)
     q <- 1
   else {

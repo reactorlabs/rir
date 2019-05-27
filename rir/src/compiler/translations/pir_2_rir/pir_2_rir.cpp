@@ -552,7 +552,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto ldvar = LdVar::Cast(instr);
                 auto key =
                     CachePosition::NameAndEnv(ldvar->varName, ldvar->env());
-                if (needsLdVarForUpdate.count(instr)) {
+                auto mkenv = MkEnv::Cast(ldvar->env());
+                if (mkenv && mkenv->stub) {
+                    cb.add(BC::ldvarNoForceStubbed(
+                        mkenv->indexOf(ldvar->varName)));
+                } else if (needsLdVarForUpdate.count(instr)) {
                     if (cache.isCached(key)) {
                         cb.add(BC::ldvarForUpdateCached(ldvar->varName,
                                                         cache.indexOf(key)));
@@ -610,7 +614,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::starg(stvar->varName));
                     }
                 } else {
-                    if (cache.isCached(key)) {
+                    auto mkenv = MkEnv::Cast(stvar->env());
+                    if (mkenv && mkenv->stub) {
+                        cb.add(
+                            BC::stvarStubbed(mkenv->indexOf(stvar->varName)));
+                    } else if (cache.isCached(key)) {
                         cb.add(BC::stvarCached(stvar->varName,
                                                cache.indexOf(key)));
                     } else {
@@ -1001,6 +1009,22 @@ void Pir2Rir::lower(Code* code) {
                 // were not sure it is correct.
                 if (ldfun->guessedBinding())
                     ldfun->clearGuessedBinding();
+            } else if (auto ld = LdVar::Cast(*it)) {
+                while (true) {
+                    auto mk = MkEnv::Cast(ld->env());
+                    if (mk && mk->stub && !mk->contains(ld->varName))
+                        ld->env(mk->lexicalEnv());
+                    else
+                        break;
+                }
+            } else if (auto st = StVar::Cast(*it)) {
+                while (true) {
+                    auto mk = MkEnv::Cast(st->env());
+                    if (mk && mk->stub && !mk->contains(st->varName))
+                        st->env(mk->lexicalEnv());
+                    else
+                        break;
+                }
             } else if (auto deopt = Deopt::Cast(*it)) {
                 // Lower Deopt instructions + their FrameStates to a
                 // ScheduledDeopt.
