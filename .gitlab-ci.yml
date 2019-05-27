@@ -4,6 +4,13 @@ stages:
   - Build benchmark container
   - Run tests
   - Deploy
+  - Cleanup
+
+before_script:
+  - export PIR_MAX_INPUT_SIZE=99999
+  - export PIR_INLINER_MAX_SIZE=99999
+  - export PIR_DEOPT_CHAOS_SEED=$RANDOM
+  - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
 
 sanity:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -11,7 +18,7 @@ sanity:
       GIT_STRATEGY: none
   stage: Sanity Checks
   script:
-    - /opt/rir/tools/cppcheck
+    - /opt/rir/tools/cppcheck --xml
     - /opt/rir/build/release/bin/tests
 
 rir container:
@@ -26,7 +33,7 @@ rir container:
     - docker info
   script:
     - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
-    - docker build -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
+    - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
 
 benchmark container:
@@ -162,5 +169,14 @@ deploy:
     - docker pull registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
     - docker tag registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA registry.gitlab.com/rirvm/rir_mirror/benchmark:master
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:master
+  only:
+    - master
+
+cleanup_registry:
+  stage: Cleanup
+  image: ruby:2.5
+  before_script: []
+  script:
+    - echo "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
   only:
     - master

@@ -23,6 +23,13 @@ DEF_INSTR(pop_context_, 0, 1, 0, 0)
  */
 DEF_INSTR(mk_env_, 2, -1, 1, 0)
 
+/*
+ * clear_binding_cache_. Clear binding cache entries from start to start+size
+ * (two
+ * immediates).
+ */
+DEF_INSTR(clear_binding_cache_, 2, 0, 0, 0)
+
 /**
  * make_stub_env_:: create a fake environment for speculative purposes
  */
@@ -65,6 +72,7 @@ DEF_INSTR(ldvar_cached_, 2, 0, 1, 0)
  * Additionally Increment named count if the variable is not local.
  */
 DEF_INSTR(ldvar_for_update_cache_, 2, 0, 1, 0)
+DEF_INSTR(ldvar_for_update_, 1, 0, 1, 0)
 
 /**
  * ldvar_noforce_:: like ldvar_ but don't force if promise or fail if missing
@@ -103,6 +111,11 @@ DEF_INSTR(ldarg_, 1, 0, 1, 0)
  * ldloc_:: push local variable on stack
  */
 DEF_INSTR(ldloc_, 1, 0, 1, 1)
+
+/**
+ * stvar_:: assign tos to the immediate symbol.
+ */
+DEF_INSTR(starg_, 1, 1, 0, 0)
 
 /**
  * stvar_:: assign tos to the immediate symbol. May be in cache

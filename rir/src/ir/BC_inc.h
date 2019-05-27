@@ -117,9 +117,13 @@ class BC {
         NumArgs nargs;
         SignedImmediate context;
     };
-    struct PoolAndCacheIdxs {
+    struct PoolAndCachePositionRange {
         PoolIdx poolIndex;
         CacheIdx cacheIndex;
+    };
+    struct CachePositionRange {
+        CacheIdx start;
+        unsigned size;
     };
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
@@ -145,7 +149,8 @@ class BC {
         LocalsCopy loc_cpy;
         ObservedCallees callFeedback;
         ObservedValues typeFeedback;
-        PoolAndCacheIdxs poolAndCache;
+        PoolAndCachePositionRange poolAndCache;
+        CachePositionRange cacheIdx;
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
@@ -343,10 +348,11 @@ BC_NOARGS(V, _)
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
-    inline static BC ldvarCache(SEXP sym, uint32_t cacheSlot);
-    inline static BC ldvarForUpdateCache(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarForUpdate(SEXP sym);
     inline static BC ldvarNoForce(SEXP sym);
-    inline static BC ldvarNoForceCache(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarNoForceCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarSuper(SEXP sym);
     inline static BC ldvarNoForceSuper(SEXP sym);
     inline static BC ldddvar(SEXP sym);
@@ -355,9 +361,10 @@ BC_NOARGS(V, _)
     inline static BC stloc(uint32_t offset);
     inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC promise(FunIdx prom);
+    inline static BC starg(SEXP sym);
     inline static BC stvar(SEXP sym);
-    inline static BC stvarCache(SEXP sym, uint32_t cacheSlot);
-    inline static BC stargCache(SEXP sym, uint32_t cacheSlot);
+    inline static BC stargCached(SEXP sym, uint32_t cacheSlot);
+    inline static BC stvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
@@ -391,6 +398,7 @@ BC_NOARGS(V, _)
 
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
+    inline static BC clearBindingCache(CacheIdx start, unsigned size);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -605,6 +613,9 @@ BC_NOARGS(V, _)
                                                               Opcode* pc) {
         ImmediateArguments immediate;
         switch (bc) {
+        case Opcode::clear_binding_cache_:
+            memcpy(&immediate.cacheIdx, pc, sizeof(CachePositionRange));
+            break;
         case Opcode::deopt_:
         case Opcode::push_:
         case Opcode::ldfun_:
@@ -614,7 +625,9 @@ BC_NOARGS(V, _)
         case Opcode::ldvar_noforce_super_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
+        case Opcode::starg_:
         case Opcode::stvar_super_:
+        case Opcode::ldvar_for_update_:
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
@@ -623,7 +636,8 @@ BC_NOARGS(V, _)
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
         case Opcode::starg_cached_:
-            memcpy(&immediate.poolAndCache, pc, sizeof(PoolAndCacheIdxs));
+            memcpy(&immediate.poolAndCache, pc,
+                   sizeof(PoolAndCachePositionRange));
             break;
         case Opcode::call_implicit_:
         case Opcode::named_call_implicit_:

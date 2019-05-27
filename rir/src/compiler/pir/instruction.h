@@ -676,7 +676,6 @@ class FLIE(LdFun, 2, Effects::Any()) {
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
   public:
     SEXP varName;
-    bool usesCache = true;
 
     LdVar(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::any(), env),
@@ -788,7 +787,6 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
 class FLIE(StVar, 2, Effect::WritesEnv) {
   public:
     bool isStArg = false;
-    bool usesCache = true;
 
     StVar(SEXP name, Value* val, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
@@ -852,18 +850,30 @@ class FLIE(MkArg, 2, Effects::None()) {
                                          env),
           prom_(prom) {
         assert(eagerArg() == v);
-        noReflection = isEager();
+        if (isEager()) {
+            noReflection = true;
+            elideEnv();
+        }
     }
     MkArg(Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
           prom_(nullptr) {
         assert(eagerArg() == v);
-        noReflection = isEager();
+        if (isEager()) {
+            noReflection = true;
+            elideEnv();
+        }
     }
 
     Value* eagerArg() const { return arg(0).val(); }
-    void eagerArg(Value* eager) { arg(0).val() = eager; }
+    void eagerArg(Value* eager) {
+        arg(0).val() = eager;
+        assert(isEager());
+        noReflection = true;
+        // Environment is not needed once a promise is evaluated
+        elideEnv();
+    }
 
     void updatePromise(Promise* p) { prom_ = p; }
     Promise* prom() const { return prom_; }

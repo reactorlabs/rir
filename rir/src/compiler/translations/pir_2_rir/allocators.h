@@ -1,7 +1,9 @@
 #ifndef PIR_2_RIR_ALLOC_H
 #define PIR_2_RIR_ALLOC_H
 
+#include "interpreter/cache.h"
 #include "stack_use.h"
+#include <set>
 
 namespace rir {
 namespace pir {
@@ -445,20 +447,97 @@ class SSAAllocator {
     }
 };
 
-class CachePositionAllocator {
+class CachePosition {
   public:
     typedef size_t SlotNumber;
+    typedef std::pair<SEXP, Value*> NameAndEnv;
+    typedef std::pair<size_t, size_t> StartSize;
 
-    size_t numberOfBindings() { return uniqueNumbers.size(); }
-    SlotNumber slotFor(SEXP varName, Value* environment) {
-        NameAndEnv key = NameAndEnv(varName, environment);
-        return uniqueNumbers.emplace(key, uniqueNumbers.size() + 1)
-            .first->second;
+    explicit CachePosition(Code* code) {
+        std::unordered_map<Value*,
+                           std::unordered_map<NameAndEnv, size_t, pairhash>>
+            found;
+
+        // Count how many instruction use a binding. We use this as a proxy for
+        // how many times it might get accessed at runtime.
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto ld = LdVar::Cast(i)) {
+                found[ld->env()][NameAndEnv(ld->varName, ld->env())]++;
+            } else if (auto st = StVar::Cast(i)) {
+                found[st->env()][NameAndEnv(st->varName, st->env())]++;
+            }
+        });
+
+        // First all global envs
+        for (const auto& env : found) {
+            auto e = Env::Cast(env.first);
+            if (e && e->rho != R_BaseEnv && e->rho != R_BaseNamespace) {
+                for (const auto& key : env.second) {
+                    // If a binding is used only once, then it does not pay off
+                    // to cache (yes, it could be used in a loop, this is just a
+                    // static approximation).
+                    if (key.second <= 2)
+                        continue;
+                    if (uniqueNumbers.size() == MAX_CACHE_SIZE)
+                        break;
+                    uniqueNumbers.emplace(key.first, uniqueNumbers.size());
+                }
+            }
+        }
+        globalEnvsCacheSize_ = uniqueNumbers.size();
+
+        // At runtime looking up a binding in a local environment is a linear
+        // search. Therefore, the smaller then environment, the faster the
+        // lookup. E.g. looking up in an env of size one is not much slower than
+        // going through the cache. Therefore we will scale the limit on the
+        // size of the environment.
+        auto minAccessEnvSize = [](size_t s) -> unsigned {
+            if (s == 0)
+                return 99999; // This env seems empty, caching is just a waste.
+            else if (s == 1)
+                return 3;
+            else if (s < 5)
+                return 2;
+            return 1;
+        };
+        for (const auto& env : found) {
+            if (!Env::Cast(env.first)) {
+                envCacheRanges[env.first].first = uniqueNumbers.size();
+                auto limit = minAccessEnvSize(env.second.size());
+                for (const auto& key : env.second) {
+                    if (key.second <= limit)
+                        continue;
+                    if (uniqueNumbers.size() == MAX_CACHE_SIZE)
+                        break;
+                    uniqueNumbers.emplace(key.first, uniqueNumbers.size());
+                }
+                envCacheRanges[env.first].second =
+                    uniqueNumbers.size() - envCacheRanges[env.first].first;
+            }
+        }
+    }
+
+    size_t size() const { return uniqueNumbers.size(); }
+
+    SlotNumber isCached(const NameAndEnv& key) const {
+        return uniqueNumbers.count(key);
+    }
+
+    SlotNumber indexOf(const NameAndEnv& key) const {
+        return uniqueNumbers.at(key);
+    }
+
+    unsigned globalEnvsCacheSize() const { return globalEnvsCacheSize_; }
+
+    void ifCacheRange(MkEnv* env, std::function<void(StartSize)> apply) const {
+        if (!env->stub && envCacheRanges.count(env))
+            apply(envCacheRanges.at(env));
     }
 
   private:
-    typedef std::pair<SEXP, Value*> NameAndEnv;
     std::unordered_map<NameAndEnv, SlotNumber, pairhash> uniqueNumbers;
+    std::unordered_map<Value*, StartSize> envCacheRanges;
+    size_t globalEnvsCacheSize_;
 };
 
 } // namespace pir

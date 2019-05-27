@@ -112,12 +112,14 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldvar_:
     case Opcode::ldvar_cached_:
     case Opcode::ldvar_for_update_cache_:
+    case Opcode::ldvar_for_update_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_noforce_cached_:
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
-    case Opcode::starg_cached_:
+    case Opcode::starg_:
     case Opcode::stvar_:
+    case Opcode::starg_cached_:
     case Opcode::stvar_cached_:
     case Opcode::stvar_super_:
     case Opcode::guard_fun_:
@@ -180,6 +182,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::push_context_:
     case Opcode::ceil_:
     case Opcode::floor_:
+    case Opcode::clear_binding_cache_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:
@@ -302,16 +305,46 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                     cptr + cur.size() + off > end)
                     Rf_error("RIR Verifier: Branch outside closure");
             }
-            if (*cptr == Opcode::ldvar_) {
+            if (*cptr == Opcode::ldvar_ || *cptr == Opcode::ldvar_noforce_ ||
+                *cptr == Opcode::ldvar_super_ ||
+                *cptr == Opcode::ldvar_noforce_super_ ||
+                *cptr == Opcode::ldvar_for_update_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
                 if (*argsIndex >= cp_pool_length(ctx))
                     Rf_error("RIR Verifier: Invalid arglist index");
                 SEXP sym = cp_pool_at(ctx, *argsIndex);
                 if (TYPEOF(sym) != SYMSXP)
-                    Rf_error("RIR Verifier: LdVar binding not a symbol");
+                    Rf_error("RIR Verifier: load/store binding not a symbol");
                 if (!(strlen(CHAR(PRINTNAME(sym)))))
-                    Rf_error("RIR Verifier: LdVar empty binding name");
+                    Rf_error("RIR Verifier: load/store empty binding name");
             }
+            if (*cptr == Opcode::ldvar_cached_ ||
+                *cptr == Opcode::stvar_cached_ ||
+                *cptr == Opcode::ldvar_noforce_cached_ ||
+                *cptr == Opcode::starg_cached_ ||
+                *cptr == Opcode::ldvar_for_update_cache_) {
+                unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
+                if (*argsIndex >= cp_pool_length(ctx))
+                    Rf_error("RIR Verifier: Invalid arglist index");
+                SEXP sym = cp_pool_at(ctx, *argsIndex);
+                if (TYPEOF(sym) != SYMSXP)
+                    Rf_error("RIR Verifier: load/store binding not a symbol");
+                if (!(strlen(CHAR(PRINTNAME(sym)))))
+                    Rf_error("RIR Verifier: load/store empty binding name");
+                unsigned cacheIdx = *(argsIndex + 1);
+                if (cacheIdx >= c->bindingCacheSize)
+                    Rf_error(
+                        "RIR Verifier: cached load/store with invalid index");
+            }
+            if (*cptr == Opcode::clear_binding_cache_) {
+                unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
+                unsigned cacheIdxStart = *(argsIndex);
+                unsigned cacheIdxSize = *(argsIndex + 1);
+                if (cacheIdxStart + cacheIdxSize > c->bindingCacheSize)
+                    Rf_error("RIR Verifier: cached clear_binding_cache_ with "
+                             "invalid index");
+            }
+
             if (*cptr == Opcode::promise_) {
                 unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
                 objs.push_back(c->getPromise(*promidx));
