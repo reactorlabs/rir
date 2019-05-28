@@ -159,14 +159,12 @@ SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
 
     SEXP arglist = R_NilValue;
     auto names = wrapper->names;
-    int j = 0;
-    for (long i = wrapper->nargs - 1; i >= 0; --i) {
-        SEXP val = wrapper->getArg(j);
+    for (size_t i = 0; i < wrapper->nargs; ++i) {
+        SEXP val = wrapper->getArg(i);
         SEXP name = cp_pool_at(ctx, names[i]);
         arglist = CONS_NR(val, arglist);
         SET_TAG(arglist, name);
         SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
-        j++;
     }
 
     SEXP environment =
@@ -1644,10 +1642,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(mk_stub_env_) {
-            // TODO: There is a potential safety problem because we are not
-            // preserving the args and parent SEXP. Doing it here is not an
-            // option becase R_Preserve is slow. We must find a simple story so
-            // that the gc trace rir wrappers.
             size_t n = readImmediate();
             advanceImmediate();
             int contextPos = readSignedImmediate();
@@ -1659,7 +1653,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto names = pc;
             advanceImmediateN(n);
             SEXP wrapper = Rf_allocVector(
-                EXTERNALSXP, sizeof(LazyEnvironment) + 50 + sizeof(SEXP) * n);
+                EXTERNALSXP, sizeof(LazyEnvironment) + sizeof(SEXP) * (n + 1));
             new (DATAPTR(wrapper))
                 LazyEnvironment(parent, (Immediate*)names, n, localsBase, ctx);
 

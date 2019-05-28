@@ -29,8 +29,8 @@ struct LazyEnvironment
         : RirRuntimeObject(sizeof(LazyEnvironment), nargs + 1),
           frameEnd(frameEnd), nargs(nargs), names(names) {
         setEntry(0, parent);
-        for (size_t i = 0; i < nargs; i++) {
-            setEntry(i + 1, ostack_pop(ctx));
+        for (long i = nargs - 1; i >= 0; --i) {
+            setArg(i, ostack_pop(ctx));
         }
     }
 
