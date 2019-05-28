@@ -84,7 +84,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->src = InInteger(inp);
     code->stackLength = InInteger(inp);
     *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
-    *const_cast<unsigned*>(&code->bindingsCount) = InInteger(inp);
+    *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
@@ -124,7 +124,7 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, src);
     OutInteger(out, stackLength);
     OutInteger(out, localsCount);
-    OutInteger(out, bindingsCount);
+    OutInteger(out, bindingCacheSize);
     OutInteger(out, codeSize);
     OutInteger(out, srcLength);
     OutInteger(out, extraPoolSize);
