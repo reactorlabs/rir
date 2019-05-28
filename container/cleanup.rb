@@ -13,14 +13,17 @@ REPOS = {
       `git rev-parse HEAD`.chomp,                   # current version
       `git rev-parse HEAD~1`.chomp,                 # prev version
       'master',
-      'c13be9ca843726e3eb3e57e6e6f2a602ae7481eb'    # referenced in paper
+      'c13be9ca843726e3eb3e57e6e6f2a602ae7481eb',   # referenced in paper
+      '3ae6a44d3a3ad5d643991b24e5c29654b053a854',
     ]},
   '12325205': {# rir experiments
     repos: [
       562769,  # scope_resolution
+      576865,  # envs_created
     ],
     keep: [
       'c13be9ca843726e3eb3e57e6e6f2a602ae7481eb-210646f2a98099ed48d928b1f5e66e551aa0d92b',
+      '3ae6a44d3a3ad5d643991b24e5c29654b053a854-b2a9331e8ffb822828595835f90da4c366d014bd',
     ]},
 }
 
