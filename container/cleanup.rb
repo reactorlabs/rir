@@ -13,8 +13,8 @@ REPOS = {
       `git rev-parse HEAD`.chomp,                   # current version
       `git rev-parse HEAD~1`.chomp,                 # prev version
       'master',
-      'c13be9ca843726e3eb3e57e6e6f2a602ae7481eb',   # referenced in paper
-      'e4cee663a3fdd0455592d4835b08716234882024',
+      # referenced in paper
+      '73655471164f3418448daaee7bbacfa1ed4e8d50',
     ]},
   '12325205': {# rir experiments
     repos: [
@@ -22,8 +22,7 @@ REPOS = {
       576865,  # envs_created
     ],
     keep: [
-      'c13be9ca843726e3eb3e57e6e6f2a602ae7481eb-210646f2a98099ed48d928b1f5e66e551aa0d92b',
-      'e4cee663a3fdd0455592d4835b08716234882024-908e16a9dd7ea5cddb8118c2c8c4a9f47a0b6479',
+      '73655471164f3418448daaee7bbacfa1ed4e8d50-908e16a9dd7ea5cddb8118c2c8c4a9f47a0b6479',
     ]},
 }
 
