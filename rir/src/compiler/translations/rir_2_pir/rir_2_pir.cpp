@@ -688,8 +688,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         BINOP(Lt, lt_);
         BINOP(Gt, gt_);
-        BINOP(Gte, le_);
-        BINOP(Lte, ge_);
+        BINOP(Gte, ge_);
+        BINOP(Lte, le_);
         BINOP(Mod, mod_);
         BINOP(Div, div_);
         BINOP(IDiv, idiv_);

@@ -764,8 +764,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Pow, pow);
                 SIMPLE_WITH_SRCIDX(Lt, lt);
                 SIMPLE_WITH_SRCIDX(Gt, gt);
-                SIMPLE_WITH_SRCIDX(Lte, ge);
-                SIMPLE_WITH_SRCIDX(Gte, le);
+                SIMPLE_WITH_SRCIDX(Lte, le);
+                SIMPLE_WITH_SRCIDX(Gte, ge);
                 SIMPLE_WITH_SRCIDX(Eq, eq);
                 SIMPLE_WITH_SRCIDX(Neq, ne);
                 SIMPLE_WITH_SRCIDX(Colon, colon);
