@@ -27,7 +27,7 @@ struct ObservedCallees {
     uint32_t numTargets : TargetBits;
     uint32_t taken : CounterBits;
 
-    void record(Code* caller, SEXP callee);
+    RIR_INLINE void record(Code* caller, SEXP callee);
     SEXP getTarget(const Code* code, size_t pos) const;
 
     std::array<unsigned, MaxTargets> targets;
