@@ -750,7 +750,8 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
         return CallSafeBuiltin::Cast(v);
     case Tag::NamedCall:
         return NamedCall::Cast(v);
-    default: {}
+    default: {
+    }
     }
     return nullptr;
 }

@@ -331,7 +331,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
          fun == symbol::Eq || fun == symbol::Ne ||
          fun == symbol::Colon)) {
         emitGuardForNamePrimitive(cs, fun);
-
+        
         compileExpr(ctx, args[0]);
         compileExpr(ctx, args[1]);
 
@@ -480,11 +480,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         }
 
         // 2) Specialcalse normal assignment (ie. "i <- expr")
-        Match(lhs){Case(SYMSXP){emitGuardForNamePrimitive(cs, fun);
-        compileExpr(ctx, rhs);
-        if (!voidContext) {
-            // No ensureNamed needed, stvar already ensures named
-            cs << BC::dup() << BC::invisible();
+        Match(lhs) {
+            Case(SYMSXP) {
+                emitGuardForNamePrimitive(cs, fun);
+                compileExpr(ctx, rhs);
+                if (!voidContext) {
+                    // No ensureNamed needed, stvar already ensures named
+                    cs << BC::dup() << BC::invisible();
                 }
                 if (superAssign) {
                     cs << BC::stvarSuper(lhs);
@@ -521,8 +523,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
                     lhsParts.push_back(target);
                 }
                 Else({
-                    errorcall(ast,
-                              "invalid (do_set) left-hand side to assignment");
+                    errorcall(ast, "invalid (do_set) left-hand side to assignment");
                 })
             }
         }
@@ -763,8 +764,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         return true;
     }
 
-    if (fun == symbol::Missing && args.length() == 1 &&
-        TYPEOF(args[0]) == SYMSXP && !DDVAL(args[0])) {
+    if (fun == symbol::Missing && args.length() == 1 && TYPEOF(args[0]) == SYMSXP &&
+        !DDVAL(args[0])) {
         emitGuardForNamePrimitive(cs, fun);
         if (!voidContext) {
             cs << BC::missing(args[0]) << BC::visible();
@@ -780,12 +781,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
 
         emitGuardForNamePrimitive(cs, fun);
 
-        compileWhile(ctx,
-                     [&ctx, &cs, &cond]() {
-                         compileExpr(ctx, cond);
-                         cs << BC::asbool();
-                     },
-                     [&ctx, &body]() { compileExpr(ctx, body, true); });
+        compileWhile(
+            ctx,
+            [&ctx, &cs, &cond]() {
+                compileExpr(ctx, cond);
+                cs << BC::asbool();
+            },
+            [&ctx, &body]() { compileExpr(ctx, body, true); });
 
         if (!voidContext)
             cs << BC::push(R_NilValue) << BC::invisible();
@@ -861,7 +863,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         cs.addSrc(R_NilValue);
 
         cs << BC::brtrue(endForBranch) << BC::pull(2) << BC::pull(1)
-           << BC::extract2_1();
+        << BC::extract2_1();
         // We know this is a loop sequence and won't do dispatch.
         // TODO: add a non-object version of extract2_1
         cs.addSrc(R_NilValue);
@@ -905,7 +907,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopNext())
+               << BC::push(R_NilValue);
             return true;
         }
     }
@@ -920,7 +923,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopBreak())
+               << BC::push(R_NilValue);
             return true;
         }
     }
@@ -983,7 +987,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
         cs.addSrc(ast);                                                        \
         return true;                                                           \
     }
-    SIMPLE_INSTRUCTIONS(V, _)
+SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
     return false;

@@ -384,9 +384,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // Insert a guard if we want to speculate
         if (monomorphicBuiltin || monomorphicClosure) {
             Value* expected = insert(new LdConst(monomorphic));
-#ifdef UNSOUND_NESTED_CALLS
-            (void)expected;
-#else
             Value* given = callee;
             // We use ldvar instead of ldfun for the guard. The reason is that
             // ldfun can force promises, which is a pain for our optimizer to
@@ -403,7 +400,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             Value* t = insert(new Identical(given, expected));
             auto cp = addCheckpoint(srcCode, pos, stack, insert);
             assumption = insert(new Assume(t, cp));
-#endif
         }
 
         // Compile the arguments (eager for builltins)
@@ -1052,21 +1048,22 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
             inner << (pos - srcCode->code());
 
-            compiler.compileFunction(function, inner.str(), formals, srcRef,
-                                     [&](ClosureVersion* innerF) {
-                                         cur.stack.push(insert(new MkFunCls(
-                                             innerF->owner(), dt, insert.env)));
+            compiler.compileFunction(
+                function, inner.str(), formals, srcRef,
+                [&](ClosureVersion* innerF) {
+                    cur.stack.push(
+                        insert(new MkFunCls(innerF->owner(), dt, insert.env)));
 
-                                         // Skip those instructions
-                                         finger = pc;
-                                         skip = true;
-                                     },
-                                     []() {
-                                         // If the closure does not compile, we
-                                         // can still call the unoptimized
-                                         // version (which is what happens on
-                                         // `tryRunCurrentBC` below)
-                                     });
+                    // Skip those instructions
+                    finger = pc;
+                    skip = true;
+                },
+                []() {
+                    // If the closure does not compile, we
+                    // can still call the unoptimized
+                    // version (which is what happens on
+                    // `tryRunCurrentBC` below)
+                });
         });
 
         if (!skip) {

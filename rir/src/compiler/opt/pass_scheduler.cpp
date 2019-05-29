@@ -93,5 +93,5 @@ PassScheduler::PassScheduler() {
     }
     add<PhaseMarker>("Phase 4: finished");
 }
-} // namespace pir
-} // namespace rir
+}
+}

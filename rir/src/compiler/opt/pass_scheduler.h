@@ -35,7 +35,7 @@ class PassScheduler {
         add(std::unique_ptr<const PirTranslator>(new PASS(name)));
     }
 };
-} // namespace pir
-} // namespace rir
+}
+}
 
 #endif

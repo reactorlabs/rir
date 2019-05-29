@@ -31,30 +31,31 @@ bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
 }
 
 bool overwritesBinding(LoopDetection::Loop& loop, SEXP binding) {
-    return loop.check([binding](Instruction* i) {
-        SEXP varName = nullptr;
-        if (auto store = StVar::Cast(i))
-            varName = store->varName;
-        else if (auto store = StVarSuper::Cast(i))
-            varName = store->varName;
+    return loop.check(
+        [binding](Instruction* i) {
+            SEXP varName = nullptr;
+            if (auto store = StVar::Cast(i))
+                varName = store->varName;
+            else if (auto store = StVarSuper::Cast(i))
+                varName = store->varName;
 
-        if (varName && varName == binding)
-            return true;
+            if (varName && varName == binding)
+                return true;
 
-        // An environment overwrites the binding
-        if (auto env = MkEnv::Cast(i)) {
-            bool ows = false;
-            env->eachLocalVar([&](SEXP name, Value* v) {
-                if (name == binding) {
-                    ows = true;
-                    return;
-                }
-            });
-            return ows;
-        }
+            // An environment overwrites the binding
+            if (auto env = MkEnv::Cast(i)) {
+                bool ows = false;
+                env->eachLocalVar([&](SEXP name, Value* v) {
+                    if (name == binding) {
+                        ows = true;
+                        return;
+                    }
+                });
+                return ows;
+            }
 
-        return false;
-    });
+            return false;
+        });
 }
 
 void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
