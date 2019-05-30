@@ -9,6 +9,7 @@
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
 #include "compiler/parameter.h"
+#include "event_counters.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -248,7 +249,29 @@ class Pir2Rir {
     };
 };
 
+#ifdef ENABLE_EVENT_COUNTERS
+static unsigned MkEnvEmited =
+    EventCounters::instance().registerCounter("mkenv emited");
+static unsigned MkEnvStubEmited =
+    EventCounters::instance().registerCounter("mkenvstub emited");
+static unsigned ClosuresCompiled =
+    EventCounters::instance().registerCounter("closures compiled");
+#endif
+
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS) {
+        VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
+            if (auto mkenv = MkEnv::Cast(i)) {
+                if (mkenv->stub)
+                    EventCounters::instance().count(MkEnvStubEmited);
+                else
+                    EventCounters::instance().count(MkEnvEmited);
+            }
+        });
+    }
+#endif
+
     lower(code);
     toCSSA(code);
 #ifdef FULLVERIFIER
@@ -552,7 +575,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto ldvar = LdVar::Cast(instr);
                 auto key =
                     CachePosition::NameAndEnv(ldvar->varName, ldvar->env());
-                if (needsLdVarForUpdate.count(instr)) {
+                auto mkenv = MkEnv::Cast(ldvar->env());
+                if (mkenv && mkenv->stub) {
+                    cb.add(BC::ldvarNoForceStubbed(
+                        mkenv->indexOf(ldvar->varName)));
+                } else if (needsLdVarForUpdate.count(instr)) {
                     if (cache.isCached(key)) {
                         cb.add(BC::ldvarForUpdateCached(ldvar->varName,
                                                         cache.indexOf(key)));
@@ -610,7 +637,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::starg(stvar->varName));
                     }
                 } else {
-                    if (cache.isCached(key)) {
+                    auto mkenv = MkEnv::Cast(stvar->env());
+                    if (mkenv && mkenv->stub) {
+                        cb.add(
+                            BC::stvarStubbed(mkenv->indexOf(stvar->varName)));
+                    } else if (cache.isCached(key)) {
                         cb.add(BC::stvarCached(stvar->varName,
                                                cache.indexOf(key)));
                     } else {
@@ -733,8 +764,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Pow, pow);
                 SIMPLE_WITH_SRCIDX(Lt, lt);
                 SIMPLE_WITH_SRCIDX(Gt, gt);
-                SIMPLE_WITH_SRCIDX(Lte, ge);
-                SIMPLE_WITH_SRCIDX(Gte, le);
+                SIMPLE_WITH_SRCIDX(Lte, le);
+                SIMPLE_WITH_SRCIDX(Gte, ge);
                 SIMPLE_WITH_SRCIDX(Eq, eq);
                 SIMPLE_WITH_SRCIDX(Neq, ne);
                 SIMPLE_WITH_SRCIDX(Colon, colon);
@@ -978,6 +1009,22 @@ void Pir2Rir::lower(Code* code) {
                 // were not sure it is correct.
                 if (ldfun->guessedBinding())
                     ldfun->clearGuessedBinding();
+            } else if (auto ld = LdVar::Cast(*it)) {
+                while (true) {
+                    auto mk = MkEnv::Cast(ld->env());
+                    if (mk && mk->stub && !mk->contains(ld->varName))
+                        ld->env(mk->lexicalEnv());
+                    else
+                        break;
+                }
+            } else if (auto st = StVar::Cast(*it)) {
+                while (true) {
+                    auto mk = MkEnv::Cast(st->env());
+                    if (mk && mk->stub && !mk->contains(st->varName))
+                        st->env(mk->lexicalEnv());
+                    else
+                        break;
+                }
             } else if (auto deopt = Deopt::Cast(*it)) {
                 // Lower Deopt instructions + their FrameStates to a
                 // ScheduledDeopt.
@@ -1114,6 +1161,10 @@ rir::Function* Pir2Rir::finalize() {
                                        globalContext());
 #endif
     log.finalRIR(function.function());
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS)
+        EventCounters::instance().count(ClosuresCompiled, cls->inlinees + 1);
+#endif
     return function.function();
 }
 

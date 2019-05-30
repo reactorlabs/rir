@@ -62,7 +62,7 @@ struct CallContext {
     const R_bcstack_t* stackArgs;
     const Immediate* implicitArgs;
     const Immediate* names;
-    const SEXP callerEnv;
+    SEXP callerEnv;
     const SEXP ast;
     const SEXP callee;
     Assumptions givenAssumptions;

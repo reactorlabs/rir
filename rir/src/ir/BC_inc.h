@@ -348,6 +348,7 @@ BC_NOARGS(V, _)
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
+    inline static BC ldvarNoForceStubbed(unsigned pos);
     inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdate(SEXP sym);
@@ -362,6 +363,7 @@ BC_NOARGS(V, _)
     inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC promise(FunIdx prom);
     inline static BC starg(SEXP sym);
+    inline static BC stvarStubbed(unsigned stubbed);
     inline static BC stvar(SEXP sym);
     inline static BC stargCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarCached(SEXP sym, uint32_t cacheSlot);
@@ -679,6 +681,8 @@ BC_NOARGS(V, _)
         case Opcode::is_:
         case Opcode::put_:
         case Opcode::alloc_:
+        case Opcode::ldvar_noforce_stubbed_:
+        case Opcode::stvar_stubbed_:
             memcpy(&immediate.i, pc, sizeof(uint32_t));
             break;
         case Opcode::ldarg_:

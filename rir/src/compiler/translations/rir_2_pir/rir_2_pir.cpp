@@ -688,8 +688,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         BINOP(Lt, lt_);
         BINOP(Gt, gt_);
-        BINOP(Gte, le_);
-        BINOP(Lte, ge_);
+        BINOP(Gte, ge_);
+        BINOP(Lte, le_);
         BINOP(Mod, mod_);
         BINOP(Div, div_);
         BINOP(IDiv, idiv_);
@@ -826,6 +826,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::static_call_:
     case Opcode::pop_context_:
     case Opcode::push_context_:
+    case Opcode::ldvar_noforce_stubbed_:
+    case Opcode::stvar_stubbed_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
