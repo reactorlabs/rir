@@ -190,7 +190,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::ldvar_noforce_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
-        case Opcode::starg_cached_:
             i.poolAndCache.poolIndex = Pool::insert(ReadItem(refTable, inp));
             i.poolAndCache.cacheIndex = InInteger(inp);
             break;
@@ -277,6 +276,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::alloc_:
         case Opcode::ldarg_:
         case Opcode::starg_:
+        case Opcode::starg_cached_:
         case Opcode::ldloc_:
         case Opcode::stloc_:
         case Opcode::movloc_:
@@ -332,7 +332,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::ldvar_noforce_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
-        case Opcode::starg_cached_:
             WriteItem(Pool::get(i.poolAndCache.poolIndex), refTable, out);
             OutInteger(out, i.poolAndCache.cacheIndex);
             break;
@@ -405,6 +404,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::alloc_:
         case Opcode::ldarg_:
         case Opcode::starg_:
+        case Opcode::starg_cached_:
         case Opcode::ldloc_:
         case Opcode::stloc_:
         case Opcode::movloc_:
