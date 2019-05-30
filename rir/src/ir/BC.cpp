@@ -181,10 +181,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldvar_noforce_super_:
-        case Opcode::ldvar_noforce_stubbed_:
         case Opcode::stvar_:
         case Opcode::stvar_super_:
-        case Opcode::stvar_stubbed_:
         case Opcode::missing_:
             i.pool = Pool::insert(ReadItem(refTable, inp));
             break;
@@ -282,6 +280,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::ldloc_:
         case Opcode::stloc_:
         case Opcode::movloc_:
+        case Opcode::ldvar_noforce_stubbed_:
+        case Opcode::stvar_stubbed_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             InBytes(inp, code + 1, size - 1);
@@ -323,10 +323,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldvar_noforce_super_:
-        case Opcode::ldvar_noforce_stubbed_:
         case Opcode::stvar_:
         case Opcode::stvar_super_:
-        case Opcode::stvar_stubbed_:
         case Opcode::missing_:
             WriteItem(Pool::get(i.pool), refTable, out);
             break;
@@ -410,6 +408,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::ldloc_:
         case Opcode::stloc_:
         case Opcode::movloc_:
+        case Opcode::ldvar_noforce_stubbed_:
+        case Opcode::stvar_stubbed_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             if (size != 0)
