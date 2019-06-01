@@ -19,9 +19,9 @@ void MeasureTable::reset() {
 }
 
 void MeasureTable::flush() const {
-    if (!fileName.empty()) {
-        bool header = access(fileName.c_str(), F_OK) == -1;
-        std::ofstream out(fileName.c_str(), std::ios_base::app);
+    if (!filePath.empty()) {
+        bool header = access(filePath.c_str(), F_OK) == -1;
+        std::ofstream out(filePath.c_str(), std::ios_base::app);
         writeCsv(header, out);
     }
 }
@@ -39,6 +39,8 @@ void MeasureTable::writeCsv(bool header, std::ostream& out) const {
     (void)i;
 
     if (header) {
+        size_t lastSlash = filePath.find_last_of("/\\");
+        std::string fileName = filePath.substr(lastSlash + 1);
         out << std::left << std::setw(pads[0]) << fileName;
 #define DEF_INSTR(name, ...) out << ", " << #name;
 #include "../ir/insns.h"

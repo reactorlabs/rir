@@ -33,11 +33,11 @@ struct MeasureTable {
     // Indexed by closure code start, assumed not to be reused. If this is
     // wrong, replace by UUID for each closure
     const std::string title;
-    const std::string fileName;
+    const std::string filePath;
 
     // cppcheck-suppress passedByValue
-    explicit MeasureTable(std::string title, std::string fileName)
-        : title(title), fileName(fileName), sumRow(MeasureRow()) {}
+    explicit MeasureTable(std::string title, std::string filePath)
+        : title(title), filePath(filePath), sumRow(MeasureRow()) {}
 
     void record(Opcode op, Code* code);
     void reset();
