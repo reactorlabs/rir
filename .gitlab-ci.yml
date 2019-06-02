@@ -166,5 +166,3 @@ cleanup_registry:
   before_script: []
   script:
     - echo "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
-  only:
-    - master
