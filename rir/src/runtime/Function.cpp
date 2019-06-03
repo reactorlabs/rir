@@ -5,6 +5,9 @@ namespace rir {
 
 Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     size_t functionSize = InInteger(inp);
+    SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
+    void* payload = DATAPTR(store);
+    AddReadRef(refTable, store);
     SEXP body = Code::deserialize(refTable, inp)->container();
     PROTECT(body);
     std::vector<SEXP> defaultArgs;
@@ -20,8 +23,6 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
             defaultArgs.push_back(nullptr);
     }
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
-    SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
-    void* payload = DATAPTR(store);
     Function* fun =
         new (payload) Function(functionSize, body, defaultArgs, sig);
     UNPROTECT(protectCount);
@@ -30,6 +31,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
 
 void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, size);
+    HashAdd(container(), refTable);
     body()->serialize(refTable, out);
     OutInteger(out, numArgs);
     for (unsigned i = 0; i < numArgs; i++) {

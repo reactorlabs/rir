@@ -7,6 +7,12 @@ stopifnot(fc(1) == 88)
 
 f <- function(n)  if (n < 2) 1 else fc(n-1) + fc(n-2)
 fc <- rir.compile(f)
+x <- 3
+fc(x)
+fc(x)
+fc(x)
+fc(x)
+rir.disassemble(fc)
 stopifnot(fc(n=4) == 5)
 
 f <- rir.compile(function(a, b, c, x, d=44) c(d, c, b, a))
