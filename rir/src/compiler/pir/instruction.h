@@ -1271,7 +1271,7 @@ BINOP(Mul, lhs()->type | rhs()->type, PirType::num());
 BINOP(Div, PirType::val().notObject(), PirType::num());
 BINOP(IDiv, lhs()->type | rhs()->type, PirType::num());
 BINOP(Mod, lhs()->type | rhs()->type, PirType::num());
-BINOP(Add, lhs()->type | rhs()->type, PirType::num());
+BINOP(Add, PirType::val().notObject(), PirType::num());
 BINOP(Pow, lhs()->type | rhs()->type, PirType::num());
 BINOP(Sub, lhs()->type | rhs()->type, PirType::num());
 BINOP(Gte, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());

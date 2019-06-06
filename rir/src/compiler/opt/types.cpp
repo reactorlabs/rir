@@ -65,6 +65,10 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     if (i->tag == Tag::Div && inferred.isA(RType::integer)) {
                         inferred = inferred | RType::real;
                     }
+                    if (i->tag == Tag::Add && inferred.isA(RType::logical)) {
+                        // TRUE + TRUE = 2
+                        inferred = inferred | RType::integer;
+                    }
                     break;
                 }
                 case Tag::CallSafeBuiltin: {
