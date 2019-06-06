@@ -43,12 +43,13 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                 if (!type.isVoid() && !i->type.isA(type)) {
                     if (auto cp = checkpoint.next(i)) {
                         if (!type.maybeObj()) {
-                            if (type.isA(RType::integer) ||
-                                type.isA(RType::real)) {
-                                speculate[cp][i] = type;
-                            } else {
-                                speculate[cp][i] = i->type.notObject();
-                            }
+                            PirType specType = (type.isA(RType::integer) ||
+                                                type.isA(RType::real))
+                                                   ? type
+                                                   : i->type.notObject();
+                            speculate[cp][i] = specType;
+                            // Prevent redundant speculation
+                            i->typeFeedback = i->type;
                         }
                     }
                 }

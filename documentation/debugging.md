@@ -47,6 +47,10 @@ completely disables the PIR optimizer. As follows are the different Options avai
         GraphVizBB print pir in GraphViz, displaying only BB names and connections
     PIR_MEASURE_COMPILER=
         1          print overal time spend in different passes on shutdown
+    RIR_CHECK_PIR_TYPES=
+        0        Disable
+        1        Assert that each PIR instruction conforms to its return type during runtime
+        2        Also print out failing instructions (leaks memory and might cause slowdown)
 
 #### Extended debug flags
 

@@ -964,6 +964,29 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                       needsEnsureNamed.count(instr)))
                 cb.add(BC::ensureNamed());
 
+            // Check the return type
+            if (pir::Parameter::RIR_CHECK_PIR_TYPES > 0 &&
+                instr->type != PirType::voyd() &&
+                instr->type != NativeType::context && !CastType::Cast(instr) &&
+                Visitor::check(code->entry, [&](Instruction* i) {
+                    if (auto cast = CastType::Cast(i)) {
+                        if (cast->arg<0>().val() == instr)
+                            return false;
+                    }
+                    return true;
+                })) {
+                int instrStr;
+                if (pir::Parameter::RIR_CHECK_PIR_TYPES > 1) {
+                    std::stringstream instrPrint;
+                    instr->print(instrPrint, false);
+                    instrStr =
+                        Pool::insert(Rf_mkString(instrPrint.str().c_str()));
+                } else {
+                    instrStr = -1;
+                }
+                cb.add(BC::assertType(instr->type, instrStr));
+            }
+
             // Store the result
             if (alloc.sa.dead(instr)) {
                 cb.add(BC::pop());

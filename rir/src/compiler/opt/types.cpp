@@ -65,6 +65,10 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     if (i->tag == Tag::Div && inferred.isA(RType::integer)) {
                         inferred = inferred | RType::real;
                     }
+                    if (i->tag == Tag::Add && inferred.isA(RType::logical)) {
+                        // TRUE + TRUE = 2
+                        inferred = inferred | RType::integer;
+                    }
                     break;
                 }
                 case Tag::CallSafeBuiltin: {
@@ -87,6 +91,15 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         break;
                     }
 
+                    static const std::unordered_set<std::string> vecTests = {
+                        "is.na", "is.nan", "is.finite", "is.infinite"};
+                    if (vecTests.count(name)) {
+                        inferred = PirType(RType::logical);
+                        if (getType(c->arg(0).val()).isScalar())
+                            inferred.setScalar();
+                        break;
+                    }
+
                     static const std::unordered_set<std::string> tests = {
                         "is.vector",   "is.null",      "is.integer",
                         "is.double",   "is.complex",   "is.character",
@@ -95,9 +108,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "is.raw",      "is.object",    "isS4",
                         "is.numeric",  "is.matrix",    "is.array",
                         "is.atomic",   "is.recursive", "is.call",
-                        "is.language", "is.function",  "is.single",
-                        "is.na",       "is.nan",       "is.finite",
-                        "is.infinite"};
+                        "is.language", "is.function",  "is.single"};
                     if (tests.count(name)) {
                         inferred = PirType(RType::logical).scalar();
                         break;

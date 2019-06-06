@@ -63,7 +63,7 @@ pir.tests <- function() {
 
 # returns TRUE f, when PIR compiled, satisfies the the given checks (e.g.
 # environment was elided). Max assumptions compiled (+ minimal) are used, if
-# warmup=list(...) will call the function with ... to get better assumptions.
+# warmup=<FUN> will call <FUN> repeatedly to get better assumptions.
 pir.check <- function(f, ..., warmup=NULL) {
     checks <- 
         as.pairlist(lapply(lapply(as.list(substitute(...())), as.character), as.name))
