@@ -54,18 +54,28 @@ struct FunctionSignature {
     };
 
     void pushDefaultArgument() {
-        arguments.emplace_back();
-        assert(formalNargs() > 0);
+        if (numArguments < MAX_TRACKED_ARGS)
+            arguments[numArguments] = ArgumentType();
+        numArguments++;
     }
 
-    void pushArgument(ArgumentType arg) { arguments.emplace_back(arg); }
+    void pushArgument(ArgumentType arg) {
+        if (numArguments < MAX_TRACKED_ARGS)
+            arguments[numArguments] = arg;
+        numArguments++;
+    }
 
     void print(std::ostream& out = std::cout) const {
         if (formalNargs() > 0) {
             out << "argTypes: (";
-            for (auto i = arguments.begin(); i != arguments.end(); ++i) {
-                i->print(out);
-                if (i + 1 != arguments.end())
+            for (unsigned i = 0; i != numArguments; i++) {
+                if (i < MAX_TRACKED_ARGS) {
+                    ArgumentType arg = arguments[i];
+                    arg.print(out);
+                } else {
+                    out << "[not tracked]";
+                }
+                if (i + 1 != numArguments)
                     out << ", ";
             }
             out << ") ";
@@ -87,14 +97,16 @@ struct FunctionSignature {
         : envCreation(envCreation), optimization(optimization),
           assumptions(assumptions) {}
 
-    size_t formalNargs() const { return arguments.size(); }
+    size_t formalNargs() const { return numArguments; }
     size_t expectedNargs() const {
-        return arguments.size() - assumptions.numMissing();
+        return numArguments - assumptions.numMissing();
     }
 
+    static const unsigned MAX_TRACKED_ARGS = 4;
     const Environment envCreation;
     const OptimizationLevel optimization;
-    std::vector<ArgumentType> arguments;
+    ArgumentType arguments[MAX_TRACKED_ARGS];
+    unsigned numArguments = 0;
     const Assumptions assumptions;
 };
 
