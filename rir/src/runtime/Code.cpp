@@ -104,7 +104,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     memcpy(DATAPTR(store), code, size);
     Code* old = code;
     code = (Code*)DATAPTR(store);
-    free(old);
+    delete old;
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
                   // GC area has only 1 pointer
