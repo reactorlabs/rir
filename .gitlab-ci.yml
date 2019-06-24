@@ -71,6 +71,7 @@ test_types:
   stage: Run tests
   script:
     - cd /opt/rir/build/release
+    - RIR_CHECK_PIR_TYPES=1 bin/tests
     - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-all
     - ../../tools/check-gnur-make-tests-error
 

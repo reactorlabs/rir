@@ -196,19 +196,6 @@ class Instruction : public Value {
         }
     }
 
-    // Removes e if all arguments are argt
-    void maskEffect(PirType argt, Effect e) {
-        bool mask = true;
-        eachArg([&](Value* v) {
-            if (mayHaveEnv() && env() == v)
-                return;
-            if (!v->type.isA(argt))
-                mask = false;
-        });
-        if (mask)
-            effects.reset(e);
-    }
-
     void updateScalarOnScalarInputs() {
         if (type.maybeObj())
             return;
@@ -1242,46 +1229,131 @@ class FLIE(Colon, 3, Effects::Any()) {
 SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
-#define BINOP(Name, Type, SafeType)                                            \
-    class FLIE(Name, 3, Effects::Any()) {                                      \
+template <typename BASE, Tag TAG>
+class Binop
+    : public FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::Any(),
+                                            HasEnvSlot::Yes> {
+  public:
+    typedef FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::Any(),
+                                           HasEnvSlot::Yes>
+        Super;
+    Binop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : Super(PirType::valOrLazy(), {{PirType::val(), PirType::val()}},
+                {{lhs, rhs}}, env, srcIdx) {}
+
+    using Super::arg;
+    Value* lhs() const { return arg(0).val(); }
+    Value* rhs() const { return arg(1).val(); }
+
+    VisibilityFlag visibilityFlag() const override final {
+        if (!lhs()->type.maybeObj() && !rhs()->type.maybeObj())
+            return VisibilityFlag::On;
+        else
+            return VisibilityFlag::Unknown;
+    }
+};
+
+template <typename BASE, Tag TAG>
+class ArithmeticBinop : public Binop<BASE, TAG> {
+  public:
+    typedef Binop<BASE, TAG> Super;
+
+    ArithmeticBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : Super(lhs, rhs, env, srcIdx) {}
+
+    using Super::lhs;
+    using Super::rhs;
+    using Super::effects;
+    using Super::maskEffectsAndTypeOnNonObjects;
+    using Super::updateScalarOnScalarInputs;
+
+    void updateType() override {
+        auto merged = lhs()->type | rhs()->type;
+        if (merged.isA(RType::logical)) {
+            // e.g. TRUE + TRUE == 2
+            merged = merged | RType::integer;
+        }
+        if (merged.isA(PirType::num().notObject())) {
+            maskEffectsAndTypeOnNonObjects(merged.notMissing());
+            updateScalarOnScalarInputs();
+            effects.reset(Effect::Warn);
+            // Potential error on 0-sized vector
+            if (merged.isScalar())
+                effects.reset(Effect::Error);
+        }
+    }
+};
+
+#define ARITHMETIC_BINOP(Kind)                                                 \
+    class Kind : public ArithmeticBinop<Kind, Tag::Kind> {                     \
       public:                                                                  \
-        Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
-            : FixedLenInstructionWithEnvSlot(                                  \
-                  PirType::valOrLazy(), {{PirType::val(), PirType::val()}},    \
-                  {{lhs, rhs}}, env, srcIdx) {}                                \
-        VisibilityFlag visibilityFlag() const override {                       \
-            if (lhs()->type.isA(PirType::num().notObject()) &&                 \
-                rhs()->type.isA(PirType::num().notObject())) {                 \
-                return VisibilityFlag::On;                                     \
-            } else {                                                           \
-                return VisibilityFlag::Unknown;                                \
-            }                                                                  \
-        }                                                                      \
-        void updateType() override final {                                     \
-            maskEffectsAndTypeOnNonObjects(Type.notMissing());                 \
-            maskEffect(SafeType.notObject(), Effect::Warn);                    \
-            maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
-            updateScalarOnScalarInputs();                                      \
-        }                                                                      \
-        Value* lhs() const { return arg<0>().val(); }                          \
-        Value* rhs() const { return arg<1>().val(); }                          \
+        Kind(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
+            : ArithmeticBinop<Kind, Tag::Kind>(lhs, rhs, env, srcIdx) {}       \
     }
 
-BINOP(Mul, lhs()->type | rhs()->type, PirType::num());
-BINOP(Div, PirType::val().notObject(), PirType::num());
-BINOP(IDiv, lhs()->type | rhs()->type, PirType::num());
-BINOP(Mod, lhs()->type | rhs()->type, PirType::num());
-BINOP(Add, PirType::val().notObject(), PirType::num());
-BINOP(Pow, lhs()->type | rhs()->type, PirType::num());
-BINOP(Sub, lhs()->type | rhs()->type, PirType::num());
-BINOP(Gte, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
-BINOP(Lte, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
-BINOP(Gt, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
-BINOP(Lt, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
-BINOP(Neq, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
-BINOP(Eq, PirType(RType::logical).notObject(), PirType::atomOrSimpleVec());
+ARITHMETIC_BINOP(Mul);
+ARITHMETIC_BINOP(IDiv);
+ARITHMETIC_BINOP(Add);
+ARITHMETIC_BINOP(Mod);
+ARITHMETIC_BINOP(Pow);
+ARITHMETIC_BINOP(Sub);
+
+class Div : public ArithmeticBinop<Div, Tag::Div> {
+  public:
+    Div(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : ArithmeticBinop<Div, Tag::Div>(lhs, rhs, env, srcIdx) {}
+    void updateType() override final {
+        ArithmeticBinop<Div, Tag::Div>::updateType();
+        if (type.isA((PirType(RType::integer) | RType::logical)))
+            type = type | RType::real;
+    }
+};
+
+template <typename BASE, Tag TAG>
+class LogicalBinop : public Binop<BASE, TAG> {
+  public:
+    typedef Binop<BASE, TAG> Super;
+
+    LogicalBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : Super(lhs, rhs, env, srcIdx) {}
+
+    using Super::lhs;
+    using Super::rhs;
+    using Super::effects;
+    using Super::maskEffectsAndTypeOnNonObjects;
+    using Super::updateScalarOnScalarInputs;
+
+    void updateType() override {
+        maskEffectsAndTypeOnNonObjects(PirType(RType::logical).notMissing());
+
+        auto merged = lhs()->type | rhs()->type;
+        if (merged.isA(PirType::atomOrSimpleVec().notObject())) {
+            updateScalarOnScalarInputs();
+            effects.reset(Effect::Warn);
+            // Potential error on 0-sized vector
+            if (merged.isScalar())
+                effects.reset(Effect::Error);
+        }
+    }
+};
+
+#define LOGICAL_BINOP(Kind)                                                    \
+    class Kind : public LogicalBinop<Kind, Tag::Kind> {                        \
+      public:                                                                  \
+        Kind(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
+            : LogicalBinop<Kind, Tag::Kind>(lhs, rhs, env, srcIdx) {}          \
+    }
+
+LOGICAL_BINOP(Gte);
+LOGICAL_BINOP(Gt);
+LOGICAL_BINOP(Lte);
+LOGICAL_BINOP(Lt);
+LOGICAL_BINOP(Eq);
+LOGICAL_BINOP(Neq);
 
 #undef BINOP
+#undef ARITHMETIC_BINOP
+#undef LOGICAL_BINOP
 
 #define BINOP_NOENV(Name, Type)                                                \
     class FLI(Name, 2, Effects::None()) {                                      \
@@ -1311,9 +1383,13 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
             }                                                                  \
         }                                                                      \
         void updateType() override final {                                     \
-            maskEffectsAndTypeOnNonObjects(arg<0>().val()->type.notMissing()); \
-            maskEffect(SafeType.notObject(), Effect::Warn);                    \
-            maskEffect(SafeType.notObject().scalar(), Effect::Error);          \
+            auto t = arg<0>().val()->type;                                     \
+            maskEffectsAndTypeOnNonObjects(t.notMissing());                    \
+            if (t.isA(PirType(RType::logical).notObject())) {                  \
+                effects.reset(Effect::Warn);                                   \
+                if (t.isScalar())                                              \
+                    effects.reset(Effect::Error);                              \
+            }                                                                  \
             updateScalarOnScalarInputs();                                      \
         }                                                                      \
     }

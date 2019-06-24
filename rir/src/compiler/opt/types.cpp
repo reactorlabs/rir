@@ -59,16 +59,21 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                 case Tag::Sub:
                 case Tag::Not:
                 case Tag::Plus:
-                case Tag::Minus:
-                case Tag::Phi: {
+                case Tag::Minus: {
                     inferred = mergedArgumentType();
-                    if (i->tag == Tag::Div && inferred.isA(RType::integer)) {
+                    if (i->tag == Tag::Div &&
+                        inferred.isA(PirType(RType::integer) |
+                                     RType::logical)) {
                         inferred = inferred | RType::real;
                     }
-                    if (i->tag == Tag::Add && inferred.isA(RType::logical)) {
-                        // TRUE + TRUE = 2
+                    if (inferred.isA(RType::logical)) {
+                        // e.g. TRUE + TRUE = 2
                         inferred = inferred | RType::integer;
                     }
+                    break;
+                }
+                case Tag::Phi: {
+                    inferred = mergedArgumentType();
                     break;
                 }
                 case Tag::CallSafeBuiltin: {

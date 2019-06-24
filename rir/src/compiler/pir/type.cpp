@@ -39,7 +39,6 @@ void PirType::merge(SEXPTYPE sexptype) {
         flags_.set(TypeFlags::lazy);
         flags_.set(TypeFlags::promiseWrapped);
         t_.r = RTypeSet::Any();
-        t_.r.reset(RType::missing);
         break;
     case EXPRSXP:
         t_.r.set(RType::ast);

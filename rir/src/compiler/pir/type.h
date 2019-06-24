@@ -335,6 +335,7 @@ struct PirType {
         if (!maybePromiseWrapped())
             return *this;
         return PirType(
+            // forcing can return the missing marker value
             t_.r | RType::missing,
             flags_ & ~(FlagSet(TypeFlags::lazy) | TypeFlags::promiseWrapped));
     }
