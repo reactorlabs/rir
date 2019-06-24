@@ -255,7 +255,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             SEXP store = Rf_allocVector(RAWSXP, size);
             memcpy(DATAPTR(store), meta, size);
             i.pool = Pool::insert(store);
-            free(meta);
+            delete meta;
             break;
         }
         case Opcode::record_call_:

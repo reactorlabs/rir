@@ -55,12 +55,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     static void rehashDeserializedUids();
     static Code* withUid(UUID uid);
 
-    Code() = delete;
     Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,
          size_t localsCnt, size_t bindingsCacheSize);
     ~Code();
 
   private:
+    Code() : Code(NULL, 0, 0, 0, 0, 0) {}
     /*
      * This array contains the GC reachable pointers. Currently there are two
      * of them.

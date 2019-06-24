@@ -24,7 +24,7 @@ DeoptMetadata* DeoptMetadata::deserialize(const Opcode* anchor, SEXP refTable,
                                           R_inpstream_t inp) {
     unsigned numFrames = InInteger(inp);
     size_t size = sizeof(DeoptMetadata) + numFrames * sizeof(FrameInfo);
-    DeoptMetadata* res = (DeoptMetadata*)malloc(size);
+    DeoptMetadata* res = (DeoptMetadata*)::operator new(size);
     res->numFrames = numFrames;
     for (unsigned i = 0; i < numFrames; i++)
         res->frames[i] = FrameInfo::deserialize(anchor, refTable, inp);
