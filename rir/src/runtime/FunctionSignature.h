@@ -102,6 +102,9 @@ struct FunctionSignature {
         return numArguments - assumptions.numMissing();
     }
 
+    // Tracks up to a fixed # of arg types, because tracking the types doesn't
+    // affect correctness (like assumptions), and otherwise the types would
+    // need to be exposed to the GC.
     static const unsigned MAX_TRACKED_ARGS = 4;
     const Environment envCreation;
     const OptimizationLevel optimization;
