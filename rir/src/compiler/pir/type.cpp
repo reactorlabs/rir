@@ -1,10 +1,15 @@
 #include "type.h"
+#include "../../interpreter/LazyEnvironment.h"
+#include "../parameter.h"
 #include "R/r.h"
 
 extern "C" Rboolean(Rf_isObject)(SEXP s);
 
 namespace rir {
 namespace pir {
+
+unsigned Parameter::RIR_CHECK_PIR_TYPES =
+    getenv("RIR_CHECK_PIR_TYPES") ? atoi(getenv("RIR_CHECK_PIR_TYPES")) : 0;
 
 void PirType::print(std::ostream& out) const { out << *this << "\n"; }
 
@@ -37,7 +42,6 @@ void PirType::merge(SEXPTYPE sexptype) {
         break;
     case EXPRSXP:
         t_.r.set(RType::ast);
-        t_.r.set(RType::code);
         break;
     case LANGSXP:
         t_.r.set(RType::code);
@@ -64,6 +68,7 @@ void PirType::merge(SEXPTYPE sexptype) {
         t_.r.set(RType::raw);
         break;
     case BCODESXP:
+    case EXTERNALSXP:
         t_.r.set(RType::code);
         break;
     case CPLXSXP:
@@ -74,7 +79,12 @@ void PirType::merge(SEXPTYPE sexptype) {
     case EXTPTRSXP:
     case WEAKREFSXP:
     case S4SXP:
-        t_.r = val().t_.r;
+        t_.r.set(RType::other);
+        break;
+    default:
+        std::cerr << "unknown type: " << sexptype << "\n";
+        assert(false);
+        break;
     }
 }
 
@@ -94,6 +104,11 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         if (Rf_length(e) == 1)
             flags_.reset(TypeFlags::maybeNotScalar);
     }
+}
+
+PirType::PirType(const void* pos) : PirType() {
+    memcpy(this, pos, sizeof(*this));
+    assert((isRType() || !t_.n.empty()) && "corrupted pir type");
 }
 
 void PirType::merge(const ObservedValues& other) {
@@ -121,6 +136,25 @@ void PirType::merge(const ObservedValues& other) {
             flags_.set(TypeFlags::maybeNotScalar);
 
         merge(record.sexptype);
+    }
+}
+
+bool PirType::isInstance(SEXP val) const {
+    if (isRType()) {
+        if (TYPEOF(val) == PROMSXP) {
+            assert(!Rf_isObject(val));
+            return maybePromiseWrapped() || maybeLazy() ||
+                   PirType(RType::prom).isA(*this);
+        }
+        if (LazyEnvironment::check(val))
+            return PirType(RType::env).isA(*this);
+        return PirType(val).isA(*this);
+    } else if (*this == NativeType::test) {
+        return IS_SIMPLE_SCALAR(val, LGLSXP) && *LOGICAL(val) != NA_LOGICAL;
+    } else {
+        std::cerr << "can't check val is instance of " << *this << ", value:\n";
+        Rf_PrintValue(val);
+        assert(false);
     }
 }
 }

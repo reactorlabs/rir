@@ -142,6 +142,10 @@ BC_NOARGS(V, _)
         cs.insert(immediate.loc_cpy);
         return;
 
+    case Opcode::assert_type_:
+        cs.insert(immediate.assertTypeArgs);
+        return;
+
     case Opcode::invalid_:
     case Opcode::num_of:
         assert(false);
@@ -357,6 +361,9 @@ BC_NOARGS(V, _)
         break;
     case Opcode::clear_binding_cache_:
         out << immediate.cacheIdx.start << " " << immediate.cacheIdx.size;
+        break;
+    case Opcode::assert_type_:
+        out << immediate.assertTypeArgs.pirType();
         break;
     }
     out << "\n";

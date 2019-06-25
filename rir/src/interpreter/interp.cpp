@@ -593,7 +593,8 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                     notObj = false;
                     isEager = false;
                 }
-            } else if (arg == R_MissingArg) {
+            }
+            if (arg == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
                 isEager = false;
             }
@@ -3735,6 +3736,29 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(printInvocation_) {
             printf("Invocation count: %d\n", c->funInvocationCount);
+            NEXT();
+        }
+
+        INSTRUCTION(assert_type_) {
+            assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
+            SEXP val = ostack_top(ctx);
+            pir::PirType typ(pc);
+            pc += sizeof(pir::PirType);
+            int instrIdx = readSignedImmediate();
+            const char* instr = NULL;
+            if (instrIdx == -1) {
+                instr = "not generated, set RIR_CHECK_PIR_TYPES=2";
+            } else {
+                instr = CHAR(Rf_asChar(Pool::get((unsigned)instrIdx)));
+            }
+            advanceImmediate();
+            if (!typ.isInstance(val)) {
+                std::cerr << "type assert failed in:\n" << instr << "\n";
+                std::cerr << "type " << typ << " not accurate for value ("
+                          << pir::PirType(val) << "):\n";
+                Rf_PrintValue(val);
+                assert(false);
+            }
             NEXT();
         }
 
