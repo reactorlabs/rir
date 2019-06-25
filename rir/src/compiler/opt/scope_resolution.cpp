@@ -212,7 +212,7 @@ class TheScopeResolution {
             }
 
             for (auto& phi : thePhis)
-                phi.second->updateType();
+                phi.second->updateTypeAndEffects();
 
             return thePhis.at(pl.targetPhiPosition);
         };

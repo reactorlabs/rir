@@ -25,8 +25,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
             auto i = *ip;
             bool trigger = false;
-            if (Force::Cast(i)) {
-                if (!i->type.isA(i->typeFeedback)) {
+            if (!i->typeFeedback.isVoid() && !i->type.isA(i->typeFeedback)) {
+                switch (i->tag) {
+                case Tag::Force: {
                     auto arg = i->arg(0).val()->followCasts();
                     // Blacklist of where it is not worthwhile
                     if (!LdConst::Cast(arg) &&
@@ -36,21 +37,29 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                         !LdVar::Cast(arg) && !LdVarSuper::Cast(arg)) {
                         trigger = true;
                     }
+                    break;
+                }
+                case Tag::Add:
+                case Tag::Mul:
+                case Tag::Sub:
+                case Tag::Div:
+                    trigger = true;
+                    break;
+                default: {}
                 }
             }
             if (trigger) {
-                PirType type = i->typeFeedback;
-                if (!type.isVoid() && !i->type.isA(type)) {
+                PirType seen = i->typeFeedback;
+                if (!seen.isVoid() && !seen.maybeObj() && !i->type.isA(seen)) {
                     if (auto cp = checkpoint.next(i)) {
-                        if (!type.maybeObj()) {
-                            PirType specType = (type.isA(RType::integer) ||
-                                                type.isA(RType::real))
-                                                   ? type
-                                                   : i->type.notObject();
-                            speculate[cp][i] = specType;
-                            // Prevent redundant speculation
-                            i->typeFeedback = i->type;
-                        }
+                        auto assume =
+                            (seen.isA(RType::integer) || seen.isA(RType::real))
+                                ? seen
+                                : i->type.notObject();
+                        if (!i->type.isA(assume))
+                            speculate[cp][i] = assume;
+                        // Prevent redundant speculation
+                        i->typeFeedback = i->type;
                     }
                 }
             }

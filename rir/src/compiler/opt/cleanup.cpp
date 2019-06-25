@@ -131,7 +131,7 @@ class TheCleanup {
                 }
 
                 if (!removed) {
-                    i->updateType();
+                    i->updateTypeAndEffects();
                 }
                 ip = next;
             }

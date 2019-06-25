@@ -33,7 +33,7 @@ void InsertCast::apply(BB* bb) {
         Instruction* instr = *ip;
         Phi* p = nullptr;
         if ((p = Phi::Cast(instr))) {
-            p->updateType();
+            p->updateTypeAndEffects();
         }
         instr->eachArg([&](InstrArg& arg) {
             while (!arg.type().isSuper(arg.val()->type)) {

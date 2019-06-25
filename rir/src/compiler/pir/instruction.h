@@ -179,37 +179,6 @@ class Instruction : public Value {
         return leaksEnv() || effects.includes(Effect::LeakArg);
     }
 
-    void maskEffectsAndTypeOnNonObjects(PirType tmask,
-                                        Effects mask = Effects(Effect::Error) |
-                                                       Effect::Warn |
-                                                       Effect::Visibility) {
-        bool maybeObj = false;
-        eachArg([&](Value* v) {
-            if (mayHaveEnv() && env() == v)
-                return;
-            if (v->type.maybeObj())
-                maybeObj = true;
-        });
-        if (!maybeObj) {
-            effects = effects & mask;
-            type = type & tmask;
-        }
-    }
-
-    void updateScalarOnScalarInputs() {
-        if (type.maybeObj())
-            return;
-        bool scalar = true;
-        eachArg([&](Value* v) {
-            if (mayHaveEnv() && env() == v)
-                return;
-            if (!v->type.isScalar())
-                scalar = false;
-        });
-        if (scalar)
-            type.setScalar();
-    }
-
     bool readsEnv() const {
         return hasEnv() && effects.includes(Effect::ReadsEnv);
     }
@@ -273,8 +242,108 @@ class Instruction : public Value {
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();
 
-    virtual void updateType(){};
+    typedef std::function<PirType(Value*)> TypeOf;
 
+    virtual PirType inferType(
+        const TypeOf& at = [](Value* v) { return v->type; }) const {
+        return type;
+    }
+    virtual Effects inferEffects(
+        const TypeOf& at = [](Value* v) { return v->type; }) const {
+        return effects;
+    }
+
+    void updateTypeAndEffects() {
+        type = inferType();
+        effects = inferEffects();
+    }
+
+    PirType mergedInputType(
+        const TypeOf& typeof = [](Value* v) { return v->type; }) const {
+        PirType t = PirType::bottom();
+        eachArg([&](Value* arg) {
+            if (!mayHaveEnv() || env() != arg)
+                t = t | typeof(arg);
+        });
+        return t;
+    }
+
+    constexpr static Effects errorWarnVisible =
+        Effects(Effect::Error) | Effect::Warn | Effect::Visibility;
+
+  protected:
+    template <typename Result>
+    Result ifNonObjectArgs(const TypeOf& typeof, Result then,
+                           Result otherwise) const {
+        if (!mergedInputType(typeof).maybeObj())
+            return then;
+        return otherwise;
+    }
+
+    template <typename Result>
+    Result ifScalarArgs(const TypeOf& typeof, Result then,
+                        Result otherwise) const {
+        if (mergedInputType(typeof).isScalar())
+            return then;
+        return otherwise;
+    }
+
+    PirType inferedTypeForArtithmeticInstruction(const TypeOf& typeof) const {
+        auto t = mergedInputType(typeof);
+        if (!t.maybeObj()) {
+            // Everything but numbers throws an error
+            t = t & PirType::num().notMissing();
+            // e.g. TRUE + TRUE == 2
+            if (t.maybe(RType::logical))
+                t = t | RType::integer;
+            return type & t;
+        }
+        return type;
+    }
+
+    PirType inferedTypeForLogicalInstruction(const TypeOf& typeof) const {
+        auto t = mergedInputType(typeof);
+        if (!t.maybeObj()) {
+            auto res = PirType(RType::logical).notMissing();
+            if (t.isScalar())
+                res.setScalar();
+            return type & res;
+        }
+        return type;
+    }
+
+    Effects
+    inferedEffectsForArtithmeticInstruction(const TypeOf& typeof) const {
+        auto e = effects;
+        auto t = mergedInputType(typeof);
+        if (!t.maybeObj())
+            e = e & errorWarnVisible;
+        if (t.isA(PirType::num().notObject())) {
+            // 0-sized input might error
+            if (t.isScalar()) {
+                e.reset(Effect::Error);
+                e.reset(Effect::Warn);
+            }
+        };
+        return e;
+    }
+
+    Effects inferedEffectsForLogicalInstruction(const TypeOf& typeof) const {
+        auto e = effects;
+        auto t = mergedInputType(typeof);
+        if (!t.maybeObj())
+            e = e & errorWarnVisible;
+        if (t.isA(PirType::atomOrSimpleVec().notObject())) {
+            // 0-sized input might error
+            if (t.isScalar()) {
+                e.reset(Effect::Error);
+                e.reset(Effect::Warn);
+            }
+        };
+        return e;
+    }
+
+  public:
     virtual void printEffects(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
     virtual void printGraphArgs(std::ostream& out, bool tty) const;
@@ -886,8 +955,13 @@ class FLI(Seq, 3, Effects::None()) {
               // TODO: require scalars, but this needs some cast support
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{start, end, step}}) {}
-    void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(PirType::num().notObject().notMissing());
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(
+            typeof, type& PirType::num().notObject().notMissing(), type);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
     }
 };
 
@@ -931,11 +1005,12 @@ class FLIE(Force, 2, Effects::Any()) {
                                          {{in}}, env) {}
     Value* input() const { return arg(0).val(); }
     const char* name() const override { return strict ? "Force!" : "Force"; }
-    void updateType() override final {
-        type = arg<0>().val()->type.forced();
-        if (!input()->type.maybeLazy()) {
-            effects.reset();
-        }
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return typeof(input()).forced();
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return typeof(input()).maybeLazy() ? effects : Effects::None();
     }
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
@@ -949,32 +1024,34 @@ class FLI(CastType, 1, Effects::None()) {
 
 class FLI(AsLogical, 1, Effect::Error) {
   public:
-    Value* val() { return arg<0>().val(); }
+    Value* val() const { return arg<0>().val(); }
 
     AsLogical(Value* in, unsigned srcIdx)
         : FixedLenInstruction(PirType::simpleScalarLogical(),
                               {{PirType::val()}}, {{in}}, srcIdx) {}
 
-    void updateType() override final {
-        if (val()->type.isA((PirType() | RType::logical | RType::integer |
-                             RType::real | RType::str | RType::cplx)
-                                .notObject())) {
-            effects.reset(Effect::Error);
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        if (typeof(val()).isA((PirType() | RType::logical | RType::integer |
+                               RType::real | RType::str | RType::cplx)
+                                  .notObject())) {
+            return effects & ~Effects(Effect::Error);
         }
+        return effects;
     }
 };
 
 class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
   public:
-    Value* val() { return arg<0>().val(); }
+    Value* val() const { return arg<0>().val(); }
 
     explicit AsTest(Value* in)
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}) {}
 
-    void updateType() override final {
-        if (val()->type.isScalar())
-            effects.reset(Effect::Warn);
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        if (typeof(val()).isScalar())
+            return effects & ~Effects(Effect::Warn);
         // Error on NA, hard to exclude
+        return effects;
     }
 };
 
@@ -1000,11 +1077,15 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
-    Value* rhs() { return arg(0).val(); }
-    Value* lhs() { return arg(1).val(); }
-    Value* idx() { return arg(2).val(); }
-    void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
+    Value* rhs() const { return arg(0).val(); }
+    Value* lhs() const { return arg(1).val(); }
+    Value* idx() const { return arg(2).val(); }
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, type& typeof(rhs()), type);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
     }
 };
 
@@ -1016,11 +1097,15 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
-    Value* rhs() { return arg(0).val(); }
-    Value* lhs() { return arg(1).val(); }
-    Value* idx() { return arg(2).val(); }
-    void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
+    Value* rhs() const { return arg(0).val(); }
+    Value* lhs() const { return arg(1).val(); }
+    Value* idx() const { return arg(2).val(); }
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, type& typeof(rhs()), type);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
     }
 };
 
@@ -1033,12 +1118,16 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
                                          srcIdx) {}
-    Value* rhs() { return arg(0).val(); }
-    Value* lhs() { return arg(1).val(); }
-    Value* idx1() { return arg(2).val(); }
-    Value* idx2() { return arg(3).val(); }
-    void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
+    Value* rhs() const { return arg(0).val(); }
+    Value* lhs() const { return arg(1).val(); }
+    Value* idx1() const { return arg(2).val(); }
+    Value* idx2() const { return arg(3).val(); }
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, type& typeof(rhs()), type);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
     }
 };
 
@@ -1051,12 +1140,16 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
                                          srcIdx) {}
-    Value* rhs() { return arg(0).val(); }
-    Value* lhs() { return arg(1).val(); }
-    Value* idx1() { return arg(2).val(); }
-    Value* idx2() { return arg(3).val(); }
-    void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(lhs()->type | rhs()->type);
+    Value* rhs() const { return arg(0).val(); }
+    Value* lhs() const { return arg(1).val(); }
+    Value* idx1() const { return arg(2).val(); }
+    Value* idx2() const { return arg(3).val(); }
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, type& typeof(rhs()), type);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
     }
 };
 
@@ -1066,10 +1159,15 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
-    Value* vec() { return arg(0).val(); }
-    Value* idx() { return arg(1).val(); }
-    void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(vec()->type.subsetType(idx()->type));
+    Value* vec() const { return arg(0).val(); }
+    Value* idx() const { return arg(1).val(); }
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(
+            typeof, type& typeof(vec()).subsetType(typeof(idx())), type);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
     }
 };
 
@@ -1079,10 +1177,15 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{vec, idx}}, env, srcIdx) {}
-    Value* vec() { return arg(0).val(); }
-    Value* idx() { return arg(1).val(); }
-    void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(vec()->type.extractType(idx()->type));
+    Value* vec() const { return arg(0).val(); }
+    Value* idx() const { return arg(1).val(); }
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(
+            typeof, type& typeof(vec()).extractType(typeof(idx())), type);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
     }
 };
 
@@ -1094,12 +1197,18 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
-    Value* vec() { return arg(0).val(); }
-    Value* idx1() { return arg(1).val(); }
-    Value* idx2() { return arg(2).val(); }
-    void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(
-            vec()->type.subsetType(idx1()->type | idx2()->type));
+    Value* vec() const { return arg(0).val(); }
+    Value* idx1() const { return arg(1).val(); }
+    Value* idx2() const { return arg(2).val(); }
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(
+            typeof,
+            type& typeof(vec()).subsetType(typeof(idx1()) | typeof(idx2())),
+            type);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
     }
 };
 
@@ -1111,12 +1220,18 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
-    Value* vec() { return arg(0).val(); }
-    Value* idx1() { return arg(1).val(); }
-    Value* idx2() { return arg(2).val(); }
-    void updateType() override final {
-        maskEffectsAndTypeOnNonObjects(
-            vec()->type.extractType(idx1()->type | idx2()->type));
+    Value* vec() const { return arg(0).val(); }
+    Value* idx1() const { return arg(1).val(); }
+    Value* idx2() const { return arg(2).val(); }
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(
+            typeof,
+            type& typeof(vec()).extractType(typeof(idx1()) | typeof(idx2())),
+            type);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override final {
+        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
     }
 };
 
@@ -1183,9 +1298,11 @@ class FLI(PirCopy, 1, Effects::None()) {
     explicit PirCopy(Value* v)
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void print(std::ostream& out, bool tty) const override;
-    void updateType() override final { type = arg<0>().val()->type; }
     int minReferenceCount() const override {
         return arg<0>().val()->minReferenceCount();
+    }
+    PirType inferType(const TypeOf& typeof) const override final {
+        return typeof(arg<0>().val());
     }
 };
 
@@ -1208,7 +1325,6 @@ class FLIE(Colon, 3, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
                                          {{PirType::val(), PirType::val()}},
                                          {{lhs, rhs}}, env, srcIdx) {}
-    void updateType() override final {}
     VisibilityFlag visibilityFlag() const override {
         if (lhs()->type.isA(PirType::simpleScalar()) &&
             rhs()->type.isA(PirType::simpleScalar())) {
@@ -1261,26 +1377,14 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
     ArithmeticBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
         : Super(lhs, rhs, env, srcIdx) {}
 
-    using Super::lhs;
-    using Super::rhs;
-    using Super::effects;
-    using Super::maskEffectsAndTypeOnNonObjects;
-    using Super::updateScalarOnScalarInputs;
-
-    void updateType() override {
-        auto merged = lhs()->type | rhs()->type;
-        if (merged.isA(RType::logical)) {
-            // e.g. TRUE + TRUE == 2
-            merged = merged | RType::integer;
-        }
-        if (merged.isA(PirType::num().notObject())) {
-            maskEffectsAndTypeOnNonObjects(merged.notMissing());
-            updateScalarOnScalarInputs();
-            effects.reset(Effect::Warn);
-            // Potential error on 0-sized vector
-            if (merged.isScalar())
-                effects.reset(Effect::Error);
-        }
+    using typename Super::TypeOf;
+    using Super::inferedTypeForArtithmeticInstruction;
+    using Super::inferedEffectsForArtithmeticInstruction;
+    PirType inferType(const TypeOf& typeof) const override {
+        return inferedTypeForArtithmeticInstruction(typeof);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override {
+        return inferedEffectsForArtithmeticInstruction(typeof);
     }
 };
 
@@ -1302,10 +1406,12 @@ class Div : public ArithmeticBinop<Div, Tag::Div> {
   public:
     Div(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
         : ArithmeticBinop<Div, Tag::Div>(lhs, rhs, env, srcIdx) {}
-    void updateType() override final {
-        ArithmeticBinop<Div, Tag::Div>::updateType();
-        if (type.isA((PirType(RType::integer) | RType::logical)))
-            type = type | RType::real;
+
+    PirType inferType(const TypeOf& typeof) const override final {
+        auto t = ArithmeticBinop<Div, Tag::Div>::inferType(typeof);
+        if (t.maybe(RType::integer) || t.maybe(RType::logical))
+            return t | RType::real;
+        return t;
     }
 };
 
@@ -1317,23 +1423,14 @@ class LogicalBinop : public Binop<BASE, TAG> {
     LogicalBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
         : Super(lhs, rhs, env, srcIdx) {}
 
-    using Super::lhs;
-    using Super::rhs;
-    using Super::effects;
-    using Super::maskEffectsAndTypeOnNonObjects;
-    using Super::updateScalarOnScalarInputs;
-
-    void updateType() override {
-        maskEffectsAndTypeOnNonObjects(PirType(RType::logical).notMissing());
-
-        auto merged = lhs()->type | rhs()->type;
-        if (merged.isA(PirType::atomOrSimpleVec().notObject())) {
-            updateScalarOnScalarInputs();
-            effects.reset(Effect::Warn);
-            // Potential error on 0-sized vector
-            if (merged.isScalar())
-                effects.reset(Effect::Error);
-        }
+    using typename Super::TypeOf;
+    using Super::inferedTypeForLogicalInstruction;
+    using Super::inferedEffectsForLogicalInstruction;
+    PirType inferType(const TypeOf& typeof) const override {
+        return inferedTypeForLogicalInstruction(typeof);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override {
+        return inferedEffectsForLogicalInstruction(typeof);
     }
 };
 
@@ -1368,37 +1465,88 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
 
 #undef BINOP_NOENV
 
-#define UNOP(Name, SafeType)                                                   \
-    class FLIE(Name, 2, Effects::Any()) {                                      \
+template <typename BASE, Tag TAG>
+class Unop : public FixedLenInstructionWithEnvSlot<TAG, BASE, 2, Effects::Any(),
+                                                   HasEnvSlot::Yes> {
+  public:
+    typedef FixedLenInstructionWithEnvSlot<TAG, BASE, 2, Effects::Any(),
+                                           HasEnvSlot::Yes>
+        Super;
+    Unop(Value* val, Value* env, unsigned srcIdx)
+        : Super(PirType::valOrLazy(), {{PirType::val()}}, {{val}}, env,
+                srcIdx) {}
+
+    using Super::arg;
+    using Super::effects;
+    using Super::mergedInputType;
+
+    Value* val() const { return arg(0).val(); }
+
+    VisibilityFlag visibilityFlag() const override final {
+        if (!mergedInputType().maybeObj())
+            return VisibilityFlag::On;
+        else
+            return VisibilityFlag::Unknown;
+    }
+};
+
+template <typename BASE, Tag TAG>
+class ArithmeticUnop : public Unop<BASE, TAG> {
+  public:
+    typedef Unop<BASE, TAG> Super;
+
+    ArithmeticUnop(Value* val, Value* env, unsigned srcIdx)
+        : Super(val, env, srcIdx) {}
+
+    using typename Super::TypeOf;
+    using Super::inferedTypeForArtithmeticInstruction;
+    using Super::inferedEffectsForArtithmeticInstruction;
+    PirType inferType(const TypeOf& typeof) const override {
+        return inferedTypeForArtithmeticInstruction(typeof);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override {
+        return inferedEffectsForArtithmeticInstruction(typeof);
+    }
+};
+
+template <typename BASE, Tag TAG>
+class LogicalUnop : public Unop<BASE, TAG> {
+  public:
+    typedef Unop<BASE, TAG> Super;
+
+    LogicalUnop(Value* val, Value* env, unsigned srcIdx)
+        : Super(val, env, srcIdx) {}
+
+    using typename Super::TypeOf;
+    using Super::inferedTypeForLogicalInstruction;
+    using Super::inferedEffectsForLogicalInstruction;
+    PirType inferType(const TypeOf& typeof) const override {
+        return inferedTypeForLogicalInstruction(typeof);
+    }
+    Effects inferEffects(const TypeOf& typeof) const override {
+        return inferedEffectsForLogicalInstruction(typeof);
+    }
+};
+
+#define ARITHMETIC_UNOP(Kind)                                                  \
+    class Kind : public ArithmeticUnop<Kind, Tag::Kind> {                      \
       public:                                                                  \
-        Name(Value* v, Value* env, unsigned srcIdx)                            \
-            : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),             \
-                                             {{PirType::val()}}, {{v}}, env,   \
-                                             srcIdx) {}                        \
-        VisibilityFlag visibilityFlag() const override {                       \
-            if (arg<0>().val()->type.isA(PirType::num().notObject())) {        \
-                return VisibilityFlag::On;                                     \
-            } else {                                                           \
-                return VisibilityFlag::Unknown;                                \
-            }                                                                  \
-        }                                                                      \
-        void updateType() override final {                                     \
-            auto t = arg<0>().val()->type;                                     \
-            maskEffectsAndTypeOnNonObjects(t.notMissing());                    \
-            if (t.isA(PirType(RType::logical).notObject())) {                  \
-                effects.reset(Effect::Warn);                                   \
-                if (t.isScalar())                                              \
-                    effects.reset(Effect::Error);                              \
-            }                                                                  \
-            updateScalarOnScalarInputs();                                      \
-        }                                                                      \
+        Kind(Value* val, Value* env, unsigned srcIdx)                          \
+            : ArithmeticUnop<Kind, Tag::Kind>(val, env, srcIdx) {}             \
+    }
+#define LOGICAL_UNOP(Kind)                                                     \
+    class Kind : public LogicalUnop<Kind, Tag::Kind> {                         \
+      public:                                                                  \
+        Kind(Value* val, Value* env, unsigned srcIdx)                          \
+            : LogicalUnop<Kind, Tag::Kind>(val, env, srcIdx) {}                \
     }
 
-UNOP(Not, PirType::num());
-UNOP(Plus, PirType::num());
-UNOP(Minus, PirType::num());
+LOGICAL_UNOP(Not);
+ARITHMETIC_UNOP(Plus);
+ARITHMETIC_UNOP(Minus);
 
-#undef UNOP
+#undef ARITHMETIC_UNOP
+#undef LOGICAL_UNOP
 
 class FLI(Length, 1, Effects::None()) {
   public:
@@ -1767,7 +1915,7 @@ class VLIE(MkEnv, Effects::None()) {
 class FLI(IsObject, 1, Effects::None()) {
   public:
     explicit IsObject(Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
+        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}) {}
 };
 
 class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
@@ -1808,7 +1956,9 @@ class VLI(Phi, Effects::None()) {
         assert(nargs() == inputs.size());
     }
     void printArgs(std::ostream& out, bool tty) const override;
-    void updateType() override final;
+    PirType inferType(const TypeOf& typeof) const override final {
+        return mergedInputType(typeof);
+    }
     void pushArg(Value* a, PirType t) override {
         assert(false && "use addInput");
     }

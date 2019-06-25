@@ -1119,7 +1119,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             r.first->setNext(merge);
             phi->addInput(r.first, r.second);
         }
-        phi->updateType();
+        phi->updateTypeAndEffects();
         res = phi;
     }
 
@@ -1170,7 +1170,7 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
                     continue;
                 }
                 auto t = p->type;
-                p->updateType();
+                p->updateTypeAndEffects();
                 if (t != p->type)
                     changed = true;
                 it++;

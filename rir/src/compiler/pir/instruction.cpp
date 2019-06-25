@@ -45,6 +45,8 @@ extern std::ostream& operator<<(std::ostream& out,
     return out;
 }
 
+constexpr Effects Instruction::errorWarnVisible;
+
 void Instruction::printRef(std::ostream& out) const {
     if (type == RType::env)
         out << "e" << id();
@@ -486,15 +488,6 @@ void Is::printArgs(std::ostream& out, bool tty) const {
 void IsType::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
     out << " isA " << typeTest;
-}
-
-void Phi::updateType() {
-    type = arg(0).val()->type;
-    eachArg([&](BB*, Value* v) -> void { type = type | v->type; });
-    typeFeedback = arg(0).val()->type;
-    eachArg([&](BB*, Value* v) -> void {
-        typeFeedback = typeFeedback | v->typeFeedback;
-    });
 }
 
 void Phi::printArgs(std::ostream& out, bool tty) const {

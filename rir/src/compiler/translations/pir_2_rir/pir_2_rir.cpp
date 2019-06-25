@@ -700,7 +700,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                     else
                         cb.add(BC::is(TypeChecks::RealNonObject));
                 } else {
-                    assert(false);
+                    t.print(std::cout);
                 }
                 break;
             }

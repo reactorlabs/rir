@@ -97,10 +97,14 @@ struct ForcedBy {
     }
 
     bool escape(Value* val) {
+        if (forcedBy.count(val) && forcedBy.at(val) != ambiguous())
+            return false;
+
         if (!escaped.count(val)) {
             escaped.insert(val);
             return true;
         }
+
         return false;
     }
 

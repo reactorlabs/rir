@@ -571,6 +571,9 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
         out << "val";
     } else if (t.isRType() && PirType::val().baseType() == t.baseType()) {
         out << "val?";
+    } else if (t.isRType() &&
+               PirType::num().notMissing().baseType() == t.baseType()) {
+        out << "num";
     } else {
         if (t.t_.r.count() > 1)
             out << "(";
