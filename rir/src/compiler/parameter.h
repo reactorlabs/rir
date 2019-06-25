@@ -19,6 +19,8 @@ struct Parameter {
 
     static bool RIR_PRESERVE;
     static unsigned RIR_SERIALIZE_CHAOS;
+
+    static unsigned RIR_CHECK_PIR_TYPES;
 };
 } // namespace pir
 } // namespace rir

@@ -66,8 +66,10 @@ enum class RType : uint8_t {
     env,
     ast,
 
+    other,
+
     FIRST = nil,
-    LAST = ast
+    LAST = other
 };
 
 enum class NativeType : uint8_t {
@@ -111,9 +113,9 @@ enum class TypeFlags : uint8_t {
  */
 
 struct PirType {
-    typedef EnumSet<RType> RTypeSet;
-    typedef EnumSet<NativeType> NativeTypeSet;
-    typedef EnumSet<TypeFlags> FlagSet;
+    typedef EnumSet<RType, uint32_t> RTypeSet;
+    typedef EnumSet<NativeType, uint32_t> NativeTypeSet;
+    typedef EnumSet<TypeFlags, uint32_t> FlagSet;
 
     FlagSet flags_;
 
@@ -156,6 +158,7 @@ struct PirType {
     explicit PirType(SEXP);
     constexpr PirType(const PirType& other)
         : flags_(other.flags_), t_(other.t_) {}
+    explicit PirType(const void* pos);
 
     constexpr PirType& operator=(const PirType& o) {
         flags_ = o.flags_;
@@ -185,7 +188,8 @@ struct PirType {
     static constexpr PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
-                       RType::missing | RType::unbound | RType::ast)
+                       RType::missing | RType::unbound | RType::ast |
+                       RType::other)
             .orObject();
     }
     static constexpr PirType vecs() { return num() | RType::str | RType::vec; }
@@ -228,10 +232,11 @@ struct PirType {
             return false;
         return flags_.includes(TypeFlags::lazy);
     }
-    RIR_INLINE bool maybePromiseWrapped() const {
+    RIR_INLINE constexpr bool maybePromiseWrapped() const {
         if (!isRType())
             return false;
-        return flags_.includes(TypeFlags::promiseWrapped);
+        return flags_.includes(TypeFlags::promiseWrapped) ||
+               flags_.includes(TypeFlags::lazy);
     }
     RIR_INLINE constexpr bool isScalar() const {
         if (!isRType())
@@ -327,10 +332,12 @@ struct PirType {
     }
 
     PirType constexpr forced() const {
-        assert(isRType());
-        FlagSet notPromised =
-            ~(FlagSet() | TypeFlags::promiseWrapped | TypeFlags::lazy);
-        return PirType(t_.r, flags_ & notPromised);
+        if (!maybePromiseWrapped())
+            return *this;
+        return PirType(
+            // forcing can return the missing marker value
+            t_.r | RType::missing,
+            flags_ & ~(FlagSet(TypeFlags::lazy) | TypeFlags::promiseWrapped));
     }
 
     RIR_INLINE constexpr PirType baseType() const {
@@ -447,6 +454,9 @@ struct PirType {
         return t_.r.includes(o.t_.r);
     }
 
+    // Is val an instance of this type?
+    bool isInstance(SEXP val) const;
+
     void print(std::ostream& out = std::cout) const;
 };
 
@@ -523,6 +533,9 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
         break;
     case RType::missing:
         out << "miss";
+        break;
+    case RType::other:
+        out << "other";
         break;
     case RType::unbound:
         out << "_";

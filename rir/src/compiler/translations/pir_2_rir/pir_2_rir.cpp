@@ -764,8 +764,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Pow, pow);
                 SIMPLE_WITH_SRCIDX(Lt, lt);
                 SIMPLE_WITH_SRCIDX(Gt, gt);
-                SIMPLE_WITH_SRCIDX(Lte, ge);
-                SIMPLE_WITH_SRCIDX(Gte, le);
+                SIMPLE_WITH_SRCIDX(Lte, le);
+                SIMPLE_WITH_SRCIDX(Gte, ge);
                 SIMPLE_WITH_SRCIDX(Eq, eq);
                 SIMPLE_WITH_SRCIDX(Neq, ne);
                 SIMPLE_WITH_SRCIDX(Colon, colon);
@@ -963,6 +963,29 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                      (refcountAnalysisOverflow ||
                       needsEnsureNamed.count(instr)))
                 cb.add(BC::ensureNamed());
+
+            // Check the return type
+            if (pir::Parameter::RIR_CHECK_PIR_TYPES > 0 &&
+                instr->type != PirType::voyd() &&
+                instr->type != NativeType::context && !CastType::Cast(instr) &&
+                Visitor::check(code->entry, [&](Instruction* i) {
+                    if (auto cast = CastType::Cast(i)) {
+                        if (cast->arg<0>().val() == instr)
+                            return false;
+                    }
+                    return true;
+                })) {
+                int instrStr;
+                if (pir::Parameter::RIR_CHECK_PIR_TYPES > 1) {
+                    std::stringstream instrPrint;
+                    instr->print(instrPrint, false);
+                    instrStr =
+                        Pool::insert(Rf_mkString(instrPrint.str().c_str()));
+                } else {
+                    instrStr = -1;
+                }
+                cb.add(BC::assertType(instr->type, instrStr));
+            }
 
             // Store the result
             if (alloc.sa.dead(instr)) {

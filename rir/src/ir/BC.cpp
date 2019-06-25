@@ -143,6 +143,10 @@ BC_NOARGS(V, _)
         cs.insert(immediate.loc_cpy);
         return;
 
+    case Opcode::assert_type_:
+        cs.insert(immediate.assertTypeArgs);
+        return;
+
     case Opcode::invalid_:
     case Opcode::num_of:
         assert(false);
@@ -258,6 +262,14 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             delete meta;
             break;
         }
+        case Opcode::assert_type_:
+            i.assertTypeArgs.typeData1 = InInteger(inp);
+            i.assertTypeArgs.typeData2 = InInteger(inp);
+            if (InChar(inp))
+                i.assertTypeArgs.instr = Pool::insert(ReadItem(refTable, inp));
+            else
+                i.assertTypeArgs.instr = -1;
+            break;
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::promise_:
@@ -386,6 +398,16 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             meta->serialize(code, refTable, out);
             break;
         }
+        case Opcode::assert_type_:
+            OutInteger(out, i.assertTypeArgs.typeData1);
+            OutInteger(out, i.assertTypeArgs.typeData2);
+            if ((int)i.assertTypeArgs.instr == -1)
+                OutChar(out, false);
+            else {
+                OutChar(out, true);
+                WriteItem(Pool::get(i.assertTypeArgs.instr), refTable, out);
+            }
+            break;
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::promise_:
@@ -634,6 +656,9 @@ BC_NOARGS(V, _)
         break;
     case Opcode::clear_binding_cache_:
         out << immediate.cacheIdx.start << " " << immediate.cacheIdx.size;
+        break;
+    case Opcode::assert_type_:
+        out << immediate.assertTypeArgs.pirType();
         break;
     }
     out << "\n";

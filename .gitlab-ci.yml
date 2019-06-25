@@ -64,6 +64,17 @@ tests_release:
     - bin/gnur-make-tests check-recommended
     - ../../tools/check-gnur-make-tests-error
 
+test_types:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+      GIT_STRATEGY: none
+  stage: Run tests
+  script:
+    - cd /opt/rir/build/release
+    - RIR_CHECK_PIR_TYPES=1 bin/tests
+    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-all
+    - ../../tools/check-gnur-make-tests-error
+
 tests_fullverifier:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
@@ -177,5 +188,3 @@ cleanup_registry:
   before_script: []
   script:
     - echo "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
-  only:
-    - master
