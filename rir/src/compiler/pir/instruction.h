@@ -189,15 +189,10 @@ class Instruction : public Value {
         return hasEnv() && effects.includes(Effect::LeaksEnv);
     }
 
-    // Instructions can be deduplicated if they have different effects,
-    // unless these effects are different
-    Effects gvnEffects() const {
-        return effects & ~(Effects(Effect::Error) | Effect::Warn |
-                           Effect::Visibility | Effect::Force);
-    }
-
     virtual unsigned cost() const { return 1; }
-    virtual size_t gvnBase() const = 0;
+
+    virtual size_t tagHash() const = 0;
+    virtual size_t gvnBase() const { return 0; }
 
     virtual bool mayHaveEnv() const = 0;
     virtual bool hasEnv() const = 0;
@@ -236,8 +231,10 @@ class Instruction : public Value {
     void replaceUsesWith(Value* val);
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
-    void replaceUsesWithLimits(Value* val, BB* start,
-                               Instruction* stop = nullptr);
+
+    void replaceReachableUses(Instruction* replacement);
+    void replaceUsesIn(Value* val, BB* target);
+
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();
@@ -440,9 +437,7 @@ class InstructionImplementation : public Instruction {
         return new Base(*static_cast<const Base*>(this));
     }
 
-    size_t gvnBase() const override {
-        return hash_combine((size_t)ITAG, gvnEffects().to_i());
-    };
+    size_t tagHash() const override final { return std::hash<Tag>()(ITAG); }
 
     bool mayHaveEnv() const override final { return ENV == HasEnvSlot::Yes; }
     bool hasEnv() const override final {
@@ -688,10 +683,8 @@ class FLI(LdConst, 0, Effects::None()) {
     explicit LdConst(SEXP c);
     explicit LdConst(int i);
     void printArgs(std::ostream& out, bool tty) const override;
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), c());
-    }
     int minReferenceCount() const override { return MAX_REFCOUNT; }
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLIE(LdFun, 2, Effects::Any()) {
@@ -722,10 +715,6 @@ class FLIE(LdFun, 2, Effects::Any()) {
 
     void printArgs(std::ostream& out, bool tty) const override;
 
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), varName);
-    }
-
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
@@ -743,10 +732,6 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
 
     void printArgs(std::ostream& out, bool tty) const override;
 
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), varName);
-    }
-
     int minReferenceCount() const override { return 1; }
 };
 
@@ -755,6 +740,7 @@ class FLI(ForSeqSize, 1, Effect::Error) {
     explicit ForSeqSize(Value* val)
         : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
                               {{PirType::val()}}, {{val}}) {}
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLI(LdArg, 0, Effects::None()) {
@@ -765,9 +751,7 @@ class FLI(LdArg, 0, Effects::None()) {
 
     void printArgs(std::ostream& out, bool tty) const override;
 
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), id);
-    }
+    size_t gvnBase() const override { return hash_combine(tagHash(), id); }
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
@@ -778,10 +762,6 @@ class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
         : FixedLenInstructionWithEnvSlot(PirType::simpleScalarLogical(), env),
           varName(varName) {}
     void printArgs(std::ostream& out, bool tty) const override;
-
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), varName);
-    }
 };
 
 class FLI(ChkMissing, 1, Effect::Warn) {
@@ -789,12 +769,14 @@ class FLI(ChkMissing, 1, Effect::Warn) {
     explicit ChkMissing(Value* in)
         : FixedLenInstruction(in->type.notMissing(), {{PirType::any()}},
                               {{in}}) {}
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLI(ChkClosure, 1, Effect::Warn) {
   public:
     explicit ChkClosure(Value* in)
         : FixedLenInstruction(RType::closure, {{PirType::val()}}, {{in}}) {}
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLIE(StVarSuper, 2, Effects() | Effect::ReadsEnv | Effect::WritesEnv) {
@@ -814,10 +796,6 @@ class FLIE(StVarSuper, 2, Effects() | Effect::ReadsEnv | Effect::WritesEnv) {
     using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out, bool tty) const override;
-
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), varName);
-    }
 };
 
 class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
@@ -832,10 +810,6 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     SEXP varName;
 
     void printArgs(std::ostream& out, bool tty) const override;
-
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), varName);
-    }
 
     int minReferenceCount() const override { return 1; }
 };
@@ -859,10 +833,6 @@ class FLIE(StVar, 2, Effect::WritesEnv) {
     using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out, bool tty) const override;
-
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), varName);
-    }
 };
 
 // Pseudo Instruction. Is actually a StVar with a flag set.
@@ -940,14 +910,12 @@ class FLIE(MkArg, 2, Effects::None()) {
 
     Value* promEnv() const { return env(); }
 
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), prom_);
-    }
+    size_t gvnBase() const override { return hash_combine(tagHash(), prom_); }
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
-class FLI(Seq, 3, Effects::None()) {
+class FLI(Seq, 3, Effects::Any()) {
   public:
     Seq(Value* start, Value* end, Value* step)
         : FixedLenInstruction(
@@ -957,11 +925,17 @@ class FLI(Seq, 3, Effects::None()) {
               {{start, end, step}}) {}
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(
-            typeof, type& PirType::num().notObject().notMissing(), type);
+        return ifNonObjectArgs(typeof,
+            type & PirType::num().notObject().notMissing(),
+            type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+        return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
+    }
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
     }
 };
 
@@ -976,6 +950,8 @@ class FLIE(MkCls, 4, Effects::None()) {
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
+    size_t gvnBase() const override { return tagHash(); }
+
   private:
     using FixedLenInstructionWithEnvSlot::env;
 };
@@ -989,11 +965,9 @@ class FLIE(MkFunCls, 1, Effects::None()) {
 
     Value* lexicalEnv() const { return env(); }
 
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), cls);
-    }
-
     int minReferenceCount() const override { return MAX_REFCOUNT; }
+
+    size_t gvnBase() const override { return hash_combine(tagHash(), cls); }
 };
 
 class FLIE(Force, 2, Effects::Any()) {
@@ -1013,6 +987,12 @@ class FLIE(Force, 2, Effects::Any()) {
         return typeof(input()).maybeLazy() ? effects : Effects::None();
     }
     int minReferenceCount() const override { return MAX_REFCOUNT; }
+
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
+    }
 };
 
 class FLI(CastType, 1, Effects::None()) {
@@ -1020,6 +1000,9 @@ class FLI(CastType, 1, Effects::None()) {
     unsigned cost() const override final { return 0; }
     CastType(Value* in, PirType from, PirType to)
         : FixedLenInstruction(to, {{from}}, {{in}}) {}
+    size_t gvnBase() const override {
+        return hash_combine(hash_combine(tagHash(), type), arg<0>().type());
+    }
 };
 
 class FLI(AsLogical, 1, Effect::Error) {
@@ -1034,10 +1017,11 @@ class FLI(AsLogical, 1, Effect::Error) {
         if (typeof(val()).isA((PirType() | RType::logical | RType::integer |
                                RType::real | RType::str | RType::cplx)
                                   .notObject())) {
-            return effects & ~Effects(Effect::Error);
+            return Effects::None();
         }
         return effects;
     }
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
@@ -1053,6 +1037,7 @@ class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
         // Error on NA, hard to exclude
         return effects;
     }
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLI(AsInt, 1, Effect::Error) {
@@ -1065,7 +1050,7 @@ class FLI(AsInt, 1, Effect::Error) {
           ceil(ceil_) {}
 
     size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), ceil);
+        return hash_combine(hash_combine(0, Tag::AsInt), ceil);
     }
 };
 
@@ -1082,10 +1067,10 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, type& typeof(rhs()), type);
+        return ifNonObjectArgs(typeof, type & typeof(rhs()), type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+        return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
     }
 };
 
@@ -1102,10 +1087,10 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, type& typeof(rhs()), type);
+        return ifNonObjectArgs(typeof, type & typeof(rhs()), type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+        return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
     }
 };
 
@@ -1124,10 +1109,10 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, type& typeof(rhs()), type);
+        return ifNonObjectArgs(typeof, type & typeof(rhs()), type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+        return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
     }
 };
 
@@ -1146,10 +1131,10 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, type& typeof(rhs()), type);
+        return ifNonObjectArgs(typeof, type & typeof(rhs()), type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+        return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
     }
 };
 
@@ -1163,11 +1148,17 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
     Value* idx() const { return arg(1).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(
-            typeof, type& typeof(vec()).subsetType(typeof(idx())), type);
+        return ifNonObjectArgs(typeof,
+            type & typeof(vec()).subsetType(typeof(idx())),
+            type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+        return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
+    }
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
     }
 };
 
@@ -1181,11 +1172,17 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
     Value* idx() const { return arg(1).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(
-            typeof, type& typeof(vec()).extractType(typeof(idx())), type);
+        return ifNonObjectArgs(typeof,
+            type & typeof(vec()).extractType(typeof(idx())),
+            type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+        return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
+    }
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
     }
 };
 
@@ -1202,13 +1199,17 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
     Value* idx2() const { return arg(2).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(
-            typeof,
-            type& typeof(vec()).subsetType(typeof(idx1()) | typeof(idx2())),
+        return ifNonObjectArgs(typeof,
+            type & typeof(vec()).subsetType(typeof(idx1()) | typeof(idx2())),
             type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
         return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+    }
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
     }
 };
 
@@ -1225,13 +1226,17 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
     Value* idx2() const { return arg(2).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(
-            typeof,
-            type& typeof(vec()).extractType(typeof(idx1()) | typeof(idx2())),
+        return ifNonObjectArgs(typeof,
+            type & typeof(vec()).extractType(typeof(idx1()) | typeof(idx2())),
             type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
         return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+    }
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
     }
 };
 
@@ -1241,6 +1246,7 @@ class FLI(Inc, 1, Effects::None()) {
         : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
                               {{PirType(RType::integer).scalar().notObject()}},
                               {{v}}) {}
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLI(Dec, 1, Effects::None()) {
@@ -1249,6 +1255,7 @@ class FLI(Dec, 1, Effects::None()) {
         : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
                               {{PirType(RType::integer).scalar().notObject()}},
                               {{v}}) {}
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLI(Is, 1, Effects::None()) {
@@ -1260,16 +1267,22 @@ class FLI(Is, 1, Effects::None()) {
     uint32_t sexpTag;
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override { return hash_combine(tagHash(), sexpTag); }
 };
 
 class FLI(IsType, 1, Effects::None()) {
   public:
     const PirType typeTest;
     IsType(PirType type, Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
+        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}),
           typeTest(type) {}
 
     void printArgs(std::ostream& out, bool tty) const override;
+
+    size_t gvnBase() const override {
+        return hash_combine(tagHash(), typeTest);
+    }
 };
 
 class FLI(LdFunctionEnv, 0, Effects::None()) {
@@ -1304,6 +1317,7 @@ class FLI(PirCopy, 1, Effects::None()) {
     PirType inferType(const TypeOf& typeof) const override final {
         return typeof(arg<0>().val());
     }
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 // Effects::Any() prevents this instruction from being optimized away
@@ -1317,6 +1331,7 @@ class FLI(Identical, 2, Effects::None()) {
     Identical(Value* a, Value* b)
         : FixedLenInstruction(NativeType::test,
                               {{PirType::any(), PirType::any()}}, {{a, b}}) {}
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLIE(Colon, 3, Effects::Any()) {
@@ -1353,11 +1368,14 @@ class Binop
     typedef FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::Any(),
                                            HasEnvSlot::Yes>
         Super;
+
     Binop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
         : Super(PirType::valOrLazy(), {{PirType::val(), PirType::val()}},
                 {{lhs, rhs}}, env, srcIdx) {}
 
     using Super::arg;
+    using Super::effects;
+    using Super::tagHash;
     Value* lhs() const { return arg(0).val(); }
     Value* rhs() const { return arg(1).val(); }
 
@@ -1366,6 +1384,12 @@ class Binop
             return VisibilityFlag::On;
         else
             return VisibilityFlag::Unknown;
+    }
+
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
     }
 };
 
@@ -1479,6 +1503,7 @@ class Unop : public FixedLenInstructionWithEnvSlot<TAG, BASE, 2, Effects::Any(),
     using Super::arg;
     using Super::effects;
     using Super::mergedInputType;
+    using Super::tagHash;
 
     Value* val() const { return arg(0).val(); }
 
@@ -1487,6 +1512,12 @@ class Unop : public FixedLenInstructionWithEnvSlot<TAG, BASE, 2, Effects::Any(),
             return VisibilityFlag::On;
         else
             return VisibilityFlag::Unknown;
+    }
+
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
     }
 };
 
@@ -1553,6 +1584,7 @@ class FLI(Length, 1, Effects::None()) {
     explicit Length(Value* v)
         : FixedLenInstruction(PirType::simpleScalarInt(), {{PirType::val()}},
                               {{v}}) {}
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 struct RirStack {
@@ -1600,6 +1632,13 @@ class VLIE(FrameState, Effect::LeaksEnv) {
     rir::Code* code;
     size_t stackSize;
 
+    size_t gvnBase() const override {
+        return hash_combine(
+            hash_combine(hash_combine(hash_combine(tagHash(), inlined), pc),
+                         code),
+            stackSize);
+    }
+
     FrameState(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack)
         : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
           code(code), stackSize(stack.size()) {
@@ -1642,8 +1681,6 @@ class VLIE(FrameState, Effect::LeaksEnv) {
 
     void printArgs(std::ostream& out, bool tty) const override;
     void printEnv(std::ostream& out, bool tty) const override final{};
-
-    size_t gvnBase() const override { return (size_t)this; }
 };
 
 // Common interface to all call instructions
@@ -1777,10 +1814,6 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     ClosureVersion* tryDispatch() const;
 
     ClosureVersion* tryOptimisticDispatch() const;
-
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), cls_);
-    }
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
@@ -1803,10 +1836,6 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     }
     void printArgs(std::ostream & out, bool tty) const override;
     Value* callerEnv() { return env(); }
-
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), blt);
-    }
 
     VisibilityFlag visibilityFlag() const override;
 
@@ -1837,10 +1866,6 @@ class VLI(CallSafeBuiltin,
 
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned srcIdx);
-
-    size_t gvnBase() const override {
-        return hash_combine(InstructionImplementation::gvnBase(), blt);
-    }
 
     VisibilityFlag visibilityFlag() const override;
 };
@@ -1889,8 +1914,6 @@ class VLIE(MkEnv, Effects::None()) {
 
     size_t nLocals() { return nargs() - 1; }
 
-    size_t gvnBase() const override { return (size_t)this; }
-
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
     bool contains(SEXP name) const {
@@ -1915,7 +1938,9 @@ class VLIE(MkEnv, Effects::None()) {
 class FLI(IsObject, 1, Effects::None()) {
   public:
     explicit IsObject(Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}) {}
+        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
+
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
@@ -1983,6 +2008,8 @@ class VLI(Phi, Effects::None()) {
         for (size_t i = 0; i < nargs(); ++i)
             it(input[i], arg(i).val());
     }
+
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 // Instructions targeted specially for speculative optimization
@@ -2030,9 +2057,9 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
                               {{NativeType::test, NativeType::checkpoint}},
                               {{test, checkpoint}}) {}
 
-    Checkpoint* checkpoint() { return Checkpoint::Cast(arg(1).val()); }
+    Checkpoint* checkpoint() const { return Checkpoint::Cast(arg(1).val()); }
     void checkpoint(Checkpoint* cp) { arg(1).val() = cp; }
-    Value* condition() { return arg(0).val(); }
+    Value* condition() const { return arg(0).val(); }
     Assume* Not() {
         assumeTrue = !assumeTrue;
         return this;

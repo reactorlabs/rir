@@ -243,48 +243,70 @@ static void checkReplace(Instruction* origin, Value* replace) {
     }
 }
 
-void Instruction::replaceUsesWithLimits(Value* replace, BB* start,
-                                        Instruction* stop) {
+void Instruction::replaceReachableUses(Instruction* replace) {
     checkReplace(this, replace);
 
-    auto apply = [&](BB* start) {
-        Visitor::run(start, stop ? stop->bb() : nullptr, [&](BB* bb) {
-            for (auto& i : *bb) {
-                if (i == stop)
-                    return;
-                i->eachArg([&](InstrArg& arg) {
-                    if (arg.val() == this)
-                        arg.val() = replace;
-                });
-            }
-        });
-    };
+    auto start = false;
 
-    // Since stop might also be in start (before the instruction to be
-    // replaced), we need to deal with start specially and only start after the
-    // instruction to be replaced (ignoring stop in that search).
-    if (start == bb()) {
-        bool found = false;
-        for (auto& i : *start) {
-            if (found) {
-                i->eachArg([&](InstrArg& arg) {
-                    if (arg.val() == this)
-                        arg.val() = replace;
-                });
+    Visitor::run(replace->bb(), bb(), [&](BB* bb) {
+        for (auto& i : *bb) {
+            // First we need to find the position of the replacee, only after
+            // this instruction is in scope we should start replacing
+            if (!start) {
+                if (i == replace)
+                    start = true;
+                continue;
             }
-            if (!found && i == this)
-                found = true;
-            else if (found && i == stop)
+
+            bool changed = false;
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val() == this) {
+                    arg.val() = replace;
+                    changed = true;
+                }
+            });
+            if (changed)
+                i->updateTypeAndEffects();
+
+            // If we reach the original instruction we have to stop replacing.
+            // E.g. in  i->replaceReachableUses(j)
+            //
+            //   loop:
+            //     i = ...
+            //     i + 1
+            //     j = ...
+            //     j + 1
+            //     goto loop
+            //
+            // we better not replace the i in i + 1.
+            if (i == this)
                 return;
         }
-    } else {
-        apply(start);
-    }
+        assert(start);
+    });
 
-    if (start->next0)
-        apply(start->next0);
-    if (start->next1)
-        apply(start->next1);
+    // Propagate typefeedback
+    if (auto rep = Instruction::Cast(replace)) {
+        if (!rep->type.isA(typeFeedback) && rep->typeFeedback.isVoid())
+            rep->typeFeedback = typeFeedback;
+    }
+}
+
+void Instruction::replaceUsesIn(Value* replace, BB* start) {
+    checkReplace(this, replace);
+    Visitor::run(start, [&](BB* bb) {
+        for (auto& i : *bb) {
+            bool changed = false;
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val() == this) {
+                    arg.val() = replace;
+                    changed = true;
+                }
+            });
+            if (changed)
+                i->updateTypeAndEffects();
+        }
+    });
 
     // Propagate typefeedback
     if (auto rep = Instruction::Cast(replace)) {
@@ -294,21 +316,7 @@ void Instruction::replaceUsesWithLimits(Value* replace, BB* start,
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
-    checkReplace(this, replace);
-    Visitor::run(bb(), [&](BB* bb) {
-        for (auto& i : *bb) {
-            i->eachArg([&](InstrArg& arg) {
-                if (arg.val() == this)
-                    arg.val() = replace;
-            });
-        }
-    });
-
-    // Propagate typefeedback
-    if (auto rep = Instruction::Cast(replace)) {
-        if (!rep->type.isA(typeFeedback) && rep->typeFeedback.isVoid())
-            rep->typeFeedback = typeFeedback;
-    }
+    replaceUsesIn(replace, bb());
 }
 
 void Instruction::replaceUsesAndSwapWith(

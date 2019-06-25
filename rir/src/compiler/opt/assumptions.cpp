@@ -55,6 +55,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
     CFG cfg(function);
     AvailableCheckpoints checkpoint(function, log);
     AvailableAssumptions assumptions(function, log);
+    std::unordered_map<Checkpoint*, Checkpoint*> replaced;
 
     Visitor::runPostChange(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
@@ -67,12 +68,16 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
             // this one.
             if (auto cp = Checkpoint::Cast(instr)) {
                 if (auto cp0 = checkpoint.at(instr)) {
+                    while (replaced.count(cp0))
+                        cp0 = replaced.at(cp0);
+                    replaced[cp] = cp0;
+
                     assert(bb->last() == instr);
                     cp->replaceUsesWith(cp0);
                     bb->remove(ip);
                     delete bb->next1;
                     bb->next1 = nullptr;
-                    next = bb->end();
+                    return;
                 }
             }
 
@@ -89,6 +94,8 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                     // if we move both at the same time, we could even jump over
                     // effectful instructions.
                     if (auto cp0 = checkpoint.at(instr)) {
+                        while (replaced.count(cp0))
+                            cp0 = replaced.at(cp0);
                         if (assume->checkpoint() != cp0)
                             assume->checkpoint(cp0);
                     }

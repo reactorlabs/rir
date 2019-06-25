@@ -25,16 +25,15 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
             auto i = *ip;
             bool trigger = false;
-            if (!i->typeFeedback.isVoid() && !i->type.isA(i->typeFeedback)) {
+            if (!i->type.maybePromiseWrapped() && !i->typeFeedback.isVoid() &&
+                !i->type.isA(i->typeFeedback)) {
                 switch (i->tag) {
                 case Tag::Force: {
                     auto arg = i->arg(0).val()->followCasts();
                     // Blacklist of where it is not worthwhile
                     if (!LdConst::Cast(arg) &&
                         // leave this to the promise inliner
-                        !MkArg::Cast(arg) && !Force::Cast(arg) &&
-                        // leave this to scope analysis
-                        !LdVar::Cast(arg) && !LdVarSuper::Cast(arg)) {
+                        !MkArg::Cast(arg) && !Force::Cast(arg)) {
                         trigger = true;
                     }
                     break;
@@ -92,18 +91,12 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             } else {
                 condition = new IsType(type, i);
             }
+            BBTransform::insertAssume(condition, cp, bb, ip, assumeTrue);
 
             auto cast = new CastType(i, PirType::any(), type);
-            i->replaceUsesWithLimits(cast, bb, i);
-
-            ip = bb->insert(ip, condition);
-            ip++;
-            auto assume = new Assume(condition, cp);
-            assume->assumeTrue = assumeTrue;
-            ip = bb->insert(ip, assume);
-            ip++;
             ip = bb->insert(ip, cast);
             ip++;
+            i->replaceReachableUses(cast);
         }
     });
 }

@@ -72,57 +72,19 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 return nextNumber;
             };
 
+            if (v->type.isVoid())
+                return;
+
             auto i = Instruction::Cast(v);
             if (!i) {
                 assignNumber(v);
                 return;
             }
 
-            if (!i->gvnEffects().empty()) {
+            if (i->gvnBase() == 0) {
                 assignNumber(i);
                 return;
             }
-
-            if (!i->producesRirResult())
-                return;
-
-            auto computeNumber = [&](Instruction* i) {
-                size_t klassNumber = i->gvnBase();
-
-                std::vector<size_t> args;
-                if (auto phi = Phi::Cast(i)) {
-                    bool success = false;
-                    auto res = computePhiNr(phi, success);
-                    if (success) {
-                        changed = true;
-                        number[phi] = res;
-                        if (!firstValue.count(res))
-                            firstValue[res] = phi;
-                    }
-                    return;
-                }
-
-                bool success = true;
-                i->eachArg([&](Value* a) {
-                    if (success && number.count(a))
-                        klassNumber = hash_combine(klassNumber, number.at(a));
-                    else
-                        success = false;
-                });
-                if (success) {
-                    i->eachArg([&](Value* a) { args.push_back(number.at(a)); });
-
-                    if (!classes.count(klassNumber) ||
-                        classes.at(klassNumber) != args) {
-                        while (classes.count(klassNumber))
-                            klassNumber++;
-                        storeNumber(i, klassNumber, args);
-                    } else {
-                        number[i] = klassNumber;
-                    }
-                    changed = true;
-                }
-            };
 
             if (auto ld = LdConst::Cast(i)) {
                 SEXP constant = ld->c();
@@ -140,7 +102,47 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 return;
             }
 
-            computeNumber(i);
+            if (auto phi = Phi::Cast(i)) {
+                bool success = false;
+                auto res = computePhiNr(phi, success);
+                if (success) {
+                    changed = true;
+                    number[phi] = res;
+                    if (!firstValue.count(res))
+                        firstValue[res] = phi;
+                }
+                return;
+            }
+
+            size_t klassNumber = i->gvnBase();
+
+            std::vector<size_t> args;
+
+            bool success = true;
+            i->eachArg([&](Value* a) {
+                // cppcheck-suppress knownConditionTrueFalse
+                if (!success)
+                    return;
+                if (!Instruction::Cast(a))
+                    computeGN(a);
+                if (number.count(a))
+                    klassNumber = hash_combine(klassNumber, number.at(a));
+                else
+                    success = false;
+            });
+            if (success) {
+                i->eachArg([&](Value* a) { args.push_back(number.at(a)); });
+
+                if (!classes.count(klassNumber) ||
+                    classes.at(klassNumber) != args) {
+                    while (classes.count(klassNumber))
+                        klassNumber++;
+                    storeNumber(i, klassNumber, args);
+                } else {
+                    number[i] = klassNumber;
+                }
+                changed = true;
+            }
         };
 
         while (changed) {

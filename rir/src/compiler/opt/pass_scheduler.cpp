@@ -57,7 +57,6 @@ PassScheduler::PassScheduler() {
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
     add<TypeSpeculation>();
-    add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();
     add<ElideEnvSpec>();

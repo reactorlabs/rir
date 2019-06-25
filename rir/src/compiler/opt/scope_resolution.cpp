@@ -365,7 +365,7 @@ class TheScopeResolution {
                                         ip = bb->insert(ip, deoptEnv);
                                         ip++;
                                         next = ip + 1;
-                                        mk->replaceUsesWithLimits(deoptEnv, bb);
+                                        mk->replaceReachableUses(deoptEnv);
                                     });
                             }
                         }
