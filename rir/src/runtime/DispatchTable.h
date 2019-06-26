@@ -2,6 +2,7 @@
 #define RIR_DISPATCH_TABLE_H
 
 #include "Function.h"
+#include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 
 namespace rir {
@@ -19,9 +20,9 @@ typedef SEXP DispatchTableEntry;
 struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
 
-    size_t size() { return size_; }
+    size_t size() const { return size_; }
 
-    Function* get(size_t i) {
+    Function* get(size_t i) const {
         assert(i < capacity());
         return Function::unpack(getEntry(i));
     }
@@ -125,6 +126,27 @@ struct DispatchTable
     }
 
     size_t capacity() const { return info.gc_area_length; }
+
+    static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp) {
+        DispatchTable* table = create();
+        PROTECT(table->container());
+        AddReadRef(refTable, table->container());
+        table->size_ = InInteger(inp);
+        for (size_t i = 0; i < table->size(); i++) {
+            table->setEntry(i,
+                            Function::deserialize(refTable, inp)->container());
+        }
+        UNPROTECT(1);
+        return table;
+    }
+
+    void serialize(SEXP refTable, R_outpstream_t out) const {
+        HashAdd(container(), refTable);
+        OutInteger(out, size());
+        for (size_t i = 0; i < size(); i++) {
+            get(i)->serialize(refTable, out);
+        }
+    }
 
   private:
     DispatchTable() = delete;

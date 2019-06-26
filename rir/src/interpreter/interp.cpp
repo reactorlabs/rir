@@ -711,9 +711,21 @@ static Function* dispatch(const CallContext& call, DispatchTable* vt) {
 unsigned pir::Parameter::RIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
 
+static unsigned serializeCounter = 0;
+
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
+    bool bodyPreserved = false;
+    if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
+        serializeCounter++;
+        if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
+            body = copyBySerial(body);
+            PROTECT(body);
+            bodyPreserved = true;
+            serializeCounter = 0;
+        }
+    }
     assert(DispatchTable::check(body));
 
     auto table = DispatchTable::unpack(body);
@@ -782,6 +794,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             UNPROTECT(1);
         }
     }
+
+    if (bodyPreserved)
+        UNPROTECT(1);
 
     assert(result);
 
@@ -3778,21 +3793,6 @@ SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env) {
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt) {
     return evalRirCode(c, ctx, env, callCtxt, nullptr, nullptr, nullptr);
-}
-
-SEXP rirExpr(SEXP s) {
-    if (auto c = Code::check(s)) {
-        return src_pool_at(globalContext(), c->src);
-    }
-    if (auto f = Function::check(s)) {
-        return src_pool_at(globalContext(), f->body()->src);
-    }
-    if (auto t = DispatchTable::check(s)) {
-        // Default is the source of the first function in the dispatch table
-        Function* f = t->baseline();
-        return src_pool_at(globalContext(), f->body()->src);
-    }
-    return s;
 }
 
 SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
