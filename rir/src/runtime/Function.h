@@ -56,9 +56,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         body(body_);
     }
 
-    Code* body() { return Code::unpack(getEntry(0)); }
+    Code* body() const { return Code::unpack(getEntry(0)); }
     void body(SEXP body) { setEntry(0, body); }
 
+    static Function* deserialize(SEXP refTable, R_inpstream_t inp);
+    void serialize(SEXP refTable, R_outpstream_t out) const;
     void disassemble(std::ostream&);
 
     Code* defaultArg(size_t i) const {

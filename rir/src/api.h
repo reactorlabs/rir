@@ -24,5 +24,7 @@ SEXP pirCompile(SEXP closure, const rir::Assumptions& assumptions,
 extern SEXP rirOptDefaultOpts(SEXP closure, const rir::Assumptions&, SEXP name);
 extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Assumptions&,
                                     SEXP name);
+REXPORT SEXP rir_serialize(SEXP data, SEXP file);
+REXPORT SEXP rir_deserialize(SEXP file);
 
 #endif // API_H_
