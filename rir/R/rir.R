@@ -114,10 +114,12 @@ pir.setDebugFlags <- function(debugFlags = pir.debugFlags()) {
 }
 
 # compiles code of the given file and returns the list of compiled version.
-rir.compile.program <- function(file) {
+pir.program <- function(file) {
   contents <- readChar(file, file.info(file)$size)
   expr <- eval(parse(text = paste("function() {", contents, "}", sep = "\n")))
   rir.compile(expr)
+  for (i in 1:as.numeric(Sys.getenv("PIR_WARMUP", unset="3")))
+    expr()
 }
 
 rir.eval <- function(what, env = globalenv()) {
@@ -141,4 +143,14 @@ rir.body <- function(f) {
 # note: the actual body of this function is replaced by an "int3_" bytecode
 .int3 <- function() {
     stop("missed breakpoint, did you re-compile RIR?")
+}
+
+# Serializes the SEXP, preserving RIR/PIR-compiled closures, to the given path
+rir.serialize <- function(data, path) {
+    .Call("rir_serialize", data, path)
+}
+
+# Deserializes and returns the SEXP at the given path
+rir.deserialize <- function(path) {
+    .Call("rir_deserialize", path)
 }

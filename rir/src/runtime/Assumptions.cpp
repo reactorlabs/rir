@@ -1,6 +1,17 @@
 #include "Assumptions.h"
+#include "R/Serialize.h"
 
 namespace rir {
+
+Assumptions Assumptions::deserialize(SEXP refTable, R_inpstream_t inp) {
+    Assumptions as;
+    InBytes(inp, &as, sizeof(Assumptions));
+    return as;
+}
+
+void Assumptions::serialize(SEXP refTable, R_outpstream_t out) const {
+    OutBytes(out, this, sizeof(Assumptions));
+}
 
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {

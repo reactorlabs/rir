@@ -3,9 +3,11 @@
  */
 
 #include <cassert>
+#include <cstdio>
 
 #include "api.h"
 
+#include "R/Serialize.h"
 #include "compiler/parameter.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
@@ -22,7 +24,14 @@
 
 using namespace rir;
 
+extern "C" Rboolean R_Visible;
+
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
+
+static size_t oldMaxInput = 0;
+static size_t oldInlinerMax = 0;
+static bool oldPreserve = false;
+static unsigned oldSerializeChaos = false;
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
@@ -206,7 +215,6 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
 
 SEXP pirCompile(SEXP what, const Assumptions& assumptions,
                 const std::string& name, const pir::DebugOptions& debug) {
-
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
     }
@@ -292,21 +300,21 @@ REXPORT SEXP pir_tests() {
     return R_NilValue;
 }
 
-static size_t oldMaxInput = 0;
-static size_t oldInlinerMax = 0;
-
 REXPORT SEXP pir_check_warmup_begin(SEXP f, SEXP checksSxp, SEXP env) {
     if (oldMaxInput == 0) {
         oldMaxInput = pir::Parameter::MAX_INPUT_SIZE;
         oldInlinerMax = pir::Parameter::INLINER_MAX_SIZE;
+        oldSerializeChaos = pir::Parameter::RIR_SERIALIZE_CHAOS;
     }
     pir::Parameter::MAX_INPUT_SIZE = 3500;
     pir::Parameter::INLINER_MAX_SIZE = 4000;
+    pir::Parameter::RIR_SERIALIZE_CHAOS = 0;
     return R_NilValue;
 }
 REXPORT SEXP pir_check_warmup_end(SEXP f, SEXP checksSxp, SEXP env) {
     pir::Parameter::MAX_INPUT_SIZE = oldMaxInput;
     pir::Parameter::INLINER_MAX_SIZE = oldInlinerMax;
+    pir::Parameter::RIR_SERIALIZE_CHAOS = oldSerializeChaos;
     return R_NilValue;
 }
 
@@ -358,6 +366,37 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
                           PirDebug | pir::DebugFlag::DryRun);
     else
         return closure;
+}
+
+REXPORT SEXP rir_serialize(SEXP data, SEXP fileSexp) {
+    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    pir::Parameter::RIR_PRESERVE = true;
+    if (TYPEOF(fileSexp) != STRSXP)
+        Rf_error("must provide a string path");
+    FILE* file = fopen(CHAR(Rf_asChar(fileSexp)), "w");
+    if (file == NULL)
+        Rf_error("couldn't open file at path");
+    R_SaveToFile(data, file, 0);
+    fclose(file);
+    R_Visible = (Rboolean) false;
+    pir::Parameter::RIR_PRESERVE = oldPreserve;
+    return R_NilValue;
+}
+
+REXPORT SEXP rir_deserialize(SEXP fileSexp) {
+    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    pir::Parameter::RIR_PRESERVE = true;
+    // Alternatively, could be a hook from R_LoadFromFile
+    Code::rehashDeserializedUids();
+    if (TYPEOF(fileSexp) != STRSXP)
+        Rf_error("must provide a string path");
+    FILE* file = fopen(CHAR(Rf_asChar(fileSexp)), "r");
+    if (file == NULL)
+        Rf_error("couldn't open file at path");
+    SEXP res = R_LoadFromFile(file, 0);
+    fclose(file);
+    pir::Parameter::RIR_PRESERVE = oldPreserve;
+    return res;
 }
 
 bool startup() {
