@@ -239,11 +239,6 @@ class BC {
     // Used to serialize bc to CodeStream
     void write(CodeStream& cs) const;
 
-    static void deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
-                            size_t codeSize, Code* container);
-    static void serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
-                          size_t codeSize, const Code* container);
-
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;
     void printImmediateArgs(std::ostream& out) const;

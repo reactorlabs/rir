@@ -64,7 +64,7 @@ tests_release:
     - bin/gnur-make-tests check-recommended
     - ../../tools/check-gnur-make-tests-error
 
-test_types_and_serialize:
+test_types:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
       GIT_STRATEGY: none
@@ -74,9 +74,6 @@ test_types_and_serialize:
     - RIR_CHECK_PIR_TYPES=1 bin/tests
     - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-all
     - ../../tools/check-gnur-make-tests-error
-    - RIR_SERIALIZE_CHAOS=1 bin/tests
-    - RIR_SERIALIZE_CHAOS=1 bin/gnur-make-tests test-all-basics
-    - RIR_SERIALIZE_CHAOS=3 bin/tests
 
 tests_fullverifier:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA

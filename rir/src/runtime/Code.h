@@ -3,7 +3,6 @@
 
 #include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
-#include "utils/UUID.h"
 
 #include <cassert>
 #include <cstdint>
@@ -48,19 +47,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class CodeVerifier;
     static constexpr size_t NumLocals = 1;
 
-    // This must be called before data containing RIR closures is deseralized.
-    // Will modify all further deserialized UIDs (both retrieved and new) with
-    // a hash, so that if the same Code* is deserialized it will be distinct,
-    // but it can also be referenced by a future withUid
-    static void rehashDeserializedUids();
-    static Code* withUid(UUID uid);
+    Code() = delete;
 
     Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,
          size_t localsCnt, size_t bindingsCacheSize);
-    ~Code();
 
   private:
-    Code() : Code(NULL, 0, 0, 0, 0, 0) {}
     /*
      * This array contains the GC reachable pointers. Currently there are two
      * of them.
@@ -73,10 +65,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;
     }
-
-    // UID for persistence when serializing/deserializing
-    UUID uid;
-
     // number of invocations. only incremented if this code object is the body
     // of a function
     unsigned funInvocationCount;
@@ -143,8 +131,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    static Code* deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;

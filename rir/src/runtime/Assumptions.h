@@ -3,7 +3,6 @@
 
 #include "utils/EnumSet.h"
 
-#include <R/r.h>
 #include <array>
 #include <cstring>
 #include <iostream>
@@ -140,9 +139,6 @@ struct Assumptions {
             return missing == other.missing && other.flags.includes(flags);
         return other.flags.includes(flags);
     }
-
-    static Assumptions deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
 
     friend struct std::hash<rir::Assumptions>;
     friend std::ostream& operator<<(std::ostream& out, const Assumptions& a);
