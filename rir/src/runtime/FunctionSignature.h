@@ -1,6 +1,5 @@
 #pragma once
 
-#include "R/Serialize.h"
 #include "R/r.h"
 
 #include "runtime/Assumptions.h"
@@ -47,16 +46,6 @@ struct FunctionSignature {
                    length == other.length;
         }
 
-        static ArgumentType deserialize(SEXP refTable, R_inpstream_t inp) {
-            ArgumentType x;
-            InBytes(inp, &x, sizeof(ArgumentType));
-            return x;
-        }
-
-        void serialize(SEXP refTable, R_outpstream_t out) const {
-            OutBytes(out, this, sizeof(ArgumentType));
-        }
-
         void print(std::ostream& out = std::cout) const {
             if (isEvaluated)
                 out << "eager ";
@@ -65,52 +54,18 @@ struct FunctionSignature {
     };
 
     void pushDefaultArgument() {
-        if (numArguments < MAX_TRACKED_ARGS)
-            arguments[numArguments] = ArgumentType();
-        numArguments++;
+        arguments.emplace_back();
+        assert(formalNargs() > 0);
     }
 
-    void pushArgument(ArgumentType arg) {
-        if (numArguments < MAX_TRACKED_ARGS)
-            arguments[numArguments] = arg;
-        numArguments++;
-    }
-
-    static FunctionSignature deserialize(SEXP refTable, R_inpstream_t inp) {
-        Environment envc = (Environment)InInteger(inp);
-        OptimizationLevel opt = (OptimizationLevel)InInteger(inp);
-        const Assumptions as = Assumptions::deserialize(refTable, inp);
-        FunctionSignature sig(envc, opt, as);
-        unsigned numArgs = InInteger(inp);
-        for (unsigned i = 0; i < numArgs; i++) {
-            sig.pushArgument(ArgumentType::deserialize(refTable, inp));
-        }
-        return sig;
-    }
-
-    void serialize(SEXP refTable, R_outpstream_t out) const {
-        OutInteger(out, (int)envCreation);
-        OutInteger(out, (int)optimization);
-        assumptions.serialize(refTable, out);
-        OutInteger(out, numArguments);
-        for (unsigned i = 0; i < numArguments; i++) {
-            ArgumentType arg =
-                (i < MAX_TRACKED_ARGS) ? arguments[i] : ArgumentType();
-            arg.serialize(refTable, out);
-        }
-    }
+    void pushArgument(ArgumentType arg) { arguments.emplace_back(arg); }
 
     void print(std::ostream& out = std::cout) const {
         if (formalNargs() > 0) {
             out << "argTypes: (";
-            for (unsigned i = 0; i != numArguments; i++) {
-                if (i < MAX_TRACKED_ARGS) {
-                    ArgumentType arg = arguments[i];
-                    arg.print(out);
-                } else {
-                    out << "[not tracked]";
-                }
-                if (i + 1 != numArguments)
+            for (auto i = arguments.begin(); i != arguments.end(); ++i) {
+                i->print(out);
+                if (i + 1 != arguments.end())
                     out << ", ";
             }
             out << ") ";
@@ -124,7 +79,6 @@ struct FunctionSignature {
         }
     }
 
-  public:
     FunctionSignature() = delete;
     FunctionSignature(Environment envCreation, OptimizationLevel optimization)
         : envCreation(envCreation), optimization(optimization) {}
@@ -133,16 +87,14 @@ struct FunctionSignature {
         : envCreation(envCreation), optimization(optimization),
           assumptions(assumptions) {}
 
-    size_t formalNargs() const { return numArguments; }
+    size_t formalNargs() const { return arguments.size(); }
     size_t expectedNargs() const {
-        return numArguments - assumptions.numMissing();
+        return arguments.size() - assumptions.numMissing();
     }
 
-    static const unsigned MAX_TRACKED_ARGS = 4;
     const Environment envCreation;
     const OptimizationLevel optimization;
-    ArgumentType arguments[MAX_TRACKED_ARGS];
-    unsigned numArguments = 0;
+    std::vector<ArgumentType> arguments;
     const Assumptions assumptions;
 };
 

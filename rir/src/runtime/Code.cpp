@@ -1,7 +1,6 @@
 #include "Code.h"
 #include "Function.h"
 #include "R/Printing.h"
-#include "R/Serialize.h"
 #include "ir/BC.h"
 #include "utils/Pool.h"
 
@@ -9,13 +8,6 @@
 #include <sstream>
 
 namespace rir {
-UUID uidHash = UUID::random();
-std::unordered_map<UUID, Code*> allCodes;
-
-void Code::rehashDeserializedUids() { uidHash = UUID::random(); }
-
-Code* Code::withUid(UUID uid) { return allCodes.at(uid ^ uidHash); }
-
 // cppcheck-suppress uninitMemberVar symbol=data
 Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
            size_t localsCnt, size_t bindingsCnt)
@@ -24,17 +16,10 @@ Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      uid(UUID::random()), funInvocationCount(0), src(src), stackLength(0),
-      localsCount(localsCnt), bindingCacheSize(bindingsCnt), codeSize(cs),
-      srcLength(sourceLength), extraPoolSize(0) {
+      funInvocationCount(0), src(src), stackLength(0), localsCount(localsCnt),
+      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
-    allCodes.emplace(uid, this);
-}
-
-Code::~Code() {
-    // TODO: Not sure if this is actually called
-    // Otherwise the pointer will leak a few bytes
-    allCodes.erase(uid);
 }
 
 unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
@@ -74,71 +59,6 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     SLOWASSERT(allowMissing || sidx);
 
     return sidx;
-}
-
-Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
-    size_t size = InInteger(inp);
-    Code* code = (Code*)::operator new(size);
-    code->uid = UUID::deserialize(refTable, inp) ^ uidHash;
-    code->funInvocationCount = InInteger(inp);
-    code->src = InInteger(inp);
-    code->stackLength = InInteger(inp);
-    *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
-    *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
-    code->codeSize = InInteger(inp);
-    code->srcLength = InInteger(inp);
-    code->extraPoolSize = InInteger(inp);
-    SEXP extraPool = ReadItem(refTable, inp);
-    PROTECT(extraPool);
-
-    // Bytecode
-    BC::deserialize(refTable, inp, code->code(), code->codeSize, code);
-
-    // Srclist
-    for (unsigned i = 0; i < code->srcLength; i++) {
-        code->srclist()[i].pcOffset = InInteger(inp);
-        code->srclist()[i].srcIdx =
-            src_pool_add(globalContext(), ReadItem(refTable, inp));
-    }
-    SEXP store = Rf_allocVector(EXTERNALSXP, size);
-    memcpy(DATAPTR(store), code, size);
-    Code* old = code;
-    code = (Code*)DATAPTR(store);
-    delete old;
-    code->info = {// GC area starts just after the header
-                  (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
-                  // GC area has only 1 pointer
-                  NumLocals, CODE_MAGIC};
-    code->setEntry(0, extraPool);
-    UNPROTECT(1);
-    allCodes.emplace(code->uid, code);
-
-    return code;
-}
-
-void Code::serialize(SEXP refTable, R_outpstream_t out) const {
-    OutInteger(out, size());
-    // Header
-    uid.serialize(refTable, out);
-    OutInteger(out, funInvocationCount);
-    OutInteger(out, src);
-    OutInteger(out, stackLength);
-    OutInteger(out, localsCount);
-    OutInteger(out, bindingCacheSize);
-    OutInteger(out, codeSize);
-    OutInteger(out, srcLength);
-    OutInteger(out, extraPoolSize);
-    WriteItem(getEntry(0), refTable, out);
-
-    // Bytecode
-    BC::serialize(refTable, out, code(), codeSize, this);
-
-    // Srclist
-    for (unsigned i = 0; i < srcLength; i++) {
-        OutInteger(out, srclist()[i].pcOffset);
-        WriteItem(src_pool_at(globalContext(), srclist()[i].srcIdx), refTable,
-                  out);
-    }
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
