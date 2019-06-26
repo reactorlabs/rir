@@ -3772,6 +3772,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 std::cerr << "type " << typ << " not accurate for value ("
                           << pir::PirType(val) << "):\n";
                 Rf_PrintValue(val);
+                std::cout << "\n";
                 assert(false);
             }
             NEXT();

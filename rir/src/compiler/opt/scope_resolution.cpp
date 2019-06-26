@@ -333,8 +333,7 @@ class TheScopeResolution {
                 if (bb->isDeopt()) {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {
-                            if (mk->context == 1 && !mk->stub &&
-                                mk->bb() != bb &&
+                            if (mk->context == 1 && mk->bb() != bb &&
                                 mk->usesAreOnly(
                                     function->entry,
                                     {Tag::FrameState, Tag::StVar})) {

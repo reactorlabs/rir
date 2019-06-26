@@ -542,7 +542,7 @@ bool testTypeRules() {
     assert(r2.subsetType(RType::real).isA(RType::logical));
     assert(!r2.subsetType(RType::integer).isScalar());
     assert(!r2.scalar().subsetType(RType::integer).isScalar());
-    assert(r2.subsetType(PirType(RType::integer).scalar()).isScalar());
+    assert(!r2.subsetType(PirType(RType::integer).scalar()).isScalar());
     assert(r2.extractType(RType::integer).isScalar());
     assert(!r2.subsetType(PirType::any()).maybeObj());
     return true;

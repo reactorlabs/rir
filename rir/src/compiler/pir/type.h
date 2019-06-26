@@ -353,10 +353,8 @@ struct PirType {
             return RType::nil;
         }
         if (isA(num() | RType::str | RType::cons | RType::code)) {
-            if (idx.isScalar())
-                return scalar();
-            else
-                return orNotScalar();
+            // e.g. c(1,2,3)[-1] returns c(2,3)
+            return orNotScalar();
         } else if (isA(RType::vec)) {
             return RType::vec;
         } else if (!maybeObj() && !PirType(RType::prom).isA(*this)) {

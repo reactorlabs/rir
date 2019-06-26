@@ -1067,7 +1067,9 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, type & typeof(rhs()), type);
+        return ifNonObjectArgs(typeof,
+            type & (typeof(rhs()) | typeof(lhs())),
+            type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
         return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
@@ -1087,7 +1089,9 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, type & typeof(rhs()), type);
+        return ifNonObjectArgs(typeof,
+            type & (typeof(rhs()) | typeof(lhs())),
+            type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
         return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
@@ -1109,7 +1113,9 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, type & typeof(rhs()), type);
+        return ifNonObjectArgs(typeof,
+            type & (typeof(rhs()) | typeof(lhs())),
+            type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
         return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
@@ -1131,7 +1137,9 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, type & typeof(rhs()), type);
+        return ifNonObjectArgs(typeof,
+            type & (typeof(rhs()) | typeof(lhs())),
+            type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
         return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
@@ -1625,7 +1633,7 @@ struct RirStack {
  *  Collects metadata about the current state of variables
  *  eventually needed for deoptimization purposes
  */
-class VLIE(FrameState, Effect::LeaksEnv) {
+class VLIE(FrameState, Effects(Effect::LeaksEnv) | Effect::ReadsEnv) {
   public:
     bool inlined = false;
     Opcode* pc;
