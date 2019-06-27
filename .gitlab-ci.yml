@@ -75,8 +75,8 @@ test_types_and_serialize:
     - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-all
     - ../../tools/check-gnur-make-tests-error
     - RIR_SERIALIZE_CHAOS=1 bin/tests
-    - RIR_SERIALIZE_CHAOS=1 bin/gnur-make-tests test-all-basics
     - RIR_SERIALIZE_CHAOS=3 bin/tests
+    - RIR_SERIALIZE_CHAOS=$(shuf -i 55-75 -n 1) bin/gnur-make-tests check-all
 
 tests_fullverifier:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
