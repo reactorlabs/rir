@@ -971,7 +971,9 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
     }
 }
 
-enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
+// TODO implement division and maybe others
+enum class Binop { PLUSOP, MINUSOP, TIMESOP };
+enum class Unop { PLUSOP, MINUSOP };
 #define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
 
 static SEXPREC createFakeSEXP(SEXPTYPE t) {
@@ -1055,15 +1057,15 @@ static SEXPREC createFakeCONS(SEXP cdr) {
             if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {                               \
                 Rboolean naflag = FALSE;                                       \
                 switch (op2) {                                                 \
-                case PLUSOP:                                                   \
+                case Binop::PLUSOP:                                            \
                     int_res =                                                  \
                         R_integer_plus(*INTEGER(lhs), *INTEGER(rhs), &naflag); \
                     break;                                                     \
-                case MINUSOP:                                                  \
+                case Binop::MINUSOP:                                           \
                     int_res = R_integer_minus(*INTEGER(lhs), *INTEGER(rhs),    \
                                               &naflag);                        \
                     break;                                                     \
-                case TIMESOP:                                                  \
+                case Binop::TIMESOP:                                           \
                     int_res = R_integer_times(*INTEGER(lhs), *INTEGER(rhs),    \
                                               &naflag);                        \
                     break;                                                     \
@@ -1187,10 +1189,10 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
             Rboolean naflag = FALSE;                                           \
             res = Rf_allocVector(INTSXP, 1);                                   \
             switch (op2) {                                                     \
-            case PLUSOP:                                                       \
+            case Unop::PLUSOP:                                                 \
                 *INTEGER(res) = R_integer_uplus(*INTEGER(val), &naflag);       \
                 break;                                                         \
-            case MINUSOP:                                                      \
+            case Unop::MINUSOP:                                                \
                 *INTEGER(res) = R_integer_uminus(*INTEGER(val), &naflag);      \
                 break;                                                         \
             }                                                                  \
@@ -2483,13 +2485,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(add_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_BINOP(+, PLUSOP);
+            DO_BINOP(+, Binop::PLUSOP);
             NEXT();
         }
 
         INSTRUCTION(uplus_) {
             SEXP val = ostack_at(ctx, 0);
-            DO_UNOP(+, PLUSOP);
+            DO_UNOP(+, Unop::PLUSOP);
             NEXT();
         }
 
@@ -2526,20 +2528,20 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(sub_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_BINOP(-, MINUSOP);
+            DO_BINOP(-, Binop::MINUSOP);
             NEXT();
         }
 
         INSTRUCTION(uminus_) {
             SEXP val = ostack_at(ctx, 0);
-            DO_UNOP(-, MINUSOP);
+            DO_UNOP(-, Unop::MINUSOP);
             NEXT();
         }
 
         INSTRUCTION(mul_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_BINOP(*, TIMESOP);
+            DO_BINOP(*, Binop::TIMESOP);
             NEXT();
         }
 

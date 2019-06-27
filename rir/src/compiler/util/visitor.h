@@ -198,28 +198,29 @@ class VisitorImplementation {
      *
      */
     static void run(BB* bb, const BBAction& action) {
-        forwardGenericRun<false>(bb, nullptr, action);
+        forwardGenericRun<false, BBAction>(bb, nullptr, action);
     }
 
     static void run(BB* bb, BB* stop, const BBAction& action) {
-        forwardGenericRun<false>(bb, stop, action);
+        forwardGenericRun<false, BBAction>(bb, stop, action);
     }
 
     static void runPostChange(BB* bb, const BBAction& action) {
-        forwardGenericRun<true>(bb, nullptr, action);
+        forwardGenericRun<true, BBAction>(bb, nullptr, action);
     }
 
     static bool check(BB* bb, const BBActionPredicate& action) {
-        return forwardGenericRun<false>(bb, nullptr, action);
+        return forwardGenericRun<false, BBActionPredicate>(bb, nullptr, action);
     }
 
     static void runBackward(BB* bb, CFG const& cfg, const BBAction& action) {
-        backwardGenericRun<false>(bb, nullptr, cfg, action);
+        backwardGenericRun<false, BBAction>(bb, nullptr, cfg, action);
     }
 
     static bool checkBackward(BB* bb, CFG const& cfg,
                               const BBActionPredicate& action) {
-        return backwardGenericRun<false>(bb, nullptr, cfg, action);
+        return backwardGenericRun<false, BBActionPredicate>(bb, nullptr, cfg,
+                                                            action);
     }
 
   protected:
