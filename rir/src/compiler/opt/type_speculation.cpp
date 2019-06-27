@@ -93,7 +93,8 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             }
             BBTransform::insertAssume(condition, cp, bb, ip, assumeTrue);
 
-            auto cast = new CastType(i, PirType::any(), type);
+            auto cast =
+                new CastType(i, CastType::Downcast, PirType::val(), type);
             ip = bb->insert(ip, cast);
             ip++;
             i->replaceReachableUses(cast);

@@ -102,7 +102,10 @@ class TheCleanup {
                     }
                 } else if (auto tt = CastType::Cast(i)) {
                     auto arg = tt->arg<0>().val();
-                    if (arg->type == tt->type) {
+                    if ((tt->kind == CastType::Upcast &&
+                         tt->type.isA(arg->type)) ||
+                        (tt->kind == CastType::Downcast &&
+                         arg->type.isA(tt->type))) {
                         tt->replaceUsesWith(arg);
                         removed = true;
                         next = bb->remove(ip);
