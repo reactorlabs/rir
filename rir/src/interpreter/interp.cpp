@@ -31,7 +31,7 @@ namespace rir {
 #ifdef PRINT_INTERP
 static void printInterp(Opcode* pc, Code* c) {
     BC bc = BC::decode(pc, c);
-    std::cout << ">";
+    std::cout << "#";
     bc.print(std::cout);
 }
 
