@@ -611,7 +611,23 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::is_:
     case Opcode::alloc_:
-        out << type2char(immediate.i);
+        switch (immediate.i) {
+            case static_cast<Immediate>(TypeChecks::RealNonObject):
+                out << "RealNonObject";
+                break;
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+                out << "RealSimpleScalar";
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+                out << "IntegerNotObject";
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+                out << "IntegerSimpleScalar";
+                break;
+            default:
+                out << type2char(immediate.i);
+                break;
+        }
         break;
     case Opcode::record_call_: {
         ObservedCallees prof = immediate.callFeedback;
