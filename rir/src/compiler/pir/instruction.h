@@ -107,8 +107,15 @@ enum class Effect : uint8_t {
     // Instruction might execute more R code
     ExecuteCode,
 
+    // If we speculatively optimize an instruction then we must set this flag
+    // to avoid it getting hoisted over its assumption. Take care when removing
+    // or masking this flag. Most of the time it is not correct to remove it,
+    // e.g. the type of inputs to an instructions might already be based on
+    // assumptions.
+    DependsOnAssume,
+
     FIRST = Visibility,
-    LAST = ExecuteCode,
+    LAST = DependsOnAssume,
 };
 typedef EnumSet<Effect> Effects;
 
@@ -158,6 +165,7 @@ class Instruction : public Value {
         e.reset(Effect::LeakArg);
         e.reset(Effect::ReadsEnv);
         e.reset(Effect::LeaksEnv);
+        e.reset(Effect::DependsOnAssume);
         return e;
     }
 
@@ -265,10 +273,11 @@ class Instruction : public Value {
         return t;
     }
 
-    constexpr static Effects errorWarnVisible =
-        Effects(Effect::Error) | Effect::Warn | Effect::Visibility;
-
   protected:
+    constexpr static Effects errorWarnVisible =
+        Effects(Effect::Error) | Effect::Warn | Effect::Visibility |
+        Effect::DependsOnAssume;
+
     template <typename Result>
     Result ifNonObjectArgs(const TypeOf& typeof, Result then,
                            Result otherwise) const {
@@ -1212,7 +1221,7 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
             type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+        return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
     }
     size_t gvnBase() const override {
         if (effects.contains(Effect::ExecuteCode))
@@ -1239,7 +1248,7 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
             type);
     }
     Effects inferEffects(const TypeOf& typeof) const override final {
-        return ifNonObjectArgs(typeof, effects& errorWarnVisible, effects);
+        return ifNonObjectArgs(typeof, effects & errorWarnVisible, effects);
     }
     size_t gvnBase() const override {
         if (effects.contains(Effect::ExecuteCode))

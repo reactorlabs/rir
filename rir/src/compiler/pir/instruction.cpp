@@ -109,9 +109,8 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
             CASE(LeaksEnv, "L")
             CASE(TriggerDeopt, "D")
             CASE(ExecuteCode, "X")
+            CASE(DependsOnAssume, "d")
 #undef CASE
-        default:
-            assert(false);
         }
     }
 }
