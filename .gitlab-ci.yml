@@ -10,7 +10,8 @@ before_script:
   - export PIR_MAX_INPUT_SIZE=99999
   - export PIR_INLINER_MAX_SIZE=99999
   - export PIR_DEOPT_CHAOS_SEED=$RANDOM
-  - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
+  - export PIR_SERIALIZE_CHAOS_SEED=$(shuf -i 55-75 -n 1)
+  - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED PIR_SERIALIZE_CHAOS_SEED=$PIR_SERIALIZE_CHAOS_SEED"
 
 sanity:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -76,7 +77,7 @@ test_types_and_serialize:
     - ../../tools/check-gnur-make-tests-error
     - RIR_SERIALIZE_CHAOS=1 bin/tests
     - RIR_SERIALIZE_CHAOS=3 bin/tests
-    - RIR_SERIALIZE_CHAOS=$(shuf -i 55-75 -n 1) bin/gnur-make-tests check-all
+    - RIR_SERIALIZE_CHAOS=$PIR_SERIALIZE_CHAOS_SEED bin/gnur-make-tests check-all
 
 tests_fullverifier:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
