@@ -212,7 +212,7 @@ class TheScopeResolution {
             }
 
             for (auto& phi : thePhis)
-                phi.second->updateType();
+                phi.second->updateTypeAndEffects();
 
             return thePhis.at(pl.targetPhiPosition);
         };
@@ -333,8 +333,7 @@ class TheScopeResolution {
                 if (bb->isDeopt()) {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {
-                            if (mk->context == 1 && !mk->stub &&
-                                mk->bb() != bb &&
+                            if (mk->context == 1 && mk->bb() != bb &&
                                 mk->usesAreOnly(
                                     function->entry,
                                     {Tag::FrameState, Tag::StVar})) {
@@ -365,7 +364,7 @@ class TheScopeResolution {
                                         ip = bb->insert(ip, deoptEnv);
                                         ip++;
                                         next = ip + 1;
-                                        mk->replaceUsesWithLimits(deoptEnv, bb);
+                                        mk->replaceReachableUses(deoptEnv);
                                     });
                             }
                         }

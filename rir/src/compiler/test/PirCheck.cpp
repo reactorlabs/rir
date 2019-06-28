@@ -41,7 +41,6 @@ static ClosureVersion* recompilePir(SEXP f, Module* m) {
         []() { Rf_warning("pir check failed: couldn't compile"); });
 
     cmp.optimizeModule();
-    cmp.optimizeModule(); // TODO: Why is this needed twice?
     return res;
 }
 

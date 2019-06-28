@@ -101,6 +101,7 @@ struct ForcedBy {
             escaped.insert(val);
             return true;
         }
+
         return false;
     }
 
@@ -290,6 +291,17 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         AbstractResult res;
+        auto apply = [&](Instruction* i) {
+            i->eachArg([&](Value* v) {
+                v = v->followCasts();
+                if (auto arg = MkArg::Cast(v))
+                    if (state.escape(arg))
+                        res.update();
+                if (auto arg = LdArg::Cast(v))
+                    if (state.escape(arg))
+                        res.update();
+            });
+        };
         if (auto f = Force::Cast(i)) {
             if (MkArg* arg = MkArg::Cast(f->arg<0>().val()->followCasts()))
                 if (state.forcedAt(arg, f))
@@ -311,35 +323,12 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else if (auto ld = LdArg::Cast(i)) {
             if (state.declare(ld))
                 res.update();
-        } else if (MkEnv::Cast(i)) {
-            // Promises assigned to envs is only relevant when the env leaks.
-            // This case is handled below.
+        } else if (auto e = MkEnv::Cast(i)) {
+            if (!e->stub)
+                apply(e);
         } else if (CastType::Cast(i)) {
-            // This is a whitelist of instructions that get a promise as
-            // argument, but don't change it in any way.
         } else {
-            auto apply = [&](Instruction* i) {
-                i->eachArg([&](Value* v) {
-                    v = v->followCasts();
-                    if (auto arg = MkArg::Cast(v))
-                        if (state.escape(arg))
-                            res.update();
-                    if (auto arg = LdArg::Cast(v))
-                        if (state.escape(arg))
-                            res.update();
-                });
-            };
             apply(i);
-
-            if (i->leaksEnv()) {
-                auto env = i->env();
-                while (auto mk = MkEnv::Cast(env)) {
-                    // Stub cannot leak
-                    if (!mk->stub)
-                        apply(mk);
-                    env = mk->lexicalEnv();
-                }
-            }
 
             if (i->effects.contains(Effect::Force))
                 if (state.sideeffect())
@@ -366,13 +355,40 @@ namespace pir {
 void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                            LogStream& log) const {
     auto apply = [&](Code* code) {
-        ForceDominanceAnalysis analysis(cls, code, log);
-        analysis();
+        std::unordered_set<Force*> toInline;
+        ForcedBy result;
 
-        auto& result = analysis.result();
-        if (result.eagerLikeFunction(cls))
-            cls->properties.set(ClosureVersion::Property::IsEager);
-        cls->properties.argumentForceOrder = result.argumentForceOrder;
+        {
+            ForceDominanceAnalysis analysis(cls, code, log);
+            analysis();
+
+            result = analysis.result();
+            if (result.eagerLikeFunction(cls))
+                cls->properties.set(ClosureVersion::Property::IsEager);
+            cls->properties.argumentForceOrder = result.argumentForceOrder;
+
+            Visitor::run(code->entry, [&](BB* bb) {
+                for (const auto& i : *bb) {
+                    if (auto f = Force::Cast(i)) {
+                        if (result.isDominatingForce(f)) {
+                            f->strict = true;
+                            if (auto mkarg =
+                                    MkArg::Cast(f->followCastsAndForce())) {
+                                if (!mkarg->isEager()) {
+                                    if (analysis
+                                            .at<ForceDominanceAnalysis::
+                                                    PositioningStyle::
+                                                        BeforeInstruction>(f)
+                                            .isSafeToInline(mkarg)) {
+                                        toInline.insert(f);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         std::unordered_map<Force*, Value*> inlinedPromise;
         std::unordered_map<Instruction*, MkArg*> forcedMkArg;
@@ -383,52 +399,45 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
             while (ip != bb->end()) {
                 auto next = ip + 1;
                 if (auto f = Force::Cast(*ip)) {
-                    if (result.isDominatingForce(f))
-                        f->strict = true;
-
                     if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
                         if (mkarg->isEager()) {
                             Value* eager = mkarg->eagerArg();
                             f->replaceUsesWith(eager);
                             next = bb->remove(ip);
-                        } else if (result.isDominatingForce(f)) {
-                            if (result.isSafeToInline(mkarg)) {
-                                Promise* prom = mkarg->prom();
-                                BB* split = BBTransform::split(code->nextBBId++,
-                                                               bb, ip, code);
-                                BB* prom_copy =
-                                    BBTransform::clone(prom->entry, code, cls);
-                                bb->overrideNext(prom_copy);
+                        } else if (toInline.count(f)) {
+                            Promise* prom = mkarg->prom();
+                            BB* split = BBTransform::split(code->nextBBId++, bb,
+                                                           ip, code);
+                            BB* prom_copy =
+                                BBTransform::clone(prom->entry, code, cls);
+                            bb->overrideNext(prom_copy);
 
-                                // For now we assume every promise starts with a
-                                // LdFunctionEnv instruction. We replace it's
-                                // usages with the caller environment.
-                                LdFunctionEnv* e =
-                                    LdFunctionEnv::Cast(*prom_copy->begin());
-                                assert(e);
-                                Replace::usesOfValue(prom_copy, e,
-                                                     mkarg->promEnv());
-                                prom_copy->remove(prom_copy->begin());
+                            // For now we assume every promise starts with a
+                            // LdFunctionEnv instruction. We replace it's
+                            // usages with the caller environment.
+                            LdFunctionEnv* e =
+                                LdFunctionEnv::Cast(*prom_copy->begin());
+                            assert(e);
+                            Replace::usesOfValue(prom_copy, e,
+                                                 mkarg->promEnv());
+                            prom_copy->remove(prom_copy->begin());
 
-                                // Create a return value phi of the promise
-                                Value* promRes =
-                                    BBTransform::forInline(prom_copy, split)
-                                        .first;
+                            // Create a return value phi of the promise
+                            Value* promRes =
+                                BBTransform::forInline(prom_copy, split).first;
 
-                                f = Force::Cast(*split->begin());
-                                assert(f);
-                                f->replaceUsesWith(promRes);
-                                split->remove(split->begin());
+                            f = Force::Cast(*split->begin());
+                            assert(f);
+                            f->replaceUsesWith(promRes);
+                            split->remove(split->begin());
 
-                                MkArg* fixedMkArg = new MkArg(
-                                    mkarg->prom(), promRes, mkarg->promEnv());
-                                next =
-                                    split->insert(split->begin(), fixedMkArg);
-                                forcedMkArg[mkarg] = fixedMkArg;
+                            MkArg* fixedMkArg = new MkArg(
+                                mkarg->prom(), promRes, mkarg->promEnv());
+                            next = split->insert(split->begin(), fixedMkArg);
+                            forcedMkArg[mkarg] = fixedMkArg;
 
-                                inlinedPromise[f] = promRes;
-                                break;
-                            }
+                            inlinedPromise[f] = promRes;
+                            break;
                         }
                     }
                 } else if (auto cast = CastType::Cast(*ip)) {
@@ -476,7 +485,7 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
 
         // 3. replace remaining uses of the mkarg itself
         for (auto m : forcedMkArg) {
-            m.first->replaceUsesWithLimits(m.second, m.second->bb(), m.first);
+            m.first->replaceReachableUses(m.second);
             if (m.first->unused())
                 m.first->eraseAndRemove();
         }

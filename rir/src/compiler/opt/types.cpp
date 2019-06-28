@@ -38,44 +38,8 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     return PirType::bottom();
                 };
 
-                auto mergedArgumentType = [&]() {
-                    PirType inferred = PirType::bottom();
-                    i->eachArg([&](Value* v) {
-                        if (i->mayHaveEnv() && v == i->env())
-                            return;
-                        inferred = inferred | getType(v);
-                    });
-                    return inferred;
-                };
-
                 PirType inferred = PirType::bottom();
                 switch (i->tag) {
-                case Tag::Mul:
-                case Tag::Div:
-                case Tag::IDiv:
-                case Tag::Mod:
-                case Tag::Add:
-                case Tag::Pow:
-                case Tag::Sub:
-                case Tag::Not:
-                case Tag::Plus:
-                case Tag::Minus: {
-                    inferred = mergedArgumentType();
-                    if (i->tag == Tag::Div &&
-                        inferred.isA(PirType(RType::integer) |
-                                     RType::logical)) {
-                        inferred = inferred | RType::real;
-                    }
-                    if (inferred.isA(RType::logical)) {
-                        // e.g. TRUE + TRUE = 2
-                        inferred = inferred | RType::integer;
-                    }
-                    break;
-                }
-                case Tag::Phi: {
-                    inferred = mergedArgumentType();
-                    break;
-                }
                 case Tag::CallSafeBuiltin: {
                     auto c = CallSafeBuiltin::Cast(i);
                     std::string name = getBuiltinName(getBuiltinNr(c->blt));
@@ -120,17 +84,17 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     }
 
                     if ("c" == name) {
-                        inferred =
-                            mergedArgumentType().collectionType(c->nCallArgs());
+                        inferred = i->mergedInputType(getType).collectionType(
+                            c->nCallArgs());
                         break;
                     }
 
-                    inferred = i->type;
+                    inferred = i->inferType(getType);
                     break;
                 }
 
                 default:
-                    inferred = i->type;
+                    inferred = i->inferType(getType);
                 }
 
                 // inference should never generate less precise type

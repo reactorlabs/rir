@@ -168,6 +168,8 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                                 if (auto f = Force::Cast(i)) {
                                     if (LdArg::Cast(f)) {
                                         f->elideEnv();
+                                        f->effects.reset(
+                                            Effect::DependsOnAssume);
                                         f->effects.reset(Effect::Reflection);
                                     }
                                 }
