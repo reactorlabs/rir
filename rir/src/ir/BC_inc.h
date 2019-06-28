@@ -166,7 +166,10 @@ class BC {
         ObservedValues typeFeedback;
         PoolAndCachePositionRange poolAndCache;
         CachePositionRange cacheIdx;
-        ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
+        ImmediateArguments() {
+            memset(reinterpret_cast<void*>(this), 0,
+                   sizeof(ImmediateArguments));
+        }
     };
 
     static Immediate readImmediate(Opcode** pc) {
@@ -677,7 +680,7 @@ BC_NOARGS(V, _)
                    sizeof(CallBuiltinFixedArgs));
             break;
         case Opcode::static_call_:
-            memcpy(&immediate.staticCallFixedArgs, pc,
+            memcpy(reinterpret_cast<void*>(&immediate.staticCallFixedArgs), pc,
                    sizeof(StaticCallFixedArgs));
             break;
         case Opcode::guard_fun_:
@@ -719,7 +722,8 @@ BC_NOARGS(V, _)
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;
         case Opcode::record_type_:
-            memcpy(&immediate.typeFeedback, pc, sizeof(ObservedValues));
+            memcpy(reinterpret_cast<void*>(&immediate.typeFeedback), pc,
+                   sizeof(ObservedValues));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)
