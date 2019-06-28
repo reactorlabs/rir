@@ -105,7 +105,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         BBTransform::insertAssume(condition, cp, bb, ip, false);
 
                         if (auto argi = Instruction::Cast(arg)) {
-                            auto cast = new CastType(argi, PirType::val(),
+                            auto cast = new CastType(argi, CastType::Downcast,
+                                                     PirType::val(),
                                                      argi->type.notObject());
                             ip = bb->insert(ip, cast);
                             ip++;

@@ -137,8 +137,8 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                     }
                     // Need to cast promise-as-a-value to lazy-value, to make
                     // it evaluate on access
-                    res =
-                        builder(new CastType(res, RType::prom, PirType::any()));
+                    res = builder(new CastType(res, CastType::Upcast,
+                                               RType::prom, PirType::any()));
                 }
 
                 builder(

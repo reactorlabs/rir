@@ -1006,12 +1006,16 @@ class FLIE(Force, 2, Effects::Any()) {
 
 class FLI(CastType, 1, Effects::None()) {
   public:
+    enum Kind { Upcast, Downcast };
+    const Kind kind;
     unsigned cost() const override final { return 0; }
-    CastType(Value* in, PirType from, PirType to)
-        : FixedLenInstruction(to, {{from}}, {{in}}) {}
+    CastType(Value* in, Kind k, PirType from, PirType to)
+        : FixedLenInstruction(to, {{from}}, {{in}}), kind(k) {}
     size_t gvnBase() const override {
-        return hash_combine(hash_combine(tagHash(), type), arg<0>().type());
+        return hash_combine(
+            hash_combine(hash_combine(tagHash(), type), arg<0>().type()), kind);
     }
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLI(AsLogical, 1, Effect::Error) {

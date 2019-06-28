@@ -414,6 +414,11 @@ void Branch::printArgs(std::ostream& out, bool tty) const {
         << bb()->falseBranch()->id << " (if false)";
 }
 
+void CastType::printArgs(std::ostream& out, bool tty) const {
+    out << (kind == Upcast ? "up " : "dn ");
+    FixedLenInstruction::printArgs(out, tty);
+}
+
 void Branch::printGraphArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
 }
