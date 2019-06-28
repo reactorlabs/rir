@@ -28,6 +28,16 @@ extern Rboolean R_Visible;
 
 namespace rir {
 
+#ifdef PRINT_INTERP
+static void printInterp(Opcode* pc, Code* c) {
+    BC bc = BC::decode(pc, c);
+    std::cout << "#";
+    bc.print(std::cout);
+}
+
+static void printLastop() { std::cout << "> lastop\n"; }
+#endif
+
 static RIR_INLINE SEXP getSrcAt(Code* c, Opcode* pc, InterpreterInstance* ctx) {
     unsigned sidx = c->getSrcIdxAt(pc, true);
     if (sidx == 0)
@@ -48,10 +58,20 @@ static RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc,
 #define BEGIN_MACHINE NEXT();
 #define INSTRUCTION(name)                                                      \
     op_##name: /* debug(c, pc, #name, ostack_length(ctx) - bp, ctx); */
+#ifdef PRINT_INTERP
+#define NEXT()                                                                 \
+    (__extension__({                                                           \
+        printInterp(pc, c);                                                    \
+        goto* opAddr[static_cast<uint8_t>(advanceOpcode())];                   \
+    }))
+#define LASTOP                                                                 \
+    { printLastop(); }
+#else
 #define NEXT()                                                                 \
     (__extension__({ goto* opAddr[static_cast<uint8_t>(advanceOpcode())]; }))
 #define LASTOP                                                                 \
     {}
+#endif
 #else
 #define BEGIN_MACHINE                                                          \
     loop:                                                                      \
