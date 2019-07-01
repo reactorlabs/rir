@@ -334,9 +334,9 @@ class TheScopeResolution {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {
                             if (mk->context == 1 && mk->bb() != bb &&
-                                mk->usesAreOnly(
-                                    function->entry,
-                                    {Tag::FrameState, Tag::StVar})) {
+                                mk->usesAreOnly(function->entry,
+                                                {Tag::FrameState, Tag::StVar,
+                                                 Tag::IsEnvStub})) {
                                 analysis.tryMaterializeEnv(
                                     before, mk,
                                     [&](const std::unordered_map<
