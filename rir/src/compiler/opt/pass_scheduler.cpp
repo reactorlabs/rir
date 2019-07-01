@@ -81,6 +81,7 @@ PassScheduler::PassScheduler() {
     //
     // After this pass it is no longer possible to inline callees with deopts
     add<CleanupFramestate>();
+    add<OptimizeAssumptions>();
     add<CleanupCheckpoints>();
 
     add<PhaseMarker>("Phase 3: Cleanup Checkpoints");
@@ -88,6 +89,7 @@ PassScheduler::PassScheduler() {
     // ==== Phase 4) Final round of default opts
     for (size_t i = 0; i < 3; ++i) {
         addDefaultOpt();
+        add<OptimizeAssumptions>();
         add<CleanupCheckpoints>();
     }
     add<PhaseMarker>("Phase 4: finished");
