@@ -173,15 +173,22 @@ class Instruction : public Value {
         return !getObservableEffects().empty();
     }
 
-    bool hasStrongEffects() const {
+    Effects getStrongEffects() const {
         auto e = getObservableEffects();
         // Yes visibility is a global effect. We try to preserve it. But geting
         // it wrong is not a strong correctness issue.
         e.reset(Effect::Visibility);
+        return e;
+    }
+
+    bool hasStrongEffects() const { return !getStrongEffects().empty(); }
+
+    bool isDeoptBarrier() const {
+        auto e = getStrongEffects();
+        e.reset(Effect::TriggerDeopt);
         return !e.empty();
     }
 
-    bool isDeoptBarrier() const { return hasStrongEffects(); }
     // TODO: Add verify, then replace with effects.includes(Effect::LeakArg)
     bool leaksArg(Value* val) const {
         return leaksEnv() || effects.includes(Effect::LeakArg);

@@ -39,7 +39,6 @@ PassScheduler::PassScheduler() {
         add<OptimizeContexts>();
         add<LoadElision>();
         add<GVN>();
-        add<OptimizeAssumptions>();
         add<Cleanup>();
         add<TypeInference>();
     };
@@ -60,6 +59,7 @@ PassScheduler::PassScheduler() {
     addDefaultOpt();
     add<TypeSpeculation>();
     add<ElideEnvSpec>();
+    add<OptimizeAssumptions>();
 
     add<PhaseMarker>("Phase 2: Env speculation");
 
