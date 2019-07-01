@@ -2,3 +2,6 @@
 	path = external/custom-r
 	url = https://github.com/reactorlabs/gnur.git
 	ignore = untracked
+[submodule "external/libjit"]
+	path = external/libjit
+	url = https://git.savannah.gnu.org/git/libjit.git

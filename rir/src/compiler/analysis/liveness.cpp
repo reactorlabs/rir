@@ -86,6 +86,9 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
                     accumulated.erase(accumulated.find(i));
                 }
 
+                if (accumulated.size() > maxLive)
+                    maxLive = accumulated.size();
+
             } while (ip != bb->begin());
         }
         assert(pos == 0);

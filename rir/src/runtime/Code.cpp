@@ -24,9 +24,9 @@ Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      uid(UUID::random()), funInvocationCount(0), src(src), stackLength(0),
-      localsCount(localsCnt), bindingCacheSize(bindingsCnt), codeSize(cs),
-      srcLength(sourceLength), extraPoolSize(0) {
+      nativeCode(nullptr), uid(UUID::random()), funInvocationCount(0), src(src),
+      stackLength(0), localsCount(localsCnt), bindingCacheSize(bindingsCnt),
+      codeSize(cs), srcLength(sourceLength), extraPoolSize(0) {
     setEntry(0, R_NilValue);
     allCodes.emplace(uid, this);
 }

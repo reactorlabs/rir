@@ -6,6 +6,7 @@
 #include "instance.h"
 
 #include "interp_incl.h"
+#include "ir/Deoptimization.h"
 
 #include <R/r.h>
 
@@ -41,6 +42,14 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     }
     return nullptr;
 }
+
+SEXP builtinCall(CallContext& call, InterpreterInstance* ctx);
+SEXP doCall(CallContext& call, InterpreterInstance* ctx);
+void deoptFramesWithContext(InterpreterInstance* ctx,
+                            const CallContext* callCtxt,
+                            DeoptMetadata* deoptData, SEXP sysparent,
+                            size_t pos, size_t stackHeight,
+                            bool outerHasContext);
 }
 
 #endif // RIR_INTERPRETER_C_H
