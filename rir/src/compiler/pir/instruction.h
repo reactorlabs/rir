@@ -366,6 +366,16 @@ class Instruction : public Value {
     void printGraph(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
     void print() const { print(std::cerr, true); }
+    void printRecursive(std::ostream& out, int i) {
+        if (i == 0)
+            return;
+        eachArg([&](Value* v) {
+            if (auto j = Instruction::Cast(v))
+                j->printRecursive(out, i - 1);
+        });
+        print(out, false);
+        out << "\n";
+    }
 
     virtual InstrArg& arg(size_t pos) = 0;
     virtual const InstrArg& arg(size_t pos) const = 0;
@@ -1874,7 +1884,8 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
 };
 
 class VLI(CallSafeBuiltin,
-          Effects(Effect::Warn) | Effect::Error | Effect::Visibility),
+          Effects(Effect::Warn) | Effect::Error | Effect::Visibility |
+              Effect::DependsOnAssume),
     public CallInstruction {
   public:
     SEXP blt;

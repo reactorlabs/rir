@@ -546,14 +546,16 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
     bool noObj = true;
     for (auto a : args) {
         if (auto mk = MkArg::Cast(a)) {
-            if (mk->isEager()) {
-                if (mk->eagerArg()->type.maybeObj())
-                    noObj = false;
-                continue;
-            }
-        }
-        if (a->type.maybeObj())
+            if (mk->isEager())
+                if (!mk->eagerArg()->type.maybeObj())
+                    continue;
             noObj = false;
+            break;
+        }
+        if (a->type.maybeObj()) {
+            noObj = false;
+            break;
+        }
     }
 
     if (SafeBuiltinsList::always(builtin) ||

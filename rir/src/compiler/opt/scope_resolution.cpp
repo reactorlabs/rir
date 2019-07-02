@@ -509,6 +509,7 @@ class TheScopeResolution {
                         i->env(aLoad.env);
                 });
 
+                // TODO move this to a pass where it fits...
                 if (auto b = CallBuiltin::Cast(i)) {
                     bool noObjects = true;
                     i->eachArg([&](Value* v) {

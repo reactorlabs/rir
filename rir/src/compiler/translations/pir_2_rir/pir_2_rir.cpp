@@ -986,7 +986,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 int instrStr;
                 if (pir::Parameter::RIR_CHECK_PIR_TYPES > 1) {
                     std::stringstream instrPrint;
-                    instr->print(instrPrint, false);
+                    instr->printRecursive(instrPrint, 2);
                     instrStr =
                         Pool::insert(Rf_mkString(instrPrint.str().c_str()));
                 } else {
