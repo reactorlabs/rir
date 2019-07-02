@@ -242,12 +242,17 @@ static void checkReplace(Instruction* origin, Value* replace) {
     }
 }
 
-void Instruction::replaceReachableUses(Instruction* replace) {
+void Instruction::replaceDominatedUses(Instruction* replace) {
     checkReplace(this, replace);
 
     auto start = false;
 
+    // TODO: ensure graph is numbered in dominance order so we don't need this
+    DominanceGraph dom(replace->bb()->owner);
+
     Visitor::run(replace->bb(), bb(), [&](BB* bb) {
+        if (bb != replace->bb() && !dom.dominates(replace->bb(), bb))
+            return;
         for (auto& i : *bb) {
             // First we need to find the position of the replacee, only after
             // this instruction is in scope we should start replacing

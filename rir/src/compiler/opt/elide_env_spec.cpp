@@ -120,7 +120,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                                                      argi->type.notObject());
                             ip = bb->insert(ip, cast);
                             ip++;
-                            argi->replaceReachableUses(cast);
+                            argi->replaceDominatedUses(cast);
                         }
                     });
                     i->elideEnv();

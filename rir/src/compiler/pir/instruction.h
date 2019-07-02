@@ -247,7 +247,7 @@ class Instruction : public Value {
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
-    void replaceReachableUses(Instruction* replacement);
+    void replaceDominatedUses(Instruction* replacement);
     void replaceUsesIn(Value* val, BB* target);
 
     bool usesAreOnly(BB*, std::unordered_set<Tag>);

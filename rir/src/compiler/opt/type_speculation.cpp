@@ -99,7 +99,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                 new CastType(i, CastType::Downcast, PirType::val(), type);
             ip = bb->insert(ip, cast);
             ip++;
-            i->replaceReachableUses(cast);
+            i->replaceDominatedUses(cast);
         }
     });
 }

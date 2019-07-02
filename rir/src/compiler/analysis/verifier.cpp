@@ -34,7 +34,7 @@ class TheVerifier {
 
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
-            f->print(std::cerr, true);
+            f->print(std::cerr, false);
         }
 
         f->eachPromise([&](Promise* p) {
@@ -48,7 +48,7 @@ class TheVerifier {
             }
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
-                p->printCode(std::cerr, true, false);
+                p->printCode(std::cerr, false, false);
             }
         });
 
