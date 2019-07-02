@@ -35,6 +35,33 @@ static bool isConstant(SEXP exp) {
     }
 }
 
+static bool containsLoop(SEXP exp) {
+    Match(exp) {
+        Case(LANGSXP, fun, args_) {
+            if (TYPEOF(fun) != SYMSXP) {
+                return false;
+            } else if (fun == symbol::Repeat) {
+                return true;
+            } else if (fun == symbol::While) {
+                return true;
+            } else if (fun == symbol::For) {
+                return true;
+            }
+
+            RList args(args_);
+            bool res = false;
+            for (RListIter e = args.begin(); e != args.end(); ++e) {
+                res = res || containsLoop(*e);
+            }
+            return res;
+        }
+        Else({
+            return false;
+        })
+    }
+    assert(false);
+}
+
 class CompilerContext {
   public:
     class LoopContext {
@@ -158,7 +185,7 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
-                  std::function<void()> compileBody) {
+                  std::function<void()> compileBody, bool peelLoop = false) {
     CodeStream& cs = ctx.cs();
 
     BC::Label nextBranch = cs.mkLabel();
@@ -166,8 +193,16 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     ctx.pushLoop(nextBranch, breakBranch);
 
     unsigned beginLoopPos = cs.currentPos();
-    cs << BC::beginloop(breakBranch) << nextBranch;
+    cs << BC::beginloop(breakBranch);
 
+    // loop peel is a copy of the condition and body, with no backwards jumps
+    if (peelLoop) {
+        compileCond();
+        cs << BC::brfalse(breakBranch);
+        compileBody();
+    }
+
+    cs << nextBranch;
     compileCond();
     cs << BC::brfalse(breakBranch);
 
@@ -258,31 +293,32 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             cs << BC::push(R_FalseValue);
             cs << BC::put(3) << BC::put(2) << startBranch;
             // while
-            compileWhile(
-                ctx,
-                [&cs]() {
-                    // ((i' > n') ...
-                    cs << BC::dup2() << BC::lt();
-                    cs.addSrc(R_NilValue);
-                    // ... == gt')
-                    cs << BC::pull(4) << BC::eq();
-                    cs.addSrc(R_NilValue);
-                },
-                [&ctx, &cs, &sym, &body]() {
-                    // {
-                    // i <- i'
-                    cs << BC::dup();
-                    if (ctx.code.top()->isCached(sym))
-                        cs << BC::stvarCached(sym, ctx.code.top()->cacheSlotFor(sym));
-                    else
-                        cs << BC::stvar(sym);
-                    // i' <- i' + diff'
-                    cs << BC::pull(2) << BC::add();
-                    cs.addSrc(R_NilValue);
-                    // ...
-                    compileExpr(ctx, body, true);
-                    // }
-                });
+            compileWhile(ctx,
+                         [&cs]() {
+                             // ((i' > n') ...
+                             cs << BC::dup2() << BC::lt();
+                             cs.addSrc(R_NilValue);
+                             // ... == gt')
+                             cs << BC::pull(4) << BC::eq();
+                             cs.addSrc(R_NilValue);
+                         },
+                         [&ctx, &cs, &sym, &body]() {
+                             // {
+                             // i <- i'
+                             cs << BC::dup();
+                             if (ctx.code.top()->isCached(sym))
+                                 cs << BC::stvarCached(
+                                     sym, ctx.code.top()->cacheSlotFor(sym));
+                             else
+                                 cs << BC::stvar(sym);
+                             // i' <- i' + diff'
+                             cs << BC::pull(2) << BC::add();
+                             cs.addSrc(R_NilValue);
+                             // ...
+                             compileExpr(ctx, body, true);
+                             // }
+                         },
+                         !containsLoop(body));
             // } else {
             cs << BC::popn(4);
             if (!voidContext)
@@ -782,13 +818,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
-        compileWhile(
-            ctx,
-            [&ctx, &cs, &cond]() {
-                compileExpr(ctx, cond);
-                cs << BC::asbool();
-            },
-            [&ctx, &body]() { compileExpr(ctx, body, true); });
+        compileWhile(ctx,
+                     [&ctx, &cs, &cond]() {
+                         compileExpr(ctx, cond);
+                         cs << BC::asbool();
+                     },
+                     [&ctx, &body]() { compileExpr(ctx, body, true); },
+                     !containsLoop(body));
 
         if (!voidContext)
             cs << BC::push(R_NilValue) << BC::invisible();
@@ -808,8 +844,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         ctx.pushLoop(nextBranch, breakBranch);
 
         unsigned beginLoopPos = cs.currentPos();
-        cs << BC::beginloop(breakBranch) << nextBranch;
+        cs << BC::beginloop(breakBranch);
 
+        // loop peel is a copy of the body, with no backwards jumps
+        if (!containsLoop(body)) {
+            compileExpr(ctx, body, true);
+        }
+
+        cs << nextBranch;
         compileExpr(ctx, body, true);
         cs << BC::br(nextBranch) << breakBranch;
 
@@ -851,27 +893,39 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             cs << BC::setShared();
         cs << BC::forSeqSize() << BC::push((int)0);
 
+        auto compileIndexOps = [&]() {
+            // Increment the index and compare to the seq upper bound
+            cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
+            // We know this is an int and won't do dispatch.
+            // TODO: add a integer version of lt_
+            cs.addSrc(R_NilValue);
+
+            // If outside bound, branch, otherwise index into the vector
+            cs << BC::brtrue(breakBranch) << BC::pull(2) << BC::pull(1)
+               << BC::extract2_1();
+            // We know this is a loop sequence and won't do dispatch.
+            // TODO: add a non-object version of extract2_1
+            cs.addSrc(R_NilValue);
+
+            // Set the loop variable
+            if (ctx.code.top()->isCached(sym))
+                cs << BC::stvarCached(sym, ctx.code.top()->cacheSlotFor(sym));
+            else
+                cs << BC::stvar(sym);
+        };
+
         unsigned int beginLoopPos = cs.currentPos();
-        cs << BC::beginloop(breakBranch) << nextBranch;
+        cs << BC::beginloop(breakBranch);
 
-        // Increment the index and compare to the seq upper bound
-        cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
-        // We know this is an int and won't do dispatch.
-        // TODO: add a integer version of lt_
-        cs.addSrc(R_NilValue);
+        // loop peel is a copy of the body (including indexing ops), with no
+        // backwards jumps
+        if (!containsLoop(body)) {
+            compileIndexOps();
+            compileExpr(ctx, body, true);
+        }
 
-        // If outside bound, branch, otherwise index into the vector
-        cs << BC::brtrue(breakBranch) << BC::pull(2) << BC::pull(1)
-           << BC::extract2_1();
-        // We know this is a loop sequence and won't do dispatch.
-        // TODO: add a non-object version of extract2_1
-        cs.addSrc(R_NilValue);
-
-        // Set the loop variable
-        if (ctx.code.top()->isCached(sym))
-            cs << BC::stvarCached(sym, ctx.code.top()->cacheSlotFor(sym));
-        else
-            cs << BC::stvar(sym);
+        cs << nextBranch;
+        compileIndexOps();
 
         // Compile the loop body
         compileExpr(ctx, body, true);
