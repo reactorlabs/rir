@@ -71,8 +71,6 @@ struct NativeBuiltins {
     static NativeBuiltin asTest;
     static NativeBuiltin asLogical;
 
-    static NativeBuiltin ensureNamed;
-
     static NativeBuiltin length;
 
     static NativeBuiltin deopt;
