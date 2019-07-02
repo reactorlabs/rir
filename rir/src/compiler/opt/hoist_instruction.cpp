@@ -78,7 +78,6 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
             {
                 bool success = true;
                 i->eachArg([&](Value* a) {
-                    // cppcheck-suppress knownConditionTrueFalse
                     if (!success)
                         return;
 
@@ -88,7 +87,6 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
 
                     // Try to find a hoisting candidate that is dominated by all
                     // arguments to i
-                    // cppcheck-suppress knownConditionTrueFalse
                     if (!target)
                         target = arg->bb();
                     if (target != arg->bb()) {
