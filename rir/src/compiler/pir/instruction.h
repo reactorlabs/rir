@@ -173,15 +173,22 @@ class Instruction : public Value {
         return !getObservableEffects().empty();
     }
 
-    bool hasStrongEffects() const {
+    Effects getStrongEffects() const {
         auto e = getObservableEffects();
         // Yes visibility is a global effect. We try to preserve it. But geting
         // it wrong is not a strong correctness issue.
         e.reset(Effect::Visibility);
+        return e;
+    }
+
+    bool hasStrongEffects() const { return !getStrongEffects().empty(); }
+
+    bool isDeoptBarrier() const {
+        auto e = getStrongEffects();
+        e.reset(Effect::TriggerDeopt);
         return !e.empty();
     }
 
-    bool isDeoptBarrier() const { return hasStrongEffects(); }
     // TODO: Add verify, then replace with effects.includes(Effect::LeakArg)
     bool leaksArg(Value* val) const {
         return leaksEnv() || effects.includes(Effect::LeakArg);
@@ -240,7 +247,7 @@ class Instruction : public Value {
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
-    void replaceReachableUses(Instruction* replacement);
+    void replaceDominatedUses(Instruction* replacement);
     void replaceUsesIn(Value* val, BB* target);
 
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
@@ -359,6 +366,16 @@ class Instruction : public Value {
     void printGraph(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
     void print() const { print(std::cerr, true); }
+    void printRecursive(std::ostream& out, int i) {
+        if (i == 0)
+            return;
+        eachArg([&](Value* v) {
+            if (auto j = Instruction::Cast(v))
+                j->printRecursive(out, i - 1);
+        });
+        print(out, false);
+        out << "\n";
+    }
 
     virtual InstrArg& arg(size_t pos) = 0;
     virtual const InstrArg& arg(size_t pos) const = 0;
@@ -1867,7 +1884,8 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
 };
 
 class VLI(CallSafeBuiltin,
-          Effects(Effect::Warn) | Effect::Error | Effect::Visibility),
+          Effects(Effect::Warn) | Effect::Error | Effect::Visibility |
+              Effect::DependsOnAssume),
     public CallInstruction {
   public:
     SEXP blt;

@@ -242,12 +242,17 @@ static void checkReplace(Instruction* origin, Value* replace) {
     }
 }
 
-void Instruction::replaceReachableUses(Instruction* replace) {
+void Instruction::replaceDominatedUses(Instruction* replace) {
     checkReplace(this, replace);
 
     auto start = false;
 
+    // TODO: ensure graph is numbered in dominance order so we don't need this
+    DominanceGraph dom(replace->bb()->owner);
+
     Visitor::run(replace->bb(), bb(), [&](BB* bb) {
+        if (bb != replace->bb() && !dom.dominates(replace->bb(), bb))
+            return;
         for (auto& i : *bb) {
             // First we need to find the position of the replacee, only after
             // this instruction is in scope we should start replacing
@@ -541,14 +546,16 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
     bool noObj = true;
     for (auto a : args) {
         if (auto mk = MkArg::Cast(a)) {
-            if (mk->isEager()) {
-                if (mk->eagerArg()->type.maybeObj())
-                    noObj = false;
-                continue;
-            }
-        }
-        if (a->type.maybeObj())
+            if (mk->isEager())
+                if (!mk->eagerArg()->type.maybeObj())
+                    continue;
             noObj = false;
+            break;
+        }
+        if (a->type.maybeObj()) {
+            noObj = false;
+            break;
+        }
     }
 
     if (SafeBuiltinsList::always(builtin) ||

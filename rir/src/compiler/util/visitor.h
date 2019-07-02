@@ -306,7 +306,6 @@ class VisitorImplementation {
                     return false;
             }
 
-            // cppcheck-suppress knownConditionTrueFalse
             if (!next) {
                 if (!todo.empty()) {
                     next = todo.front();

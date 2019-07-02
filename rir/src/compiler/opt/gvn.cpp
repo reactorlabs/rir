@@ -120,7 +120,6 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
 
             bool success = true;
             i->eachArg([&](Value* a) {
-                // cppcheck-suppress knownConditionTrueFalse
                 if (!success)
                     return;
                 if (!Instruction::Cast(a))

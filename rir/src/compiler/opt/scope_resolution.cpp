@@ -334,9 +334,9 @@ class TheScopeResolution {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {
                             if (mk->context == 1 && mk->bb() != bb &&
-                                mk->usesAreOnly(
-                                    function->entry,
-                                    {Tag::FrameState, Tag::StVar})) {
+                                mk->usesAreOnly(function->entry,
+                                                {Tag::FrameState, Tag::StVar,
+                                                 Tag::IsEnvStub})) {
                                 analysis.tryMaterializeEnv(
                                     before, mk,
                                     [&](const std::unordered_map<
@@ -364,7 +364,7 @@ class TheScopeResolution {
                                         ip = bb->insert(ip, deoptEnv);
                                         ip++;
                                         next = ip + 1;
-                                        mk->replaceReachableUses(deoptEnv);
+                                        mk->replaceDominatedUses(deoptEnv);
                                     });
                             }
                         }
@@ -509,6 +509,7 @@ class TheScopeResolution {
                         i->env(aLoad.env);
                 });
 
+                // TODO move this to a pass where it fits...
                 if (auto b = CallBuiltin::Cast(i)) {
                     bool noObjects = true;
                     i->eachArg([&](Value* v) {

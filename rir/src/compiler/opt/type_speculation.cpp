@@ -33,17 +33,19 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     // Blacklist of where it is not worthwhile
                     if (!LdConst::Cast(arg) &&
                         // leave this to the promise inliner
-                        !MkArg::Cast(arg) && !Force::Cast(arg)) {
+                        !MkArg::Cast(arg) && !Force::Cast(arg) &&
+                        // leave this to scope resolution
+                        !LdVar::Cast(arg) && !LdVarSuper::Cast(arg)) {
                         trigger = true;
                     }
+                    if (auto ld = LdVar::Cast(arg))
+                        if (!Env::isPirEnv(ld->env()))
+                            trigger = true;
+                    if (auto ld = LdVarSuper::Cast(arg))
+                        if (!Env::isPirEnv(ld->env()))
+                            trigger = true;
                     break;
                 }
-                case Tag::Add:
-                case Tag::Mul:
-                case Tag::Sub:
-                case Tag::Div:
-                    trigger = true;
-                    break;
                 default: {}
                 }
             }
@@ -97,7 +99,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                 new CastType(i, CastType::Downcast, PirType::val(), type);
             ip = bb->insert(ip, cast);
             ip++;
-            i->replaceReachableUses(cast);
+            i->replaceDominatedUses(cast);
         }
     });
 }

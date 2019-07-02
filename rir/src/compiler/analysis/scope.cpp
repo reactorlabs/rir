@@ -212,18 +212,38 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         }
 
         if (!handled) {
-            lookup(arg->followCastsAndForce(),
-                   [&](const AbstractPirValue& analysisRes) {
-                       if (!analysisRes.type.maybeLazy()) {
-                           if (!analysisRes.type.maybePromiseWrapped())
-                               updateReturnValue(analysisRes);
-                           else
-                               updateReturnValue(AbstractPirValue::tainted());
-                           handled = true;
-                       } else if (analysisRes.isSingleValue()) {
-                           arg = analysisRes.singleValue().val;
-                       }
-                   });
+            auto doLookup = [&](const AbstractPirValue& analysisRes) {
+                if (!analysisRes.type.maybeLazy()) {
+                    if (!analysisRes.type.maybePromiseWrapped())
+                        updateReturnValue(analysisRes);
+                    else
+                        updateReturnValue(AbstractPirValue::tainted());
+                    handled = true;
+                } else if (analysisRes.isSingleValue()) {
+                    arg = analysisRes.singleValue().val;
+                }
+            };
+            // Often we have `x = LdVar(...); y = Force(x)`. Since LdVar does
+            // not change the environment, the state at Force is usable to query
+            // the result of the LdVar.
+            auto arg0 = Instruction::Cast(arg->followCastsAndForce());
+            bool adjacent = false;
+            if (arg0 && i->bb() == arg0->bb())
+                for (const auto& j : *i->bb()) {
+                    if (j == arg0)
+                        adjacent = true;
+                    else if (j == i)
+                        break;
+                    else if (adjacent && j->changesEnv()) {
+                        adjacent = false;
+                        break;
+                    }
+                }
+
+            if (adjacent)
+                lookupAt(state, arg0, doLookup);
+            else
+                lookup(arg->followCastsAndForce(), doLookup);
         }
 
         if (!handled && LdArg::Cast(arg) &&

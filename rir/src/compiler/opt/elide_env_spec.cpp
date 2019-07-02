@@ -20,13 +20,23 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     auto nonObjectArgs = [&](Instruction* i) {
         auto answer = true;
         i->eachArg([&](Value* arg) {
+            if (!answer)
+                return;
+
             if (i->env() == arg)
                 return;
-            if (arg->type.maybeObj() &&
-                (arg->typeFeedback.isVoid() || arg->typeFeedback.maybeObj()))
+            if (!arg->followCastsAndForce()->type.maybeObj())
+                return;
+            if (arg->type.maybePromiseWrapped()) {
                 answer = false;
-            // We can't type-test lazy args
-            if (arg->type.maybePromiseWrapped())
+                return;
+            }
+
+            auto fb = arg->typeFeedback;
+            if (fb.isVoid())
+                fb = arg->followCastsAndForce()->typeFeedback;
+
+            if (fb.isVoid() || fb.maybeObj())
                 answer = false;
         });
         return answer;
@@ -110,7 +120,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                                                      argi->type.notObject());
                             ip = bb->insert(ip, cast);
                             ip++;
-                            argi->replaceReachableUses(cast);
+                            argi->replaceDominatedUses(cast);
                         }
                     });
                     i->elideEnv();

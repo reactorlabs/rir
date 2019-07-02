@@ -485,7 +485,7 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
 
         // 3. replace remaining uses of the mkarg itself
         for (auto m : forcedMkArg) {
-            m.first->replaceReachableUses(m.second);
+            m.first->replaceDominatedUses(m.second);
             if (m.first->unused())
                 m.first->eraseAndRemove();
         }
