@@ -175,6 +175,29 @@ struct PirType {
         return *this != t;
     }
 
+    inline void mergeWithConversion(const PirType& other) {
+        assert(isRType() && other.isRType());
+
+        auto me = *this;
+        merge(other);
+
+        auto fixup = [&](PirType a, PirType b) {
+            if (a.isA(PirType() | RType::integer | RType::logical) &&
+                b.isA(RType::integer)) {
+                *this = *this & RType::integer;
+                return true;
+            } else if (a.isA(PirType() | RType::real | RType::logical |
+                             RType::integer) &&
+                       b.isA(RType::real)) {
+                *this = *this & RType::real;
+                return true;
+            }
+            return false;
+        };
+
+        fixup(me, other) or fixup(other, me);
+    }
+
     void merge(const ObservedValues& other);
     void merge(SEXPTYPE t);
 
