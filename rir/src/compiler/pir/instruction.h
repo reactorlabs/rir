@@ -302,7 +302,8 @@ class Instruction : public Value {
     }
 
     PirType inferedTypeForArtithmeticInstruction(const TypeOf& typeof) const {
-        if (!mergedInputType(typeof).maybeObj()) {
+        auto m = mergedInputType(typeof);
+        if (!m.maybeObj()) {
             auto t = PirType::bottom();
             eachArg([&](Value* v) {
                 if (!mayHaveEnv() || v != env())
@@ -311,7 +312,7 @@ class Instruction : public Value {
             // Everything but numbers throws an error
             t = t & PirType::num().notMissing();
             // e.g. TRUE + TRUE == 2
-            if (t.maybe(RType::logical))
+            if (m.maybe(RType::logical))
                 t = t | RType::integer;
             return type & t;
         }
