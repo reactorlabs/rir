@@ -198,7 +198,7 @@ benchmark_rir:
   tags:
     - benchmark
   script:
-    - $REBENCH_RUN e:RIR $REBENCH_OPTIONS
+    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS"
 benchmark_pir:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -209,7 +209,7 @@ benchmark_pir:
   tags:
     - benchmark
   script:
-    - $REBENCH_RUN e:PIR $REBENCH_OPTIONS
+    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS"
 benchmark_native:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -220,7 +220,7 @@ benchmark_native:
   tags:
     - benchmark
   script:
-    - $REBENCH_RUN e:PIR-NATIVE $REBENCH_OPTIONS
+    - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS"
 benchmark_gnur:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -231,7 +231,7 @@ benchmark_gnur:
   tags:
     - benchmark
   script:
-    - $REBENCH_RUN_BL e:GNU-R $REBENCH_OPTIONS
+    - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS"
 benchmark_fastr:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -242,5 +242,5 @@ benchmark_fastr:
   tags:
     - benchmark
   script:
-    - $REBENCH_RUN_BL e:FASTR $REBENCH_OPTIONS
+    - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS"
   allow_failure: true
