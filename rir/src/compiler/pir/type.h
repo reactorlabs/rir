@@ -169,10 +169,28 @@ struct PirType {
         return *this;
     }
 
-    RIR_INLINE bool merge(const PirType& other) {
-        PirType t = *this;
-        *this = *this | other;
-        return *this != t;
+    inline PirType mergeWithConversion(const PirType& other) const {
+        assert(isRType() && other.isRType());
+
+        auto res = *this | other;
+
+        auto fixup = [&](PirType a, PirType b) {
+            if (a.isA(PirType() | RType::integer | RType::logical) &&
+                b.isA(RType::integer)) {
+                res = res & RType::integer;
+                return true;
+            } else if (a.isA(PirType() | RType::real | RType::logical |
+                             RType::integer) &&
+                       b.isA(RType::real)) {
+                res = res & RType::real;
+                return true;
+            }
+            return false;
+        };
+
+        fixup(*this, other) || fixup(other, *this);
+
+        return res;
     }
 
     void merge(const ObservedValues& other);

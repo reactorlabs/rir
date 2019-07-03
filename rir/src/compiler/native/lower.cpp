@@ -154,32 +154,75 @@ class PirCodeFunction : public jit_function {
     jit_value paramEnv() { return get_param(3); }
     jit_value paramClosure() { return get_param(4); }
 
+    void insn_assert(jit_value v, const char* msg) {
+        auto ok = jit_label();
+        insn_branch_if(v, ok);
+        call(NativeBuiltins::assertFail, {new_constant((void*)msg)});
+        insn_label(ok);
+    }
+
+    jit_value unboxIntLgl(jit_value v) {
+#ifdef ENABLE_SLOWASSERT
+        auto type = sexptype(v);
+        auto isLgl = type == new_constant(LGLSXP);
+        auto isInt = type == new_constant(INTSXP);
+        auto match = insn_or(isLgl, isInt);
+        insn_assert(match, "unboxIntLgl expected INTSXP or LGLSXP");
+#endif
+        return insn_load_relative(v, stdVecDtptrOfs, jit_type_int);
+    }
     jit_value unboxInt(jit_value v) {
+#ifdef ENABLE_SLOWASSERT
+        auto type = sexptype(v);
+        insn_assert(type == new_constant(INTSXP), "unboxInt expected INTSXP");
+#endif
+        return insn_load_relative(v, stdVecDtptrOfs, jit_type_int);
+    }
+    jit_value unboxLgl(jit_value v) {
+#ifdef ENABLE_SLOWASSERT
+        auto type = sexptype(v);
+        insn_assert(type == new_constant(LGLSXP), "unboxLgl expected LGLSXP");
+#endif
         return insn_load_relative(v, stdVecDtptrOfs, jit_type_int);
     }
     jit_value unboxReal(jit_value v) {
+#ifdef ENABLE_SLOWASSERT
+        auto type = sexptype(v);
+        insn_assert(type == new_constant(REALSXP),
+                    "unboxReal expected REALSXP");
+#endif
         return insn_load_relative(v, stdVecDtptrOfs, jit_type_float64);
     }
-    jit_value unboxRealOrInt(jit_value v) {
-        auto isInt = jit_label();
+    jit_value unboxRealIntLgl(jit_value v) {
+        auto isReal = jit_label();
         auto done = jit_label();
 
         auto res = jit_value_create(raw(), jit_type_float64);
 
         auto type = sexptype(v);
-        auto tt = insn_eq(type, new_constant(INTSXP));
-        insn_branch_if(tt, isInt);
+        auto tt = insn_eq(type, new_constant(REALSXP));
+        insn_branch_if(tt, isReal);
 
-        store(res, unboxReal(v));
+        store(res, unboxIntLgl(v));
         insn_branch(done);
 
-        insn_label(isInt);
-        store(res, unboxInt(v));
+        insn_label(isReal);
+        store(res, unboxReal(v));
         insn_label(done);
 
         return res;
     }
 
+    jit_value box(Instruction* pos, jit_value v, PirType t) {
+        if (t.isA(PirType(RType::integer).notObject()))
+            return boxInt(pos, v);
+        if (t.isA(PirType(RType::logical).notObject()))
+            return boxLgl(pos, v);
+        if (t.isA(PirType(RType::real).notObject()))
+            return boxReal(pos, v);
+        assert(false);
+        return nullptr;
+    }
     jit_value boxInt(Instruction* pos, jit_value v) {
         gcSafepoint(pos, 1, true);
         if (v.type() == jit_type_int)
@@ -216,9 +259,9 @@ class PirCodeFunction : public jit_function {
     void setVal(Instruction* i, jit_value val) {
         assert(!valueMap.count(i));
         if (val.type() == sxp && representationOf(i) == jit_type_int)
-            val = unboxInt(val);
+            val = unboxIntLgl(val);
         if (val.type() == sxp && representationOf(i) == jit_type_float64)
-            val = unboxRealOrInt(val);
+            val = unboxRealIntLgl(val);
         if (i->producesRirResult() && representationOf(i) != val.type()) {
             jit_dump_function(stdout, raw(), "test");
             i->print(std::cout);
@@ -316,6 +359,11 @@ jit_value PirCodeFunction::load(Instruction* pos, Value* val, PirType type,
 
     jit_value res;
 
+    if (auto cast = CastType::Cast(val)) {
+        auto arg = cast->arg(0).val();
+        return load(pos, arg, cast->type, needed);
+    }
+
     if (valueMap.count(val))
         res = valueMap.at(val);
     else if (val == Env::elided())
@@ -342,10 +390,12 @@ jit_value PirCodeFunction::load(Instruction* pos, Value* val, PirType type,
     }
 
     if (res.type() == sxp && needed != sxp) {
-        if (type.isA((PirType() | RType::integer | RType::logical)
-                         .scalar()
-                         .notObject())) {
+        if (type.isA(PirType(RType::integer).scalar().notObject())) {
             res = unboxInt(res);
+        } else if (type.isA((PirType() | RType::integer | RType::logical)
+                                .scalar()
+                                .notObject())) {
+            res = unboxIntLgl(res);
             assert(res.type() == jit_type_int);
         } else if (type.isA(PirType(RType::real).scalar().notObject())) {
             res = unboxReal(res);
@@ -354,10 +404,15 @@ jit_value PirCodeFunction::load(Instruction* pos, Value* val, PirType type,
                        (PirType(RType::real) | RType::integer | RType::logical)
                            .scalar()
                            .notObject())) {
-            res = unboxRealOrInt(res);
+            res = unboxRealIntLgl(res);
             assert(res.type() == jit_type_float64);
         } else {
+            code->printCode(std::cout, true, true);
             std::cout << "Don't know how to unbox a " << type << "\n";
+            pos->print(std::cout);
+            std::cout << "\n";
+            val->printRef(std::cout);
+            std::cout << "\n";
             assert(false);
         }
         // fall through, since more conversions might be needed after unboxing
@@ -688,7 +743,7 @@ void PirCodeFunction::build() {
                            {a, b, new_constant((int)kind)});
             }
             if (rep == Representation::Integer)
-                setVal(i, unboxInt(res));
+                setVal(i, unboxIntLgl(res));
             else
                 setVal(i, res);
             return;
@@ -734,38 +789,61 @@ void PirCodeFunction::build() {
     auto compileBinop = [&](
         Instruction* i, std::function<jit_value(jit_value, jit_value)> insert,
         BinopKind kind) {
-        auto r = representationOf(i);
 
-        auto a = load(i, i->arg(0).val(), r);
-        auto b = load(i, i->arg(1).val(), r);
+        auto rep = representationOf(i);
+        auto lhs = i->arg(0).val();
+        auto rhs = i->arg(1).val();
+        auto lhsRep = representationOf(lhs);
+        auto rhsRep = representationOf(rhs);
 
-        if (r == Representation::Sexp) {
+        if (lhsRep == Representation::Sexp || rhsRep == Representation::Sexp) {
+            auto a = loadSxp(i, i->arg(0).val());
+            auto b = loadSxp(i, i->arg(1).val());
+
+            jit_value res;
             gcSafepoint(i, -1, true);
             if (i->hasEnv()) {
                 auto e = loadSxp(i, i->env());
-                setVal(i, call(NativeBuiltins::binopEnv,
-                               {a, b, e, new_constant(i->srcIdx),
-                                new_constant((int)kind)}));
+                res = call(NativeBuiltins::binopEnv,
+                           {a, b, e, new_constant(i->srcIdx),
+                            new_constant((int)kind)});
             } else {
-                setVal(i, call(NativeBuiltins::binop,
-                               {a, b, new_constant((int)kind)}));
+                res = call(NativeBuiltins::binop,
+                           {a, b, new_constant((int)kind)});
             }
+
+            if (rep == Representation::Integer)
+                setVal(i, unboxIntLgl(res));
+            else if (rep == Representation::Real)
+                setVal(i, unboxRealIntLgl(res));
+            else
+                setVal(i, res);
             return;
         }
 
         jit_label done, isNa;
-        auto res = jit_value_create(raw(), representationOf(i));
+        auto res = jit_value_create(
+            raw(),
+            (lhsRep == Representation::Real || rhsRep == Representation::Real)
+                ? jit_type_float64
+                : jit_type_int);
 
-        if (r == Representation::Integer) {
-            auto aIsNa = insn_eq(a, new_constant(NA_INTEGER));
-            insn_branch_if(aIsNa, isNa);
-            auto bIsNa = insn_eq(b, new_constant(NA_INTEGER));
-            insn_branch_if(bIsNa, isNa);
-        }
+        auto a = load(i, lhs, lhsRep);
+        auto b = load(i, rhs, rhsRep);
+
+        auto checkNa = [&](jit_value v, Representation r) {
+            if (r == Representation::Integer) {
+                auto aIsNa = insn_eq(v, new_constant(NA_INTEGER));
+                insn_branch_if(aIsNa, isNa);
+            }
+        };
+        checkNa(a, lhsRep);
+        checkNa(b, rhsRep);
 
         store(res, insert(a, b));
 
-        if (r == Representation::Integer) {
+        if (lhsRep == Representation::Integer ||
+            rhsRep == Representation::Integer) {
             insn_branch(done);
 
             insn_label(isNa);
@@ -773,7 +851,12 @@ void PirCodeFunction::build() {
 
             insn_label(done);
         }
-        setVal(i, res);
+
+        if (rep == Representation::Sexp) {
+            setVal(i, box(i, res, lhs->type.mergeWithConversion(rhs->type)));
+        } else {
+            setVal(i, res);
+        }
     };
 
     std::unordered_map<Value*, std::unordered_map<SEXP, size_t>> bindingsCache;
@@ -859,9 +942,7 @@ void PirCodeFunction::build() {
             }
 
             case Tag::CastType: {
-                auto arg = i->arg(0).val();
-                // this is unsafe cast, thus we assume arg has type i->type
-                setVal(i, load(i, arg, i->type, representationOf(i)));
+                // Scheduled on use
                 break;
             }
 
