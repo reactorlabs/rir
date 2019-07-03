@@ -477,12 +477,6 @@ NativeBuiltin NativeBuiltins::asLogical = {
     jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp1, 1, 0),
 };
 
-void ensureNamedImpl(SEXP a) { ENSURE_NAMED(a); }
-NativeBuiltin NativeBuiltins::ensureNamed = {
-    "ensureNamed", (void*)&ensureNamedImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, jit_type_void, sxp1, 1, 0),
-};
-
 int lengthImpl(SEXP e) { return Rf_length(e); }
 
 NativeBuiltin NativeBuiltins::length = {
