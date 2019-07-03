@@ -24,6 +24,8 @@ static jit_type_t sxp2_int[3] = {sxp, sxp, jit_type_int};
 static jit_type_t sxp2_void[3] = {sxp, sxp, jit_type_void_ptr};
 static jit_type_t sxp3_int2[5] = {sxp, sxp, sxp, jit_type_int, jit_type_int};
 
+static jit_type_t ptr1[1] = {jit_type_void_ptr};
+
 NativeBuiltin NativeBuiltins::forcePromise = {
     "forcePromise", (void*)&forcePromiseImpl, 1,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 1, 0),
@@ -517,6 +519,20 @@ static jit_type_t deoptType[4] = {jit_type_void_ptr, sxp, jit_type_void_ptr,
 NativeBuiltin NativeBuiltins::deopt = {
     "deopt", (void*)deoptImpl, 4,
     jit_type_create_signature(jit_abi_cdecl, jit_type_void, deoptType, 4, 0),
+};
+
+void assertFailImpl(const char* msg) {
+    std::cout << "Assertion in jitted code failed: '" << msg << "'\n";
+    asm("int3");
+}
+NativeBuiltin NativeBuiltins::assertFail = {
+    "assertFail", (void*)assertFailImpl, 1,
+    jit_type_create_signature(jit_abi_cdecl, jit_type_void, ptr1, 1, 0),
+};
+
+NativeBuiltin NativeBuiltins::printValue = {
+    "printValue", (void*)Rf_PrintValue, 1,
+    jit_type_create_signature(jit_abi_cdecl, jit_type_void, sxp1, 1, 0),
 };
 }
 }

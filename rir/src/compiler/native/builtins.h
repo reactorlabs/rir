@@ -74,6 +74,10 @@ struct NativeBuiltins {
     static NativeBuiltin length;
 
     static NativeBuiltin deopt;
+
+    static NativeBuiltin assertFail;
+
+    static NativeBuiltin printValue;
 };
 }
 }
