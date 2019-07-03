@@ -79,6 +79,7 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
 Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     size_t size = InInteger(inp);
     Code* code = (Code*)::operator new(size);
+    code->nativeCode = NULL; // TODO Serialize/deserialize native if possible
     code->uid = UUID::deserialize(refTable, inp) ^ uidHash;
     code->funInvocationCount = InInteger(inp);
     code->src = InInteger(inp);
