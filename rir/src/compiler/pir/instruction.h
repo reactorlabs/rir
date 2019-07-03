@@ -306,7 +306,7 @@ class Instruction : public Value {
             auto t = PirType::bottom();
             eachArg([&](Value* v) {
                 if (!mayHaveEnv() || v != env())
-                    t.mergeWithConversion(typeof(v));
+                    t = t.mergeWithConversion(typeof(v));
             });
             // Everything but numbers throws an error
             t = t & PirType::num().notMissing();

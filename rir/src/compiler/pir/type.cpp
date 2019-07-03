@@ -115,14 +115,14 @@ void PirType::merge(const ObservedValues& other) {
     assert(other.numTypes);
 
     if (other.numTypes == ObservedValues::MaxTypes) {
-        merge(any());
+        *this = *this | any();
         flags_.set(TypeFlags::maybeObject);
         flags_.set(TypeFlags::maybeNotScalar);
         return;
     }
 
     if (other.numTypes == ObservedValues::MaxTypes) {
-        merge(any());
+        *this = *this | any();
         flags_.set(TypeFlags::maybeObject);
         flags_.set(TypeFlags::maybeNotScalar);
         return;

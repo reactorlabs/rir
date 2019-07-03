@@ -64,7 +64,9 @@ AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
         vals.insert(other.vals.begin(), other.vals.end());
         changed = true;
     }
-    changed = type.merge(other.type) || changed;
+    auto old = type;
+    type = type | other.type;
+    changed = changed || old != type;
 
     return changed ? AbstractResult::Updated : AbstractResult::None;
 }
