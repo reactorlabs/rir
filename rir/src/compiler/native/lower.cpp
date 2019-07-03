@@ -213,6 +213,16 @@ class PirCodeFunction : public jit_function {
         return res;
     }
 
+    jit_value box(Instruction* pos, jit_value v, PirType t) {
+        if (t.isA(PirType(RType::integer).notObject()))
+            return boxInt(pos, v);
+        if (t.isA(PirType(RType::logical).notObject()))
+            return boxLgl(pos, v);
+        if (t.isA(PirType(RType::real).notObject()))
+            return boxReal(pos, v);
+        assert(false);
+        return nullptr;
+    }
     jit_value boxInt(Instruction* pos, jit_value v) {
         gcSafepoint(pos, 1, true);
         if (v.type() == jit_type_int)
@@ -351,7 +361,7 @@ jit_value PirCodeFunction::load(Instruction* pos, Value* val, PirType type,
 
     if (auto cast = CastType::Cast(val)) {
         auto arg = cast->arg(0).val();
-        return load(pos, arg, type, needed);
+        return load(pos, arg, cast->type, needed);
     }
 
     if (valueMap.count(val))
@@ -397,7 +407,12 @@ jit_value PirCodeFunction::load(Instruction* pos, Value* val, PirType type,
             res = unboxRealIntLgl(res);
             assert(res.type() == jit_type_float64);
         } else {
+            code->printCode(std::cout, true, true);
             std::cout << "Don't know how to unbox a " << type << "\n";
+            pos->print(std::cout);
+            std::cout << "\n";
+            val->printRef(std::cout);
+            std::cout << "\n";
             assert(false);
         }
         // fall through, since more conversions might be needed after unboxing
@@ -774,38 +789,72 @@ void PirCodeFunction::build() {
     auto compileBinop = [&](
         Instruction* i, std::function<jit_value(jit_value, jit_value)> insert,
         BinopKind kind) {
-        auto r = representationOf(i);
 
-        auto a = load(i, i->arg(0).val(), r);
-        auto b = load(i, i->arg(1).val(), r);
+        auto rep = representationOf(i);
+        auto lhs = i->arg(0).val();
+        auto rhs = i->arg(1).val();
+        auto lhsRep = representationOf(lhs);
+        auto rhsRep = representationOf(rhs);
 
-        if (r == Representation::Sexp) {
+        if (lhsRep == Representation::Sexp || rhsRep == Representation::Sexp) {
+            auto a = loadSxp(i, i->arg(0).val());
+            auto b = loadSxp(i, i->arg(1).val());
+
+            jit_value res;
             gcSafepoint(i, -1, true);
             if (i->hasEnv()) {
                 auto e = loadSxp(i, i->env());
-                setVal(i, call(NativeBuiltins::binopEnv,
-                               {a, b, e, new_constant(i->srcIdx),
-                                new_constant((int)kind)}));
+                res = call(NativeBuiltins::binopEnv,
+                           {a, b, e, new_constant(i->srcIdx),
+                            new_constant((int)kind)});
             } else {
-                setVal(i, call(NativeBuiltins::binop,
-                               {a, b, new_constant((int)kind)}));
+                res = call(NativeBuiltins::binop,
+                           {a, b, new_constant((int)kind)});
             }
+
+            if (rep == Representation::Integer)
+                setVal(i, unboxIntLgl(res));
+            else if (rep == Representation::Real)
+                setVal(i, unboxRealIntLgl(res));
+            else
+                setVal(i, res);
             return;
         }
 
         jit_label done, isNa;
-        auto res = jit_value_create(raw(), representationOf(i));
+        auto res = jit_value_create(
+            raw(),
+            (lhsRep == Representation::Real || rhsRep == Representation::Real)
+                ? jit_type_float64
+                : jit_type_int);
 
-        if (r == Representation::Integer) {
-            auto aIsNa = insn_eq(a, new_constant(NA_INTEGER));
-            insn_branch_if(aIsNa, isNa);
-            auto bIsNa = insn_eq(b, new_constant(NA_INTEGER));
-            insn_branch_if(bIsNa, isNa);
+        auto a = load(i, lhs, lhsRep);
+        auto b = load(i, rhs, rhsRep);
+
+        auto checkNa = [&](jit_value v, Representation r) {
+            if (r == Representation::Integer) {
+                auto aIsNa = insn_eq(v, new_constant(NA_INTEGER));
+                insn_branch_if(aIsNa, isNa);
+            }
+        };
+        checkNa(a, lhsRep);
+        checkNa(b, rhsRep);
+
+        auto result = insert(a, b);
+        if (rep == Representation::Sexp) {
+            i->print(std::cout);
+            std::cout << "\n";
+            Instruction::Cast(rhs)->print(std::cout);
+            std::cout << "\n";
+            Instruction::Cast(lhs)->print(std::cout);
+            std::cout << "\n";
+            result = box(i, result, i->type);
         }
 
-        store(res, insert(a, b));
+        store(res, result);
 
-        if (r == Representation::Integer) {
+        if (lhsRep == Representation::Integer ||
+            rhsRep == Representation::Integer) {
             insn_branch(done);
 
             insn_label(isNa);
@@ -813,6 +862,7 @@ void PirCodeFunction::build() {
 
             insn_label(done);
         }
+
         setVal(i, res);
     };
 
