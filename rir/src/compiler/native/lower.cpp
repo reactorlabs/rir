@@ -840,18 +840,7 @@ void PirCodeFunction::build() {
         checkNa(a, lhsRep);
         checkNa(b, rhsRep);
 
-        auto result = insert(a, b);
-        if (rep == Representation::Sexp) {
-            i->print(std::cout);
-            std::cout << "\n";
-            Instruction::Cast(rhs)->print(std::cout);
-            std::cout << "\n";
-            Instruction::Cast(lhs)->print(std::cout);
-            std::cout << "\n";
-            result = box(i, result, i->type);
-        }
-
-        store(res, result);
+        store(res, insert(a, b));
 
         if (lhsRep == Representation::Integer ||
             rhsRep == Representation::Integer) {
@@ -863,7 +852,11 @@ void PirCodeFunction::build() {
             insn_label(done);
         }
 
-        setVal(i, res);
+        if (rep == Representation::Sexp) {
+            setVal(i, box(i, res, lhs->type.mergeWithConversion(rhs->type)));
+        } else {
+            setVal(i, res);
+        }
     };
 
     std::unordered_map<Value*, std::unordered_map<SEXP, size_t>> bindingsCache;
