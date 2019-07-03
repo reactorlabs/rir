@@ -5,12 +5,16 @@ stages:
   - Run tests
   - Deploy
   - Cleanup
+  - Benchmark
 
 before_script:
   - export PIR_MAX_INPUT_SIZE=99999
   - export PIR_INLINER_MAX_SIZE=99999
   - export PIR_DEOPT_CHAOS_SEED=$RANDOM
   - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
+  - export REBENCH_OPTIONS="--commit-id=$CI_COMMIT_SHA --branch=master --environment=PragueDesktop"
+  - export REBENCH_RUN="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
+  - export REBENCH_RUN_BL="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
 
 sanity:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -183,3 +187,60 @@ cleanup_registry:
   before_script: []
   script:
     - echo "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
+
+benchmark_rir:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmark
+  script:
+    - $REBENCH_RUN e:RIR $REBENCH_OPTIONS
+benchmark_pir:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmark
+  script:
+    - $REBENCH_RUN e:PIR $REBENCH_OPTIONS
+benchmark_native:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmark
+  script:
+    - $REBENCH_RUN e:PIR-NATIVE $REBENCH_OPTIONS
+benchmark_gnur:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmark
+  script:
+    - $REBENCH_RUN_BL e:GNU-R $REBENCH_OPTIONS
+benchmark_fastr:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmark
+  script:
+    - $REBENCH_RUN_BL e:FASTR $REBENCH_OPTIONS
+  allow_failure: true
