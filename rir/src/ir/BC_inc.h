@@ -455,7 +455,8 @@ BC_NOARGS(V, _)
     struct MkEnvExtraInformation : public ExtraInformation {
         std::vector<BC::PoolIdx> names;
     };
-    std::unique_ptr<ExtraInformation> extraInformation = nullptr;
+    std::unique_ptr<ExtraInformation, std::function<void(ExtraInformation*)>>
+        extraInformation = nullptr;
 
   public:
     MkEnvExtraInformation& mkEnvExtra() const {
@@ -501,15 +502,27 @@ BC_NOARGS(V, _)
         case Opcode::call_implicit_:
         case Opcode::named_call_implicit_:
         case Opcode::named_call_: {
+            extraInformation.get_deleter() = [](auto x) {
+                auto y = (CallInstructionExtraInformation*)x;
+                delete y;
+            };
             extraInformation.reset(new CallInstructionExtraInformation);
             break;
         }
         case Opcode::record_call_: {
+            extraInformation.get_deleter() = [](auto x) {
+                auto y = (CallFeedbackExtraInformation*)x;
+                delete y;
+            };
             extraInformation.reset(new CallFeedbackExtraInformation);
             break;
         }
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
+            extraInformation.get_deleter() = [](auto x) {
+                auto y = (MkEnvExtraInformation*)x;
+                delete y;
+            };
             extraInformation.reset(new MkEnvExtraInformation);
             break;
         }
