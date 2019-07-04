@@ -1,4 +1,5 @@
 #include "lower.h"
+#include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "builtins.h"
@@ -203,7 +204,15 @@ class PirCodeFunction : public jit_function {
         auto tt = insn_eq(type, new_constant(REALSXP));
         insn_branch_if(tt, isReal);
 
-        store(res, unboxIntLgl(v));
+        auto isNa = jit_label();
+        auto intres = unboxIntLgl(v);
+        insn_branch_if(intres == new_constant(NA_INTEGER), isNa);
+
+        store(res, intres);
+        insn_branch(done);
+
+        insn_label(isNa);
+        store(res, new_constant(NAN));
         insn_branch(done);
 
         insn_label(isReal);
@@ -533,7 +542,6 @@ jit_value PirCodeFunction::constant(SEXP c, jit_type_t needed) {
         if (TYPEOF(c) == INTSXP)
             return new_constant(INTEGER(c)[0], jit_type_int);
         if (TYPEOF(c) == REALSXP) {
-            assert(REAL(c)[0] == (int)REAL(c)[0]);
             return new_constant((int)REAL(c)[0], jit_type_int);
         }
         if (TYPEOF(c) == LGLSXP)
@@ -1401,6 +1409,103 @@ void PirCodeFunction::build() {
                 auto b = CallSafeBuiltin::Cast(i);
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
+
+                // TODO: this should probably go somewhere else... This is an
+                // inlined version of bitwise builtins
+                if (representationOf(b) == Representation::Integer) {
+                    if (b->nargs() == 2) {
+                        auto x = b->arg(0).val();
+                        auto y = b->arg(1).val();
+                        auto xRep = representationOf(x);
+                        auto yRep = representationOf(y);
+
+                        static auto bitwise = {
+                            findBuiltin("bitwiseShiftL"),
+                            findBuiltin("bitwiseShiftR"),
+                            findBuiltin("bitwiseAnd"),
+                            findBuiltin("bitwiseOr"),
+                            findBuiltin("bitwiseXor"),
+                        };
+                        auto found = std::find(bitwise.begin(), bitwise.end(),
+                                               b->builtinId);
+                        if (found != bitwise.end()) {
+                            const static PirType num =
+                                (PirType() | RType::integer | RType::logical |
+                                 RType::real)
+                                    .notObject()
+                                    .scalar();
+
+                            if (xRep == Representation::Sexp &&
+                                x->type.isA(num))
+                                xRep = Representation::Real;
+                            if (yRep == Representation::Sexp &&
+                                y->type.isA(num))
+                                yRep = Representation::Real;
+
+                            if (xRep != Representation::Sexp &&
+                                yRep != Representation::Sexp) {
+                                auto isNa = jit_label();
+                                auto done = jit_label();
+                                auto res =
+                                    jit_value_create(raw(), jit_type_int);
+
+                                auto xInt = load(i, x, Representation::Integer);
+                                auto yInt = load(i, y, Representation::Integer);
+
+                                auto naCheck = [&](Value* v, jit_value asInt,
+                                                   Representation rep) {
+                                    if (rep == Representation::Real) {
+                                        auto vv = load(i, v, rep);
+                                        insn_branch_if(vv != vv, isNa);
+                                    } else {
+                                        assert(rep == Representation::Integer);
+                                        insn_branch_if(
+                                            asInt == new_constant(NA_INTEGER),
+                                            isNa);
+                                    }
+                                };
+                                naCheck(x, xInt, xRep);
+                                naCheck(y, yInt, yRep);
+
+                                switch (found - bitwise.begin()) {
+                                case 0:
+                                    insn_branch_if(yInt < new_constant(0),
+                                                   isNa);
+                                    insn_branch_if(yInt > new_constant(31),
+                                                   isNa);
+                                    store(res, xInt << yInt);
+                                    break;
+                                case 1:
+                                    insn_branch_if(yInt < new_constant(0),
+                                                   isNa);
+                                    insn_branch_if(yInt > new_constant(31),
+                                                   isNa);
+                                    store(res, xInt >> yInt);
+                                    break;
+                                case 2:
+                                    store(res, xInt & yInt);
+                                    break;
+                                case 3:
+                                    store(res, xInt | yInt);
+                                    break;
+                                case 4:
+                                    store(res, xInt ^ yInt);
+                                    break;
+                                }
+
+                                insn_branch(done);
+
+                                insn_label(isNa);
+                                store(res, new_constant(NA_INTEGER));
+
+                                insn_label(done);
+                                setVal(i, res);
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 setVal(i, withCallFrame(i, args, [&]() -> jit_value {
                            return call(NativeBuiltins::callBuiltin,
                                        {
