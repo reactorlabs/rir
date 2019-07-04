@@ -444,7 +444,9 @@ BC_NOARGS(V, _)
     // objects extra pool. Or for the variable length call bytecodes we need a
     // vector to store arguments. For those bytecodes we allocate an extra
     // information struct to hold those things.
-    struct ExtraInformation {};
+    struct ExtraInformation {
+        virtual ~ExtraInformation() {}
+    };
     struct CallInstructionExtraInformation : public ExtraInformation {
         std::vector<BC::ArgIdx> immediateCallArguments;
         std::vector<BC::PoolIdx> callArgumentNames;
