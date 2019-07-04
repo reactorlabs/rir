@@ -20,9 +20,11 @@ matrix:
       env:
         - CXX_OVERRIDE=clang++
         - CC_OVERRIDE=clang
+        - PIR_MAX_INPUT_SIZE=1000
+        - PIR_INLINER_MAX_SIZE=800
         - BUILD=debugopt
         - CHECK=check
-        - PIR_WARMUP=2
+
       compiler: clang
 
     - env:

@@ -110,14 +110,33 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         if (arg == i->env() || !arg->type.maybeObj()) {
                             return;
                         }
+                        // TODO: deduplicate this code with type_speculation
+                        // pass
                         assert(!arg->type.maybePromiseWrapped());
-                        auto condition = new IsObject(arg);
-                        BBTransform::insertAssume(condition, cp, bb, ip, false);
+                        PirType seen = arg->typeFeedback;
+                        if (seen.isVoid())
+                            seen = arg->followCastsAndForce()->typeFeedback;
+                        PirType resType;
+                        Instruction* condition = nullptr;
+                        bool assumeTrue = true;
+                        auto argi = Instruction::Cast(arg);
+                        if (argi && !seen.isVoid() &&
+                            (seen.isA(RType::integer) ||
+                             seen.isA(RType::real))) {
+                            resType = seen;
+                            condition = new IsType(seen, arg);
+                        } else {
+                            condition = new IsObject(arg);
+                            assumeTrue = false;
+                            resType = arg->type.notObject();
+                        }
 
-                        if (auto argi = Instruction::Cast(arg)) {
+                        BBTransform::insertAssume(condition, cp, bb, ip,
+                                                  assumeTrue);
+
+                        if (argi) {
                             auto cast = new CastType(argi, CastType::Downcast,
-                                                     PirType::val(),
-                                                     argi->type.notObject());
+                                                     PirType::val(), resType);
                             ip = bb->insert(ip, cast);
                             ip++;
                             argi->replaceDominatedUses(cast);
