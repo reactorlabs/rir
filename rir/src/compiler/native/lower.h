@@ -14,7 +14,8 @@ namespace pir {
 
 class Lower {
   public:
-    void* tryCompile(Code* code, const std::unordered_map<Promise*, unsigned>&,
+    void* tryCompile(ClosureVersion* cls, Code* code,
+                     const std::unordered_map<Promise*, unsigned>&,
                      const std::unordered_set<Instruction*>& needsEnsureNamed);
 };
 }

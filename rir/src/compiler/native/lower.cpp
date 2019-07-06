@@ -94,6 +94,7 @@ std::ostream& operator<<(std::ostream& out, const Representation& r) {
 
 class PirCodeFunction : public jit_function {
   public:
+    ClosureVersion* cls;
     Code* code;
     bool success = false;
 
@@ -101,7 +102,7 @@ class PirCodeFunction : public jit_function {
     LivenessIntervals liveness;
     size_t numLocals = liveness.maxLive;
 
-    PirCodeFunction(jit_context& context, Code* code,
+    PirCodeFunction(jit_context& context, ClosureVersion* cls, Code* code,
                     const std::unordered_map<Promise*, unsigned>& promMap,
                     const std::unordered_set<Instruction*>& needsEnsureNamed);
 
@@ -680,10 +681,10 @@ Representation PirCodeFunction::representationOf(PirType t) {
 void dummy() {}
 
 PirCodeFunction::PirCodeFunction(
-    jit_context& context, Code* code,
+    jit_context& context, ClosureVersion* cls, Code* code,
     const std::unordered_map<Promise*, unsigned>& promMap,
     const std::unordered_set<Instruction*>& needsEnsureNamed)
-    : jit_function(context), code(code), cfg(code),
+    : jit_function(context), cls(cls), code(code), cfg(code),
       liveness(code->nextBBId, cfg), promMap(promMap),
       needsEnsureNamed(needsEnsureNamed) {
     create();
@@ -878,8 +879,11 @@ void PirCodeFunction::build() {
             else if (auto l = StVar::Cast(i))
                 varName = l->varName;
 
-            if (varName && MkEnv::Cast(i->env())) {
-                bindings.insert(std::pair<Value*, SEXP>(i->env(), varName));
+            if (varName) {
+                auto e = MkEnv::Cast(i->env());
+                if (e && !e->stub) {
+                    bindings.insert(std::pair<Value*, SEXP>(i->env(), varName));
+                }
             }
         });
         size_t idx = 0;
@@ -1168,6 +1172,14 @@ void PirCodeFunction::build() {
 
             case Tag::LdVar: {
                 auto ld = LdVar::Cast(i);
+
+                // TODO support env stubs
+                auto env = MkEnv::Cast(ld->env());
+                if (env && env->stub) {
+                    success = false;
+                    break;
+                }
+
                 jit_value res;
                 if (bindingsCache.count(i->env())) {
                     res = jit_value_create(raw(), sxp);
@@ -1278,7 +1290,8 @@ void PirCodeFunction::build() {
 
             case Tag::StVar: {
                 auto st = StVar::Cast(i);
-                if (st->isStArg) {
+                auto env = MkEnv::Cast(st->env());
+                if (st->isStArg || (env && env->stub)) {
                     success = false;
                     break;
                 }
@@ -1342,11 +1355,10 @@ void PirCodeFunction::build() {
             }
 
             case Tag::MkEnv: {
+                // TODO support env stubs
+                //  (creates normal env for stubs, aborts if any
+                //  stvar/ldvar/isstubenv are present)
                 auto mkenv = MkEnv::Cast(i);
-                if (mkenv->stub) {
-                    success = false;
-                    break;
-                }
 
                 gcSafepoint(i, mkenv->nargs() + 1, true);
                 auto arglist = constant(R_NilValue, sxp);
@@ -1575,6 +1587,52 @@ void PirCodeFunction::build() {
             case Tag::Nop:
                 break;
 
+            case Tag::AsInt: {
+                auto arg = i->arg(0).val();
+                auto asint = AsInt::Cast(i);
+                jit_value res;
+                if (representationOf(arg) == Representation::Integer) {
+                    res = load(i, arg, Representation::Integer);
+                } else if (representationOf(arg) == Representation::Real) {
+                    if (asint->ceil) {
+                        res = insn_ceil(load(i, arg, Representation::Real));
+                    } else {
+                        res = insn_floor(load(i, arg, Representation::Real));
+                    }
+                    res = insn_convert(res, jit_type_int);
+                } else {
+                    success = false;
+                }
+                setVal(i, res);
+                break;
+            }
+
+            case Tag::Inc: {
+                auto arg = i->arg(0).val();
+                jit_value res;
+                if (representationOf(arg) == Representation::Integer) {
+                    res = load(i, arg, Representation::Integer);
+                    res = insn_add(res, new_constant(1));
+                } else {
+                    success = false;
+                }
+                setVal(i, res);
+                break;
+            }
+
+            case Tag::Dec: {
+                auto arg = i->arg(0).val();
+                jit_value res;
+                if (representationOf(arg) == Representation::Integer) {
+                    res = load(i, arg, Representation::Integer);
+                    res = insn_sub(res, new_constant(1));
+                } else {
+                    success = false;
+                }
+                setVal(i, res);
+                break;
+            }
+
             default:
                 success = false;
                 break;
@@ -1615,9 +1673,10 @@ void PirCodeFunction::build() {
 static jit_context context;
 
 void* Lower::tryCompile(
-    Code* code, const std::unordered_map<Promise*, unsigned>& promMap,
+    ClosureVersion* cls, Code* code,
+    const std::unordered_map<Promise*, unsigned>& promMap,
     const std::unordered_set<Instruction*>& needsEnsureNamed) {
-    PirCodeFunction function(context, code, promMap, needsEnsureNamed);
+    PirCodeFunction function(context, cls, code, promMap, needsEnsureNamed);
     function.set_optimization_level(function.max_optimization_level());
     function.build_start();
     function.build();
