@@ -80,8 +80,13 @@ void AbstractPirValue::print(std::ostream& out, bool tty) const {
     for (auto it = vals.begin(); it != vals.end();) {
         auto vo = *it;
         vo.val->printRef(out);
-        out << "@";
-        vo.origin->printRef(out);
+        if (vo.val != UnboundValue::instance()) {
+            out << "@";
+            vo.origin->printRef(out);
+        } else {
+            assert(vo.origin == NULL);
+            out << "unbound";
+        }
         it++;
         if (it != vals.end())
             out << "|";
