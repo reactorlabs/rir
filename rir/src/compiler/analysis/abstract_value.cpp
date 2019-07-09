@@ -123,14 +123,16 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
     while (env != AbstractREnvironment::UnknownParent) {
         assert(env);
         if (envs.count(env) == 0)
-            return AbstractLoad(env, AbstractPirValue::tainted());
+            return AbstractLoad(AbstractREnvironment::UnknownParent,
+                                AbstractPirValue::tainted());
         auto aenv = envs.at(env);
         if (!aenv.absent(e)) {
             const AbstractPirValue& res = aenv.get(e);
             // UnboundValue has fall-through semantics which cause lookup to
             // fall through.
             if (res.maybeUnboundValue())
-                return AbstractLoad(env, AbstractPirValue::tainted());
+                return AbstractLoad(AbstractREnvironment::UnknownParent,
+                                    AbstractPirValue::tainted());
             if (!res.isUnboundValue())
                 return AbstractLoad(env, res);
         }
