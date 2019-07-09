@@ -135,4 +135,15 @@ g(TRUE)
 g(FALSE)
 g(TRUE)
 delayedAssign("c", fail())
-g(FALSE)  
+g(FALSE)
+
+f0 <- function() {
+    for (i in 1:10)
+        last <- i
+    last
+}
+f0()
+f0()
+f0()
+f0()
+
