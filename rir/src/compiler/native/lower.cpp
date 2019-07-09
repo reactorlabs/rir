@@ -571,7 +571,8 @@ jit_value PirCodeFunction::constant(SEXP c, jit_type_t needed) {
 jit_value PirCodeFunction::argument(int i) {
     i *= sizeof(R_bcstack_t);
     i += stackCellValueOfs;
-    return insn_load_relative(paramArgs(), i, sxp);
+    auto res = insn_load_relative(paramArgs(), i, sxp);
+    return res;
 }
 
 jit_value PirCodeFunction::call(const NativeBuiltin& builtin,
@@ -903,6 +904,7 @@ void PirCodeFunction::build() {
                 return;
 
 #if 0
+        static std::vector<std::string> instrs;
         // Enable to emit all pir instructions as strings into the final code
         std::stringstream str;
         i->print(str, false);
@@ -1389,10 +1391,16 @@ void PirCodeFunction::build() {
             case Tag::Force: {
                 auto f = Force::Cast(i);
                 auto arg = loadSxp(i, f->arg<0>().val());
-                if (!f->effects.includes(Effect::Force))
-                    setVal(i, depromise(arg));
-                else
+                if (!f->effects.includes(Effect::Force)) {
+                    auto res = depromise(arg);
+                    setVal(i, res);
+#ifdef ENABLE_SLOWASSERT
+                    insn_assert(res != constant(R_UnboundValue, sxp),
+                                "Expected evaluated promise");
+#endif
+                } else {
                     setVal(i, force(i, arg));
+                }
                 break;
             }
 
@@ -1668,6 +1676,8 @@ void PirCodeFunction::build() {
             insn_branch(blockLabel.at(bb->next()));
         }
     });
+
+    // jit_dump_function(stdout, raw(), "test");
 };
 
 static jit_context context;
