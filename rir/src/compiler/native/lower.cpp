@@ -19,7 +19,7 @@ namespace pir {
 
 static const auto cpOfs = (size_t) & ((InterpreterInstance*)0) -> cp.list;
 static const auto stdVecDtptrOfs = sizeof(SEXPREC_ALIGN);
-static const auto carOfs = (size_t) & ((SEXP)0) -> u.listsxp.carval;
+static const auto carOfs_ = (size_t) & ((SEXP)0) -> u.listsxp.carval;
 static const auto prValueOfs = (size_t) & ((SEXP)0) -> u.promsxp.value;
 static const auto stackCellValueOfs = (size_t) & ((R_bcstack_t*)0) -> u.sxpval;
 static const auto sxpinfofOfs = (size_t) & ((SEXP)0) -> sxpinfo;
@@ -111,7 +111,11 @@ class PirCodeFunction : public jit_function {
     jit_value constant(SEXP c, jit_type_t);
     jit_value sexptype(jit_value v);
     void ensureNamed(jit_value v);
+    void writeBarrier(jit_value x, jit_value y, std::function<void()> no,
+                      std::function<void()> yes);
     jit_value isObj(jit_value v);
+    jit_value car(jit_value x);
+    void setCar(jit_value x, jit_value y);
 
     jit_value call(const NativeBuiltin&, const std::vector<jit_value>&);
 
@@ -530,6 +534,56 @@ void PirCodeFunction::ensureNamed(jit_value v) {
     insn_store_relative(v, sxpinfofOfs, named);
     insn_label(isNamed);
 };
+
+void PirCodeFunction::writeBarrier(jit_value x, jit_value y,
+                                   std::function<void()> no,
+                                   std::function<void()> yes) {
+    auto sxpinfoX = insn_load_relative(x, sxpinfofOfs, jit_type_ulong);
+
+    auto markBitPos = new_constant((unsigned long)(1ul << (TYPE_BITS + 19)));
+    auto genBitPos = new_constant((unsigned long)(1ul << (TYPE_BITS + 23)));
+
+    auto done = jit_label();
+    auto noBarrier = jit_label();
+    auto maybeNeedsBarrier = jit_label();
+    auto needsBarrier = jit_label();
+
+    auto markBitX = insn_and(sxpinfoX, markBitPos);
+    insn_branch_if(markBitX, maybeNeedsBarrier);
+    insn_branch(noBarrier);
+
+    // TODO: it seems with the right bit fiddling we could do this with just
+    // one branch. Also, maybe we should share this code between write barriers?
+    insn_label(maybeNeedsBarrier);
+    auto sxpinfoY = insn_load_relative(y, sxpinfofOfs, jit_type_ulong);
+    auto markBitY = insn_and(sxpinfoY, markBitPos);
+    insn_branch_if_not(markBitY, needsBarrier);
+
+    auto genBitX = insn_and(sxpinfoX, genBitPos);
+    auto genBitY = insn_and(sxpinfoY, genBitPos);
+    auto olderGen = insn_gt(genBitX, genBitY);
+    insn_branch_if(olderGen, needsBarrier);
+
+    insn_label(noBarrier);
+    no();
+    insn_branch(done);
+
+    insn_label(needsBarrier);
+    yes();
+
+    insn_label(done);
+};
+
+void PirCodeFunction::setCar(jit_value x, jit_value y) {
+    writeBarrier(x, y, [&]() { insn_store_relative(x, carOfs_, y); },
+                 [&]() {
+                     call(NativeBuiltins::setCar, {{x, y}});
+                 });
+}
+
+jit_value PirCodeFunction::car(jit_value x) {
+    return insn_load_relative(x, carOfs_, sxp);
+}
 
 jit_value PirCodeFunction::constant(SEXP c, jit_type_t needed) {
     static std::unordered_set<SEXP> eternal = {
@@ -1192,7 +1246,7 @@ void PirCodeFunction::build() {
                                                     jit_type_nuint);
                     jit_label done, miss;
                     insn_branch_if(insn_le(cache, new_constant((SEXP)1)), miss);
-                    auto val = insn_load_relative(cache, carOfs, sxp);
+                    auto val = car(cache);
                     insn_branch_if(insn_eq(val, constant(R_UnboundValue, sxp)),
                                    miss);
                     store(res, val);
@@ -1307,17 +1361,16 @@ void PirCodeFunction::build() {
                     jit_label done, miss;
 
                     insn_branch_if(insn_le(cache, new_constant((SEXP)1)), miss);
-                    auto val = insn_load_relative(cache, carOfs, sxp);
+                    auto val = car(cache);
                     insn_branch_if(insn_eq(val, constant(R_UnboundValue, sxp)),
                                    miss);
 
-                    // TODO: write barrier
-                    insn_store_relative(cache, carOfs,
-                                        loadSxp(i, st->arg<0>().val()));
+                    setCar(cache, loadSxp(i, st->arg<0>().val()));
                     insn_branch(done);
 
                     insn_label(miss);
 
+                    gcSafepoint(i, 1, false);
                     call(NativeBuiltins::stvar,
                          {constant(st->varName, sxp),
                           loadSxp(i, st->arg<0>().val()),
@@ -1325,6 +1378,7 @@ void PirCodeFunction::build() {
 
                     insn_label(done);
                 } else {
+                    gcSafepoint(i, 1, false);
                     call(NativeBuiltins::stvar,
                          {constant(st->varName, sxp),
                           loadSxp(i, st->arg<0>().val()),

@@ -51,6 +51,8 @@ struct NativeBuiltins {
     static NativeBuiltin stvar;
     static NativeBuiltin ldfun;
 
+    static NativeBuiltin setCar;
+
     static NativeBuiltin error;
 
     static NativeBuiltin createPromise;
