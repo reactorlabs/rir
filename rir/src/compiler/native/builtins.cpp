@@ -118,6 +118,31 @@ NativeBuiltin NativeBuiltins::stvar = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
 };
 
+void stargImpl(SEXP sym, SEXP val, SEXP env) {
+    // In case there is a local binding we must honor missingness which
+    // defineVar does not
+    if (env != R_BaseEnv && env != R_BaseNamespace) {
+        R_varloc_t loc = R_findVarLocInFrame(env, sym);
+        if (!R_VARLOC_IS_NULL(loc) && !BINDING_IS_LOCKED(loc.cell) &&
+            !IS_ACTIVE_BINDING(loc.cell)) {
+            SEXP cur = CAR(loc.cell);
+            if (cur != val) {
+                INCREMENT_NAMED(val);
+                SETCAR(loc.cell, val);
+            }
+            return;
+        }
+    }
+
+    Rf_defineVar(sym, val, env);
+};
+NativeBuiltin NativeBuiltins::starg = {
+    "starg",
+    (void*)&stargImpl,
+    3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
+};
+
 void setCarImpl(SEXP x, SEXP y) {
     assert(x->sxpinfo.mark && "Use fastpath setCar");
     assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
