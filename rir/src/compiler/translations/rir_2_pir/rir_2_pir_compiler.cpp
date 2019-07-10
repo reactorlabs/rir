@@ -75,10 +75,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     }
 
     if (closure->formals().hasDefaultArgs()) {
-        if (!ctx.assumptions.includes(Assumption::NoExplicitlyMissingArgs)) {
-            logger.warn("TODO: don't know which are explicitly missing");
-            return fail_();
-        }
         if (!ctx.assumptions.includes(Assumption::NotTooFewArguments)) {
             logger.warn("TODO: don't know how many are missing");
             return fail_();
@@ -114,37 +110,71 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 
     Protect protect;
     auto& assumptions = version->assumptions();
-    for (unsigned i = closure->nargs() - assumptions.numMissing();
-         i < closure->nargs(); ++i) {
-        if (closure->formals().hasDefaultArgs()) {
-            auto arg = closure->formals().defaultArgs()[i];
-            if (arg != R_MissingArg) {
-                Value* res = nullptr;
-                if (TYPEOF(arg) != EXTERNALSXP) {
-                    // A bit of a hack to compile default args, which somehow
-                    // are not compiled.
-                    // TODO: why are they sometimes not compiled??
-                    auto funexp = rir::Compiler::compileExpression(arg);
-                    protect(funexp);
-                    arg = Function::unpack(funexp)->body()->container();
-                }
-                if (rir::Code::check(arg)) {
-                    auto code = rir::Code::unpack(arg);
-                    res = rir2pir.tryCreateArg(code, builder, false);
-                    if (!res) {
-                        logger.warn("Failed to compile default arg");
-                        return fail();
-                    }
-                    // Need to cast promise-as-a-value to lazy-value, to make
-                    // it evaluate on access
-                    res = builder(new CastType(res, CastType::Upcast,
-                                               RType::prom, PirType::any()));
-                }
 
-                builder(
-                    new StArg(closure->formals().names()[i], res, builder.env));
+    auto compileDefaultArg = [&](size_t idx) {
+        auto arg = closure->formals().defaultArgs()[idx];
+        Value* res = nullptr;
+        if (TYPEOF(arg) != EXTERNALSXP) {
+            // A bit of a hack to compile default args, which somehow
+            // are not compiled.
+            // TODO: why are they sometimes not compiled??
+            auto funexp = rir::Compiler::compileExpression(arg);
+            protect(funexp);
+            arg = Function::unpack(funexp)->body()->container();
+        }
+        if (rir::Code::check(arg)) {
+            auto code = rir::Code::unpack(arg);
+            res = rir2pir.tryCreateArg(code, builder, false);
+            if (!res) {
+                logger.warn("Failed to compile default arg");
+                return fail();
+            }
+            // Need to cast promise-as-a-value to lazy-value, to make
+            // it evaluate on access
+            res = builder(new CastType(res, CastType::Upcast, RType::prom,
+                                       PirType::any()));
+        }
+
+        builder(new StArg(closure->formals().names()[idx], res, builder.env));
+    };
+
+    if (closure->formals().hasDefaultArgs()) {
+        if (!ctx.assumptions.includes(Assumption::NoExplicitlyMissingArgs)) {
+            Value* missing = builder(new LdConst(R_MissingArg));
+            for (unsigned i = 0;
+                 i < closure->nargs() - assumptions.numMissing(); ++i) {
+                if (closure->formals().defaultArgs()[i] != R_MissingArg) {
+                    // If this arg has a default, then test if the argument is
+                    // missing and if so, load the default arg.
+                    auto a = builder(new LdArg(i));
+                    auto testMissing = builder(new Identical(a, missing));
+                    builder(new Branch(testMissing));
+
+                    auto isMissing = builder.createBB();
+                    auto notMissing = builder.createBB();
+                    auto done = builder.createBB();
+
+                    builder.setBranch(isMissing, notMissing);
+                    builder.enterBB(isMissing);
+
+                    compileDefaultArg(i);
+
+                    builder.setNext(done);
+
+                    builder.enterBB(notMissing);
+                    builder.setNext(done);
+
+                    builder.enterBB(done);
+                }
             }
         }
+
+        // if we supplied less arguments than required, we know the rest is
+        // missing
+        for (unsigned i = closure->nargs() - assumptions.numMissing();
+             i < closure->nargs(); ++i)
+            if (closure->formals().defaultArgs()[i] != R_MissingArg)
+                compileDefaultArg(i);
     }
 
     if (rir2pir.tryCompile(builder)) {
