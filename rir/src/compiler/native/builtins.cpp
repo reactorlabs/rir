@@ -121,6 +121,20 @@ NativeBuiltin NativeBuiltins::stvar = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
 };
 
+void setCarImpl(SEXP x, SEXP y) {
+    assert(x->sxpinfo.mark && "Use fastpath setCar");
+    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
+           "use fast path setCar");
+    SETCAR(x, y);
+}
+
+NativeBuiltin NativeBuiltins::setCar = {
+    "setCar",
+    (void*)&setCarImpl,
+    2,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
+};
+
 NativeBuiltin NativeBuiltins::ldfun = {
     "Rf_findFun", (void*)&Rf_findFun, 2,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
