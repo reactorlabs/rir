@@ -1021,6 +1021,7 @@ void PirCodeFunction::build() {
                     arg = lgl->arg(0).val();
 
                 if (representationOf(arg) == Representation::Sexp) {
+                    gcSafepoint(i, -1, true);
                     setVal(i, call(NativeBuiltins::asTest, {loadSxp(i, arg)}));
                     break;
                 }
