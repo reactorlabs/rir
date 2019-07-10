@@ -140,14 +140,14 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 
     if (closure->formals().hasDefaultArgs()) {
         if (!ctx.assumptions.includes(Assumption::NoExplicitlyMissingArgs)) {
-            Value* missing = builder(new LdConst(R_MissingArg));
             for (unsigned i = 0;
                  i < closure->nargs() - assumptions.numMissing(); ++i) {
                 if (closure->formals().defaultArgs()[i] != R_MissingArg) {
                     // If this arg has a default, then test if the argument is
                     // missing and if so, load the default arg.
                     auto a = builder(new LdArg(i));
-                    auto testMissing = builder(new Identical(a, missing));
+                    auto testMissing =
+                        builder(new Identical(a, MissingArg::instance()));
                     builder(new Branch(testMissing));
 
                     auto isMissing = builder.createBB();
