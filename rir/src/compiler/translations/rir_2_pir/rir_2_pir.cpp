@@ -156,22 +156,22 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
             return nullptr;
         }
     }
+
     Value* eagerVal = UnboundValue::instance();
-    Value* theArg = nullptr;
     if (eager || Query::pure(prom)) {
-        auto inlineProm = tryTranslatePromise(promiseCode, insert);
-        if (!inlineProm) {
+        eagerVal = tryTranslatePromise(promiseCode, insert);
+        if (!eagerVal) {
             log.warn("Failed to inline a promise");
             return nullptr;
         }
-        eagerVal = inlineProm;
-        if (eager)
-            theArg = eagerVal;
     }
-    if (!theArg) {
-        theArg = insert(new MkArg(prom, eagerVal, insert.env));
+
+    if (eager) {
+        assert(eagerVal != UnboundValue::instance());
+        return eagerVal;
     }
-    return theArg;
+
+    return insert(new MkArg(prom, eagerVal, insert.env));
 }
 
 bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,

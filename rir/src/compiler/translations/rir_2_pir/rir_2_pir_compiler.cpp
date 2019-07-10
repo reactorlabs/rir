@@ -61,7 +61,7 @@ void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
 
 void Rir2PirCompiler::compileClosure(Closure* closure,
                                      const OptimizationContext& ctx,
-                                     MaybeCls success, Maybe fail_) {
+                                     MaybeCls success, Maybe fail) {
 
     if (!ctx.assumptions.includes(minimalAssumptions)) {
         for (const auto& a : minimalAssumptions) {
@@ -69,7 +69,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                 std::stringstream as;
                 as << "Missing minimal assumption " << a;
                 logger.warn(as.str());
-                return fail_();
+                return fail();
             }
         }
     }
@@ -77,24 +77,18 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     if (closure->formals().hasDefaultArgs()) {
         if (!ctx.assumptions.includes(Assumption::NotTooFewArguments)) {
             logger.warn("TODO: don't know how many are missing");
-            return fail_();
+            return fail();
         }
     }
 
-    // Above failures are context dependent. From here on we assume that
-    // failures always happen, so we mark the function as unoptimizable on
-    // failure.
-    auto fail = [&]() {
-        closure->rirFunction()->unoptimizable = true;
-        fail_();
-    };
-
     if (closure->formals().hasDots()) {
+        closure->rirFunction()->unoptimizable = true;
         logger.warn("no support for ...");
         return fail();
     }
 
     if (closure->rirFunction()->body()->codeSize > Parameter::MAX_INPUT_SIZE) {
+        closure->rirFunction()->unoptimizable = true;
         logger.warn("skipping huge function");
         return fail();
     }
@@ -103,7 +97,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         return success(existing);
 
     auto version = closure->declareVersion(ctx);
-
     Builder builder(version, closure->closureEnv());
     auto& log = logger.begin(version);
     Rir2Pir rir2pir(*this, closure->rirFunction(), log, closure->name());
@@ -111,6 +104,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     Protect protect;
     auto& assumptions = version->assumptions();
 
+    bool failedToCompileDefaultArgs = false;
     auto compileDefaultArg = [&](size_t idx) {
         auto arg = closure->formals().defaultArgs()[idx];
         Value* res = nullptr;
@@ -126,13 +120,15 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
             auto code = rir::Code::unpack(arg);
             res = rir2pir.tryCreateArg(code, builder, false);
             if (!res) {
-                logger.warn("Failed to compile default arg");
-                return fail();
+                failedToCompileDefaultArgs = true;
+                return;
             }
-            // Need to cast promise-as-a-value to lazy-value, to make
-            // it evaluate on access
-            res = builder(new CastType(res, CastType::Upcast, RType::prom,
-                                       PirType::any()));
+            if (MkArg::Cast(res)) {
+                // Need to cast promise-as-a-value to lazy-value, to make
+                // it evaluate on access
+                res = builder(new CastType(res, CastType::Upcast, RType::prom,
+                                           PirType::any()));
+            }
         }
 
         builder(new StArg(closure->formals().names()[idx], res, builder.env));
@@ -177,6 +173,13 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                 compileDefaultArg(i);
     }
 
+    if (failedToCompileDefaultArgs) {
+        logger.warn("Failed to compile default arg");
+        logger.close(version);
+        closure->erase(ctx);
+        return fail();
+    }
+
     if (rir2pir.tryCompile(builder)) {
         log.compilationEarlyPir(version);
 #ifdef FULLVERIFIER
@@ -188,11 +191,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 #endif
         log.flush();
         return success(version);
-
-        log.failed("rir2pir failed to verify");
-        log.flush();
-        logger.close(version);
-        assert(false);
     }
 
     log.failed("rir2pir aborted");
