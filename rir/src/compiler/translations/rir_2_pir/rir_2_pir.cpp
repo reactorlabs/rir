@@ -429,25 +429,30 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         }
 
         size_t missingArgs = 0;
+        auto matchedArgs(args);
         // Static argument name matching
         // Currently we only match callsites with the correct number of
         // arguments passed. Thus, we set those given assumptions below.
         if (monomorphicClosure) {
-            bool correctOrder = (bc.bc != Opcode::named_call_implicit_) ||
-                                ArgumentMatcher::reorder(
-                                    FORMALS(monomorphic),
-                                    bc.callExtra().callArgumentNames, args);
+            bool correctOrder =
+                (bc.bc != Opcode::named_call_implicit_) ||
+                ArgumentMatcher::reorder(FORMALS(monomorphic),
+                                         bc.callExtra().callArgumentNames,
+                                         matchedArgs);
 
             size_t needed = RList(FORMALS(monomorphic)).length();
 
-            if (!correctOrder || needed < args.size()) {
+            if (!correctOrder || needed < matchedArgs.size()) {
                 monomorphicClosure = false;
                 assert(assumption);
                 // Kill unnecessary speculation
                 assumption->arg<0>().val() = True::instance();
             }
+            for (const auto& a : matchedArgs)
+                if (a == MissingArg::instance())
+                    given.remove(Assumption::NoExplicitlyMissingArgs);
 
-            missingArgs = needed - args.size();
+            missingArgs = needed - matchedArgs.size();
         }
 
         // Emit the actual call
@@ -481,8 +486,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     pop();
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(
-                        new StaticCall(insert.env, f->owner(), args, fs, ast)));
+                    push(insert(new StaticCall(insert.env, f->owner(),
+                                               matchedArgs, fs, ast)));
                 },
                 insertGenericCall);
         } else if (monomorphicBuiltin) {
