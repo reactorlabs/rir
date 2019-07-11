@@ -1,6 +1,7 @@
 #ifndef RIR_SET_H
 #define RIR_SET_H
 
+#include <algorithm>
 #include <vector>
 
 namespace rir {
@@ -24,6 +25,8 @@ class SmallSet {
     }
 
     void clear() { container.clear(); }
+
+    size_t count(const T t) const { return includes(t) ? 1 : 0; }
 
     bool includes(const T t) const {
         for (const auto& e : container)
@@ -52,6 +55,10 @@ class SmallSet {
     }
 
     size_t size() const { return container.size(); }
+
+    iterator find(const T& t) {
+        return std::find(container.begin(), container.end(), t);
+    }
 
     iterator erase(iterator e) { return container.erase(e); }
     const_iterator erase(const_iterator e) { return container.erase(e); }

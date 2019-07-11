@@ -4,6 +4,7 @@
 #include "../transform/bb.h"
 #include "../transform/replace.h"
 #include "pass_definitions.h"
+#include "utils/Set.h"
 
 namespace {
 
@@ -45,8 +46,8 @@ using namespace rir::pir;
 
 struct ForcedBy {
     std::unordered_map<Value*, Force*> forcedBy;
-    std::unordered_set<Value*> inScope;
-    std::unordered_set<Value*> escaped;
+    rir::SmallSet<Value*> inScope;
+    rir::SmallSet<Value*> escaped;
 
     std::vector<size_t> argumentForceOrder;
     bool ambiguousForceOrder = false;

@@ -145,10 +145,10 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             staticClosureEnv != Env::notClosed()) {
             lexicalEnv = staticClosureEnv;
         }
-        state.envs[mk].parentEnv(lexicalEnv);
-        mk->eachLocalVar([&](SEXP name, Value* val) {
-            state.envs[mk].set(name, val, mk, depth);
-        });
+        auto& env = state.envs.at(mk);
+        env.parentEnv(lexicalEnv);
+        mk->eachLocalVar(
+            [&](SEXP name, Value* val) { env.set(name, val, mk, depth); });
         handled = true;
         effect.update();
     } else if (auto le = LdFunctionEnv::Cast(i)) {
@@ -170,8 +170,9 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         } else if (ld.env != AbstractREnvironment::UnknownParent) {
             // If our analysis give us an environment approximation for the
             // ldfun, then we can at least contain the tainted environments.
-            state.envs[ld.env].leaked = true;
-            state.envs[ld.env].taint();
+            auto& env = state.envs.at(ld.env);
+            env.leaked = true;
+            env.taint();
             effect.taint();
             handled = true;
         }
@@ -182,15 +183,15 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         auto res = superLoad(state, ld->varName, ld->env());
         storeResult(res);
     } else if (auto s = StVar::Cast(i)) {
-        state.envs[s->env()].set(s->varName, s->val(), s, depth);
+        state.envs.at(s->env()).set(s->varName, s->val(), s, depth);
         handled = true;
         effect.update();
     } else if (auto ss = StVarSuper::Cast(i)) {
-        auto superEnv = state.envs[ss->env()].parentEnv();
+        auto superEnv = state.envs.at(ss->env()).parentEnv();
         if (superEnv != AbstractREnvironment::UnknownParent) {
             auto binding = state.envs.superGet(ss->env(), ss->varName);
             if (!binding.result.isUnknown()) {
-                state.envs[superEnv].set(ss->varName, ss->val(), ss, depth);
+                state.envs.at(superEnv).set(ss->varName, ss->val(), ss, depth);
                 handled = true;
                 effect.update();
             }
@@ -405,7 +406,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             }
 
             if (envIsNeeded && i->leaksEnv()) {
-                state.envs[i->env()].leaked = true;
+                state.envs.at(i->env()).leaked = true;
                 effect.update();
             }
 
@@ -413,7 +414,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             // need to consider it tainted.
             if (envIsNeeded && i->changesEnv()) {
                 state.envs.taintLeaked();
-                state.envs[i->env()].taint();
+                state.envs.at(i->env()).taint();
                 effect.taint();
             }
         }
@@ -432,8 +433,10 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
                                       const MaybeMaterialized& action) {
     auto envState = state.envs.at(env);
     std::unordered_map<SEXP, AbstractPirValue> theEnv;
-    for (auto& e : envState.entries) {
-        if (e.second.isUnknown())
+    for (const auto& entry : envState.entries) {
+        auto& name = entry.first;
+        auto& val = entry.second;
+        if (val.isUnknown())
             return;
         // If any of the stores are StArg, then we cannot do this trick. The
         // reason is in the following case:
@@ -441,7 +444,7 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
         //       StVar (StArg) x, ...
         // in this case starg must be preserved, since it does not override the
         // missing flag on the environment binding
-        auto maybeStarg = e.second.checkEachSource([&](const ValOrig& src) {
+        auto maybeStarg = val.checkEachSource([&](const ValOrig& src) {
             if (!src.origin)
                 return false;
             auto st = StVar::Cast(src.origin);
@@ -449,8 +452,8 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
         });
         if (maybeStarg)
             return;
-        theEnv[e.first] = e.second;
-    }
+        theEnv[name] = val;
+    };
 
     action(theEnv);
 }

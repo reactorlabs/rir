@@ -37,11 +37,11 @@ void AbstractREnvironment::print(std::ostream& out, bool tty) const {
     if (tainted)
         out << "* tainted\n";
 
-    for (auto e : entries) {
-        SEXP name = std::get<0>(e);
+    for (const auto& entry : entries) {
+        auto& name = entry.first;
+        auto& val = entry.second;
         out << "   " << CHAR(PRINTNAME(name)) << " -> ";
-        AbstractPirValue v = std::get<1>(e);
-        v.print(out);
+        val.print(out);
         out << "\n";
     }
 }
@@ -59,10 +59,15 @@ AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
     }
 
     bool changed = false;
-    if (!std::includes(vals.begin(), vals.end(), other.vals.begin(),
-                       other.vals.end())) {
-        vals.insert(other.vals.begin(), other.vals.end());
-        changed = true;
+    for (const auto& e : other.vals) {
+        if (!vals.includes(e)) {
+            vals.insert(e);
+            changed = true;
+            if (vals.size() > MAX_VALS) {
+                taint();
+                break;
+            }
+        }
     }
     auto old = type;
     type = type | other.type;
@@ -70,6 +75,8 @@ AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
 
     return changed ? AbstractResult::Updated : AbstractResult::None;
 }
+
+size_t constexpr AbstractPirValue::MAX_VALS;
 
 void AbstractPirValue::print(std::ostream& out, bool tty) const {
     if (unknown) {
