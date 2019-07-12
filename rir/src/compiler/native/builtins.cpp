@@ -2,6 +2,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "compiler/parameter.h"
+#include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
 #include "ir/Deoptimization.h"
@@ -111,11 +112,7 @@ NativeBuiltin NativeBuiltins::ldvarCacheMiss = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_void, 3, 0),
 };
 
-void stvarImpl(SEXP a, SEXP b, SEXP c) {
-    // std::cout << CHAR(PRINTNAME(a)) << "=";
-    // Rf_PrintValue(b);
-    Rf_defineVar(a, b, c);
-};
+void stvarImpl(SEXP a, SEXP val, SEXP c) { rirDefineVarWrapper(a, val, c); };
 NativeBuiltin NativeBuiltins::stvar = {
     "stvar", (void*)&stvarImpl, 3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),

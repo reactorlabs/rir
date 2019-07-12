@@ -47,12 +47,20 @@ cachedSetBindingCell(Immediate cacheIdx, BindingCache* cache, R_varloc_t loc) {
 static void rirDefineVarWrapper(SEXP symbol, SEXP value, SEXP rho) {
     if (rho == R_EmptyEnv)
         return;
-    if (rho == R_BaseNamespace || rho == R_BaseEnv || OBJECT(rho) ||
-        HASHTAB(rho) != R_NilValue) {
+
+    if (OBJECT(rho) || HASHTAB(rho) != R_NilValue) {
         PROTECT(value);
         INCREMENT_NAMED(value);
         Rf_defineVar(symbol, value, rho);
         UNPROTECT(1);
+        return;
+    }
+
+    if (rho == R_BaseNamespace || rho == R_BaseEnv) {
+        if (SYMVALUE(symbol) == value)
+            return;
+        INCREMENT_NAMED(value);
+        Rf_defineVar(symbol, value, rho);
         return;
     }
 
