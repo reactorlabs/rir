@@ -1501,6 +1501,15 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     ostack_push(ctx, res);
 }
 
+
+#define NON_REUSABLE(sexp)              \
+    TYPEOF(sexp) == CLOSXP ||          \
+    TYPEOF(sexp) == PROMSXP ||          \
+    TYPEOF(sexp) == LANGSXP ||          \
+    TYPEOF(sexp) == SPECIALSXP ||       \
+    TYPEOF(sexp) == BUILTINSXP  
+
+
 #ifdef ENABLE_EVENT_COUNTERS
 static unsigned EnvAllocated =
     EventCounters::instance().registerCounter("env allocated");
@@ -1810,15 +1819,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
-            if (TYPEOF(res) == PROMSXP)
+            if (TYPEOF(res) == PROMSXP) 
                 res = promiseValue(res, ctx);
 
-            if (res != R_NilValue) {
-                if (isLocal)
-                    ENSURE_NAMED(res);
-                else if (NAMED(res) < 2)
-                    SET_NAMED(res, 2);
-            }
+            if (res != R_NilValue && !isLocal && NAMED(res) < 2) 
+                SET_NAMED(res, 2);
+
+            assert(res == R_NilValue || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
@@ -1850,16 +1857,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
-            if (TYPEOF(res) == PROMSXP) {
+            if (TYPEOF(res) == PROMSXP) 
                 res = promiseValue(res, ctx);
-            }
 
-            if (res != R_NilValue) {
-                if (isLocal)
-                    ENSURE_NAMED(res);
-                else if (NAMED(res) < 2)
-                    SET_NAMED(res, 2);
-            }
+            if (res != R_NilValue && !isLocal && NAMED(res) < 2) 
+                SET_NAMED(res, 2);
+
+            assert(res == R_NilValue || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
@@ -1882,8 +1886,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(Pool::get(le->names[pos]))));
             }
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+            assert(res == R_NilValue || NON_REUSABLE(res) || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
@@ -1899,13 +1902,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             } else if (res == R_MissingArg) {
                 Rf_error("argument \"%s\" is missing, with no default",
                          CHAR(PRINTNAME(sym)));
-            } else if (TYPEOF(res) == PROMSXP) {
+            } else if (TYPEOF(res) == PROMSXP) 
                 // if promise, evaluate & return
                 res = promiseValue(res, ctx);
-            }
-
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+            
+            assert(res == R_NilValue || NON_REUSABLE(res) || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
@@ -1928,11 +1929,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
-            if (TYPEOF(res) == PROMSXP)
+            if (TYPEOF(res) == PROMSXP) 
                 res = promiseValue(res, ctx);
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+            assert(res == R_NilValue || NON_REUSABLE(res) || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
@@ -1950,8 +1950,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(sym)));
             }
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+            assert(res == R_NilValue || NON_REUSABLE(res) || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
@@ -1973,8 +1972,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(sym)));
             }
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+            assert(res == R_NilValue || NON_REUSABLE(res) || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
@@ -1996,8 +1994,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+            assert(res == R_NilValue || NON_REUSABLE(res) || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
@@ -2015,8 +2012,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(sym)));
             }
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+            assert(res == R_NilValue || NON_REUSABLE(res) || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
@@ -2038,8 +2034,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+            assert(res == R_NilValue || NON_REUSABLE(res) || MAYBE_REFERENCED(res));
 
             ostack_push(ctx, res);
             NEXT();
