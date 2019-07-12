@@ -83,8 +83,6 @@ NativeBuiltin NativeBuiltins::createEnvironment = {
 
 SEXP ldvarImpl(SEXP a, SEXP b) {
     auto res = Rf_findVar(a, b);
-    if (res != R_NilValue)
-                ENSURE_NAMED(res); 
     // std::cout << CHAR(PRINTNAME(a)) << "=";
     // Rf_PrintValue(res);
     return res;
@@ -139,7 +137,9 @@ void defvarImpl(SEXP var, SEXP value, SEXP env) {
 };
 
 NativeBuiltin NativeBuiltins::defvar = {
-    "defvar", (void*)&defvarImpl, 3,
+    "defvar",
+    (void*)&defvarImpl,
+    3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
 };
 
@@ -449,8 +449,10 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     return res;
 }
 
-NativeBuiltin NativeBuiltins:: binop = {
-    "binop", (void*)&binopImpl, 3,
+NativeBuiltin NativeBuiltins::binop = {
+    "binop",
+    (void*)&binopImpl,
+    3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 

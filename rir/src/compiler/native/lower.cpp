@@ -608,8 +608,9 @@ jit_value PirCodeFunction::car(jit_value x) {
 }
 
 jit_value PirCodeFunction::constant(SEXP c, jit_type_t needed) {
-    static std::unordered_set<SEXP> eternal = {
-        R_TrueValue, R_NilValue, R_FalseValue, R_UnboundValue, R_MissingArg, R_GlobalEnv};
+    static std::unordered_set<SEXP> eternal = {R_TrueValue,  R_NilValue,
+                                               R_FalseValue, R_UnboundValue,
+                                               R_MissingArg, R_GlobalEnv};
     if (eternal.count(c) && needed == sxp) {
         return new_constant(c);
     }
@@ -776,10 +777,10 @@ void PirCodeFunction::build() {
 
 #if 0
     code->printCode(std::cout, true, false);
-    /* for (auto& r : representation) {
+    for (auto& r : representation) {
         r.first->printRef(std::cout);
         std::cout << " = " << r.second << "\n";
-    }*/
+    }
 #endif
 
     basepointer = nodestackPtr();
@@ -971,7 +972,7 @@ void PirCodeFunction::build() {
         auto size = new_constant(idx * sizeof(SEXPREC));
         bindingsCacheBase = insn_alloca(size);
     }
-    
+
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         insn_label(blockLabel.at(bb));
 
@@ -1386,7 +1387,7 @@ void PirCodeFunction::build() {
                     insn_branch_if(insn_le(cache, new_constant((SEXP)1)), miss);
                     auto val = car(cache);
                     insn_branch_if(insn_eq(val, constant(R_UnboundValue, sxp)),
-                                    miss);
+                                   miss);
 
                     insn_branch_if(insn_eq(val, newVal), done);
 
@@ -1405,9 +1406,9 @@ void PirCodeFunction::build() {
                     insn_label(done);
                 } else {
                     gcSafepoint(i, 1, false);
-                    call(NativeBuiltins::stvar,
-                        {constant(st->varName, sxp), loadSxp(i, st->arg<0>().val()),
-                        loadSxp(i, st->env())});
+                    call(NativeBuiltins::stvar, {constant(st->varName, sxp),
+                                                 loadSxp(i, st->arg<0>().val()),
+                                                 loadSxp(i, st->env())});
                 }
                 break;
             }
@@ -1422,12 +1423,13 @@ void PirCodeFunction::build() {
                         break;
                     }
                 }
-                
-                // In case we statically knew the parent PIR already converted super assigns to standard stores
+
+                // In case we statically knew the parent PIR already converted
+                // super assigns to standard stores
                 gcSafepoint(i, 1, false);
                 call(NativeBuiltins::defvar,
-                        {constant(st->varName, sxp), loadSxp(i, st->arg<0>().val()),
-                        loadSxp(i, st->env())});
+                     {constant(st->varName, sxp),
+                      loadSxp(i, st->arg<0>().val()), loadSxp(i, st->env())});
                 break;
             }
 
@@ -1776,7 +1778,7 @@ void PirCodeFunction::build() {
         }
     });
 
-    //jit_dump_function(stdout, raw(), "test");
+    // jit_dump_function(stdout, raw(), "test");
 };
 
 static jit_context context;
