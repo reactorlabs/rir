@@ -47,7 +47,7 @@ PassScheduler::PassScheduler() {
     add<PhaseMarker>("Initial");
 
     // ==== Phase 1) Run the default passes a couple of times
-    for (size_t i = 0; i < 3; ++i)
+    for (size_t i = 0; i < 2; ++i)
         addDefaultOpt();
 
     add<PhaseMarker>("Phase 1");

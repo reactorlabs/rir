@@ -4,6 +4,7 @@
 #include "../pir/pir.h"
 #include "../pir/singleton_values.h"
 #include "abstract_result.h"
+#include "utils/Map.h"
 #include "utils/Set.h"
 
 #include <functional>
@@ -63,8 +64,8 @@ namespace pir {
 struct AbstractPirValue {
   private:
     bool unknown = false;
-    // This needs to be ordered set, for std::includes check!
-    std::set<ValOrig> vals;
+    SmallSet<ValOrig> vals;
+    constexpr static size_t MAX_VALS = 5;
 
   public:
     PirType type = PirType::bottom();
@@ -178,7 +179,7 @@ struct AbstractREnvironment {
     static Value* UnknownParent;
     static Value* UninitializedParent;
 
-    std::unordered_map<SEXP, AbstractPirValue> entries;
+    SmallMap<SEXP, AbstractPirValue> entries;
 
     AbstractREnvironment() {}
 
@@ -189,23 +190,21 @@ struct AbstractREnvironment {
         tainted = true;
         for (auto& e : entries) {
             e.second.taint();
-        }
+        };
     }
 
     void set(SEXP n, Value* v, Instruction* origin, unsigned recursionLevel) {
-        entries[n] = AbstractPirValue(v, origin, recursionLevel);
+        entries.set(n, AbstractPirValue(v, origin, recursionLevel));
     }
 
     void print(std::ostream& out, bool tty = false) const;
 
     const AbstractPirValue& get(SEXP e) const {
         static AbstractPirValue t = AbstractPirValue::tainted();
-        if (entries.count(e))
-            return entries.at(e);
-        return t;
+        return entries.get(e, t);
     }
 
-    const bool absent(SEXP e) const { return !tainted && !entries.count(e); }
+    const bool absent(SEXP e) const { return !tainted && !entries.contains(e); }
 
     AbstractResult mergeExit(const AbstractREnvironment& other) {
         return merge(other);
@@ -223,23 +222,26 @@ struct AbstractREnvironment {
             res.taint();
         }
 
-        for (auto& entry : other.entries) {
+        for (const auto& entry : other.entries) {
             auto name = entry.first;
-            if (!entries.count(name)) {
-                entries[name] = other.get(name);
-                res.max(entries.at(name).merge(
-                    AbstractPirValue(UnboundValue::instance(), nullptr, 0)));
-            } else {
-                res.max(entries.at(name).merge(other.get(name)));
-            }
+            entries.contains(name,
+                             [&](AbstractPirValue& val) {
+                                 res.max(val.merge(entry.second));
+                             },
+                             [&]() {
+                                 AbstractPirValue copy = entry.second;
+                                 res.max(copy.merge(AbstractPirValue(
+                                     UnboundValue::instance(), nullptr, 0)));
+                                 entries.insert(name, copy);
+                             });
         }
         for (auto& entry : entries) {
             auto name = entry.first;
-            if (!other.entries.count(name) && !entries.at(name).isUnknown()) {
-                res.max(entries.at(name).merge(
+            if (!entry.second.isUnknown() && !other.entries.contains(name)) {
+                res.max(entry.second.merge(
                     AbstractPirValue(UnboundValue::instance(), nullptr, 0)));
             }
-        }
+        };
 
         if (parentEnv_ == UninitializedParent &&
             other.parentEnv_ != UninitializedParent) {
@@ -300,12 +302,12 @@ struct AbstractLoad {
 
 class AbstractREnvironmentHierarchy {
   private:
-    std::unordered_map<Value*, AbstractREnvironment> envs;
+    SmallMap<Value*, AbstractREnvironment> envs;
 
   public:
     AbstractREnvironmentHierarchy() {}
 
-    std::unordered_map<Value*, Value*> aliases;
+    SmallMap<Value*, Value*> aliases;
 
     AbstractResult mergeExit(const AbstractREnvironmentHierarchy& other) {
         return merge(other);
@@ -314,15 +316,16 @@ class AbstractREnvironmentHierarchy {
     AbstractResult merge(const AbstractREnvironmentHierarchy& other) {
         AbstractResult res;
 
-        for (auto& e : other.envs)
-            if (envs.count(e.first))
-                res.max(envs.at(e.first).merge(e.second));
-            else
-                envs.emplace(e);
+        for (const auto& e : other.envs)
+            envs.contains(e.first,
+                          [&](AbstractREnvironment& env) {
+                              res.max(env.merge(e.second));
+                          },
+                          [&]() { envs.insert(e.first, e.second); });
 
         for (auto& entry : other.aliases) {
             if (!aliases.count(entry.first)) {
-                aliases.emplace(entry);
+                aliases.insert(entry.first, entry.second);
                 res.update();
             } else {
                 SLOWASSERT(entry.second == aliases.at(entry.first));
@@ -331,7 +334,7 @@ class AbstractREnvironmentHierarchy {
         return res;
     }
 
-    bool known(Value* env) const { return envs.count(env); }
+    bool known(Value* env) const { return envs.contains(env); }
 
     const AbstractREnvironment& at(Value* env) const {
         if (aliases.count(env))
@@ -340,7 +343,7 @@ class AbstractREnvironmentHierarchy {
             return envs.at(env);
     }
 
-    AbstractREnvironment& operator[](Value* env) {
+    AbstractREnvironment& at(Value* env) {
         if (aliases.count(env))
             return envs[aliases.at(env)];
         else
