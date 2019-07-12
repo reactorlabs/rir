@@ -111,6 +111,7 @@ class PirCodeFunction : public jit_function {
     jit_value constant(SEXP c, jit_type_t);
     jit_value sexptype(jit_value v);
     void ensureNamed(jit_value v);
+    void incrementNamed(jit_value v);
     void writeBarrier(jit_value x, jit_value y, std::function<void()> no,
                       std::function<void()> yes);
     jit_value isObj(jit_value v);
@@ -533,6 +534,27 @@ void PirCodeFunction::ensureNamed(jit_value v) {
     insn_branch_if(named == sxpinfo, isNamed);
     insn_store_relative(v, sxpinfofOfs, named);
     insn_label(isNamed);
+};
+
+void PirCodeFunction::incrementNamed(jit_value v) {
+    auto sxpinfo = insn_load_relative(v, sxpinfofOfs, jit_type_ulong);
+    // named count is NAMED_BITS, starting at the 33th bit
+    static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1) << 33;
+    static auto namedNegMask = ~namedMask;
+
+    auto isNamedMax = jit_label();
+
+    auto named = insn_and(sxpinfo, new_constant(namedMask));
+    named = insn_shr(named, new_constant(33));
+    insn_branch_if(named == new_constant(NAMEDMAX), isNamedMax);
+
+    auto newNamed = insn_add(named, new_constant(1));
+    newNamed = insn_shl(newNamed, new_constant(33));
+    auto newSxpinfo = insn_and(sxpinfo, new_constant(namedNegMask));
+    newSxpinfo = insn_or(newSxpinfo, newNamed);
+    insn_store_relative(v, sxpinfofOfs, newSxpinfo);
+
+    insn_label(isNamedMax);
 };
 
 void PirCodeFunction::writeBarrier(jit_value x, jit_value y,
@@ -1360,20 +1382,25 @@ void PirCodeFunction::build() {
                                                     jit_type_nuint);
                     jit_label done, miss;
 
+                    auto newVal = loadSxp(i, st->arg<0>().val());
+
                     insn_branch_if(insn_le(cache, new_constant((SEXP)1)), miss);
                     auto val = car(cache);
                     insn_branch_if(insn_eq(val, constant(R_UnboundValue, sxp)),
                                    miss);
 
-                    setCar(cache, loadSxp(i, st->arg<0>().val()));
+                    insn_branch_if(insn_eq(val, newVal), done);
+
+                    incrementNamed(newVal);
+                    setCar(cache, newVal);
+
                     insn_branch(done);
 
                     insn_label(miss);
 
                     gcSafepoint(i, 1, false);
                     call(NativeBuiltins::stvar,
-                         {constant(st->varName, sxp),
-                          loadSxp(i, st->arg<0>().val()),
+                         {constant(st->varName, sxp), newVal,
                           loadSxp(i, st->env())});
 
                     insn_label(done);
