@@ -1,4 +1,5 @@
 #include "bb.h"
+#include "../analysis/dead.h"
 #include "../pir/pir_impl.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
@@ -223,13 +224,14 @@ void BBTransform::removeDeadInstrs(Code* fun) {
     // key -> {val_1, ..., val_n} means val_1 ... val_n have key as an input
     std::unordered_map<Phi*, std::unordered_set<Instruction*>> phiUses;
 
+    DeadInstructions dead(fun);
+
     Visitor::run(fun->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
             auto next = ip + 1;
-            if (i->unused() && !i->branchOrExit() &&
-                !i->hasObservableEffects()) {
+            if (!i->hasObservableEffects() && dead.unused(i)) {
                 next = bb->remove(ip);
             } else {
                 i->eachArg([&](Value* v) {

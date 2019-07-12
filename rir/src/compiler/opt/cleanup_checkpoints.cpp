@@ -10,12 +10,19 @@ namespace pir {
 void CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
                                LogStream&) const {
     auto apply = [](Code* code) {
+        std::unordered_set<Checkpoint*> used;
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto a = Assume::Cast(i)) {
+                used.insert(a->checkpoint());
+            }
+        });
+
         std::unordered_set<BB*> toDelete;
         Visitor::run(code->entry, [&](BB* bb) {
             if (bb->isEmpty())
                 return;
             if (auto cp = Checkpoint::Cast(bb->last())) {
-                if (cp->unused()) {
+                if (!used.count(cp)) {
                     bb->remove(bb->end() - 1);
                     toDelete.insert(bb->next1);
                     assert(bb->next1->isExit() &&

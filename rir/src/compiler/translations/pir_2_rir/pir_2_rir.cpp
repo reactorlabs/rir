@@ -1111,8 +1111,6 @@ void Pir2Rir::lower(Code* code) {
                 next = bb->remove(it);
                 // Branching removed. Preserve invariant
                 bb->next1 = nullptr;
-            } else if (MkArg::Cast(*it) && (*it)->unused()) {
-                next = bb->remove(it);
             }
             it = next;
         }

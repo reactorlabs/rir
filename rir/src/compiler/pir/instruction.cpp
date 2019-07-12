@@ -199,16 +199,6 @@ Instruction::InstructionUID Instruction::id() const {
     return InstructionUID(bb()->id, bb()->indexOf(this));
 }
 
-bool Instruction::unused() {
-    if (type == PirType::voyd())
-        return true;
-    return Visitor::check(bb(), [&](Instruction* i) {
-        bool unused = true;
-        i->eachArg([&](Value* v) { unused = unused && (v != this); });
-        return unused;
-    });
-}
-
 Instruction* Instruction::hasSingleUse() {
     size_t seen = 0;
     Instruction* usage;
