@@ -276,17 +276,22 @@ class TheScopeResolution {
 
                 // StVarSuper where the parent environment is known and
                 // local, can be replaced by simple StVar, if the variable
-                // exists in the super env.
+                // exists in the super env. Or if the super env is the global
+                // env, since super assign never goes beyond that one.
                 if (auto sts = StVarSuper::Cast(i)) {
                     auto aLoad =
                         analysis.superLoad(before, sts->varName, sts->env());
-                    if (aLoad.env != AbstractREnvironment::UnknownParent &&
-                        !aLoad.result.isUnknown() &&
-                        aLoad.env->validIn(function)) {
-                        auto r = new StVar(sts->varName, sts->val(), aLoad.env);
-                        bb->replace(ip, r);
-                        sts->replaceUsesWith(r);
-                        replacedValue[sts] = r;
+                    if (aLoad.env != AbstractREnvironment::UnknownParent) {
+                        auto env = Env::Cast(aLoad.env);
+                        if ((env && env->rho == R_GlobalEnv) ||
+                            (!aLoad.result.isUnknown() &&
+                             aLoad.env->validIn(function))) {
+                            auto r =
+                                new StVar(sts->varName, sts->val(), aLoad.env);
+                            bb->replace(ip, r);
+                            sts->replaceUsesWith(r);
+                            replacedValue[sts] = r;
+                        }
                     }
                     ip = next;
                     continue;
