@@ -252,7 +252,6 @@ class Instruction : public Value {
 
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
-    bool unused();
 
     typedef std::function<PirType(Value*)> TypeOf;
 
@@ -795,11 +794,17 @@ class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLI(ChkMissing, 1, Effect::Warn) {
+class FLI(ChkMissing, 1, Effect::Error) {
   public:
     explicit ChkMissing(Value* in)
-        : FixedLenInstruction(in->type.notMissing(), {{PirType::any()}},
-                              {{in}}) {}
+        // Check missing on the missing value will throw an error. If we would
+        // set the type to MissingArg::instance()->type.notMissing() then this
+        // would be void, which will mess up the consumer instructions (even
+        // though they will never be executed due to the error, it would still
+        // confuse the compiler...)
+        : FixedLenInstruction(
+              in == MissingArg::instance() ? in->type : in->type.notMissing(),
+              {{PirType::any()}}, {{in}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 

@@ -1,3 +1,4 @@
+#include "../analysis/dead.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../translations/pir_translator.h"
@@ -23,17 +24,19 @@ class TheCleanup {
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
         std::deque<Promise*> todo;
 
+        DeadInstructions dead(function);
+
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 Instruction* i = *ip;
                 auto next = ip + 1;
                 bool removed = false;
-                bool dead = i->unused() && !i->branchOrExit();
-                if (dead && !i->hasObservableEffects()) {
+                bool isDead = dead.unused(i);
+                if (!i->hasObservableEffects() && isDead) {
                     removed = true;
                     next = bb->remove(ip);
-                } else if (dead &&
+                } else if (isDead &&
                            i->getObservableEffects() == Effect::Visibility &&
                            i->visibilityFlag() != VisibilityFlag::Unknown &&
                            !Visible::Cast(i) && !Invisible::Cast(i)) {
@@ -86,7 +89,7 @@ class TheCleanup {
                             usedBB[curBB].insert(phi);
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
-                    if (arg->unused()) {
+                    if (dead.unused(arg)) {
                         removed = true;
                         next = bb->remove(ip);
                     } else {
