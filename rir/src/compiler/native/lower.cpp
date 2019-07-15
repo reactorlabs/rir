@@ -1409,15 +1409,9 @@ void PirCodeFunction::build() {
                     insn_label(done);
                 } else {
                     gcSafepoint(i, 1, false);
-<<<<<<< HEAD
-                    call(NativeBuiltins::stvar, {constant(st->varName, sxp),
-                                                 loadSxp(i, st->arg<0>().val()),
-                                                 loadSxp(i, st->env())});
-=======
                     call(setter, {constant(st->varName, sxp),
                                   loadSxp(i, st->arg<0>().val()),
                                   loadSxp(i, st->env())});
->>>>>>> 045f259921c5c39dd1168be8e745f6196c3b65aa
                 }
                 break;
             }
