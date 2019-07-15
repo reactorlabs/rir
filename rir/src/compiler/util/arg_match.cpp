@@ -217,11 +217,13 @@ bool ArgumentMatcher::reorder(SEXP formals,
 
     RList result(actuals);
     for (auto r : result) {
-        if (r == R_MissingArg || r == R_DotsSymbol || TYPEOF(r) == DOTSXP)
+        if (r == R_DotsSymbol || TYPEOF(r) == DOTSXP) {
             return false;
-        assert(TYPEOF(r) == INTSXP && "Static argument matching bug, this "
-                                      "actual value was not put there by us");
-        if (TYPEOF(r) != INTSXP)
+        }
+        assert((r == R_MissingArg || TYPEOF(r) == INTSXP) &&
+               "Static argument matching bug, this "
+               "actual value was not put there by us");
+        if (TYPEOF(r) != INTSXP && r != R_MissingArg)
             return false;
     }
 
@@ -229,9 +231,13 @@ bool ArgumentMatcher::reorder(SEXP formals,
     givenArgs.resize(result.length());
     size_t pos = 0;
     for (auto r : result) {
-        assert(TYPEOF(r) == INTSXP);
-        int idx = INTEGER(r)[0];
-        givenArgs[pos++] = copy[idx];
+        if (TYPEOF(r) == INTSXP) {
+            int idx = INTEGER(r)[0];
+            givenArgs[pos++] = copy[idx];
+        } else {
+            assert(r == R_MissingArg);
+            givenArgs[pos++] = MissingArg::instance();
+        }
     }
 
     return true;

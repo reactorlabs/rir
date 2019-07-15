@@ -1371,7 +1371,12 @@ void PirCodeFunction::build() {
             case Tag::StVar: {
                 auto st = StVar::Cast(i);
                 auto env = MkEnv::Cast(st->env());
-                if (st->isStArg || (env && env->stub)) {
+
+                auto setter = NativeBuiltins::stvar;
+                if (st->isStArg)
+                    setter = NativeBuiltins::starg;
+
+                if (env && env->stub) {
                     success = false;
                     break;
                 }
@@ -1398,16 +1403,21 @@ void PirCodeFunction::build() {
                     insn_label(miss);
 
                     gcSafepoint(i, 1, false);
-                    call(NativeBuiltins::stvar,
-                         {constant(st->varName, sxp), newVal,
-                          loadSxp(i, st->env())});
+                    call(setter, {constant(st->varName, sxp), newVal,
+                                  loadSxp(i, st->env())});
 
                     insn_label(done);
                 } else {
                     gcSafepoint(i, 1, false);
+<<<<<<< HEAD
                     call(NativeBuiltins::stvar, {constant(st->varName, sxp),
                                                  loadSxp(i, st->arg<0>().val()),
                                                  loadSxp(i, st->env())});
+=======
+                    call(setter, {constant(st->varName, sxp),
+                                  loadSxp(i, st->arg<0>().val()),
+                                  loadSxp(i, st->env())});
+>>>>>>> 045f259921c5c39dd1168be8e745f6196c3b65aa
                 }
                 break;
             }

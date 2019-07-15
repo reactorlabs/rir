@@ -49,6 +49,7 @@ struct NativeBuiltins {
     static NativeBuiltin ldvar;
     static NativeBuiltin ldvarCacheMiss;
     static NativeBuiltin stvar;
+    static NativeBuiltin starg;
     static NativeBuiltin ldfun;
 
     static NativeBuiltin setCar;
