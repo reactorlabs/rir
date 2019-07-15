@@ -143,10 +143,8 @@ static RIR_INLINE void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
     SEXP loc = getCellFromCache(env, poolIdx, cacheIdx, ctx, cache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
-        if (cur == val) {
-            ENSURE_NAMED(cur);
+        if (cur == val)
             return;
-        }
         INCREMENT_NAMED(val);
         SETCAR(loc, val);
         if (!keepMissing && MISSING(loc)) {

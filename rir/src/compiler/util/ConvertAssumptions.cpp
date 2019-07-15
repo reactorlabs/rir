@@ -33,15 +33,19 @@ void writeArgTypeToAssumptions(Assumptions& assumptions, Value* arg, int i) {
             assumptions.remove(Assumption::NoReflectiveArgument);
     } else {
         Value* value = arg->followCastsAndForce();
-        if (!value->type.maybeObj())
-            assumptions.setNotObj(i);
-        if (assumptions.isEager(i) && assumptions.isNotObj(i) &&
-            value->type.isScalar()) {
-            assert(value->type.isRType());
-            if (value->type.isRType(RType::real))
-                assumptions.setSimpleReal(i);
-            if (value->type.isRType(RType::integer))
-                assumptions.setSimpleInt(i);
+        if (value == MissingArg::instance()) {
+            assumptions.remove(Assumption::NoExplicitlyMissingArgs);
+        } else {
+            if (!value->type.maybeObj())
+                assumptions.setNotObj(i);
+            if (assumptions.isEager(i) && assumptions.isNotObj(i) &&
+                value->type.isScalar()) {
+                assert(value->type.isRType());
+                if (value->type.isRType(RType::real))
+                    assumptions.setSimpleReal(i);
+                if (value->type.isRType(RType::integer))
+                    assumptions.setSimpleInt(i);
+            }
         }
     }
 }

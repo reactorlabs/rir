@@ -189,11 +189,25 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             });
 
-            FOLD_BINARY(Identical, [&](SEXP a, SEXP b) {
-                i->replaceUsesWith(a == b ? (Value*)True::instance()
-                                          : (Value*)False::instance());
-                next = bb->remove(ip);
-            });
+            if (Identical::Cast(i)) {
+                // Those are targeting the checks for default argument
+                // evaluation after inlining
+                if (i->arg(1).val() == MissingArg::instance()) {
+                    if (i->arg(0).val() == MissingArg::instance()) {
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
+                    } else if (!i->arg(0).val()->type.maybeMissing()) {
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
+                    }
+                } else {
+                    FOLD_BINARY(Identical, [&](SEXP a, SEXP b) {
+                        i->replaceUsesWith(a == b ? (Value*)True::instance()
+                                                  : (Value*)False::instance());
+                        next = bb->remove(ip);
+                    });
+                }
+            }
 
             if (auto isTest = IsObject::Cast(i)) {
                 if (!isTest->arg<0>().val()->type.maybeObj()) {
