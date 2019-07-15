@@ -608,9 +608,8 @@ jit_value PirCodeFunction::car(jit_value x) {
 }
 
 jit_value PirCodeFunction::constant(SEXP c, jit_type_t needed) {
-    static std::unordered_set<SEXP> eternal = {R_TrueValue,  R_NilValue,
-                                               R_FalseValue, R_UnboundValue,
-                                               R_MissingArg};
+    static std::unordered_set<SEXP> eternal = {
+        R_TrueValue, R_NilValue, R_FalseValue, R_UnboundValue, R_MissingArg};
     if (eternal.count(c) && needed == sxp) {
         return new_constant(c);
     }
