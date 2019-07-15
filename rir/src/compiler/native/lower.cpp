@@ -610,7 +610,7 @@ jit_value PirCodeFunction::car(jit_value x) {
 jit_value PirCodeFunction::constant(SEXP c, jit_type_t needed) {
     static std::unordered_set<SEXP> eternal = {R_TrueValue,  R_NilValue,
                                                R_FalseValue, R_UnboundValue,
-                                               R_MissingArg, R_GlobalEnv};
+                                               R_MissingArg};
     if (eternal.count(c) && needed == sxp) {
         return new_constant(c);
     }
@@ -1371,13 +1371,13 @@ void PirCodeFunction::build() {
 
             case Tag::StVar: {
                 auto st = StVar::Cast(i);
-                auto environment = MkEnv::Cast(st->env());
-                if (st->isStArg || (environment && environment->stub)) {
+                auto env = MkEnv::Cast(st->env());
+                if (st->isStArg || (env && env->stub)) {
                     success = false;
                     break;
                 }
-                if (bindingsCache.count(environment)) {
-                    auto offset = bindingsCache.at(environment).at(st->varName);
+                if (bindingsCache.count(i->env())) {
+                    auto offset = bindingsCache.at(i->env()).at(st->varName);
                     auto cache = insn_load_relative(bindingsCacheBase, offset,
                                                     jit_type_nuint);
                     jit_label done, miss;
@@ -1410,26 +1410,6 @@ void PirCodeFunction::build() {
                                                  loadSxp(i, st->arg<0>().val()),
                                                  loadSxp(i, st->env())});
                 }
-                break;
-            }
-
-            case Tag::StVarSuper: {
-                auto st = StVarSuper::Cast(i);
-                auto environment = MkEnv::Cast(st->env());
-                if (environment) {
-                    auto parent = MkEnv::Cast(environment->lexicalEnv());
-                    if (environment->stub || (parent && parent->stub)) {
-                        success = false;
-                        break;
-                    }
-                }
-
-                // In case we statically knew the parent PIR already converted
-                // super assigns to standard stores
-                gcSafepoint(i, 1, false);
-                call(NativeBuiltins::defvar,
-                     {constant(st->varName, sxp),
-                      loadSxp(i, st->arg<0>().val()), loadSxp(i, st->env())});
                 break;
             }
 
