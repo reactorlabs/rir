@@ -464,9 +464,7 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
 }
 
 NativeBuiltin NativeBuiltins::binop = {
-    "binop",
-    (void*)&binopImpl,
-    3,
+    "binop", (void*)&binopImpl, 3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 

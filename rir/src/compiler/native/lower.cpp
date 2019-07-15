@@ -971,7 +971,6 @@ void PirCodeFunction::build() {
         auto size = new_constant(idx * sizeof(SEXPREC));
         bindingsCacheBase = insn_alloca(size);
     }
-
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         insn_label(blockLabel.at(bb));
 
@@ -1380,7 +1379,9 @@ void PirCodeFunction::build() {
                     success = false;
                     break;
                 }
+
                 if (bindingsCache.count(i->env())) {
+
                     auto offset = bindingsCache.at(i->env()).at(st->varName);
                     auto cache = insn_load_relative(bindingsCacheBase, offset,
                                                     jit_type_nuint);
@@ -1403,8 +1404,9 @@ void PirCodeFunction::build() {
                     insn_label(miss);
 
                     gcSafepoint(i, 1, false);
-                    call(setter, {constant(st->varName, sxp), newVal,
-                                  loadSxp(i, st->env())});
+                    call(setter,
+                         {constant(st->varName, sxp), newVal,
+                          loadSxp(i, st->env())});
 
                     insn_label(done);
                 } else {
