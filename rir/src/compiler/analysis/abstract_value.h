@@ -21,9 +21,7 @@ struct ValOrig {
     unsigned recursionLevel;
 
     ValOrig(Value* v, Instruction* o, unsigned recursionLevel)
-        : val(v), origin(o), recursionLevel(recursionLevel) {
-        assert((val == UnboundValue::instance()) == (origin == NULL));
-    }
+        : val(v), origin(o), recursionLevel(recursionLevel) {}
 
     bool operator<(const ValOrig& other) const {
         if (origin == other.origin && recursionLevel == other.recursionLevel)
