@@ -129,9 +129,9 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
         env = aliases.at(env);
     while (env != AbstractREnvironment::UnknownParent) {
         assert(env);
-        if (envs.count(env) == 0)
-            return AbstractLoad(AbstractREnvironment::UnknownParent,
-                                AbstractPirValue::tainted());
+        if (envs.count(env) == 0) {
+            return AbstractLoad(env, AbstractPirValue::tainted());
+        }
         auto aenv = envs.at(env);
         if (!aenv.absent(e)) {
             const AbstractPirValue& res = aenv.get(e);
