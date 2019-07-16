@@ -464,4 +464,34 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     }
     return nullptr;
 }
+
+bool supportsFastBuiltinCall(SEXP blt) {
+    switch (blt->u.primsxp.offset) {
+    case 88:  // "length"
+    case 90:  // "c"
+    case 109: // "vector"
+    case 136: // "which"
+    case 301: // "min"
+    case 384: // "is.object"
+    case 386: // "is.numeric"
+    case 387: // "is.matrix"
+    case 388: // "is.array"
+    case 389: // "is.atomic"
+    case 393: // "is.function"
+    case 395: // "is.na"
+    case 399: // "is.vector"
+    case 412: // "list"
+    case 407: // "rep.int"
+    case 507: // "islistfactor"
+    case 678: // "bitwiseAnd"
+    case 680: // "bitwiseOr"
+    case 681: // "bitwiseXor"
+    case 682: // "bitwiseShiftL"
+    case 683: // "bitwiseShiftL"
+        return true;
+    default: {}
+    }
+    return false;
+}
+
 } // namespace rir

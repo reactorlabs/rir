@@ -78,7 +78,7 @@ class ClosureVersion : public Code {
     void printGraph(std::ostream& out, bool omitDeoptBranches) const;
     void printBBGraph(std::ostream& out, bool omitDeoptBranches) const;
 
-    Promise* createProm(unsigned srcPoolIdx);
+    Promise* createProm(rir::Code* rirSrc);
 
     Promise* promise(unsigned id) const { return promises_.at(id); }
     const std::vector<Promise*>& promises() { return promises_; }

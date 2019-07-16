@@ -231,9 +231,17 @@ class VisitorImplementation {
     static bool forwardGenericRun(BB* bb, BB* stop, const ActionKind& action) {
         struct Scheduler {
             RIR_INLINE std::array<BB*, 2> operator()(BB* cur) const {
-                if (!VISIT_DEOPT_BRANCH && !cur->isEmpty())
-                    if (Checkpoint::Cast(cur->last()))
+                if (!VISIT_DEOPT_BRANCH) {
+                    if (!cur->isEmpty() && Checkpoint::Cast(cur->last()))
                         return {{cur->next0}};
+                    // Exclude unconditional deopt BB's
+                    if (cur->next0 && !cur->next0->isEmpty() &&
+                        Deopt::Cast(cur->next0->last()))
+                        return {{cur->next1}};
+                    if (cur->next1 && !cur->next1->isEmpty() &&
+                        Deopt::Cast(cur->next1->last()))
+                        return {{cur->next0}};
+                }
                 return {{cur->next0, cur->next1}};
             }
         };

@@ -267,7 +267,7 @@ class TheInliner {
                                         version->promises().at(newPromId[id]));
                                 } else {
                                     Promise* clone = version->createProm(
-                                        mk->prom()->srcPoolIdx());
+                                        mk->prom()->rirSrc());
                                     BB* promCopy = BBTransform::clone(
                                         mk->prom()->entry, clone, version);
                                     clone->entry = promCopy;

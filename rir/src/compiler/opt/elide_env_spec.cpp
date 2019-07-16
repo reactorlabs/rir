@@ -5,6 +5,7 @@
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "compiler/util/safe_builtins_list.h"
+#include "interpreter/builtins.h"
 #include "pass_definitions.h"
 
 #include <unordered_map>
@@ -62,11 +63,10 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     return;
                 if (CallInstruction::CastCall(i)) {
                     if (auto bt = CallBuiltin::Cast(i)) {
-                        if (SafeBuiltinsList::forInline(bt->builtinId)) {
+                        // Calling a builtin materializes environment, except
+                        // for the fastcases
+                        if (supportsFastBuiltinCall(bt->blt))
                             return;
-                        }
-                        // reflective builtins will trigger deopt, so let's not
-                        // stub those environemtns
                     } else {
                         return;
                     }

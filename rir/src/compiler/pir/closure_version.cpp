@@ -74,8 +74,8 @@ void ClosureVersion::printBBGraph(std::ostream& out,
     out << "}\n";
 }
 
-Promise* ClosureVersion::createProm(unsigned srcPoolIdx) {
-    Promise* p = new Promise(this, promises_.size(), srcPoolIdx);
+Promise* ClosureVersion::createProm(rir::Code* rirSrc) {
+    Promise* p = new Promise(this, promises_.size(), rirSrc);
     promises_.push_back(p);
     return p;
 }

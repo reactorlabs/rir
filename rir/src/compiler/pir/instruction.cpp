@@ -845,6 +845,7 @@ void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
+BB* Checkpoint::nextBB() { return bb()->trueBranch(); }
 
 } // namespace pir
 } // namespace rir
