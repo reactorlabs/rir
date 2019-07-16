@@ -123,6 +123,8 @@ struct AbstractPirValue {
     }
 
     bool isUnboundValue() const {
+        if (unknown)
+            return false;
         if (vals.empty())
             return false;
         for (auto& v : vals)
@@ -132,6 +134,8 @@ struct AbstractPirValue {
     }
 
     bool maybeUnboundValue() const {
+        if (unknown)
+            return true;
         if (vals.empty())
             return false;
         for (auto& v : vals)
@@ -235,6 +239,7 @@ struct AbstractREnvironment {
                                  res.max(copy.merge(AbstractPirValue(
                                      UnboundValue::instance(), nullptr, 0)));
                                  entries.insert(name, copy);
+                                 res.update();
                              });
         }
         for (auto& entry : entries) {
