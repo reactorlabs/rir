@@ -492,6 +492,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             compiler.compileClosure(
                 monomorphic, name, given,
                 [&](ClosureVersion* f) {
+                    assert(f->owner()->rirClosure());
                     pop();
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
