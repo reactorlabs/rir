@@ -442,13 +442,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::push(R_NilValue));
                     } else if (Env::isStaticEnv(what)) {
                         auto env = Env::Cast(what);
-                        // Here we could also load env->rho, but if the user
-                        // were to change the environment on the closure our
-                        // code would be wrong.
-                        if (env == cls->owner()->closureEnv())
-                            cb.add(BC::parentEnv());
-                        else
-                            cb.add(BC::push(env->rho));
+                        cb.add(BC::push(env->rho));
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the env ";

@@ -50,7 +50,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), deopt(false), markOpt(false),
           unoptimizable(false), uninlinable(false), dead(false),
-          numArgs(defaultArgs.size()), signature_(signature) {
+          innerFunction(false), numArgs(defaultArgs.size()),
+          signature_(signature) {
         for (size_t i = 0; i < numArgs; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
@@ -80,6 +81,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     unsigned unoptimizable : 1;
     unsigned uninlinable : 1;
     unsigned dead : 1;
+    unsigned innerFunction : 1;
 
     unsigned numArgs;
 

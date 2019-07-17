@@ -315,6 +315,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_, bo
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
             SEXP fun = Compiler::compileFunction(args[1], args[0]);
+            // Mark this as an inner function to prevent the optimizer from
+            // assuming a stable environment
+            DispatchTable::check(fun)->baseline()->innerFunction = true;
             assert(TYPEOF(fun) == EXTERNALSXP);
             cs << BC::push(args[0]) << BC::push(fun) << BC::push(args[2])
                << BC::close();
