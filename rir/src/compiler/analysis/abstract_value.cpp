@@ -133,7 +133,11 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
             return AbstractLoad(env, AbstractPirValue::tainted());
         }
         auto aenv = envs.at(env);
-        if (!aenv.absent(e)) {
+        // In the case of existing R envs we only have a partial view (ie. we
+        // don't see all stores happening before entering the current function,
+        // therefore we cannot practically exclude the existence of a
+        // bindinging in those environments).
+        if (Env::Cast(env) || !aenv.absent(e)) {
             const AbstractPirValue& res = aenv.get(e);
             // UnboundValue has fall-through semantics which cause lookup to
             // fall through.
