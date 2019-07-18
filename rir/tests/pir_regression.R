@@ -147,3 +147,23 @@ f0()
 f0()
 f0()
 
+xx1 <- function() {
+   ok = 0
+
+   # returning a missing arg is supposed to error
+   f <- function(a,b)
+     a
+
+   tryCatch(f(), error=function(e) ok <<- 1)
+   stopifnot(ok == 1);
+}
+
+xx1()
+xx1()
+xx1()
+xx1()
+xx1()
+xx1()
+xx1()
+xx1()
+xx1()

@@ -8,9 +8,28 @@ namespace pir {
 
 void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const {
+
+    std::unordered_map<Instruction*, BB*> usedOnlyInDeopt;
+
+    Visitor::run(function->entry, [&](Instruction* i) {
+        i->eachArg([&](Value* v) {
+            if (auto j = Instruction::Cast(v)) {
+                if (LdFun::Cast(j) || MkArg::Cast(j)) {
+                    auto& u = usedOnlyInDeopt[j];
+                    if (FrameState::Cast(i) && i->bb()->isDeopt()) {
+                        if (!u)
+                            u = i->bb();
+                        else
+                            u = (BB*)-1;
+                    } else {
+                        u = (BB*)-1;
+                    }
+                }
+            }
+        });
+    });
+
     Visitor::run(function->entry, [&](BB* bb) {
-        Checkpoint* checkpoint =
-            bb->isEmpty() ? nullptr : Checkpoint::Cast(bb->last());
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto i = *ip;
@@ -42,12 +61,11 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
              * sideeffects and the sideeffecting ldfun is moved to the deopt
              * branch.
              */
-            if (checkpoint) {
-                if (auto ldfun = LdFun::Cast(i)) {
-                    auto usage = ldfun->hasSingleUse();
-                    if (usage && FrameState::Cast(usage) &&
-                        usage->bb() == checkpoint->deoptBranch()) {
-                        next = bb->moveToBegin(ip, usage->bb());
+            if (LdFun::Cast(i) || MkArg::Cast(i)) {
+                if (usedOnlyInDeopt.count(i)) {
+                    auto u = usedOnlyInDeopt.at(i);
+                    if (u && u != (BB*)-1 && u != i->bb()) {
+                        next = bb->moveToBegin(ip, u);
                     }
                 }
             }
