@@ -92,7 +92,6 @@ class ScopeAnalysis
     static constexpr size_t MAX_RESULTS = 1000;
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
-    using StaticAnalysis::PositioningStyle;
 
     AbstractResult doCompute(ScopeAnalysisState& state, Instruction* i,
                              bool updateGlobalState);
@@ -109,6 +108,8 @@ class ScopeAnalysis
     }
 
   public:
+    using StaticAnalysis::PositioningStyle;
+
     // Default
     ScopeAnalysis(ClosureVersion* cls, LogStream& log)
         : StaticAnalysis("Scope", cls, cls, log), depth(0) {

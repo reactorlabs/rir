@@ -97,6 +97,7 @@ stopifnot(pir.check(function(x) {
   (function() a <<- 1)()
 }, NoStore))
 stopifnot(!pir.check(function(x) {
+  leak()
   (function() a <<- 1)()
 }, NoStSuper))
 stopifnot(!pir.check(function(x) {

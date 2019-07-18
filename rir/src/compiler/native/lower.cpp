@@ -20,6 +20,8 @@ namespace pir {
 static const auto cpOfs = (size_t) & ((InterpreterInstance*)0) -> cp.list;
 static const auto stdVecDtptrOfs = sizeof(SEXPREC_ALIGN);
 static const auto carOfs_ = (size_t) & ((SEXP)0) -> u.listsxp.carval;
+static const auto cdrOfs_ = (size_t) & ((SEXP)0) -> u.listsxp.cdrval;
+static const auto tagOfs_ = (size_t) & ((SEXP)0) -> u.listsxp.tagval;
 static const auto prValueOfs = (size_t) & ((SEXP)0) -> u.promsxp.value;
 static const auto stackCellValueOfs = (size_t) & ((R_bcstack_t*)0) -> u.sxpval;
 static const auto sxpinfofOfs = (size_t) & ((SEXP)0) -> sxpinfo;
@@ -116,6 +118,8 @@ class PirCodeFunction : public jit_function {
                       std::function<void()> yes);
     jit_value isObj(jit_value v);
     jit_value car(jit_value x);
+    jit_value cdr(jit_value x);
+    jit_value tag(jit_value x);
     void setCar(jit_value x, jit_value y);
 
     jit_value call(const NativeBuiltin&, const std::vector<jit_value>&);
@@ -383,9 +387,17 @@ jit_value PirCodeFunction::load(Instruction* pos, Value* val, PirType type,
         res = valueMap.at(val);
     else if (val == Env::elided())
         res = constant(R_NilValue, needed);
-    else if (auto e = Env::Cast(val))
-        res = constant(e->rho, sxp);
-    else if (val == True::instance())
+    else if (auto e = Env::Cast(val)) {
+        if (e == Env::notClosed()) {
+            res = tag(paramClosure());
+        } else if (e == Env::nil()) {
+            res = constant(R_NilValue, needed);
+        } else if (Env::isStaticEnv(e)) {
+            res = constant(e->rho, sxp);
+        } else {
+            assert(false);
+        }
+    } else if (val == True::instance())
         res = constant(R_TrueValue, needed);
     else if (val == False::instance())
         res = constant(R_FalseValue, needed);
@@ -605,6 +617,12 @@ void PirCodeFunction::setCar(jit_value x, jit_value y) {
 
 jit_value PirCodeFunction::car(jit_value x) {
     return insn_load_relative(x, carOfs_, sxp);
+}
+jit_value PirCodeFunction::cdr(jit_value x) {
+    return insn_load_relative(x, cdrOfs_, sxp);
+}
+jit_value PirCodeFunction::tag(jit_value x) {
+    return insn_load_relative(x, tagOfs_, sxp);
 }
 
 jit_value PirCodeFunction::constant(SEXP c, jit_type_t needed) {

@@ -95,6 +95,14 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         }
     });
 
+    auto envOnlyForObj = [&](Instruction* i) {
+        if (i->envOnlyForObj())
+            return true;
+        if (auto blt = CallBuiltin::Cast(i))
+            if (SafeBuiltinsList::nonObject(blt->blt))
+                return true;
+        return false;
+    };
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -105,7 +113,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 // Speculatively elide environments on instructions in which
                 // all operators are primitive values
                 auto cp = checkpoint.at(i);
-                if (cp && i->envOnlyForObj() && nonObjectArgs(i)) {
+                if (cp && envOnlyForObj(i) && nonObjectArgs(i)) {
                     i->eachArg([&](Value* arg) {
                         if (arg == i->env() || !arg->type.maybeObj()) {
                             return;
@@ -142,7 +150,16 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                             argi->replaceDominatedUses(cast);
                         }
                     });
-                    i->elideEnv();
+                    if (auto blt = CallBuiltin::Cast(i)) {
+                        std::vector<Value*> args;
+                        blt->eachCallArg([&](Value* v) { args.push_back(v); });
+                        auto safe =
+                            new CallSafeBuiltin(blt->blt, args, blt->srcIdx);
+                        blt->replaceUsesWith(safe);
+                        bb->replace(ip, safe);
+                    } else {
+                        i->elideEnv();
+                    }
                     i->updateTypeAndEffects();
                     next = ip + 1;
                 } else if (checks.count(i)) {
