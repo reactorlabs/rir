@@ -33,7 +33,9 @@ class TheCleanup {
                 auto next = ip + 1;
                 bool removed = false;
                 bool isDead = dead.unused(i);
-                if (!i->hasObservableEffects() && isDead) {
+                // unused ldfun is a left over from a guard where ldfun was
+                // converted into ldvar.
+                if ((!i->hasObservableEffects() || LdFun::Cast(i)) && isDead) {
                     removed = true;
                     next = bb->remove(ip);
                 } else if (isDead &&

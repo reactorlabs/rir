@@ -48,7 +48,8 @@ class Rir2Pir {
     LogStream& log;
     std::string name;
 
-    typedef std::unordered_map<Value*, ObservedCallees> CallTargetFeedback;
+    typedef std::unordered_map<Value*, std::pair<Checkpoint*, ObservedCallees>>
+        CallTargetFeedback;
 
     bool compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                    rir::Code* srcCode, RirStack&, Builder&,
