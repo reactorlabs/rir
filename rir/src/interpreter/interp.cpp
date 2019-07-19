@@ -221,6 +221,10 @@ SEXP createLegacyArgsListFromStackValues(CallContext& call, bool eagerCallee,
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
             arg = forcePromise(arg);
         }
+        // This is to ensure we pass named arguments to GNU-R builtins because
+        // who knows what assumptions does GNU-R do??? We SHOULD test this.
+        if (TYPEOF(arg) != PROMSXP)
+            ENSURE_NAMED(arg);
         __listAppend(&result, &pos, arg, name);
     }
 
