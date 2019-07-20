@@ -1039,6 +1039,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (*arg == R_MissingArg) {
             callArgs.push_back(MISSING_ARG_IDX);
             names.push_back(R_NilValue);
+            eagerVal.push_back(nullptr);
             continue;
         }
 
@@ -1067,10 +1068,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                     assumptions.setSimpleInt(i);
             }
         }
-        if (known)
-            eagerVal.push_back(known);
-        else
-            eagerVal.push_back(R_UnboundValue);
+        eagerVal.push_back(known);
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
@@ -1083,9 +1081,14 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             if (a == MISSING_ARG_IDX) {
                 cs << BC::push(R_MissingArg);
             } else {
-                cs << BC::push(eagerVal[i++]);
-                cs << BC::promise(a);
+                if (auto ev = eagerVal[i]) {
+                    cs << BC::push(ev);
+                    cs << BC::mkEagerPromise(a);
+                } else {
+                    cs << BC::mkPromise(a);
+                }
             }
+            i++;
         }
     }
     if (hasNames) {

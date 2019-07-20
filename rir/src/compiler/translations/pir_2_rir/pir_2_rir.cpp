@@ -145,6 +145,16 @@ class Pir2Rir {
                             next = code.emplace(next, BC::dup2(), noSource);
                             changed = true;
                         }
+                    } else if (bc.is(rir::Opcode::swap_) &&
+                               next != code.end() &&
+                               next->first.is(rir::Opcode::swap_)) {
+                        next = code.erase(it, plus(next, 1));
+                        changed = true;
+                    } else if (bc.is(rir::Opcode::push_) &&
+                               next != code.end() &&
+                               next->first.is(rir::Opcode::pop_)) {
+                        next = code.erase(it, plus(next, 1));
+                        changed = true;
                     } else if (bc.is(rir::Opcode::dup_) && next != code.end() &&
                                plus(next, 1) != code.end() &&
                                next->first.is(rir::Opcode::isobj_) &&
@@ -653,10 +663,18 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             case Tag::MkArg: {
-                auto p = MkArg::Cast(instr)->prom();
+                auto mk = MkArg::Cast(instr);
+                auto p = mk->prom();
                 unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
                 promMap[p] = id;
-                cb.add(BC::promise(id));
+                if (mk->eagerArg()) {
+                    cb.add(BC::mkEagerPromise(id));
+                } else {
+                    // Remove the UnbounValue argument pushed by loadArg, this
+                    // will be cleaned up by the peephole opts
+                    cb.add(BC::pop());
+                    cb.add(BC::mkPromise(id));
+                }
                 break;
             }
 

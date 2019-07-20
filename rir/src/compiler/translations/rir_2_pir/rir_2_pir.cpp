@@ -532,10 +532,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::promise_: {
+    case Opcode::mk_eager_promise_:
+    case Opcode::mk_promise_: {
         unsigned promi = bc.immediate.i;
         rir::Code* promiseCode = srcCode->getPromise(promi);
-        Value* val = pop();
+        Value* val = UnboundValue::instance();
+        if (bc.bc == Opcode::mk_eager_promise_)
+            val = pop();
         Promise* prom = insert.function->createProm(promiseCode);
         {
             Builder promiseBuilder(insert.function, prom);
