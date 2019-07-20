@@ -272,14 +272,16 @@ class BC {
 
     bool hasPromargs() const {
         return bc == Opcode::call_implicit_ ||
-               bc == Opcode::named_call_implicit_ || bc == Opcode::promise_ ||
+               bc == Opcode::named_call_implicit_ ||
+               bc == Opcode::mk_promise_ || bc == Opcode::mk_eager_promise_ ||
                bc == Opcode::push_code_;
     }
 
     void addMyPromArgsTo(std::vector<FunIdx>& proms) {
         switch (bc) {
         case Opcode::push_code_:
-        case Opcode::promise_:
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
             proms.push_back(immediate.arg_idx);
             break;
         case Opcode::named_call_implicit_:
@@ -384,7 +386,8 @@ BC_NOARGS(V, _)
     inline static BC ldloc(uint32_t offset);
     inline static BC stloc(uint32_t offset);
     inline static BC copyloc(uint32_t target, uint32_t source);
-    inline static BC promise(FunIdx prom);
+    inline static BC mkPromise(FunIdx prom);
+    inline static BC mkEagerPromise(FunIdx prom);
     inline static BC starg(SEXP sym);
     inline static BC stvarStubbed(unsigned stubbed);
     inline static BC stvar(SEXP sym);
@@ -688,7 +691,8 @@ BC_NOARGS(V, _)
         case Opcode::guard_fun_:
             memcpy(&immediate.guard_fun_args, pc, sizeof(GuardFunArgs));
             break;
-        case Opcode::promise_:
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
         case Opcode::push_code_:
             memcpy(&immediate.fun, pc, sizeof(FunIdx));
             break;

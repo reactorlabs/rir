@@ -98,7 +98,8 @@ BC_NOARGS(V, _)
         cs.insert(immediate.callBuiltinFixedArgs);
         break;
 
-    case Opcode::promise_:
+    case Opcode::mk_promise_:
+    case Opcode::mk_eager_promise_:
     case Opcode::push_code_:
         cs.insert(immediate.fun);
         return;
@@ -272,7 +273,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
-        case Opcode::promise_:
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
         case Opcode::push_code_:
         case Opcode::br_:
         case Opcode::brtrue_:
@@ -410,7 +412,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
-        case Opcode::promise_:
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
         case Opcode::push_code_:
         case Opcode::br_:
         case Opcode::brtrue_:
@@ -658,7 +661,8 @@ void BC::print(std::ostream& out) const {
 BC_NOARGS(V, _)
 #undef V
         break;
-    case Opcode::promise_:
+    case Opcode::mk_promise_:
+    case Opcode::mk_eager_promise_:
     case Opcode::push_code_:
         out << std::hex << immediate.fun << std::dec;
         break;
