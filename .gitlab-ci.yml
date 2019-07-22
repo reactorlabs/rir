@@ -259,7 +259,7 @@ benchmark_rir_ginger:
   only:
     - master
   tags:
-    - benchmark
+    - benchmarks-ginger
   script:
     - export REBENCH_ENV="Prg-Ginger"
     - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS"
@@ -283,7 +283,7 @@ benchmark_native_ginger:
   only:
     - master
   tags:
-    - benchmark
+    - benchmarks-ginger
   script:
     - export REBENCH_ENV="Prg-Ginger"
     - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS"
@@ -295,7 +295,7 @@ benchmark_gnur_ginger:
   only:
     - master
   tags:
-    - benchmark
+    - benchmarks-ginger
   script:
     - export REBENCH_ENV="Prg-Ginger"
     - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS"
@@ -307,7 +307,7 @@ benchmark_fastr_ginger:
   only:
     - master
   tags:
-    - benchmark
+    - benchmarks-ginger
   script:
     - export REBENCH_ENV="Prg-Ginger"
     - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS"
