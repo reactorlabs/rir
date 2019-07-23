@@ -101,7 +101,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     auto& log = logger.begin(version);
     Rir2Pir rir2pir(*this, closure->rirFunction(), log, closure->name());
 
-    Protect protect;
     auto& assumptions = version->assumptions();
 
     bool failedToCompileDefaultArgs = false;
@@ -113,7 +112,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
             // are not compiled.
             // TODO: why are they sometimes not compiled??
             auto funexp = rir::Compiler::compileExpression(arg);
-            protect(funexp);
+            preserve_(funexp);
             arg = Function::unpack(funexp)->body()->container();
         }
         if (rir::Code::check(arg)) {

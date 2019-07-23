@@ -56,7 +56,7 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
                 if (promMap.count(p)) {
                     mk->updatePromise(promMap.at(p));
                 } else {
-                    auto c = targetClosure->createProm(p->srcPoolIdx());
+                    auto c = targetClosure->createProm(p->rirSrc());
                     c->entry = clone(p->entry, c, targetClosure);
                     mk->updatePromise(c);
                 }
@@ -168,9 +168,13 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         BB* debug = new BB(code, code->nextBBId++);
         SEXP msg = Rf_mkString(debugMessage.c_str());
         auto ldprint = new LdConst(print);
-        auto ldmsg = new LdConst(msg);
+        Instruction* ldmsg = new LdConst(msg);
         debug->append(ldmsg);
         debug->append(ldprint);
+        // Hack to silence the verifier.
+        ldmsg = new CastType(ldmsg, CastType::Downcast, PirType::any(),
+                             RType::prom);
+        debug->append(ldmsg);
         debug->append(new Call(Env::elided(), ldprint, {ldmsg},
                                Tombstone::framestate(), 0));
         debug->setNext(deoptBlock);

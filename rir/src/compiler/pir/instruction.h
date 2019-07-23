@@ -912,20 +912,8 @@ class FLIE(MkArg, 2, Effects::None()) {
                                          env),
           prom_(prom) {
         assert(eagerArg() == v);
-        if (isEager()) {
+        if (isEager())
             noReflection = true;
-            elideEnv();
-        }
-    }
-    MkArg(Value* v, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
-                                         env),
-          prom_(nullptr) {
-        assert(eagerArg() == v);
-        if (isEager()) {
-            noReflection = true;
-            elideEnv();
-        }
     }
 
     Value* eagerArg() const { return arg(0).val(); }
@@ -2077,6 +2065,7 @@ class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
     void printGraphArgs(std::ostream& out, bool tty) const override;
     void printGraphBranches(std::ostream& out, size_t bbId) const override;
     BB* deoptBranch();
+    BB* nextBB();
 };
 
 /*

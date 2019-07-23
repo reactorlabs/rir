@@ -199,6 +199,7 @@ benchmark_rir:
   tags:
     - benchmark
   script:
+    - export REBENCH_ENV="PragueDesktop"
     - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS"
 benchmark_pir:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
@@ -210,6 +211,7 @@ benchmark_pir:
   tags:
     - benchmark
   script:
+    - export REBENCH_ENV="PragueDesktop"
     - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS"
 benchmark_native:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
@@ -221,6 +223,7 @@ benchmark_native:
   tags:
     - benchmark
   script:
+    - export REBENCH_ENV="PragueDesktop"
     - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS"
 benchmark_gnur:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
@@ -232,6 +235,7 @@ benchmark_gnur:
   tags:
     - benchmark
   script:
+    - export REBENCH_ENV="PragueDesktop"
     - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS"
 benchmark_fastr:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
@@ -243,5 +247,68 @@ benchmark_fastr:
   tags:
     - benchmark
   script:
+    - export REBENCH_ENV="PragueDesktop"
+    - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS"
+  allow_failure: true
+
+benchmark_rir_ginger:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmarks-ginger
+  script:
+    - export REBENCH_ENV="Prg-Ginger"
+    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS"
+benchmark_pir_ginger:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmarks-ginger
+  script:
+    - export REBENCH_ENV="Prg-Ginger"
+    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS"
+benchmark_native_ginger:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmarks-ginger
+  script:
+    - export REBENCH_ENV="Prg-Ginger"
+    - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS"
+benchmark_gnur_ginger:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmarks-ginger
+  script:
+    - export REBENCH_ENV="Prg-Ginger"
+    - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS"
+benchmark_fastr_ginger:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - master
+  tags:
+    - benchmarks-ginger
+  script:
+    - export REBENCH_ENV="Prg-Ginger"
     - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS"
   allow_failure: true

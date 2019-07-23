@@ -19,14 +19,19 @@ void Env::printRef(std::ostream& out) const {
         out << "nil";
         return;
     }
+
     assert(rho);
-    std::string val;
-    {
+    if (rho == R_GlobalEnv) {
+        out << "GlobalEnv";
+    } else if (rho == R_BaseNamespace) {
+        out << "BaseNamespace";
+    } else {
+        std::string val;
         CaptureOut rec;
         Rf_PrintValue(rho);
         val = rec();
+        out << val.substr(0, val.length() - 1);
     }
-    out << val.substr(0, val.length() - 1);
 }
 
 bool Env::isStaticEnv(Value* v) {

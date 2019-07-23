@@ -17,11 +17,13 @@ class Promise : public Code {
     }
 
     unsigned srcPoolIdx() const;
+    rir::Code* rirSrc() { return rirSrc_; }
 
   private:
+    rir::Code* rirSrc_;
     const unsigned srcPoolIdx_;
     friend class ClosureVersion;
-    Promise(ClosureVersion* owner, unsigned id, unsigned src);
+    Promise(ClosureVersion* owner, unsigned id, rir::Code* rirSrc);
 };
 
 } // namespace pir

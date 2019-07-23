@@ -2420,11 +2420,19 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(promise_) {
+        INSTRUCTION(mk_eager_promise_) {
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
             SET_PRVALUE(prom, ostack_pop(ctx));
+            ostack_push(ctx, prom);
+            NEXT();
+        }
+
+        INSTRUCTION(mk_promise_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
             ostack_push(ctx, prom);
             NEXT();
         }

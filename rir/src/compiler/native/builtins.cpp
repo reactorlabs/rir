@@ -157,6 +157,17 @@ NativeBuiltin NativeBuiltins::setCar = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
 };
 
+void defvarImpl(SEXP var, SEXP value, SEXP env) {
+    rirSetVarWrapper(var, value, ENCLOS(env));
+};
+
+NativeBuiltin NativeBuiltins::defvar = {
+    "defvar",
+    (void*)&defvarImpl,
+    3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
+};
+
 NativeBuiltin NativeBuiltins::ldfun = {
     "Rf_findFun", (void*)&Rf_findFun, 2,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
@@ -464,7 +475,9 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
 }
 
 NativeBuiltin NativeBuiltins::binop = {
-    "binop", (void*)&binopImpl, 3,
+    "binop",
+    (void*)&binopImpl,
+    3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 

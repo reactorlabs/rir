@@ -186,11 +186,6 @@ class TheVerifier {
                           << p->owner->name() << "\n";
                 ok = false;
             }
-            if (mk->isEager() && mk->hasEnv()) {
-                mk->printRef(std::cerr);
-                std::cerr << " is evaluated, but still has env reference\n";
-                ok = false;
-            }
         }
 
         if (i->branchOrExit())

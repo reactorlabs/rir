@@ -84,8 +84,8 @@ static bool testNoEnvSpec(ClosureVersion* f) { return Query::noEnvSpec(f); }
 static bool testNoEnv(ClosureVersion* f) { return Query::noEnv(f); }
 
 static bool testNoPromise(ClosureVersion* f) {
-    return Visitor::check(f->entry,
-                          [&](Instruction* i) { return !MkArg::Cast(i); });
+    return VisitorNoDeoptBranch::check(
+        f->entry, [&](Instruction* i) { return !MkArg::Cast(i); });
 }
 
 static bool testNoExternalCalls(ClosureVersion* f) {
