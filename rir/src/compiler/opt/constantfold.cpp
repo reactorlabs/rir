@@ -307,23 +307,23 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             }
     });
 
-    std::unordered_set<BB*> toDelete;
     // Find all dead basic blocks
-    for (auto e : branchRemoval) {
-        auto bb = e.first;
-        auto deadBranch = e.second ? bb->falseBranch() : bb->trueBranch();
-        deadBranch->collectDominated(toDelete, dom);
-        toDelete.insert(deadBranch);
+    DominanceGraph::BBSet dead;
+    for (const auto& e : branchRemoval) {
+        const auto& branch = e.first;
+        const auto& condition = e.second;
+        dead.insert(condition ? branch->falseBranch() : branch->trueBranch());
     }
+    auto toDelete = DominanceGraph::dominatedSet(function, dead);
 
     Visitor::run(function->entry, [&](Instruction* i) {
         if (auto phi = Phi::Cast(i))
             phi->removeInputs(toDelete);
     });
 
-    for (auto e : branchRemoval) {
-        auto branch = e.first;
-        auto condition = e.second;
+    for (const auto& e : branchRemoval) {
+        const auto& branch = e.first;
+        const auto& condition = e.second;
         branch->remove(branch->end() - 1);
         if (condition) {
             branch->next1 = nullptr;
@@ -333,7 +333,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         }
     }
 
-    for (auto bb : toDelete)
+    for (const auto& bb : toDelete)
         delete bb;
 }
 } // namespace pir

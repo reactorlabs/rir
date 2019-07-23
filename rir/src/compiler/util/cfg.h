@@ -3,6 +3,7 @@
 
 #include "../pir/pir.h"
 #include "utils/Set.h"
+#include <unordered_set>
 #include <vector>
 
 namespace rir {
@@ -28,6 +29,7 @@ class CFG {
 class DominanceGraph {
   public:
     typedef std::vector<BB*> BBList;
+    typedef std::unordered_set<BB*> BBSet;
 
   private:
     class DomTree {
@@ -42,6 +44,10 @@ class DominanceGraph {
   public:
     size_t size() const { return dominating.size(); }
     explicit DominanceGraph(Code*);
+
+    // Given a Code and a set of BBs, return the set of BBs dominated by the
+    // input set.
+    static BBSet dominatedSet(Code* start, const BBSet& bbs);
 
     bool dominates(BB* a, BB* b) const;
     bool immediatelyDominates(BB* a, BB* b) const;

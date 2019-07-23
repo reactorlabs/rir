@@ -127,8 +127,6 @@ class BB {
     BB* next0 = nullptr;
     BB* next1 = nullptr;
 
-    void collectDominated(std::unordered_set<BB*>& subs, DominanceGraph& dom);
-
   private:
     Instrs instrs;
     // Keeps around deleted instructions to be able to remove them later
