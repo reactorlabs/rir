@@ -166,9 +166,12 @@ static inline void rirSetVarWrapper(SEXP sym, SEXP val, SEXP env) {
         if (!R_VARLOC_IS_NULL(loc) && !BINDING_IS_LOCKED(loc.cell) &&
             !IS_ACTIVE_BINDING(loc.cell)) {
             SEXP cur = CAR(loc.cell);
+            // Some primitives clear the name expecting a store to happen later
+            // Thus, the increment must be done always. See subassign.c:1672 for
+            // instance.
+            INCREMENT_NAMED(val);
             if (cur == val)
                 return;
-            INCREMENT_NAMED(val);
             SETCAR(loc.cell, val);
             SET_MISSING(loc.cell, 0);
             return;
