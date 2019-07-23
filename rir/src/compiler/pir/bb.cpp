@@ -184,12 +184,5 @@ bool BB::before(Instruction* a, Instruction* b) const {
     return false;
 };
 
-void BB::collectDominated(std::unordered_set<BB*>& subs, DominanceGraph& dom) {
-    Visitor::run(this, [&](BB* child) {
-        if (dom.dominates(this, child))
-            subs.insert(child);
-    });
-}
-
 } // namespace pir
 } // namespace rir

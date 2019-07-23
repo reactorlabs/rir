@@ -114,6 +114,69 @@ DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
     }
 }
 
+DominanceGraph::BBSet DominanceGraph::dominatedSet(Code* start,
+                                                   const BBSet& input) {
+    // Given a set of BBs, compute the set of BBs dominated by the input set.
+    // Inductive definition:
+    // - a BB is dominated by the input set if it is contained in the input set.
+    // - a BB is dominated by the input set if all its inputs are dominated by
+    //   the input set.
+
+    BBSet result;
+    BBSet seen;
+    std::stack<BB*> todo;
+    todo.push(start->entry);
+
+    while (!todo.empty()) {
+        BB* cur = todo.top();
+        todo.pop();
+
+        // Is the current BB dominated by the input set?
+        bool curState = result.count(cur);
+
+        // If not _and_ the current BB is in the input set, then the BB is
+        // dominated; put it in the result set and update our current state.
+        if (!curState && input.count(cur)) {
+            result.insert(cur);
+            curState = true;
+        }
+
+        auto apply = [&](BB* bb) {
+            if (!bb) {
+                return;
+            }
+
+            // Have we already processed this child BB?
+            if (!seen.count(bb)) {
+                seen.insert(bb);
+
+                // Our parent is dominated, so tentatively assume we're
+                // dominated; then add ourself to the worklist.
+                if (curState) {
+                    result.insert(bb);
+                }
+                todo.push(bb);
+                return;
+            }
+
+            if (!curState) {
+                auto position = result.find(bb);
+                if (position != result.end()) {
+                    // Our parent is _not_ dominated, but we're in the result
+                    // set. We were wrong, so remove ourself from the result;
+                    // then add ourself to the worklist.
+                    result.erase(position);
+                    todo.push(bb);
+                }
+            }
+        };
+        apply(cur->trueBranch());
+        apply(cur->falseBranch());
+    }
+
+    return result;
+}
+
 bool DominanceGraph::dominates(BB* a, BB* b) const {
     const auto& doms = dominating[b->id].container;
     return std::find(doms.begin(), doms.end(), a) != doms.end();
