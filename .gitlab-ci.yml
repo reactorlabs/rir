@@ -206,7 +206,7 @@ benchmark_rir:
   variables:
     GIT_STRATEGY: none
   only:
-    - master
+    - schedules
   tags:
     - benchmark
   script:
@@ -218,6 +218,8 @@ benchmark_pir:
     GIT_STRATEGY: none
   only:
     - master
+  except:
+    - schedules
   tags:
     - benchmark
   script:
@@ -229,6 +231,8 @@ benchmark_native:
     GIT_STRATEGY: none
   only:
     - master
+  except:
+    - schedules
   tags:
     - benchmark
   script:
@@ -239,7 +243,7 @@ benchmark_gnur:
   variables:
     GIT_STRATEGY: none
   only:
-    - master
+    - schedules
   tags:
     - benchmark
   script:
@@ -250,7 +254,7 @@ benchmark_fastr:
   variables:
     GIT_STRATEGY: none
   only:
-    - master
+    - schedules
   tags:
     - benchmark
   script:
@@ -263,7 +267,7 @@ benchmark_rir_ginger:
   variables:
     GIT_STRATEGY: none
   only:
-    - master
+    - schedules
   tags:
     - benchmarks-ginger
   script:
@@ -275,6 +279,8 @@ benchmark_pir_ginger:
     GIT_STRATEGY: none
   only:
     - master
+  except:
+    - schedules
   tags:
     - benchmarks-ginger
   script:
@@ -286,6 +292,8 @@ benchmark_native_ginger:
     GIT_STRATEGY: none
   only:
     - master
+  except:
+    - schedules
   tags:
     - benchmarks-ginger
   script:
@@ -296,7 +304,7 @@ benchmark_gnur_ginger:
   variables:
     GIT_STRATEGY: none
   only:
-    - master
+    - schedules
   tags:
     - benchmarks-ginger
   script:
@@ -307,7 +315,7 @@ benchmark_fastr_ginger:
   variables:
     GIT_STRATEGY: none
   only:
-    - master
+    - schedules
   tags:
     - benchmarks-ginger
   script:
