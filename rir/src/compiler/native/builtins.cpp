@@ -612,19 +612,19 @@ SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
     SEXP res = nullptr;
     if (isObject(vector)) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
-        res = dispatchApply(call, vector, args, symbol::Bracket, env,
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
         if (!res)
-            res = do_subset2_dflt(R_NilValue, symbol::Bracket, args, env);
+            res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
     } else {
-        res = do_subset2_dflt(R_NilValue, symbol::Bracket, args, env);
+        res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     return res;
 }
 
 NativeBuiltin NativeBuiltins::extract21 = {
     "extract2_1D",
-    (void*)extract11Impl,
+    (void*)extract21Impl,
     4,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
 };
