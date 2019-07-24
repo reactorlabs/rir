@@ -4,15 +4,48 @@ jitOn <- jitOn && (Sys.getenv("PIR_ENABLE", unset="on") == "on")
 if (!jitOn)
   quit()
 
+# Sanity check for loop peeling, and testing that enabling/disabling works
+# These loop peeling tests may be a bit brittle.
+# Loop peeling should be enabled by default
+stopifnot(pir.check(
+  f <- function(x) {
+    i <- 0
+    while (i < 5) {
+      i <- i + x
+    }
+  }, TwoAdd, warmup=function(f) f(2)))
+rir.disableLoopPeeling()
+stopifnot(pir.check(
+  f <- function(x) {
+    i <- 0
+    while (i < 5) {
+      i <- i + x
+    }
+  }, OneAdd, warmup=function(f) f(2)))
+rir.enableLoopPeeling()
+stopifnot(pir.check(
+  f <- function(x) {
+    i <- 0
+    while (i < 5) {
+      i <- i + x
+    }
+  }, TwoAdd, warmup=function(f) f(2)))
+
 # Copied / cross-validated from pir_tests
+
+# This checks that loop-invariant hoisting is working, but it's a bit brittle,
+# and it requires loop peeling to be disabled.
+rir.disableLoopPeeling()
 stopifnot(pir.check(
   f <- function(){
     j <- 0
     while (j < 2) {
-    vector("integer",0)
-    j <- j + 1
+      vector("integer",0)
+      j <- j + 1
     }
   }, LdVarVectorInFirstBB, warmup=function(f) f()))
+rir.enableLoopPeeling()
+
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
 stopifnot(!pir.check(function(x = 4) {
   print("PIR doesn't support default args")

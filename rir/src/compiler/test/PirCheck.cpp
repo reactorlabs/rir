@@ -134,6 +134,24 @@ static bool testOneNot(ClosureVersion* f) {
     return numNots == 1;
 }
 
+static bool testOneAdd(ClosureVersion* f) {
+    int numAdds = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (Add::Cast(i))
+            numAdds++;
+    });
+    return numAdds == 1;
+}
+
+static bool testTwoAdd(ClosureVersion* f) {
+    int numAdds = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (Add::Cast(i))
+            numAdds++;
+    });
+    return numAdds == 2;
+}
+
 static bool testLdVarVectorInFirstBB(ClosureVersion* f) {
     for (auto instruction : *f->entry) {
         if (auto ldvar = LdVar::Cast(instruction)) {

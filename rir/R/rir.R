@@ -154,3 +154,11 @@ rir.serialize <- function(data, path) {
 rir.deserialize <- function(path) {
     .Call("rir_deserialize", path)
 }
+
+rir.enableLoopPeeling <- function() {
+    .Call("rirEnableLoopPeeling")
+}
+
+rir.disableLoopPeeling <- function() {
+    .Call("rirDisableLoopPeeling")
+}
