@@ -59,7 +59,7 @@ benchmark container:
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
 
 # Run check-all in release mode  (additionally check pir types)
-test_release:
+test_release_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -68,7 +68,18 @@ test_release:
   script:
     - cd /opt/rir/build/release
     - RIR_CHECK_PIR_TYPES=1 bin/tests
-    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-all
+    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-devel
+    - ../../tools/check-gnur-make-tests-error
+
+test_release_2:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+  stage: Run tests
+  retry: 1
+  script:
+    - cd /opt/rir/build/release
+    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-recommended
     - ../../tools/check-gnur-make-tests-error
 
 # Run some tests in the debug mode
