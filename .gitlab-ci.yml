@@ -12,7 +12,7 @@ before_script:
   - export PIR_INLINER_MAX_SIZE=10000
   - export PIR_DEOPT_CHAOS_SEED=$RANDOM
   - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
-  - export REBENCH_OPTIONS="--commit-id=$CI_COMMIT_SHA --branch=master --environment=PragueDesktop"
+  - export REBENCH_OPTIONS="--commit-id=$CI_COMMIT_SHA --branch=master"
   - export REBENCH_RUN="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   - export REBENCH_RUN_BL="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
 
@@ -199,8 +199,7 @@ benchmark_rir:
   tags:
     - benchmark
   script:
-    - export REBENCH_ENV="PragueDesktop"
-    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS"
+    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS --environment=PragueDesktop"
 benchmark_pir:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -211,8 +210,7 @@ benchmark_pir:
   tags:
     - benchmark
   script:
-    - export REBENCH_ENV="PragueDesktop"
-    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS"
+    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS --environment=PragueDesktop"
 benchmark_native:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -223,8 +221,7 @@ benchmark_native:
   tags:
     - benchmark
   script:
-    - export REBENCH_ENV="PragueDesktop"
-    - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS"
+    - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS --environment=PragueDesktop"
 benchmark_gnur:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -235,8 +232,7 @@ benchmark_gnur:
   tags:
     - benchmark
   script:
-    - export REBENCH_ENV="PragueDesktop"
-    - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS"
+    - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS --environment=PragueDesktop"
 benchmark_fastr:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -247,8 +243,7 @@ benchmark_fastr:
   tags:
     - benchmark
   script:
-    - export REBENCH_ENV="PragueDesktop"
-    - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS"
+    - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS --environment=PragueDesktop"
   allow_failure: true
 
 benchmark_rir_ginger:
@@ -261,8 +256,7 @@ benchmark_rir_ginger:
   tags:
     - benchmarks-ginger
   script:
-    - export REBENCH_ENV="Prg-Ginger"
-    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS"
+    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS --environment=Prg-Ginger"
 benchmark_pir_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -273,8 +267,7 @@ benchmark_pir_ginger:
   tags:
     - benchmarks-ginger
   script:
-    - export REBENCH_ENV="Prg-Ginger"
-    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS"
+    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS  --environment=Prg-Ginger"
 benchmark_native_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -285,8 +278,7 @@ benchmark_native_ginger:
   tags:
     - benchmarks-ginger
   script:
-    - export REBENCH_ENV="Prg-Ginger"
-    - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS"
+    - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS  --environment=Prg-Ginger"
 benchmark_gnur_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -297,8 +289,7 @@ benchmark_gnur_ginger:
   tags:
     - benchmarks-ginger
   script:
-    - export REBENCH_ENV="Prg-Ginger"
-    - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS"
+    - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS  --environment=Prg-Ginger"
 benchmark_fastr_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -309,6 +300,5 @@ benchmark_fastr_ginger:
   tags:
     - benchmarks-ginger
   script:
-    - export REBENCH_ENV="Prg-Ginger"
-    - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS"
+    - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS  --environment=Prg-Ginger"
   allow_failure: true
