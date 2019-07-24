@@ -30,7 +30,6 @@ benchmarks/
 /tests
 *.dylib
 .R_HOME
-.vscode/
 .travis_token
 /bin
 .bin_create
