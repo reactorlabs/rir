@@ -44,8 +44,6 @@ struct NativeBuiltins {
     static NativeBuiltin consNrTagged;
     static NativeBuiltin consNrTaggedMissing;
 
-    static NativeBuiltin createEnvironment;
-
     static NativeBuiltin ldvar;
     static NativeBuiltin ldvarCacheMiss;
     static NativeBuiltin stvar;
@@ -57,10 +55,9 @@ struct NativeBuiltins {
 
     static NativeBuiltin error;
 
+    static NativeBuiltin createEnvironment;
     static NativeBuiltin createPromise;
-
-    static NativeBuiltin call;
-    static NativeBuiltin callBuiltin;
+    static NativeBuiltin createClosure;
 
     static NativeBuiltin newInt;
     static NativeBuiltin newLgl;
@@ -68,6 +65,9 @@ struct NativeBuiltins {
     static NativeBuiltin newIntFromReal;
     static NativeBuiltin newLglFromReal;
     static NativeBuiltin newRealFromInt;
+
+    static NativeBuiltin call;
+    static NativeBuiltin callBuiltin;
 
     static NativeBuiltin binop;
     static NativeBuiltin binopEnv;
@@ -82,6 +82,7 @@ struct NativeBuiltins {
     static NativeBuiltin assertFail;
 
     static NativeBuiltin printValue;
+
     static NativeBuiltin extract11;
     static NativeBuiltin extract21;
 };
