@@ -917,8 +917,8 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
     return R_NilValue;
 }
 
-static SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
-                          SEXP callerEnv, InterpreterInstance* ctx) {
+SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
+                   SEXP callerEnv, InterpreterInstance* ctx) {
     SEXP op = SYMVALUE(selector);
 
     // ===============================================
