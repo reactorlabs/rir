@@ -29,12 +29,12 @@ static jit_type_t ptr1[1] = {jit_type_void_ptr};
 
 NativeBuiltin NativeBuiltins::forcePromise = {
     "forcePromise", (void*)&forcePromiseImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 1, 0),
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp1, 1, 0),
 };
 
 NativeBuiltin NativeBuiltins::consNr = {
     "consNr", (void*)&CONS_NR, 2,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp1, 2, 0),
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
 };
 
 static SEXP consNrTaggedImpl(SEXP val, SEXP name, SEXP rest) {
