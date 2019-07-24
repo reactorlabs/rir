@@ -185,8 +185,6 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
 
         // Print call ast
         switch (bc.bc) {
-        case Opcode::call_implicit_:
-        case Opcode::named_call_implicit_:
         case Opcode::call_:
         case Opcode::named_call_:
             out << "   ; "
@@ -217,8 +215,6 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     }
 
     for (auto i : promises) {
-        if (i == MISSING_ARG_IDX || i == DOTS_ARG_IDX)
-            continue;
         auto c = getPromise(i);
         out << "\n[Prom (index " << prefix << i << ")]\n";
         std::stringstream ss;

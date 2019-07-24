@@ -27,9 +27,6 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
     case Assumption::NotTooManyArguments:
         out << "!TMany";
         break;
-    case Assumption::NotTooFewArguments:
-        out << "!TFew";
-        break;
 #define TYPE_ASSUMPTIONS(Type, Msg)                                            \
     case Assumption::Arg0Is##Type##_:                                          \
         out << Msg << "0";                                                     \

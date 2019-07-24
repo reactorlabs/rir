@@ -4,13 +4,6 @@
 #include "R/r.h"
 #include "ir/BC_inc.h"
 
-// Indicates an argument is missing
-#define MISSING_ARG_IDX ((unsigned)-1)
-// Indicates an argument does not correspond to a valid CodeObject
-#define DOTS_ARG_IDX ((unsigned)-2)
-// Maximum valid entry for a CodeObject offset/idx entry
-#define MAX_ARG_IDX ((unsigned)-3)
-
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
 
 namespace rir {

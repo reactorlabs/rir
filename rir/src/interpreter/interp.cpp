@@ -230,65 +230,6 @@ SEXP createLegacyArgsListFromStackValues(CallContext& call, bool eagerCallee,
     return result;
 }
 
-static SEXP createLegacyArgsList(CallContext& call, bool eagerCallee,
-                                 InterpreterInstance* ctx) {
-    SEXP result = R_NilValue;
-    SEXP pos = result;
-
-    // loop through the arguments and create a promise, unless it is a missing
-    // argument
-    for (size_t i = 0; i < call.suppliedArgs; ++i) {
-        unsigned argi = call.implicitArgIdx(i);
-        SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
-
-        // if the argument is an ellipsis, then retrieve it from the environment
-        // and
-        // flatten the ellipsis
-        if (argi == DOTS_ARG_IDX) {
-            SEXP ellipsis =
-                Rf_findVar(R_DotsSymbol, materializeCallerEnv(call, ctx));
-            if (TYPEOF(ellipsis) == DOTSXP) {
-                while (ellipsis != R_NilValue) {
-                    name = TAG(ellipsis);
-                    if (eagerCallee) {
-                        SEXP arg = CAR(ellipsis);
-                        if (arg != R_MissingArg)
-                            arg = Rf_eval(CAR(ellipsis),
-                                          materializeCallerEnv(call, ctx));
-                        assert(TYPEOF(arg) != PROMSXP);
-                        __listAppend(&result, &pos, arg, name);
-                    } else {
-                        SEXP promise = Rf_mkPROMISE(
-                            CAR(ellipsis), materializeCallerEnv(call, ctx));
-                        __listAppend(&result, &pos, promise, name);
-                    }
-                    ellipsis = CDR(ellipsis);
-                }
-            }
-        } else if (argi == MISSING_ARG_IDX) {
-            if (eagerCallee)
-                Rf_errorcall(call.ast, "argument %d is empty", i + 1);
-            __listAppend(&result, &pos, R_MissingArg, R_NilValue);
-        } else {
-            if (eagerCallee) {
-                SEXP arg = evalRirCodeExtCaller(
-                    call.implicitArg(i), ctx, materializeCallerEnv(call, ctx));
-                assert(TYPEOF(arg) != PROMSXP);
-                __listAppend(&result, &pos, arg, name);
-            } else {
-                Code* arg = call.implicitArg(i);
-                SEXP promise =
-                    createPromise(arg, materializeCallerEnv(call, ctx));
-                __listAppend(&result, &pos, promise, name);
-            }
-        }
-    }
-
-    if (result != R_NilValue)
-        UNPROTECT(1);
-    return result;
-}
-
 SEXP materialize(void* rirDataWrapper) {
     if (auto promargs = ArgsLazyData::cast(rirDataWrapper)) {
         return promargs->createArgsLists();
@@ -310,21 +251,13 @@ SEXP lazyPromargsCreation(void* rirDataWrapper) {
 
 static RIR_INLINE SEXP createLegacyLazyArgsList(CallContext& call,
                                                 InterpreterInstance* ctx) {
-    if (call.hasStackArgs()) {
         return createLegacyArgsListFromStackValues(call, false, ctx);
-    } else {
-        return createLegacyArgsList(call, false, ctx);
-    }
 }
 
 static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
                                             InterpreterInstance* ctx) {
-    if (call.hasStackArgs()) {
         return createLegacyArgsListFromStackValues(call, call.hasEagerCallee(),
                                                    ctx);
-    } else {
-        return createLegacyArgsList(call, call.hasEagerCallee(), ctx);
-    }
 }
 
 SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
@@ -598,11 +531,6 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
         given.add(Assumption::CorrectOrderOfArguments);
 
     given.add(Assumption::NoExplicitlyMissingArgs);
-    if (call.hasStackArgs()) {
-        // Always true in this case, since we will pad missing args on the stack
-        // later with R_MissingArg's
-        given.add(Assumption::NotTooFewArguments);
-
         auto testArg = [&](size_t i) {
             SEXP arg = call.stackArg(i);
             bool notObj = true;
@@ -634,12 +562,6 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
             testArg(i);
         }
-    } else {
-        for (size_t i = 0; i < call.suppliedArgs; ++i) {
-            if (call.missingArg(i))
-                given.remove(Assumption::NoExplicitlyMissingArgs);
-        }
-    }
 }
 
 static RIR_INLINE Assumptions addDynamicAssumptionsForOneTarget(
@@ -648,11 +570,6 @@ static RIR_INLINE Assumptions addDynamicAssumptionsForOneTarget(
 
     if (call.suppliedArgs <= signature.formalNargs()) {
         given.numMissing(signature.formalNargs() - call.suppliedArgs);
-    }
-
-    if (!call.hasStackArgs()) {
-        if (call.suppliedArgs >= signature.expectedNargs())
-            given.add(Assumption::NotTooFewArguments);
     }
 
     if (call.suppliedArgs <= signature.formalNargs())
@@ -679,13 +596,6 @@ static RIR_INLINE bool matches(const CallContext& call,
     assert(signature.envCreation ==
            FunctionSignature::Environment::CalleeCreated);
 
-    if (!call.hasStackArgs()) {
-        // We can't materialize ... in optimized code yet
-        for (size_t i = 0; i < call.suppliedArgs; ++i)
-            if (call.implicitArgIdx(i) == DOTS_ARG_IDX)
-                return false;
-    }
-
     Assumptions given = addDynamicAssumptionsForOneTarget(call, signature);
 
 #ifdef DEBUG_DISPATCH
@@ -703,7 +613,6 @@ static RIR_INLINE bool matches(const CallContext& call,
 static RIR_INLINE void supplyMissingArgs(CallContext& call,
                                          const Function* fun) {
     auto signature = fun->signature();
-    assert(call.hasStackArgs());
     if (signature.expectedNargs() > call.suppliedArgs) {
         for (size_t i = 0; i < signature.expectedNargs() - call.suppliedArgs;
              ++i)
@@ -763,7 +672,6 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         // arguments might be off. But we want to force compiling a new version
         // exactly for this number of arguments, thus we need to add this as an
         // explicit assumption.
-        given.add(Assumption::NotTooFewArguments);
         if (fun == table->baseline() || given != fun->signature().assumptions) {
             if (Assumptions(given).includes(
                     pir::Rir2PirCompiler::minimalAssumptions)) {
@@ -800,7 +708,6 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         result = rirCallTrampoline(call, fun, env, arglist, ctx);
         UNPROTECT(2);
     } else {
-        if (call.hasStackArgs()) {
             // Instead of a SEXP with the argslist we create an
             // structure with the information needed to recreate
             // the list lazily if the gnu-r interpreter needs it
@@ -809,13 +716,6 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                 arglist = (SEXP)&lazyArgs;
             supplyMissingArgs(call, fun);
             result = rirCallTrampoline(call, fun, arglist, ctx);
-        } else {
-            if (!arglist)
-                arglist = createLegacyArgsList(call, ctx);
-            PROTECT(arglist);
-            result = rirCallTrampoline(call, fun, arglist, ctx);
-            UNPROTECT(1);
-        }
     }
 
     if (bodyPreserved)
@@ -874,7 +774,7 @@ SlowcaseCounter SLOWCASE_COUNTER;
 #endif
 
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
-    if (call.hasStackArgs() && !call.hasNames()) {
+    if (!call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
         if (res)
             return res;
@@ -887,7 +787,7 @@ SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
 
 static RIR_INLINE SEXP specialCall(CallContext& call,
                                    InterpreterInstance* ctx) {
-    if (call.hasStackArgs() && !call.hasNames()) {
+    if (!call.hasNames()) {
         SEXP res = tryFastSpecialCall(call, ctx);
         if (res)
             return res;
@@ -1508,39 +1408,54 @@ static unsigned EnvStubAllocated =
     EventCounters::instance().registerCounter("envstub allocated");
 #endif
 
+static size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
+                                      Immediate* names_, SEXP env) {
+    std::vector<SEXP> args;
+    std::vector<SEXP> names;
+    for (size_t i = 0; i < n; ++i) {
+        auto arg = ostack_at(ctx, n - i - 1);
+        if (arg != R_DotsSymbol) {
+            args.push_back(arg);
+            names.push_back(cp_pool_at(ctx, names_[i]));
+        } else {
+            SEXP ellipsis = Rf_findVar(R_DotsSymbol, env);
+            if (TYPEOF(ellipsis) == DOTSXP) {
+                while (ellipsis != R_NilValue) {
+                    auto arg = CAR(ellipsis);
+                    if (TYPEOF(arg) == LANGSXP || TYPEOF(arg) == SYMSXP)
+                        arg = Rf_mkPROMISE(arg, env);
+                    args.push_back(arg);
+                    names.push_back(TAG(ellipsis));
+                    ellipsis = CDR(ellipsis);
+                }
+            }
+        }
+    }
+    ostack_popn(ctx, n);
+    SEXP namesStore = Rf_allocVector(RAWSXP, sizeof(Immediate) * names.size());
+    ostack_push(ctx, namesStore);
+    {
+        Immediate* nstore = (Immediate*)DATAPTR(namesStore);
+        for (const auto& n : names) {
+            *nstore = Pool::insert(n);
+            nstore++;
+        }
+    }
+
+    for (const auto& a : args)
+        ostack_push(ctx, a);
+    return args.size();
+}
+
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  R_bcstack_t* localsBase, BindingCache* cache) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
     if (c->nativeCode) {
-        if (callCtxt && !callCtxt->hasStackArgs() && !callCtxt->hasNames()) {
-            assert(!LazyEnvironment::check(callCtxt->callerEnv));
-            void* stackBase = R_BCNodeStackTop;
-            for (size_t i = 0; i < callCtxt->suppliedArgs; ++i) {
-                if (callCtxt->missingArg(i)) {
-                    ostack_push(ctx, R_MissingArg);
-                } else {
-                    auto arg = callCtxt->implicitArg(i);
-                    auto prom = createPromise(arg, callCtxt->callerEnv);
-                    ostack_push(ctx, prom);
-                    if (callCtxt->givenAssumptions.isEager(i)) {
-                        promiseValue(prom, ctx);
-                    }
-                }
-            }
-            auto res = c->nativeCode(c, ctx, stackBase, env, callCtxt->callee);
-            ostack_popn(ctx, callCtxt->suppliedArgs);
-            return res;
-        }
-        if (!callCtxt || callCtxt->hasStackArgs()) {
             return c->nativeCode(
                 c, ctx, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
                 callCtxt ? callCtxt->callee : nullptr);
-        }
-        // TODO: figure out how to create some adapter frame here. If we fix the
-        // fall through case, we don't have to emit rir bytecode as fallback
-        // anymore...
     }
 
 #ifdef THREADED_CODE
@@ -2050,18 +1965,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             assert(callCtxt);
 
-            if (callCtxt->hasStackArgs()) {
                 ostack_push(ctx, callCtxt->stackArg(idx));
-            } else {
-                if (callCtxt->missingArg(idx)) {
-                    res = R_MissingArg;
-                } else {
-                    Code* arg = callCtxt->implicitArg(idx);
-                    assert(!LazyEnvironment::check(callCtxt->callerEnv));
-                    res = createPromise(arg, callCtxt->callerEnv);
-                }
-                ostack_push(ctx, res);
-            }
             NEXT();
         }
 
@@ -2180,35 +2084,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(named_call_implicit_) {
-#ifdef ENABLE_SLOWASSERT
-            auto lll = ostack_length(ctx);
-            int ttt = R_PPStackTop;
-#endif
-
-            // Callee is TOS
-            // Arguments and names are immediate given as promise code indices.
-            size_t n = readImmediate();
-            advanceImmediate();
-            size_t ast = readImmediate();
-            advanceImmediate();
-            Assumptions given(pc);
-            pc += sizeof(Assumptions);
-            auto arguments = (Immediate*)pc;
-            advanceImmediateN(n);
-            auto names = (Immediate*)pc;
-            advanceImmediateN(n);
-            CallContext call(c, ostack_top(ctx), n, ast, arguments, names, env,
-                             given, ctx);
-            res = doCall(call, ctx);
-            ostack_pop(ctx); // callee
-            ostack_push(ctx, res);
-
-            SLOWASSERT(ttt == R_PPStackTop);
-            SLOWASSERT(lll == ostack_length(ctx));
-            NEXT();
-        }
-
         INSTRUCTION(record_call_) {
             ObservedCallees* feedback = (ObservedCallees*)pc;
             SEXP callee = ostack_top(ctx);
@@ -2225,33 +2100,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(call_implicit_) {
-#ifdef ENABLE_SLOWASSERT
-            auto lll = ostack_length(ctx);
-            int ttt = R_PPStackTop;
-#endif
-
-            // Callee is TOS
-            // Arguments are immediate given as promise code indices.
-            size_t n = readImmediate();
-            advanceImmediate();
-            size_t ast = readImmediate();
-            advanceImmediate();
-            Assumptions given(pc);
-            pc += sizeof(Assumptions);
-            auto arguments = (Immediate*)pc;
-            advanceImmediateN(n);
-            CallContext call(c, ostack_top(ctx), n, ast, arguments, env, given,
-                             ctx);
-            res = doCall(call, ctx);
-            ostack_pop(ctx); // callee
-            ostack_push(ctx, res);
-
-            SLOWASSERT(ttt == R_PPStackTop);
-            SLOWASSERT(lll == ostack_length(ctx));
-            NEXT();
-        }
-
         INSTRUCTION(call_) {
 #ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
@@ -2265,6 +2113,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Assumptions given(pc);
             pc += sizeof(Assumptions);
+
             CallContext call(c, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), env, given, ctx);
             res = doCall(call, ctx);
@@ -2300,6 +2149,34 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
+            NEXT();
+        }
+
+        INSTRUCTION(call_dots_) {
+#ifdef ENABLE_SLOWASSERT
+            int ttt = R_PPStackTop;
+#endif
+
+            // Stack contains [callee, arg1, ..., argn]
+            Immediate n = readImmediate();
+            advanceImmediate();
+            size_t ast = readImmediate();
+            advanceImmediate();
+            Assumptions given(pc);
+            pc += sizeof(Assumptions);
+            auto names_ = (Immediate*)pc;
+            advanceImmediateN(n);
+
+            n = expandDotDotDotCallArgs(ctx, n, names_, env);
+            auto namesStore = ostack_at(ctx, n);
+            CallContext call(c, ostack_at(ctx, n + 1), n, ast,
+                             ostack_cell_at(ctx, n - 1),
+                             (Immediate*)DATAPTR(namesStore), env, given, ctx);
+            res = doCall(call, ctx);
+            ostack_popn(ctx, call.passedArgs + 2);
+            ostack_push(ctx, res);
+
+            SLOWASSERT(ttt == R_PPStackTop);
             NEXT();
         }
 
@@ -3893,8 +3770,8 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
     }
 
     CallContext call(nullptr, op, nargs, ast, ostack_cell_at(ctx, nargs - 1),
-                     nullptr, names.empty() ? nullptr : names.data(), rho,
-                     Assumptions(), ctx);
+                     names.empty() ? nullptr : names.data(), rho, Assumptions(),
+                     ctx);
     call.arglist = arglist;
     call.safeForceArgs();
 

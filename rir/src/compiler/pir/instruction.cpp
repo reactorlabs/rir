@@ -767,7 +767,6 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
             given.add(Assumption::NotTooManyArguments);
             auto missing = cls->nargs() - nCallArgs();
             given.numMissing(missing);
-            given.add(Assumption::NotTooFewArguments);
         }
     }
     given.add(Assumption::NotTooManyArguments);

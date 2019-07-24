@@ -123,9 +123,8 @@ static Sources hasSources(Opcode bc) {
     case Opcode::stvar_cached_:
     case Opcode::stvar_super_:
     case Opcode::guard_fun_:
-    case Opcode::call_implicit_:
-    case Opcode::named_call_implicit_:
     case Opcode::call_:
+    case Opcode::call_dots_:
     case Opcode::named_call_:
     case Opcode::static_call_:
     case Opcode::call_builtin_:
@@ -353,33 +352,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                 *cptr == Opcode::mk_eager_promise_) {
                 unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
                 objs.push_back(c->getPromise(*promidx));
-            }
-            if (*cptr == Opcode::ldarg_) {
-                unsigned idx = *reinterpret_cast<Immediate*>(cptr + 1);
-                if (idx >= MAX_ARG_IDX)
-                    Rf_error("RIR Verifier: Loading out of index argument");
-            }
-            if (*cptr == Opcode::call_implicit_ ||
-                *cptr == Opcode::named_call_implicit_) {
-                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
-
-                for (size_t i = 0, e = nargs; i != e; ++i) {
-                    uint32_t offset = cur.callExtra().immediateCallArguments[i];
-                    if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
-                        continue;
-                    objs.push_back(c->getPromise(offset));
-                }
-                if (*cptr == Opcode::named_call_implicit_) {
-                    for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = cur.callExtra().callArgumentNames[i];
-                        if (offset) {
-                            SEXP name = cp_pool_at(ctx, offset);
-                            if (TYPEOF(name) != SYMSXP && name != R_NilValue)
-                                Rf_error("RIR Verifier: Calling target not a "
-                                         "symbol");
-                        }
-                    }
-                }
             }
             if (*cptr == Opcode::named_call_) {
                 uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);

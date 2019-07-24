@@ -33,9 +33,6 @@ enum class Assumption {
 
     NoExplicitlyMissingArgs, // Explicitly missing, e.g. f(,,)
     CorrectOrderOfArguments, // Ie. the args are not named
-    NotTooFewArguments,      // The number of args supplied is as expected, ie.
-                             //  supplied >= (nargs - missing)
-                             //  Note: can still have explicitly missing args
     NotTooManyArguments,     // The number of args supplied is <= nargs
     NoReflectiveArgument,    // Argument promises are not reflective
 
@@ -136,9 +133,7 @@ struct Assumptions {
     }
 
     RIR_INLINE bool subtype(const Assumptions& other) const {
-        if (other.flags.includes(Assumption::NotTooFewArguments))
-            return missing == other.missing && other.flags.includes(flags);
-        return other.flags.includes(flags);
+        return missing == other.missing && other.flags.includes(flags);
     }
 
     static Assumptions deserialize(SEXP refTable, R_inpstream_t inp);
