@@ -1312,80 +1312,43 @@ void PirCodeFunction::build() {
                 break;
             }
 
-            //   case Tag::Extract2_1D: {
-            //       auto ex = Extract2_1D::Cast(i);
-            //       auto vec = load(ex->arg<0>().val());
-            //       auto idx = ex->arg<1>().val();
-            //       int constantIdx = -1;
-            //       if (auto cidx = LdConst::Cast(idx)) {
-            //           if (IS_SIMPLE_SCALAR(cidx->c(), REALSXP)) {
-            //               constantIdx = REAL(cidx->c())[0] - 1;
-            //           } else if (IS_SIMPLE_SCALAR(cidx->c(), INTSXP)) {
-            //               constantIdx = INTEGER(cidx->c())[0] - 1;
-            //           } else {
-            //               success = false;
-            //               break;
-            //           }
-            //       }
+            case Tag::Extract1_1D: {
+                auto extract = Extract1_1D::Cast(i);
+                auto vector = loadSxp(i, extract->vec());
+                auto idx = loadSxp(i, extract->idx());
 
-            //       if (constantIdx < 0 || constantIdx > 3) {
-            //           success = false;
-            //           break;
-            //       }
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, sxp);
+                if (extract->hasEnv())
+                    env = loadSxp(i, extract->env());
 
-            //       jit_value res = jit_value_create(raw(), sxp);
-            //       auto type = sexptype(vec);
-            //       auto isInt = jit_label();
-            //       auto isReal = jit_label();
-            //       auto isVec = jit_label();
-            //       auto done = jit_label();
-            //       auto isIntTest = insn_eq(type, new_constant(INTSXP));
-            //       insn_branch_if(isIntTest, isInt);
-            //       auto isRealTest = insn_eq(type, new_constant(REALSXP));
-            //       insn_branch_if(isRealTest, isReal);
-            //       auto isVecTest = insn_eq(type, new_constant(VECSXP));
-            //       insn_branch_if(isVecTest, isVec);
+                // auto idx = extract->->arg<1>().val();
 
-            //       // TODO;
-            //       call(NativeBuiltins::error, {});
-            //       insn_branch(done);
+                auto res =
+                    call(NativeBuiltins::extract11,
+                         {vector, idx, env, new_constant(extract->srcIdx)});
+                setVal(i, res);
+                break;
+            }
 
-            //       insn_label(isInt);
-            //       // TODO check size
-            //       auto intOffset = stdVecDtptrOfs + sizeof(int) *
-            //       constantIdx;
-            //       auto intRes = insn_load_relative(vec, intOffset,
-            //       jit_type_int);
-            //       gcSafepoint(i, 1, false);
-            //       auto intResSexp = call(NativeBuiltins::newInt, {intRes});
-            //       store(res, intResSexp);
-            //       insn_branch(done);
+            case Tag::Extract2_1D: {
+                auto extract = Extract2_1D::Cast(i);
+                auto vector = loadSxp(i, extract->vec());
+                auto idx = loadSxp(i, extract->idx());
 
-            //       insn_label(isReal);
-            //       // TODO check size
-            //       auto realOffset = stdVecDtptrOfs + sizeof(double) *
-            //       constantIdx;
-            //       auto realRes =
-            //           insn_load_relative(vec, realOffset,
-            //           jit_type_float64);
-            //       gcSafepoint(i, 1, false);
-            //       auto realResSexp = call(NativeBuiltins::newReal,
-            //       {realRes});
-            //       store(res, realResSexp);
-            //       insn_branch(done);
+                auto env = constant(R_NilValue, sxp);
+                if (extract->hasEnv())
+                    env = loadSxp(i, extract->env());
 
-            //       insn_label(isVec);
-            //       // TODO check size
-            //       auto vecOffset = stdVecDtptrOfs + sizeof(SEXP) *
-            //       constantIdx;
-            //       auto vecRes = insn_load_relative(vec, vecOffset, sxp);
-            //       store(res, vecRes);
-            //       insn_branch(done);
+                // auto idx = extract->->arg<1>().val();
 
-            //       insn_label(done);
-            //       vals[i] = res;
-            //       break;
-            //   }
+                auto res =
+                    call(NativeBuiltins::extract21,
+                         {vector, idx, env, new_constant(extract->srcIdx)});
+                setVal(i, res);
+                break;
+            }
 
             case Tag::StVar: {
                 auto st = StVar::Cast(i);

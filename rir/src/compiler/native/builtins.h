@@ -82,6 +82,8 @@ struct NativeBuiltins {
     static NativeBuiltin assertFail;
 
     static NativeBuiltin printValue;
+    static NativeBuiltin extract11;
+    static NativeBuiltin extract21;
 };
 }
 }

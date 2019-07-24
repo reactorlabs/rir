@@ -23,6 +23,7 @@ static jit_type_t double1[1] = {jit_type_float64};
 
 static jit_type_t sxp2_int[3] = {sxp, sxp, jit_type_int};
 static jit_type_t sxp2_void[3] = {sxp, sxp, jit_type_void_ptr};
+static jit_type_t sxp3_int[4] = {sxp, sxp, sxp, jit_type_int};
 static jit_type_t sxp3_int2[5] = {sxp, sxp, sxp, jit_type_int, jit_type_int};
 
 static jit_type_t ptr1[1] = {jit_type_void_ptr};
@@ -582,6 +583,50 @@ NativeBuiltin NativeBuiltins::assertFail = {
 NativeBuiltin NativeBuiltins::printValue = {
     "printValue", (void*)Rf_PrintValue, 1,
     jit_type_create_signature(jit_abi_cdecl, jit_type_void, sxp1, 1, 0),
+};
+
+SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
+    SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
+    SEXP res = nullptr;
+    if (isObject(vector)) {
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        res = dispatchApply(call, vector, args, symbol::Bracket, env,
+                            globalContext());
+        if (!res)
+            res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+    } else {
+        res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+    }
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::extract11 = {
+    "extract1_1D",
+    (void*)extract11Impl,
+    4,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
+};
+
+SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
+    SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
+    SEXP res = nullptr;
+    if (isObject(vector)) {
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        res = dispatchApply(call, vector, args, symbol::Bracket, env,
+                            globalContext());
+        if (!res)
+            res = do_subset2_dflt(R_NilValue, symbol::Bracket, args, env);
+    } else {
+        res = do_subset2_dflt(R_NilValue, symbol::Bracket, args, env);
+    }
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::extract21 = {
+    "extract2_1D",
+    (void*)extract11Impl,
+    4,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
 };
 }
 }
