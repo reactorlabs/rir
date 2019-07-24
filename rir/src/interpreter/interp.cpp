@@ -1517,10 +1517,6 @@ static unsigned EnvStubAllocated =
     EventCounters::instance().registerCounter("envstub allocated");
 #endif
 
-static bool valueComplyWithNamedRules(SEXP value) {
-    return res == R_NilValue || NON_REUSABLE(res) || MAYBE_REFERENCED(res)
-}
-
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  R_bcstack_t* localsBase, BindingCache* cache) {
@@ -1833,8 +1829,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     SET_NAMED(res, 2);
             }
             
-            SLOWASSERT(valueComplyWithNamedRules(res));
-
             ostack_push(ctx, res);
             NEXT();
         }
@@ -1875,8 +1869,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     SET_NAMED(res, 2);
             }
 
-            SLOWASSERT(valueComplyWithNamedRules(res));
-
             ostack_push(ctx, res);
             NEXT();
         }
@@ -1898,8 +1890,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(Pool::get(le->names[pos]))));
             }
 
-            SLOWASSERT(valueComplyWithNamedRules(res));
-            
             if (res != R_NilValue) 
                 ENSURE_NAMED(res);
 
@@ -1921,7 +1911,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // if promise, evaluate & return
                 res = promiseValue(res, ctx);
 
-            SLOWASSERT(valueComplyWithNamedRules(res));
             if (res != R_NilValue) 
                 ENSURE_NAMED(res);
 
@@ -1949,10 +1938,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
-            SLOWASSERT(valueComplyWithNamedRules(res));
             if (res != R_NilValue) 
                 ENSURE_NAMED(res);
-
 
             ostack_push(ctx, res);
             NEXT();
@@ -1970,7 +1957,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(sym)));
             }
 
-            SLOWASSERT(valueComplyWithNamedRules(res));
             if (res != R_NilValue) 
                 ENSURE_NAMED(res);
 
@@ -1994,7 +1980,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(sym)));
             }
 
-            SLOWASSERT(valueComplyWithNamedRules(res));
             if (res != R_NilValue) 
                 ENSURE_NAMED(res);
 
@@ -2018,7 +2003,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
-            SLOWASSERT(valueComplyWithNamedRules(res));
             if (res != R_NilValue) 
                 ENSURE_NAMED(res);
 
@@ -2038,7 +2022,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(sym)));
             }
 
-            SLOWASSERT(valueComplyWithNamedRules(res));
             if (res != R_NilValue) 
                 ENSURE_NAMED(res);
 
@@ -2062,7 +2045,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
-            SLOWASSERT(valueComplyWithNamedRules(res));
             if (res != R_NilValue) 
                 ENSURE_NAMED(res);
 
