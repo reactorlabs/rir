@@ -21,6 +21,8 @@ namespace rir {
     V(NoEq)                                                                    \
     V(OneEq)                                                                   \
     V(OneNot)                                                                  \
+    V(OneAdd)                                                                  \
+    V(TwoAdd)                                                                  \
     V(LdVarVectorInFirstBB)
 
 struct PirCheck {

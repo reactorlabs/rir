@@ -196,7 +196,7 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     cs << BC::beginloop(breakBranch);
 
     // loop peel is a copy of the condition and body, with no backwards jumps
-    if (peelLoop) {
+    if (Compiler::loopPeelingEnabled && peelLoop) {
         compileCond();
         cs << BC::brfalse(breakBranch);
         compileBody();
@@ -847,7 +847,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs << BC::beginloop(breakBranch);
 
         // loop peel is a copy of the body, with no backwards jumps
-        if (!containsLoop(body)) {
+        if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
             compileExpr(ctx, body, true);
         }
 
@@ -919,7 +919,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // loop peel is a copy of the body (including indexing ops), with no
         // backwards jumps
-        if (!containsLoop(body)) {
+        if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
             compileIndexOps();
             compileExpr(ctx, body, true);
         }
@@ -1272,5 +1272,7 @@ bool Compiler::unsoundOpts =
 bool Compiler::profile =
     !(getenv("RIR_PROFILING") &&
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
+
+bool Compiler::loopPeelingEnabled = true;
 
 } // namespace rir

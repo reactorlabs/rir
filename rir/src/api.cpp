@@ -400,6 +400,16 @@ REXPORT SEXP rir_deserialize(SEXP fileSexp) {
     return res;
 }
 
+REXPORT SEXP rirEnableLoopPeeling() {
+    Compiler::loopPeelingEnabled = true;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirDisableLoopPeeling() {
+    Compiler::loopPeelingEnabled = false;
+    return R_NilValue;
+}
+
 bool startup() {
     initializeRuntime();
     return true;
