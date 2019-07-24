@@ -587,6 +587,7 @@ NativeBuiltin NativeBuiltins::printValue = {
 
 SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
     SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
+    PROTECT(args);
     SEXP res = nullptr;
     if (isObject(vector)) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
@@ -597,6 +598,7 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
     } else {
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
+    UNPROTECT(1);
     return res;
 }
 
@@ -609,6 +611,7 @@ NativeBuiltin NativeBuiltins::extract11 = {
 
 SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
     SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
+    PROTECT(args);
     SEXP res = nullptr;
     if (isObject(vector)) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
@@ -619,6 +622,7 @@ SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
     } else {
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
+    UNPROTECT(1);
     return res;
 }
 

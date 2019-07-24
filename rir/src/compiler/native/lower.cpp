@@ -1323,8 +1323,7 @@ void PirCodeFunction::build() {
                 if (extract->hasEnv())
                     env = loadSxp(i, extract->env());
 
-                // auto idx = extract->->arg<1>().val();
-
+                gcSafepoint(i, -1, false);
                 auto res =
                     call(NativeBuiltins::extract11,
                          {vector, idx, env, new_constant(extract->srcIdx)});
@@ -1341,8 +1340,7 @@ void PirCodeFunction::build() {
                 if (extract->hasEnv())
                     env = loadSxp(i, extract->env());
 
-                // auto idx = extract->->arg<1>().val();
-
+                gcSafepoint(i, -1, false);
                 auto res =
                     call(NativeBuiltins::extract21,
                          {vector, idx, env, new_constant(extract->srcIdx)});
