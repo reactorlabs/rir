@@ -72,9 +72,13 @@ static void rirDefineVarWrapper(SEXP symbol, SEXP value, SEXP rho) {
     while (frame != R_NilValue) {
         if (TAG(frame) == symbol) {
             SEXP cur = CAR(frame);
-            // No named increment if we are storing the same value again
-            if (cur == value)
+            if (cur == value){
+                // subassign.c primitives and instructions clear the name
+                // expecting a store to happen later Thus, the increment must be
+                // done always
+                ENSURE_NAMED(value);
                 return;
+            }
             INCREMENT_NAMED(value);
             // we don't handle these
             if (BINDING_IS_LOCKED(frame) || IS_ACTIVE_BINDING(frame)) {
@@ -144,7 +148,10 @@ static RIR_INLINE void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
         if (cur == val) {
-            ENSURE_NAMED(cur);
+            // subassign.c primitives and instructions clear the name
+            // expecting a store to happen later Thus, the increment must be
+            // done always
+            ENSURE_NAMED(val);
             return;
         }
         INCREMENT_NAMED(val);
@@ -166,12 +173,14 @@ static inline void rirSetVarWrapper(SEXP sym, SEXP val, SEXP env) {
         if (!R_VARLOC_IS_NULL(loc) && !BINDING_IS_LOCKED(loc.cell) &&
             !IS_ACTIVE_BINDING(loc.cell)) {
             SEXP cur = CAR(loc.cell);
-            // Some primitives clear the name expecting a store to happen later
-            // Thus, the increment must be done always. See subassign.c:1672 for
-            // instance.
-            INCREMENT_NAMED(val);
-            if (cur == val)
+            if (cur == val) {
+                // subassign.c primitives and instructions clear the name
+                // expecting a store to happen later Thus, the increment must be
+                // done always
+                ENSURE_NAMED(val);
                 return;
+            }
+            INCREMENT_NAMED(val);
             SETCAR(loc.cell, val);
             SET_MISSING(loc.cell, 0);
             return;
