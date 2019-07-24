@@ -9,6 +9,7 @@
 #include "interpreter/instance.h"
 #include "jit/jit-dump.h"
 #include "jit/jit-value.h"
+#include "runtime/DispatchTable.h"
 #include "utils/Pool.h"
 
 #include <cassert>
@@ -1470,6 +1471,22 @@ void PirCodeFunction::build() {
                     for (auto b : bindingsCache.at(i))
                         insn_store_relative(bindingsCacheBase, b.second,
                                             new_constant(nullptr));
+                break;
+            }
+
+            case Tag::MkFunCls: {
+                auto mkFunction = MkFunCls::Cast(i);
+                auto closure = mkFunction->cls;
+                auto srcRef = constant(closure->srcRef(), sxp);
+                auto formals = constant(closure->formals().original(), sxp);
+                auto body =
+                    constant(mkFunction->originalBody->container(), sxp);
+                assert(DispatchTable::check(
+                    mkFunction->originalBody->container()));
+                gcSafepoint(i, 1, true);
+                setVal(i, call(NativeBuiltins::createClosure,
+                               {body, formals, loadSxp(i, mkFunction->env()),
+                                srcRef}));
                 break;
             }
 

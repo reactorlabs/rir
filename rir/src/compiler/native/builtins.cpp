@@ -18,6 +18,7 @@ static SEXP forcePromiseImpl(SEXP prom) {
 static jit_type_t sxp1[1] = {sxp};
 static jit_type_t sxp2[2] = {sxp, sxp};
 static jit_type_t sxp3[3] = {sxp, sxp, sxp};
+static jit_type_t sxp4[4] = {sxp, sxp, sxp, sxp};
 static jit_type_t int1[1] = {jit_type_int};
 static jit_type_t double1[1] = {jit_type_float64};
 
@@ -239,6 +240,22 @@ static jit_type_t createPromiseArgs[4] = {jit_type_void_ptr, jit_type_uint, sxp,
 NativeBuiltin NativeBuiltins::createPromise = {
     "createPromise", (void*)&createPromiseImpl, 4,
     jit_type_create_signature(jit_abi_cdecl, sxp, createPromiseArgs, 4, 0),
+};
+
+SEXP createClosureImpl(SEXP body, SEXP formals, SEXP env, SEXP srcref) {
+    auto res = Rf_allocSExp(CLOSXP);
+    SET_FORMALS(res, formals);
+    SET_BODY(res, body);
+    SET_CLOENV(res, env);
+    Rf_setAttrib(res, Rf_install("srcref"), srcref);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::createClosure = {
+    "createClosure",
+    (void*)createClosureImpl,
+    4,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp4, 4, 0),
 };
 
 SEXP newLglImpl(int i) {
