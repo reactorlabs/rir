@@ -69,6 +69,8 @@ struct NativeBuiltins {
     static NativeBuiltin call;
     static NativeBuiltin callBuiltin;
 
+    static NativeBuiltin notOp;
+    static NativeBuiltin notEnv;
     static NativeBuiltin binop;
     static NativeBuiltin binopEnv;
 

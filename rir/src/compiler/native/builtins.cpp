@@ -327,7 +327,7 @@ NativeBuiltin NativeBuiltins::newLgl = {
     jit_type_create_signature(jit_abi_cdecl, sxp, int1, 1, 0),
 };
 
-#define BINOP_FALLBACK(op)                                                     \
+#define OPERATION_FALLBACK(op)                                                 \
     do {                                                                       \
         static SEXP prim = NULL;                                               \
         static CCODE blt;                                                      \
@@ -364,6 +364,44 @@ static SEXPREC createFakeCONS(SEXP cdr) {
     return res;
 }
 
+static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
+    SEXP res = nullptr;
+    SEXP arglist = CONS_NR(argument, R_NilValue);
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    PROTECT(arglist);
+    OPERATION_FALLBACK("!");
+    UNPROTECT(1);
+    SLOWASSERT(res);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::notEnv = {
+    "notEnv",
+    (void*)&notEnvImpl,
+    3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+};
+
+static SEXP notImpl(SEXP argument) {
+    SEXP res = nullptr;
+    SEXPREC arglistStruct = createFakeCONS(R_NilValue);
+    arglistStruct.u.listsxp.carval = argument;
+    SEXP arglist = &arglistStruct;
+    SEXP env = R_NilValue;
+    SEXP call = R_NilValue;
+    // Why we do not need a protect here?
+    OPERATION_FALLBACK("!");
+    SLOWASSERT(res);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::notOp = {
+    "not",
+    (void*)&notImpl,
+    3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+};
+
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
                          BinopKind kind) {
     SEXP res = nullptr;
@@ -374,40 +412,40 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
     PROTECT(arglist);
     switch (kind) {
     case BinopKind::ADD:
-        BINOP_FALLBACK("+");
+        OPERATION_FALLBACK("+");
         break;
     case BinopKind::SUB:
-        BINOP_FALLBACK("-");
+        OPERATION_FALLBACK("-");
         break;
     case BinopKind::MUL:
-        BINOP_FALLBACK("*");
+        OPERATION_FALLBACK("*");
         break;
     case BinopKind::DIV:
-        BINOP_FALLBACK("/");
+        OPERATION_FALLBACK("/");
         break;
     case BinopKind::EQ:
-        BINOP_FALLBACK("==");
+        OPERATION_FALLBACK("==");
         break;
     case BinopKind::NE:
-        BINOP_FALLBACK("!=");
+        OPERATION_FALLBACK("!=");
         break;
     case BinopKind::GT:
-        BINOP_FALLBACK(">");
+        OPERATION_FALLBACK(">");
         break;
     case BinopKind::GTE:
-        BINOP_FALLBACK(">=");
+        OPERATION_FALLBACK(">=");
         break;
     case BinopKind::LT:
-        BINOP_FALLBACK("<");
+        OPERATION_FALLBACK("<");
         break;
     case BinopKind::LTE:
-        BINOP_FALLBACK("<=");
+        OPERATION_FALLBACK("<=");
         break;
     case BinopKind::LAND:
-        BINOP_FALLBACK("&&");
+        OPERATION_FALLBACK("&&");
         break;
     case BinopKind::LOR:
-        BINOP_FALLBACK("||");
+        OPERATION_FALLBACK("||");
         break;
     }
     UNPROTECT(1);
@@ -441,42 +479,43 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
         debugBinopImpl = true;
     }
 
+    // Why we do not need a protect here?
     switch (kind) {
     case BinopKind::ADD:
-        BINOP_FALLBACK("+");
+        OPERATION_FALLBACK("+");
         break;
     case BinopKind::SUB:
-        BINOP_FALLBACK("-");
+        OPERATION_FALLBACK("-");
         break;
     case BinopKind::MUL:
-        BINOP_FALLBACK("*");
+        OPERATION_FALLBACK("*");
         break;
     case BinopKind::DIV:
-        BINOP_FALLBACK("/");
+        OPERATION_FALLBACK("/");
         break;
     case BinopKind::EQ:
-        BINOP_FALLBACK("==");
+        OPERATION_FALLBACK("==");
         break;
     case BinopKind::NE:
-        BINOP_FALLBACK("!=");
+        OPERATION_FALLBACK("!=");
         break;
     case BinopKind::GT:
-        BINOP_FALLBACK(">");
+        OPERATION_FALLBACK(">");
         break;
     case BinopKind::GTE:
-        BINOP_FALLBACK(">=");
+        OPERATION_FALLBACK(">=");
         break;
     case BinopKind::LT:
-        BINOP_FALLBACK("<");
+        OPERATION_FALLBACK("<");
         break;
     case BinopKind::LTE:
-        BINOP_FALLBACK("<=");
+        OPERATION_FALLBACK("<=");
         break;
     case BinopKind::LAND:
-        BINOP_FALLBACK("&&");
+        OPERATION_FALLBACK("&&");
         break;
     case BinopKind::LOR:
-        BINOP_FALLBACK("||");
+        OPERATION_FALLBACK("||");
         break;
     }
     SLOWASSERT(res);
