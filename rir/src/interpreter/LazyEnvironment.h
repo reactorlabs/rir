@@ -24,24 +24,37 @@ struct LazyEnvironment
     LazyEnvironment(const LazyEnvironment&) = delete;
     LazyEnvironment& operator=(const LazyEnvironment&) = delete;
 
-    LazyEnvironment(SEXP parent, Immediate* names, size_t nargs, void* frameEnd,
-                    InterpreterInstance* ctx)
-        : RirRuntimeObject(sizeof(LazyEnvironment), nargs + 1),
-          frameEnd(frameEnd), nargs(nargs), names(names) {
-        setEntry(0, parent);
-        for (long i = nargs - 1; i >= 0; --i) {
-            setArg(i, ostack_pop(ctx));
-        }
-    }
+    LazyEnvironment(SEXP parent, size_t nargs, Immediate* names)
+        : RirRuntimeObject(sizeof(LazyEnvironment), nargs + 2), nargs(nargs),
+          names(names) {}
 
-    void* frameEnd;
+    SEXP materialized() { return getEntry(nargs + 1); }
+    void materialized(SEXP m) { setEntry(nargs + 1, m); }
+
     size_t nargs;
     Immediate* names;
 
-    SEXP getArg(size_t i) { return getEntry(i + 1); }
-    void setArg(size_t i, SEXP val) { setEntry(i + 1, val); }
+    SEXP getArg(size_t i) { return getEntry(i); }
+    void setArg(size_t i, SEXP val) { setEntry(i, val); }
 
-    SEXP getParent() { return getEntry(0); }
+    SEXP getParent() { return getEntry(nargs); }
+
+    static LazyEnvironment* BasicNew(SEXP parent, size_t nargs,
+                                     Immediate* names) {
+        SEXP wrapper = Rf_allocVector(
+            EXTERNALSXP, sizeof(LazyEnvironment) + sizeof(SEXP) * (nargs + 2));
+        return new (DATAPTR(wrapper))
+            LazyEnvironment(parent, nargs, (Immediate*)names);
+    }
+
+    static LazyEnvironment* New(SEXP parent, size_t nargs, Immediate* names) {
+        auto le = BasicNew(parent, nargs, names);
+        for (long i = nargs - 1; i >= 0; --i) {
+            le->setArg(i, ostack_pop(ctx));
+        }
+        le->setEntry(nargs, parent);
+        return le;
+    }
 };
 } // namespace rir
 
