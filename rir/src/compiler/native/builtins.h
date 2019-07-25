@@ -1,12 +1,18 @@
 #ifndef PIR_NATIVE_BUILTINS
 #define PIR_NATIVE_BUILTINS
 
-#include "R/r.h"
+#include "R/r_incl.h"
+#include "R_ext/Boolean.h"
 #include "jit/jit.h"
+#include <cstddef>
 
 extern "C" {
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
+}
+
+namespace llvm {
+class FunctionType;
 }
 
 namespace rir {
@@ -19,6 +25,7 @@ struct NativeBuiltin {
     void* fun;
     size_t nargs;
     jit_type_t signature;
+    llvm::FunctionType* llvmSignature;
 };
 
 enum class BinopKind : int {
@@ -76,7 +83,7 @@ struct NativeBuiltins {
     static NativeBuiltin binopEnv;
 
     static NativeBuiltin asTest;
-    static NativeBuiltin asLogical;
+    static NativeBuiltin asLogicalBlt;
 
     static NativeBuiltin length;
 

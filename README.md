@@ -13,6 +13,7 @@ To give it a spin try
     # takes a while. Note that on Mac OSX, you will need to install a fortran
     # compiler (eg. brew install gcc). 
     make setup
+    cmake ..
     make
 
 ## Running tests

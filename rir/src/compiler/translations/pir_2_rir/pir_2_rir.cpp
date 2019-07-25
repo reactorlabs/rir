@@ -8,9 +8,10 @@
 #include "allocators.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
+#include "compiler/native/lower.h"
+#include "compiler/native/lower_llvm.h"
 #include "compiler/parameter.h"
 #include "event_counters.h"
-#include "compiler/native/lower.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -269,9 +270,8 @@ static unsigned ClosuresCompiled =
     EventCounters::instance().registerCounter("closures compiled");
 #endif
 
-static bool PIR_NATIVE_BACKEND =
-    getenv("PIR_NATIVE_BACKEND") &&
-    0 == strncmp("1", getenv("PIR_NATIVE_BACKEND"), 1);
+static int PIR_NATIVE_BACKEND =
+    getenv("PIR_NATIVE_BACKEND") ? atoi(getenv("PIR_NATIVE_BACKEND")) : 0;
 
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 #ifdef ENABLE_EVENT_COUNTERS
@@ -1028,13 +1028,16 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto localsCnt = alloc.slots();
     auto res = ctx.finalizeCode(localsCnt, cache.size());
-    if (PIR_NATIVE_BACKEND) {
-        {
-            Lower native;
-            if (auto n =
-                    native.tryCompile(cls, code, promMap, needsEnsureNamed)) {
-                res->nativeCode = (NativeCode)n;
-            }
+    if (PIR_NATIVE_BACKEND == 1) {
+        Lower native;
+        if (auto n = native.tryCompile(cls, code, promMap, needsEnsureNamed)) {
+            res->nativeCode = (NativeCode)n;
+        }
+    }
+    if (PIR_NATIVE_BACKEND == 2) {
+        LowerLLVM native;
+        if (auto n = native.tryCompile(cls, code, promMap, needsEnsureNamed)) {
+            res->nativeCode = (NativeCode)n;
         }
     }
     return res;
