@@ -562,17 +562,17 @@ void PirCodeFunction::ensureNamed(jit_value v) {
 void PirCodeFunction::incrementNamed(jit_value v) {
     auto sxpinfo = insn_load_relative(v, sxpinfofOfs, jit_type_ulong);
     // named count is NAMED_BITS, starting at the 33th bit
-    static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1) << 33;
+    static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1) << 32;
     static auto namedNegMask = ~namedMask;
 
     auto isNamedMax = jit_label();
 
     auto named = insn_and(sxpinfo, new_constant(namedMask));
-    named = insn_shr(named, new_constant(33));
+    named = insn_shr(named, new_constant(32));
     insn_branch_if(named == new_constant(NAMEDMAX), isNamedMax);
 
     auto newNamed = insn_add(named, new_constant(1));
-    newNamed = insn_shl(newNamed, new_constant(33));
+    newNamed = insn_shl(newNamed, new_constant(32));
     auto newSxpinfo = insn_and(sxpinfo, new_constant(namedNegMask));
     newSxpinfo = insn_or(newSxpinfo, newNamed);
     insn_store_relative(v, sxpinfofOfs, newSxpinfo);
@@ -958,6 +958,7 @@ void PirCodeFunction::build() {
         insn_branch(done);
 
         insn_label(isNa);
+        // TODO: fix bug when res is double
         store(res, new_constant(NA_INTEGER));
 
         insn_label(done);
@@ -1107,7 +1108,7 @@ void PirCodeFunction::build() {
 
                 jit_value res;
                 if (r1 == Representation::Sexp) {
-                    res = call(NativeBuiltins::asLogical, {loadSxp(i, arg)});
+                    res = call(NativeBuiltins::asLogicalBlt, {loadSxp(i, arg)});
                 } else if (r1 == Representation::Real) {
                     res = insn_dup(load(i, arg, Representation::Integer));
 
@@ -2041,6 +2042,8 @@ void* Lower::tryCompile(
     function.compile();
     function.build_end();
 
+    if (cls->name().substr(0, 10) != "mandelbrot")
+        return nullptr;
     if (function.success) {
         // auto ctx = globalContext();
         // void* args[1] = {&ctx};

@@ -372,6 +372,7 @@ class Instruction : public Value {
     virtual void print(std::ostream& out, bool tty = false) const;
     void printGraph(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
+    std::string getRef() const;
     void print() const { print(std::cerr, true); }
     void printRecursive(std::ostream& out, int i) {
         if (i == 0)

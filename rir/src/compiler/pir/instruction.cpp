@@ -48,6 +48,13 @@ extern std::ostream& operator<<(std::ostream& out,
 
 constexpr Effects Instruction::errorWarnVisible;
 
+std::string Instruction::getRef() const {
+    std::stringstream ss;
+    ss << "PIR";
+    printRef(ss);
+    return ss.str();
+}
+
 void Instruction::printRef(std::ostream& out) const {
     if (type == RType::env)
         out << "e" << id();
