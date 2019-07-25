@@ -74,13 +74,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         }
     }
 
-    if (closure->formals().hasDefaultArgs()) {
-        if (!ctx.assumptions.includes(Assumption::NotTooFewArguments)) {
-            logger.warn("TODO: don't know how many are missing");
-            return fail();
-        }
-    }
-
     if (closure->formals().hasDots()) {
         closure->rirFunction()->unoptimizable = true;
         logger.warn("no support for ...");

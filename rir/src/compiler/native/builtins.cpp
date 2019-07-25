@@ -573,7 +573,7 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
     CallContext call(c, cls, /* nargs */ -1,
-                     src_pool_at(globalContext(), c->src), args, nullptr,
+                     src_pool_at(globalContext(), c->src), args,
                      (Immediate*)nullptr, env, Assumptions(), globalContext());
 
     deoptFramesWithContext(globalContext(), &call, m, R_NilValue,

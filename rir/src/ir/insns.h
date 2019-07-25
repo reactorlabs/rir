@@ -160,38 +160,27 @@ DEF_INSTR(stloc_, 1, 1, 0, 1)
 DEF_INSTR(movloc_, 2, 0, 0, 1)
 
 /**
- * call_implicit_:: Takes a list of code objects, which represent the arguments,
- *                  decides on eager/lazy evaluation and does the right thing
- *                  with the code objs
- *                  Expects the callee on TOS
- *                  code objects are passed as immediate arguments
- *
- *                  THIS IS A VARIABLE LENGTH INSTRUCTION
- *                  the actual number of immediates is 3 + nargs
- */
-DEF_INSTR(call_implicit_, 4, 1, 1, 0)
-/*
- * Same as above, but with names for the arguments as immediates
- *
- *                  THIS IS A VARIABLE LENGTH INSTRUCTION
- *                  the actual number of immediates is 3 + 2 * nargs
- */
-DEF_INSTR(named_call_implicit_, 4, 1, 1, 0)
-
-/**
- * call_:: Like call_implicit_, but expects arguments on stack
- *         on top of the callee; these arguments can be both
- *         values and promises (even preseeded w/ a value)
+ * call_:: Call instruction. Takes n arguments on the stack
+ *         on top of the callee; these arguments can be
+ *         values, promises (even preseeded w/ a value), or R_MissingValue for
+ *         exlicitly missing arguments.
  */
 DEF_INSTR(call_, 4, -1, 1, 0)
 
 /*
- * Same as above, but with names for the arguments as immediates
- *
- *                  THIS IS A VARIABLE LENGTH INSTRUCTION
- *                  the actual number of immediates is 3 + nargs
+ * named_call_:: Same as above, but with names for the arguments as immediates
+ *               THIS IS A VARIABLE LENGTH INSTRUCTION
+ *               the actual number of immediates is 3 + nargs
  */
 DEF_INSTR(named_call_, 4, -1, 1, 0)
+
+/*
+ * call_dots_:: This instruction is like named_call_, but additionally it
+ *              allows the callee to pass R_DotsSymbol as an argument. This
+ *              argument will be expanded (on the stack) with the contents of
+ *              `...` and passed to the callee.
+ */
+DEF_INSTR(call_dots_, 4, -1, 1, 0)
 
 /**
  * static_call_:: Like call_, but the callee is statically known

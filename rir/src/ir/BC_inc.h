@@ -200,18 +200,9 @@ class BC {
     bool is(Opcode aBc) const { return bc == aBc; }
 
     inline size_t size() const {
-        // Those are the 3 variable length BC we have
-        // call implicit has the promise offsets in the bc stream
-        if (bc == Opcode::call_implicit_)
+        // Those are the variable length BC we have
+        if (bc == Opcode::named_call_ || bc == Opcode::call_dots_)
             return immediate.callFixedArgs.nargs * sizeof(FunIdx) +
-                   fixedSize(bc);
-        // named call has the names in the bc stream
-        if (bc == Opcode::named_call_)
-            return immediate.callFixedArgs.nargs * sizeof(FunIdx) +
-                   fixedSize(bc);
-        // named call implicit has both the promargs and names in the bc stream
-        if (bc == Opcode::named_call_implicit_)
-            return immediate.callFixedArgs.nargs * 2 * sizeof(FunIdx) +
                    fixedSize(bc);
 
         if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
@@ -225,7 +216,8 @@ class BC {
     inline size_t popCount() {
         // return also is a leave
         assert(bc != Opcode::return_);
-        if (bc == Opcode::call_ || bc == Opcode::named_call_)
+        if (bc == Opcode::call_ || bc == Opcode::named_call_ ||
+            bc == Opcode::call_dots_)
             return immediate.callFixedArgs.nargs + 1;
         if (bc == Opcode::static_call_)
             return immediate.staticCallFixedArgs.nargs;
@@ -264,16 +256,13 @@ class BC {
     }
 
     bool isCall() const {
-        return bc == Opcode::call_implicit_ || bc == Opcode::call_ ||
-               bc == Opcode::named_call_ ||
-               bc == Opcode::named_call_implicit_ ||
-               bc == Opcode::static_call_ || bc == Opcode::call_builtin_;
+        return bc == Opcode::call_ || bc == Opcode::named_call_ ||
+               bc == Opcode::call_dots_ || bc == Opcode::static_call_ ||
+               bc == Opcode::call_builtin_;
     }
 
     bool hasPromargs() const {
-        return bc == Opcode::call_implicit_ ||
-               bc == Opcode::named_call_implicit_ ||
-               bc == Opcode::mk_promise_ || bc == Opcode::mk_eager_promise_ ||
+        return bc == Opcode::mk_promise_ || bc == Opcode::mk_eager_promise_ ||
                bc == Opcode::push_code_;
     }
 
@@ -284,12 +273,6 @@ class BC {
         case Opcode::mk_eager_promise_:
             proms.push_back(immediate.arg_idx);
             break;
-        case Opcode::named_call_implicit_:
-        case Opcode::call_implicit_: {
-            auto& in = callExtra().immediateCallArguments;
-            std::copy(in.begin(), in.end(), std::back_inserter(proms));
-            break;
-        }
         default: {}
         }
     }
@@ -321,18 +304,12 @@ class BC {
         // instructions have 4 fixed length immediates. After that there are
         // narg varlen immediates for the first two and 2*narg varlen
         // immediates in the last case.
-        case Opcode::call_implicit_:
+        case Opcode::call_dots_:
         case Opcode::named_call_: {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
             return 1 + (4 + nargs) * sizeof(Immediate);
-        }
-        case Opcode::named_call_implicit_: {
-            pc++;
-            Immediate nargs;
-            memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (4 + 2 * nargs) * sizeof(Immediate);
         }
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
@@ -412,12 +389,9 @@ BC_NOARGS(V, _)
     inline static BC is(uint32_t);
     inline static BC is(TypeChecks);
     inline static BC deopt(SEXP);
-    inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast,
-                                  const Assumptions& given);
-    inline static BC callImplicit(const std::vector<FunIdx>& args,
-                                  const std::vector<SEXP>& names, SEXP ast,
-                                  const Assumptions& given);
     inline static BC call(size_t nargs, SEXP ast, const Assumptions& given);
+    inline static BC callDots(size_t nargs, const std::vector<SEXP>& names,
+                              SEXP ast, const Assumptions& given);
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
                           SEXP ast, const Assumptions& given);
     inline static BC staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
@@ -473,9 +447,8 @@ BC_NOARGS(V, _)
 
     CallInstructionExtraInformation& callExtra() const {
         switch (bc) {
-        case Opcode::call_implicit_:
-        case Opcode::named_call_implicit_:
         case Opcode::named_call_:
+        case Opcode::call_dots_:
             break;
         default:
             assert(false && "Not a varlen call instruction");
@@ -503,8 +476,7 @@ BC_NOARGS(V, _)
             assert(false && "run decodeFixlen first!");
             break;
 
-        case Opcode::call_implicit_:
-        case Opcode::named_call_implicit_:
+        case Opcode::call_dots_:
         case Opcode::named_call_: {
             extraInformation.reset(new CallInstructionExtraInformation);
             break;
@@ -527,21 +499,12 @@ BC_NOARGS(V, _)
         pc++; // skip bc
 
         switch (bc) {
-        case Opcode::call_implicit_:
-        case Opcode::named_call_implicit_:
+        case Opcode::call_dots_:
         case Opcode::named_call_: {
             pc += sizeof(CallFixedArgs);
 
-            // Read implicit promise argument offsets
-            if (bc == Opcode::call_implicit_ ||
-                bc == Opcode::named_call_implicit_) {
-                for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
-                    callExtra().immediateCallArguments.push_back(
-                        readImmediate(&pc));
-            }
             // Read named arguments
-            if (bc == Opcode::named_call_ ||
-                bc == Opcode::named_call_implicit_) {
+            if (bc == Opcode::named_call_ || bc == Opcode::call_dots_) {
                 for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
                     callExtra().callArgumentNames.push_back(readImmediate(&pc));
             }
@@ -669,10 +632,9 @@ BC_NOARGS(V, _)
             memcpy(&immediate.poolAndCache, pc,
                    sizeof(PoolAndCachePositionRange));
             break;
-        case Opcode::call_implicit_:
-        case Opcode::named_call_implicit_:
         case Opcode::call_:
         case Opcode::named_call_:
+        case Opcode::call_dots_:
             memcpy(&immediate.callFixedArgs,
                    reinterpret_cast<CallFixedArgs*>(pc), sizeof(CallFixedArgs));
             break;

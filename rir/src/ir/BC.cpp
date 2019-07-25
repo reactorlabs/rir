@@ -66,25 +66,12 @@ BC_NOARGS(V, _)
         cs.insert(immediate.guard_fun_args);
         return;
 
-    case Opcode::call_implicit_:
-        cs.insert(immediate.callFixedArgs);
-        for (FunIdx arg : callExtra().immediateCallArguments)
-            cs.insert(arg);
-        break;
-
-    case Opcode::named_call_implicit_:
-        cs.insert(immediate.callFixedArgs);
-        for (FunIdx arg : callExtra().immediateCallArguments)
-            cs.insert(arg);
-        for (PoolIdx name : callExtra().callArgumentNames)
-            cs.insert(name);
-        break;
-
     case Opcode::call_:
         cs.insert(immediate.callFixedArgs);
         break;
 
     case Opcode::named_call_:
+    case Opcode::call_dots_:
         cs.insert(immediate.callFixedArgs);
         for (PoolIdx name : callExtra().callArgumentNames)
             cs.insert(name);
@@ -213,24 +200,15 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             break;
         }
         case Opcode::call_:
-        case Opcode::call_implicit_:
         case Opcode::named_call_:
-        case Opcode::named_call_implicit_: {
+        case Opcode::call_dots_: {
             i.callFixedArgs.nargs = InInteger(inp);
             i.callFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
             InBytes(inp, &i.callFixedArgs.given, sizeof(Assumptions));
             Opcode* c = code + 1 + sizeof(CallFixedArgs);
             // Read implicit promise argument offsets
-            if (*code == Opcode::call_implicit_ ||
-                *code == Opcode::named_call_implicit_) {
-                ArgIdx* immArgs = (ArgIdx*)c;
-                for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
-                    immArgs[j] = InInteger(inp);
-                c += i.callFixedArgs.nargs * sizeof(ArgIdx);
-            }
             // Read named arguments
-            if (*code == Opcode::named_call_ ||
-                *code == Opcode::named_call_implicit_) {
+            if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 PoolIdx* names = (PoolIdx*)c;
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
                     names[j] = Pool::insert(ReadItem(refTable, inp));
@@ -361,21 +339,13 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
                 WriteItem(Pool::get(bc.mkEnvExtra().names[j]), refTable, out);
             break;
         case Opcode::call_:
-        case Opcode::call_implicit_:
+        case Opcode::call_dots_:
         case Opcode::named_call_:
-        case Opcode::named_call_implicit_:
             OutInteger(out, i.callFixedArgs.nargs);
             WriteItem(Pool::get(i.callFixedArgs.ast), refTable, out);
             OutBytes(out, &i.callFixedArgs.given, sizeof(Assumptions));
-            // Write implicit promise argument offsets
-            if (*code == Opcode::call_implicit_ ||
-                *code == Opcode::named_call_implicit_) {
-                for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
-                    OutInteger(out, bc.callExtra().immediateCallArguments[j]);
-            }
             // Write named arguments
-            if (*code == Opcode::named_call_ ||
-                *code == Opcode::named_call_implicit_) {
+            if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
                     WriteItem(Pool::get(bc.callExtra().callArgumentNames[j]),
                               refTable, out);
@@ -461,12 +431,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
 void BC::printImmediateArgs(std::ostream& out) const {
     out << "[";
     for (auto arg : callExtra().immediateCallArguments) {
-        if (arg == MISSING_ARG_IDX)
-            out << " _";
-        else if (arg == DOTS_ARG_IDX)
-            out << " ...";
-        else
-            out << " " << std::hex << arg << std::dec;
+        out << " " << std::hex << arg << std::dec;
     }
     out << " ]";
 }
@@ -508,23 +473,19 @@ void BC::print(std::ostream& out) const {
     case Opcode::num_of:
         assert(false);
         break;
-    case Opcode::call_implicit_: {
-        printImmediateArgs(out);
-        break;
-    }
-    case Opcode::named_call_implicit_: {
-        printImmediateArgs(out);
-        out << " ";
-        printNames(out, callExtra().callArgumentNames);
-        break;
-    }
     case Opcode::call_: {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
         out << nargs;
         break;
     }
-
+    case Opcode::call_dots_: {
+        auto args = immediate.callFixedArgs;
+        BC::NumArgs nargs = args.nargs;
+        out << nargs << " ";
+        printNames(out, callExtra().callArgumentNames);
+        break;
+    }
     case Opcode::named_call_: {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;

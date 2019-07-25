@@ -85,12 +85,12 @@ R_xlen_t asVecSize(SEXP x) {
 }
 
 SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
-    SLOWASSERT(call.hasStackArgs() && !call.hasNames());
+    SLOWASSERT(!call.hasNames());
     return nullptr;
 }
 
 SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
-    SLOWASSERT(call.hasStackArgs() && !call.hasNames());
+    SLOWASSERT(!call.hasNames());
 
     static constexpr size_t MAXARGS = 16;
     std::array<SEXP, MAXARGS> args;

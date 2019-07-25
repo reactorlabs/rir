@@ -48,8 +48,12 @@ stopifnot(pir.check(
 rir.enableLoopPeeling()
 
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
-stopifnot(!pir.check(function(x = 4) {
-  print("PIR doesn't support default args")
+stopifnot(pir.check(function(x = 4) {
+  print("PIR does support default args")
+}, IsPirCompilable))
+stopifnot(!pir.check(function(...) {
+  foo(...);
+  print("PIR does support dotdotdot")
 }, IsPirCompilable))
 stopifnot(pir.check(function() 42L, Returns42L))
 stopifnot(pir.check(function() {
