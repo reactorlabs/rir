@@ -23,39 +23,42 @@ struct LazyEnvironment
     LazyEnvironment() = delete;
     LazyEnvironment(const LazyEnvironment&) = delete;
     LazyEnvironment& operator=(const LazyEnvironment&) = delete;
+    constexpr static size_t ArgOffset = 2;
 
     LazyEnvironment(SEXP parent, size_t nargs, Immediate* names)
-        : RirRuntimeObject(sizeof(LazyEnvironment), nargs + 2), nargs(nargs),
-          names(names) {}
+        : RirRuntimeObject(sizeof(LazyEnvironment), nargs + ArgOffset),
+          nargs(nargs), names(names) {}
 
-    SEXP materialized() { return getEntry(nargs + 1); }
-    void materialized(SEXP m) { setEntry(nargs + 1, m); }
+    SEXP materialized() { return getEntry(0); }
+    void materialized(SEXP m) { setEntry(0, m); }
 
     size_t nargs;
     Immediate* names;
 
-    SEXP getArg(size_t i) { return getEntry(i); }
-    void setArg(size_t i, SEXP val) { setEntry(i, val); }
+    SEXP getArg(size_t i) { return getEntry(i + ArgOffset); }
+    void setArg(size_t i, SEXP val) { setEntry(i + ArgOffset, val); }
 
-    SEXP getParent() { return getEntry(nargs); }
+    SEXP getParent() { return getEntry(1); }
 
     static LazyEnvironment* BasicNew(SEXP parent, size_t nargs,
                                      Immediate* names) {
-        SEXP wrapper = Rf_allocVector(
-            EXTERNALSXP, sizeof(LazyEnvironment) + sizeof(SEXP) * (nargs + 2));
-        return new (DATAPTR(wrapper))
+        SEXP wrapper =
+            Rf_allocVector(EXTERNALSXP, sizeof(LazyEnvironment) +
+                                            sizeof(SEXP) * (nargs + ArgOffset));
+        auto le = new (DATAPTR(wrapper))
             LazyEnvironment(parent, nargs, (Immediate*)names);
+        le->setEntry(1, parent);
+        return le;
     }
 
     static LazyEnvironment* New(SEXP parent, size_t nargs, Immediate* names) {
         auto le = BasicNew(parent, nargs, names);
-        for (long i = nargs - 1; i >= 0; --i) {
+        for (long i = nargs - 1; i >= 0; --i)
             le->setArg(i, ostack_pop(ctx));
-        }
-        le->setEntry(nargs, parent);
         return le;
     }
 };
+
 } // namespace rir
 
 #endif
