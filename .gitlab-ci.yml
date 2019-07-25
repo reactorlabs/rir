@@ -46,8 +46,6 @@ benchmark container:
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
-  only:
-    - master
   services:
     - docker:dind
   before_script:
