@@ -12,7 +12,7 @@ before_script:
   - export PIR_INLINER_MAX_SIZE=10000
   - export PIR_DEOPT_CHAOS_SEED=$RANDOM
   - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
-  - export REBENCH_OPTIONS="-df /tmp/benchmarks.data --commit-id=$CI_COMMIT_SHA --branch=master"
+  - export REBENCH_OPTIONS="-df $CI_PROJECT_DIR/benchmarks.data --commit-id=$CI_COMMIT_SHA --branch=master"
   - export REBENCH_RUN="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   - export REBENCH_RUN_BL="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
 
@@ -227,7 +227,7 @@ benchmark_rir:
     - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS --environment=PragueDesktop"
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
 benchmark_pir:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
@@ -244,7 +244,7 @@ benchmark_pir:
     - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS --environment=PragueDesktop"
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
 benchmark_native:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
@@ -261,7 +261,7 @@ benchmark_native:
     - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS --environment=PragueDesktop"
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
 benchmark_gnur:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
@@ -276,7 +276,7 @@ benchmark_gnur:
     - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS --environment=PragueDesktop"
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
 benchmark_fastr:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
@@ -292,7 +292,7 @@ benchmark_fastr:
   allow_failure: true
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
 
 benchmark_rir_ginger:
@@ -308,7 +308,7 @@ benchmark_rir_ginger:
     - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS --environment=Prg-Ginger"
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
 benchmark_pir_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
@@ -325,7 +325,7 @@ benchmark_pir_ginger:
     - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS  --environment=Prg-Ginger"
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
 benchmark_native_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
@@ -342,7 +342,7 @@ benchmark_native_ginger:
     - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS  --environment=Prg-Ginger"
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
 benchmark_gnur_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
@@ -357,7 +357,7 @@ benchmark_gnur_ginger:
     - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS  --environment=Prg-Ginger"
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
 benchmark_fastr_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
@@ -373,5 +373,5 @@ benchmark_fastr_ginger:
   allow_failure: true
   artifacts:
     paths:
-    - /tmp/benchmarks.data
+    - benchmarks.data
     expire_in: 6 month
