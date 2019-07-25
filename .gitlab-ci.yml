@@ -64,6 +64,8 @@ test_release_1:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  except:
+    - schedules
   retry: 1
   script:
     - cd /opt/rir/build/release
@@ -76,6 +78,8 @@ test_release_2:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  except:
+    - schedules
   retry: 1
   script:
     - cd /opt/rir/build/release
@@ -88,6 +92,8 @@ tests_debug:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  except:
+    - schedules
   retry: 1
   script:
     - cd /opt/rir/build/debugopt
@@ -107,6 +113,8 @@ tests_fullverify:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  except:
+    - schedules
   retry: 1
   script:
     - cd /opt/rir/build/fullverifier
@@ -119,6 +127,8 @@ test_features:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  except:
+    - schedules
   retry: 1
   script:
     - cd /opt/rir/build/debugopt
@@ -133,6 +143,8 @@ test_sanitize:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  except:
+    - schedules
   retry: 1
   only:
     - master
@@ -148,6 +160,8 @@ test_big_inline:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  except:
+    - schedules
   retry: 1
   only:
     - master
@@ -163,6 +177,8 @@ test_benchmarks:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  except:
+    - schedules
   script:
     - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:RIR e:PIR -r -SN -wu 0 --iterations 2"
     - PIR_DEOPT_CHAOS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR -r -SN -wu 0 --iterations 2"
@@ -170,6 +186,8 @@ test_benchmarks:
 
 deploy:
   stage: Deploy
+  except:
+    - schedules
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
