@@ -1365,7 +1365,7 @@ void PirCodeFunction::build() {
                     auto offset = bindingsCache.at(environment).at(st->varName);
                     auto cache = insn_load_relative(bindingsCacheBase, offset,
                                                     jit_type_nuint);
-                    jit_label done, miss;
+                    jit_label done, miss, identical;
 
                     auto newVal = loadSxp(i, st->arg<0>().val());
 
@@ -1374,11 +1374,17 @@ void PirCodeFunction::build() {
                     insn_branch_if(insn_eq(val, constant(R_UnboundValue, sxp)),
                                    miss);
 
-                    insn_branch_if(insn_eq(val, newVal), done);
+                    insn_branch_if(insn_eq(val, newVal), identical);
 
                     incrementNamed(newVal);
                     setCar(cache, newVal);
 
+                    insn_branch(done);
+
+                    insn_label(identical);
+                    // In the fast case (where the value is not updated) we
+                    // still need to ensure it is named.
+                    ensureNamed(val);
                     insn_branch(done);
 
                     insn_label(miss);
@@ -1389,6 +1395,7 @@ void PirCodeFunction::build() {
                           loadSxp(i, st->env())});
 
                     insn_label(done);
+
                 } else {
                     gcSafepoint(i, 1, false);
                     call(setter, {constant(st->varName, sxp),
