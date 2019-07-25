@@ -1273,6 +1273,6 @@ bool Compiler::profile =
     !(getenv("RIR_PROFILING") &&
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
-bool Compiler::loopPeelingEnabled = true;
+bool Compiler::loopPeelingEnabled = false;
 
 } // namespace rir
