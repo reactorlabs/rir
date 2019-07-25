@@ -12,7 +12,7 @@ namespace rir {
 UUID uidHash = UUID::random();
 std::unordered_map<UUID, Code*> allCodes;
 
-void Code::rehashDeserializedUids() { uidHash = UUID::random(); }
+void Code::modifyUidHash() { uidHash = UUID::random(); }
 
 Code* Code::withUid(UUID uid) { return allCodes.at(uid ^ uidHash); }
 
@@ -79,7 +79,8 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
 Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     size_t size = InInteger(inp);
     Code* code = (Code*)::operator new(size);
-    code->uid = UUID::deserialize(refTable, inp) ^ uidHash;
+    code->nativeCode = NULL;
+    code->uid = UUID::deserialize(refTable, inp);
     code->funInvocationCount = InInteger(inp);
     code->src = InInteger(inp);
     code->stackLength = InInteger(inp);
@@ -119,7 +120,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
 void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, size());
     // Header
-    uid.serialize(refTable, out);
+    (uid ^ uidHash).serialize(refTable, out);
     OutInteger(out, funInvocationCount);
     OutInteger(out, src);
     OutInteger(out, stackLength);

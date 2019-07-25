@@ -58,7 +58,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     // Will modify all further deserialized UIDs (both retrieved and new) with
     // a hash, so that if the same Code* is deserialized it will be distinct,
     // but it can also be referenced by a future withUid
-    static void rehashDeserializedUids();
+    static void modifyUidHash();
     static Code* withUid(UUID uid);
 
     Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,
