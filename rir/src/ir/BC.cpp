@@ -463,6 +463,18 @@ void BC::print(std::ostream& out) const {
                 if (i != (unsigned)prof.numTypes - 1)
                     out << ", ";
             }
+            if (prof.stateBeforeLastForce !=
+                ObservedValues::StateBeforeLastForce::unknown) {
+                out << " | "
+                    << ((prof.stateBeforeLastForce ==
+                         ObservedValues::StateBeforeLastForce::value)
+                            ? "value"
+                            : (prof.stateBeforeLastForce ==
+                               ObservedValues::StateBeforeLastForce::
+                                   evaluatedPromise)
+                                  ? "evaluatedPromise"
+                                  : "promise");
+            }
         } else {
             out << "<?>";
         }

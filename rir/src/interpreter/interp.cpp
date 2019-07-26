@@ -1529,6 +1529,22 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     checkUserInterrupt();
 
+    // This flag is used to record if loading had to force a promise or not.
+    // Needed to pass the information between two instructions, namely ldvar_
+    // variants and record_type_
+    ObservedValues::StateBeforeLastForce stateBeforeLastForce =
+        ObservedValues::StateBeforeLastForce::unknown;
+    auto recordForceBehavior = [&stateBeforeLastForce](SEXP s) {
+        if (TYPEOF(s) != PROMSXP)
+            stateBeforeLastForce = ObservedValues::StateBeforeLastForce::value;
+        else if (PRVALUE(s) != R_UnboundValue)
+            stateBeforeLastForce =
+                ObservedValues::StateBeforeLastForce::evaluatedPromise;
+        else
+            stateBeforeLastForce =
+                ObservedValues::StateBeforeLastForce::promise;
+    };
+
     // main loop
     BEGIN_MACHINE {
 
@@ -1734,6 +1750,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -1774,6 +1791,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -1818,6 +1836,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             res = Rf_findVar(sym, env);
 
+            recordForceBehavior(res);
+
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
@@ -1852,6 +1872,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -1917,6 +1938,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -1959,6 +1981,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -2105,7 +2128,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(record_type_) {
             ObservedValues* feedback = (ObservedValues*)pc;
             SEXP t = ostack_top(ctx);
-            feedback->record(t);
+            feedback->record(t, stateBeforeLastForce);
             pc += sizeof(ObservedValues);
             NEXT();
         }
