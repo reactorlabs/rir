@@ -376,11 +376,6 @@ DEF_INSTR(missing_, 1, 0, 1, 1)
 DEF_INSTR(check_missing_, 0, 0, 0, 1)
 
 /**
- * brobj_:: branch if tos is object
- */
-DEF_INSTR(brobj_, 1, 0, 0, 1)
-
-/**
  * brtrue_:: pop object stack, if TRUE branch to immediate offset
  */
 DEF_INSTR(brtrue_, 1, 1, 0, 1)

@@ -157,14 +157,6 @@ class Pir2Rir {
                         changed = true;
                     } else if (bc.is(rir::Opcode::dup_) && next != code.end() &&
                                plus(next, 1) != code.end() &&
-                               next->first.is(rir::Opcode::isobj_) &&
-                               plus(next, 1)->first.is(rir::Opcode::brtrue_)) {
-                        auto target = plus(next, 1)->first.immediate.offset;
-                        next = code.erase(it, plus(next, 2));
-                        next = code.emplace(next, BC::brobj(target), noSource);
-                        changed = true;
-                    } else if (bc.is(rir::Opcode::dup_) && next != code.end() &&
-                               plus(next, 1) != code.end() &&
                                plus(next, 2) != code.end() &&
                                next->first.is(rir::Opcode::for_seq_size_) &&
                                plus(next, 1)->first.is(rir::Opcode::swap_) &&
@@ -743,6 +735,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::isType(TypeChecks::RealNonObjectWrapped));
                 } else {
                     t.print(std::cout);
+                    assert(false && "IsType used for unsupported type check");
                 }
                 break;
             }

@@ -279,7 +279,7 @@ class BC {
 
     bool isCondJmp() const {
         return bc == Opcode::brtrue_ || bc == Opcode::brfalse_ ||
-               bc == Opcode::brobj_ || bc == Opcode::beginloop_;
+               bc == Opcode::beginloop_;
     }
 
     bool isUncondJmp() const { return bc == Opcode::br_; }
@@ -379,7 +379,6 @@ BC_NOARGS(V, _)
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
     inline static BC br(Jmp);
-    inline static BC brobj(Jmp);
     inline static BC label(Jmp);
     inline static BC guardName(SEXP, SEXP);
     inline static BC guardNamePrimitive(SEXP);
@@ -660,7 +659,6 @@ BC_NOARGS(V, _)
             break;
         case Opcode::br_:
         case Opcode::brtrue_:
-        case Opcode::brobj_:
         case Opcode::brfalse_:
         case Opcode::beginloop_:
         case Opcode::push_context_:
