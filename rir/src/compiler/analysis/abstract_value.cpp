@@ -129,7 +129,10 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
         env = aliases.at(env);
     while (env != AbstractREnvironment::UnknownParent) {
         assert(env);
-        if (envs.count(env) == 0) {
+        // We only analyze PIR environments, not concrete R environments.
+        // TODO: If we can assume that the enclosing environments are stable,
+        // then we could just do the lookup here.
+        if (Env::Cast(env) || envs.count(env) == 0) {
             return AbstractLoad(env, AbstractPirValue::tainted());
         }
         auto aenv = envs.at(env);
@@ -166,8 +169,12 @@ AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
         env = aliases.at(env);
     while (env != AbstractREnvironment::UnknownParent) {
         assert(env);
-        if (envs.count(env) == 0)
+        // We only analyze PIR environments, not concrete R environments.
+        // TODO: If we can assume that the enclosing environments are stable,
+        // then we could just do the lookup here.
+        if (Env::Cast(env) || envs.count(env) == 0) {
             return AbstractLoad(env, AbstractPirValue::tainted());
+        }
         auto aenv = envs.at(env);
         if (!aenv.absent(e)) {
             const AbstractPirValue& res = aenv.get(e);
