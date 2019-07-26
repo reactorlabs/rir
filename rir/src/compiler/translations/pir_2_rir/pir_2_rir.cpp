@@ -703,22 +703,44 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::IsObject: {
+                auto is = IsObject::Cast(instr);
+                auto arg = is->arg(0).val();
+
+                if (arg->type.maybePromiseWrapped()) {
+                    cb.add(BC::isType(TypeChecks::IsObjectWrapped));
+                } else {
+                    cb.add(BC::isType(TypeChecks::IsObject));
+                }
+                break;
+            }
+
             case Tag::IsType: {
                 auto is = IsType::Cast(instr);
                 auto t = is->typeTest;
-                assert(!t.isVoid() && !t.maybeObj() && !t.maybeLazy() &&
-                       !t.maybePromiseWrapped());
+                assert(!t.isVoid() && !t.maybeObj() && !t.maybeLazy());
 
                 if (t.isA(RType::integer)) {
                     if (t.isScalar())
-                        cb.add(BC::is(TypeChecks::IntegerSimpleScalar));
+                        cb.add(BC::isType(TypeChecks::IntegerSimpleScalar));
                     else
-                        cb.add(BC::is(TypeChecks::IntegerNonObject));
+                        cb.add(BC::isType(TypeChecks::IntegerNonObject));
+                } else if (t.isA(PirType(RType::integer).orPromiseWrapped())) {
+                    if (t.isScalar())
+                        cb.add(
+                            BC::isType(TypeChecks::IntegerSimpleScalarWrapped));
+                    else
+                        cb.add(BC::isType(TypeChecks::IntegerNonObjectWrapped));
                 } else if (t.isA(RType::real)) {
                     if (t.isScalar())
-                        cb.add(BC::is(TypeChecks::RealSimpleScalar));
+                        cb.add(BC::isType(TypeChecks::RealSimpleScalar));
                     else
-                        cb.add(BC::is(TypeChecks::RealNonObject));
+                        cb.add(BC::isType(TypeChecks::RealNonObject));
+                } else if (t.isA(PirType(RType::real).orPromiseWrapped())) {
+                    if (t.isScalar())
+                        cb.add(BC::isType(TypeChecks::RealSimpleScalarWrapped));
+                    else
+                        cb.add(BC::isType(TypeChecks::RealNonObjectWrapped));
                 } else {
                     t.print(std::cout);
                 }
@@ -752,7 +774,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Visible, visible);
                 SIMPLE(Invisible, invisible);
                 SIMPLE(Identical, identicalNoforce);
-                SIMPLE(IsObject, isobj);
                 SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);

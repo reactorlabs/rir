@@ -867,7 +867,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldloc_:
     case Opcode::stloc_:
     case Opcode::movloc_:
-    case Opcode::isobj_:
+    case Opcode::istype_:
     case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:

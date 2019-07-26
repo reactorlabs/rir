@@ -356,9 +356,9 @@ DEF_INSTR(asast_, 0, 1, 1, 1)
 DEF_INSTR(is_, 1, 1, 1, 1)
 
 /**
- * isobj_:: check if TOS is any kind of object, push T/F
+ * istype_:: check if TOS is a given type, push T/F
  */
-DEF_INSTR(isobj_, 0, 1, 1, 1)
+DEF_INSTR(istype_, 1, 1, 1, 1)
 
 /**
  * isstubenv_:: check if TOS is an env stub, push T/F
