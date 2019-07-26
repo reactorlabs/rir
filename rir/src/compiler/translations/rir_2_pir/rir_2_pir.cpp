@@ -834,7 +834,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     // Currently unused opcodes:
-    case Opcode::brobj_:
     case Opcode::alloc_:
     case Opcode::push_code_:
     case Opcode::set_names_:
@@ -976,11 +975,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 insert(new Branch(v));
                 break;
             }
-            case Opcode::brobj_: {
-                Value* v = insert(new IsObject(cur.stack.top()));
-                insert(new Branch(v));
-                break;
-            }
             case Opcode::beginloop_:
                 log.warn("Cannot compile Function. Unsupported beginloop bc");
                 return nullptr;
@@ -1005,7 +999,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 insert.setBranch(branch, fall);
                 break;
             case Opcode::brfalse_:
-            case Opcode::brobj_:
                 insert.setBranch(fall, branch);
                 break;
             default:

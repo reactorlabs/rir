@@ -3001,17 +3001,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(brobj_) {
-            JumpOffset offset = readJumpOffset();
-            advanceJump();
-            if (isObject(ostack_top(ctx))) {
-                checkUserInterrupt();
-                pc += offset;
-            }
-            PC_BOUNDSCHECK(pc, c);
-            NEXT();
-        }
-
         INSTRUCTION(brtrue_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();

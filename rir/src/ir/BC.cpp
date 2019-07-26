@@ -102,7 +102,6 @@ BC_NOARGS(V, _)
     case Opcode::brtrue_:
     case Opcode::beginloop_:
     case Opcode::push_context_:
-    case Opcode::brobj_:
     case Opcode::brfalse_:
         cs.patchpoint(immediate.offset);
         return;
@@ -259,7 +258,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::brtrue_:
         case Opcode::beginloop_:
         case Opcode::push_context_:
-        case Opcode::brobj_:
         case Opcode::brfalse_:
         case Opcode::popn_:
         case Opcode::pick_:
@@ -391,7 +389,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::brtrue_:
         case Opcode::beginloop_:
         case Opcode::push_context_:
-        case Opcode::brobj_:
         case Opcode::brfalse_:
         case Opcode::popn_:
         case Opcode::pick_:
@@ -664,7 +661,6 @@ BC_NOARGS(V, _)
     case Opcode::beginloop_:
     case Opcode::push_context_:
     case Opcode::brtrue_:
-    case Opcode::brobj_:
     case Opcode::brfalse_:
     case Opcode::br_:
         out << immediate.offset;
