@@ -132,16 +132,16 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
         // We only analyze PIR environments, not concrete R environments.
         // TODO: If we can assume that the enclosing environments are stable,
         // then we could just do the lookup here.
-        if (Env::Cast(env) || envs.count(env) == 0) {
+        auto envIt = envs.find(env);
+        if (Env::Cast(env) || envIt == envs.end()) {
             return AbstractLoad(env, AbstractPirValue::tainted());
         }
-        auto aenv = envs.at(env);
         // In the case of existing R envs we only have a partial view (ie. we
         // don't see all stores happening before entering the current function,
         // therefore we cannot practically exclude the existence of a
         // bindinging in those environments).
-        if (Env::Cast(env) || !aenv.absent(e)) {
-            const AbstractPirValue& res = aenv.get(e);
+        if (!envIt->second.absent(e)) {
+            const AbstractPirValue& res = envIt->second.get(e);
             // UnboundValue has fall-through semantics which cause lookup to
             // fall through.
             if (res.maybeUnboundValue())
@@ -150,7 +150,7 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
             if (!res.isUnboundValue())
                 return AbstractLoad(env, res);
         }
-        auto parent = envs.at(env).parentEnv();
+        auto parent = envIt->second.parentEnv();
         assert(parent);
         if (parent == AbstractREnvironment::UnknownParent &&
             Env::parentEnv(env))
@@ -172,12 +172,12 @@ AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
         // We only analyze PIR environments, not concrete R environments.
         // TODO: If we can assume that the enclosing environments are stable,
         // then we could just do the lookup here.
-        if (Env::Cast(env) || envs.count(env) == 0) {
+        auto envIt = envs.find(env);
+        if (Env::Cast(env) || envIt == envs.end()) {
             return AbstractLoad(env, AbstractPirValue::tainted());
         }
-        auto aenv = envs.at(env);
-        if (!aenv.absent(e)) {
-            const AbstractPirValue& res = aenv.get(e);
+        if (!envIt->second.absent(e)) {
+            const AbstractPirValue& res = envIt->second.get(e);
 
             // If it is a closure, we know we are good
             if (res.type.isA(RType::closure))
@@ -191,7 +191,7 @@ AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
             if (res.maybeUnboundValue())
                 return AbstractLoad(env, AbstractPirValue::tainted());
         }
-        auto parent = envs.at(env).parentEnv();
+        auto parent = envIt->second.parentEnv();
         assert(parent);
         // If the analysis does not know what the parent env is, but the env is
         // an existing R env, we can get the parent from the actual R env object

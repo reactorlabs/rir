@@ -117,6 +117,21 @@ class SmallMap {
         return false;
     }
 
+    const_iterator find(const K& k) const {
+        if (big) {
+            auto idx = index.find(k);
+            if (idx == index.end()) {
+                return cend();
+            } else {
+                return cbegin() + idx->second;
+            }
+        }
+        for (auto idx = cbegin(); idx != cend(); ++idx)
+            if (idx->first == k)
+                return idx;
+        return cend();
+    }
+
     void contains(const K& k, const std::function<void(V&)>& found,
                   const std::function<void()>& notFound) {
         if (big) {
