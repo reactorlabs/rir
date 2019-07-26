@@ -50,14 +50,24 @@ static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 struct ObservedValues {
+
+    enum StateBeforeLastForce {
+        unknown,
+        value,
+        evaluatedPromise,
+        promise,
+    };
+
     static constexpr unsigned MaxTypes = 3;
-    uint8_t numTypes;
+    uint8_t numTypes : 2;
+    uint8_t stateBeforeLastForce : 2;
 
     std::array<ObservedType, MaxTypes> seen;
 
-    ObservedValues() : numTypes(0) {}
+    ObservedValues()
+        : numTypes(0), stateBeforeLastForce(StateBeforeLastForce::unknown) {}
 
-    RIR_INLINE void record(SEXP e) {
+    RIR_INLINE void record(SEXP e, StateBeforeLastForce s) {
         ObservedType type(e);
         if (numTypes < MaxTypes) {
             int i = 0;
@@ -66,6 +76,8 @@ struct ObservedValues {
                     break;
             if (i == numTypes)
                 seen[numTypes++] = type;
+            if (stateBeforeLastForce < s)
+                stateBeforeLastForce = s;
         }
     }
 };
