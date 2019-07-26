@@ -157,3 +157,23 @@ xx1()
 xx1()
 xx1()
 xx1()
+
+#################
+
+s <- NaN
+h <- function() s <<- 74755
+f <- function(x) x
+g <- function() 42
+
+execute <- function () {
+    h()
+    f(g())
+}
+
+run <- function() {
+    for (i in 1:3) {
+        execute()
+    }
+}
+
+run()
