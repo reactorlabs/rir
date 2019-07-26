@@ -89,9 +89,15 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
 enum class TypeChecks : uint32_t {
     // Must be bigger than smallest sexptype
     IntegerNonObject = 3330,
-    IntegerSimpleScalar = 3331,
-    RealNonObject = 3332,
-    RealSimpleScalar = 3334,
+    IntegerNonObjectWrapped = 3331,
+    IntegerSimpleScalar = 3332,
+    IntegerSimpleScalarWrapped = 3333,
+    RealNonObject = 3334,
+    RealNonObjectWrapped = 3335,
+    RealSimpleScalar = 3336,
+    RealSimpleScalarWrapped = 3337,
+    IsObject = 3338,
+    IsObjectWrapped = 3339,
 };
 
 } // namespace rir

@@ -387,7 +387,7 @@ BC_NOARGS(V, _)
     inline static BC pick(uint32_t);
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
-    inline static BC is(TypeChecks);
+    inline static BC isType(TypeChecks);
     inline static BC deopt(SEXP);
     inline static BC call(size_t nargs, SEXP ast, const Assumptions& given);
     inline static BC callDots(size_t nargs, const std::vector<SEXP>& names,
@@ -670,6 +670,7 @@ BC_NOARGS(V, _)
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
+        case Opcode::istype_:
         case Opcode::put_:
         case Opcode::alloc_:
         case Opcode::ldvar_noforce_stubbed_:

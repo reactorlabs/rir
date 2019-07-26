@@ -111,6 +111,7 @@ BC_NOARGS(V, _)
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::is_:
+    case Opcode::istype_:
     case Opcode::put_:
     case Opcode::alloc_:
     case Opcode::stvar_stubbed_:
@@ -264,6 +265,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
+        case Opcode::istype_:
         case Opcode::put_:
         case Opcode::alloc_:
         case Opcode::ldarg_:
@@ -395,6 +397,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
+        case Opcode::istype_:
         case Opcode::put_:
         case Opcode::alloc_:
         case Opcode::ldarg_:
@@ -586,6 +589,7 @@ void BC::print(std::ostream& out) const {
             << immediate.loc_cpy.target;
         break;
     case Opcode::is_:
+    case Opcode::istype_:
     case Opcode::alloc_:
         switch (immediate.i) {
             case static_cast<Immediate>(TypeChecks::RealNonObject):
@@ -599,6 +603,24 @@ void BC::print(std::ostream& out) const {
                 break;
             case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
                 out << "IntegerSimpleScalar";
+                break;
+            case static_cast<Immediate>(TypeChecks::RealNonObjectWrapped):
+                out << "RealNonObjectWrapped";
+                break;
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalarWrapped):
+                out << "RealSimpleScalarWrapped";
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerNonObjectWrapped):
+                out << "IntegerNotObjectWrapped";
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalarWrapped):
+                out << "IntegerSimpleScalarWrapped";
+                break;
+            case static_cast<Immediate>(TypeChecks::IsObject):
+                out << "IsObject";
+                break;
+            case static_cast<Immediate>(TypeChecks::IsObjectWrapped):
+                out << "IsObjectWrapped";
                 break;
             default:
                 out << type2char(immediate.i);
