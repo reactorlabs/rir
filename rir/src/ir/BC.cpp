@@ -238,7 +238,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             SEXP store = Rf_allocVector(RAWSXP, size);
             memcpy(DATAPTR(store), meta, size);
             i.pool = Pool::insert(store);
-            delete meta;
+            ::operator delete(meta);
             break;
         }
         case Opcode::assert_type_:
