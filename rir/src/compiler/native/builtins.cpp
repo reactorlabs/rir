@@ -2,6 +2,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "compiler/parameter.h"
+#include "interpreter/LazyEnvironment.h"
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
@@ -83,6 +84,28 @@ NativeBuiltin NativeBuiltins::createEnvironment = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 
+SEXP createStubEnvironmentImpl(SEXP parent, int n, Immediate* names,
+                               int contextPos) {
+    SLOWASSERT(TYPEOF(parent) == ENVSXP);
+    SEXP res = LazyEnvironment::BasicNew(parent, n, names)->container();
+    if (contextPos > 0) {
+        if (auto cptr = getFunctionContext(contextPos - 1)) {
+            cptr->cloenv = res;
+        }
+    }
+    return res;
+}
+
+static jit_type_t createStubEnvironmentSignature[4] = {
+    sxp, jit_type_sys_int, jit_type_void_ptr, jit_type_sys_int};
+NativeBuiltin NativeBuiltins::createStubEnvironment = {
+    "createStubEnvironment",
+    (void*)createStubEnvironmentImpl,
+    4,
+    jit_type_create_signature(jit_abi_cdecl, sxp,
+                              createStubEnvironmentSignature, 4, 0),
+};
+
 SEXP ldvarImpl(SEXP a, SEXP b) {
     auto res = Rf_findVar(a, b);
     // std::cout << CHAR(PRINTNAME(a)) << "=";
@@ -159,6 +182,23 @@ NativeBuiltin NativeBuiltins::setCar = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
 };
 
+void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
+    assert(x->sxpinfo.mark && "Use fastpath setEntry");
+    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
+           "use fast path setEntry");
+    EXTERNALSXP_SET_ENTRY(x, i, y);
+}
+
+static jit_type_t externalsxpSetEntrySignature[4] = {sxp, jit_type_sys_int,
+                                                     sxp};
+NativeBuiltin NativeBuiltins::externalsxpSetEntry = {
+    "externalsxpSetEntry",
+    (void*)externalsxpSetEntryImpl,
+    3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, externalsxpSetEntrySignature,
+                              3, 0),
+};
+
 void defvarImpl(SEXP var, SEXP value, SEXP env) {
     rirSetVarWrapper(var, value, ENCLOS(env));
 };
@@ -201,7 +241,8 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
         debugPrintCallBuiltinImpl = true;
     }
     SLOWASSERT(TYPEOF(callee) == BUILTINSXP);
-    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP);
+    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+               LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = builtinCall(call, ctx);
     SLOWASSERT(res);
@@ -636,8 +677,11 @@ NativeBuiltin NativeBuiltins::assertFail = {
     jit_type_create_signature(jit_abi_cdecl, jit_type_void, ptr1, 1, 0),
 };
 
+void printValueImpl(SEXP v) { Rf_PrintValue(v); }
 NativeBuiltin NativeBuiltins::printValue = {
-    "printValue", (void*)Rf_PrintValue, 1,
+    "printValue",
+    (void*)printValueImpl,
+    1,
     jit_type_create_signature(jit_abi_cdecl, jit_type_void, sxp1, 1, 0),
 };
 

@@ -176,6 +176,7 @@ static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
 
 SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
     auto wrapper = LazyEnvironment::unpack(wrapper_);
+    assert(!wrapper->materialized());
 
     SEXP arglist = R_NilValue;
     auto names = wrapper->names;
@@ -189,19 +190,18 @@ SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
 
     SEXP environment =
         Rf_NewEnvironment(R_NilValue, arglist, wrapper->getParent());
-    auto finger = R_BCNodeStackTop;
-    while (finger > wrapper->frameEnd) {
-        if (finger->tag == 0 && finger->u.sxpval == wrapper_)
-            finger->u.sxpval = environment;
-        finger--;
-    }
+    wrapper->materialized(environment);
     return environment;
 }
 
 static SEXP materializeCallerEnv(CallContext& callCtx,
                                  InterpreterInstance* ctx) {
-    if (LazyEnvironment::check(callCtx.callerEnv))
-        callCtx.callerEnv = createEnvironment(ctx, callCtx.callerEnv);
+    if (auto le = LazyEnvironment::check(callCtx.callerEnv)) {
+        if (le->materialized())
+            callCtx.callerEnv = le->materialized();
+        else
+            callCtx.callerEnv = createEnvironment(ctx, callCtx.callerEnv);
+    }
     SLOWASSERT(callCtx.callerEnv == symbol::delayedEnv ||
                TYPEOF(callCtx.callerEnv) == ENVSXP);
     return callCtx.callerEnv;
@@ -1331,8 +1331,11 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                            FRAME(sysparent), R_NilValue);
     }
 
-    if (LazyEnvironment::check(deoptEnv)) {
-        deoptEnv = createEnvironment(globalContext(), deoptEnv);
+    if (auto le = LazyEnvironment::check(deoptEnv)) {
+        if (le->materialized())
+            deoptEnv = le->materialized();
+        else
+            deoptEnv = createEnvironment(globalContext(), deoptEnv);
         cntxt->cloenv = deoptEnv;
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
@@ -1381,7 +1384,10 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         SEXP res = nullptr;
         if (!innermostFrame)
             res = ostack_pop(ctx);
-        assert(ostack_top() == deoptEnv);
+        assert(
+            ostack_top() == deoptEnv ||
+            (LazyEnvironment::check(ostack_top()) &&
+             LazyEnvironment::check(ostack_top())->materialized() == deoptEnv));
         ostack_pop(ctx);
         if (!innermostFrame)
             ostack_push(ctx, res);
@@ -1514,6 +1520,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     auto changeEnv = [&](SEXP e) {
         assert((TYPEOF(e) == ENVSXP || LazyEnvironment::check(e)) &&
                "Expected an environment");
+        assert(!LazyEnvironment::check(e) ||
+               !LazyEnvironment::check(e)->materialized());
         if (e != env)
             env = e;
     };
@@ -1639,12 +1647,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP parent = ostack_pop(ctx);
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
-            auto names = pc;
+            auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            SEXP wrapper = Rf_allocVector(
-                EXTERNALSXP, sizeof(LazyEnvironment) + sizeof(SEXP) * (n + 1));
-            new (DATAPTR(wrapper))
-                LazyEnvironment(parent, (Immediate*)names, n, localsBase, ctx);
+            SEXP wrapper = LazyEnvironment::New(parent, n, names)->container();
 
             ostack_push(ctx, wrapper);
             if (contextPos > 0) {
@@ -1789,6 +1794,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             auto le = LazyEnvironment::check(env);
             assert(le);
+            assert(!le->materialized());
 
             auto res = le->getArg(pos);
 
@@ -1987,6 +1993,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             auto le = LazyEnvironment::check(env);
             assert(le);
+            assert(!le->materialized());
             le->setArg(pos, val);
             ostack_pop(ctx);
             NEXT();
@@ -2882,8 +2889,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(isstubenv_) {
             SEXP val = ostack_pop(ctx);
-            ostack_push(
-                ctx, LazyEnvironment::check(val) ? R_TrueValue : R_FalseValue);
+            auto le = LazyEnvironment::check(val);
+            auto isStub = le && !le->materialized();
+            ostack_push(ctx, isStub ? R_TrueValue : R_FalseValue);
             NEXT();
         }
 

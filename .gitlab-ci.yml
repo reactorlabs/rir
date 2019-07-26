@@ -12,7 +12,7 @@ before_script:
   - export PIR_INLINER_MAX_SIZE=10000
   - export PIR_DEOPT_CHAOS_SEED=$RANDOM
   - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
-  - export REBENCH_OPTIONS="--commit-id=$CI_COMMIT_SHA --branch=master"
+  - export REBENCH_OPTIONS="-df $CI_PROJECT_DIR/benchmarks.data --commit-id=$CI_COMMIT_SHA --branch=master"
   - export REBENCH_RUN="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   - export REBENCH_RUN_BL="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
 
@@ -46,8 +46,6 @@ benchmark container:
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
-  only:
-    - master
   services:
     - docker:dind
   before_script:
@@ -136,6 +134,7 @@ test_features:
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
+    - PIR_NATIVE_BACKEND=1 ./bin/gnur-make-tests check
 
 # Run ubsan and gc torture
 test_sanitize:
@@ -230,7 +229,7 @@ benchmark_rir:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month
 benchmark_pir:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -247,7 +246,7 @@ benchmark_pir:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month
 benchmark_native:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -264,7 +263,7 @@ benchmark_native:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month
 benchmark_gnur:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -279,7 +278,7 @@ benchmark_gnur:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month
 benchmark_fastr:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -295,7 +294,7 @@ benchmark_fastr:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month
 
 benchmark_rir_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
@@ -311,7 +310,7 @@ benchmark_rir_ginger:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month
 benchmark_pir_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -328,7 +327,7 @@ benchmark_pir_ginger:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month
 benchmark_native_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
@@ -345,7 +344,7 @@ benchmark_native_ginger:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month
 benchmark_gnur_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -360,7 +359,7 @@ benchmark_gnur_ginger:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month
 benchmark_fastr_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
@@ -376,4 +375,4 @@ benchmark_fastr_ginger:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 1 month
+    expire_in: 6 month

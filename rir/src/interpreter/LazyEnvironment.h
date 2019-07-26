@@ -23,26 +23,42 @@ struct LazyEnvironment
     LazyEnvironment() = delete;
     LazyEnvironment(const LazyEnvironment&) = delete;
     LazyEnvironment& operator=(const LazyEnvironment&) = delete;
+    constexpr static size_t ArgOffset = 2;
 
-    LazyEnvironment(SEXP parent, Immediate* names, size_t nargs, void* frameEnd,
-                    InterpreterInstance* ctx)
-        : RirRuntimeObject(sizeof(LazyEnvironment), nargs + 1),
-          frameEnd(frameEnd), nargs(nargs), names(names) {
-        setEntry(0, parent);
-        for (long i = nargs - 1; i >= 0; --i) {
-            setArg(i, ostack_pop(ctx));
-        }
-    }
+    LazyEnvironment(SEXP parent, size_t nargs, Immediate* names)
+        : RirRuntimeObject(sizeof(LazyEnvironment), nargs + ArgOffset),
+          nargs(nargs), names(names) {}
 
-    void* frameEnd;
+    SEXP materialized() { return getEntry(0); }
+    void materialized(SEXP m) { setEntry(0, m); }
+
     size_t nargs;
     Immediate* names;
 
-    SEXP getArg(size_t i) { return getEntry(i + 1); }
-    void setArg(size_t i, SEXP val) { setEntry(i + 1, val); }
+    SEXP getArg(size_t i) { return getEntry(i + ArgOffset); }
+    void setArg(size_t i, SEXP val) { setEntry(i + ArgOffset, val); }
 
-    SEXP getParent() { return getEntry(0); }
+    SEXP getParent() { return getEntry(1); }
+
+    static LazyEnvironment* BasicNew(SEXP parent, size_t nargs,
+                                     Immediate* names) {
+        SEXP wrapper =
+            Rf_allocVector(EXTERNALSXP, sizeof(LazyEnvironment) +
+                                            sizeof(SEXP) * (nargs + ArgOffset));
+        auto le = new (DATAPTR(wrapper))
+            LazyEnvironment(parent, nargs, (Immediate*)names);
+        le->setEntry(1, parent);
+        return le;
+    }
+
+    static LazyEnvironment* New(SEXP parent, size_t nargs, Immediate* names) {
+        auto le = BasicNew(parent, nargs, names);
+        for (long i = nargs - 1; i >= 0; --i)
+            le->setArg(i, ostack_pop(ctx));
+        return le;
+    }
 };
+
 } // namespace rir
 
 #endif

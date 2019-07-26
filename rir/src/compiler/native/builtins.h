@@ -53,9 +53,12 @@ struct NativeBuiltins {
 
     static NativeBuiltin setCar;
 
+    static NativeBuiltin externalsxpSetEntry;
+
     static NativeBuiltin error;
 
     static NativeBuiltin createEnvironment;
+    static NativeBuiltin createStubEnvironment;
     static NativeBuiltin createPromise;
     static NativeBuiltin createClosure;
 

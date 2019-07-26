@@ -6,6 +6,7 @@
 #include "compiler/analysis/liveness.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/visitor.h"
+#include "interpreter/LazyEnvironment.h"
 #include "interpreter/instance.h"
 #include "jit/jit-dump.h"
 #include "jit/jit-value.h"
@@ -26,6 +27,9 @@ static const auto tagOfs_ = (size_t) & ((SEXP)0) -> u.listsxp.tagval;
 static const auto prValueOfs = (size_t) & ((SEXP)0) -> u.promsxp.value;
 static const auto stackCellValueOfs = (size_t) & ((R_bcstack_t*)0) -> u.sxpval;
 static const auto sxpinfofOfs = (size_t) & ((SEXP)0) -> sxpinfo;
+static const auto dataptrOfs = (size_t)STDVEC_DATAPTR((SEXP)0);
+static const auto extsxpMagicOfs =
+    (size_t) & ((rir_header*)STDVEC_DATAPTR((SEXP)0)) -> magic;
 
 struct Representation {
     enum Type {
@@ -122,6 +126,12 @@ class PirCodeFunction : public jit_function {
     jit_value cdr(jit_value x);
     jit_value tag(jit_value x);
     void setCar(jit_value x, jit_value y);
+
+    void externalsxpSetEntry(jit_value x, int i, jit_value y);
+    jit_value externalsxpGetEntry(jit_value x, int i);
+
+    void envStubSet(jit_value x, int i, jit_value y);
+    jit_value envStubGet(jit_value x, int i);
 
     jit_value call(const NativeBuiltin&, const std::vector<jit_value>&);
 
@@ -614,6 +624,72 @@ void PirCodeFunction::setCar(jit_value x, jit_value y) {
                  [&]() {
                      call(NativeBuiltins::setCar, {{x, y}});
                  });
+}
+
+void PirCodeFunction::externalsxpSetEntry(jit_value x, int i, jit_value y) {
+#ifdef ENABLE_SLOWASSERT
+    auto tp = sexptype(x);
+    insn_assert(tp == new_constant(EXTERNALSXP),
+                "externalsxpGetEntry on something which is not an EXTERNALSXP");
+#endif
+    writeBarrier(x, y,
+                 [&]() {
+                     auto ofset =
+                         insn_load_relative(x, dataptrOfs, jit_type_uint);
+                     auto pos = new_constant(dataptrOfs) + ofset +
+                                new_constant(i * sizeof(SEXP));
+                     insn_store_relative(x + pos, 0, y);
+                 },
+                 [&]() {
+                     call(NativeBuiltins::externalsxpSetEntry,
+                          {{x, new_constant(i), y}});
+                 });
+}
+
+jit_value PirCodeFunction::externalsxpGetEntry(jit_value x, int i) {
+#ifdef ENABLE_SLOWASSERT
+    auto tp = sexptype(x);
+    insn_assert(tp == new_constant(EXTERNALSXP),
+                "externalsxpGetEntry on something which is not an EXTERNALSXP");
+#endif
+    auto ofset = insn_load_relative(x, dataptrOfs, jit_type_uint);
+    auto pos =
+        new_constant(dataptrOfs) + ofset + new_constant(i * sizeof(SEXP));
+    return insn_load_relative(x + pos, 0, sxp);
+}
+
+jit_value PirCodeFunction::envStubGet(jit_value x, int i) {
+    // We could use externalsxpGetEntry, but this is faster
+#ifdef ENABLE_SLOWASSERT
+    auto magic = insn_load_relative(x, extsxpMagicOfs, jit_type_uint);
+    insn_assert(magic == new_constant(LAZY_ENVIRONMENT_MAGIC),
+                "envStubGet on something which is not an env stub");
+#endif
+    auto offset = dataptrOfs + sizeof(LazyEnvironment) +
+                  sizeof(SEXP) * LazyEnvironment::ArgOffset;
+    offset += i * sizeof(SEXP);
+    return insn_load_relative(x, offset, sxp);
+}
+
+void PirCodeFunction::envStubSet(jit_value x, int i, jit_value y) {
+    // We could use externalsxpSetEntry, but this is faster
+    writeBarrier(
+        x, y,
+        [&]() {
+#ifdef ENABLE_SLOWASSERT
+            auto magic = insn_load_relative(x, extsxpMagicOfs, jit_type_uint);
+            insn_assert(magic == new_constant(LAZY_ENVIRONMENT_MAGIC),
+                        "envStubSet on something which is not an env stub");
+#endif
+            auto offset = dataptrOfs + sizeof(LazyEnvironment) +
+                          sizeof(SEXP) * LazyEnvironment::ArgOffset;
+            offset += i * sizeof(SEXP);
+            insn_store_relative(x, offset, y);
+        },
+        [&]() {
+            call(NativeBuiltins::externalsxpSetEntry,
+                 {{x, new_constant(i + LazyEnvironment::ArgOffset), y}});
+        });
 }
 
 jit_value PirCodeFunction::car(jit_value x) {
@@ -1331,10 +1407,10 @@ void PirCodeFunction::build() {
             case Tag::LdVar: {
                 auto ld = LdVar::Cast(i);
 
-                // TODO support env stubs
                 auto env = MkEnv::Cast(ld->env());
                 if (env && env->stub) {
-                    success = false;
+                    setVal(i, envStubGet(loadSxp(i, env),
+                                         env->indexOf(ld->varName)));
                     break;
                 }
 
@@ -1411,14 +1487,17 @@ void PirCodeFunction::build() {
                 auto st = StVar::Cast(i);
                 auto environment = MkEnv::Cast(st->env());
 
+                if (environment && environment->stub) {
+                    envStubSet(loadSxp(i, environment),
+                               environment->indexOf(st->varName),
+                               loadSxp(i, st->val()));
+                    break;
+                }
+
                 auto setter = NativeBuiltins::stvar;
                 if (st->isStArg)
                     setter = NativeBuiltins::starg;
 
-                if (environment && environment->stub) {
-                    success = false;
-                    break;
-                }
                 if (bindingsCache.count(environment)) {
                     auto offset = bindingsCache.at(environment).at(st->varName);
                     auto cache = insn_load_relative(bindingsCacheBase, offset,
@@ -1512,6 +1591,26 @@ void PirCodeFunction::build() {
                 //  (creates normal env for stubs, aborts if any
                 //  stvar/ldvar/isstubenv are present)
                 auto mkenv = MkEnv::Cast(i);
+                auto parent = loadSxp(i, mkenv->env());
+                static std::vector<std::vector<Immediate>> mkEnvStubNames;
+                mkEnvStubNames.push_back({});
+                auto& namesBuffer = mkEnvStubNames.back();
+                for (size_t i = 0; i < mkenv->nLocals(); ++i)
+                    namesBuffer.push_back(Pool::insert(mkenv->varName[i]));
+
+                if (mkenv->stub) {
+                    gcSafepoint(i, 1, true);
+                    auto env = call(NativeBuiltins::createStubEnvironment,
+                                    {parent, new_constant(mkenv->nLocals()),
+                                     new_constant(namesBuffer.data()),
+                                     new_constant(mkenv->context)});
+                    size_t pos = 0;
+                    mkenv->eachLocalVar([&](SEXP name, Value* v) {
+                        envStubSet(env, pos++, loadSxp(i, v));
+                    });
+                    setVal(i, env);
+                    break;
+                }
 
                 gcSafepoint(i, mkenv->nargs() + 1, true);
                 auto arglist = constant(R_NilValue, sxp);
@@ -1525,7 +1624,6 @@ void PirCodeFunction::build() {
                                  {loadSxp(i, v), constant(name, sxp), arglist});
                     }
                 });
-                auto parent = loadSxp(i, mkenv->env());
 
                 setVal(i,
                        call(NativeBuiltins::createEnvironment,
@@ -1536,6 +1634,29 @@ void PirCodeFunction::build() {
                     for (auto b : bindingsCache.at(i))
                         insn_store_relative(bindingsCacheBase, b.second,
                                             new_constant(nullptr));
+                break;
+            }
+
+            case Tag::IsEnvStub: {
+                auto arg = loadSxp(i, i->arg(0).val());
+                jit_label done;
+
+                auto res = jit_value_create(raw(), representationOf(i));
+                store(res, constant(R_FalseValue, representationOf(i)));
+
+                auto magic =
+                    insn_load_relative(arg, extsxpMagicOfs, jit_type_uint);
+                insn_branch_if(magic != new_constant(LAZY_ENVIRONMENT_MAGIC),
+                               done);
+
+                auto materialized = envStubGet(arg, -1);
+                insn_branch_if(materialized != new_constant(nullptr), done);
+
+                store(res, constant(R_TrueValue, representationOf(i)));
+
+                insn_label(done);
+
+                setVal(i, res);
                 break;
             }
 
