@@ -269,22 +269,6 @@ class TheVerifier {
             }
         }
 
-        if (auto cast = CastType::Cast(i)) {
-            auto arg = cast->arg<0>().val();
-            // assertion is:
-            // "input is a promise => output is a promise"
-            // to remove a promise wrapper -- even for eager args -- a force
-            // instruction is needed!
-            if (arg->type.maybePromiseWrapped() &&
-                !cast->type.maybePromiseWrapped()) {
-                std::cerr << "Error at instruction '";
-                i->print(std::cerr);
-                std::cerr
-                    << "': Cannot cast away promise wrapper. need to use Force";
-                ok = false;
-            }
-        }
-
         i->eachArg([&](const InstrArg& a) -> void {
             auto v = a.val();
             auto t = a.type();

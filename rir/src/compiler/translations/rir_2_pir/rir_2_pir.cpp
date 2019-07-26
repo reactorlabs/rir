@@ -316,8 +316,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::record_type_: {
-        if (bc.immediate.typeFeedback.numTypes)
-            at(0)->typeFeedback.merge(bc.immediate.typeFeedback);
+        if (bc.immediate.typeFeedback.numTypes) {
+            auto feedback = bc.immediate.typeFeedback;
+            at(0)->typeFeedback.merge(feedback);
+
+            if (auto force = Force::Cast(at(0))) {
+                auto arg = force->arg(0).val();
+                if (feedback.stateBeforeLastForce ==
+                    ObservedValues::StateBeforeLastForce::value)
+                    arg->typeFeedback = at(0)->typeFeedback;
+                else if (feedback.stateBeforeLastForce ==
+                         ObservedValues::StateBeforeLastForce::evaluatedPromise)
+                    arg->typeFeedback = at(0)->typeFeedback.orPromiseWrapped();
+            }
+        }
         break;
     }
 
