@@ -44,6 +44,10 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     if (auto ld = LdVarSuper::Cast(arg))
                         if (!Env::isPirEnv(ld->env()))
                             trigger = true;
+                    if (i->arg(0).val()->typeFeedback.orPromiseWrapped() ==
+                            i->typeFeedback.orPromiseWrapped() &&
+                        Instruction::Cast(i->arg(0).val()))
+                        i = Instruction::Cast(i->arg(0).val());
                     break;
                 }
                 default: {}
@@ -54,7 +58,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                 if (!seen.isVoid() && !seen.maybeObj() && !i->type.isA(seen)) {
                     if (auto cp = checkpoint.next(i)) {
                         auto assume =
-                            (seen.isA(RType::integer) || seen.isA(RType::real))
+                            (seen.isA(
+                                 PirType(RType::integer).orPromiseWrapped()) ||
+                             seen.isA(PirType(RType::real).orPromiseWrapped()))
                                 ? seen
                                 : i->type.notObject();
                         if (!i->type.isA(assume))
@@ -96,7 +102,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             BBTransform::insertAssume(condition, cp, bb, ip, assumeTrue);
 
             auto cast =
-                new CastType(i, CastType::Downcast, PirType::val(), type);
+                new CastType(i, CastType::Downcast, PirType::any(), type);
             ip = bb->insert(ip, cast);
             ip++;
             i->replaceDominatedUses(cast);
