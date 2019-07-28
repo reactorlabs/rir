@@ -1227,6 +1227,64 @@ void PirCodeFunction::build() {
                     BinopKind::NE);
                 break;
 
+            case Tag::Not: {
+                auto resultRep = representationOf(i);
+                auto argument = i->arg(0).val();
+                auto argumentRep = representationOf(argument);
+                if (argumentRep == Representation::Sexp) {
+                    auto argumentNative = loadSxp(i, argument);
+
+                    jit_value res;
+                    gcSafepoint(i, -1, true);
+                    if (i->hasEnv()) {
+                        res = call(NativeBuiltins::notEnv,
+                                   {argumentNative, loadSxp(i, i->env()),
+                                    new_constant(i->srcIdx)});
+                    } else {
+                        res = call(NativeBuiltins::notOp, {argumentNative});
+                    }
+                    if (resultRep == Representation::Integer)
+                        setVal(i, unboxIntLgl(res));
+                    else
+                        setVal(i, res);
+                    break;
+                }
+
+                jit_label done;
+                jit_label isNa;
+
+                auto checkNa = [&](jit_value v, Representation r) {
+                    if (r == Representation::Integer) {
+                        auto aIsNa = insn_eq(v, new_constant(NA_INTEGER));
+                        insn_branch_if(aIsNa, isNa);
+                    } else if (r == Representation::Real) {
+                        auto aIsNa = insn_ne(v, v);
+                        insn_branch_if(aIsNa, isNa);
+                    } else {
+                        assert(false);
+                    }
+                };
+
+                auto res = jit_value_create(raw(), jit_type_int);
+                auto argumentNative = load(i, argument, argumentRep);
+
+                checkNa(argumentNative, argumentRep);
+
+                store(res, insn_to_not_bool(argumentNative));
+                insn_branch(done);
+
+                insn_label(isNa);
+                // Maybe we need to model R_LogicalNAValue?
+                store(res, new_constant(NA_INTEGER));
+
+                insn_label(done);
+
+                if (resultRep == Representation::Sexp)
+                    setVal(i, boxLgl(i, res));
+                else
+                    setVal(i, res);
+                break;
+            }
             case Tag::Eq:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_eq(a, b); },
