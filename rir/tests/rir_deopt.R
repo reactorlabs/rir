@@ -1,3 +1,6 @@
+if (as.numeric(Sys.getenv("RIR_UNSOUND_ASSUME", unset="0")))
+    quit() # deoptimization won't work
+
 # === modify env
 
 f <- rir.compile(

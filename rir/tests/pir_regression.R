@@ -42,12 +42,14 @@ h()  # aborts if g's environment got elided
 }
 
 # speculative binop with deopt
-rir.compile(function(){
-    f <- rir.compile(function(a) a+2);
-    f(1);
-    f <- pir.compile(f);
-    f(structure(1, class="foo"))
-})()
+if (!as.numeric(Sys.getenv("RIR_UNSOUND_ASSUME", unset="0"))) {
+  rir.compile(function(){
+      f <- rir.compile(function(a) a+2);
+      f(1);
+      f <- pir.compile(f);
+      f(structure(1, class="foo"))
+  })()
+}
 
 
 # inlined frameStates:
@@ -59,21 +61,21 @@ if (Sys.getenv("PIR_DEOPT_CHAOS") != "1" &&
     g <- rir.compile(function(x) h(x))
     h <- rir.compile(function(x) 1+i(x))
     i <- rir.compile(function(x) 40-x)
-    
+
     stopifnot(f(-1) == 42)
     stopifnot(f(-1) == 42)
-    
+
     hc1 = .Call("rir_invocation_count", h)
     ic1 = .Call("rir_invocation_count", i)
     g <- pir.compile(g)
     stopifnot(f(-1) == 42)
-    
+
     ## Assert we are really inlined (ie. h and i are not called)
     hc2 = .Call("rir_invocation_count", h)
     ic2 = .Call("rir_invocation_count", i)
     stopifnot(hc1 == hc2)
     stopifnot(ic1 == ic2)
-    
+
     ## Assert we deopt (ie. base version of h and i are invoked)
     stopifnot(f(structure(-1, class="asdf")) == 42)
     hc3 = .Call("rir_invocation_count", h)
@@ -122,11 +124,11 @@ f <- function(j){
     j <- j
     while (j < 2) {
         c(j)
-        j <- j + 1 
-    }   
+        j <- j + 1
+    }
 }
 g <- function(i) {
-  if (i) 
+  if (i)
     f(0)
   else
     f(2)

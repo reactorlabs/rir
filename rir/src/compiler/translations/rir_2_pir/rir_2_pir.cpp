@@ -2,6 +2,7 @@
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
+#include "../../transform/bb.h"
 #include "../../transform/insert_cast.h"
 #include "../../util/ConvertAssumptions.h"
 #include "../../util/arg_match.h"
@@ -478,12 +479,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 given = ldvar;
             }
 
-            auto t = new Identical(given, expected);
-            pos = bb->insert(pos, t);
-            pos++;
-
-            assumption = new Assume(t, cp);
-            bb->insert(pos, assumption);
+            assumption = BBTransform::insertIdenticalAssume(given, expected, cp,
+                                                            bb, pos);
         }
 
         if (monomorphicBuiltin) {
@@ -528,9 +525,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
             if (!correctOrder || needed < matchedArgs.size()) {
                 monomorphicClosure = false;
-                assert(assumption);
-                // Kill unnecessary speculation
-                assumption->arg<0>().val() = True::instance();
+                // Kill unnecessary speculation (if the assumption doesn't exist
+                // we're already not speculating)
+                if (assumption != NULL)
+                    assumption->arg<0>().val() = True::instance();
             }
 
             missingArgs = needed - matchedArgs.size();

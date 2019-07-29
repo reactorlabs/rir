@@ -53,12 +53,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
             ip++;
         }
 
-        auto test = new Identical(given, expected);
-        ip = bb->insert(ip, test);
-        ip++;
-
-        auto assume = new Assume(test, cp);
-        ip = bb->insert(ip, assume);
+        BBTransform::insertIdenticalAssume(given, expected, cp, bb, ip);
         ip++;
 
         return ip;

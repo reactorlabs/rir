@@ -1,5 +1,6 @@
 #include "bb.h"
 #include "../analysis/dead.h"
+#include "../parameter.h"
 #include "../pir/pir_impl.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
@@ -195,22 +196,35 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     return split;
 }
 
-void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
-                               BB::Instrs::iterator& position,
-                               bool assumePositive) {
-    position = bb->insert(position, (Instruction*)condition);
-    auto assume = new Assume(condition, cp);
-    if (!assumePositive)
-        assume->Not();
-    position = bb->insert(position + 1, assume);
-    position++;
-};
+Assume* BBTransform::insertAssume(Instruction* condition, Checkpoint* cp,
+                                  BB* bb, BB::Instrs::iterator& position,
+                                  bool assumePositive) {
+    if (Parameter::RIR_UNSOUND_ASSUME) {
+        // don't actually insert the assume
+        delete condition; // we don't actually need it
+        return NULL;
+    } else {
+        position = bb->insert(position, condition);
+        auto assume = new Assume(condition, cp);
+        if (!assumePositive)
+            assume->Not();
+        position = bb->insert(position + 1, assume);
+        position++;
+        return assume;
+    }
+}
 
-void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
-                               bool assumePositive) {
+Assume* BBTransform::insertAssume(Instruction* condition, Checkpoint* cp,
+                                  bool assumePositive) {
     auto contBB = cp->bb()->trueBranch();
     auto contBegin = contBB->begin();
-    insertAssume(condition, cp, contBB, contBegin, assumePositive);
+    return insertAssume(condition, cp, contBB, contBegin, assumePositive);
+}
+
+Assume* BBTransform::insertIdenticalAssume(Value* given, Value* expected,
+                                           Checkpoint* cp, BB* bb,
+                                           BB::Instrs::iterator& position) {
+    return insertAssume(new Identical(given, expected), cp, bb, position, true);
 }
 
 void BBTransform::mergeRedundantBBs(Code* closure) {

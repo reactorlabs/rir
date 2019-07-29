@@ -81,6 +81,13 @@ completely disables the PIR optimizer. As follows are the different Options avai
         n          serialize and deserialize the dispatch table on every `n`th
                    RIR call. WARNING: This sometimes prevents optimization
 
+#### Library Optimization
+
+    RIR_UNSOUND_ASSUME=
+        1          when compiling closures, don't insert any assumption checks.
+                   Furthermore, mark properties (such as strictness) even if
+                   they can't be proved, if they were never recorded.
+
 ### Disassembly annotations
 
 #### Assumptions

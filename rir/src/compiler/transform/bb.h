@@ -8,6 +8,7 @@
 namespace rir {
 namespace pir {
 
+class Assume;
 class FrameState;
 class Checkpoint;
 class BBTransform {
@@ -22,11 +23,14 @@ class BBTransform {
                            BB::Instrs::iterator position, Value* condition,
                            bool expected, BB* deoptBlock,
                            const std::string& debugMesage);
-    static void insertAssume(Value* condition, Checkpoint* cp, BB* bb,
-                             BB::Instrs::iterator& position,
-                             bool assumePositive);
-    static void insertAssume(Value* condition, Checkpoint* cp,
-                             bool assumePositive);
+    static Assume* insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
+                                BB::Instrs::iterator& position,
+                                bool assumePositive);
+    static Assume* insertAssume(Instruction* condition, Checkpoint* cp,
+                                bool assumePositive);
+    static Assume* insertIdenticalAssume(Value* given, Value* expected,
+                                         Checkpoint* cp, BB* bb,
+                                         BB::Instrs::iterator& position);
 
     static void mergeRedundantBBs(Code* closure);
 

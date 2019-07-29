@@ -158,8 +158,8 @@ stopifnot(pir.check(function() {
     q <- 1
   else {
     if (a)
-      q <- 3 
-    else 
+      q <- 3
+    else
       q <- 2
   }
   q
@@ -169,8 +169,8 @@ stopifnot(pir.check(function(a) {
     q <- 1
   else {
     if (a)
-      q <- 3 
-    else 
+      q <- 3
+    else
       q <- 2
   }
   q
@@ -346,7 +346,7 @@ stopifnot(pir.check(function() {
     x <- x + i
   x
 }, NoAsInt))
-                     
+
 # More dead instruction removal
 stopifnot(!pir.check(function(x) {
   x == 4

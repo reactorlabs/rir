@@ -18,7 +18,7 @@ mandelbrot <- function() {
 
     size <- 10
     while (y < size) {
-      ci = (2.0 * y / size) - 1.0 
+      ci = (2.0 * y / size) - 1.0
       x = 0
 
       while (x < size) {
@@ -27,7 +27,7 @@ mandelbrot <- function() {
         zi   = 0.0
         zizi = 0.0
         cr = (2.0 * x / size) - 1.5
-        
+
         z = 0
         notDone = TRUE
         escape = 0

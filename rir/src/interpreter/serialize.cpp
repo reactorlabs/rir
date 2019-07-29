@@ -9,6 +9,8 @@ bool pir::Parameter::RIR_PRESERVE =
     getenv("RIR_PRESERVE") ? atoi(getenv("RIR_PRESERVE")) : false;
 unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
     getenv("RIR_SERIALIZE_CHAOS") ? atoi(getenv("RIR_SERIALIZE_CHAOS")) : 0;
+bool pir::Parameter::RIR_UNSOUND_ASSUME =
+    getenv("RIR_UNSOUND_ASSUME") ? atoi(getenv("RIR_UNSOUND_ASSUME")) : false;
 
 static bool oldPreserve = false;
 
