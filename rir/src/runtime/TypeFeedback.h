@@ -67,7 +67,7 @@ struct ObservedValues {
     ObservedValues()
         : numTypes(0), stateBeforeLastForce(StateBeforeLastForce::unknown) {}
 
-    RIR_INLINE void record(SEXP e, StateBeforeLastForce s) {
+    RIR_INLINE void record(SEXP e) {
         ObservedType type(e);
         if (numTypes < MaxTypes) {
             int i = 0;
@@ -76,8 +76,6 @@ struct ObservedValues {
                     break;
             if (i == numTypes)
                 seen[numTypes++] = type;
-            if (stateBeforeLastForce < s)
-                stateBeforeLastForce = s;
         }
     }
 };

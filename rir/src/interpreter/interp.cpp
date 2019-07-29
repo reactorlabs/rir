@@ -1525,25 +1525,32 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         if (e != env)
             env = e;
     };
+
+    // This is used in loads for recording if the loaded value was a promise
+    // and if it was forced. Looks at the next instruction, if it's a force,
+    // marks how this load behaved.
+    auto recordForceBehavior = [&](SEXP s) {
+        // Bail if this load not recorded or we are in already optimized code
+        if (*pc != Opcode::record_type_)
+            return;
+
+        ObservedValues::StateBeforeLastForce state =
+            ObservedValues::StateBeforeLastForce::unknown;
+        if (TYPEOF(s) != PROMSXP)
+            state = ObservedValues::StateBeforeLastForce::value;
+        else if (PRVALUE(s) != R_UnboundValue)
+            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
+        else
+            state = ObservedValues::StateBeforeLastForce::promise;
+
+        ObservedValues* feedback = (ObservedValues*)(pc + 1);
+        if (feedback->stateBeforeLastForce < state)
+            feedback->stateBeforeLastForce = state;
+    };
+
     R_Visible = TRUE;
 
     checkUserInterrupt();
-
-    // This flag is used to record if loading had to force a promise or not.
-    // Needed to pass the information between two instructions, namely ldvar_
-    // variants and record_type_
-    ObservedValues::StateBeforeLastForce stateBeforeLastForce =
-        ObservedValues::StateBeforeLastForce::unknown;
-    auto recordForceBehavior = [&stateBeforeLastForce](SEXP s) {
-        if (TYPEOF(s) != PROMSXP)
-            stateBeforeLastForce = ObservedValues::StateBeforeLastForce::value;
-        else if (PRVALUE(s) != R_UnboundValue)
-            stateBeforeLastForce =
-                ObservedValues::StateBeforeLastForce::evaluatedPromise;
-        else
-            stateBeforeLastForce =
-                ObservedValues::StateBeforeLastForce::promise;
-    };
 
     // main loop
     BEGIN_MACHINE {
@@ -2128,7 +2135,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(record_type_) {
             ObservedValues* feedback = (ObservedValues*)pc;
             SEXP t = ostack_top(ctx);
-            feedback->record(t, stateBeforeLastForce);
+            feedback->record(t);
             pc += sizeof(ObservedValues);
             NEXT();
         }
