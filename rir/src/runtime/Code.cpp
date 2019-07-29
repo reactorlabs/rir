@@ -9,12 +9,9 @@
 #include <sstream>
 
 namespace rir {
-UUID uidHash = UUID::random();
 std::unordered_map<UUID, Code*> allCodes;
 
-void Code::modifyUidHash() { uidHash = UUID::random(); }
-
-Code* Code::withUid(UUID uid) { return allCodes.at(uid ^ uidHash); }
+Code* Code::withUid(UUID uid) { return allCodes.at(uid); }
 
 // cppcheck-suppress uninitMemberVar symbol=data
 Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
@@ -120,7 +117,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
 void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, size());
     // Header
-    (uid ^ uidHash).serialize(refTable, out);
+    uid.serialize(refTable, out);
     OutInteger(out, funInvocationCount);
     OutInteger(out, src);
     OutInteger(out, stackLength);
