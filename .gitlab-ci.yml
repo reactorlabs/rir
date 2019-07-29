@@ -119,7 +119,7 @@ tests_fullverify:
     - bin/tests
     - bin/gnur-make-tests check-devel
 
-# Test particular features, like deoptimization
+# Test particular features, like deoptimization and serialization
 test_features:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
@@ -135,6 +135,8 @@ test_features:
     - PIR_DEOPT_CHAOS=1 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
     - PIR_NATIVE_BACKEND=1 ./bin/gnur-make-tests check
+    - RIR_SERIALIZE_CHAOS=1 ./bin/tests
+    - RIR_SERIALIZE_CHAOS=10 ./bin/tests
 
 # Run ubsan and gc torture
 test_sanitize:
