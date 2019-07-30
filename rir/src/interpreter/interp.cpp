@@ -1280,6 +1280,32 @@ RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
     ostack_push(ctx, res);
 }
 
+bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
+    SEXP val = R_findVarLocInFrame(environment, symbol).cell;
+    if (val == NULL) {
+        if (code)
+            Rf_errorcall(getSrcAt(code, pc - 1, globalContext()),
+                         "'missing' can only be used for arguments");
+        else
+            Rf_errorcall(R_NilValue,
+                         "'missing' can only be used for arguments");
+    }
+
+    if (MISSING(val) || CAR(val) == R_MissingArg)
+        return true;
+
+    val = CAR(val);
+    if (TYPEOF(val) != PROMSXP)
+        return false;
+
+    val = findRootPromise(val);
+    if (!isSymbol(PREXPR(val)))
+        return false;
+    else {
+        return R_isMissing(PREXPR(val), PRENV(val));
+    }
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
@@ -2901,31 +2927,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SLOWASSERT(!DDVAL(sym));
             assert(env);
-            SEXP val = R_findVarLocInFrame(env, sym).cell;
-            if (val == NULL)
-                Rf_errorcall(getSrcAt(c, pc - 1, ctx),
-                             "'missing' can only be used for arguments");
-
-            if (MISSING(val) || CAR(val) == R_MissingArg) {
-                ostack_push(ctx, R_TrueValue);
-                NEXT();
-            }
-
-            val = CAR(val);
-
-            if (TYPEOF(val) != PROMSXP) {
-                ostack_push(ctx, R_FalseValue);
-                NEXT();
-            }
-
-            val = findRootPromise(val);
-            if (!isSymbol(PREXPR(val)))
-                ostack_push(ctx, R_FalseValue);
-            else {
-                ostack_push(ctx, R_isMissing(PREXPR(val), PRENV(val))
-                                     ? R_TrueValue
-                                     : R_FalseValue);
-            }
+            ostack_push(ctx, isMissing(sym, env, c, pc) ? R_TrueValue
+                                                        : R_FalseValue);
             NEXT();
         }
 

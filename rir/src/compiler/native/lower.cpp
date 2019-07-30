@@ -1133,6 +1133,14 @@ void PirCodeFunction::build() {
                 break;
             }
 
+            case Tag::Missing: {
+                auto missing = Missing::Cast(i);
+                setVal(i, call(NativeBuiltins::isMissing,
+                               {constant(missing->varName, sxp),
+                                loadSxp(i, i->env())}));
+                break;
+            }
+
             case Tag::ChkMissing: {
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp)
@@ -1616,11 +1624,11 @@ void PirCodeFunction::build() {
                 auto arglist = constant(R_NilValue, sxp);
                 mkenv->eachLocalVarRev([&](SEXP name, Value* v) {
                     if (v == MissingArg::instance()) {
-                        arglist = call(NativeBuiltins::consNrTaggedMissing,
+                        arglist = call(NativeBuiltins::createMissingBindingCell,
                                        {constant(name, sxp), arglist});
                     } else {
                         arglist =
-                            call(NativeBuiltins::consNrTagged,
+                            call(NativeBuiltins::createBindingCell,
                                  {loadSxp(i, v), constant(name, sxp), arglist});
                     }
                 });
