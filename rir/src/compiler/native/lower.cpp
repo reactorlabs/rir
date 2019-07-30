@@ -1180,12 +1180,24 @@ void PirCodeFunction::build() {
                 break;
             }
 
-            case Tag::IsObject: {
-                if (representationOf(i) != Representation::Integer) {
+            case Tag::Is: {
+                assert(representationOf(i) == Representation::Integer);
+                auto is = Is::Cast(i);
+                auto arg = i->arg(0).val();
+                if (representationOf(arg) == Representation::Sexp) {
+                    setVal(i,
+                           call(NativeBuiltins::is,
+                                {loadSxp(i, arg), new_constant(is->sexpTag)}));
+                } else {
+                    // How do we implement the fast path? Because in native
+                    // representations we may have lost the real representation
                     success = false;
-                    break;
                 }
+                break;
+            }
 
+            case Tag::IsObject: {
+                assert(representationOf(i) == Representation::Integer);
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp)
                     setVal(i, isObj(loadSxp(i, arg)));

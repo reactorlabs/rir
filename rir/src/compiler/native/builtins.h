@@ -77,6 +77,7 @@ struct NativeBuiltins {
     static NativeBuiltin binop;
     static NativeBuiltin binopEnv;
 
+    static NativeBuiltin is;
     static NativeBuiltin isMissing;
     static NativeBuiltin asTest;
     static NativeBuiltin asLogical;

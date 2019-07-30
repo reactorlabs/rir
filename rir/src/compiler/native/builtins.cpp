@@ -23,9 +23,13 @@ static jit_type_t sxp4[4] = {sxp, sxp, sxp, sxp};
 static jit_type_t int1[1] = {jit_type_int};
 static jit_type_t double1[1] = {jit_type_float64};
 
+static jit_type_t sxp_uint[2] = {sxp, jit_type_uint};
+
 static jit_type_t sxp2_int[3] = {sxp, sxp, jit_type_int};
 static jit_type_t sxp2_void[3] = {sxp, sxp, jit_type_void_ptr};
+
 static jit_type_t sxp3_int[4] = {sxp, sxp, sxp, jit_type_int};
+
 static jit_type_t sxp3_int2[5] = {sxp, sxp, sxp, jit_type_int, jit_type_int};
 
 static jit_type_t ptr1[1] = {jit_type_void_ptr};
@@ -583,6 +587,17 @@ NativeBuiltin NativeBuiltins::binop = {
     (void*)&binopImpl,
     3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+};
+
+SEXP isImpl(SEXP value, uint32_t type) {
+    return rir::is(value, type) ? R_TrueValue : R_FalseValue;
+}
+
+NativeBuiltin NativeBuiltins::is = {
+    "is",
+    (void*)&isImpl,
+    2,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp_uint, 2, 0),
 };
 
 SEXP isMissingImpl(SEXP symbol, SEXP environment) {
