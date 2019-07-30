@@ -1134,6 +1134,7 @@ void PirCodeFunction::build() {
             }
 
             case Tag::Missing: {
+                assert(representationOf(i) == Representation::Integer);
                 auto missing = Missing::Cast(i);
                 setVal(i, call(NativeBuiltins::isMissing,
                                {constant(missing->varName, sxp),
@@ -1185,9 +1186,39 @@ void PirCodeFunction::build() {
                 auto is = Is::Cast(i);
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp) {
-                    setVal(i,
-                           call(NativeBuiltins::is,
-                                {loadSxp(i, arg), new_constant(is->sexpTag)}));
+                    auto argNative = loadSxp(i, arg);
+                    auto expectedTypeNative = new_constant(is->sexpTag);
+                    jit_value res;
+                    auto typeNative = sexptype(argNative);
+                    switch (is->sexpTag) {
+                    case NILSXP:
+                    case LGLSXP:
+                    case REALSXP:
+                        res = typeNative == expectedTypeNative;
+                        break;
+
+                    case VECSXP: {
+                        auto operandLhs = typeNative == new_constant(VECSXP);
+                        auto operandRhs = typeNative == new_constant(LISTSXP);
+                        res = insn_or(operandLhs, operandRhs);
+                        break;
+                    }
+
+                    case LISTSXP: {
+                        auto operandLhs = typeNative == new_constant(LISTSXP);
+                        auto operandRhs = typeNative == new_constant(NILSXP);
+                        res = insn_or(operandLhs, operandRhs);
+                        break;
+                    }
+
+                    default:
+                        assert(false);
+                        success = false;
+                        break;
+                    }
+
+                    setVal(i, res);
+
                 } else {
                     // How do we implement the fast path? Because in native
                     // representations we may have lost the real representation

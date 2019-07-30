@@ -1280,42 +1280,6 @@ RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
     ostack_push(ctx, res);
 }
 
-bool is(SEXP val, Immediate type) {
-    switch (type) {
-    case NILSXP:
-    case LGLSXP:
-    case REALSXP:
-        return TYPEOF(val) == type;
-        break;
-
-    case VECSXP:
-        return TYPEOF(val) == VECSXP || TYPEOF(val) == LISTSXP;
-        break;
-
-    case LISTSXP:
-        return TYPEOF(val) == LISTSXP || TYPEOF(val) == NILSXP;
-        break;
-
-    case static_cast<Immediate>(TypeChecks::RealNonObject):
-        return TYPEOF(val) == REALSXP && !isObject(val);
-        break;
-    case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
-        return IS_SIMPLE_SCALAR(val, REALSXP);
-        break;
-    case static_cast<Immediate>(TypeChecks::IntegerNonObject):
-        return TYPEOF(val) == INTSXP && !isObject(val);
-        break;
-    case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
-        return IS_SIMPLE_SCALAR(val, INTSXP);
-        break;
-
-    default:
-        assert(false);
-        return false;
-        break;
-    }
-}
-
 bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
     SEXP val = R_findVarLocInFrame(environment, symbol).cell;
     if (val == NULL) {
@@ -2905,7 +2869,40 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_pop(ctx);
             Immediate type = readImmediate();
             advanceImmediate();
-            ostack_push(ctx, is(val, type) ? R_TrueValue : R_FalseValue);
+            bool res;
+            switch (type) {
+            case NILSXP:
+            case LGLSXP:
+            case REALSXP:
+                res = TYPEOF(val) == type;
+                break;
+
+            case VECSXP:
+                res = TYPEOF(val) == VECSXP || TYPEOF(val) == LISTSXP;
+                break;
+
+            case LISTSXP:
+                res = TYPEOF(val) == LISTSXP || TYPEOF(val) == NILSXP;
+                break;
+
+            case static_cast<Immediate>(TypeChecks::RealNonObject):
+                res = TYPEOF(val) == REALSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, REALSXP);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+                res = TYPEOF(val) == INTSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, INTSXP);
+                break;
+
+            default:
+                assert(false);
+                break;
+            }
+            ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
             NEXT();
         }
 
