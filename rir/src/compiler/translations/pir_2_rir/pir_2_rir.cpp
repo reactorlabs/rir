@@ -1130,6 +1130,8 @@ void Pir2Rir::lower(Code* code) {
         }
     });
 
+    BBTransform::mergeRedundantBBs(code);
+
     // Insert Nop into all empty blocks to make life easier
     Visitor::run(code->entry, [&](BB* bb) {
         if (bb->isEmpty())

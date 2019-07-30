@@ -213,6 +213,30 @@ void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
     insertAssume(condition, cp, contBB, contBegin, assumePositive);
 }
 
+void BBTransform::mergeRedundantBBs(Code* closure) {
+    CFG cfg(closure);
+    std::unordered_set<BB*> merge;
+    Visitor::run(closure->entry, [&](BB* bb) {
+        if (bb->isJmp() && cfg.hasSinglePred(bb->next()))
+            merge.insert(bb);
+    });
+    while (!merge.empty()) {
+        auto it = merge.begin();
+        auto bb = *it;
+        auto next = bb->next();
+        if (merge.count(next) == 0)
+            merge.erase(it);
+        auto instr = next->begin();
+        while (instr != next->end()) {
+            instr = next->moveToEnd(instr, bb);
+        }
+        bb->next0 = next->next0;
+        bb->next1 = next->next1;
+        next->next0 = next->next1 = nullptr;
+        delete next;
+    }
+}
+
 void BBTransform::renumber(Code* fun) {
     DominanceGraph dom(fun);
     fun->nextBBId = 0;
