@@ -214,18 +214,39 @@ void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
 }
 
 void BBTransform::mergeRedundantBBs(Code* closure) {
+    // Aggregate all BBs that have 1 successor and that successor
+    // only has 1 predecessor
     CFG cfg(closure);
     std::unordered_set<BB*> merge;
     Visitor::run(closure->entry, [&](BB* bb) {
         if (bb->isJmp() && cfg.hasSinglePred(bb->next()))
             merge.insert(bb);
     });
+
+    // Take each such BB and insert all its successor's instructions
+    // at the end
     while (!merge.empty()) {
         auto it = merge.begin();
         auto bb = *it;
         auto next = bb->next();
-        if (merge.count(next) == 0)
+
+        // Remove the current BB from the todo list, but if its successor is
+        // also to be merged, remove that one instead
+        if (merge.count(next))
+            merge.erase(merge.find(next));
+        else
             merge.erase(it);
+
+        // Fixup phis
+        Visitor::run(next, [&](Instruction* i) {
+            if (auto phi = Phi::Cast(i)) {
+                for (size_t j = 0; j < phi->nargs(); ++j)
+                    if (phi->inputAt(j) == next)
+                        phi->updateInputAt(j, bb);
+            }
+        });
+
+        // Merge
         auto instr = next->begin();
         while (instr != next->end()) {
             instr = next->moveToEnd(instr, bb);
