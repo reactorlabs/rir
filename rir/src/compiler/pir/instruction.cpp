@@ -5,6 +5,7 @@
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
+#include "R/Symbols.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
 #include "utils/capture_out.h"
@@ -457,7 +458,7 @@ void LdFun::printArgs(std::ostream& out, bool tty) const {
         guessedBinding()->printRef(out);
         out << ">, ";
     }
-    if (hint) {
+    if (hint && hint != symbol::ambiguousCallTarget) {
         out << "<" << hint << ">, ";
     }
 }

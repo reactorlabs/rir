@@ -1011,7 +1011,7 @@ class FLIE(Force, 2, Effects::Any()) {
         return getType(input()).forced();
     }
     Effects inferEffects(const GetType& getType) const override final {
-        return getType(input()).maybeLazy() ? effects : Effects::None();
+        return getType(input()).maybeLazy() ? effects : Effect::DependsOnAssume;
     }
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
@@ -1310,7 +1310,7 @@ class FLI(IsType, 1, Effects::None()) {
   public:
     const PirType typeTest;
     IsType(PirType type, Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}),
+        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
           typeTest(type) {}
 
     void printArgs(std::ostream& out, bool tty) const override;
@@ -1974,7 +1974,7 @@ class VLIE(MkEnv, Effects::None()) {
 class FLI(IsObject, 1, Effects::None()) {
   public:
     explicit IsObject(Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
+        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}) {}
 
     size_t gvnBase() const override { return tagHash(); }
 };

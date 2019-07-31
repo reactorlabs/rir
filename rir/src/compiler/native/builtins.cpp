@@ -26,7 +26,9 @@ static jit_type_t double1[1] = {jit_type_float64};
 
 static jit_type_t sxp2_int[3] = {sxp, sxp, jit_type_int};
 static jit_type_t sxp2_void[3] = {sxp, sxp, jit_type_void_ptr};
+
 static jit_type_t sxp3_int[4] = {sxp, sxp, sxp, jit_type_int};
+
 static jit_type_t sxp3_int2[5] = {sxp, sxp, sxp, jit_type_int, jit_type_int};
 
 static jit_type_t ptr1[1] = {jit_type_void_ptr};
@@ -41,26 +43,32 @@ NativeBuiltin NativeBuiltins::consNr = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
 };
 
-static SEXP consNrTaggedImpl(SEXP val, SEXP name, SEXP rest) {
+static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
+    if (val == R_MissingArg)
+        SET_MISSING(res, 2);
     SET_TAG(res, name);
     return res;
 }
 
-NativeBuiltin NativeBuiltins::consNrTagged = {
-    "consNrTagged", (void*)&consNrTaggedImpl, 3,
+NativeBuiltin NativeBuiltins::createBindingCell = {
+    "createBindingCellImpl",
+    (void*)&createBindingCellImpl,
+    3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
 };
 
-static SEXP consNrTaggedMissingImpl(SEXP name, SEXP rest) {
+static SEXP createMissingBindingCellImpl(SEXP name, SEXP rest) {
     SEXP res = CONS_NR(R_MissingArg, rest);
     SET_TAG(res, name);
     SET_MISSING(res, 2);
     return res;
 }
 
-NativeBuiltin NativeBuiltins::consNrTaggedMissing = {
-    "consNrTaggedMissing", (void*)&consNrTaggedMissingImpl, 2,
+NativeBuiltin NativeBuiltins::createMissingBindingCell = {
+    "createMissingBindingCell",
+    (void*)&createMissingBindingCellImpl,
+    2,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
 };
 
@@ -371,7 +379,7 @@ NativeBuiltin NativeBuiltins::newLgl = {
     jit_type_create_signature(jit_abi_cdecl, sxp, int1, 1, 0),
 };
 
-#define BINOP_FALLBACK(op)                                                     \
+#define OPERATION_FALLBACK(op)                                                 \
     do {                                                                       \
         static SEXP prim = NULL;                                               \
         static CCODE blt;                                                      \
@@ -408,6 +416,44 @@ static SEXPREC createFakeCONS(SEXP cdr) {
     return res;
 }
 
+static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
+    SEXP res = nullptr;
+    SEXP arglist = CONS_NR(argument, R_NilValue);
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    PROTECT(arglist);
+    OPERATION_FALLBACK("!");
+    UNPROTECT(1);
+    SLOWASSERT(res);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::notEnv = {
+    "notEnv",
+    (void*)&notEnvImpl,
+    3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+};
+
+static SEXP notImpl(SEXP argument) {
+    SEXP res = nullptr;
+    SEXPREC arglistStruct = createFakeCONS(R_NilValue);
+    arglistStruct.u.listsxp.carval = argument;
+    SEXP arglist = &arglistStruct;
+    SEXP env = R_NilValue;
+    SEXP call = R_NilValue;
+    // Why we do not need a protect here?
+    OPERATION_FALLBACK("!");
+    SLOWASSERT(res);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::notOp = {
+    "not",
+    (void*)&notImpl,
+    3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+};
+
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
                          BinopKind kind) {
     SEXP res = nullptr;
@@ -418,40 +464,40 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
     PROTECT(arglist);
     switch (kind) {
     case BinopKind::ADD:
-        BINOP_FALLBACK("+");
+        OPERATION_FALLBACK("+");
         break;
     case BinopKind::SUB:
-        BINOP_FALLBACK("-");
+        OPERATION_FALLBACK("-");
         break;
     case BinopKind::MUL:
-        BINOP_FALLBACK("*");
+        OPERATION_FALLBACK("*");
         break;
     case BinopKind::DIV:
-        BINOP_FALLBACK("/");
+        OPERATION_FALLBACK("/");
         break;
     case BinopKind::EQ:
-        BINOP_FALLBACK("==");
+        OPERATION_FALLBACK("==");
         break;
     case BinopKind::NE:
-        BINOP_FALLBACK("!=");
+        OPERATION_FALLBACK("!=");
         break;
     case BinopKind::GT:
-        BINOP_FALLBACK(">");
+        OPERATION_FALLBACK(">");
         break;
     case BinopKind::GTE:
-        BINOP_FALLBACK(">=");
+        OPERATION_FALLBACK(">=");
         break;
     case BinopKind::LT:
-        BINOP_FALLBACK("<");
+        OPERATION_FALLBACK("<");
         break;
     case BinopKind::LTE:
-        BINOP_FALLBACK("<=");
+        OPERATION_FALLBACK("<=");
         break;
     case BinopKind::LAND:
-        BINOP_FALLBACK("&&");
+        OPERATION_FALLBACK("&&");
         break;
     case BinopKind::LOR:
-        BINOP_FALLBACK("||");
+        OPERATION_FALLBACK("||");
         break;
     }
     UNPROTECT(1);
@@ -485,42 +531,43 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
         debugBinopImpl = true;
     }
 
+    // Why we do not need a protect here?
     switch (kind) {
     case BinopKind::ADD:
-        BINOP_FALLBACK("+");
+        OPERATION_FALLBACK("+");
         break;
     case BinopKind::SUB:
-        BINOP_FALLBACK("-");
+        OPERATION_FALLBACK("-");
         break;
     case BinopKind::MUL:
-        BINOP_FALLBACK("*");
+        OPERATION_FALLBACK("*");
         break;
     case BinopKind::DIV:
-        BINOP_FALLBACK("/");
+        OPERATION_FALLBACK("/");
         break;
     case BinopKind::EQ:
-        BINOP_FALLBACK("==");
+        OPERATION_FALLBACK("==");
         break;
     case BinopKind::NE:
-        BINOP_FALLBACK("!=");
+        OPERATION_FALLBACK("!=");
         break;
     case BinopKind::GT:
-        BINOP_FALLBACK(">");
+        OPERATION_FALLBACK(">");
         break;
     case BinopKind::GTE:
-        BINOP_FALLBACK(">=");
+        OPERATION_FALLBACK(">=");
         break;
     case BinopKind::LT:
-        BINOP_FALLBACK("<");
+        OPERATION_FALLBACK("<");
         break;
     case BinopKind::LTE:
-        BINOP_FALLBACK("<=");
+        OPERATION_FALLBACK("<=");
         break;
     case BinopKind::LAND:
-        BINOP_FALLBACK("&&");
+        OPERATION_FALLBACK("&&");
         break;
     case BinopKind::LOR:
-        BINOP_FALLBACK("||");
+        OPERATION_FALLBACK("||");
         break;
     }
     SLOWASSERT(res);
@@ -541,6 +588,18 @@ NativeBuiltin NativeBuiltins::binop = {
     (void*)&binopImpl,
     3,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+};
+
+int isMissingImpl(SEXP symbol, SEXP environment) {
+    // TODO: Send the proper src
+    return rir::isMissing(symbol, environment, nullptr, nullptr);
+}
+
+NativeBuiltin NativeBuiltins::isMissing = {
+    "isMissing",
+    (void*)&isMissingImpl,
+    2,
+    jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp2, 2, 0),
 };
 
 int astestImpl(SEXP val) {

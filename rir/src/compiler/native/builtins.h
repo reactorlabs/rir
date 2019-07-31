@@ -48,8 +48,8 @@ struct NativeBuiltins {
     static NativeBuiltin forcePromise;
 
     static NativeBuiltin consNr;
-    static NativeBuiltin consNrTagged;
-    static NativeBuiltin consNrTaggedMissing;
+    static NativeBuiltin createBindingCell;
+    static NativeBuiltin createMissingBindingCell;
 
     static NativeBuiltin ldvar;
     static NativeBuiltin ldvarCacheMiss;
@@ -79,9 +79,13 @@ struct NativeBuiltins {
     static NativeBuiltin call;
     static NativeBuiltin callBuiltin;
 
+    static NativeBuiltin notOp;
+    static NativeBuiltin notEnv;
     static NativeBuiltin binop;
     static NativeBuiltin binopEnv;
 
+    static NativeBuiltin is;
+    static NativeBuiltin isMissing;
     static NativeBuiltin asTest;
     static NativeBuiltin asLogicalBlt;
 

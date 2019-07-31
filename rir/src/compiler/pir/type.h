@@ -240,12 +240,12 @@ struct PirType {
     }
     static constexpr PirType any() { return val().orLazy(); }
 
-    RIR_INLINE bool maybeMissing() const {
+    RIR_INLINE constexpr bool maybeMissing() const {
         if (!isRType())
             return false;
         return t_.r.includes(RType::missing);
     }
-    RIR_INLINE bool maybeLazy() const {
+    RIR_INLINE constexpr bool maybeLazy() const {
         if (!isRType())
             return false;
         return flags_.includes(TypeFlags::lazy);
@@ -264,7 +264,7 @@ struct PirType {
     RIR_INLINE constexpr bool isRType() const {
         return flags_.includes(TypeFlags::rtype);
     }
-    RIR_INLINE bool isRType(const RType& o) const {
+    RIR_INLINE constexpr bool isRType(const RType& o) const {
         return isRType() && t_.r == o;
     }
     RIR_INLINE constexpr bool maybe(RType type) const {
@@ -352,6 +352,8 @@ struct PirType {
     PirType constexpr forced() const {
         if (!maybePromiseWrapped())
             return *this;
+        if (!maybeLazy())
+            return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::promiseWrapped));
         return PirType(
             // forcing can return the missing marker value
             t_.r | RType::missing,

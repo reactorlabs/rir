@@ -316,8 +316,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::record_type_: {
-        if (bc.immediate.typeFeedback.numTypes)
-            at(0)->typeFeedback.merge(bc.immediate.typeFeedback);
+        if (bc.immediate.typeFeedback.numTypes) {
+            auto feedback = bc.immediate.typeFeedback;
+            at(0)->typeFeedback.merge(feedback);
+
+            if (auto force = Force::Cast(at(0))) {
+                auto arg = force->arg(0).val();
+                if (feedback.stateBeforeLastForce ==
+                    ObservedValues::StateBeforeLastForce::value)
+                    arg->typeFeedback = at(0)->typeFeedback;
+                else if (feedback.stateBeforeLastForce ==
+                         ObservedValues::StateBeforeLastForce::evaluatedPromise)
+                    arg->typeFeedback = at(0)->typeFeedback.orPromiseWrapped();
+            }
+        }
         break;
     }
 
@@ -834,7 +846,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     // Currently unused opcodes:
-    case Opcode::brobj_:
     case Opcode::alloc_:
     case Opcode::push_code_:
     case Opcode::set_names_:
@@ -867,7 +878,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldloc_:
     case Opcode::stloc_:
     case Opcode::movloc_:
-    case Opcode::isobj_:
+    case Opcode::istype_:
     case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
@@ -976,11 +987,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 insert(new Branch(v));
                 break;
             }
-            case Opcode::brobj_: {
-                Value* v = insert(new IsObject(cur.stack.top()));
-                insert(new Branch(v));
-                break;
-            }
             case Opcode::beginloop_:
                 log.warn("Cannot compile Function. Unsupported beginloop bc");
                 return nullptr;
@@ -1005,7 +1011,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 insert.setBranch(branch, fall);
                 break;
             case Opcode::brfalse_:
-            case Opcode::brobj_:
                 insert.setBranch(fall, branch);
                 break;
             default:

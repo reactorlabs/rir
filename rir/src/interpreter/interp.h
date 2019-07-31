@@ -19,6 +19,7 @@
 namespace rir {
 SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
                    SEXP callerEnv, InterpreterInstance* ctx);
+bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* op);
 
 inline RCNTXT* getFunctionContext(size_t pos = 0,
                                   RCNTXT* cptr = R_GlobalContext) {

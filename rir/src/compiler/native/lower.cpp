@@ -1134,6 +1134,15 @@ void PirCodeFunction::build() {
                 break;
             }
 
+            case Tag::Missing: {
+                assert(representationOf(i) == Representation::Integer);
+                auto missing = Missing::Cast(i);
+                setVal(i, call(NativeBuiltins::isMissing,
+                               {constant(missing->varName, sxp),
+                                loadSxp(i, i->env())}));
+                break;
+            }
+
             case Tag::ChkMissing: {
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp)
@@ -1155,11 +1164,20 @@ void PirCodeFunction::build() {
                     auto a = loadSxp(i, arg);
                     if (t->typeTest.isA(RType::integer)) {
                         res = insn_eq(sexptype(a), new_constant(INTSXP));
+                    } else if (t->typeTest.isA(PirType(RType::integer)
+                                                   .orPromiseWrapped())) {
+                        a = depromise(a);
+                        res = insn_eq(sexptype(a), new_constant(INTSXP));
                     } else if (t->typeTest.isA(RType::real)) {
+                        res = insn_eq(sexptype(a), new_constant(REALSXP));
+                    } else if (t->typeTest.isA(
+                                   PirType(RType::real).orPromiseWrapped())) {
+                        a = depromise(a);
                         res = insn_eq(sexptype(a), new_constant(REALSXP));
                     } else {
                         t->print(std::cerr, true);
-                        assert(false);
+                        assert(false &&
+                               "Unsupported IsType check in native backend");
                     }
                     if (t->typeTest.isScalar()) {
                         res = insn_and(
@@ -1173,12 +1191,54 @@ void PirCodeFunction::build() {
                 break;
             }
 
-            case Tag::IsObject: {
-                if (representationOf(i) != Representation::Integer) {
-                    success = false;
-                    break;
-                }
+            case Tag::Is: {
+                assert(representationOf(i) == Representation::Integer);
+                auto is = Is::Cast(i);
+                auto arg = i->arg(0).val();
+                if (representationOf(arg) == Representation::Sexp) {
+                    auto argNative = loadSxp(i, arg);
+                    auto expectedTypeNative = new_constant(is->sexpTag);
+                    jit_value res;
+                    auto typeNative = sexptype(argNative);
+                    switch (is->sexpTag) {
+                    case NILSXP:
+                    case LGLSXP:
+                    case REALSXP:
+                        res = typeNative == expectedTypeNative;
+                        break;
 
+                    case VECSXP: {
+                        auto operandLhs = typeNative == new_constant(VECSXP);
+                        auto operandRhs = typeNative == new_constant(LISTSXP);
+                        res = insn_or(operandLhs, operandRhs);
+                        break;
+                    }
+
+                    case LISTSXP: {
+                        auto operandLhs = typeNative == new_constant(LISTSXP);
+                        auto operandRhs = typeNative == new_constant(NILSXP);
+                        res = insn_or(operandLhs, operandRhs);
+                        break;
+                    }
+
+                    default:
+                        assert(false);
+                        success = false;
+                        break;
+                    }
+
+                    setVal(i, res);
+
+                } else {
+                    // How do we implement the fast path? Because in native
+                    // representations we may have lost the real representation
+                    success = false;
+                }
+                break;
+            }
+
+            case Tag::IsObject: {
+                assert(representationOf(i) == Representation::Integer);
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp)
                     setVal(i, isObj(loadSxp(i, arg)));
@@ -1228,6 +1288,64 @@ void PirCodeFunction::build() {
                     BinopKind::NE);
                 break;
 
+            case Tag::Not: {
+                auto resultRep = representationOf(i);
+                auto argument = i->arg(0).val();
+                auto argumentRep = representationOf(argument);
+                if (argumentRep == Representation::Sexp) {
+                    auto argumentNative = loadSxp(i, argument);
+
+                    jit_value res;
+                    gcSafepoint(i, -1, true);
+                    if (i->hasEnv()) {
+                        res = call(NativeBuiltins::notEnv,
+                                   {argumentNative, loadSxp(i, i->env()),
+                                    new_constant(i->srcIdx)});
+                    } else {
+                        res = call(NativeBuiltins::notOp, {argumentNative});
+                    }
+                    if (resultRep == Representation::Integer)
+                        setVal(i, unboxIntLgl(res));
+                    else
+                        setVal(i, res);
+                    break;
+                }
+
+                jit_label done;
+                jit_label isNa;
+
+                auto checkNa = [&](jit_value v, Representation r) {
+                    if (r == Representation::Integer) {
+                        auto aIsNa = insn_eq(v, new_constant(NA_INTEGER));
+                        insn_branch_if(aIsNa, isNa);
+                    } else if (r == Representation::Real) {
+                        auto aIsNa = insn_ne(v, v);
+                        insn_branch_if(aIsNa, isNa);
+                    } else {
+                        assert(false);
+                    }
+                };
+
+                auto res = jit_value_create(raw(), jit_type_int);
+                auto argumentNative = load(i, argument, argumentRep);
+
+                checkNa(argumentNative, argumentRep);
+
+                store(res, insn_to_not_bool(argumentNative));
+                insn_branch(done);
+
+                insn_label(isNa);
+                // Maybe we need to model R_LogicalNAValue?
+                store(res, new_constant(NA_INTEGER));
+
+                insn_label(done);
+
+                if (resultRep == Representation::Sexp)
+                    setVal(i, boxLgl(i, res));
+                else
+                    setVal(i, res);
+                break;
+            }
             case Tag::Eq:
                 compileRelop(
                     i, [&](jit_value a, jit_value b) { return insn_eq(a, b); },
@@ -1559,11 +1677,11 @@ void PirCodeFunction::build() {
                 auto arglist = constant(R_NilValue, sxp);
                 mkenv->eachLocalVarRev([&](SEXP name, Value* v) {
                     if (v == MissingArg::instance()) {
-                        arglist = call(NativeBuiltins::consNrTaggedMissing,
+                        arglist = call(NativeBuiltins::createMissingBindingCell,
                                        {constant(name, sxp), arglist});
                     } else {
                         arglist =
-                            call(NativeBuiltins::consNrTagged,
+                            call(NativeBuiltins::createBindingCell,
                                  {loadSxp(i, v), constant(name, sxp), arglist});
                     }
                 });

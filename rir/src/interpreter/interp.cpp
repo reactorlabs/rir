@@ -1280,6 +1280,32 @@ RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
     ostack_push(ctx, res);
 }
 
+bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
+    SEXP val = R_findVarLocInFrame(environment, symbol).cell;
+    if (val == NULL) {
+        if (code)
+            Rf_errorcall(getSrcAt(code, pc - 1, globalContext()),
+                         "'missing' can only be used for arguments");
+        else
+            Rf_errorcall(R_NilValue,
+                         "'missing' can only be used for arguments");
+    }
+
+    if (MISSING(val) || CAR(val) == R_MissingArg)
+        return true;
+
+    val = CAR(val);
+    if (TYPEOF(val) != PROMSXP)
+        return false;
+
+    val = findRootPromise(val);
+    if (!isSymbol(PREXPR(val)))
+        return false;
+    else {
+        return R_isMissing(PREXPR(val), PRENV(val));
+    }
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
@@ -1525,6 +1551,29 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         if (e != env)
             env = e;
     };
+
+    // This is used in loads for recording if the loaded value was a promise
+    // and if it was forced. Looks at the next instruction, if it's a force,
+    // marks how this load behaved.
+    auto recordForceBehavior = [&](SEXP s) {
+        // Bail if this load not recorded or we are in already optimized code
+        if (*pc != Opcode::record_type_)
+            return;
+
+        ObservedValues::StateBeforeLastForce state =
+            ObservedValues::StateBeforeLastForce::unknown;
+        if (TYPEOF(s) != PROMSXP)
+            state = ObservedValues::StateBeforeLastForce::value;
+        else if (PRVALUE(s) != R_UnboundValue)
+            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
+        else
+            state = ObservedValues::StateBeforeLastForce::promise;
+
+        ObservedValues* feedback = (ObservedValues*)(pc + 1);
+        if (feedback->stateBeforeLastForce < state)
+            feedback->stateBeforeLastForce = state;
+    };
+
     R_Visible = TRUE;
 
     checkUserInterrupt();
@@ -1734,6 +1783,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -1774,6 +1824,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -1818,6 +1869,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             res = Rf_findVar(sym, env);
 
+            recordForceBehavior(res);
+
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
@@ -1852,6 +1905,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -1917,6 +1971,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -1959,6 +2014,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             // if promise, evaluate & return
+            recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
@@ -2841,14 +2897,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(is_) {
             SEXP val = ostack_pop(ctx);
-            Immediate i = readImmediate();
+            Immediate type = readImmediate();
             advanceImmediate();
             bool res;
-            switch (i) {
+            switch (type) {
             case NILSXP:
             case LGLSXP:
             case REALSXP:
-                res = TYPEOF(val) == i;
+                res = TYPEOF(val) == type;
                 break;
 
             case VECSXP:
@@ -2858,20 +2914,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             case LISTSXP:
                 res = TYPEOF(val) == LISTSXP || TYPEOF(val) == NILSXP;
                 break;
-
-            case static_cast<Immediate>(TypeChecks::RealNonObject):
-                res = TYPEOF(val) == REALSXP && !isObject(val);
-                break;
-            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
-                res = IS_SIMPLE_SCALAR(val, REALSXP);
-                break;
-            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
-                res = TYPEOF(val) == INTSXP && !isObject(val);
-                break;
-            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
-                res = IS_SIMPLE_SCALAR(val, INTSXP);
-                break;
-
             default:
                 assert(false);
                 res = false;
@@ -2881,9 +2923,64 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(isobj_) {
+        INSTRUCTION(istype_) {
             SEXP val = ostack_pop(ctx);
-            ostack_push(ctx, isObject(val) ? R_TrueValue : R_FalseValue);
+            Immediate i = readImmediate();
+            advanceImmediate();
+            bool res;
+            switch (i) {
+
+            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+                res = TYPEOF(val) == INTSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerNonObjectWrapped):
+                if (TYPEOF(val) == PROMSXP)
+                    val = PRVALUE(val);
+                res = TYPEOF(val) == INTSXP && !isObject(val);
+                break;
+
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, INTSXP);
+                break;
+            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalarWrapped):
+                if (TYPEOF(val) == PROMSXP)
+                    val = PRVALUE(val);
+                res = IS_SIMPLE_SCALAR(val, INTSXP);
+                break;
+
+            case static_cast<Immediate>(TypeChecks::RealNonObject):
+                res = TYPEOF(val) == REALSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::RealNonObjectWrapped):
+                if (TYPEOF(val) == PROMSXP)
+                    val = PRVALUE(val);
+                res = TYPEOF(val) == REALSXP && !isObject(val);
+                break;
+
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, REALSXP);
+                break;
+            case static_cast<Immediate>(TypeChecks::RealSimpleScalarWrapped):
+                if (TYPEOF(val) == PROMSXP)
+                    val = PRVALUE(val);
+                res = IS_SIMPLE_SCALAR(val, REALSXP);
+                break;
+
+            case static_cast<Immediate>(TypeChecks::IsObject):
+                res = isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::IsObjectWrapped):
+                if (TYPEOF(val) == PROMSXP)
+                    val = PRVALUE(val);
+                res = isObject(val);
+                break;
+
+            default:
+                assert(false);
+                break;
+            }
+            ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
+
             NEXT();
         }
 
@@ -2901,31 +2998,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SLOWASSERT(!DDVAL(sym));
             assert(env);
-            SEXP val = R_findVarLocInFrame(env, sym).cell;
-            if (val == NULL)
-                Rf_errorcall(getSrcAt(c, pc - 1, ctx),
-                             "'missing' can only be used for arguments");
-
-            if (MISSING(val) || CAR(val) == R_MissingArg) {
-                ostack_push(ctx, R_TrueValue);
-                NEXT();
-            }
-
-            val = CAR(val);
-
-            if (TYPEOF(val) != PROMSXP) {
-                ostack_push(ctx, R_FalseValue);
-                NEXT();
-            }
-
-            val = findRootPromise(val);
-            if (!isSymbol(PREXPR(val)))
-                ostack_push(ctx, R_FalseValue);
-            else {
-                ostack_push(ctx, R_isMissing(PREXPR(val), PRENV(val))
-                                     ? R_TrueValue
-                                     : R_FalseValue);
-            }
+            ostack_push(ctx, isMissing(sym, env, c, pc) ? R_TrueValue
+                                                        : R_FalseValue);
             NEXT();
         }
 
@@ -2933,17 +3007,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_top(ctx);
             if (val == R_MissingArg)
                 Rf_error("argument is missing, with no default");
-            NEXT();
-        }
-
-        INSTRUCTION(brobj_) {
-            JumpOffset offset = readJumpOffset();
-            advanceJump();
-            if (isObject(ostack_top(ctx))) {
-                checkUserInterrupt();
-                pc += offset;
-            }
-            PC_BOUNDSCHECK(pc, c);
             NEXT();
         }
 
