@@ -35,7 +35,9 @@ SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP, SEXP);
 
 SEXP argsLazyCreation(void* rirDataWrapper);
 
-SEXP createLegacyArgsListFromStackValues(CallContext& call, bool eagerCallee,
+SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
+                                         const Immediate* names,
+                                         bool eagerCallee,
                                          InterpreterInstance* ctx);
 
 SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,

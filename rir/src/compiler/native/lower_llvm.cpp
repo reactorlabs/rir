@@ -130,11 +130,7 @@ class LowerFunctionLLVM {
           needsEnsureNamed(needsEnsureNamed), builder(C), MDB(C), cfg(code),
           liveness(code->nextBBId, cfg), numLocals(liveness.maxLive) {
 
-        std::vector<Type*> args(
-            {t::voidPtr, t::voidPtr, t::stackCellPtr, t::SEXP, t::SEXP});
-        FunctionType* signature = FunctionType::get(t::SEXP, args, false);
-
-        fun = JitLLVM::declare(name, signature);
+        fun = JitLLVM::declare(name, t::nativeFunction);
         // prevent Wunused
         this->cls->size();
         this->promMap.size();
@@ -184,14 +180,12 @@ class LowerFunctionLLVM {
 
     void setVisible(int i);
 
-    std::array<std::string, 5> argNames = {
-        {"code", "ctx", "args", "env", "closure"}};
+    std::array<std::string, 4> argNames = {{"code", "args", "env", "closure"}};
     std::vector<llvm::Value*> args;
     llvm::Value* paramCode() { return args[0]; }
-    llvm::Value* paramCtx() { return args[1]; }
-    llvm::Value* paramArgs() { return args[2]; }
-    llvm::Value* paramEnv() { return args[3]; }
-    llvm::Value* paramClosure() { return args[4]; }
+    llvm::Value* paramArgs() { return args[1]; }
+    llvm::Value* paramEnv() { return args[2]; }
+    llvm::Value* paramClosure() { return args[3]; }
 
     llvm::Value* c(void* i) {
         return llvm::ConstantInt::get(C, APInt(64, (intptr_t)i));
@@ -1236,8 +1230,7 @@ bool LowerFunctionLLVM::tryCompile() {
         arg++;
     }
 
-    constantpool =
-        builder.CreateBitCast(paramCtx(), PointerType::get(t::SEXP, 0));
+    constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
     constantpool = builder.CreateGEP(constantpool, c(1));
 
     if (numLocals > 0)
@@ -1453,7 +1446,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                    constant(b->blt, t::SEXP),
                                    constant(symbol::delayedEnv, t::SEXP),
                                    c(b->nCallArgs()),
-                                   paramCtx(),
                                });
                        }));
                 break;
@@ -1471,7 +1463,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                            constant(b->blt, t::SEXP),
                                            loadSxp(i, b->env()),
                                            c(b->nCallArgs()),
-                                           paramCtx(),
                                        });
                        }));
                 break;
@@ -1489,8 +1480,64 @@ bool LowerFunctionLLVM::tryCompile() {
                                            loadSxp(i, b->cls()),
                                            loadSxp(i, b->env()),
                                            c(b->nCallArgs()),
-                                           paramCtx(),
                                        });
+                       }));
+                break;
+            }
+
+            case Tag::StaticCall: {
+                auto calli = StaticCall::Cast(i);
+                auto target = calli->tryDispatch();
+                auto bestTarget = calli->tryOptimisticDispatch();
+                std::vector<Value*> args;
+                calli->eachCallArg([&](Value* v) { args.push_back(v); });
+
+                if (target == bestTarget) {
+                    auto callee = target->owner()->rirClosure();
+                    auto dt = DispatchTable::check(BODY(callee));
+                    assert(cls);
+                    rir::Function* nativeTarget = nullptr;
+                    for (size_t i = 0; i < dt->size(); i++) {
+                        auto entry = dt->get(i);
+                        if (entry->signature().assumptions ==
+                                target->assumptions() &&
+                            entry->signature().numArguments >= args.size()) {
+                            nativeTarget = entry;
+                        }
+                    }
+                    if (nativeTarget && nativeTarget->body()->nativeCode) {
+                        auto missing = nativeTarget->signature().numArguments -
+                                       args.size();
+                        for (size_t i = 0; i < missing; ++i)
+                            args.push_back(MissingArg::instance());
+
+                        auto res = withCallFrame(i, args, [&]() {
+                            return call(NativeBuiltins::nativeCallTrampoline,
+                                        {
+                                            constant(callee, t::SEXP),
+                                            builder.CreateIntToPtr(
+                                                c(nativeTarget), t::voidPtr),
+                                            c(calli->srcIdx),
+                                            loadSxp(i, calli->env()),
+                                            c(args.size()),
+                                        });
+                        });
+                        setVal(i, res);
+                        break;
+                    }
+                }
+
+                setVal(i, withCallFrame(i, args, [&]() -> llvm::Value* {
+                           return call(
+                               NativeBuiltins::call,
+                               {
+                                   paramCode(),
+                                   c(calli->srcIdx),
+                                   builder.CreateIntToPtr(
+                                       c(calli->cls()->rirClosure()), t::SEXP),
+                                   loadSxp(i, calli->env()),
+                                   c(calli->nCallArgs()),
+                               });
                        }));
                 break;
             }

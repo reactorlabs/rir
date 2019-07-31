@@ -47,7 +47,7 @@ static unsigned pad4(unsigned sizeInBytes) {
 
 struct InterpreterInstance;
 struct Code;
-typedef SEXP (*NativeCode)(Code*, InterpreterInstance*, void*, SEXP, SEXP);
+typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
 
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
