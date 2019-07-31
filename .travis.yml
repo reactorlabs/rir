@@ -2,7 +2,7 @@ language: cpp
 
 # Use linux unless specified otherwise
 os: linux
-dist: trusty
+dist: bionic
 
 matrix:
   include:
@@ -27,11 +27,12 @@ matrix:
 
       compiler: clang
 
-    - env:
-        - CXX_OVERRIDE=g++-7
-        - CC_OVERRIDE=gcc-7
-        - CHECK=check
-        - BUILD=release
+      # bionic containers are broken and older ubuntu have some linking issue with ubuntu :(
+      #    - env:
+      #        - CHECK=check
+      #        - BUILD=release
+      #        - CXX_OVERRIDE=g++
+      #        - CC_OVERRIDE=gcc
 
 addons:
   apt:
@@ -70,9 +71,10 @@ addons:
       - openjdk-11-jre
       - openjdk-11-jre-headless
       - texinfo
-      - g++-7
+      - texi2html
+      - g++
       - xdg-utils
-      - gfortran-7
+      - gfortran
       - subversion
       - make
       - r-base-dev
@@ -112,6 +114,7 @@ before_script:
   - mkdir build && cd build
   - cmake -DCMAKE_BUILD_TYPE=$BUILD ..
   - make setup
+  - cmake ..
   - make -j2
   - echo "running make $CHECK on a $BUILD build with and PIR_ENABLE=$PIR_ENABLE"
 
@@ -120,6 +123,7 @@ script:
   - PIR_ENABLE=off ./bin/tests
   - PIR_ENABLE=force ./bin/tests
   - PIR_NATIVE_BACKEND=1 ./bin/tests
+  - PIR_NATIVE_BACKEND=2 ./bin/tests
   - if [[ "$TEST_GCTORTURE" != "" ]];  then  R_GCTORTURE=200   ./bin/tests; fi
   # Run a particular portion of the gnur testsuite
   - if [[ "$CHECK" != "" ]]; then ./bin/gnur-make-tests $CHECK; fi
