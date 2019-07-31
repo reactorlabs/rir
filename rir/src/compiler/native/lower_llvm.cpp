@@ -1694,6 +1694,58 @@ bool LowerFunctionLLVM::tryCompile() {
                              },
                              BinopKind::NE);
                 break;
+
+            case Tag::Not: {
+                auto resultRep = representationOf(i);
+                auto argument = i->arg(0).val();
+                auto argumentRep = representationOf(argument);
+                if (argumentRep == Representation::Sexp) {
+                    auto argumentNative = loadSxp(i, argument);
+
+                    llvm::Value* res = nullptr;
+                    gcSafepoint(i, -1, true);
+                    if (i->hasEnv()) {
+                        res = call(NativeBuiltins::notEnv,
+                                   {argumentNative, loadSxp(i, i->env()),
+                                    c(i->srcIdx)});
+                    } else {
+                        res = call(NativeBuiltins::notOp, {argumentNative});
+                    }
+                    if (resultRep == Representation::Integer)
+                        setVal(i, unboxIntLgl(res));
+                    else
+                        setVal(i, res);
+                    break;
+                }
+
+                auto done = BasicBlock::Create(C, "", fun);
+                auto isNa = BasicBlock::Create(C, "", fun);
+
+                auto res = builder.CreateAlloca(t::Int);
+                auto argumentNative = load(i, argument, argumentRep);
+
+                nacheck(argumentNative, isNa);
+
+                builder.CreateStore(
+                    builder.CreateZExt(
+                        builder.CreateICmpEQ(argumentNative, c(0)), t::Int),
+                    res);
+                builder.CreateBr(done);
+
+                builder.SetInsertPoint(isNa);
+                // Maybe we need to model R_LogicalNAValue?
+                builder.CreateStore(c(NA_INTEGER), res);
+                builder.CreateBr(done);
+                builder.SetInsertPoint(done);
+
+                auto result = builder.CreateLoad(res);
+                if (resultRep == Representation::Sexp)
+                    setVal(i, boxLgl(i, result));
+                else
+                    setVal(i, result);
+                break;
+            }
+
             case Tag::Eq:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -1854,7 +1906,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto t = IsType::Cast(i);
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp) {
-                    llvm::Value* res;
+                    llvm::Value* res = nullptr;
                     auto a = loadSxp(i, arg);
                     if (t->typeTest.isA(RType::integer)) {
                         res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
@@ -1884,6 +1936,57 @@ bool LowerFunctionLLVM::tryCompile() {
                     setVal(i, builder.CreateZExt(res, t::Int));
                 } else {
                     setVal(i, c(1));
+                }
+                break;
+            }
+
+            case Tag::Is: {
+                assert(representationOf(i) == Representation::Integer);
+                auto is = Is::Cast(i);
+                auto arg = i->arg(0).val();
+                if (representationOf(arg) == Representation::Sexp) {
+                    auto argNative = loadSxp(i, arg);
+                    auto expectedTypeNative = c(is->sexpTag);
+                    llvm::Value* res = nullptr;
+                    auto typeNative = sexptype(argNative);
+                    switch (is->sexpTag) {
+                    case NILSXP:
+                    case LGLSXP:
+                    case REALSXP:
+                        res = builder.CreateICmpEQ(typeNative,
+                                                   expectedTypeNative);
+                        break;
+
+                    case VECSXP: {
+                        auto operandLhs =
+                            builder.CreateICmpEQ(typeNative, c(VECSXP));
+                        auto operandRhs =
+                            builder.CreateICmpEQ(typeNative, c(LISTSXP));
+                        res = builder.CreateOr(operandLhs, operandRhs);
+                        break;
+                    }
+
+                    case LISTSXP: {
+                        auto operandLhs =
+                            builder.CreateICmpEQ(typeNative, c(LISTSXP));
+                        auto operandRhs =
+                            builder.CreateICmpEQ(typeNative, c(NILSXP));
+                        res = builder.CreateOr(operandLhs, operandRhs);
+                        break;
+                    }
+
+                    default:
+                        assert(false);
+                        success = false;
+                        break;
+                    }
+
+                    setVal(i, builder.CreateZExt(res, t::Int));
+
+                } else {
+                    // How do we implement the fast path? Because in native
+                    // representations we may have lost the real representation
+                    success = false;
                 }
                 break;
             }
@@ -1958,7 +2061,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 assert(r2 == Representation::Integer);
 
-                llvm::Value* res;
+                llvm::Value* res = nullptr;
                 if (r1 == Representation::Sexp) {
                     res = call(NativeBuiltins::asLogicalBlt, {loadSxp(i, arg)});
                 } else if (r1 == Representation::Real) {
@@ -2213,6 +2316,15 @@ bool LowerFunctionLLVM::tryCompile() {
                 call(NativeBuiltins::defvar,
                      {constant(st->varName, t::SEXP),
                       loadSxp(i, st->arg<0>().val()), loadSxp(i, st->env())});
+                break;
+            }
+
+            case Tag::Missing: {
+                assert(representationOf(i) == Representation::Integer);
+                auto missing = Missing::Cast(i);
+                setVal(i, call(NativeBuiltins::isMissing,
+                               {constant(missing->varName, t::SEXP),
+                                loadSxp(i, i->env())}));
                 break;
             }
 

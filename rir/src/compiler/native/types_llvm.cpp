@@ -165,9 +165,12 @@ int initializeTypes(LLVMContext& context) {
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::voidPtr},
         false);
 
+    NativeBuiltins::notEnv.llvmSignature = t::sexp_sexpsexpint;
+    NativeBuiltins::notOp.llvmSignature = t::sexp_sexp;
     NativeBuiltins::binop.llvmSignature = t::sexp_sexpsexpint;
     NativeBuiltins::binopEnv.llvmSignature = t::sexp_sexp3int2;
 
+    NativeBuiltins::isMissing.llvmSignature = t::int_sexpsexp;
     NativeBuiltins::asTest.llvmSignature = t::int_sexp;
     NativeBuiltins::asLogicalBlt.llvmSignature = t::int_sexp;
 
