@@ -727,7 +727,7 @@ void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
 
-    auto named = builder.CreateOr(sxpinfo, c(0x10000000ul));
+    auto named = builder.CreateOr(sxpinfo, c(0x100000000ul));
     auto isNamed = builder.CreateICmpEQ(sxpinfo, named);
 
     auto notNamed = BasicBlock::Create(C, "notNamed", fun);
@@ -943,12 +943,13 @@ void LowerFunctionLLVM::compileRelop(
         auto b = loadSxp(i, rhs);
 
         llvm::Value* res;
-        gcSafepoint(i, -1, true);
         if (i->hasEnv()) {
+            gcSafepoint(i, -1, true);
             auto e = loadSxp(i, i->env());
             res = call(NativeBuiltins::binopEnv,
                        {a, b, e, c(i->srcIdx), c((int)kind)});
         } else {
+            gcSafepoint(i, 1, true);
             res = call(NativeBuiltins::binop, {a, b, c((int)kind)});
         }
         if (rep == Representation::Integer)
@@ -986,10 +987,12 @@ void LowerFunctionLLVM::compileRelop(
 
     builder.SetInsertPoint(done);
     res = builder.CreateLoad(res);
-    if (rep == Representation::Sexp)
+    if (rep == Representation::Sexp) {
+        gcSafepoint(i, 1, false);
         setVal(i, boxLgl(i, res));
-    else
+    } else {
         setVal(i, res);
+    }
 };
 
 void LowerFunctionLLVM::compileBinop(
@@ -1008,12 +1011,13 @@ void LowerFunctionLLVM::compileBinop(
         auto b = loadSxp(i, i->arg(1).val());
 
         llvm::Value* res = nullptr;
-        gcSafepoint(i, -1, true);
         if (i->hasEnv()) {
+            gcSafepoint(i, -1, true);
             auto e = loadSxp(i, i->env());
             res = call(NativeBuiltins::binopEnv,
                        {a, b, e, c(i->srcIdx), c((int)kind)});
         } else {
+            gcSafepoint(i, 1, true);
             res = call(NativeBuiltins::binop, {a, b, c((int)kind)});
         }
 
@@ -1076,6 +1080,7 @@ void LowerFunctionLLVM::compileBinop(
     builder.SetInsertPoint(done);
     res = builder.CreateLoad(res);
     if (rep == Representation::Sexp) {
+        gcSafepoint(i, 1, false);
         setVal(i, box(i, res, lhs->type.mergeWithConversion(rhs->type)));
     } else {
         setVal(i, res);
@@ -1739,10 +1744,12 @@ bool LowerFunctionLLVM::tryCompile() {
                 builder.SetInsertPoint(done);
 
                 auto result = builder.CreateLoad(res);
-                if (resultRep == Representation::Sexp)
+                if (resultRep == Representation::Sexp) {
+                    gcSafepoint(i, 1, false);
                     setVal(i, boxLgl(i, result));
-                else
+                } else {
                     setVal(i, result);
+                }
                 break;
             }
 
@@ -1913,7 +1920,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     } else if (t->typeTest.isA(PirType(RType::integer)
                                                    .orPromiseWrapped())) {
                         a = depromise(a);
-                        builder.CreateICmpEQ(sexptype(a), c(INTSXP));
+                        res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
                     } else if (t->typeTest.isA(RType::real)) {
                         res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
                     } else if (t->typeTest.isA(
@@ -2375,6 +2382,7 @@ bool LowerFunctionLLVM::tryCompile() {
     if (success) {
         // outs() << "Compiled " << fun->getName() << "\n";
         // fun->dump();
+        // code->printCode(std::cout, true, true);
     }
     return success;
 }
