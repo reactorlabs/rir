@@ -1,12 +1,14 @@
 #include "builtins.h"
 
 #include "compiler/parameter.h"
+#include "interpreter/ArgsLazyData.h"
 #include "interpreter/LazyEnvironment.h"
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
 #include "ir/Deoptimization.h"
 #include "utils/Pool.h"
+
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 
@@ -235,7 +237,8 @@ NativeBuiltin NativeBuiltins::error = {
 
 static bool debugPrintCallBuiltinImpl = false;
 static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                            size_t nargs, InterpreterInstance* ctx) {
+                            size_t nargs) {
+    auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
                      Assumptions(), ctx);
     if (debugPrintCallBuiltinImpl) {
@@ -253,32 +256,38 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     }
     SLOWASSERT(TYPEOF(callee) == BUILTINSXP);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
-               LazyEnvironment::check(env));
+               LazyEnvironment::check(env) || env == R_NilValue);
     SLOWASSERT(ctx);
     auto res = builtinCall(call, ctx);
     SLOWASSERT(res);
     return res;
 };
-static jit_type_t callArgs[6] = {jit_type_void_ptr, jit_type_uint,    sxp, sxp,
-                                 jit_type_ulong,    jit_type_void_ptr};
+static jit_type_t callArgs[5] = {jit_type_void_ptr, jit_type_uint, sxp, sxp,
+                                 jit_type_ulong};
 NativeBuiltin NativeBuiltins::callBuiltin = {
-    "callBuiltin", (void*)&callBuiltinImpl, 6,
-    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 6, 0),
+    "callBuiltin",
+    (void*)&callBuiltinImpl,
+    5,
+    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 5, 0),
 };
 
 static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                     size_t nargs, InterpreterInstance* ctx) {
+                     size_t nargs) {
+    auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
                      Assumptions(), ctx);
-    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP);
+    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+               LazyEnvironment::check(env) || env == R_NilValue);
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
     return res;
 };
 
 NativeBuiltin NativeBuiltins::call = {
-    "call", (void*)&callImpl, 6,
-    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 6, 0),
+    "call",
+    (void*)&callImpl,
+    5,
+    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 5, 0),
 };
 
 SEXP createPromiseImpl(rir::Code* c, unsigned id, SEXP env, SEXP value) {
@@ -760,6 +769,84 @@ NativeBuiltin NativeBuiltins::extract21 = {
     (void*)&extract21Impl,
     4,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
+};
+
+static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
+                               SEXP env, SEXP callee) {
+    if ((SETJMP(cntxt.cjmpbuf))) {
+        if (R_ReturnedValue == R_RestartToken) {
+            cntxt.callflag = CTXT_RETURN; /* turn restart off */
+            R_ReturnedValue = R_NilValue; /* remove restart token */
+            return code->nativeCode(code, args, env, callee);
+        } else {
+            return R_ReturnedValue;
+        }
+    }
+    return code->nativeCode(code, args, env, callee);
+}
+
+void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
+                        SEXP arglist, SEXP op) {
+    /*  If we have a generic function we need to use the sysparent of
+       the generic as the sysparent of the method because the method
+       is a straight substitution of the generic.  */
+
+    if (R_GlobalContext->callflag == CTXT_GENERIC)
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho,
+                        R_GlobalContext->sysparent, arglist, op);
+    else
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, sysparent, arglist, op);
+}
+
+static void endClosureContext(RCNTXT* cntxt, SEXP result) {
+    cntxt->returnValue = result;
+    Rf_endcontext(cntxt);
+}
+
+static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
+                                     Immediate astP, SEXP env, size_t nargs) {
+    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+               LazyEnvironment::check(env) || env == R_NilValue);
+
+    auto t = R_BCNodeStackTop;
+    R_bcstack_t* args = ostack_cell_at(ctx, nargs - 1);
+    auto ast = cp_pool_at(globalContext(), astP);
+
+    ArgsLazyData lazyArgs(nargs, args, nullptr, globalContext());
+    SEXP arglist = (SEXP)&lazyArgs;
+
+    assert(fun->signature().envCreation ==
+           FunctionSignature::Environment::CalleeCreated);
+
+    RCNTXT cntxt;
+
+    // This code needs to be protected, because its slot in the dispatch table
+    // could get overwritten while we are executing it.
+    PROTECT(fun->container());
+
+    initClosureContext(ast, &cntxt, symbol::delayedEnv, env, arglist, callee);
+    R_Srcref = getAttrib(callee, symbol::srcref);
+
+    // TODO debug
+
+    SEXP result = rirCallTrampoline_(cntxt, fun->body(), args, env, callee);
+
+    endClosureContext(&cntxt, result);
+
+    PROTECT(result);
+    R_Srcref = cntxt.srcref;
+    R_ReturnedValue = R_NilValue;
+
+    UNPROTECT(2);
+    assert(t == R_BCNodeStackTop);
+    return result;
+}
+
+NativeBuiltin NativeBuiltins::nativeCallTrampoline = {
+    "nativeCallTrampoline",
+    (void*)&nativeCallTrampolineImpl,
+    5,
+    nullptr,
 };
 }
 }

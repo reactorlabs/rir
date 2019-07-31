@@ -85,8 +85,9 @@ int initializeTypes(LLVMContext& context) {
 #define DECLARE(name, ret, ...)                                                \
     fields = {__VA_ARGS__};                                                    \
     t::name = FunctionType::get(ret, fields, false)
-    DECLARE(nativeFunction_t, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
-    t::nativeFunctionPtr_t = PointerType::get(t::nativeFunction_t, 0);
+    DECLARE(nativeFunction, t::SEXP, t::voidPtr, t::stackCellPtr, t::SEXP,
+            t::SEXP);
+    t::nativeFunctionPtr = PointerType::get(t::nativeFunction, 0);
     DECLARE(void_void, t_void);
     DECLARE(void_voidPtr, t_void, t::voidPtr);
     DECLARE(void_sexp, t_void, t::SEXP);
@@ -159,11 +160,9 @@ int initializeTypes(LLVMContext& context) {
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
 
     NativeBuiltins::call.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::voidPtr},
-        false);
+        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64}, false);
     NativeBuiltins::callBuiltin.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::voidPtr},
-        false);
+        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64}, false);
 
     NativeBuiltins::notEnv.llvmSignature = t::sexp_sexpsexpint;
     NativeBuiltins::notOp.llvmSignature = t::sexp_sexp;
@@ -188,6 +187,9 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::extract21.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
 
+    NativeBuiltins::nativeCallTrampoline.llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::voidPtr, t::Int, t::SEXP, t::i64}, false);
     return 1;
 }
 
@@ -257,8 +259,8 @@ FunctionType* void_cntxtsexp;
 FunctionType* void_cntxtsexpsexp;
 FunctionType* sexp_contxtsexpsexp;
 
-FunctionType* nativeFunction_t;
-Type* nativeFunctionPtr_t;
+FunctionType* nativeFunction;
+Type* nativeFunctionPtr;
 
 StructType* stackCell;
 PointerType* stackCellPtr;

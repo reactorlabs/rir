@@ -25,14 +25,18 @@ struct ArgsLazyData : public RirDataWrapper<ArgsLazyData, LAZY_ARGS_MAGIC> {
     ArgsLazyData(const ArgsLazyData&) = delete;
     ArgsLazyData& operator=(const ArgsLazyData&) = delete;
 
-    ArgsLazyData(CallContext* callCtx, InterpreterInstance* cmpCtx)
-        : RirDataWrapper(0), callContext(callCtx), compilationContext(cmpCtx){};
+    ArgsLazyData(size_t length, const R_bcstack_t* args, const Immediate* names,
+                 InterpreterInstance* cmpCtx)
+        : RirDataWrapper(0), length(length), args(args), names(names),
+          compilationContext(cmpCtx){};
 
-    CallContext* callContext;
+    size_t length;
+    const R_bcstack_t* args;
+    const Immediate* names;
     InterpreterInstance* compilationContext;
 
     SEXP createArgsLists() {
-        return createLegacyArgsListFromStackValues(*callContext, false,
+        return createLegacyArgsListFromStackValues(length, args, names, false,
                                                    compilationContext);
     }
 };

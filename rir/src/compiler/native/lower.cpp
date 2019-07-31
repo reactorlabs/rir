@@ -171,10 +171,9 @@ class PirCodeFunction : public jit_function {
     }
 
     jit_value paramCode() { return get_param(0); }
-    jit_value paramCtx() { return get_param(1); }
-    jit_value paramArgs() { return get_param(2); }
-    jit_value paramEnv() { return get_param(3); }
-    jit_value paramClosure() { return get_param(4); }
+    jit_value paramArgs() { return get_param(1); }
+    jit_value paramEnv() { return get_param(2); }
+    jit_value paramClosure() { return get_param(3); }
 
     void insn_assert(jit_value v, const char* msg) {
         auto ok = jit_label();
@@ -311,9 +310,9 @@ class PirCodeFunction : public jit_function {
     }
 
     jit_type_t create_signature() override {
-        return signature_helper(jit_type_void_ptr, jit_type_void_ptr,
-                                jit_type_void_ptr, sxp, jit_type_void_ptr,
-                                jit_type_void_ptr, end_params);
+        return signature_helper(jit_type_void_ptr, jit_type_void_ptr, sxp,
+                                jit_type_void_ptr, jit_type_void_ptr,
+                                end_params);
     }
 };
 
@@ -732,11 +731,6 @@ jit_value PirCodeFunction::constant(SEXP c, jit_type_t needed) {
     assert(needed == sxp);
 
     auto i = Pool::insert(c);
-    if (!cp.is_valid()) {
-        auto cp_ = insn_load_relative(paramCtx(), cpOfs, sxp);
-        cp = insn_add(cp_, new_constant(stdVecDtptrOfs));
-    }
-
     return insn_load_elem(cp, new_constant(i), sxp);
 }
 
@@ -862,7 +856,7 @@ PirCodeFunction::PirCodeFunction(
       needsEnsureNamed(needsEnsureNamed) {
     create();
 
-    auto cp_ = insn_load_relative(paramCtx(), cpOfs, sxp);
+    auto cp_ = insn_load_relative(new_constant(globalContext()), cpOfs, sxp);
     cp = insn_add(cp_, new_constant(stdVecDtptrOfs));
     nodestackPtrPtr = new_constant(&R_BCNodeStackTop);
 };
@@ -1882,7 +1876,6 @@ void PirCodeFunction::build() {
                                            constant(b->blt, sxp),
                                            constant(symbol::delayedEnv, sxp),
                                            new_constant(b->nCallArgs()),
-                                           paramCtx(),
                                        });
                        }));
                 break;
@@ -1893,13 +1886,14 @@ void PirCodeFunction::build() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
                 setVal(i, withCallFrame(i, args, [&]() -> jit_value {
-                           return call(
-                               NativeBuiltins::callBuiltin,
-                               {
-                                   paramCode(), new_constant(b->srcIdx),
-                                   constant(b->blt, sxp), loadSxp(i, b->env()),
-                                   new_constant(b->nCallArgs()), paramCtx(),
-                               });
+                           return call(NativeBuiltins::callBuiltin,
+                                       {
+                                           paramCode(),
+                                           new_constant(b->srcIdx),
+                                           constant(b->blt, sxp),
+                                           loadSxp(i, b->env()),
+                                           new_constant(b->nCallArgs()),
+                                       });
                        }));
                 break;
             }
@@ -1919,7 +1913,6 @@ void PirCodeFunction::build() {
             //                                   new_constant(b->cls()->rirClosure()),
             //                                   loadSxp(i, b->env()),
             //                                   new_constant(b->nCallArgs()),
-            //                                   paramCtx(),
             //                               });
             //                       }));
             //                break;
@@ -1930,13 +1923,14 @@ void PirCodeFunction::build() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
                 setVal(i, withCallFrame(i, args, [&]() -> jit_value {
-                           return call(
-                               NativeBuiltins::call,
-                               {
-                                   paramCode(), new_constant(b->srcIdx),
-                                   loadSxp(i, b->cls()), loadSxp(i, b->env()),
-                                   new_constant(b->nCallArgs()), paramCtx(),
-                               });
+                           return call(NativeBuiltins::call,
+                                       {
+                                           paramCode(),
+                                           new_constant(b->srcIdx),
+                                           loadSxp(i, b->cls()),
+                                           loadSxp(i, b->env()),
+                                           new_constant(b->nCallArgs()),
+                                       });
                        }));
                 break;
             }
