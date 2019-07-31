@@ -1163,11 +1163,20 @@ void PirCodeFunction::build() {
                     auto a = loadSxp(i, arg);
                     if (t->typeTest.isA(RType::integer)) {
                         res = insn_eq(sexptype(a), new_constant(INTSXP));
+                    } else if (t->typeTest.isA(PirType(RType::integer)
+                                                   .orPromiseWrapped())) {
+                        a = depromise(a);
+                        res = insn_eq(sexptype(a), new_constant(INTSXP));
                     } else if (t->typeTest.isA(RType::real)) {
+                        res = insn_eq(sexptype(a), new_constant(REALSXP));
+                    } else if (t->typeTest.isA(
+                                   PirType(RType::real).orPromiseWrapped())) {
+                        a = depromise(a);
                         res = insn_eq(sexptype(a), new_constant(REALSXP));
                     } else {
                         t->print(std::cerr, true);
-                        assert(false);
+                        assert(false &&
+                               "Unsupported IsType check in native backend");
                     }
                     if (t->typeTest.isScalar()) {
                         res = insn_and(

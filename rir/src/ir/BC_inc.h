@@ -279,7 +279,7 @@ class BC {
 
     bool isCondJmp() const {
         return bc == Opcode::brtrue_ || bc == Opcode::brfalse_ ||
-               bc == Opcode::brobj_ || bc == Opcode::beginloop_;
+               bc == Opcode::beginloop_;
     }
 
     bool isUncondJmp() const { return bc == Opcode::br_; }
@@ -379,7 +379,6 @@ BC_NOARGS(V, _)
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
     inline static BC br(Jmp);
-    inline static BC brobj(Jmp);
     inline static BC label(Jmp);
     inline static BC guardName(SEXP, SEXP);
     inline static BC guardNamePrimitive(SEXP);
@@ -387,7 +386,7 @@ BC_NOARGS(V, _)
     inline static BC pick(uint32_t);
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
-    inline static BC is(TypeChecks);
+    inline static BC isType(TypeChecks);
     inline static BC deopt(SEXP);
     inline static BC call(size_t nargs, SEXP ast, const Assumptions& given);
     inline static BC callDots(size_t nargs, const std::vector<SEXP>& names,
@@ -660,7 +659,6 @@ BC_NOARGS(V, _)
             break;
         case Opcode::br_:
         case Opcode::brtrue_:
-        case Opcode::brobj_:
         case Opcode::brfalse_:
         case Opcode::beginloop_:
         case Opcode::push_context_:
@@ -670,6 +668,7 @@ BC_NOARGS(V, _)
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
+        case Opcode::istype_:
         case Opcode::put_:
         case Opcode::alloc_:
         case Opcode::ldvar_noforce_stubbed_:

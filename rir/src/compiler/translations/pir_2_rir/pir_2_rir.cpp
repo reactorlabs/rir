@@ -157,14 +157,6 @@ class Pir2Rir {
                         changed = true;
                     } else if (bc.is(rir::Opcode::dup_) && next != code.end() &&
                                plus(next, 1) != code.end() &&
-                               next->first.is(rir::Opcode::isobj_) &&
-                               plus(next, 1)->first.is(rir::Opcode::brtrue_)) {
-                        auto target = plus(next, 1)->first.immediate.offset;
-                        next = code.erase(it, plus(next, 2));
-                        next = code.emplace(next, BC::brobj(target), noSource);
-                        changed = true;
-                    } else if (bc.is(rir::Opcode::dup_) && next != code.end() &&
-                               plus(next, 1) != code.end() &&
                                plus(next, 2) != code.end() &&
                                next->first.is(rir::Opcode::for_seq_size_) &&
                                plus(next, 1)->first.is(rir::Opcode::swap_) &&
@@ -703,24 +695,47 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::IsObject: {
+                auto is = IsObject::Cast(instr);
+                auto arg = is->arg(0).val();
+
+                if (arg->type.maybePromiseWrapped()) {
+                    cb.add(BC::isType(TypeChecks::IsObjectWrapped));
+                } else {
+                    cb.add(BC::isType(TypeChecks::IsObject));
+                }
+                break;
+            }
+
             case Tag::IsType: {
                 auto is = IsType::Cast(instr);
                 auto t = is->typeTest;
-                assert(!t.isVoid() && !t.maybeObj() && !t.maybeLazy() &&
-                       !t.maybePromiseWrapped());
+                assert(!t.isVoid() && !t.maybeObj() && !t.maybeLazy());
 
                 if (t.isA(RType::integer)) {
                     if (t.isScalar())
-                        cb.add(BC::is(TypeChecks::IntegerSimpleScalar));
+                        cb.add(BC::isType(TypeChecks::IntegerSimpleScalar));
                     else
-                        cb.add(BC::is(TypeChecks::IntegerNonObject));
+                        cb.add(BC::isType(TypeChecks::IntegerNonObject));
+                } else if (t.isA(PirType(RType::integer).orPromiseWrapped())) {
+                    if (t.isScalar())
+                        cb.add(
+                            BC::isType(TypeChecks::IntegerSimpleScalarWrapped));
+                    else
+                        cb.add(BC::isType(TypeChecks::IntegerNonObjectWrapped));
                 } else if (t.isA(RType::real)) {
                     if (t.isScalar())
-                        cb.add(BC::is(TypeChecks::RealSimpleScalar));
+                        cb.add(BC::isType(TypeChecks::RealSimpleScalar));
                     else
-                        cb.add(BC::is(TypeChecks::RealNonObject));
+                        cb.add(BC::isType(TypeChecks::RealNonObject));
+                } else if (t.isA(PirType(RType::real).orPromiseWrapped())) {
+                    if (t.isScalar())
+                        cb.add(BC::isType(TypeChecks::RealSimpleScalarWrapped));
+                    else
+                        cb.add(BC::isType(TypeChecks::RealNonObjectWrapped));
                 } else {
                     t.print(std::cout);
+                    assert(false && "IsType used for unsupported type check");
                 }
                 break;
             }
@@ -752,7 +767,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Visible, visible);
                 SIMPLE(Invisible, invisible);
                 SIMPLE(Identical, identicalNoforce);
-                SIMPLE(IsObject, isobj);
                 SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);

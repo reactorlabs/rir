@@ -134,11 +134,11 @@ static Sources hasSources(Opcode bc) {
     case Opcode::br_:
     case Opcode::brtrue_:
     case Opcode::beginloop_:
-    case Opcode::brobj_:
     case Opcode::brfalse_:
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::is_:
+    case Opcode::istype_:
     case Opcode::put_:
     case Opcode::alloc_:
     case Opcode::ldarg_:
@@ -170,7 +170,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::invisible_:
     case Opcode::visible_:
     case Opcode::endloop_:
-    case Opcode::isobj_:
     case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::lgl_and_:
@@ -301,8 +300,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
             case Sources::May: {
             }
             }
-            if (*cptr == Opcode::br_ || *cptr == Opcode::brobj_ ||
-                *cptr == Opcode::brtrue_ || *cptr == Opcode::brfalse_) {
+            if (*cptr == Opcode::br_ || *cptr == Opcode::brtrue_ ||
+                *cptr == Opcode::brfalse_) {
                 int off = *reinterpret_cast<int*>(cptr + 1);
                 if (cptr + cur.size() + off < start ||
                     cptr + cur.size() + off > end)
