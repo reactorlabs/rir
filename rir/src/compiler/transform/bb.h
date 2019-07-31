@@ -28,6 +28,8 @@ class BBTransform {
     static void insertAssume(Value* condition, Checkpoint* cp,
                              bool assumePositive);
 
+    static void mergeRedundantBBs(Code* closure);
+
     // Renumber in dominance order. This ensures that controlflow always goes
     // from smaller id to bigger id, except for back-edges.
     static void renumber(Code* fun);

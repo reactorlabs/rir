@@ -29,6 +29,11 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
         } else
             fun->setEntry(Function::NUM_PTRS + i, nullptr);
     }
+    fun->deopt = InChar(inp);
+    fun->markOpt = InChar(inp);
+    fun->unoptimizable = InChar(inp);
+    fun->uninlinable = InChar(inp);
+    fun->dead = InChar(inp);
     UNPROTECT(protectCount);
     return fun;
 }
@@ -45,6 +50,11 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
         if (arg != NULL)
             defaultArg(i)->serialize(refTable, out);
     }
+    OutChar(out, deopt ? 1 : 0);
+    OutChar(out, markOpt ? 1 : 0);
+    OutChar(out, unoptimizable ? 1 : 0);
+    OutChar(out, uninlinable ? 1 : 0);
+    OutChar(out, dead ? 1 : 0);
 }
 
 void Function::disassemble(std::ostream& out) {

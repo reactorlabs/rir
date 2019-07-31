@@ -890,7 +890,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto mkenv = MkEnv::Cast(instr);
                 cb.add(BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub));
                 cache.ifCacheRange(mkenv, [&](CachePosition::StartSize range) {
-                    cb.add(BC::clearBindingCache(range.first, range.second));
+                    if (range.second > 0)
+                        cb.add(
+                            BC::clearBindingCache(range.first, range.second));
                 });
                 break;
             }
@@ -1127,6 +1129,8 @@ void Pir2Rir::lower(Code* code) {
             it = next;
         }
     });
+
+    BBTransform::mergeRedundantBBs(code);
 
     // Insert Nop into all empty blocks to make life easier
     Visitor::run(code->entry, [&](BB* bb) {
