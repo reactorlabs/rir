@@ -1396,6 +1396,12 @@ void PirCodeFunction::build() {
                     BinopKind::DIV);
                 break;
 
+            case Tag::Mod:
+                compileBinop(
+                    i, [&](jit_value a, jit_value b) { return insn_rem(a, b); },
+                    BinopKind::MOD);
+                break;    
+
             case Tag::ScheduledDeopt: {
                 // TODO, this is copied from pir_2_rir... rather ugly
                 DeoptMetadata* m = nullptr;
@@ -1530,6 +1536,46 @@ void PirCodeFunction::build() {
                 auto res =
                     call(NativeBuiltins::extract21,
                          {vector, idx, env, new_constant(extract->srcIdx)});
+                setVal(i, res);
+                break;
+            }
+
+            case Tag::Subassign1_1D: {
+                auto subAssign = Subassign1_1D::Cast(i);
+                auto vector = loadSxp(i, subAssign->vector());
+                auto val = loadSxp(i, subAssign->val());
+                auto idx = loadSxp(i, subAssign->idx());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, sxp);
+                if (subAssign->hasEnv())
+                    env = loadSxp(i, subAssign->env());
+
+                gcSafepoint(i, -1, false);
+                auto res =
+                    call(NativeBuiltins::subassign11,
+                         {vector, idx, val, env, new_constant(subAssign->srcIdx)});
+                setVal(i, res);
+                break;
+            }
+
+            case Tag::Subassign2_1D: {
+                auto subAssign = Subassign2_1D::Cast(i);
+                auto vector = loadSxp(i, subAssign->vector());
+                auto val = loadSxp(i, subAssign->val());
+                auto idx = loadSxp(i, subAssign->idx());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, sxp);
+                if (subAssign->hasEnv())
+                    env = loadSxp(i, subAssign->env());
+
+                gcSafepoint(i, -1, false);
+                auto res =
+                    call(NativeBuiltins::subassign21,
+                         {vector, idx, val, env, new_constant(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
             }

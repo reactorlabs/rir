@@ -26,6 +26,7 @@ enum class BinopKind : int {
     MUL,
     SUB,
     DIV,
+    MOD,
     EQ,
     NE,
     LT,
@@ -92,6 +93,8 @@ struct NativeBuiltins {
 
     static NativeBuiltin extract11;
     static NativeBuiltin extract21;
+    static NativeBuiltin subassign11;
+    static NativeBuiltin subassign21;
 };
 }
 }
