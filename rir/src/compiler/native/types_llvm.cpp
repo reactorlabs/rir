@@ -118,8 +118,8 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::forcePromise.llvmSignature = t::sexp_sexp;
 
     NativeBuiltins::consNr.llvmSignature = t::sexp_sexpsexp;
-    NativeBuiltins::consNrTagged.llvmSignature = t::sexp_sexpsexpsexp;
-    NativeBuiltins::consNrTaggedMissing.llvmSignature = t::sexp_sexpsexp;
+    NativeBuiltins::createBindingCell.llvmSignature = t::sexp_sexpsexpsexp;
+    NativeBuiltins::createMissingBindingCell.llvmSignature = t::sexp_sexpsexp;
 
     NativeBuiltins::ldvar.llvmSignature = t::sexp_sexpsexp;
     NativeBuiltins::ldvarCacheMiss.llvmSignature = llvm::FunctionType::get(

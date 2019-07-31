@@ -1623,11 +1623,11 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto arglist = constant(R_NilValue, t::SEXP);
                 mkenv->eachLocalVarRev([&](SEXP name, Value* v) {
                     if (v == MissingArg::instance()) {
-                        arglist = call(NativeBuiltins::consNrTaggedMissing,
+                        arglist = call(NativeBuiltins::createMissingBindingCell,
                                        {constant(name, t::SEXP), arglist});
                     } else {
                         arglist = call(
-                            NativeBuiltins::consNrTagged,
+                            NativeBuiltins::createBindingCell,
                             {loadSxp(i, v), constant(name, t::SEXP), arglist});
                     }
                 });
@@ -1858,7 +1858,15 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto a = loadSxp(i, arg);
                     if (t->typeTest.isA(RType::integer)) {
                         res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
+                    } else if (t->typeTest.isA(PirType(RType::integer)
+                                                   .orPromiseWrapped())) {
+                        a = depromise(a);
+                        builder.CreateICmpEQ(sexptype(a), c(INTSXP));
                     } else if (t->typeTest.isA(RType::real)) {
+                        res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
+                    } else if (t->typeTest.isA(
+                                   PirType(RType::real).orPromiseWrapped())) {
+                        a = depromise(a);
                         res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
                     } else {
                         t->print(std::cerr, true);
@@ -1887,11 +1895,14 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 auto arg = i->arg(0).val();
-                if (representationOf(arg) == Representation::Sexp)
-                    setVal(i,
-                           builder.CreateZExt(isObj(loadSxp(i, arg)), t::Int));
-                else
+                if (representationOf(arg) == Representation::Sexp) {
+                    auto a = loadSxp(i, arg);
+                    if (arg->type.maybePromiseWrapped())
+                        a = depromise(a);
+                    setVal(i, builder.CreateZExt(isObj(a), t::Int));
+                } else {
                     setVal(i, c((int)0));
+                }
                 break;
             }
 
