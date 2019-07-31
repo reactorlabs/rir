@@ -425,6 +425,58 @@ static SEXPREC createFakeCONS(SEXP cdr) {
     return res;
 }
 
+static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
+                        UnopKind op) {
+    SEXP res = nullptr;
+    SEXP arglist = CONS_NR(argument, R_NilValue);
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    PROTECT(arglist);
+    switch (op) {
+    case UnopKind::MINUS:
+        OPERATION_FALLBACK("-");
+        break;
+    case UnopKind::PLUS:
+        OPERATION_FALLBACK("+");
+        break;
+    }
+    UNPROTECT(1);
+    SLOWASSERT(res);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::unopEnv = {
+    "unopEnv",
+    (void*)&unopEnvImpl,
+    4,
+    nullptr,
+};
+
+static SEXP unopImpl(SEXP argument, UnopKind op) {
+    SEXP res = nullptr;
+    SEXPREC arglistStruct = createFakeCONS(R_NilValue);
+    arglistStruct.u.listsxp.carval = argument;
+    SEXP arglist = &arglistStruct;
+    SEXP env = R_NilValue;
+    SEXP call = R_NilValue;
+    switch (op) {
+    case UnopKind::MINUS:
+        OPERATION_FALLBACK("-");
+        break;
+    case UnopKind::PLUS:
+        OPERATION_FALLBACK("+");
+        break;
+    }
+    SLOWASSERT(res);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::unop = {
+    "unop",
+    (void*)&unopImpl,
+    2,
+    nullptr,
+};
+
 static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
     SEXP res = nullptr;
     SEXP arglist = CONS_NR(argument, R_NilValue);
@@ -459,8 +511,8 @@ static SEXP notImpl(SEXP argument) {
 NativeBuiltin NativeBuiltins::notOp = {
     "not",
     (void*)&notImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+    1,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp1, 1, 0),
 };
 
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
@@ -507,6 +559,9 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
         break;
     case BinopKind::LOR:
         OPERATION_FALLBACK("||");
+        break;
+    case BinopKind::COLON:
+        OPERATION_FALLBACK(":");
         break;
     }
     UNPROTECT(1);
@@ -577,6 +632,9 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
         break;
     case BinopKind::LOR:
         OPERATION_FALLBACK("||");
+        break;
+    case BinopKind::COLON:
+        OPERATION_FALLBACK(":");
         break;
     }
     SLOWASSERT(res);

@@ -110,6 +110,7 @@ int initializeTypes(LLVMContext& context) {
     DECLARE(sexp_contxtsexpsexp, t::SEXP, t::cntxtPtr, t::SEXP, t::SEXP);
     DECLARE(sexp_sexp3int, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int);
     DECLARE(sexp_sexp3int2, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int, t::Int);
+    DECLARE(sexp_sexp2int2, t::SEXP, t::SEXP, t::SEXP, t::Int, t::Int);
     DECLARE(sexp_double, t::SEXP, t::Double);
     DECLARE(sexp_int, t::SEXP, t::Int);
     DECLARE(int_sexp, t::Int, t::SEXP);
@@ -190,6 +191,9 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::nativeCallTrampoline.llvmSignature =
         llvm::FunctionType::get(
             t::SEXP, {t::SEXP, t::voidPtr, t::Int, t::SEXP, t::i64}, false);
+
+    NativeBuiltins::unop.llvmSignature = t::sexp_sexpint;
+    NativeBuiltins::unopEnv.llvmSignature = t::sexp_sexp2int2;
     return 1;
 }
 
@@ -237,6 +241,7 @@ FunctionType* sexp_sexpsexp;
 FunctionType* sexp_sexpsexpsexp;
 FunctionType* sexp_sexpsexpsexpsexp;
 FunctionType* sexp_sexp3int;
+FunctionType* sexp_sexp2int2;
 FunctionType* sexp_sexp3int2;
 
 FunctionType* sexp_sexpint;
