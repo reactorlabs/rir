@@ -243,13 +243,34 @@ class LowerFunctionLLVM {
 
     void compileBinop(
         Instruction* i,
-        std::function<llvm::Value*(llvm::Value*, llvm::Value*)> intInsert,
-        std::function<llvm::Value*(llvm::Value*, llvm::Value*)> fpInsert,
+        const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
+            intInsert,
+        const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
+        BinopKind kind) {
+        compileBinop(i, i->arg(0).val(), i->arg(1).val(), intInsert, fpInsert,
+                     kind);
+    }
+    void compileBinop(
+        Instruction* i, Value* lhs, Value* rhs,
+        const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
+            intInsert,
+        const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
         BinopKind kind);
+    void compileUnop(Instruction* i,
+                     const std::function<llvm::Value*(llvm::Value*)>& intInsert,
+                     const std::function<llvm::Value*(llvm::Value*)>& fpInsert,
+                     UnopKind kind) {
+        compileUnop(i, i->arg(0).val(), intInsert, fpInsert, kind);
+    }
+    void compileUnop(Instruction* i, Value* lhs,
+                     const std::function<llvm::Value*(llvm::Value*)>& intInsert,
+                     const std::function<llvm::Value*(llvm::Value*)>& fpInsert,
+                     UnopKind kind);
     void compileRelop(
         Instruction* i,
-        std::function<llvm::Value*(llvm::Value*, llvm::Value*)> intInsert,
-        std::function<llvm::Value*(llvm::Value*, llvm::Value*)> fpInsert,
+        const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
+            intInsert,
+        const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
         BinopKind kind);
 
     bool success = true;
@@ -924,8 +945,8 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
 
 void LowerFunctionLLVM::compileRelop(
     Instruction* i,
-    std::function<llvm::Value*(llvm::Value*, llvm::Value*)> intInsert,
-    std::function<llvm::Value*(llvm::Value*, llvm::Value*)> fpInsert,
+    const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
+    const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
     BinopKind kind) {
     auto rep = representationOf(i);
     auto lhs = i->arg(0).val();
@@ -937,13 +958,12 @@ void LowerFunctionLLVM::compileRelop(
         auto b = loadSxp(i, rhs);
 
         llvm::Value* res;
+        gcSafepoint(i, -1, true);
         if (i->hasEnv()) {
-            gcSafepoint(i, -1, true);
             auto e = loadSxp(i, i->env());
             res = call(NativeBuiltins::binopEnv,
                        {a, b, e, c(i->srcIdx), c((int)kind)});
         } else {
-            gcSafepoint(i, 1, true);
             res = call(NativeBuiltins::binop, {a, b, c((int)kind)});
         }
         if (rep == Representation::Integer)
@@ -990,28 +1010,25 @@ void LowerFunctionLLVM::compileRelop(
 };
 
 void LowerFunctionLLVM::compileBinop(
-    Instruction* i,
-    std::function<llvm::Value*(llvm::Value*, llvm::Value*)> intInsert,
-    std::function<llvm::Value*(llvm::Value*, llvm::Value*)> fpInsert,
+    Instruction* i, Value* lhs, Value* rhs,
+    const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
+    const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
     BinopKind kind) {
     auto rep = representationOf(i);
-    auto lhs = i->arg(0).val();
-    auto rhs = i->arg(1).val();
     auto lhsRep = representationOf(lhs);
     auto rhsRep = representationOf(rhs);
 
     if (lhsRep == Representation::Sexp || rhsRep == Representation::Sexp) {
-        auto a = loadSxp(i, i->arg(0).val());
-        auto b = loadSxp(i, i->arg(1).val());
+        auto a = loadSxp(i, lhs);
+        auto b = loadSxp(i, rhs);
 
         llvm::Value* res = nullptr;
+        gcSafepoint(i, -1, true);
         if (i->hasEnv()) {
-            gcSafepoint(i, -1, true);
             auto e = loadSxp(i, i->env());
             res = call(NativeBuiltins::binopEnv,
                        {a, b, e, c(i->srcIdx), c((int)kind)});
         } else {
-            gcSafepoint(i, 1, true);
             res = call(NativeBuiltins::binop, {a, b, c((int)kind)});
         }
 
@@ -1076,6 +1093,84 @@ void LowerFunctionLLVM::compileBinop(
     if (rep == Representation::Sexp) {
         gcSafepoint(i, 1, false);
         setVal(i, box(i, res, lhs->type.mergeWithConversion(rhs->type)));
+    } else {
+        setVal(i, res);
+    }
+};
+
+void LowerFunctionLLVM::compileUnop(
+    Instruction* i, Value* arg,
+    const std::function<llvm::Value*(llvm::Value*)>& intInsert,
+    const std::function<llvm::Value*(llvm::Value*)>& fpInsert, UnopKind kind) {
+    auto rep = representationOf(i);
+    auto argRep = representationOf(arg);
+
+    if (argRep == Representation::Sexp) {
+        auto a = loadSxp(i, arg);
+
+        llvm::Value* res = nullptr;
+        if (i->hasEnv()) {
+            gcSafepoint(i, -1, true);
+            auto e = loadSxp(i, i->env());
+            res = call(NativeBuiltins::unopEnv,
+                       {a, e, c(i->srcIdx), c((int)kind)});
+        } else {
+            gcSafepoint(i, 1, true);
+            res = call(NativeBuiltins::unop, {a, c((int)kind)});
+        }
+
+        if (rep == Representation::Integer)
+            setVal(i, unboxIntLgl(res));
+        else if (rep == Representation::Real)
+            setVal(i, unboxRealIntLgl(res));
+        else
+            setVal(i, res);
+        return;
+    }
+
+    BasicBlock* isNaBr = nullptr;
+    auto done = BasicBlock::Create(C, "", fun);
+
+    auto r = (argRep == Representation::Real) ? t::Double : t::Int;
+
+    llvm::Value* res = builder.CreateAlloca(r);
+
+    auto a = load(i, arg, argRep);
+
+    auto checkNa = [&](llvm::Value* v, Representation r) {
+        if (r == Representation::Integer) {
+            if (!isNaBr)
+                isNaBr = BasicBlock::Create(C, "isNa", fun);
+            nacheck(v, isNaBr);
+        }
+    };
+    checkNa(a, argRep);
+
+    if (a->getType() == t::Int) {
+        builder.CreateStore(intInsert(a), res);
+    } else {
+        builder.CreateStore(fpInsert(a), res);
+    }
+    builder.CreateBr(done);
+
+    if (argRep == Representation::Integer) {
+        if (isNaBr) {
+            builder.SetInsertPoint(isNaBr);
+
+            if (r == t::Int)
+                builder.CreateStore(c(NA_INTEGER), res);
+            else
+                builder.CreateStore(c((double)NAN), res);
+
+            builder.CreateBr(done);
+        }
+    }
+
+    builder.SetInsertPoint(done);
+    res = builder.CreateLoad(res);
+    if (rep == Representation::Sexp) {
+        gcSafepoint(i, 1, false);
+        setVal(i, box(i, res, arg->type));
     } else {
         setVal(i, res);
     }
@@ -1747,6 +1842,20 @@ bool LowerFunctionLLVM::tryCompile() {
                              BinopKind::NE);
                 break;
 
+            case Tag::Minus: {
+                compileUnop(
+                    i, [&](llvm::Value* a) { return builder.CreateNeg(a); },
+                    [&](llvm::Value* a) { return builder.CreateFNeg(a); },
+                    UnopKind::MINUS);
+                break;
+            }
+
+            case Tag::Plus: {
+                compileUnop(i, [&](llvm::Value* a) { return a; },
+                            [&](llvm::Value* a) { return a; }, UnopKind::PLUS);
+                break;
+            }
+
             case Tag::Not: {
                 auto resultRep = representationOf(i);
                 auto argument = i->arg(0).val();
@@ -1879,6 +1988,19 @@ bool LowerFunctionLLVM::tryCompile() {
                              },
                              BinopKind::LOR);
                 break;
+
+            case Tag::Colon: {
+                assert(representationOf(i) == t::SEXP);
+                auto a = loadSxp(i, i->arg(0).val());
+                auto b = loadSxp(i, i->arg(1).val());
+                auto e = loadSxp(i, i->env());
+                gcSafepoint(i, -1, true);
+                auto res =
+                    call(NativeBuiltins::binopEnv,
+                         {a, b, e, c(i->srcIdx), c((int)BinopKind::COLON)});
+                setVal(i, res);
+                break;
+            }
 
             case Tag::CastType: {
                 // Scheduled on use
