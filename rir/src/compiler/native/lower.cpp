@@ -1239,10 +1239,14 @@ void PirCodeFunction::build() {
             case Tag::IsObject: {
                 assert(representationOf(i) == Representation::Integer);
                 auto arg = i->arg(0).val();
-                if (representationOf(arg) == Representation::Sexp)
-                    setVal(i, isObj(loadSxp(i, arg)));
-                else
+                if (representationOf(arg) == Representation::Sexp) {
+                    auto a = loadSxp(i, arg);
+                    if (arg->type.maybePromiseWrapped())
+                        a = depromise(a);
+                    setVal(i, isObj(a));
+                } else {
                     setVal(i, new_constant((int)0));
+                }
                 break;
             }
 
