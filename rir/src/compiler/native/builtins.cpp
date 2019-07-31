@@ -25,7 +25,9 @@ static jit_type_t double1[1] = {jit_type_float64};
 
 static jit_type_t sxp2_int[3] = {sxp, sxp, jit_type_int};
 static jit_type_t sxp2_void[3] = {sxp, sxp, jit_type_void_ptr};
+
 static jit_type_t sxp3_int[4] = {sxp, sxp, sxp, jit_type_int};
+
 static jit_type_t sxp3_int2[5] = {sxp, sxp, sxp, jit_type_int, jit_type_int};
 
 static jit_type_t ptr1[1] = {jit_type_void_ptr};
@@ -585,17 +587,16 @@ NativeBuiltin NativeBuiltins::binop = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 
-SEXP isMissingImpl(SEXP symbol, SEXP environment) {
+int isMissingImpl(SEXP symbol, SEXP environment) {
     // TODO: Send the proper src
-    return rir::isMissing(symbol, environment, nullptr, nullptr) ? R_TrueValue
-                                                                 : R_FalseValue;
+    return rir::isMissing(symbol, environment, nullptr, nullptr);
 }
 
 NativeBuiltin NativeBuiltins::isMissing = {
     "isMissing",
     (void*)&isMissingImpl,
     2,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
+    jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp2, 2, 0),
 };
 
 int astestImpl(SEXP val) {

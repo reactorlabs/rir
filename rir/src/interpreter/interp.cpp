@@ -2867,14 +2867,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(is_) {
             SEXP val = ostack_pop(ctx);
-            Immediate i = readImmediate();
+            Immediate type = readImmediate();
             advanceImmediate();
             bool res;
-            switch (i) {
+            switch (type) {
             case NILSXP:
             case LGLSXP:
             case REALSXP:
-                res = TYPEOF(val) == i;
+                res = TYPEOF(val) == type;
                 break;
 
             case VECSXP:
@@ -2900,7 +2900,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             default:
                 assert(false);
-                res = false;
                 break;
             }
             ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
