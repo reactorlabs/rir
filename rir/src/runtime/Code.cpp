@@ -76,8 +76,8 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
 Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     size_t size = InInteger(inp);
     Code* code = (Code*)::operator new(size);
-    code->nativeCode = NULL;
     code->uid = UUID::deserialize(refTable, inp);
+    code->nativeCode = nullptr; // not serialized for now
     code->funInvocationCount = InInteger(inp);
     code->src = InInteger(inp);
     code->stackLength = InInteger(inp);
@@ -102,7 +102,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     memcpy(DATAPTR(store), code, size);
     Code* old = code;
     code = (Code*)DATAPTR(store);
-    delete old;
+    ::operator delete(old);
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
                   // GC area has only 1 pointer

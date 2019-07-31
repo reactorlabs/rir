@@ -356,9 +356,9 @@ DEF_INSTR(asast_, 0, 1, 1, 1)
 DEF_INSTR(is_, 1, 1, 1, 1)
 
 /**
- * isobj_:: check if TOS is any kind of object, push T/F
+ * istype_:: check if TOS is a given type, push T/F
  */
-DEF_INSTR(isobj_, 0, 1, 1, 1)
+DEF_INSTR(istype_, 1, 1, 1, 1)
 
 /**
  * isstubenv_:: check if TOS is an env stub, push T/F
@@ -374,11 +374,6 @@ DEF_INSTR(missing_, 1, 0, 1, 1)
  * check_missing_ :: check if TOS is missing
  */
 DEF_INSTR(check_missing_, 0, 0, 0, 1)
-
-/**
- * brobj_:: branch if tos is object
- */
-DEF_INSTR(brobj_, 1, 0, 0, 1)
 
 /**
  * brtrue_:: pop object stack, if TRUE branch to immediate offset
