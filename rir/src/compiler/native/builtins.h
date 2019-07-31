@@ -83,6 +83,7 @@ struct NativeBuiltins {
     static NativeBuiltin newRealFromInt;
 
     static NativeBuiltin call;
+    static NativeBuiltin namedCall;
     static NativeBuiltin callBuiltin;
 
     static NativeBuiltin notOp;

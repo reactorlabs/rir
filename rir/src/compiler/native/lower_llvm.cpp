@@ -1580,6 +1580,21 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
+            case Tag::NamedCall: {
+                auto b = NamedCall::Cast(i);
+                std::vector<Value*> args;
+                b->eachCallArg([&](Value* v) { args.push_back(v); });
+                setVal(i, withCallFrame(i, args, [&]() -> llvm::Value* {
+                           return call(NativeBuiltins::namedCall,
+                                       {paramCode(), c(b->srcIdx),
+                                        loadSxp(i, b->cls()),
+                                        loadSxp(i, b->env()), c(b->nCallArgs()),
+                                        builder.CreateIntToPtr(c(b->namesPtr),
+                                                               t::voidPtr)});
+                       }));
+                break;
+            }
+
             case Tag::StaticCall: {
                 auto calli = StaticCall::Cast(i);
                 auto target = calli->tryDispatch();

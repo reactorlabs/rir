@@ -290,6 +290,25 @@ NativeBuiltin NativeBuiltins::call = {
     jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 5, 0),
 };
 
+static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
+                          size_t nargs, Immediate* names) {
+    auto ctx = globalContext();
+    CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
+                     names, env, Assumptions(), ctx);
+    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+               LazyEnvironment::check(env) || env == R_NilValue);
+    SLOWASSERT(ctx);
+    auto res = doCall(call, ctx);
+    return res;
+};
+
+NativeBuiltin NativeBuiltins::namedCall = {
+    "namedCall",
+    (void*)&namedCallImpl,
+    6,
+    nullptr,
+};
+
 SEXP createPromiseImpl(rir::Code* c, unsigned id, SEXP env, SEXP value) {
     SEXP res = Rf_mkPROMISE(c->getPromise(id)->container(), env);
     SET_PRVALUE(res, value);

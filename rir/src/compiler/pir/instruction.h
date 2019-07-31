@@ -1781,6 +1781,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
 class VLIE(NamedCall, Effects::Any()), public CallInstruction {
   public:
     std::vector<SEXP> names;
+    Immediate* namesPtr;
 
     Value* cls() const { return arg(0).val(); }
 
@@ -1793,7 +1794,8 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
     bool hasNamedArgs() const override { return true; }
 
     NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
-              const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
+              const std::vector<BC::PoolIdx>& names_, Immediate* namesPtr,
+              unsigned srcIdx);
 
     size_t nCallArgs() const override { return nargs() - 2; };
     void eachCallArg(const Instruction::ArgumentValueIterator& it)
