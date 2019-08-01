@@ -112,6 +112,8 @@ class LowerFunctionLLVM {
     Code* code;
     const std::unordered_map<Promise*, unsigned>& promMap;
     const std::unordered_set<Instruction*>& needsEnsureNamed;
+    const std::unordered_set<Instruction*>& needsSetShared;
+    bool refcountAnalysisOverflow;
     IRBuilder<> builder;
     MDBuilder MDB;
     CFG cfg;
@@ -125,10 +127,14 @@ class LowerFunctionLLVM {
 
     LowerFunctionLLVM(const std::string& name, ClosureVersion* cls, Code* code,
                       const std::unordered_map<Promise*, unsigned>& promMap,
-                      const std::unordered_set<Instruction*>& needsEnsureNamed)
+                      const std::unordered_set<Instruction*>& needsEnsureNamed,
+                      const std::unordered_set<Instruction*>& needsSetShared,
+                      bool refcountAnalysisOverflow)
         : cls(cls), code(code), promMap(promMap),
-          needsEnsureNamed(needsEnsureNamed), builder(C), MDB(C), cfg(code),
-          liveness(code->nextBBId, cfg), numLocals(liveness.maxLive) {
+          needsEnsureNamed(needsEnsureNamed), needsSetShared(needsSetShared),
+          refcountAnalysisOverflow(refcountAnalysisOverflow), builder(C),
+          MDB(C), cfg(code), liveness(code->nextBBId, cfg),
+          numLocals(liveness.maxLive) {
 
         fun = JitLLVM::declare(name, t::nativeFunction);
         // prevent Wunused
@@ -199,7 +205,7 @@ class LowerFunctionLLVM {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
-    llvm::Value* c(unsigned i, int bs = 32) {
+    llvm::Value* c(unsigned int i, int bs = 32) {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
@@ -225,7 +231,8 @@ class LowerFunctionLLVM {
     llvm::Value* sxpinfoPtr(llvm::Value*);
 
     void ensureNamed(llvm::Value* v);
-    void incrementNamed(llvm::Value* v);
+    void assertNamed(llvm::Value* v);
+    void incrementNamed(llvm::Value* v, int max = NAMEDMAX);
     void nacheck(llvm::Value* v, BasicBlock* isNa, BasicBlock* notNa = nullptr);
     void checkMissing(llvm::Value* v);
     void checkUnbound(llvm::Value* v);
@@ -287,7 +294,7 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     auto needsEval = BasicBlock::Create(C, "needsEval", fun);
     auto ok = BasicBlock::Create(C, "ok", fun);
 
-    auto res = builder.CreateAlloca(t::SEXP);
+    llvm::Value* res = builder.CreateAlloca(t::SEXP);
     builder.CreateStore(arg, res);
 
     checkIsSexp(arg, "force argument");
@@ -313,7 +320,12 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
-    return builder.CreateLoad(res);
+    res = builder.CreateLoad(res);
+#ifdef ENABLE_SLOWASSERT
+    insn_assert(builder.CreateICmpNE(sexptype(res), c(PROMSXP)),
+                "Force returned promise");
+#endif
+    return res;
 }
 
 void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg) {
@@ -621,7 +633,7 @@ llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v) {
     builder.CreateBr(done);
 
     builder.SetInsertPoint(isNaBr);
-    builder.CreateStore(c(NAN), res);
+    builder.CreateStore(c(R_NaN), res);
     builder.CreateBr(done);
 
     builder.SetInsertPoint(isReal);
@@ -737,12 +749,33 @@ llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
     return builder.CreateLoad(v);
 }
 
+void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
+    assert(v->getType() == t::SEXP);
+    auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
+    auto sxpinfo = builder.CreateLoad(sxpinfoP);
+
+    unsigned long namedBit = 1ul << 32;
+    auto named = builder.CreateOr(sxpinfo, c(namedBit));
+    auto isNamed = builder.CreateICmpEQ(sxpinfo, named);
+
+    auto notNamed = BasicBlock::Create(C, "notNamed", fun);
+    auto ok = BasicBlock::Create(C, "", fun);
+
+    builder.CreateCondBr(isNamed, ok, notNamed);
+    builder.SetInsertPoint(notNamed);
+    insn_assert(builder.getFalse(), "Value is not named");
+    builder.CreateBr(ok);
+
+    builder.SetInsertPoint(ok);
+};
+
 void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
 
-    auto named = builder.CreateOr(sxpinfo, c(0x100000000ul));
+    unsigned long namedBit = 1ul << 32;
+    auto named = builder.CreateOr(sxpinfo, c(namedBit));
     auto isNamed = builder.CreateICmpEQ(sxpinfo, named);
 
     auto notNamed = BasicBlock::Create(C, "notNamed", fun);
@@ -756,7 +789,7 @@ void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 };
 
-void LowerFunctionLLVM::incrementNamed(llvm::Value* v) {
+void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = sxpinfoPtr(v);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
@@ -767,7 +800,7 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v) {
     auto named = builder.CreateLShr(sxpinfo, c(32, 64));
     named = builder.CreateAnd(named, c(namedMask));
 
-    auto isNamedMax = builder.CreateICmpEQ(named, c(NAMEDMAX, 64));
+    auto isNamedMax = builder.CreateICmpEQ(named, c(max, 64));
 
     auto incrementBr = BasicBlock::Create(C, "", fun);
     auto done = BasicBlock::Create(C, "", fun);
@@ -911,7 +944,7 @@ void LowerFunctionLLVM::gcSafepoint(Instruction* i, size_t required,
             i->eachArg([&](Value* a) { isArg = isArg || a == test; });
         }
 
-        if (i != test && (isArg || liveness.live(i, v.first))) {
+        if (i != test && (isArg || liveness.live(i, test))) {
             if (v.second->getType() == t::SEXP)
                 setLocal(pos++, v.second);
         }
@@ -926,7 +959,7 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
     auto isProm = BasicBlock::Create(C, "isProm", fun);
     auto ok = BasicBlock::Create(C, "ok", fun);
 
-    auto res = builder.CreateAlloca(t::SEXP);
+    llvm::Value* res = builder.CreateAlloca(t::SEXP);
     builder.CreateStore(arg, res);
 
     auto type = sexptype(arg);
@@ -940,7 +973,12 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
-    return builder.CreateLoad(res);
+    res = builder.CreateLoad(res);
+#ifdef ENABLE_SLOWASSERT
+    insn_assert(builder.CreateICmpNE(sexptype(res), c(PROMSXP)),
+                "Depromise returned promise");
+#endif
+    return res;
 }
 
 void LowerFunctionLLVM::compileRelop(
@@ -1082,7 +1120,7 @@ void LowerFunctionLLVM::compileBinop(
             if (r == t::Int)
                 builder.CreateStore(c(NA_INTEGER), res);
             else
-                builder.CreateStore(c((double)NAN), res);
+                builder.CreateStore(c((double)R_NaN), res);
 
             builder.CreateBr(done);
         }
@@ -1160,7 +1198,7 @@ void LowerFunctionLLVM::compileUnop(
             if (r == t::Int)
                 builder.CreateStore(c(NA_INTEGER), res);
             else
-                builder.CreateStore(c((double)NAN), res);
+                builder.CreateStore(c((double)R_NaN), res);
 
             builder.CreateBr(done);
         }
@@ -1583,18 +1621,25 @@ bool LowerFunctionLLVM::tryCompile() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
                 Assumptions asmpt = b->inferAvailableAssumptions();
+
+                auto namesStore =
+                    builder.CreateAlloca(t::Int, 0, c(b->names.size()));
+                for (size_t i = 0; i < b->names.size(); ++i)
+                    builder.CreateStore(c(Pool::insert(b->names[i])),
+                                        builder.CreateGEP(namesStore, c(i)));
+
                 setVal(i, withCallFrame(i, args, [&]() -> llvm::Value* {
-                           return call(NativeBuiltins::namedCall,
-                                       {
-                                           paramCode(),
-                                           c(b->srcIdx),
-                                           loadSxp(i, b->cls()),
-                                           loadSxp(i, b->env()),
-                                           c(b->nCallArgs()),
-                                           builder.CreateIntToPtr(
-                                               c(b->namesPtr), t::voidPtr),
-                                           c(asmpt.toI()),
-                                       });
+                           return call(
+                               NativeBuiltins::namedCall,
+                               {
+                                   paramCode(),
+                                   c(b->srcIdx),
+                                   loadSxp(i, b->cls()),
+                                   loadSxp(i, b->env()),
+                                   c(b->nCallArgs()),
+                                   builder.CreateBitCast(namesStore, t::IntPtr),
+                                   c(asmpt.toI()),
+                               });
                        }));
                 break;
             }
@@ -1766,18 +1811,18 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto mkenv = MkEnv::Cast(i);
                 auto parent = loadSxp(i, mkenv->env());
 
-                static std::vector<std::vector<Immediate>> mkEnvStubNames;
-                mkEnvStubNames.push_back({});
-                auto& namesBuffer = mkEnvStubNames.back();
+                auto namesStore =
+                    builder.CreateAlloca(t::Int, 0, c(mkenv->nLocals()));
                 for (size_t i = 0; i < mkenv->nLocals(); ++i)
-                    namesBuffer.push_back(Pool::insert(mkenv->varName[i]));
+                    builder.CreateStore(c(Pool::insert(mkenv->varName[i])),
+                                        builder.CreateGEP(namesStore, c(i)));
 
                 if (mkenv->stub) {
                     gcSafepoint(i, -1, true);
                     auto env =
                         call(NativeBuiltins::createStubEnvironment,
                              {parent, c((int)mkenv->nLocals()),
-                              convertToPointer(namesBuffer.data(), t::voidPtr),
+                              builder.CreateBitCast(namesStore, t::IntPtr),
                               c(mkenv->context)});
                     size_t pos = 0;
                     mkenv->eachLocalVar([&](SEXP name, Value* v) {
@@ -2337,6 +2382,9 @@ bool LowerFunctionLLVM::tryCompile() {
                     break;
                 }
 
+                // TODO: why is this needed?
+                gcSafepoint(i, -1, true);
+
                 llvm::Value* res = nullptr;
                 if (bindingsCache.count(i->env())) {
                     res = builder.CreateAlloca(t::SEXP);
@@ -2558,9 +2606,13 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
             }
 
-            if (representationOf(i) == Representation::Sexp &&
-                needsEnsureNamed.count(i)) {
-                ensureNamed(loadSxp(i, i));
+            if (valueMap.count(i) && representationOf(i) == t::SEXP) {
+                if (i->minReferenceCount() < 2 && needsSetShared.count(i))
+                    incrementNamed(loadSxp(i, i), 2);
+                else if (i->minReferenceCount() < 1 &&
+                         (refcountAnalysisOverflow ||
+                          needsEnsureNamed.count(i)))
+                    ensureNamed(loadSxp(i, i));
             }
         }
 
@@ -2588,11 +2640,14 @@ namespace pir {
 void* LowerLLVM::tryCompile(
     ClosureVersion* cls, Code* code,
     const std::unordered_map<Promise*, unsigned>& m,
-    const std::unordered_set<Instruction*>& needsEnsureNamed) {
+    const std::unordered_set<Instruction*>& needsEnsureNamed,
+    const std::unordered_set<Instruction*>& needsSetShared,
+    bool refcountAnalysisOverflow) {
 
     JitLLVM::createModule();
     auto mangledName = JitLLVM::mangle(cls->name());
-    LowerFunctionLLVM funCompiler(mangledName, cls, code, m, needsEnsureNamed);
+    LowerFunctionLLVM funCompiler(mangledName, cls, code, m, needsEnsureNamed,
+                                  needsSetShared, refcountAnalysisOverflow);
     if (!funCompiler.tryCompile())
         return nullptr;
 

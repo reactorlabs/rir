@@ -140,7 +140,7 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::createEnvironment.llvmSignature = t::sexp_sexpsexpint;
     NativeBuiltins::createStubEnvironment.llvmSignature =
-        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::voidPtr, t::Int},
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::IntPtr, t::Int},
                                 false);
     NativeBuiltins::createPromise.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP}, false);
@@ -164,7 +164,7 @@ int initializeTypes(LLVMContext& context) {
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64}, false);
     NativeBuiltins::namedCall.llvmSignature = llvm::FunctionType::get(
         t::SEXP,
-        {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::voidPtr, t::i64},
+        {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
         false);
     NativeBuiltins::callBuiltin.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64}, false);

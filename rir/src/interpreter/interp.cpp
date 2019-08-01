@@ -182,6 +182,7 @@ SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
     auto names = wrapper->names;
     for (size_t i = 0; i < wrapper->nargs; ++i) {
         SEXP val = wrapper->getArg(i);
+        INCREMENT_NAMED(val);
         SEXP name = cp_pool_at(ctx, names[i]);
         arglist = CONS_NR(val, arglist);
         SET_TAG(arglist, name);
@@ -1628,7 +1629,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             bool hasMissing = false;
             for (long i = n - 1; i >= 0; --i) {
                 SEXP val = ostack_pop(ctx);
-                ENSURE_NAMED(val);
+                INCREMENT_NAMED(val);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
@@ -2369,6 +2370,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
             SEXP val = ostack_pop(ctx);
+            assert(TYPEOF(val) != PROMSXP);
             ENSURE_NAMEDMAX(val);
             SET_PRVALUE(prom, val);
             ostack_push(ctx, prom);
