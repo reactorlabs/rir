@@ -1,12 +1,14 @@
 #include "builtins.h"
 
 #include "compiler/parameter.h"
+#include "interpreter/ArgsLazyData.h"
 #include "interpreter/LazyEnvironment.h"
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
 #include "ir/Deoptimization.h"
 #include "utils/Pool.h"
+
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 
@@ -48,6 +50,7 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     if (val == R_MissingArg)
         SET_MISSING(res, 2);
     SET_TAG(res, name);
+    INCREMENT_NAMED(val);
     return res;
 }
 
@@ -75,7 +78,9 @@ NativeBuiltin NativeBuiltins::createMissingBindingCell = {
 SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
     SLOWASSERT(TYPEOF(parent) == ENVSXP);
     SLOWASSERT(TYPEOF(arglist) == LISTSXP || arglist == R_NilValue);
+    PROTECT(arglist);
     SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent);
+    UNPROTECT(1);
 
     if (contextPos > 0) {
         if (auto cptr = getFunctionContext(contextPos - 1)) {
@@ -121,6 +126,7 @@ SEXP ldvarImpl(SEXP a, SEXP b) {
     auto res = Rf_findVar(a, b);
     // std::cout << CHAR(PRINTNAME(a)) << "=";
     // Rf_PrintValue(res);
+    ENSURE_NAMED(res);
     return res;
 };
 
@@ -136,11 +142,15 @@ SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
             *cache = (SEXP)1;
         } else {
             *cache = loc.cell;
-            if (CAR(*cache) != R_UnboundValue)
+            if (CAR(*cache) != R_UnboundValue) {
+                ENSURE_NAMED(*cache);
                 return CAR(*cache);
+            }
         }
     }
-    return Rf_findVar(sym, env);
+    auto res = Rf_findVar(sym, env);
+    ENSURE_NAMED(res);
+    return res;
 };
 
 NativeBuiltin NativeBuiltins::ldvarCacheMiss = {
@@ -235,7 +245,8 @@ NativeBuiltin NativeBuiltins::error = {
 
 static bool debugPrintCallBuiltinImpl = false;
 static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                            size_t nargs, InterpreterInstance* ctx) {
+                            size_t nargs) {
+    auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
                      Assumptions(), ctx);
     if (debugPrintCallBuiltinImpl) {
@@ -253,36 +264,66 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     }
     SLOWASSERT(TYPEOF(callee) == BUILTINSXP);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
-               LazyEnvironment::check(env));
+               LazyEnvironment::check(env) || env == R_NilValue);
     SLOWASSERT(ctx);
     auto res = builtinCall(call, ctx);
     SLOWASSERT(res);
     return res;
 };
-static jit_type_t callArgs[6] = {jit_type_void_ptr, jit_type_uint,    sxp, sxp,
-                                 jit_type_ulong,    jit_type_void_ptr};
+static jit_type_t callArgs[6] = {jit_type_void_ptr, jit_type_uint, sxp, sxp,
+                                 jit_type_ulong,    jit_type_ulong};
 NativeBuiltin NativeBuiltins::callBuiltin = {
-    "callBuiltin", (void*)&callBuiltinImpl, 6,
-    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 6, 0),
+    "callBuiltin",
+    (void*)&callBuiltinImpl,
+    5,
+    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 5, 0),
 };
 
 static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                     size_t nargs, InterpreterInstance* ctx) {
+                     size_t nargs, unsigned long available) {
+    auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
-                     Assumptions(), ctx);
-    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP);
+                     Assumptions(available), ctx);
+    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+               LazyEnvironment::check(env) || env == R_NilValue);
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
     return res;
 };
 
 NativeBuiltin NativeBuiltins::call = {
-    "call", (void*)&callImpl, 6,
+    "call",
+    (void*)&callImpl,
+    6,
     jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 6, 0),
 };
 
+static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
+                          size_t nargs, Immediate* names,
+                          unsigned long available) {
+    auto ctx = globalContext();
+    CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
+                     names, env, Assumptions(available), ctx);
+    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+               LazyEnvironment::check(env) || env == R_NilValue);
+    SLOWASSERT(ctx);
+    auto res = doCall(call, ctx);
+    return res;
+};
+
+NativeBuiltin NativeBuiltins::namedCall = {
+    "namedCall",
+    (void*)&namedCallImpl,
+    7,
+    nullptr,
+};
+
 SEXP createPromiseImpl(rir::Code* c, unsigned id, SEXP env, SEXP value) {
+    assert(TYPEOF(value) != PROMSXP);
+    PROTECT(value);
     SEXP res = Rf_mkPROMISE(c->getPromise(id)->container(), env);
+    UNPROTECT(1);
+    ENSURE_NAMEDMAX(value);
     SET_PRVALUE(res, value);
     return res;
 }
@@ -416,6 +457,58 @@ static SEXPREC createFakeCONS(SEXP cdr) {
     return res;
 }
 
+static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
+                        UnopKind op) {
+    SEXP res = nullptr;
+    SEXP arglist = CONS_NR(argument, R_NilValue);
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    PROTECT(arglist);
+    switch (op) {
+    case UnopKind::MINUS:
+        OPERATION_FALLBACK("-");
+        break;
+    case UnopKind::PLUS:
+        OPERATION_FALLBACK("+");
+        break;
+    }
+    UNPROTECT(1);
+    SLOWASSERT(res);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::unopEnv = {
+    "unopEnv",
+    (void*)&unopEnvImpl,
+    4,
+    nullptr,
+};
+
+static SEXP unopImpl(SEXP argument, UnopKind op) {
+    SEXP res = nullptr;
+    SEXPREC arglistStruct = createFakeCONS(R_NilValue);
+    arglistStruct.u.listsxp.carval = argument;
+    SEXP arglist = &arglistStruct;
+    SEXP env = R_NilValue;
+    SEXP call = R_NilValue;
+    switch (op) {
+    case UnopKind::MINUS:
+        OPERATION_FALLBACK("-");
+        break;
+    case UnopKind::PLUS:
+        OPERATION_FALLBACK("+");
+        break;
+    }
+    SLOWASSERT(res);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::unop = {
+    "unop",
+    (void*)&unopImpl,
+    2,
+    nullptr,
+};
+
 static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
     SEXP res = nullptr;
     SEXP arglist = CONS_NR(argument, R_NilValue);
@@ -450,8 +543,8 @@ static SEXP notImpl(SEXP argument) {
 NativeBuiltin NativeBuiltins::notOp = {
     "not",
     (void*)&notImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+    1,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp1, 1, 0),
 };
 
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
@@ -498,6 +591,9 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
         break;
     case BinopKind::LOR:
         OPERATION_FALLBACK("||");
+        break;
+    case BinopKind::COLON:
+        OPERATION_FALLBACK(":");
         break;
     }
     UNPROTECT(1);
@@ -568,6 +664,9 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
         break;
     case BinopKind::LOR:
         OPERATION_FALLBACK("||");
+        break;
+    case BinopKind::COLON:
+        OPERATION_FALLBACK(":");
         break;
     }
     SLOWASSERT(res);
@@ -723,7 +822,7 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
         if (!res)
-            res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+            res = do_subset_dflt(call, symbol::Bracket, args, env);
     } else {
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
@@ -760,6 +859,86 @@ NativeBuiltin NativeBuiltins::extract21 = {
     (void*)&extract21Impl,
     4,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
+};
+
+static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
+                               SEXP env, SEXP callee) {
+    code->registerInvocation();
+    if ((SETJMP(cntxt.cjmpbuf))) {
+        if (R_ReturnedValue == R_RestartToken) {
+            cntxt.callflag = CTXT_RETURN; /* turn restart off */
+            R_ReturnedValue = R_NilValue; /* remove restart token */
+            code->registerInvocation();
+            return code->nativeCode(code, args, env, callee);
+        } else {
+            return R_ReturnedValue;
+        }
+    }
+    return code->nativeCode(code, args, env, callee);
+}
+
+void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
+                        SEXP arglist, SEXP op) {
+    /*  If we have a generic function we need to use the sysparent of
+       the generic as the sysparent of the method because the method
+       is a straight substitution of the generic.  */
+
+    if (R_GlobalContext->callflag == CTXT_GENERIC)
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho,
+                        R_GlobalContext->sysparent, arglist, op);
+    else
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, sysparent, arglist, op);
+}
+
+static void endClosureContext(RCNTXT* cntxt, SEXP result) {
+    cntxt->returnValue = result;
+    Rf_endcontext(cntxt);
+}
+
+static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
+                                     Immediate astP, SEXP env, size_t nargs) {
+    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+               LazyEnvironment::check(env) || env == R_NilValue);
+
+    auto t = R_BCNodeStackTop;
+    R_bcstack_t* args = ostack_cell_at(ctx, nargs - 1);
+    auto ast = cp_pool_at(globalContext(), astP);
+
+    ArgsLazyData lazyArgs(nargs, args, nullptr, globalContext());
+    SEXP arglist = (SEXP)&lazyArgs;
+
+    assert(fun->signature().envCreation ==
+           FunctionSignature::Environment::CalleeCreated);
+
+    RCNTXT cntxt;
+
+    // This code needs to be protected, because its slot in the dispatch table
+    // could get overwritten while we are executing it.
+    PROTECT(fun->container());
+
+    initClosureContext(ast, &cntxt, symbol::delayedEnv, env, arglist, callee);
+    R_Srcref = getAttrib(callee, symbol::srcref);
+
+    // TODO debug
+
+    SEXP result = rirCallTrampoline_(cntxt, fun->body(), args, env, callee);
+
+    endClosureContext(&cntxt, result);
+
+    PROTECT(result);
+    R_Srcref = cntxt.srcref;
+    R_ReturnedValue = R_NilValue;
+
+    UNPROTECT(2);
+    assert(t == R_BCNodeStackTop);
+    return result;
+}
+
+NativeBuiltin NativeBuiltins::nativeCallTrampoline = {
+    "nativeCallTrampoline",
+    (void*)&nativeCallTrampolineImpl,
+    5,
+    nullptr,
 };
 }
 }

@@ -41,6 +41,12 @@ enum class BinopKind : int {
     GTE,
     LAND,
     LOR,
+    COLON,
+};
+
+enum class UnopKind : int {
+    MINUS,
+    PLUS,
 };
 
 struct NativeBuiltins {
@@ -77,12 +83,15 @@ struct NativeBuiltins {
     static NativeBuiltin newRealFromInt;
 
     static NativeBuiltin call;
+    static NativeBuiltin namedCall;
     static NativeBuiltin callBuiltin;
 
     static NativeBuiltin notOp;
     static NativeBuiltin notEnv;
     static NativeBuiltin binop;
     static NativeBuiltin binopEnv;
+    static NativeBuiltin unop;
+    static NativeBuiltin unopEnv;
 
     static NativeBuiltin is;
     static NativeBuiltin isMissing;
@@ -99,6 +108,8 @@ struct NativeBuiltins {
 
     static NativeBuiltin extract11;
     static NativeBuiltin extract21;
+
+    static NativeBuiltin nativeCallTrampoline;
 };
 }
 }

@@ -61,6 +61,16 @@ struct Assumptions {
         (void)unused2;
         memcpy(this, pos, sizeof(*this));
     }
+    explicit Assumptions(unsigned long val) {
+        memcpy(this, &val, sizeof(*this));
+    }
+
+    unsigned long toI() {
+        static_assert(sizeof(*this) == sizeof(unsigned long), "");
+        uint64_t m;
+        memcpy(&m, this, sizeof(*this));
+        return m;
+    }
 
     RIR_INLINE void add(Assumption a) { flags.set(a); }
     RIR_INLINE void remove(Assumption a) { flags.reset(a); }

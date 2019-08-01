@@ -135,9 +135,7 @@ test_features:
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
-    - PIR_NATIVE_BACKEND=1 ./bin/gnur-make-tests check
-    # TODO: fix bugs and switch to 'check'
-    - PIR_NATIVE_BACKEND=2 ./bin/gnur-make-tests test-Specific test-Reg
+    - PIR_NATIVE_BACKEND=2 ./bin/gnur-make-tests check
     - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
     - RIR_SERIALIZE_CHAOS=10 FAST_TESTS=1 ./bin/tests
 

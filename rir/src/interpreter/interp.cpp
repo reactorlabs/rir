@@ -182,6 +182,7 @@ SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
     auto names = wrapper->names;
     for (size_t i = 0; i < wrapper->nargs; ++i) {
         SEXP val = wrapper->getArg(i);
+        INCREMENT_NAMED(val);
         SEXP name = cp_pool_at(ctx, names[i]);
         arglist = CONS_NR(val, arglist);
         SET_TAG(arglist, name);
@@ -207,16 +208,18 @@ static SEXP materializeCallerEnv(CallContext& callCtx,
     return callCtx.callerEnv;
 }
 
-SEXP createLegacyArgsListFromStackValues(CallContext& call, bool eagerCallee,
+SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
+                                         const Immediate* names,
+                                         bool eagerCallee,
                                          InterpreterInstance* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
-    for (size_t i = 0; i < call.suppliedArgs; ++i) {
+    for (size_t i = 0; i < length; ++i) {
 
-        SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
+        SEXP name = names ? cp_pool_at(ctx, names[i]) : R_NilValue;
 
-        SEXP arg = call.stackArg(i);
+        SEXP arg = ostack_at_cell(args + i);
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
             arg = forcePromise(arg);
@@ -255,13 +258,15 @@ SEXP lazyPromargsCreation(void* rirDataWrapper) {
 
 static RIR_INLINE SEXP createLegacyLazyArgsList(CallContext& call,
                                                 InterpreterInstance* ctx) {
-        return createLegacyArgsListFromStackValues(call, false, ctx);
+    return createLegacyArgsListFromStackValues(
+        call.suppliedArgs, call.stackArgs, call.names, false, ctx);
 }
 
 static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
                                             InterpreterInstance* ctx) {
-        return createLegacyArgsListFromStackValues(call, call.hasEagerCallee(),
-                                                   ctx);
+    return createLegacyArgsListFromStackValues(call.suppliedArgs,
+                                               call.stackArgs, call.names,
+                                               call.hasEagerCallee(), ctx);
 }
 
 SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
@@ -715,7 +720,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             // Instead of a SEXP with the argslist we create an
             // structure with the information needed to recreate
             // the list lazily if the gnu-r interpreter needs it
-            ArgsLazyData lazyArgs(&call, ctx);
+            ArgsLazyData lazyArgs(call.suppliedArgs, call.stackArgs, call.names,
+                                  ctx);
             if (!arglist)
                 arglist = (SEXP)&lazyArgs;
             supplyMissingArgs(call, fun);
@@ -1488,10 +1494,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  R_bcstack_t* localsBase, BindingCache* cache) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
-    if (c->nativeCode) {
-            return c->nativeCode(
-                c, ctx, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
-                callCtxt ? callCtxt->callee : nullptr);
+    checkUserInterrupt();
+    if (!initialPC && c->nativeCode) {
+        return c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
+                             env, callCtxt ? callCtxt->callee : nullptr);
     }
 
 #ifdef THREADED_CODE
@@ -1576,8 +1582,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     R_Visible = TRUE;
 
-    checkUserInterrupt();
-
     // main loop
     BEGIN_MACHINE {
 
@@ -1625,7 +1629,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             bool hasMissing = false;
             for (long i = n - 1; i >= 0; --i) {
                 SEXP val = ostack_pop(ctx);
-                ENSURE_NAMED(val);
+                INCREMENT_NAMED(val);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
@@ -2312,7 +2316,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 FunctionSignature::Environment::CallerProvided) {
                 res = doCall(call, ctx);
             } else {
-                ArgsLazyData lazyArgs(&call, ctx);
+                ArgsLazyData lazyArgs(call.suppliedArgs, call.stackArgs,
+                                      call.names, ctx);
                 fun->registerInvocation();
                 supplyMissingArgs(call, fun);
                 res = rirCallTrampoline(call, fun, symbol::delayedEnv,
@@ -2365,6 +2370,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
             SEXP val = ostack_pop(ctx);
+            assert(TYPEOF(val) != PROMSXP);
             ENSURE_NAMEDMAX(val);
             SET_PRVALUE(prom, val);
             ostack_push(ctx, prom);

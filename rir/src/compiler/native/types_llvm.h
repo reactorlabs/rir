@@ -57,6 +57,7 @@ extern llvm::FunctionType* sexp_sexpsexpsexp;
 extern llvm::FunctionType* sexp_sexpsexpsexpsexp;
 extern llvm::FunctionType* sexp_sexp3int;
 extern llvm::FunctionType* sexp_sexp3int2;
+extern llvm::FunctionType* sexp_sexp2int2;
 
 extern llvm::FunctionType* sexp_double;
 extern llvm::FunctionType* sexp_sexpint;
@@ -78,8 +79,8 @@ extern llvm::FunctionType* void_cntxtsexp;
 extern llvm::FunctionType* void_cntxtsexpsexp;
 extern llvm::FunctionType* sexp_contxtsexpsexp;
 
-extern llvm::FunctionType* nativeFunction_t;
-extern llvm::Type* nativeFunctionPtr_t;
+extern llvm::FunctionType* nativeFunction;
+extern llvm::Type* nativeFunctionPtr;
 
 } // namespace t
 } // namespace pir
