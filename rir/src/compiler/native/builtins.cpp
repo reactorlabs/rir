@@ -312,6 +312,7 @@ NativeBuiltin NativeBuiltins::namedCall = {
 
 SEXP createPromiseImpl(rir::Code* c, unsigned id, SEXP env, SEXP value) {
     SEXP res = Rf_mkPROMISE(c->getPromise(id)->container(), env);
+    ENSURE_NAMEDMAX(value);
     SET_PRVALUE(res, value);
     return res;
 }
@@ -810,7 +811,7 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
         if (!res)
-            res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+            res = do_subset_dflt(call, symbol::Bracket, args, env);
     } else {
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }

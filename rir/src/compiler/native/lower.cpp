@@ -1935,7 +1935,7 @@ void PirCodeFunction::build() {
                                            loadSxp(i, b->cls()),
                                            loadSxp(i, b->env()),
                                            new_constant(b->nCallArgs()),
-                                           new_constant(asmpt.toI()),
+                                           new_constant((jit_ulong)asmpt.toI()),
                                        });
                        }));
                 break;

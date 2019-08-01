@@ -793,10 +793,8 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
 
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
-                     const std::vector<BC::PoolIdx>& names_,
-                     Immediate* namesPtr, unsigned srcIdx)
-    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
-      namesPtr(namesPtr) {
+                     const std::vector<BC::PoolIdx>& names_, unsigned srcIdx)
+    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
     for (unsigned i = 0; i < args.size(); ++i) {

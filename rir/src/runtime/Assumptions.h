@@ -65,8 +65,8 @@ struct Assumptions {
         memcpy(this, &val, sizeof(*this));
     }
 
-    uint64_t toI() {
-        static_assert(sizeof(*this) == sizeof(uint64_t), "");
+    unsigned long toI() {
+        static_assert(sizeof(*this) == sizeof(unsigned long), "");
         uint64_t m;
         memcpy(&m, this, sizeof(*this));
         return m;

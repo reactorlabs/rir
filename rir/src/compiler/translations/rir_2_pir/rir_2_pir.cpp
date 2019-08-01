@@ -541,11 +541,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto insertGenericCall = [&]() {
             popn(toPop);
             if (bc.bc == Opcode::named_call_) {
-                Immediate* names =
-                    (Immediate*)((char*)pos + 1 + sizeof(BC::CallFixedArgs));
-                push(insert(new NamedCall(
-                    env, callee, args, bc.callExtra().callArgumentNames, names,
-                    bc.immediate.callFixedArgs.ast)));
+                push(insert(new NamedCall(env, callee, args,
+                                          bc.callExtra().callArgumentNames,
+                                          bc.immediate.callFixedArgs.ast)));
             } else {
                 Value* fs = nullptr;
                 if (inPromise())
