@@ -2023,6 +2023,17 @@ bool LowerFunctionLLVM::tryCompile() {
                              },
                              BinopKind::LOR);
                 break;
+            case Tag::Mod:
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateSRem(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFRem(a, b);
+                    },
+                    BinopKind::MOD);
+                break;
 
             case Tag::Colon: {
                 assert(representationOf(i) == t::SEXP);
@@ -2430,6 +2441,44 @@ bool LowerFunctionLLVM::tryCompile() {
                 gcSafepoint(i, -1, true);
                 auto res = call(NativeBuiltins::extract21,
                                 {vector, idx, env, c(extract->srcIdx)});
+                setVal(i, res);
+                break;
+            }
+
+            case Tag::Subassign1_1D: {
+                auto subAssign = Subassign1_1D::Cast(i);
+                auto vector = loadSxp(i, subAssign->vector());
+                auto val = loadSxp(i, subAssign->val());
+                auto idx = loadSxp(i, subAssign->idx());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, t::SEXP);
+                if (subAssign->hasEnv())
+                    env = loadSxp(i, subAssign->env());
+
+                gcSafepoint(i, -1, false);
+                auto res = call(NativeBuiltins::subassign11,
+                                {vector, idx, val, env, c(subAssign->srcIdx)});
+                setVal(i, res);
+                break;
+            }
+
+            case Tag::Subassign2_1D: {
+                auto subAssign = Subassign2_1D::Cast(i);
+                auto vector = loadSxp(i, subAssign->vector());
+                auto val = loadSxp(i, subAssign->val());
+                auto idx = loadSxp(i, subAssign->idx());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, t::SEXP);
+                if (subAssign->hasEnv())
+                    env = loadSxp(i, subAssign->env());
+
+                gcSafepoint(i, -1, false);
+                auto res = call(NativeBuiltins::subassign21,
+                                {vector, idx, val, env, c(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
             }

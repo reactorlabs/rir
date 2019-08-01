@@ -31,6 +31,7 @@ static jit_type_t sxp2_void[3] = {sxp, sxp, jit_type_void_ptr};
 
 static jit_type_t sxp3_int[4] = {sxp, sxp, sxp, jit_type_int};
 
+static jit_type_t sxp4_int[5] = {sxp, sxp, sxp, sxp, jit_type_int};
 static jit_type_t sxp3_int2[5] = {sxp, sxp, sxp, jit_type_int, jit_type_int};
 
 static jit_type_t ptr1[1] = {jit_type_void_ptr};
@@ -584,6 +585,9 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
     case BinopKind::COLON:
         OPERATION_FALLBACK(":");
         break;
+    case BinopKind::MOD:
+        OPERATION_FALLBACK("%%");
+        break;
     }
     UNPROTECT(1);
     SLOWASSERT(res);
@@ -656,6 +660,9 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
         break;
     case BinopKind::COLON:
         OPERATION_FALLBACK(":");
+        break;
+    case BinopKind::MOD:
+        OPERATION_FALLBACK("%%");
         break;
     }
     SLOWASSERT(res);
@@ -928,6 +935,64 @@ NativeBuiltin NativeBuiltins::nativeCallTrampoline = {
     (void*)&nativeCallTrampolineImpl,
     5,
     nullptr,
+};
+
+SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
+                     Immediate srcIdx) {
+    SEXP args = CONS_NR(vector, CONS_NR(index, CONS_NR(value, R_NilValue)));
+    SET_TAG(CDDR(args), symbol::value);
+    PROTECT(args);
+    SEXP res = nullptr;
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    RCNTXT assignContext;
+    Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
+                    symbol::AssignBracket);
+    if (isObject(vector))
+        res = dispatchApply(call, vector, args, symbol::AssignBracket, env,
+                            globalContext());
+    if (!res) {
+        res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
+        SET_NAMED(res, 0);
+    }
+    Rf_endcontext(&assignContext);
+    UNPROTECT(1);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::subassign11 = {
+    "subassign1_1D",
+    (void*)subassign11Impl,
+    5,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp4_int, 5, 0),
+};
+
+SEXP subassign21Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
+                     Immediate srcIdx) {
+    SEXP args = CONS_NR(vector, CONS_NR(index, CONS_NR(value, R_NilValue)));
+    SET_TAG(CDDR(args), symbol::value);
+    PROTECT(args);
+    SEXP res = nullptr;
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    RCNTXT assignContext;
+    Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
+                    symbol::AssignDoubleBracket);
+    if (isObject(vector))
+        res = dispatchApply(call, vector, args, symbol::AssignDoubleBracket,
+                            env, globalContext());
+    if (!res) {
+        res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
+        SET_NAMED(res, 0);
+    }
+    Rf_endcontext(&assignContext);
+    UNPROTECT(1);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::subassign21 = {
+    "subassign2_1D",
+    (void*)subassign21Impl,
+    5,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp4_int, 5, 0),
 };
 }
 }
