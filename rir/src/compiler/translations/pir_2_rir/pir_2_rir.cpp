@@ -659,10 +659,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto p = mk->prom();
                 unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
                 promMap[p] = id;
-                if (mk->eagerArg()) {
+                if (mk->isEager()) {
                     cb.add(BC::mkEagerPromise(id));
                 } else {
-                    // Remove the UnbounValue argument pushed by loadArg, this
+                    // Remove the UnboundValue argument pushed by loadArg, this
                     // will be cleaned up by the peephole opts
                     cb.add(BC::pop());
                     cb.add(BC::mkPromise(id));
