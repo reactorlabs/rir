@@ -18,7 +18,7 @@ DeadInstructions::DeadInstructions(Code* code) {
 bool DeadInstructions::used(Instruction* i) {
     if (i->branchOrExit())
         return true;
-    return !i->type.isVoid() && used_.count(i);
+    return (i->type != PirType::voyd()) && used_.count(i);
 }
 
 bool DeadInstructions::unused(Instruction* i) { return !used(i); }
