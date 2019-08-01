@@ -54,11 +54,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class CodeVerifier;
     static constexpr size_t NumLocals = 1;
 
-    // This must be called before data containing RIR closures is deseralized.
-    // Will modify all further deserialized UIDs (both retrieved and new) with
-    // a hash, so that if the same Code* is deserialized it will be distinct,
-    // but it can also be referenced by a future withUid
-    static void rehashDeserializedUids();
     static Code* withUid(UUID uid);
 
     Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,

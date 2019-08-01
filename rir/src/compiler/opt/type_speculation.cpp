@@ -26,7 +26,8 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             auto i = *ip;
             bool trigger = false;
             if (!i->type.maybePromiseWrapped() && !i->typeFeedback.isVoid() &&
-                !i->type.isA(i->typeFeedback)) {
+                !i->type.isA(i->typeFeedback) &&
+                !(i->type & i->typeFeedback).isVoid()) {
                 switch (i->tag) {
                 case Tag::Force: {
                     auto arg = i->arg(0).val()->followCasts();

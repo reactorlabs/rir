@@ -41,7 +41,8 @@ void DeoptMetadata::serialize(const Opcode* anchor, SEXP refTable,
 void DeoptMetadata::print(std::ostream& out) const {
     for (size_t i = 0; i < numFrames; ++i) {
         auto f = frames[i];
-        out << f.code << "+" << f.pc - f.code->code() << " s" << f.stackSize;
+        out << f.code << "(" << f.code->uid.str() << ")"
+            << "+" << f.pc - f.code->code() << " s" << f.stackSize;
         if (i < numFrames - 1)
             out << ", ";
     }
