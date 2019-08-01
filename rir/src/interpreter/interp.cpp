@@ -1493,7 +1493,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  R_bcstack_t* localsBase, BindingCache* cache) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
-    if (c->nativeCode) {
+    checkUserInterrupt();
+    if (!initialPC && c->nativeCode) {
         return c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
                              env, callCtxt ? callCtxt->callee : nullptr);
     }
@@ -1579,8 +1580,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     };
 
     R_Visible = TRUE;
-
-    checkUserInterrupt();
 
     // main loop
     BEGIN_MACHINE {

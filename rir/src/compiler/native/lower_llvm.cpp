@@ -1567,15 +1567,13 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto b = Call::Cast(i);
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
+                Assumptions asmpt = b->inferAvailableAssumptions();
                 setVal(i, withCallFrame(i, args, [&]() -> llvm::Value* {
                            return call(NativeBuiltins::call,
-                                       {
-                                           paramCode(),
-                                           c(b->srcIdx),
-                                           loadSxp(i, b->cls()),
-                                           loadSxp(i, b->env()),
-                                           c(b->nCallArgs()),
-                                       });
+                                       {paramCode(), c(b->srcIdx),
+                                        loadSxp(i, b->cls()),
+                                        loadSxp(i, b->env()), c(b->nCallArgs()),
+                                        c(asmpt.toI())});
                        }));
                 break;
             }
@@ -1584,13 +1582,19 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto b = NamedCall::Cast(i);
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
+                Assumptions asmpt = b->inferAvailableAssumptions();
                 setVal(i, withCallFrame(i, args, [&]() -> llvm::Value* {
                            return call(NativeBuiltins::namedCall,
-                                       {paramCode(), c(b->srcIdx),
-                                        loadSxp(i, b->cls()),
-                                        loadSxp(i, b->env()), c(b->nCallArgs()),
-                                        builder.CreateIntToPtr(c(b->namesPtr),
-                                                               t::voidPtr)});
+                                       {
+                                           paramCode(),
+                                           c(b->srcIdx),
+                                           loadSxp(i, b->cls()),
+                                           loadSxp(i, b->env()),
+                                           c(b->nCallArgs()),
+                                           builder.CreateIntToPtr(
+                                               c(b->namesPtr), t::voidPtr),
+                                           c(asmpt.toI()),
+                                       });
                        }));
                 break;
             }
@@ -1637,6 +1641,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                 }
 
+                Assumptions asmpt = calli->inferAvailableAssumptions();
                 setVal(i, withCallFrame(i, args, [&]() -> llvm::Value* {
                            return call(
                                NativeBuiltins::call,
@@ -1647,6 +1652,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                        c(calli->cls()->rirClosure()), t::SEXP),
                                    loadSxp(i, calli->env()),
                                    c(calli->nCallArgs()),
+                                   c(asmpt.toI()),
                                });
                        }));
                 break;

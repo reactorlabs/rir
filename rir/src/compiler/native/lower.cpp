@@ -1926,6 +1926,7 @@ void PirCodeFunction::build() {
                 auto b = Call::Cast(i);
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
+                Assumptions asmpt = b->inferAvailableAssumptions();
                 setVal(i, withCallFrame(i, args, [&]() -> jit_value {
                            return call(NativeBuiltins::call,
                                        {
@@ -1934,6 +1935,7 @@ void PirCodeFunction::build() {
                                            loadSxp(i, b->cls()),
                                            loadSxp(i, b->env()),
                                            new_constant(b->nCallArgs()),
+                                           new_constant(asmpt.toI()),
                                        });
                        }));
                 break;

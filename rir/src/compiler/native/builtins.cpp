@@ -262,8 +262,8 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     SLOWASSERT(res);
     return res;
 };
-static jit_type_t callArgs[5] = {jit_type_void_ptr, jit_type_uint, sxp, sxp,
-                                 jit_type_ulong};
+static jit_type_t callArgs[6] = {jit_type_void_ptr, jit_type_uint, sxp, sxp,
+                                 jit_type_ulong,    jit_type_ulong};
 NativeBuiltin NativeBuiltins::callBuiltin = {
     "callBuiltin",
     (void*)&callBuiltinImpl,
@@ -272,10 +272,10 @@ NativeBuiltin NativeBuiltins::callBuiltin = {
 };
 
 static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                     size_t nargs) {
+                     size_t nargs, unsigned long available) {
     auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
-                     Assumptions(), ctx);
+                     Assumptions(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
     SLOWASSERT(ctx);
@@ -286,15 +286,16 @@ static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
 NativeBuiltin NativeBuiltins::call = {
     "call",
     (void*)&callImpl,
-    5,
-    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 5, 0),
+    6,
+    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 6, 0),
 };
 
 static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                          size_t nargs, Immediate* names) {
+                          size_t nargs, Immediate* names,
+                          unsigned long available) {
     auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
-                     names, env, Assumptions(), ctx);
+                     names, env, Assumptions(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
     SLOWASSERT(ctx);
@@ -305,7 +306,7 @@ static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
 NativeBuiltin NativeBuiltins::namedCall = {
     "namedCall",
     (void*)&namedCallImpl,
-    6,
+    7,
     nullptr,
 };
 
@@ -850,10 +851,12 @@ NativeBuiltin NativeBuiltins::extract21 = {
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
                                SEXP env, SEXP callee) {
+    code->registerInvocation();
     if ((SETJMP(cntxt.cjmpbuf))) {
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
+            code->registerInvocation();
             return code->nativeCode(code, args, env, callee);
         } else {
             return R_ReturnedValue;
