@@ -2364,7 +2364,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
-            SET_PRVALUE(prom, ostack_pop(ctx));
+            SEXP val = ostack_pop(ctx);
+            ENSURE_NAMEDMAX(val);
+            SET_PRVALUE(prom, val);
             ostack_push(ctx, prom);
             NEXT();
         }
