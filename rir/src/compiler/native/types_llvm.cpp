@@ -85,8 +85,9 @@ int initializeTypes(LLVMContext& context) {
 #define DECLARE(name, ret, ...)                                                \
     fields = {__VA_ARGS__};                                                    \
     t::name = FunctionType::get(ret, fields, false)
-    DECLARE(nativeFunction_t, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
-    t::nativeFunctionPtr_t = PointerType::get(t::nativeFunction_t, 0);
+    DECLARE(nativeFunction, t::SEXP, t::voidPtr, t::stackCellPtr, t::SEXP,
+            t::SEXP);
+    t::nativeFunctionPtr = PointerType::get(t::nativeFunction, 0);
     DECLARE(void_void, t_void);
     DECLARE(void_voidPtr, t_void, t::voidPtr);
     DECLARE(void_sexp, t_void, t::SEXP);
@@ -109,6 +110,7 @@ int initializeTypes(LLVMContext& context) {
     DECLARE(sexp_contxtsexpsexp, t::SEXP, t::cntxtPtr, t::SEXP, t::SEXP);
     DECLARE(sexp_sexp3int, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int);
     DECLARE(sexp_sexp3int2, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int, t::Int);
+    DECLARE(sexp_sexp2int2, t::SEXP, t::SEXP, t::SEXP, t::Int, t::Int);
     DECLARE(sexp_double, t::SEXP, t::Double);
     DECLARE(sexp_int, t::SEXP, t::Int);
     DECLARE(int_sexp, t::Int, t::SEXP);
@@ -138,7 +140,7 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::createEnvironment.llvmSignature = t::sexp_sexpsexpint;
     NativeBuiltins::createStubEnvironment.llvmSignature =
-        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::voidPtr, t::Int},
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::IntPtr, t::Int},
                                 false);
     NativeBuiltins::createPromise.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP}, false);
@@ -159,11 +161,13 @@ int initializeTypes(LLVMContext& context) {
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
 
     NativeBuiltins::call.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::voidPtr},
+        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64}, false);
+    NativeBuiltins::namedCall.llvmSignature = llvm::FunctionType::get(
+        t::SEXP,
+        {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
         false);
     NativeBuiltins::callBuiltin.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::voidPtr},
-        false);
+        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64}, false);
 
     NativeBuiltins::notEnv.llvmSignature = t::sexp_sexpsexpint;
     NativeBuiltins::notOp.llvmSignature = t::sexp_sexp;
@@ -188,6 +192,12 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::extract21.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
 
+    NativeBuiltins::nativeCallTrampoline.llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::voidPtr, t::Int, t::SEXP, t::i64}, false);
+
+    NativeBuiltins::unop.llvmSignature = t::sexp_sexpint;
+    NativeBuiltins::unopEnv.llvmSignature = t::sexp_sexp2int2;
     return 1;
 }
 
@@ -235,6 +245,7 @@ FunctionType* sexp_sexpsexp;
 FunctionType* sexp_sexpsexpsexp;
 FunctionType* sexp_sexpsexpsexpsexp;
 FunctionType* sexp_sexp3int;
+FunctionType* sexp_sexp2int2;
 FunctionType* sexp_sexp3int2;
 
 FunctionType* sexp_sexpint;
@@ -257,8 +268,8 @@ FunctionType* void_cntxtsexp;
 FunctionType* void_cntxtsexpsexp;
 FunctionType* sexp_contxtsexpsexp;
 
-FunctionType* nativeFunction_t;
-Type* nativeFunctionPtr_t;
+FunctionType* nativeFunction;
+Type* nativeFunctionPtr;
 
 StructType* stackCell;
 PointerType* stackCellPtr;
