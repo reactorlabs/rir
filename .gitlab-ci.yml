@@ -131,10 +131,13 @@ test_features:
   script:
     - cd /opt/rir/build/debugopt
     - PIR_NATIVE_BACKEND=1 ./bin/tests
+    - PIR_NATIVE_BACKEND=2 ./bin/tests
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
     - PIR_NATIVE_BACKEND=1 ./bin/gnur-make-tests check
+    # TODO: fix bugs and switch to 'check'
+    - PIR_NATIVE_BACKEND=2 ./bin/gnur-make-tests test-Specific test-Reg
     - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
     - RIR_SERIALIZE_CHAOS=10 FAST_TESTS=1 ./bin/tests
 
@@ -184,6 +187,7 @@ test_benchmarks:
     - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:RIR e:PIR -r -SN -wu 0 --iterations 2"
     - PIR_DEOPT_CHAOS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR -r -SN -wu 0 --iterations 2"
     - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-NATIVE -r -SN -wu 0 --iterations 3"
+    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -r -SN -wu 0 --iterations 3"
 
 deploy:
   stage: Deploy
@@ -216,87 +220,6 @@ cleanup_registry:
   before_script: []
   script:
     - echo "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
-
-benchmark_rir:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    - schedules
-  tags:
-    - benchmark
-  script:
-    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS --environment=PragueDesktop"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 6 month
-benchmark_pir:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    - master
-  except:
-    - schedules
-  tags:
-    - benchmark
-  script:
-    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS --environment=PragueDesktop"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 6 month
-benchmark_native:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    - master
-  except:
-    - schedules
-  tags:
-    - benchmark
-  script:
-    - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS --environment=PragueDesktop"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 6 month
-benchmark_gnur:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    - schedules
-  tags:
-    - benchmark
-  script:
-    - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS --environment=PragueDesktop"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 6 month
-benchmark_fastr:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    - schedules
-  tags:
-    - benchmark
-  script:
-    - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS --environment=PragueDesktop"
-  allow_failure: true
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 6 month
 
 benchmark_rir_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA

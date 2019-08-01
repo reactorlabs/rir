@@ -23,7 +23,7 @@ struct LazyEnvironment
     LazyEnvironment() = delete;
     LazyEnvironment(const LazyEnvironment&) = delete;
     LazyEnvironment& operator=(const LazyEnvironment&) = delete;
-    constexpr static size_t ArgOffset = 2;
+    constexpr static int ArgOffset = 2;
 
     LazyEnvironment(SEXP parent, size_t nargs, Immediate* names)
         : RirRuntimeObject(sizeof(LazyEnvironment), nargs + ArgOffset),

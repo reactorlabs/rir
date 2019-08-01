@@ -84,3 +84,21 @@ function build_r {
 }
 
 build_r custom-r
+
+LLVM_DIR="${SRC_DIR}/external/llvm-8.0.0"
+if [ ! -d $LLVM_DIR ]; then
+    cd "${SRC_DIR}/external"
+    if [ $USING_OSX -eq 1 ]; then
+        if [ ! -f "clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz" ]; then
+            curl http://releases.llvm.org/8.0.0/clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz > clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz
+        fi
+        tar xf clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz
+        mv clang+llvm-8.0.0-x86_64-apple-darwin llvm-8.0.0
+    else
+        if [ ! -f "clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz" ]; then
+            curl http://releases.llvm.org/8.0.0/clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz > clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+        fi
+        tar xf clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+        mv clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04 llvm-8.0.0
+    fi
+fi

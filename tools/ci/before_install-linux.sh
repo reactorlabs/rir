@@ -13,3 +13,6 @@ for i in jitdynamic/Makefile.am jitplus/Makefile.am jit/Makefile.am; do
   fi
 done
 cd ../..
+
+sudo apt-get update
+sudo apt-get install -y gfortran texi2html
