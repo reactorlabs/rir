@@ -17,7 +17,7 @@ void BC::write(CodeStream& cs) const {
     cs.insert(bc);
     switch (bc) {
 #define V(NESTED, name, name_) case Opcode::name_##_:
-BC_NOARGS(V, _)
+        BC_NOARGS(V, _)
 #undef V
         return;
 
@@ -238,7 +238,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             SEXP store = Rf_allocVector(RAWSXP, size);
             memcpy(DATAPTR(store), meta, size);
             i.pool = Pool::insert(store);
-            ::operator delete(meta);
+            ::operator delete(meta, size);
             break;
         }
         case Opcode::assert_type_:
@@ -596,39 +596,39 @@ void BC::print(std::ostream& out) const {
     case Opcode::istype_:
     case Opcode::alloc_:
         switch (immediate.i) {
-            case static_cast<Immediate>(TypeChecks::RealNonObject):
-                out << "RealNonObject";
-                break;
-            case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
-                out << "RealSimpleScalar";
-                break;
-            case static_cast<Immediate>(TypeChecks::IntegerNonObject):
-                out << "IntegerNotObject";
-                break;
-            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
-                out << "IntegerSimpleScalar";
-                break;
-            case static_cast<Immediate>(TypeChecks::RealNonObjectWrapped):
-                out << "RealNonObjectWrapped";
-                break;
-            case static_cast<Immediate>(TypeChecks::RealSimpleScalarWrapped):
-                out << "RealSimpleScalarWrapped";
-                break;
-            case static_cast<Immediate>(TypeChecks::IntegerNonObjectWrapped):
-                out << "IntegerNotObjectWrapped";
-                break;
-            case static_cast<Immediate>(TypeChecks::IntegerSimpleScalarWrapped):
-                out << "IntegerSimpleScalarWrapped";
-                break;
-            case static_cast<Immediate>(TypeChecks::IsObject):
-                out << "IsObject";
-                break;
-            case static_cast<Immediate>(TypeChecks::IsObjectWrapped):
-                out << "IsObjectWrapped";
-                break;
-            default:
-                out << type2char(immediate.i);
-                break;
+        case static_cast<Immediate>(TypeChecks::RealNonObject):
+            out << "RealNonObject";
+            break;
+        case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+            out << "RealSimpleScalar";
+            break;
+        case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+            out << "IntegerNotObject";
+            break;
+        case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+            out << "IntegerSimpleScalar";
+            break;
+        case static_cast<Immediate>(TypeChecks::RealNonObjectWrapped):
+            out << "RealNonObjectWrapped";
+            break;
+        case static_cast<Immediate>(TypeChecks::RealSimpleScalarWrapped):
+            out << "RealSimpleScalarWrapped";
+            break;
+        case static_cast<Immediate>(TypeChecks::IntegerNonObjectWrapped):
+            out << "IntegerNotObjectWrapped";
+            break;
+        case static_cast<Immediate>(TypeChecks::IntegerSimpleScalarWrapped):
+            out << "IntegerSimpleScalarWrapped";
+            break;
+        case static_cast<Immediate>(TypeChecks::IsObject):
+            out << "IsObject";
+            break;
+        case static_cast<Immediate>(TypeChecks::IsObjectWrapped):
+            out << "IsObjectWrapped";
+            break;
+        default:
+            out << type2char(immediate.i);
+            break;
         }
         break;
     case Opcode::record_call_: {
@@ -657,7 +657,7 @@ void BC::print(std::ostream& out) const {
     }
 
 #define V(NESTED, name, name_) case Opcode::name_##_:
-BC_NOARGS(V, _)
+        BC_NOARGS(V, _)
 #undef V
         break;
     case Opcode::mk_promise_:

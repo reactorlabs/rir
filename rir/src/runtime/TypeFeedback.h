@@ -61,11 +61,13 @@ struct ObservedValues {
     static constexpr unsigned MaxTypes = 3;
     uint8_t numTypes : 2;
     uint8_t stateBeforeLastForce : 2;
+    uint8_t unused : 4;
 
     std::array<ObservedType, MaxTypes> seen;
 
     ObservedValues()
-        : numTypes(0), stateBeforeLastForce(StateBeforeLastForce::unknown) {}
+        : numTypes(0), stateBeforeLastForce(StateBeforeLastForce::unknown),
+          unused(0) {}
 
     RIR_INLINE void record(SEXP e) {
         ObservedType type(e);
