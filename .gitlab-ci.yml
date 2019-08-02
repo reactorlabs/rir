@@ -251,7 +251,7 @@ benchmark_pir_ginger:
     paths:
     - benchmarks.data
     expire_in: 6 month
-benchmark_native_ginger:
+benchmark_llvm_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
   variables:
@@ -263,7 +263,7 @@ benchmark_native_ginger:
   tags:
     - benchmarks-ginger
   script:
-    - $REBENCH_RUN "e:PIR-NATIVE $REBENCH_OPTIONS  --environment=Prg-Ginger"
+    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS  --environment=Prg-Ginger"
   artifacts:
     paths:
     - benchmarks.data
