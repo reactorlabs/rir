@@ -224,6 +224,8 @@ class LowerFunctionLLVM {
     void checkSexptype(llvm::Value* v, const std::vector<SEXPTYPE>& types);
     void checkIsSexp(llvm::Value* v, const std::string& msg = "");
     llvm::Value* sexptype(llvm::Value* v);
+    llvm::Value* attr(llvm::Value* v);
+    llvm::Value* xlength(llvm::Value* v);
     llvm::Value* tag(llvm::Value* v);
     llvm::Value* car(llvm::Value* v);
     void setCar(llvm::Value* x, llvm::Value* y);
@@ -741,6 +743,16 @@ void LowerFunctionLLVM::setCar(llvm::Value* x, llvm::Value* y) {
 llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
     v = builder.CreateGEP(v, {c(0), c(4), c(0)});
     return builder.CreateLoad(v);
+}
+
+llvm::Value* LowerFunctionLLVM::attr(llvm::Value* v) {
+    auto pos = builder.CreateGEP(v, {c(0), c(1)});
+    return builder.CreateLoad(pos);
+}
+
+llvm::Value* LowerFunctionLLVM::xlength(llvm::Value* v) {
+    auto pos = builder.CreateGEP(v, {c(0), c(4), c(0)});
+    return builder.CreateLoad(pos);
 }
 
 void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
@@ -2432,15 +2444,56 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Extract2_1D: {
                 auto extract = Extract2_1D::Cast(i);
                 auto vector = loadSxp(i, extract->vec());
-                auto idx = loadSxp(i, extract->idx());
-
                 auto env = constant(R_NilValue, t::SEXP);
                 if (extract->hasEnv())
                     env = loadSxp(i, extract->env());
 
-                gcSafepoint(i, -1, true);
-                auto res = call(NativeBuiltins::extract21,
-                                {vector, idx, env, c(extract->srcIdx)});
+                llvm::Value* res = builder.CreateAlloca(t::SEXP);
+                if (representationOf(extract->idx()) != Representation::Sexp && 
+                    extract->vec()->type.isA(PirType::num().notObject())) {
+                    auto fallback = BasicBlock::Create(C, "", fun);
+                    auto hit = BasicBlock::Create(C, "", fun);
+                    auto hit2 = BasicBlock::Create(C, "", fun);
+                    auto done = BasicBlock::Create(C, "", fun);
+                    
+                    auto rNil = constant(R_NilValue, t::SEXP);
+                    auto vectorhasAttr = builder.CreateICmpEQ(attr(vector), rNil);
+                    //auto indexIsNil = builder.CreateICmpEQ(attr(index), rNil);
+                    //builder.CreateCondBr(builder.CreateOr(vectorIsNil, indexIsNil), hit, fallback);
+                    builder.CreateCondBr(vectorhasAttr, hit, fallback);
+                    builder.SetInsertPoint(hit);
+
+                    auto index = load(i, extract->idx(), Representation::Integer);
+                    auto veclength = xlength(vector);
+                    auto indexOverRange = builder.CreateICmpUGE(index, vector);
+                    auto indexUnderRange = builder.CreateICmpULT(index, c(0));
+                    builder.CreateCondBr(builder.CreateOr(indexOverRange, indexUnderRange), hit2, fallback);
+                    
+                    builder.SetInsertPoint(hit2);
+
+                    if (extract->vec()->type.isA(RType::logical)){
+
+                    } else if (extract->vec()->type.isA(RType::integer) {
+                    } else if (extract->vec()->type.isA(RType::real)) {
+
+                    }
+
+                    
+                    
+                    builder.CreateBr(fallback);
+                    builder.SetInsertPoint(fallback);
+                    
+                    builder.CreateBr(done);
+                    builder.SetInsertPoint(done);
+                    gcSafepoint(i, -1, true);
+                    res = call(NativeBuiltins::extract21,
+                                    {vector, index, env, c(extract->srcIdx)});
+                } else {
+                    gcSafepoint(i, -1, true);
+                    res = call(NativeBuiltins::extract21,
+                                    {vector, index, env, c(extract->srcIdx)});
+                    
+                }
                 setVal(i, res);
                 break;
             }
