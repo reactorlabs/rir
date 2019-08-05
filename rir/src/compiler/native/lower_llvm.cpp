@@ -1431,6 +1431,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     setVal(i, loadSame(i, in));
                 break;
             }
+
             case Tag::Phi:
                 setVal(i, builder.CreateLoad(phis.at(i)));
                 break;
@@ -1801,6 +1802,18 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Nop:
                 break;
 
+            case Tag::ForSeqSize: {
+                gcSafepoint(i, -1, true);
+                llvm::Value* res = call(NativeBuiltins::forSeqSize,
+                                        {loadSxp(i, i->arg(0).val())});
+                if (representationOf(i) == Representation::Real)
+                    res = builder.CreateSIToFP(res, t::Double);
+                else if (representationOf(i) == Representation::Sexp)
+                    res = boxInt(i, res);
+                setVal(i, res);
+                break;
+            }
+
             case Tag::Branch: {
                 auto cond = load(i, i->arg(0).val(), Representation::Integer);
                 cond = builder.CreateICmpNE(cond, c(0));
@@ -1938,6 +1951,20 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateFDiv(a, b);
                              },
                              BinopKind::DIV);
+                break;
+            case Tag::Pow:
+                compileBinop(i,
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 return builder.CreateIntrinsic(
+                                     Intrinsic::powi,
+                                     {a->getType(), b->getType()}, {a, b});
+                             },
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 return builder.CreateIntrinsic(
+                                     Intrinsic::pow,
+                                     {a->getType(), b->getType()}, {a, b});
+                             },
+                             BinopKind::POW);
                 break;
 
             case Tag::Neq:

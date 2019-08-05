@@ -75,12 +75,27 @@ int initializeTypes(LLVMContext& context) {
     t::t_void = t_void;
     t::Void = t_void;
 
-    // TODO: probably not the best idea...
-    t::cntxt = StructType::create(context, "struct.RCNTXT");
-    std::vector<Type*> cntxtbod(360 /* sizeof(RCNTXT) */,
-                                IntegerType::get(context, 8));
-    t::cntxt->setBody(cntxtbod);
-    t::cntxtPtr = PointerType::get(t::cntxt, 0);
+    auto jmp_buf_sigset_type = StructType::create(context, "stjmp_buf_sigset");
+    fields.clear();
+    for (size_t i = 0; i < 16; ++i)
+        fields.push_back(t::i64);
+    jmp_buf_sigset_type->setBody(fields);
+    auto jmp_buf_type = StructType::create(context, "stjmp_buf");
+    fields = {t::i64, t::i64, t::i64, t::i64, t::i64,
+              t::i64, t::i64, t::i64, t::i32, jmp_buf_sigset_type};
+    jmp_buf_type->setBody(fields);
+
+    t::RCNTXT = StructType::create(context, "struct.RCNTXT");
+    t::RCNTXT_ptr = PointerType::get(t::RCNTXT, 0);
+    fields = {
+        t::RCNTXT_ptr, t::Int,     jmp_buf_type,    t::Int,     t::Int,
+        t::SEXP,       t::SEXP,    t::SEXP,         t::SEXP,    t::SEXP,
+        t::SEXP,       t::voidPtr, t::voidPtr,      t::voidPtr, t::Int,
+        t::Int,        t::Int,     t::SEXP,         t::voidPtr, t::SEXP,
+        t::SEXP,       t::voidPtr, t::stackCellPtr, t::SEXP,    t::Int,
+        t::SEXP,       t::voidPtr, t::Int,
+    };
+    t::RCNTXT->setBody(fields);
 
 #define DECLARE(name, ret, ...)                                                \
     fields = {__VA_ARGS__};                                                    \
@@ -103,11 +118,6 @@ int initializeTypes(LLVMContext& context) {
     DECLARE(int_sexpsexp, t::Int, t::SEXP, t::SEXP);
     DECLARE(int_sexpsexpsexp, t::Int, t::SEXP, t::SEXP, t::SEXP);
     DECLARE(int_sexpint, t::Int, t::SEXP, t::Int);
-    DECLARE(void_cntxtsexpsexpsexpsexpsexp, t_void, t::cntxtPtr, t::SEXP,
-            t::SEXP, t::SEXP, t::SEXP, t::SEXP);
-    DECLARE(void_cntxtsexp, t_void, t::cntxtPtr, t::SEXP);
-    DECLARE(void_cntxtsexpsexp, t_void, t::cntxtPtr, t::SEXP, t::SEXP);
-    DECLARE(sexp_contxtsexpsexp, t::SEXP, t::cntxtPtr, t::SEXP, t::SEXP);
     DECLARE(sexp_sexp3int, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int);
     DECLARE(sexp_sexp3int2, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int, t::Int);
     DECLARE(sexp_sexp2int2, t::SEXP, t::SEXP, t::SEXP, t::Int, t::Int);
@@ -178,7 +188,8 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::asTest.llvmSignature = t::int_sexp;
     NativeBuiltins::asLogicalBlt.llvmSignature = t::int_sexp;
 
-    NativeBuiltins::length.llvmSignature = t::sexp_sexp;
+    NativeBuiltins::length.llvmSignature = t::int_sexp;
+    NativeBuiltins::forSeqSize.llvmSignature = t::int_sexp;
 
     NativeBuiltins::deopt.llvmSignature = llvm::FunctionType::get(
         t::t_void, {t::voidPtr, t::SEXP, t::voidPtr, t::stackCellPtr}, false);
@@ -203,6 +214,11 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::unop.llvmSignature = t::sexp_sexpint;
     NativeBuiltins::unopEnv.llvmSignature = t::sexp_sexp2int2;
+
+    NativeBuiltins::initClosureContext.llvmSignature = llvm::FunctionType::get(
+        t::t_void, {t::SEXP, t::RCNTXT_ptr, t::SEXP, t::SEXP}, false);
+    NativeBuiltins::endClosureContext.llvmSignature =
+        llvm::FunctionType::get(t::t_void, {t::RCNTXT_ptr, t::SEXP}, false);
     return 1;
 }
 
@@ -230,8 +246,8 @@ StructType* RirRuntimeObject;
 
 PointerType* VECTOR_SEXPREC_ptr;
 
-StructType* cntxt;
-PointerType* cntxtPtr;
+StructType* RCNTXT;
+PointerType* RCNTXT_ptr;
 
 Type* t_void;
 Type* voidPtr;
@@ -267,11 +283,6 @@ FunctionType* double_sexp;
 FunctionType* void_argssexp;
 FunctionType* void_argssexpsexp;
 FunctionType* void_argssexpint;
-
-FunctionType* void_cntxtsexpsexpsexpsexpsexp;
-FunctionType* void_cntxtsexp;
-FunctionType* void_cntxtsexpsexp;
-FunctionType* sexp_contxtsexpsexp;
 
 FunctionType* nativeFunction;
 Type* nativeFunctionPtr;
