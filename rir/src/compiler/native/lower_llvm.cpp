@@ -2779,6 +2779,27 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
+            case Tag::ChkClosure: {
+                auto arg = loadSxp(i, i->arg(0).val());
+                auto type = sexptype(arg);
+                auto test1 = builder.CreateICmpEQ(type, c(CLOSXP));
+                auto test2 = builder.CreateICmpEQ(type, c(SPECIALSXP));
+                auto test3 = builder.CreateICmpEQ(type, c(BUILTINSXP));
+                auto match1 = builder.CreateOr(test1, test2);
+                auto match2 = builder.CreateOr(match1, test3);
+                auto ok = BasicBlock::Create(C, "", fun);
+                auto nok = BasicBlock::Create(C, "", fun);
+
+                builder.CreateCondBr(match2, ok, nok);
+                builder.SetInsertPoint(nok);
+                call(NativeBuiltins::error, {});
+                builder.CreateBr(ok);
+
+                builder.SetInsertPoint(ok);
+                setVal(i, arg);
+                break;
+            }
+
             default:
                 success = false;
                 break;
