@@ -19,15 +19,11 @@ class DeadStoreAnalysis {
             AbstractResult effect;
             if (auto force = Force::Cast(i)) {
                 if (auto mk = MkArg::Cast(force->input()->followCasts())) {
-                    if (!mk->isEager()) {
-                        BB* bb = mk->prom()->entry;
-                        if (bb->size() > 0 &&
-                            LdFunctionEnv::Cast(*bb->begin())) {
-                            // The promise could get forced here and
-                            // use variables in the parent environment
-                            effect.max(
-                                recurse(state, i, mk->prom(), mk->promEnv()));
-                        }
+                    if (mk->usesPromEnv()) {
+                        // The promise could get forced here and
+                        // use variables in the parent environment
+                        effect.max(
+                            recurse(state, i, mk->prom(), mk->promEnv()));
                     }
                 }
             }
@@ -292,12 +288,12 @@ class DeadStoreAnalysis {
                     state.ignoreStore.insert(var);
                     effect.update();
                 }
-            } else if (i->readsEnv()) {
-                observeFullEnv(aliases.resolveEnv(i->env()));
             } else if (i->exits() || i->effects.contains(Effect::ExecuteCode)) {
                 auto leakedEnvs = leaked.leakedAt(i);
                 for (auto& l : leakedEnvs.envs)
                     observeFullEnv(l);
+            } else if (i->readsEnv()) {
+                observeFullEnv(aliases.resolveEnv(i->env()));
             }
 
             effect.max(applyCommon(state, i));

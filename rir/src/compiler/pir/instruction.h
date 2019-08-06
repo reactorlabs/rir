@@ -426,8 +426,7 @@ class Instruction : public Value {
             COMPILER_INSTRUCTIONS(V)
 #undef V
             return static_cast<Instruction*>(v);
-        default: {
-        }
+        default: {}
         }
         return nullptr;
     }
@@ -941,6 +940,8 @@ class FLIE(MkArg, 2, Effects::None()) {
     size_t gvnBase() const override { return hash_combine(tagHash(), prom_); }
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
+
+    bool usesPromEnv() const;
 };
 
 class FLI(Seq, 3, Effects::Any()) {
@@ -1010,9 +1011,7 @@ class FLIE(Force, 2, Effects::Any()) {
     PirType inferType(const GetType& getType) const override final {
         return getType(input()).forced();
     }
-    Effects inferEffects(const GetType& getType) const override final {
-        return getType(input()).maybeLazy() ? effects : Effect::DependsOnAssume;
-    }
+    Effects inferEffects(const GetType& getType) const override final;
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
     size_t gvnBase() const override {
@@ -1880,9 +1879,8 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     friend class BuiltinCallFactory;
 };
 
-class VLI(CallSafeBuiltin,
-          Effects(Effect::Warn) | Effect::Error | Effect::Visibility |
-              Effect::DependsOnAssume),
+class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
+                               Effect::Visibility | Effect::DependsOnAssume),
     public CallInstruction {
   public:
     SEXP blt;
