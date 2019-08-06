@@ -83,16 +83,13 @@ class LoopDetection {
         }
 
         bool check(const InstrActionPredicate& action) const {
-            auto answer = true;
             for (auto bb : body_) {
                 for (auto instruction : *bb) {
-                    if (!action(instruction)) {
-                        answer = false;
-                        break;
-                    }
+                    if (!action(instruction))
+                        return false;
                 }
             }
-            return answer;
+            return true;
         }
 
         typedef BBSet::iterator iterator;
