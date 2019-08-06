@@ -43,6 +43,7 @@
 #include <llvm/Transforms/Instrumentation.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 #include <llvm/Transforms/Vectorize.h>
 
@@ -160,11 +161,11 @@ class JitLLVMImplementation {
         return MangledName;
     }
 
-  private:
     JITSymbol findSymbol(const std::string& Name) {
         return findMangledSymbol(mangle(Name));
     }
 
+  private:
     JITSymbol findMangledSymbol(const std::string& Name) {
 #ifdef _WIN32
         // The symbol lookup of ObjectLinkingLayer uses the
@@ -184,9 +185,10 @@ class JitLLVMImplementation {
         // This is the opposite of the usual search order for dlsym, but makes
         // more sense in a REPL where we want to bind to the newest available
         // definition.
-        if (auto Sym =
-                CompileLayer.findSymbolIn(moduleKey, Name, ExportedSymbolsOnly))
-            return Sym;
+        if (moduleKey != (unsigned long)-1)
+            if (auto Sym = CompileLayer.findSymbolIn(moduleKey, Name,
+                                                     ExportedSymbolsOnly))
+                return Sym;
 
         // If we can't find the symbol in the JIT, try looking in the host
         // process.
@@ -210,6 +212,8 @@ class JitLLVMImplementation {
     optimizeModule(std::unique_ptr<llvm::Module> M) {
         // Create a function pass manager.
         auto PM = llvm::make_unique<legacy::FunctionPassManager>(M.get());
+
+        PM->add(createPromoteMemoryToRegisterPass());
 
         PM->add(createScopedNoAliasAAWrapperPass());
         PM->add(createTypeBasedAAWrapperPass());
@@ -316,6 +320,18 @@ void* JitLLVM::tryCompile(llvm::Function* fun) {
 llvm::Function* JitLLVM::declare(const std::string& name,
                                  llvm::FunctionType* signature) {
     return JitLLVMImplementation::instance().declareFunction(name, signature);
+}
+
+llvm::Value* JitLLVM::getFunctionDeclaration(const std::string& name,
+                                             llvm::FunctionType* signature,
+                                             llvm::IRBuilder<>& builder) {
+    auto sym = JitLLVMImplementation::instance().findSymbol(name).getAddress();
+    if (!sym) {
+        return nullptr;
+    }
+    llvm::Type* tp = PointerType::get(signature, 0);
+    auto ptr = llvm::ConstantInt::get(C, APInt(64, (uintptr_t)*sym));
+    return builder.CreateIntToPtr(ptr, tp);
 }
 
 } // namespace pir

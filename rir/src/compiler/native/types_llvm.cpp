@@ -80,15 +80,16 @@ int initializeTypes(LLVMContext& context) {
     for (size_t i = 0; i < 16; ++i)
         fields.push_back(t::i64);
     jmp_buf_sigset_type->setBody(fields);
-    auto jmp_buf_type = StructType::create(context, "stjmp_buf");
+    t::setjmp_buf = StructType::create(context, "stjmp_buf");
     fields = {t::i64, t::i64, t::i64, t::i64, t::i64,
               t::i64, t::i64, t::i64, t::i32, jmp_buf_sigset_type};
-    jmp_buf_type->setBody(fields);
+    t::setjmp_buf->setBody(fields);
+    t::setjmp_buf_ptr = PointerType::get(t::setjmp_buf, 0);
 
     t::RCNTXT = StructType::create(context, "struct.RCNTXT");
     t::RCNTXT_ptr = PointerType::get(t::RCNTXT, 0);
     fields = {
-        t::RCNTXT_ptr, t::Int,     jmp_buf_type,    t::Int,     t::Int,
+        t::RCNTXT_ptr, t::Int,     t::setjmp_buf,   t::Int,     t::Int,
         t::SEXP,       t::SEXP,    t::SEXP,         t::SEXP,    t::SEXP,
         t::SEXP,       t::voidPtr, t::voidPtr,      t::voidPtr, t::Int,
         t::Int,        t::Int,     t::SEXP,         t::voidPtr, t::SEXP,
@@ -243,6 +244,9 @@ StructType* VECTOR_SEXPREC;
 
 StructType* LazyEnvironment;
 StructType* RirRuntimeObject;
+
+StructType* setjmp_buf;
+PointerType* setjmp_buf_ptr;
 
 PointerType* VECTOR_SEXPREC_ptr;
 

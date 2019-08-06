@@ -22,6 +22,9 @@ extern llvm::Type* Bool;
 extern llvm::PointerType* IntPtr;
 extern llvm::PointerType* DoublePtr;
 
+extern llvm::StructType* setjmp_buf;
+extern llvm::PointerType* setjmp_buf_ptr;
+
 /** Vector length in R. This is equivalent to ptrdiff_t type.
  */
 extern llvm::Type* VectorLength;

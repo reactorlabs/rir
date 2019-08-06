@@ -1996,10 +1996,15 @@ class FLIE(PushContext, 3, Effect::ChangesContexts) {
 class FLI(PopContext, 2, Effect::ChangesContexts) {
   public:
     PopContext(Value* res, PushContext* push)
-        : FixedLenInstruction(PirType::voyd(),
+        : FixedLenInstruction(PirType::any(),
                               {{PirType::any(), NativeType::context}},
                               {{res, push}}) {}
-    PushContext* push() { return PushContext::Cast(arg<1>().val()); }
+    PushContext* push() const { return PushContext::Cast(arg<1>().val()); }
+    Value* result() const { return arg<0>().val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        return getType(result());
+    }
 };
 
 class VLI(Phi, Effects::None()) {

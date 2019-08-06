@@ -895,6 +895,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto push = PopContext::Cast(instr)->push();
                 if (!pushContexts.count(push))
                     pushContexts[push] = ctx.cs().mkLabel();
+                cb.add(BC::dup());
                 cb.add(pushContexts.at(push));
                 cb.add(BC::popContext());
                 break;
