@@ -221,6 +221,7 @@ class LowerFunctionLLVM {
 
     llvm::Value* argument(int i);
     void setVal(Instruction* i, llvm::Value* val);
+    void updateVal(Instruction* i, llvm::Value* val);
 
     llvm::Value* isExternalsxp(llvm::Value* v, uint32_t magic);
     void checkSexptype(llvm::Value* v, const std::vector<SEXPTYPE>& types);
@@ -482,7 +483,7 @@ llvm::Value* LowerFunctionLLVM::load(Instruction* pos, Value* val, PirType type,
     }
 
     if (valueMap.count(val))
-        res = valueMap.at(val);
+        res = builder.CreateLoad(valueMap.at(val));
     else if (val == Env::elided())
         res = constant(R_NilValue, needed);
     else if (auto e = Env::Cast(val)) {
@@ -682,6 +683,11 @@ llvm::Value* LowerFunctionLLVM::argument(int i) {
     return builder.CreateLoad(t::SEXP, pos);
 }
 
+void LowerFunctionLLVM::updateVal(Instruction* i, llvm::Value* val) {
+    assert(valueMap.count(i));
+    builder.CreateStore(val, valueMap.at(i));
+}
+
 void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
     assert(!valueMap.count(i));
     if (val->getType() == t::SEXP && representationOf(i) == t::Int)
@@ -697,9 +703,10 @@ void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
         std::cout << "\n";
         assert(false);
     }
-    if (!val->hasName())
-        val->setName(i->getRef());
-    valueMap[i] = val;
+    auto location = builder.CreateAlloca(val->getType());
+    builder.CreateStore(val, location);
+    location->setName(i->getRef());
+    valueMap[i] = location;
 }
 
 llvm::Value* LowerFunctionLLVM::isExternalsxp(llvm::Value* v, uint32_t magic) {
@@ -988,8 +995,8 @@ void LowerFunctionLLVM::gcSafepoint(Instruction* i, size_t required,
         }
 
         if (i != test && (isArg || liveness.live(i, test))) {
-            if (v.second->getType() == t::SEXP)
-                setLocal(pos++, v.second);
+            if (v.second->getType()->getPointerElementType() == t::SEXP)
+                setLocal(pos++, builder.CreateLoad(v.second));
         }
     }
 
@@ -1384,16 +1391,15 @@ bool LowerFunctionLLVM::tryCompile() {
     }
 
     basepointer = nodestackPtr();
-    std::unordered_map<Instruction*, llvm::Value*> phis;
+    std::unordered_map<Instruction*, Instruction*> phis;
     Visitor::run(code->entry, [&](BB* bb) {
         for (auto i : *bb) {
             if (auto phi = Phi::Cast(i)) {
-                auto val = builder.CreateAlloca(representationOf(i));
-                phis[i] = val;
+                valueMap[phi] = builder.CreateAlloca(representationOf(phi));
                 phi->eachArg([&](BB*, Value* v) {
                     auto i = Instruction::Cast(v);
                     assert(i);
-                    phis[i] = val;
+                    phis[i] = phi;
                 });
             }
         }
@@ -1433,7 +1439,6 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::Phi:
-                setVal(i, builder.CreateLoad(phis.at(i)));
                 break;
 
             case Tag::LdArg:
@@ -2815,13 +2820,12 @@ bool LowerFunctionLLVM::tryCompile() {
                 return;
 
             if (phis.count(i)) {
-                auto r = Representation(
-                    phis.at(i)->getType()->getPointerElementType());
+                auto phi = phis.at(i);
+                auto r = representationOf(phi);
                 if (PirCopy::Cast(i)) {
-                    builder.CreateStore(load(i, i->arg(0).val(), r),
-                                        phis.at(i));
+                    updateVal(phi, load(i, i->arg(0).val(), r));
                 } else {
-                    builder.CreateStore(load(i, i, r), phis.at(i));
+                    updateVal(phi, load(i, i, r));
                 }
             }
 
