@@ -28,8 +28,8 @@ struct DeoptMetadata {
     FrameInfo frames[];
 
     // Must be manually deallocated
-    static DeoptMetadata* deserialize(const Opcode* anchor, SEXP refTable,
-                                      R_inpstream_t inp);
+    static SEXP deserialize(const Opcode* anchor, SEXP refTable,
+                            R_inpstream_t inp);
     void serialize(const Opcode* anchor, SEXP refTable,
                    R_outpstream_t out) const;
 };
