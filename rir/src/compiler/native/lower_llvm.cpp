@@ -123,6 +123,16 @@ class LowerFunctionLLVM {
     llvm::Value* constantpool = nullptr;
     BasicBlock* entryBlock = nullptr;
 
+    struct ContextData {
+        llvm::AllocaInst* rcntxt;
+        llvm::AllocaInst* result;
+        llvm::BasicBlock* popContextTarget;
+    };
+    std::unordered_map<Value*, ContextData> contexts;
+
+    std::unordered_map<Value*, std::unordered_map<SEXP, size_t>> bindingsCache;
+    llvm::Value* bindingsCacheBase = nullptr;
+
   public:
     llvm::Function* fun;
 
@@ -258,6 +268,9 @@ class LowerFunctionLLVM {
     void insn_assert(llvm::Value* v, const char* msg);
 
     llvm::Value* force(Instruction* i, llvm::Value* arg);
+
+    void compilePushContext(Instruction* i);
+    void compilePopContext(Instruction* i);
 
     void compileBinop(
         Instruction* i,
@@ -592,6 +605,123 @@ llvm::Value* LowerFunctionLLVM::load(Instruction* pos, Value* val, PirType type,
     }
 
     return res;
+}
+
+void LowerFunctionLLVM::compilePopContext(Instruction* i) {
+    auto popc = PopContext::Cast(i);
+    auto data = contexts.at(popc->push());
+    auto arg = load(i, popc->result());
+    builder.CreateStore(arg, data.result);
+    builder.CreateBr(data.popContextTarget);
+
+    builder.SetInsertPoint(data.popContextTarget);
+    llvm::Value* ret = builder.CreateLoad(data.result);
+    llvm::Value* boxedRet = ret;
+    if (ret->getType() == t::Int) {
+        boxedRet = boxInt(i, ret);
+    } else if (ret->getType() == t::Double) {
+        boxedRet = boxReal(i, ret);
+    }
+    call(NativeBuiltins::endClosureContext, {data.rcntxt, boxedRet});
+    setVal(i, ret);
+}
+
+void LowerFunctionLLVM::compilePushContext(Instruction* i) {
+    auto ct = PushContext::Cast(i);
+    auto ast = loadSxp(i, ct->arg(0).val());
+    auto op = loadSxp(i, ct->arg(1).val());
+    auto sysparent = loadSxp(i, ct->env());
+
+    // Allocate and initialize a RCNTXT on the stack
+    auto& data = contexts[i];
+    call(NativeBuiltins::initClosureContext, {ast, data.rcntxt, sysparent, op});
+
+    // Create a copy of all live variables to be able to restart
+    // TODO: maybe SEXP need to be protected here?
+    std::vector<Instruction*> savedLocals;
+    llvm::Value* savedLocalsStore;
+    {
+        std::vector<llvm::Type*> bufferTypes;
+        for (auto& v : valueMap) {
+            if (uninitializedMut.count(v.first))
+                continue;
+            if (auto j = Instruction::Cast(v.first)) {
+                if (liveness.live(i, j)) {
+                    bufferTypes.push_back(representationOf(j));
+                    savedLocals.push_back(j);
+                }
+            }
+        }
+        auto bufferType = StructType::create(C, "setjmp_locals_buffer");
+        bufferType->setBody(bufferTypes);
+
+        savedLocalsStore = topAlloca(bufferType);
+        for (auto pos = savedLocals.begin(); pos != savedLocals.end(); pos++) {
+            auto bufferEntry = builder.CreateGEP(
+                savedLocalsStore, {c(0), c(pos - savedLocals.begin(), 32)});
+            builder.CreateStore(getValOrMut(*pos), bufferEntry);
+        }
+    }
+
+    // Do a setjmp
+    auto didLongjmp = BasicBlock::Create(C, "", fun);
+    auto cont = BasicBlock::Create(C, "", fun);
+    {
+        auto setjmpBuf = builder.CreateGEP(data.rcntxt, {c(0), c(2)});
+        auto setjmpType =
+            FunctionType::get(t::i32, {t::setjmp_buf_ptr, t::i32}, false);
+        auto setjmpFun =
+            JitLLVM::getFunctionDeclaration("__sigsetjmp", setjmpType, builder);
+        auto longjmp = builder.CreateCall(setjmpFun, {setjmpBuf, c(0)});
+
+        builder.CreateCondBr(builder.CreateICmpEQ(longjmp, c(0)), cont,
+                             didLongjmp);
+    }
+
+    // Handle Incomming longjumps
+    {
+        builder.SetInsertPoint(didLongjmp);
+        llvm::Value* returned = builder.CreateLoad(
+            builder.CreateIntToPtr(c((void*)&R_ReturnedValue), t::SEXP_ptr));
+        auto restart =
+            builder.CreateICmpEQ(returned, constant(R_RestartToken, t::SEXP));
+
+        auto longjmpRestart = BasicBlock::Create(C, "", fun);
+        auto longjmpRet = BasicBlock::Create(C, "", fun);
+        builder.CreateCondBr(restart, longjmpRestart, longjmpRet);
+
+        // The longjump returned a restart token.
+        // In this case we need to restore all local variables as we
+        // preserved them before the setjmp and then continue
+        // execution
+        builder.SetInsertPoint(longjmpRestart);
+        for (auto pos = savedLocals.begin(); pos != savedLocals.end(); pos++) {
+            auto bufferEntry = builder.CreateGEP(
+                savedLocalsStore, {c(0), c(pos - savedLocals.begin(), 32)});
+            updateMut(*pos, builder.CreateLoad(bufferEntry));
+        }
+        for (const auto& be : bindingsCache)
+            for (const auto& b : be.second)
+                builder.CreateStore(
+                    convertToPointer(nullptr, t::SEXP),
+                    builder.CreateGEP(bindingsCacheBase, c(b.second)));
+        builder.CreateBr(cont);
+
+        // The longjump returned a value to return.
+        // In this case we store the result and skip everything
+        // until the matching popcontext
+        builder.SetInsertPoint(longjmpRet);
+        if (data.result->getType()->getPointerElementType() == t::Int) {
+            returned = unboxIntLgl(returned);
+        } else if (data.result->getType()->getPointerElementType() ==
+                   t::Double) {
+            returned = unboxRealIntLgl(returned);
+        }
+        builder.CreateStore(returned, data.result);
+        builder.CreateBr(data.popContextTarget);
+    }
+
+    builder.SetInsertPoint(cont);
 }
 
 llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v) {
@@ -1409,8 +1539,6 @@ bool LowerFunctionLLVM::tryCompile() {
     entryBlock = BasicBlock::Create(C, "", fun);
     builder.SetInsertPoint(entryBlock);
 
-    std::unordered_map<Value*, std::unordered_map<SEXP, size_t>> bindingsCache;
-    llvm::Value* bindingsCacheBase;
     {
         SmallSet<std::pair<Value*, SEXP>> bindings;
         Visitor::run(code->entry, [&](Instruction* i) {
@@ -1466,13 +1594,6 @@ bool LowerFunctionLLVM::tryCompile() {
     if (numLocals > 0)
         incStack(numLocals, true);
 
-    struct ContextData {
-        llvm::AllocaInst* rcntxt;
-        llvm::AllocaInst* result;
-        llvm::BasicBlock* popContextTarget;
-    };
-    std::unordered_map<Value*, ContextData> contexts;
-
     Visitor::run(code->entry, [&](Instruction* i) {
         if (auto pop = PopContext::Cast(i)) {
             auto res = pop->result();
@@ -1504,133 +1625,12 @@ bool LowerFunctionLLVM::tryCompile() {
 
             switch (i->tag) {
             case Tag::PushContext: {
-                auto ct = PushContext::Cast(i);
-                auto ast = loadSxp(i, ct->arg(0).val());
-                auto op = loadSxp(i, ct->arg(1).val());
-                auto sysparent = loadSxp(i, ct->env());
-
-                // Allocate and initialize a RCNTXT on the stack
-                auto& data = contexts[i];
-                call(NativeBuiltins::initClosureContext,
-                     {ast, data.rcntxt, sysparent, op});
-
-                // Create a copy of all live variables to be able to restart
-                // TODO: maybe SEXP need to be protected here?
-                std::vector<Instruction*> savedLocals;
-                llvm::Value* savedLocalsStore;
-                {
-                    std::vector<llvm::Type*> bufferTypes;
-                    for (auto& v : valueMap) {
-                        if (uninitializedMut.count(v.first))
-                            continue;
-                        if (auto j = Instruction::Cast(v.first)) {
-                            if (liveness.live(i, j)) {
-                                bufferTypes.push_back(representationOf(j));
-                                savedLocals.push_back(j);
-                            }
-                        }
-                    }
-                    auto bufferType =
-                        StructType::create(C, "setjmp_locals_buffer");
-                    bufferType->setBody(bufferTypes);
-
-                    savedLocalsStore = topAlloca(bufferType);
-                    for (auto pos = savedLocals.begin();
-                         pos != savedLocals.end(); pos++) {
-                        auto bufferEntry = builder.CreateGEP(
-                            savedLocalsStore,
-                            {c(0), c(pos - savedLocals.begin(), 32)});
-                        builder.CreateStore(getValOrMut(*pos), bufferEntry);
-                    }
-                }
-
-                // Do a setjmp
-                auto didLongjmp = BasicBlock::Create(C, "", fun);
-                auto cont = BasicBlock::Create(C, "", fun);
-                {
-                    auto setjmpBuf =
-                        builder.CreateGEP(data.rcntxt, {c(0), c(2)});
-                    auto setjmpType = FunctionType::get(
-                        t::i32, {t::setjmp_buf_ptr, t::i32}, false);
-                    auto setjmpFun = JitLLVM::getFunctionDeclaration(
-                        "__sigsetjmp", setjmpType, builder);
-                    auto longjmp =
-                        builder.CreateCall(setjmpFun, {setjmpBuf, c(0)});
-
-                    builder.CreateCondBr(builder.CreateICmpEQ(longjmp, c(0)),
-                                         cont, didLongjmp);
-                }
-
-                // Handle Incomming longjumps
-                {
-                    builder.SetInsertPoint(didLongjmp);
-                    llvm::Value* returned =
-                        builder.CreateLoad(builder.CreateIntToPtr(
-                            c((void*)&R_ReturnedValue), t::SEXP_ptr));
-                    auto restart = builder.CreateICmpEQ(
-                        returned, constant(R_RestartToken, t::SEXP));
-
-                    auto longjmpRestart = BasicBlock::Create(C, "", fun);
-                    auto longjmpRet = BasicBlock::Create(C, "", fun);
-                    builder.CreateCondBr(restart, longjmpRestart, longjmpRet);
-
-                    // The longjump returned a restart token.
-                    // In this case we need to restore all local variables as we
-                    // preserved them before the setjmp and then continue
-                    // execution
-                    builder.SetInsertPoint(longjmpRestart);
-                    for (auto pos = savedLocals.begin();
-                         pos != savedLocals.end(); pos++) {
-                        auto bufferEntry = builder.CreateGEP(
-                            savedLocalsStore,
-                            {c(0), c(pos - savedLocals.begin(), 32)});
-                        updateMut(*pos, builder.CreateLoad(bufferEntry));
-                    }
-                    for (const auto& be : bindingsCache)
-                        for (const auto& b : be.second)
-                            builder.CreateStore(
-                                convertToPointer(nullptr, t::SEXP),
-                                builder.CreateGEP(bindingsCacheBase,
-                                                  c(b.second)));
-                    builder.CreateBr(cont);
-
-                    // The longjump returned a value to return.
-                    // In this case we store the result and skip everything
-                    // until the matching popcontext
-                    builder.SetInsertPoint(longjmpRet);
-                    if (data.result->getType()->getPointerElementType() ==
-                        t::Int) {
-                        returned = unboxIntLgl(returned);
-                    } else if (data.result->getType()
-                                   ->getPointerElementType() == t::Double) {
-                        returned = unboxRealIntLgl(returned);
-                    }
-                    builder.CreateStore(returned, data.result);
-                    builder.CreateBr(data.popContextTarget);
-                }
-
-                builder.SetInsertPoint(cont);
+                compilePushContext(i);
                 break;
             }
 
             case Tag::PopContext: {
-                auto popc = PopContext::Cast(i);
-                auto data = contexts.at(popc->push());
-                auto arg = load(i, popc->result());
-                builder.CreateStore(arg, data.result);
-                builder.CreateBr(data.popContextTarget);
-
-                builder.SetInsertPoint(data.popContextTarget);
-                llvm::Value* ret = builder.CreateLoad(data.result);
-                llvm::Value* boxedRet = ret;
-                if (ret->getType() == t::Int) {
-                    boxedRet = boxInt(i, ret);
-                } else if (ret->getType() == t::Double) {
-                    boxedRet = boxReal(i, ret);
-                }
-                call(NativeBuiltins::endClosureContext,
-                     {data.rcntxt, boxedRet});
-                setVal(i, ret);
+                compilePopContext(i);
                 break;
             }
 
