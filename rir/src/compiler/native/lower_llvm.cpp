@@ -667,11 +667,19 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     auto didLongjmp = BasicBlock::Create(C, "", fun);
     auto cont = BasicBlock::Create(C, "", fun);
     {
+#ifdef __APPLE__
+        auto setjmpBuf = builder.CreateGEP(data.rcntxt, {c(0), c(2), c(0)});
+        auto setjmpType = FunctionType::get(
+            t::i32, {PointerType::get(t::i32, 0), t::i32}, false);
+        auto setjmpFun =
+            JitLLVM::getFunctionDeclaration("sigsetjmp", setjmpType, builder);
+#else
         auto setjmpBuf = builder.CreateGEP(data.rcntxt, {c(0), c(2)});
         auto setjmpType =
             FunctionType::get(t::i32, {t::setjmp_buf_ptr, t::i32}, false);
         auto setjmpFun =
             JitLLVM::getFunctionDeclaration("__sigsetjmp", setjmpType, builder);
+#endif
         auto longjmp = builder.CreateCall(setjmpFun, {setjmpBuf, c(0)});
 
         builder.CreateCondBr(builder.CreateICmpEQ(longjmp, c(0)), cont,

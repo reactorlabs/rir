@@ -75,15 +75,23 @@ int initializeTypes(LLVMContext& context) {
     t::t_void = t_void;
     t::Void = t_void;
 
+    t::setjmp_buf = StructType::create(context, "stjmp_buf");
+#ifdef __APPLE__
+    fields.clear();
+    for (size_t i = 0; i < 38; ++i)
+        fields.push_back(t::i32);
+    t::setjmp_buf->setBody(fields);
+#else
     auto jmp_buf_sigset_type = StructType::create(context, "stjmp_buf_sigset");
     fields.clear();
     for (size_t i = 0; i < 16; ++i)
         fields.push_back(t::i64);
     jmp_buf_sigset_type->setBody(fields);
-    t::setjmp_buf = StructType::create(context, "stjmp_buf");
     fields = {t::i64, t::i64, t::i64, t::i64, t::i64,
               t::i64, t::i64, t::i64, t::i32, jmp_buf_sigset_type};
     t::setjmp_buf->setBody(fields);
+#endif
+
     t::setjmp_buf_ptr = PointerType::get(t::setjmp_buf, 0);
 
     t::RCNTXT = StructType::create(context, "struct.RCNTXT");
