@@ -2508,10 +2508,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Extract2_1D: {
                 auto extract = Extract2_1D::Cast(i);
-                auto env = constant(R_NilValue, t::SEXP);
-                if (extract->hasEnv())
-                    env = loadSxp(i, extract->env());
-
+                
                 llvm::Value* res = nullptr;
                 // TODO: Extend a fastPath for generic vectors.
                 if (extract->vec()->type.isA(PirType::num().notObject()) &&
@@ -2521,7 +2518,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto hit = BasicBlock::Create(C, "", fun);
                     auto hit2 = BasicBlock::Create(C, "", fun);
                     auto done = BasicBlock::Create(C, "", fun);
-
+                    
                     llvm::Value* vector = load(i, extract->vec());
 
                     if (representationOf(extract->vec()) == t::SEXP) {
@@ -2541,7 +2538,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto vecIndex = loadSxp(i, extract->idx());
                         auto indexSize = vectorLength(vecIndex);
                         builder.CreateCondBr(
-                            builder.CreateICmpUGT(indexSize, c(1)), fallback,
+                            builder.CreateICmpUGT(indexSize, c(1ul)), fallback,
                             indexUnitVector);
                         builder.SetInsertPoint(indexUnitVector);
                         index = accessVector(vector, c(0), RType::integer);
@@ -2558,14 +2555,17 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto indexUnderRange = builder.CreateICmpULT(index, c(0));
                     builder.CreateCondBr(builder.CreateOr(indexOverRange, indexUnderRange), hit2, fallback);
                     builder.SetInsertPoint(hit2);
+                    
 
                     if (representationOf(extract->vec()) != t::SEXP)
                         res = vector;
-                    else
+                    else 
                         res = accessVector(vector, index, extract->vec()->type);
-
+                    
+                    
                     builder.CreateBr(done);
                     builder.SetInsertPoint(fallback);
+                    auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
                     gcSafepoint(i, -1, true);
                     res = call(NativeBuiltins::extract21,
                                {loadSxp(i, extract->vec()),
@@ -2574,6 +2574,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.CreateBr(done);
                     builder.SetInsertPoint(done);
                 } else {
+                    auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
                     gcSafepoint(i, -1, true);
                     res = call(NativeBuiltins::extract21,
                                {loadSxp(i, extract->vec()),
