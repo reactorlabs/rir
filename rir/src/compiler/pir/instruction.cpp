@@ -453,21 +453,6 @@ bool MkArg::usesPromEnv() const {
     return false;
 }
 
-Effects Force::inferEffects(const GetType& getType) const {
-    Effects effects = this->effects;
-    if (!getType(input()).maybeLazy())
-        return Effect::DependsOnAssume;
-    if (auto mk = MkArg::Cast(input())) {
-        if (Visitor::check(mk->prom()->entry, [&](Instruction* i) {
-                return !i->effects.contains(Effect::ExecuteCode);
-            })) {
-            // We know what code we're executing
-            effects.reset(Effect::ExecuteCode);
-        }
-    }
-    return effects;
-}
-
 void Missing::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName)) << ", ";
 }

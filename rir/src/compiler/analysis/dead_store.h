@@ -15,23 +15,25 @@ class DeadStoreAnalysis {
       protected:
         SubAnalysis() {}
 
-        AbstractResult applyCommon(State& state, Instruction* i) const {
-            AbstractResult effect;
+        bool applyRecurse(AbstractResult& effect, State& state,
+                          Instruction* i) const {
             if (auto force = Force::Cast(i)) {
                 if (auto mk = MkArg::Cast(force->input()->followCasts())) {
                     if (mk->usesPromEnv()) {
                         // The promise could get forced here and
                         // use variables in the parent environment
                         effect.max(
-                            recurse(state, i, mk->prom(), mk->promEnv()));
+                            handleRecurse(state, i, mk->prom(), mk->promEnv()));
+                        return true;
                     }
                 }
             }
-            return effect;
+            return false;
         }
 
-        virtual AbstractResult recurse(State& state, Instruction* i,
-                                       Promise* prom, Value* env) const = 0;
+        virtual AbstractResult handleRecurse(State& state, Instruction* i,
+                                             Promise* prom,
+                                             Value* env) const = 0;
     };
 
     // 1. keep track of LdFunctionEnv aliases.
@@ -65,11 +67,13 @@ class DeadStoreAnalysis {
         }
 
         AbstractResult apply(AliasSet& state, Instruction* i) const override {
-            return applyCommon(state, i);
+            AbstractResult effect;
+            applyRecurse(effect, state, i);
+            return effect;
         }
 
-        AbstractResult recurse(AliasSet& state, Instruction* i, Promise* prom,
-                               Value* env) const override {
+        AbstractResult handleRecurse(AliasSet& state, Instruction* i,
+                                     Promise* prom, Value* env) const override {
             AbstractResult res;
 
             auto ld = LdFunctionEnv::Cast(*prom->entry->begin());
@@ -139,6 +143,7 @@ class DeadStoreAnalysis {
       protected:
         AbstractResult apply(EnvSet& state, Instruction* i) const override {
             AbstractResult effect;
+            applyRecurse(effect, state, i);
             if (i->leaksEnv()) {
                 Value* env = aliases.resolveEnv(i->env());
                 if (auto mk = MkEnv::Cast(env)) {
@@ -151,12 +156,11 @@ class DeadStoreAnalysis {
                     effect.update();
                 }
             }
-            effect.max(applyCommon(state, i));
             return effect;
         }
 
-        AbstractResult recurse(EnvSet& state, Instruction* i, Promise* prom,
-                               Value* env) const override {
+        AbstractResult handleRecurse(EnvSet& state, Instruction* i,
+                                     Promise* prom, Value* env) const override {
             EnvLeakAnalysis analysis(closure, prom, aliases, log);
             analysis();
             return state.merge(analysis.result());
@@ -248,6 +252,10 @@ class DeadStoreAnalysis {
         AbstractResult apply(ObservedStores& state, Instruction* i,
                              Value* alias) const {
             AbstractResult effect;
+            bool handled = applyRecurse(effect, state, i);
+            if (handled)
+                return effect;
+
             auto observeFullEnv = [&](Value* env) {
                 for (auto& e : withPotentialParents(env)) {
                     if (!state.completelyObserved.count(e)) {
@@ -296,12 +304,11 @@ class DeadStoreAnalysis {
                 observeFullEnv(aliases.resolveEnv(i->env()));
             }
 
-            effect.max(applyCommon(state, i));
             return effect;
         }
 
-        AbstractResult recurse(ObservedStores& state, Instruction* i,
-                               Promise* prom, Value* env) const override {
+        AbstractResult handleRecurse(ObservedStores& state, Instruction* i,
+                                     Promise* prom, Value* env) const override {
             CFG cfg(prom);
             EnvLeakAnalysis subLeak(closure, prom, leaked.leakedAt(i), aliases,
                                     log);

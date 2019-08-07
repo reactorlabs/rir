@@ -1011,7 +1011,9 @@ class FLIE(Force, 2, Effects::Any()) {
     PirType inferType(const GetType& getType) const override final {
         return getType(input()).forced();
     }
-    Effects inferEffects(const GetType& getType) const override final;
+    Effects inferEffects(const GetType& getType) const override final {
+        return getType(input()).maybeLazy() ? effects : Effect::DependsOnAssume;
+    }
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
     size_t gvnBase() const override {
