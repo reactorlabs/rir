@@ -173,6 +173,8 @@ class LowerFunctionLLVM {
     llvm::Value* load(Instruction* pos, Value* val, PirType type,
                       Representation needed);
     llvm::Value* dataPtr(llvm::Value* v);
+    llvm::Value* accessVector(llvm::Value* vector, llvm::Value* position,
+                              PirType type);
     llvm::Value* unboxIntLgl(llvm::Value* v);
     llvm::Value* unboxInt(llvm::Value* v);
     llvm::Value* unboxLgl(llvm::Value* v);
@@ -225,7 +227,7 @@ class LowerFunctionLLVM {
     void checkIsSexp(llvm::Value* v, const std::string& msg = "");
     llvm::Value* sexptype(llvm::Value* v);
     llvm::Value* attr(llvm::Value* v);
-    llvm::Value* xlength(llvm::Value* v);
+    llvm::Value* vectorLength(llvm::Value* v);
     llvm::Value* tag(llvm::Value* v);
     llvm::Value* car(llvm::Value* v);
     void setCar(llvm::Value* x, llvm::Value* y);
@@ -283,6 +285,10 @@ class LowerFunctionLLVM {
 
     bool success = true;
     bool tryCompile();
+
+  private:
+    llvm::Value* vectorPositionPtr(llvm::Value* vector, llvm::Value* position,
+                                   PirType type);
 };
 
 void LowerFunctionLLVM::setVisible(int i) {
@@ -581,6 +587,30 @@ llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v) {
     return builder.CreateGEP(pos, c(1));
 }
 
+llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
+                                                  llvm::Value* position,
+                                                  PirType type) {
+    assert(vector->getType() == t::SEXP);
+    PointerType* nativeType;
+    if (type.isA(PirType(RType::integer).notObject()) ||
+        type.isA(PirType(RType::logical).notObject())) {
+        nativeType = t::IntPtr;
+    } else if (type.isA(PirType(RType::real).notObject())) {
+        nativeType = t::DoublePtr;
+    } else {
+        nativeType = t::SEXP_ptr;
+        assert(false);
+    }
+    auto pos = builder.CreateBitCast(dataPtr(vector), nativeType);
+    return builder.CreateGEP(pos, position);
+}
+
+llvm::Value* LowerFunctionLLVM::accessVector(llvm::Value* vector,
+                                             llvm::Value* position,
+                                             PirType type) {
+    return builder.CreateLoad(vectorPositionPtr(vector, position, type));
+}
+
 llvm::Value* LowerFunctionLLVM::unboxIntLgl(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     checkSexptype(v, {LGLSXP, INTSXP});
@@ -750,8 +780,10 @@ llvm::Value* LowerFunctionLLVM::attr(llvm::Value* v) {
     return builder.CreateLoad(pos);
 }
 
-llvm::Value* LowerFunctionLLVM::xlength(llvm::Value* v) {
-    auto pos = builder.CreateGEP(v, {c(0), c(4), c(0)});
+llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
+    assert(v->getType() == t::SEXP);
+    auto pos = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
+    pos = builder.CreateGEP(pos, {c(0), c(4), c(0)});
     return builder.CreateLoad(pos);
 }
 
@@ -2443,56 +2475,77 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Extract2_1D: {
                 auto extract = Extract2_1D::Cast(i);
-                auto vector = loadSxp(i, extract->vec());
                 auto env = constant(R_NilValue, t::SEXP);
                 if (extract->hasEnv())
                     env = loadSxp(i, extract->env());
 
-                llvm::Value* res = builder.CreateAlloca(t::SEXP);
-                if (representationOf(extract->idx()) != Representation::Sexp && 
-                    extract->vec()->type.isA(PirType::num().notObject())) {
+                llvm::Value* res = nullptr;
+                // TODO: Extend a fastPath for generic vectors.
+                if (extract->vec()->type.isA(PirType::num().notObject()) &&
+                    extract->type.isScalar()) {
                     auto fallback = BasicBlock::Create(C, "", fun);
+                    auto indexUnitVector = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
                     auto hit2 = BasicBlock::Create(C, "", fun);
                     auto done = BasicBlock::Create(C, "", fun);
-                    
-                    auto rNil = constant(R_NilValue, t::SEXP);
-                    auto vectorhasAttr = builder.CreateICmpEQ(attr(vector), rNil);
-                    //auto indexIsNil = builder.CreateICmpEQ(attr(index), rNil);
-                    //builder.CreateCondBr(builder.CreateOr(vectorIsNil, indexIsNil), hit, fallback);
-                    builder.CreateCondBr(vectorhasAttr, hit, fallback);
-                    builder.SetInsertPoint(hit);
 
-                    auto index = load(i, extract->idx(), Representation::Integer);
-                    auto veclength = xlength(vector);
-                    auto indexOverRange = builder.CreateICmpUGE(index, vector);
-                    auto indexUnderRange = builder.CreateICmpULT(index, c(0));
-                    builder.CreateCondBr(builder.CreateOr(indexOverRange, indexUnderRange), hit2, fallback);
-                    
-                    builder.SetInsertPoint(hit2);
+                    llvm::Value* vector = load(i, extract->vec());
 
-                    if (extract->vec()->type.isA(RType::logical)){
-
-                    } else if (extract->vec()->type.isA(RType::integer) {
-                    } else if (extract->vec()->type.isA(RType::real)) {
-
+                    if (representationOf(extract->vec()) == t::SEXP) {
+                        auto rNil = constant(R_NilValue, t::SEXP);
+                        auto vectorhasAttr =
+                            builder.CreateICmpEQ(attr(vector), rNil);
+                        builder.CreateCondBr(vectorhasAttr, hit, fallback);
+                        builder.SetInsertPoint(hit);
                     }
 
-                    
-                    
-                    builder.CreateBr(fallback);
-                    builder.SetInsertPoint(fallback);
-                    
+                    llvm::Value* index = nullptr;
+                    if (representationOf(extract->idx()) !=
+                        Representation::Sexp) {
+                        index =
+                            load(i, extract->idx(), Representation::Integer);
+                    } else {
+                        auto vecIndex = loadSxp(i, extract->idx());
+                        auto indexSize = vectorLength(vecIndex);
+                        builder.CreateCondBr(
+                            builder.CreateICmpUGT(indexSize, c(1)), fallback,
+                            indexUnitVector);
+                        builder.SetInsertPoint(indexUnitVector);
+                        index = accessVector(vector, c(0), RType::integer);
+                        nacheck(index, fallback);
+                    }
+
+                    index = builder.CreateSub(index, c(1));
+                    auto veclength =
+                        (representationOf(extract->vec()) == t::SEXP)
+                            ? vectorLength(vector)
+                            : c(1);
+                    auto indexOverRange = builder.CreateICmpUGE(
+                        builder.CreateZExt(index, t::i64), veclength);
+                    auto indexUnderRange = builder.CreateICmpULT(index, c(0));
+                    builder.CreateCondBr(builder.CreateOr(indexOverRange, indexUnderRange), hit2, fallback);
+                    builder.SetInsertPoint(hit2);
+
+                    if (representationOf(extract->vec()) != t::SEXP)
+                        res = vector;
+                    else
+                        res = accessVector(vector, index, extract->vec()->type);
+
                     builder.CreateBr(done);
-                    builder.SetInsertPoint(done);
+                    builder.SetInsertPoint(fallback);
                     gcSafepoint(i, -1, true);
                     res = call(NativeBuiltins::extract21,
-                                    {vector, index, env, c(extract->srcIdx)});
+                               {loadSxp(i, extract->vec()),
+                                loadSxp(i, extract->idx()), env,
+                                c(extract->srcIdx)});
+                    builder.CreateBr(done);
+                    builder.SetInsertPoint(done);
                 } else {
                     gcSafepoint(i, -1, true);
                     res = call(NativeBuiltins::extract21,
-                                    {vector, index, env, c(extract->srcIdx)});
-                    
+                               {loadSxp(i, extract->vec()),
+                                loadSxp(i, extract->idx()), env,
+                                c(extract->srcIdx)});
                 }
                 setVal(i, res);
                 break;
@@ -2512,25 +2565,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 gcSafepoint(i, -1, false);
                 auto res = call(NativeBuiltins::subassign11,
-                                {vector, idx, val, env, c(subAssign->srcIdx)});
-                setVal(i, res);
-                break;
-            }
-
-            case Tag::Subassign2_1D: {
-                auto subAssign = Subassign2_1D::Cast(i);
-                auto vector = loadSxp(i, subAssign->vector());
-                auto val = loadSxp(i, subAssign->val());
-                auto idx = loadSxp(i, subAssign->idx());
-
-                // We should implement the fast cases (known and primitive
-                // types) speculatively here
-                auto env = constant(R_NilValue, t::SEXP);
-                if (subAssign->hasEnv())
-                    env = loadSxp(i, subAssign->env());
-
-                gcSafepoint(i, -1, false);
-                auto res = call(NativeBuiltins::subassign21,
                                 {vector, idx, val, env, c(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
