@@ -235,6 +235,7 @@ class LowerFunctionLLVM {
     llvm::Value* sxpinfoPtr(llvm::Value*);
 
     void ensureNamed(llvm::Value* v);
+    void assertNamed(llvm::Value* v);
     void incrementNamed(llvm::Value* v, int max = NAMEDMAX);
     void nacheck(llvm::Value* v, BasicBlock* isNa, BasicBlock* notNa = nullptr);
     void checkMissing(llvm::Value* v);
@@ -327,7 +328,12 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
-    return builder.CreateLoad(res);
+    res = builder.CreateLoad(res);
+#ifdef ENABLE_SLOWASSERT
+    insn_assert(builder.CreateICmpNE(sexptype(res), c(PROMSXP)),
+                "Force returned promise");
+#endif
+    return res;
 }
 
 void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg) {
@@ -786,6 +792,25 @@ llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
     pos = builder.CreateGEP(pos, {c(0), c(4), c(0)});
     return builder.CreateLoad(pos);
 }
+void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
+    assert(v->getType() == t::SEXP);
+    auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
+    auto sxpinfo = builder.CreateLoad(sxpinfoP);
+
+    unsigned long namedBit = 1ul << 32;
+    auto named = builder.CreateOr(sxpinfo, c(namedBit));
+    auto isNamed = builder.CreateICmpEQ(sxpinfo, named);
+
+    auto notNamed = BasicBlock::Create(C, "notNamed", fun);
+    auto ok = BasicBlock::Create(C, "", fun);
+
+    builder.CreateCondBr(isNamed, ok, notNamed);
+    builder.SetInsertPoint(notNamed);
+    insn_assert(builder.getFalse(), "Value is not named");
+    builder.CreateBr(ok);
+
+    builder.SetInsertPoint(ok);
+};
 
 void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
@@ -962,7 +987,7 @@ void LowerFunctionLLVM::gcSafepoint(Instruction* i, size_t required,
             i->eachArg([&](Value* a) { isArg = isArg || a == test; });
         }
 
-        if (i != test && (isArg || liveness.live(i, v.first))) {
+        if (i != test && (isArg || liveness.live(i, test))) {
             if (v.second->getType() == t::SEXP)
                 setLocal(pos++, v.second);
         }
@@ -977,7 +1002,7 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
     auto isProm = BasicBlock::Create(C, "isProm", fun);
     auto ok = BasicBlock::Create(C, "ok", fun);
 
-    auto res = builder.CreateAlloca(t::SEXP);
+    llvm::Value* res = builder.CreateAlloca(t::SEXP);
     builder.CreateStore(arg, res);
 
     auto type = sexptype(arg);
@@ -991,7 +1016,12 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
-    return builder.CreateLoad(res);
+    res = builder.CreateLoad(res);
+#ifdef ENABLE_SLOWASSERT
+    insn_assert(builder.CreateICmpNE(sexptype(res), c(PROMSXP)),
+                "Depromise returned promise");
+#endif
+    return res;
 }
 
 void LowerFunctionLLVM::compileRelop(
@@ -2405,6 +2435,9 @@ bool LowerFunctionLLVM::tryCompile() {
                                          env->indexOf(ld->varName)));
                     break;
                 }
+
+                // TODO: why is this needed?
+                gcSafepoint(i, -1, true);
 
                 llvm::Value* res = nullptr;
                 if (bindingsCache.count(i->env())) {

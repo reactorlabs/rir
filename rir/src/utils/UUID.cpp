@@ -1,5 +1,6 @@
 #include "UUID.h"
 #include "R/Serialize.h"
+#include <sstream>
 #include <stdlib.h>
 #include <time.h>
 
@@ -23,6 +24,16 @@ UUID UUID::deserialize(SEXP refTable, R_inpstream_t inp) {
 
 void UUID::serialize(SEXP refTable, R_outpstream_t out) const {
     OutBytes(out, &data, UUID_SIZE);
+}
+
+std::string UUID::str() {
+    std::ostringstream str;
+    for (int i = 0; i < 8; i++) {
+        if (i != 0)
+            str << " ";
+        str << (int)data[i];
+    }
+    return str.str();
 }
 
 bool UUID::operator==(const UUID& other) const {

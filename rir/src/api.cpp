@@ -387,8 +387,6 @@ REXPORT SEXP rir_serialize(SEXP data, SEXP fileSexp) {
 REXPORT SEXP rir_deserialize(SEXP fileSexp) {
     oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
-    // Alternatively, could be a hook from R_LoadFromFile
-    Code::rehashDeserializedUids();
     if (TYPEOF(fileSexp) != STRSXP)
         Rf_error("must provide a string path");
     FILE* file = fopen(CHAR(Rf_asChar(fileSexp)), "r");

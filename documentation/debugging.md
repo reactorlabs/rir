@@ -114,6 +114,7 @@ completely disables the PIR optimizer. As follows are the different Options avai
 * `L` : LeaksEnv
 * `D` : TriggerDeopt
 * `X` : ExecuteCode
+* `d` : DependsOnAssume
 
 `!` means that an instruction has all effects *except* the following. e.g. `!r`
 means an instruction has all effects but reflection, just `!` means it has all

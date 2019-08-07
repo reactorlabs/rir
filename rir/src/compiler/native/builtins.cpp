@@ -51,6 +51,7 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     if (val == R_MissingArg)
         SET_MISSING(res, 2);
     SET_TAG(res, name);
+    INCREMENT_NAMED(val);
     return res;
 }
 
@@ -78,7 +79,9 @@ NativeBuiltin NativeBuiltins::createMissingBindingCell = {
 SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
     SLOWASSERT(TYPEOF(parent) == ENVSXP);
     SLOWASSERT(TYPEOF(arglist) == LISTSXP || arglist == R_NilValue);
+    PROTECT(arglist);
     SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent);
+    UNPROTECT(1);
 
     if (contextPos > 0) {
         if (auto cptr = getFunctionContext(contextPos - 1)) {
@@ -124,6 +127,7 @@ SEXP ldvarImpl(SEXP a, SEXP b) {
     auto res = Rf_findVar(a, b);
     // std::cout << CHAR(PRINTNAME(a)) << "=";
     // Rf_PrintValue(res);
+    ENSURE_NAMED(res);
     return res;
 };
 
@@ -139,11 +143,15 @@ SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
             *cache = (SEXP)1;
         } else {
             *cache = loc.cell;
-            if (CAR(*cache) != R_UnboundValue)
+            if (CAR(*cache) != R_UnboundValue) {
+                ENSURE_NAMED(*cache);
                 return CAR(*cache);
+            }
         }
     }
-    return Rf_findVar(sym, env);
+    auto res = Rf_findVar(sym, env);
+    ENSURE_NAMED(res);
+    return res;
 };
 
 NativeBuiltin NativeBuiltins::ldvarCacheMiss = {
@@ -312,7 +320,10 @@ NativeBuiltin NativeBuiltins::namedCall = {
 };
 
 SEXP createPromiseImpl(rir::Code* c, unsigned id, SEXP env, SEXP value) {
+    assert(TYPEOF(value) != PROMSXP);
+    PROTECT(value);
     SEXP res = Rf_mkPROMISE(c->getPromise(id)->container(), env);
+    UNPROTECT(1);
     ENSURE_NAMEDMAX(value);
     SET_PRVALUE(res, value);
     return res;
