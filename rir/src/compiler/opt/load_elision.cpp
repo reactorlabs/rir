@@ -14,6 +14,12 @@ namespace rir {
 namespace pir {
 
 struct ALoad {
+  private:
+    ALoad() : origin(NULL), type(), env(NULL), name(NULL) {}
+
+  public:
+    static ALoad empty() { return ALoad(); }
+
     // cppcheck-suppress noExplicitConstructor
     ALoad(LdVar* ld)
         : origin(ld), type(ld->type), env(ld->env()), name(ld->varName) {}
@@ -67,16 +73,14 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
         return res;
     }
 
-    Instruction* get(Instruction* i, PirType& type) const {
+    ALoad get(Instruction* i) const {
         auto res = StaticAnalysis::at<
             StaticAnalysis::PositioningStyle::BeforeInstruction>(i);
         for (auto dld : res.available) {
-            if (dld.same(i)) {
-                type = dld.type;
-                return dld.origin;
-            }
+            if (dld.same(i))
+                return dld;
         }
-        return nullptr;
+        return ALoad::empty();
     }
 };
 
@@ -91,10 +95,10 @@ void LoadElision::apply(RirCompiler&, ClosureVersion* function,
             auto instr = *ip;
 
             if (LdVar::Cast(instr) || LdFun::Cast(instr)) {
-                PirType type;
-                if (auto domld = loads.get(instr, type)) {
+                auto domald = loads.get(instr);
+                if (auto domld = domald.origin) {
+                    domld->type = domald.type;
                     instr->replaceUsesWith(domld);
-                    domld->type = type;
                     next = bb->remove(ip);
                 }
             }
