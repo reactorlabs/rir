@@ -121,6 +121,7 @@ class LowerFunctionLLVM {
     size_t numLocals;
     llvm::Value* basepointer = nullptr;
     llvm::Value* constantpool = nullptr;
+    BasicBlock* entryBlock = nullptr;
 
   public:
     llvm::Function* fun;
@@ -219,6 +220,8 @@ class LowerFunctionLLVM {
     llvm::Value* c(double d) {
         return llvm::ConstantFP::get(C, llvm::APFloat(d));
     }
+
+    llvm::AllocaInst* topAlloca(llvm::Type* t, size_t len = 1);
 
     llvm::Value* argument(int i);
     void setVal(Instruction* i, llvm::Value* val);
@@ -694,6 +697,14 @@ llvm::Value* LowerFunctionLLVM::getValOrMut(Value* i) {
         return builder.CreateLoad(v);
     }
     return v;
+}
+
+AllocaInst* LowerFunctionLLVM::topAlloca(llvm::Type* t, size_t len) {
+    auto cur = builder.GetInsertBlock();
+    builder.SetInsertPoint(entryBlock);
+    auto res = builder.CreateAlloca(t, 0, c(len));
+    builder.SetInsertPoint(cur);
+    return res;
 }
 
 void LowerFunctionLLVM::updateMut(Instruction* i, llvm::Value* val) {
@@ -1395,7 +1406,8 @@ bool LowerFunctionLLVM::tryCompile() {
         ss << "BB" << bb->id;
         return blockMapping_[bb] = BasicBlock::Create(C, ss.str(), fun);
     };
-    builder.SetInsertPoint(getBlock(code->entry));
+    entryBlock = BasicBlock::Create(C, "", fun);
+    builder.SetInsertPoint(entryBlock);
 
     std::unordered_map<Value*, std::unordered_map<SEXP, size_t>> bindingsCache;
     llvm::Value* bindingsCacheBase;
@@ -1466,8 +1478,8 @@ bool LowerFunctionLLVM::tryCompile() {
             auto res = pop->result();
             auto push = pop->push();
             auto resStore = builder.CreateAlloca(representationOf(res));
-            contexts[push] = {nullptr, resStore,
-                              BasicBlock::Create(C, "", fun)};
+            auto rcntxt = builder.CreateAlloca(t::RCNTXT);
+            contexts[push] = {rcntxt, resStore, BasicBlock::Create(C, "", fun)};
 
             // Everything which is live at the Push context needs to be mutable,
             // to be able to restore on restart
@@ -1498,11 +1510,9 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto sysparent = loadSxp(i, ct->env());
 
                 // Allocate and initialize a RCNTXT on the stack
-                auto cntxt = builder.CreateAlloca(t::RCNTXT);
                 auto& data = contexts[i];
-                data.rcntxt = cntxt;
                 call(NativeBuiltins::initClosureContext,
-                     {ast, cntxt, sysparent, op});
+                     {ast, data.rcntxt, sysparent, op});
 
                 // Create a copy of all live variables to be able to restart
                 // TODO: maybe SEXP need to be protected here?
@@ -1523,7 +1533,8 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto bufferType =
                         StructType::create(C, "setjmp_locals_buffer");
                     bufferType->setBody(bufferTypes);
-                    savedLocalsStore = builder.CreateAlloca(bufferType);
+
+                    savedLocalsStore = topAlloca(bufferType);
                     for (auto pos = savedLocals.begin();
                          pos != savedLocals.end(); pos++) {
                         auto bufferEntry = builder.CreateGEP(
@@ -1537,7 +1548,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto didLongjmp = BasicBlock::Create(C, "", fun);
                 auto cont = BasicBlock::Create(C, "", fun);
                 {
-                    auto setjmpBuf = builder.CreateGEP(cntxt, {c(0), c(2)});
+                    auto setjmpBuf =
+                        builder.CreateGEP(data.rcntxt, {c(0), c(2)});
                     auto setjmpType = FunctionType::get(
                         t::i32, {t::setjmp_buf_ptr, t::i32}, false);
                     auto setjmpFun = JitLLVM::getFunctionDeclaration(
@@ -1863,8 +1875,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
                 Assumptions asmpt = b->inferAvailableAssumptions();
 
-                auto namesStore =
-                    builder.CreateAlloca(t::Int, 0, c(b->names.size()));
+                auto namesStore = topAlloca(t::Int, b->names.size());
                 for (size_t i = 0; i < b->names.size(); ++i)
                     builder.CreateStore(c(Pool::insert(b->names[i])),
                                         builder.CreateGEP(namesStore, c(i)));
@@ -2064,8 +2075,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto mkenv = MkEnv::Cast(i);
                 auto parent = loadSxp(i, mkenv->env());
 
-                auto namesStore =
-                    builder.CreateAlloca(t::Int, 0, c(mkenv->nLocals()));
+                auto namesStore = topAlloca(t::Int, mkenv->nLocals());
                 for (size_t i = 0; i < mkenv->nLocals(); ++i)
                     builder.CreateStore(c(Pool::insert(mkenv->varName[i])),
                                         builder.CreateGEP(namesStore, c(i)));
@@ -3003,9 +3013,9 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             if (!success) {
-                std::cerr << "Can't compile ";
-                i->print(std::cerr, true);
-                std::cerr << "\n";
+                // std::cerr << "Can't compile ";
+                // i->print(std::cerr, true);
+                // std::cerr << "\n";
             }
 
             if (!success)
@@ -3035,6 +3045,11 @@ bool LowerFunctionLLVM::tryCompile() {
             builder.CreateBr(getBlock(bb->next()));
         }
     });
+
+    // Delayed insertion of the branch, so we can still easily add instructions
+    // to the entry block while compiling
+    builder.SetInsertPoint(entryBlock);
+    builder.CreateBr(getBlock(code->entry));
 
     if (success) {
         // outs() << "Compiled " << fun->getName() << "\n";
