@@ -47,8 +47,13 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
         AbstractResult res;
         if (auto ld = LdVar::Cast(i)) {
             for (auto& ald : state.available) {
-                if (ald.same(ld))
-                    return AbstractResult::None;
+                if (ald.same(ld)) {
+                    if (ld->type.isA(ald.origin->type)) {
+                        ald.origin->type = ld->type;
+                        res.update();
+                    }
+                    return res;
+                }
             }
             state.available.insert(ld);
             res.update();
