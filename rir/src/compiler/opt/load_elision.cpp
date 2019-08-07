@@ -15,10 +15,13 @@ namespace pir {
 
 struct ALoad {
     // cppcheck-suppress noExplicitConstructor
-    ALoad(LdVar* ld) : origin(ld), env(ld->env()), name(ld->varName) {}
+    ALoad(LdVar* ld)
+        : origin(ld), type(ld->type), env(ld->env()), name(ld->varName) {}
     // cppcheck-suppress noExplicitConstructor
-    ALoad(LdFun* ld) : origin(ld), env(ld->env()), name(ld->varName) {}
+    ALoad(LdFun* ld)
+        : origin(ld), type(ld->type), env(ld->env()), name(ld->varName) {}
     Instruction* origin;
+    PirType type;
     Value* env;
     SEXP name;
     bool operator==(const ALoad& other) const {
@@ -48,8 +51,8 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
         if (auto ld = LdVar::Cast(i)) {
             for (auto& ald : state.available) {
                 if (ald.same(ld)) {
-                    if (ld->type.isA(ald.origin->type)) {
-                        ald.origin->type = ld->type;
+                    if (ld->type.isA(ald.type)) {
+                        ald.type = ld->type;
                         res.update();
                     }
                     return res;
@@ -64,12 +67,14 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
         return res;
     }
 
-    Instruction* get(Instruction* i) const {
+    Instruction* get(Instruction* i, PirType& type) const {
         auto res = StaticAnalysis::at<
             StaticAnalysis::PositioningStyle::BeforeInstruction>(i);
         for (auto dld : res.available) {
-            if (dld.same(i))
+            if (dld.same(i)) {
+                type = dld.type;
                 return dld.origin;
+            }
         }
         return nullptr;
     }
@@ -86,8 +91,10 @@ void LoadElision::apply(RirCompiler&, ClosureVersion* function,
             auto instr = *ip;
 
             if (LdVar::Cast(instr) || LdFun::Cast(instr)) {
-                if (auto domld = loads.get(instr)) {
+                PirType type;
+                if (auto domld = loads.get(instr, type)) {
                     instr->replaceUsesWith(domld);
+                    domld->type = type;
                     next = bb->remove(ip);
                 }
             }
