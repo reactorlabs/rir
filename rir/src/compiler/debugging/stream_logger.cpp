@@ -113,8 +113,19 @@ void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
 void LogStream::pirOptimizations(ClosureVersion* closure,
                                  const PirTranslator* pass) {
     if (shouldLog(closure, pass, options)) {
-        closure->print(options.style, out, tty(),
-                       options.includes(DebugFlag::OmitDeoptBranches));
+        if (options.includes(DebugFlag::OnlyChanges)) {
+            static std::string last = "";
+            std::stringstream ss;
+            closure->print(options.style, ss, tty(),
+                           options.includes(DebugFlag::OmitDeoptBranches));
+            if (last != ss.str()) {
+                last = ss.str();
+                out << last;
+            }
+        } else {
+            closure->print(options.style, out, tty(),
+                           options.includes(DebugFlag::OmitDeoptBranches));
+        }
     }
 }
 
