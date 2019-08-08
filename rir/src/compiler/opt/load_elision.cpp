@@ -14,11 +14,20 @@ namespace rir {
 namespace pir {
 
 struct ALoad {
+  private:
+    ALoad() : origin(NULL), type(), env(NULL), name(NULL) {}
+
+  public:
+    static ALoad empty() { return ALoad(); }
+
     // cppcheck-suppress noExplicitConstructor
-    ALoad(LdVar* ld) : origin(ld), env(ld->env()), name(ld->varName) {}
+    ALoad(LdVar* ld)
+        : origin(ld), type(ld->type), env(ld->env()), name(ld->varName) {}
     // cppcheck-suppress noExplicitConstructor
-    ALoad(LdFun* ld) : origin(ld), env(ld->env()), name(ld->varName) {}
+    ALoad(LdFun* ld)
+        : origin(ld), type(ld->type), env(ld->env()), name(ld->varName) {}
     Instruction* origin;
+    PirType type;
     Value* env;
     SEXP name;
     bool operator==(const ALoad& other) const {
@@ -47,8 +56,13 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
         AbstractResult res;
         if (auto ld = LdVar::Cast(i)) {
             for (auto& ald : state.available) {
-                if (ald.same(ld))
-                    return AbstractResult::None;
+                if (ald.same(ld)) {
+                    if (ld->type.isA(ald.type)) {
+                        ald.type = ld->type;
+                        res.update();
+                    }
+                    return res;
+                }
             }
             state.available.insert(ld);
             res.update();
@@ -59,14 +73,14 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
         return res;
     }
 
-    Instruction* get(Instruction* i) const {
+    ALoad get(Instruction* i) const {
         auto res = StaticAnalysis::at<
             StaticAnalysis::PositioningStyle::BeforeInstruction>(i);
         for (auto dld : res.available) {
             if (dld.same(i))
-                return dld.origin;
+                return dld;
         }
-        return nullptr;
+        return ALoad::empty();
     }
 };
 
@@ -81,7 +95,9 @@ void LoadElision::apply(RirCompiler&, ClosureVersion* function,
             auto instr = *ip;
 
             if (LdVar::Cast(instr) || LdFun::Cast(instr)) {
-                if (auto domld = loads.get(instr)) {
+                auto domald = loads.get(instr);
+                if (auto domld = domald.origin) {
+                    domld->type = domald.type;
                     instr->replaceUsesWith(domld);
                     next = bb->remove(ip);
                 }
