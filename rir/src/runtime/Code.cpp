@@ -75,7 +75,9 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
 
 Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     size_t size = InInteger(inp);
-    Code* code = (Code*)::operator new(size);
+    SEXP store = Rf_allocVector(EXTERNALSXP, size);
+    PROTECT(store);
+    Code* code = new (DATAPTR(store)) Code;
     code->uid = UUID::deserialize(refTable, inp);
     code->nativeCode = nullptr; // not serialized for now
     code->funInvocationCount = InInteger(inp);
@@ -98,17 +100,12 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
         code->srclist()[i].srcIdx =
             src_pool_add(globalContext(), ReadItem(refTable, inp));
     }
-    SEXP store = Rf_allocVector(EXTERNALSXP, size);
-    memcpy(DATAPTR(store), code, size);
-    Code* old = code;
-    code = (Code*)DATAPTR(store);
-    ::operator delete(old, size);
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
                   // GC area has only 1 pointer
                   NumLocals, CODE_MAGIC};
     code->setEntry(0, extraPool);
-    UNPROTECT(1);
+    UNPROTECT(2);
     allCodes.emplace(code->uid, code);
 
     return code;

@@ -231,14 +231,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
                 Pool::insert(ReadItem(refTable, inp));
             break;
         case Opcode::deopt_: {
-            DeoptMetadata* meta =
-                DeoptMetadata::deserialize(code, refTable, inp);
-            size_t size =
-                sizeof(DeoptMetadata) + meta->numFrames * sizeof(FrameInfo);
-            SEXP store = Rf_allocVector(RAWSXP, size);
-            memcpy(DATAPTR(store), meta, size);
-            i.pool = Pool::insert(store);
-            ::operator delete(meta, size);
+            SEXP meta = DeoptMetadata::deserialize(code, refTable, inp);
+            i.pool = Pool::insert(meta);
             break;
         }
         case Opcode::assert_type_:

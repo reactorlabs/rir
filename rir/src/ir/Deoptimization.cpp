@@ -20,15 +20,18 @@ void FrameInfo::serialize(const Opcode* anchor, SEXP refTable,
     OutInteger(out, stackSize);
 }
 
-DeoptMetadata* DeoptMetadata::deserialize(const Opcode* anchor, SEXP refTable,
-                                          R_inpstream_t inp) {
+SEXP DeoptMetadata::deserialize(const Opcode* anchor, SEXP refTable,
+                                R_inpstream_t inp) {
     unsigned numFrames = InInteger(inp);
     size_t size = sizeof(DeoptMetadata) + numFrames * sizeof(FrameInfo);
-    DeoptMetadata* res = (DeoptMetadata*)::operator new(size);
+    SEXP store = Rf_allocVector(RAWSXP, size);
+
+    DeoptMetadata* res = new (DATAPTR(store)) DeoptMetadata;
     res->numFrames = numFrames;
     for (unsigned i = 0; i < numFrames; i++)
         res->frames[i] = FrameInfo::deserialize(anchor, refTable, inp);
-    return res;
+
+    return store;
 }
 
 void DeoptMetadata::serialize(const Opcode* anchor, SEXP refTable,
