@@ -2508,8 +2508,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Extract2_1D: {
                 auto extract = Extract2_1D::Cast(i);
-                
-                llvm::Value* res = nullptr;
+                auto resultRep = representationOf(i);
                 // TODO: Extend a fastPath for generic vectors.
                 if (extract->vec()->type.isA(PirType::num().notObject()) &&
                     extract->type.isScalar()) {
@@ -2517,11 +2516,15 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto indexUnitVector = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
                     auto hit2 = BasicBlock::Create(C, "", fun);
+                    auto hit3 = BasicBlock::Create(C, "", fun);
                     auto done = BasicBlock::Create(C, "", fun);
                     
                     llvm::Value* vector = load(i, extract->vec());
+                    llvm::Value* res =
+                        builder.CreateAlloca(representationOf(i));
+                    llvm::Value* index = nullptr;
 
-                    if (representationOf(extract->vec()) == t::SEXP) {
+                    if (extract->vec()->type.maybeObj()) {
                         auto rNil = constant(R_NilValue, t::SEXP);
                         auto vectorhasAttr =
                             builder.CreateICmpEQ(attr(vector), rNil);
@@ -2529,12 +2532,27 @@ bool LowerFunctionLLVM::tryCompile() {
                         builder.SetInsertPoint(hit);
                     }
 
-                    llvm::Value* index = nullptr;
                     if (representationOf(extract->idx()) !=
                         Representation::Sexp) {
-                        index =
-                            load(i, extract->idx(), Representation::Integer);
+                        if (representationOf(extract->idx()) ==
+                            Representation::Real) {
+                            index = builder.CreateTrunc(
+                                load(i, extract->idx(), Representation::Real),
+                                t::i64);
+                        } else {
+                            index = builder.CreateZExt(
+                                load(i, extract->idx(),
+                                     Representation::Integer),
+                                t::i64);
+                        }
                     } else {
+                        if (extract->idx()->type.maybeObj()) {
+                            auto rNil = constant(R_NilValue, t::SEXP);
+                            auto vectorhasAttr = builder.CreateICmpEQ(
+                                attr(loadSxp(i, extract->idx())), rNil);
+                            builder.CreateCondBr(vectorhasAttr, hit2, fallback);
+                            builder.SetInsertPoint(hit2);
+                        }
                         auto vecIndex = loadSxp(i, extract->idx());
                         auto indexSize = vectorLength(vecIndex);
                         builder.CreateCondBr(
@@ -2545,43 +2563,59 @@ bool LowerFunctionLLVM::tryCompile() {
                         nacheck(index, fallback);
                     }
 
-                    index = builder.CreateSub(index, c(1));
+                    index = builder.CreateSub(index, c(1ul));
                     auto veclength =
                         (representationOf(extract->vec()) == t::SEXP)
                             ? vectorLength(vector)
                             : c(1);
-                    auto indexOverRange = builder.CreateICmpUGE(
-                        builder.CreateZExt(index, t::i64), veclength);
-                    auto indexUnderRange = builder.CreateICmpULT(index, c(0));
+                    auto indexOverRange =
+                        builder.CreateICmpUGE(index, veclength);
+                    auto indexUnderRange = builder.CreateICmpULT(index, c(0ul));
                     builder.CreateCondBr(
                         builder.CreateOr(indexOverRange, indexUnderRange),
-                        fallback, hit2);
-                    builder.SetInsertPoint(hit2);
+                        fallback, hit3);
+                    builder.SetInsertPoint(hit3);
 
-                    if (representationOf(extract->vec()) != t::SEXP)
-                        res = vector;
-                    else 
-                        res = accessVector(vector, index, extract->vec()->type);
+                    if (representationOf(extract->vec()) != t::SEXP) {
+                        if (resultRep == t::SEXP)
+                            builder.CreateStore(
+                                box(i, vector, extract->vec()->type), res);
+                        else
+                            builder.CreateStore(vector, res);
+                    } else {
+                        builder.CreateStore(
+                            accessVector(vector, index, extract->vec()->type),
+                            res);
+                    }
+
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(fallback);
                     auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
                     gcSafepoint(i, -1, true);
-                    res = call(NativeBuiltins::extract21,
-                               {loadSxp(i, extract->vec()),
-                                loadSxp(i, extract->idx()), env,
-                                c(extract->srcIdx)});
+                    llvm::Value* res0 = call(NativeBuiltins::extract21,
+                                             {loadSxp(i, extract->vec()),
+                                              loadSxp(i, extract->idx()), env,
+                                              c(extract->srcIdx)});
+                    if (resultRep == t::SEXP) {
+                        builder.CreateStore(res0, res);
+                    } else if (resultRep == Representation::Real) {
+                        builder.CreateStore(unboxReal(res0), res);
+                    } else {
+                        builder.CreateStore(unboxIntLgl(res0), res);
+                    }
+
                     builder.CreateBr(done);
                     builder.SetInsertPoint(done);
+                    setVal(i, builder.CreateLoad(res));
                 } else {
                     auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
                     gcSafepoint(i, -1, true);
-                    res = call(NativeBuiltins::extract21,
-                               {loadSxp(i, extract->vec()),
-                                loadSxp(i, extract->idx()), env,
-                                c(extract->srcIdx)});
+                    setVal(i, call(NativeBuiltins::extract21,
+                                   {loadSxp(i, extract->vec()),
+                                    loadSxp(i, extract->idx()), env,
+                                    c(extract->srcIdx)}));
                 }
-                setVal(i, res);
                 break;
             }
 
