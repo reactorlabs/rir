@@ -2541,7 +2541,7 @@ bool LowerFunctionLLVM::tryCompile() {
                             builder.CreateICmpUGT(indexSize, c(1ul)), fallback,
                             indexUnitVector);
                         builder.SetInsertPoint(indexUnitVector);
-                        index = accessVector(vector, c(0), RType::integer);
+                        index = accessVector(vecIndex, c(0), RType::integer);
                         nacheck(index, fallback);
                     }
 
@@ -2553,17 +2553,17 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto indexOverRange = builder.CreateICmpUGE(
                         builder.CreateZExt(index, t::i64), veclength);
                     auto indexUnderRange = builder.CreateICmpULT(index, c(0));
-                    builder.CreateCondBr(builder.CreateOr(indexOverRange, indexUnderRange), hit2, fallback);
+                    builder.CreateCondBr(
+                        builder.CreateOr(indexOverRange, indexUnderRange),
+                        fallback, hit2);
                     builder.SetInsertPoint(hit2);
-                    
 
                     if (representationOf(extract->vec()) != t::SEXP)
                         res = vector;
                     else 
                         res = accessVector(vector, index, extract->vec()->type);
-                    
-                    
                     builder.CreateBr(done);
+
                     builder.SetInsertPoint(fallback);
                     auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
                     gcSafepoint(i, -1, true);
