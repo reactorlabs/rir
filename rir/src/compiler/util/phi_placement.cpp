@@ -60,6 +60,12 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
                 if (phis.includes(next)) {
                     placement[next].insert(input);
                 } else {
+                    SLOWASSERT(
+                        (pendingInput.count(next) == 0 ||
+                         (pendingInput[next].otherPhi == input.otherPhi &&
+                          pendingInput[next].aValue == input.aValue)) &&
+                        "Merging different phi input values (maybe an "
+                        "earlier phi is missing?)");
                     pendingInput[next] = input;
                 }
             };
