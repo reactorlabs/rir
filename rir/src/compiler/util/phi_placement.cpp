@@ -36,7 +36,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
 
     {
         std::unordered_map<BB*, PhiInput> pendingInput;
-        DominatorTreeVisitor<>(dom).run(cls->entry, [&](BB* cur) {
+        BreadthFirstVisitor::run(cls->entry, [&](BB* cur) {
             PhiInput input = {nullptr, nullptr, nullptr};
             if (pendingInput.count(cur))
                 input = pendingInput.at(cur);
@@ -45,7 +45,6 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
                 input.aValue = nullptr;
                 input.otherPhi = cur;
             }
-
             if (writes.count(cur)) {
                 input.otherPhi = nullptr;
                 input.aValue = writes.at(cur);
@@ -60,8 +59,9 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
 
                 if (phis.includes(next)) {
                     placement[next].insert(input);
-                } else
+                } else {
                     pendingInput[next] = input;
+                }
             };
 
             apply(cur->next0);
