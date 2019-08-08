@@ -293,6 +293,7 @@ class JitLLVMImplementation {
         // the JIT.
         for (auto& F : *M) {
             PM->run(F);
+            verifyFunction(F);
         }
 
         return M;

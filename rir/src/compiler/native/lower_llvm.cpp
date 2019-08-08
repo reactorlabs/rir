@@ -122,6 +122,8 @@ class LowerFunctionLLVM {
     llvm::Value* basepointer = nullptr;
     llvm::Value* constantpool = nullptr;
     BasicBlock* entryBlock = nullptr;
+    int inPushContext = 0;
+    std::unordered_set<Value*> escapesInlineContext;
 
     struct ContextData {
         llvm::AllocaInst* rcntxt;
@@ -400,10 +402,15 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
         return convertToPointer(co);
 
     auto i = Pool::insert(co);
+
+    auto cur = builder.GetInsertBlock();
+    builder.SetInsertPoint(entryBlock);
     llvm::Value* pos = builder.CreateLoad(constantpool);
     pos = builder.CreateBitCast(dataPtr(pos), PointerType::get(t::SEXP, 0));
     pos = builder.CreateGEP(pos, c(i));
-    return builder.CreateLoad(pos);
+    auto res = builder.CreateLoad(pos);
+    builder.SetInsertPoint(cur);
+    return res;
 }
 
 llvm::Value* LowerFunctionLLVM::nodestackPtr() {
@@ -623,6 +630,7 @@ void LowerFunctionLLVM::compilePopContext(Instruction* i) {
         boxedRet = boxReal(i, ret);
     }
     call(NativeBuiltins::endClosureContext, {data.rcntxt, boxedRet});
+    inPushContext--;
     setVal(i, ret);
 }
 
@@ -631,6 +639,8 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     auto ast = loadSxp(i, ct->arg(0).val());
     auto op = loadSxp(i, ct->arg(1).val());
     auto sysparent = loadSxp(i, ct->env());
+
+    inPushContext++;
 
     // Allocate and initialize a RCNTXT on the stack
     auto& data = contexts[i];
@@ -849,7 +859,8 @@ void LowerFunctionLLVM::updateMut(Instruction* i, llvm::Value* val) {
     assert(valueMap.count(i));
     assert(isa<AllocaInst>(valueMap.at(i)));
     uninitializedMut.erase(i);
-    builder.CreateStore(val, valueMap.at(i));
+    builder.CreateStore(val, valueMap.at(i),
+                        inPushContext && escapesInlineContext.count(i));
 }
 
 void LowerFunctionLLVM::createMut(Instruction* i) {
@@ -881,7 +892,13 @@ void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
         val->setName(i->getRef());
 
     if (isUninitializedMut) {
-        builder.CreateStore(val, valueMap.at(i));
+        // variables that are updated in between push/pop context can be read by
+        // instructions after popcontext, through non-local return. For llvm the
+        // controlflow of non-local return looks like a jump directly from push
+        // to pop context. Therefore all variable updates inside push/pop
+        // context need to be volatile. (same applies for updateMut).
+        builder.CreateStore(val, valueMap.at(i),
+                            inPushContext && escapesInlineContext.count(i));
         uninitializedMut.erase(i);
     } else {
         valueMap[i] = val;
@@ -1613,18 +1630,26 @@ bool LowerFunctionLLVM::tryCompile() {
             // Everything which is live at the Push context needs to be mutable,
             // to be able to restore on restart
             Visitor::run(code->entry, [&](Instruction* j) {
-                if (maybeInValueMap(j) && !valueMap.count(j))
-                    if (liveness.live(push, j))
+                if (maybeInValueMap(j)) {
+                    if (!liveness.live(push, j) && liveness.live(pop, j))
+                        escapesInlineContext.insert(j);
+                    if (!valueMap.count(j) &&
+                        (liveness.live(push, j) || liveness.live(pop, j)))
                         createMut(j);
+                }
             });
         }
     });
+
+    std::unordered_map<BB*, int> blockInPushContext;
+    blockInPushContext[code->entry] = 0;
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (!success)
             return;
 
         builder.SetInsertPoint(getBlock(bb));
+        inPushContext = blockInPushContext.at(bb);
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto i = *it;
@@ -3049,9 +3074,13 @@ bool LowerFunctionLLVM::tryCompile() {
             }
         }
 
-        if (bb->isJmp()) {
+        if (bb->isJmp())
             builder.CreateBr(getBlock(bb->next()));
-        }
+
+        if (bb->next0)
+            blockInPushContext[bb->next0] = inPushContext;
+        if (bb->next1)
+            blockInPushContext[bb->next1] = inPushContext;
     });
 
     // Delayed insertion of the branch, so we can still easily add instructions
