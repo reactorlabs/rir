@@ -290,6 +290,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 #endif
     log.CSSA(code);
 
+    Visitor::run(code->entry,
+                 [](Instruction* i) { i->updateTypeAndEffects(); });
+
     SSAAllocator alloc(code, cls, log);
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
     alloc.verify();
