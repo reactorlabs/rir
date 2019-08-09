@@ -2511,9 +2511,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto resultRep = representationOf(i);
                 // TODO: Extend a fastPath for generic vectors.
                 if (extract->vec()->type.isA(PirType::num().notObject()) &&
-                    extract->type.isScalar()) {
+                    extract->idx()->type.isScalar()) {
                     auto fallback = BasicBlock::Create(C, "", fun);
-                    auto indexUnitVector = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
                     auto hit2 = BasicBlock::Create(C, "", fun);
                     auto hit3 = BasicBlock::Create(C, "", fun);
@@ -2546,6 +2545,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                 t::i64);
                         }
                     } else {
+                        // Maybe not needed if we know it is scalar?
                         if (extract->idx()->type.maybeObj()) {
                             auto rNil = constant(R_NilValue, t::SEXP);
                             auto vectorhasAttr = builder.CreateICmpEQ(
@@ -2554,12 +2554,13 @@ bool LowerFunctionLLVM::tryCompile() {
                             builder.SetInsertPoint(hit2);
                         }
                         auto vecIndex = loadSxp(i, extract->idx());
-                        auto indexSize = vectorLength(vecIndex);
-                        builder.CreateCondBr(
-                            builder.CreateICmpUGT(indexSize, c(1ul)), fallback,
-                            indexUnitVector);
-                        builder.SetInsertPoint(indexUnitVector);
-                        index = accessVector(vecIndex, c(0), RType::integer);
+                        index =
+                            accessVector(vecIndex, c(0), extract->idx()->type);
+                        if (extract->idx()->type.isA(PirType(RType::real))) {
+                            index = builder.CreateTrunc(index, t::i64);
+                        } else {
+                            index = builder.CreateZExt(index, t::i64);
+                        }
                         nacheck(index, fallback);
                     }
 
