@@ -343,6 +343,7 @@ class LowerFunctionLLVM {
     llvm::Value* vectorLength(llvm::Value* v);
     llvm::Value* tag(llvm::Value* v);
     llvm::Value* car(llvm::Value* v);
+    llvm::Value* cdr(llvm::Value* v);
     void setCar(llvm::Value* x, llvm::Value* y);
     llvm::Value* isObj(llvm::Value*);
     llvm::Value* sxpinfoPtr(llvm::Value*);
@@ -1036,6 +1037,11 @@ void LowerFunctionLLVM::setCar(llvm::Value* x, llvm::Value* y) {
 
 llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
     v = builder.CreateGEP(v, {c(0), c(4), c(0)});
+    return builder.CreateLoad(v);
+}
+
+llvm::Value* LowerFunctionLLVM::cdr(llvm::Value* v) {
+    v = builder.CreateGEP(v, {c(0), c(4), c(1)});
     return builder.CreateLoad(v);
 }
 
@@ -2497,6 +2503,17 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
+            case Tag::MkCls: {
+                auto mk = MkCls::Cast(i);
+                auto formals = loadSxp(mk->arg(0).val());
+                auto body = loadSxp(mk->arg(1).val());
+                auto srcRef = loadSxp(mk->arg(2).val());
+                auto env = loadSxp(mk->arg(3).val());
+                setVal(i, call(NativeBuiltins::createClosure,
+                               {body, formals, env, srcRef}));
+                break;
+            }
+
             case Tag::IsType: {
                 if (representationOf(i) != Representation::Integer) {
                     success = false;
@@ -2723,6 +2740,21 @@ bool LowerFunctionLLVM::tryCompile() {
                 setVal(i, call(NativeBuiltins::createPromise,
                                {paramCode(), c(promMap.at(p->prom())),
                                 loadSxp(p->env()), loadSxp(p->eagerArg())}));
+                break;
+            }
+
+            case Tag::LdVarSuper: {
+                auto ld = LdVarSuper::Cast(i);
+
+                auto env = cdr(loadSxp(ld->env()));
+
+                auto res = call(NativeBuiltins::ldvar,
+                                {constant(ld->varName, t::SEXP), env});
+                res->setName(CHAR(PRINTNAME(ld->varName)));
+
+                checkMissing(res);
+                checkUnbound(res);
+                setVal(i, res);
                 break;
             }
 
@@ -3066,7 +3098,54 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
-            default:
+            case Tag::Length: {
+                llvm::Value* l;
+                if (representationOf(i) == Representation::Sexp) {
+                    l = vectorLength(loadSxp(i->arg(0).val()));
+                } else if (representationOf(i) == Representation::Real) {
+                    l = c((double)1);
+                } else {
+                    assert(representationOf(i) == Representation::Integer);
+                    l = c(1);
+                }
+                setVal(i, l);
+                break;
+            }
+
+            case Tag::Int3:
+            case Tag::PrintInvocation:
+            case Tag::IDiv:
+            case Tag::Extract2_2D:
+            case Tag::Extract1_2D:
+            case Tag::Subassign2_1D:
+            case Tag::Subassign1_2D:
+            case Tag::Subassign2_2D:
+            case Tag::Seq:
+                success = false;
+                break;
+
+            case Tag::_UNUSED_:
+                assert(false && "Invalid instruction tag");
+                success = false;
+                break;
+
+            case Tag::FrameState:
+            case Tag::Checkpoint:
+            case Tag::Assume:
+            case Tag::Deopt:
+                assert(false && "Expected scheduled deopt");
+                success = false;
+                break;
+
+            case Tag::True:
+            case Tag::False:
+            case Tag::NaLogical:
+            case Tag::Tombstone:
+            case Tag::MissingArg:
+            case Tag::UnboundValue:
+            case Tag::Env:
+            case Tag::Nil:
+                assert(false && "Values should not occur in instructions");
                 success = false;
                 break;
             }
