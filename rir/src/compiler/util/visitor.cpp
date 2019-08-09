@@ -13,8 +13,8 @@ void DominatorTreeVisitor<VisitorHelpers::IDMarker>::run(
     todo.push_back(entry);
 
     while (!todo.empty()) {
-        BB* cur = todo.back();
-        todo.pop_back();
+        BB* cur = todo.front();
+        todo.pop_front();
         if (!done.check(cur)) {
             done.set(cur);
             dom.dominatorTreeNext(cur, [&](BB* bb) { todo.push_back(bb); });
