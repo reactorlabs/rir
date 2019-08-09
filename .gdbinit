@@ -137,3 +137,5 @@ end
 define ds
   dumpsxp $arg0 1
 end
+
+source .pirpp.py

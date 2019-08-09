@@ -9,5 +9,6 @@ echo $R_HOME > .R_HOME
 if [ $ROOT_DIR != $BUILD_DIR ]; then
     if [ ! -f .gdbinit ]; then
         ln -s $ROOT_DIR/.gdbinit
+        ln -s $ROOT_DIR/tools/pirpp.py .pirpp.py
     fi
 fi
