@@ -129,6 +129,7 @@ class LowerFunctionLLVM {
         llvm::AllocaInst* rcntxt;
         llvm::AllocaInst* result;
         llvm::BasicBlock* popContextTarget;
+        std::unordered_map<Instruction*, size_t> savedSexpPos;
     };
     std::unordered_map<Value*, ContextData> contexts;
 
@@ -146,8 +147,7 @@ class LowerFunctionLLVM {
         : cls(cls), code(code), promMap(promMap),
           needsEnsureNamed(needsEnsureNamed), needsSetShared(needsSetShared),
           refcountAnalysisOverflow(refcountAnalysisOverflow), builder(C),
-          MDB(C), cfg(code), liveness(code->nextBBId, cfg),
-          numLocals(liveness.maxLive) {
+          MDB(C), cfg(code), liveness(code->nextBBId, cfg), numLocals(0) {
 
         fun = JitLLVM::declare(name, t::nativeFunction);
         // prevent Wunused
@@ -168,14 +168,111 @@ class LowerFunctionLLVM {
             t::SEXP);
     }
 
-    std::unordered_map<Value*, llvm::Value*> valueMap;
-    std::unordered_set<Value*> uninitializedMut;
+    struct Variable {
+        enum Kind {
+            MutableLocalRVariable,
+            ImmutableLocalRVariable,
+            MutablePrimitive,
+            ImmutablePrimitive,
+        };
+        Kind kind;
+
+        static Variable MutableRVariable(Instruction* i, size_t pos,
+                                         IRBuilder<>& builder,
+                                         llvm::Value* basepointer) {
+            auto v = RVariable(i, pos, builder, basepointer);
+            v.kind = MutableLocalRVariable;
+            return v;
+        }
+
+        static Variable RVariable(Instruction* i, size_t pos,
+                                  IRBuilder<>& builder,
+                                  llvm::Value* basepointer) {
+            assert(i->producesRirResult());
+            assert(!LdConst::Cast(i));
+            assert(!CastType::Cast(i));
+            assert(representationOf(i) == Representation::Sexp);
+            auto ptr = builder.CreateGEP(basepointer, {c(pos), c(1)});
+            ptr->setName(i->getRef());
+            return {ImmutableLocalRVariable, ptr, false};
+        }
+
+        static Variable Mutable(Instruction* i, IRBuilder<>& builder) {
+            assert(i->producesRirResult());
+            auto r = representationOf(i);
+            assert(r != Representation::Sexp);
+            auto location = builder.CreateAlloca(r);
+            location->setName(i->getRef());
+            return {MutablePrimitive, location, false};
+        }
+
+        static Variable Immutable(Instruction* i) {
+            assert(i->producesRirResult());
+            auto r = representationOf(i);
+            assert(r != Representation::Sexp);
+            return {ImmutablePrimitive, nullptr, false};
+        }
+
+        llvm::Value* get(IRBuilder<>& builder) {
+            assert(initialized);
+            assert(slot);
+            switch (kind) {
+            case ImmutableLocalRVariable:
+            case MutableLocalRVariable:
+            case MutablePrimitive:
+                return builder.CreateLoad(slot);
+            case ImmutablePrimitive:
+                return slot;
+            }
+            assert(false);
+            return nullptr;
+        }
+
+        void update(IRBuilder<>& builder, llvm::Value* val,
+                    bool volatile_ = false) {
+            initialized = true;
+            switch (kind) {
+            case MutableLocalRVariable:
+            case MutablePrimitive:
+                assert(slot);
+                builder.CreateStore(val, slot, volatile_);
+                break;
+            case ImmutableLocalRVariable:
+            case ImmutablePrimitive:
+                assert(false);
+                break;
+            }
+        }
+
+        void set(IRBuilder<>& builder, llvm::Value* val,
+                 bool volatile_ = false) {
+            assert(!initialized);
+            initialized = true;
+            switch (kind) {
+            case ImmutableLocalRVariable:
+            case MutableLocalRVariable:
+            case MutablePrimitive:
+                assert(slot);
+                builder.CreateStore(val, slot, volatile_);
+                break;
+            case ImmutablePrimitive:
+                slot = val;
+                break;
+            }
+        }
+
+        llvm::Value* slot;
+        bool initialized;
+    };
+
+    std::unordered_map<Instruction*, Variable> variables;
 
     llvm::Value* constant(SEXP co, llvm::Type* needed);
     llvm::Value* nodestackPtr();
     llvm::Value* stack(int i);
     void stack(const std::vector<llvm::Value*>& args);
     void setLocal(size_t i, llvm::Value* v);
+    llvm::Value* getLocal(size_t i);
     void incStack(int i, bool zero);
     void decStack(int i);
     llvm::Value* withCallFrame(Instruction* i, const std::vector<Value*>& args,
@@ -209,27 +306,27 @@ class LowerFunctionLLVM {
     llvm::Value* paramEnv() { return args[2]; }
     llvm::Value* paramClosure() { return args[3]; }
 
-    llvm::Value* c(void* i) {
+    static llvm::Value* c(void* i) {
         return llvm::ConstantInt::get(C, APInt(64, (intptr_t)i));
     }
 
-    llvm::Value* c(unsigned long i, int bs = 64) {
+    static llvm::Value* c(unsigned long i, int bs = 64) {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
-    llvm::Value* c(long i, int bs = 64) {
+    static llvm::Value* c(long i, int bs = 64) {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
-    llvm::Value* c(unsigned int i, int bs = 32) {
+    static llvm::Value* c(unsigned int i, int bs = 32) {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
-    llvm::Value* c(int i, int bs = 32) {
+    static llvm::Value* c(int i, int bs = 32) {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
-    llvm::Value* c(double d) {
+    static llvm::Value* c(double d) {
         return llvm::ConstantFP::get(C, llvm::APFloat(d));
     }
 
@@ -237,9 +334,6 @@ class LowerFunctionLLVM {
 
     llvm::Value* argument(int i);
     void setVal(Instruction* i, llvm::Value* val);
-    void createMut(Instruction* i);
-    void updateMut(Instruction* i, llvm::Value* val);
-    llvm::Value* getValOrMut(Value* i);
 
     llvm::Value* isExternalsxp(llvm::Value* v, uint32_t magic);
     void checkSexptype(llvm::Value* v, const std::vector<SEXPTYPE>& types);
@@ -255,6 +349,7 @@ class LowerFunctionLLVM {
 
     void ensureNamed(llvm::Value* v);
     void assertNamed(llvm::Value* v);
+    void ensureShared(llvm::Value* v);
     void incrementNamed(llvm::Value* v, int max = NAMEDMAX);
     void nacheck(llvm::Value* v, BasicBlock* isNa, BasicBlock* notNa = nullptr);
     void checkMissing(llvm::Value* v);
@@ -265,7 +360,6 @@ class LowerFunctionLLVM {
     llvm::Value* boxInt(Instruction* pos, llvm::Value* v);
     llvm::Value* boxReal(Instruction* pos, llvm::Value* v);
     llvm::Value* boxLgl(Instruction* pos, llvm::Value* v);
-    void gcSafepoint(Instruction* i, size_t required, bool protectArgs);
     llvm::Value* depromise(llvm::Value* arg);
     void insn_assert(llvm::Value* v, const char* msg);
 
@@ -343,7 +437,6 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     builder.CreateCondBr(tv, needsEval, ok);
 
     builder.SetInsertPoint(needsEval);
-    gcSafepoint(i, -1, true);
     auto evaled = call(NativeBuiltins::forcePromise, {arg});
     checkIsSexp(evaled, "force result");
     builder.CreateStore(evaled, res);
@@ -442,7 +535,13 @@ void LowerFunctionLLVM::setLocal(size_t i, llvm::Value* v) {
     assert(i < numLocals);
     assert(v->getType() == t::SEXP);
     auto pos = builder.CreateGEP(basepointer, {c(i), c(1)});
-    builder.CreateStore(v, pos);
+    builder.CreateStore(v, pos, true);
+}
+
+llvm::Value* LowerFunctionLLVM::getLocal(size_t i) {
+    assert(i < numLocals);
+    auto pos = builder.CreateGEP(basepointer, {c(i), c(1)});
+    return builder.CreateLoad(pos);
 }
 
 void LowerFunctionLLVM::incStack(int i, bool zero) {
@@ -472,7 +571,6 @@ llvm::Value*
 LowerFunctionLLVM::withCallFrame(Instruction* i,
                                  const std::vector<Value*>& args,
                                  const std::function<llvm::Value*()>& theCall) {
-    gcSafepoint(i, -1, false);
     auto nargs = args.size();
     incStack(nargs, false);
     std::vector<llvm::Value*> jitArgs;
@@ -508,8 +606,9 @@ llvm::Value* LowerFunctionLLVM::load(Instruction* pos, Value* val, PirType type,
         return load(pos, arg, cast->type, needed);
     }
 
-    if (valueMap.count(val))
-        res = getValOrMut(val);
+    auto vali = Instruction::Cast(val);
+    if (vali && variables.count(vali))
+        res = variables.at(vali).get(builder);
     else if (val == Env::elided())
         res = constant(R_NilValue, needed);
     else if (auto e = Env::Cast(val)) {
@@ -642,23 +741,31 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
 
     inPushContext++;
 
-    // Allocate and initialize a RCNTXT on the stack
+    // initialize a RCNTXT on the stack
     auto& data = contexts[i];
     call(NativeBuiltins::initClosureContext, {ast, data.rcntxt, sysparent, op});
 
     // Create a copy of all live variables to be able to restart
-    // TODO: maybe SEXP need to be protected here?
-    std::vector<Instruction*> savedLocals;
+    // SEXPs are stored as local vars, primitive values are placed in an
+    // alloca'd buffer
+    std::vector<Instruction*> savedLocalPrimitives;
     llvm::Value* savedLocalsStore;
     {
         std::vector<llvm::Type*> bufferTypes;
-        for (auto& v : valueMap) {
-            if (uninitializedMut.count(v.first))
+        for (auto& v : variables) {
+            auto& var = v.second;
+            if (!var.initialized)
                 continue;
             if (auto j = Instruction::Cast(v.first)) {
                 if (liveness.live(i, j)) {
-                    bufferTypes.push_back(representationOf(j));
-                    savedLocals.push_back(j);
+                    if (representationOf(j) == t::SEXP) {
+                        auto v = var.get(builder);
+                        ensureShared(v);
+                        setLocal(data.savedSexpPos.at(j), v);
+                    } else {
+                        bufferTypes.push_back(representationOf(j));
+                        savedLocalPrimitives.push_back(j);
+                    }
                 }
             }
         }
@@ -666,10 +773,13 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         bufferType->setBody(bufferTypes);
 
         savedLocalsStore = topAlloca(bufferType);
-        for (auto pos = savedLocals.begin(); pos != savedLocals.end(); pos++) {
+        for (auto pos = savedLocalPrimitives.begin();
+             pos != savedLocalPrimitives.end(); pos++) {
             auto bufferEntry = builder.CreateGEP(
-                savedLocalsStore, {c(0), c(pos - savedLocals.begin(), 32)});
-            builder.CreateStore(getValOrMut(*pos), bufferEntry);
+                savedLocalsStore,
+                {c(0), c(pos - savedLocalPrimitives.begin(), 32)});
+            builder.CreateStore(variables.at(*pos).get(builder), bufferEntry,
+                                true);
         }
     }
 
@@ -713,11 +823,16 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         // preserved them before the setjmp and then continue
         // execution
         builder.SetInsertPoint(longjmpRestart);
-        for (auto pos = savedLocals.begin(); pos != savedLocals.end(); pos++) {
+        for (auto pos = savedLocalPrimitives.begin();
+             pos != savedLocalPrimitives.end(); pos++) {
             auto bufferEntry = builder.CreateGEP(
-                savedLocalsStore, {c(0), c(pos - savedLocals.begin(), 32)});
-            updateMut(*pos, builder.CreateLoad(bufferEntry));
+                savedLocalsStore,
+                {c(0), c(pos - savedLocalPrimitives.begin(), 32)});
+            variables.at(*pos).update(builder, builder.CreateLoad(bufferEntry));
         }
+        for (auto l : data.savedSexpPos)
+            variables.at(l.first).update(builder, getLocal(l.second));
+        // Also clear all binding caches
         for (const auto& be : bindingsCache)
             for (const auto& b : be.second)
                 builder.CreateStore(
@@ -837,16 +952,6 @@ llvm::Value* LowerFunctionLLVM::argument(int i) {
     return builder.CreateLoad(t::SEXP, pos);
 }
 
-llvm::Value* LowerFunctionLLVM::getValOrMut(Value* i) {
-    assert(valueMap.count(i));
-    auto v = valueMap.at(i);
-    if (isa<AllocaInst>(v)) {
-        assert(!uninitializedMut.count(i));
-        return builder.CreateLoad(v);
-    }
-    return v;
-}
-
 AllocaInst* LowerFunctionLLVM::topAlloca(llvm::Type* t, size_t len) {
     auto cur = builder.GetInsertBlock();
     builder.SetInsertPoint(entryBlock);
@@ -855,26 +960,9 @@ AllocaInst* LowerFunctionLLVM::topAlloca(llvm::Type* t, size_t len) {
     return res;
 }
 
-void LowerFunctionLLVM::updateMut(Instruction* i, llvm::Value* val) {
-    assert(valueMap.count(i));
-    assert(isa<AllocaInst>(valueMap.at(i)));
-    uninitializedMut.erase(i);
-    builder.CreateStore(val, valueMap.at(i),
-                        inPushContext && escapesInlineContext.count(i));
-}
-
-void LowerFunctionLLVM::createMut(Instruction* i) {
-    assert(!LdConst::Cast(i) && !CastType::Cast(i));
-    auto r = representationOf(i);
-    auto location = builder.CreateAlloca(r);
-    location->setName(i->getRef());
-    valueMap[i] = location;
-    uninitializedMut.insert(i);
-}
-
 void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
-    auto isUninitializedMut = uninitializedMut.count(i);
-    assert(isUninitializedMut || !valueMap.count(i));
+    assert(i->producesRirResult() && !CastType::Cast(i) &&
+           !PushContext::Cast(i));
     if (val->getType() == t::SEXP && representationOf(i) == t::Int)
         val = unboxIntLgl(val);
     if (val->getType() == t::SEXP && representationOf(i) == t::Double)
@@ -891,18 +979,8 @@ void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
     if (!val->hasName())
         val->setName(i->getRef());
 
-    if (isUninitializedMut) {
-        // variables that are updated in between push/pop context can be read by
-        // instructions after popcontext, through non-local return. For llvm the
-        // controlflow of non-local return looks like a jump directly from push
-        // to pop context. Therefore all variable updates inside push/pop
-        // context need to be volatile. (same applies for updateMut).
-        builder.CreateStore(val, valueMap.at(i),
-                            inPushContext && escapesInlineContext.count(i));
-        uninitializedMut.erase(i);
-    } else {
-        valueMap[i] = val;
-    }
+    variables.at(i).set(builder, val,
+                        inPushContext && escapesInlineContext.count(i));
 }
 
 llvm::Value* LowerFunctionLLVM::isExternalsxp(llvm::Value* v, uint32_t magic) {
@@ -1035,6 +1113,35 @@ void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 };
 
+void LowerFunctionLLVM::ensureShared(llvm::Value* v) {
+    assert(v->getType() == t::SEXP);
+    auto sxpinfoP = sxpinfoPtr(v);
+    auto sxpinfo = builder.CreateLoad(sxpinfoP);
+
+    static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1);
+    static auto namedNegMask = ~(namedMask << 32);
+
+    auto named = builder.CreateLShr(sxpinfo, c(32, 64));
+    named = builder.CreateAnd(named, c(namedMask));
+
+    auto isNamedShared = builder.CreateICmpUGE(named, c(2, 64));
+
+    auto incrementBr = BasicBlock::Create(C, "", fun);
+    auto done = BasicBlock::Create(C, "", fun);
+
+    builder.CreateCondBr(isNamedShared, done, incrementBr);
+
+    builder.SetInsertPoint(incrementBr);
+    auto newNamed = c(2ul << 32, 64);
+
+    auto newSxpinfo = builder.CreateAnd(sxpinfo, c(namedNegMask));
+    newSxpinfo = builder.CreateOr(newSxpinfo, newNamed);
+    builder.CreateStore(newSxpinfo, sxpinfoP);
+    builder.CreateBr(done);
+
+    builder.SetInsertPoint(done);
+};
+
 void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = sxpinfoPtr(v);
@@ -1138,69 +1245,66 @@ llvm::Value* LowerFunctionLLVM::box(Instruction* pos, llvm::Value* v,
     return nullptr;
 }
 llvm::Value* LowerFunctionLLVM::boxInt(Instruction* pos, llvm::Value* v) {
-    gcSafepoint(pos, 1, true);
     if (v->getType() == t::Int)
         return call(NativeBuiltins::newInt, {v});
     assert(v->getType() == t::Double);
     return call(NativeBuiltins::newIntFromReal, {v});
 }
 llvm::Value* LowerFunctionLLVM::boxReal(Instruction* pos, llvm::Value* v) {
-    gcSafepoint(pos, 1, true);
     if (v->getType() == t::Double)
         return call(NativeBuiltins::newReal, {v});
     assert(v->getType() == t::Int);
     return call(NativeBuiltins::newRealFromInt, {v});
 }
 llvm::Value* LowerFunctionLLVM::boxLgl(Instruction* pos, llvm::Value* v) {
-    gcSafepoint(pos, 1, true);
     if (v->getType() == t::Int)
         return call(NativeBuiltins::newLgl, {v});
     assert(v->getType() == t::Double);
     return call(NativeBuiltins::newLglFromReal, {v});
 }
 
-void LowerFunctionLLVM::gcSafepoint(Instruction* i, size_t required,
-                                    bool protectArgs) {
-    auto ok = BasicBlock::Create(C, "", fun);
-
-    if (required != (size_t)-1) {
-        auto use_ptr = convertToPointer(&R_NodesInUse, t::i64ptr);
-        auto size_ptr = convertToPointer(&R_NSize, t::i64ptr);
-        auto use = builder.CreateLoad(use_ptr);
-        auto size = builder.CreateLoad(size_ptr);
-        auto req = builder.CreateAdd(use, c(required));
-        auto t = builder.CreateICmpULT(req, size);
-        auto nok = BasicBlock::Create(C, "", fun);
-        auto br = builder.CreateCondBr(t, ok, nok);
-
-        MDNode* WeightNode = MDB.createBranchWeights(1, 0);
-        br->setMetadata(LLVMContext::MD_prof, WeightNode);
-        builder.SetInsertPoint(nok);
-    }
-
-    // Store every live variable into a local variable slot from R
-    size_t pos = 0;
-    for (auto& v : valueMap) {
-        auto test = Instruction::Cast(v.first);
-        if (uninitializedMut.count(test))
-            continue;
-        if (!test)
-            continue;
-
-        bool isArg = false;
-        if (protectArgs) {
-            i->eachArg([&](Value* a) { isArg = isArg || a == test; });
-        }
-
-        if (i != test && (isArg || liveness.live(i, test))) {
-            if (representationOf(v.first) == Representation::Sexp)
-                setLocal(pos++, getValOrMut(v.first));
-        }
-    }
-
-    builder.CreateBr(ok);
-    builder.SetInsertPoint(ok);
-}
+// void LowerFunctionLLVM::gcSafepoint(Instruction* i, size_t required,
+//                                     bool protectArgs) {
+//    auto ok = BasicBlock::Create(C, "", fun);
+//
+//    if (required != (size_t)-1) {
+//        auto use_ptr = convertToPointer(&R_NodesInUse, t::i64ptr);
+//        auto size_ptr = convertToPointer(&R_NSize, t::i64ptr);
+//        auto use = builder.CreateLoad(use_ptr);
+//        auto size = builder.CreateLoad(size_ptr);
+//        auto req = builder.CreateAdd(use, c(required));
+//        auto t = builder.CreateICmpULT(req, size);
+//        auto nok = BasicBlock::Create(C, "", fun);
+//        auto br = builder.CreateCondBr(t, ok, nok);
+//
+//        MDNode* WeightNode = MDB.createBranchWeights(1, 0);
+//        br->setMetadata(LLVMContext::MD_prof, WeightNode);
+//        builder.SetInsertPoint(nok);
+//    }
+//
+//    // Store every live variable into a local variable slot from R
+//    size_t pos = 0;
+//    for (auto& v : valueMap) {
+//        auto test = Instruction::Cast(v.first);
+//        if (uninitializedMut.count(test))
+//            continue;
+//        if (!test)
+//            continue;
+//
+//        bool isArg = false;
+//        if (protectArgs) {
+//            i->eachArg([&](Value* a) { isArg = isArg || a == test; });
+//        }
+//
+//        if (i != test && (isArg || liveness.live(i, test))) {
+//            if (representationOf(v.first) == Representation::Sexp)
+//                setLocal(pos++, getValOrMut(v.first));
+//        }
+//    }
+//
+//    builder.CreateBr(ok);
+//    builder.SetInsertPoint(ok);
+// }
 
 llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
 
@@ -1244,7 +1348,6 @@ void LowerFunctionLLVM::compileRelop(
         auto b = loadSxp(i, rhs);
 
         llvm::Value* res;
-        gcSafepoint(i, -1, true);
         if (i->hasEnv()) {
             auto e = loadSxp(i, i->env());
             res = call(NativeBuiltins::binopEnv,
@@ -1288,7 +1391,6 @@ void LowerFunctionLLVM::compileRelop(
     builder.SetInsertPoint(done);
     res = builder.CreateLoad(res);
     if (rep == Representation::Sexp) {
-        gcSafepoint(i, 1, false);
         setVal(i, boxLgl(i, res));
     } else {
         setVal(i, res);
@@ -1309,7 +1411,6 @@ void LowerFunctionLLVM::compileBinop(
         auto b = loadSxp(i, rhs);
 
         llvm::Value* res = nullptr;
-        gcSafepoint(i, -1, true);
         if (i->hasEnv()) {
             auto e = loadSxp(i, i->env());
             res = call(NativeBuiltins::binopEnv,
@@ -1377,7 +1478,6 @@ void LowerFunctionLLVM::compileBinop(
     builder.SetInsertPoint(done);
     res = builder.CreateLoad(res);
     if (rep == Representation::Sexp) {
-        gcSafepoint(i, 1, false);
         setVal(i, box(i, res, lhs->type.mergeWithConversion(rhs->type)));
     } else {
         setVal(i, res);
@@ -1396,12 +1496,10 @@ void LowerFunctionLLVM::compileUnop(
 
         llvm::Value* res = nullptr;
         if (i->hasEnv()) {
-            gcSafepoint(i, -1, true);
             auto e = loadSxp(i, i->env());
             res = call(NativeBuiltins::unopEnv,
                        {a, e, c(i->srcIdx), c((int)kind)});
         } else {
-            gcSafepoint(i, 1, true);
             res = call(NativeBuiltins::unop, {a, c((int)kind)});
         }
 
@@ -1455,7 +1553,6 @@ void LowerFunctionLLVM::compileUnop(
     builder.SetInsertPoint(done);
     res = builder.CreateLoad(res);
     if (rep == Representation::Sexp) {
-        gcSafepoint(i, 1, false);
         setVal(i, box(i, res, arg->type));
     } else {
         setVal(i, res);
@@ -1587,59 +1684,86 @@ bool LowerFunctionLLVM::tryCompile() {
         bindingsCacheBase = builder.CreateAlloca(t::SEXP, 0, c(idx));
     }
 
-    basepointer = nodestackPtr();
     std::unordered_map<Instruction*, Instruction*> phis;
-    Visitor::run(code->entry, [&](BB* bb) {
-        for (auto i : *bb) {
-            if (auto phi = Phi::Cast(i)) {
-                valueMap[phi] = builder.CreateAlloca(representationOf(phi));
-                phi->eachArg([&](BB*, Value* v) {
-                    auto i = Instruction::Cast(v);
-                    assert(i);
-                    phis[i] = phi;
+    {
+        basepointer = nodestackPtr();
+        auto needsVariable = [](Instruction* v) {
+            return v->producesRirResult() && !LdConst::Cast(v) &&
+                   !CastType::Cast(v);
+        };
+        auto createVariable = [&](Instruction* i, bool mut) {
+            if (representationOf(i) == Representation::Sexp) {
+                if (mut)
+                    variables[i] = Variable::MutableRVariable(
+                        i, numLocals++, builder, basepointer);
+                else
+                    variables[i] = Variable::RVariable(i, numLocals++, builder,
+                                                       basepointer);
+            } else {
+                if (mut)
+                    variables[i] = Variable::Mutable(i, builder);
+                else
+                    variables[i] = Variable::Immutable(i);
+            }
+        };
+
+        auto arg = fun->arg_begin();
+        for (size_t i = 0; i < argNames.size(); ++i) {
+            args.push_back(arg);
+            args.back()->setName(argNames[i]);
+            arg++;
+        }
+
+        constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
+        constantpool = builder.CreateGEP(constantpool, c(1));
+
+        Visitor::run(code->entry, [&](BB* bb) {
+            for (auto i : *bb) {
+                if (auto phi = Phi::Cast(i)) {
+                    createVariable(phi, true);
+                    phi->eachArg([&](BB*, Value* v) {
+                        auto i = Instruction::Cast(v);
+                        assert(i);
+                        phis[i] = phi;
+                    });
+                }
+            }
+        });
+
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto pop = PopContext::Cast(i)) {
+                auto res = pop->result();
+                auto push = pop->push();
+                auto resStore = builder.CreateAlloca(representationOf(res));
+                auto rcntxt = builder.CreateAlloca(t::RCNTXT);
+                contexts[push] = {rcntxt, resStore,
+                                  BasicBlock::Create(C, "", fun)};
+
+                // Everything which is live at the Push context needs to be
+                // mutable, to be able to restore on restart
+                Visitor::run(code->entry, [&](Instruction* j) {
+                    if (needsVariable(j)) {
+                        if (representationOf(j) == t::SEXP &&
+                            liveness.live(push, j)) {
+                            contexts[push].savedSexpPos[j] = numLocals++;
+                        }
+                        if (!liveness.live(push, j) && liveness.live(pop, j))
+                            escapesInlineContext.insert(j);
+                        if (!variables.count(j) &&
+                            (liveness.live(push, j) || liveness.live(pop, j)))
+                            createVariable(j, true);
+                    }
                 });
             }
-        }
-    });
-
-    auto maybeInValueMap = [](Value* v) {
-        return !v->type.isVoid() && !LdConst::Cast(v) && !CastType::Cast(v);
-    };
-
-    auto arg = fun->arg_begin();
-    for (size_t i = 0; i < argNames.size(); ++i) {
-        args.push_back(arg);
-        args.back()->setName(argNames[i]);
-        arg++;
+        });
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (needsVariable(i) && !variables.count(i))
+                createVariable(i, false);
+        });
     }
-
-    constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
-    constantpool = builder.CreateGEP(constantpool, c(1));
 
     if (numLocals > 0)
         incStack(numLocals, true);
-
-    Visitor::run(code->entry, [&](Instruction* i) {
-        if (auto pop = PopContext::Cast(i)) {
-            auto res = pop->result();
-            auto push = pop->push();
-            auto resStore = builder.CreateAlloca(representationOf(res));
-            auto rcntxt = builder.CreateAlloca(t::RCNTXT);
-            contexts[push] = {rcntxt, resStore, BasicBlock::Create(C, "", fun)};
-
-            // Everything which is live at the Push context needs to be mutable,
-            // to be able to restore on restart
-            Visitor::run(code->entry, [&](Instruction* j) {
-                if (maybeInValueMap(j)) {
-                    if (!liveness.live(push, j) && liveness.live(pop, j))
-                        escapesInlineContext.insert(j);
-                    if (!valueMap.count(j) &&
-                        (liveness.live(push, j) || liveness.live(pop, j)))
-                        createMut(j);
-                }
-            });
-        }
-    });
 
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
@@ -2044,7 +2168,6 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
 
             case Tag::ForSeqSize: {
-                gcSafepoint(i, -1, true);
                 llvm::Value* res = call(NativeBuiltins::forSeqSize,
                                         {loadSxp(i, i->arg(0).val())});
                 if (representationOf(i) == Representation::Real)
@@ -2114,7 +2237,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                         builder.CreateGEP(namesStore, c(i)));
 
                 if (mkenv->stub) {
-                    gcSafepoint(i, -1, true);
                     auto env =
                         call(NativeBuiltins::createStubEnvironment,
                              {parent, c((int)mkenv->nLocals()),
@@ -2128,7 +2250,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     break;
                 }
 
-                gcSafepoint(i, mkenv->nargs() + 1, true);
                 auto arglist = constant(R_NilValue, t::SEXP);
                 mkenv->eachLocalVarRev([&](SEXP name, Value* v) {
                     if (v == MissingArg::instance()) {
@@ -2240,7 +2361,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto argumentNative = loadSxp(i, argument);
 
                     llvm::Value* res = nullptr;
-                    gcSafepoint(i, -1, true);
                     if (i->hasEnv()) {
                         res = call(NativeBuiltins::notEnv,
                                    {argumentNative, loadSxp(i, i->env()),
@@ -2277,7 +2397,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 auto result = builder.CreateLoad(res);
                 if (resultRep == Representation::Sexp) {
-                    gcSafepoint(i, 1, false);
                     setVal(i, boxLgl(i, result));
                 } else {
                     setVal(i, result);
@@ -2381,7 +2500,6 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto a = loadSxp(i, i->arg(0).val());
                 auto b = loadSxp(i, i->arg(1).val());
                 auto e = loadSxp(i, i->env());
-                gcSafepoint(i, -1, true);
                 auto res =
                     call(NativeBuiltins::binopEnv,
                          {a, b, e, c(i->srcIdx), c((int)BinopKind::COLON)});
@@ -2396,9 +2514,8 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Return: {
                 auto res = loadSxp(i, Return::Cast(i)->arg<0>().val());
-                if (numLocals > 0) {
+                if (numLocals > 0)
                     decStack(numLocals);
-                }
                 builder.CreateRet(res);
                 break;
             }
@@ -2453,7 +2570,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     constant(mkFunction->originalBody->container(), t::SEXP);
                 assert(DispatchTable::check(
                     mkFunction->originalBody->container()));
-                gcSafepoint(i, 1, true);
                 setVal(i, call(NativeBuiltins::createClosure,
                                {body, formals, loadSxp(i, mkFunction->env()),
                                 srcRef}));
@@ -2581,7 +2697,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 if (representationOf(arg) == Representation::Sexp) {
                     auto a = loadSxp(i, arg);
-                    gcSafepoint(i, -1, true);
                     setVal(i, call(NativeBuiltins::asTest, {a}));
                     break;
                 }
@@ -2671,7 +2786,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::LdFun: {
                 auto ld = LdFun::Cast(i);
-                gcSafepoint(i, -1, false);
                 auto res =
                     call(NativeBuiltins::ldfun, {constant(ld->varName, t::SEXP),
                                                  loadSxp(i, ld->env())});
@@ -2685,7 +2799,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::MkArg: {
                 auto p = MkArg::Cast(i);
-                gcSafepoint(i, 1, true);
                 setVal(i,
                        call(NativeBuiltins::createPromise,
                             {paramCode(), c(promMap.at(p->prom())),
@@ -2702,9 +2815,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                          env->indexOf(ld->varName)));
                     break;
                 }
-
-                // TODO: why is this needed?
-                gcSafepoint(i, -1, true);
 
                 llvm::Value* res = nullptr;
                 if (bindingsCache.count(i->env())) {
@@ -2766,7 +2876,6 @@ bool LowerFunctionLLVM::tryCompile() {
                 if (extract->hasEnv())
                     env = loadSxp(i, extract->env());
 
-                gcSafepoint(i, -1, true);
                 auto res = call(NativeBuiltins::extract11,
                                 {vector, idx, env, c(extract->srcIdx)});
                 setVal(i, res);
@@ -2860,7 +2969,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
                     builder.SetInsertPoint(fallback);
                     auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
-                    gcSafepoint(i, -1, true);
                     llvm::Value* res0 = call(NativeBuiltins::extract21,
                                              {loadSxp(i, extract->vec()),
                                               loadSxp(i, extract->idx()), env,
@@ -2878,7 +2986,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     setVal(i, builder.CreateLoad(res));
                 } else {
                     auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
-                    gcSafepoint(i, -1, true);
                     setVal(i, call(NativeBuiltins::extract21,
                                    {loadSxp(i, extract->vec()),
                                     loadSxp(i, extract->idx()), env,
@@ -2899,7 +3006,6 @@ bool LowerFunctionLLVM::tryCompile() {
                 if (subAssign->hasEnv())
                     env = loadSxp(i, subAssign->env());
 
-                gcSafepoint(i, -1, false);
                 auto res = call(NativeBuiltins::subassign11,
                                 {vector, idx, val, env, c(subAssign->srcIdx)});
                 setVal(i, res);
@@ -2966,7 +3072,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(miss);
-                    gcSafepoint(i, 1, true);
                     call(setter, {constant(st->varName, t::SEXP), newVal,
                                   loadSxp(i, st->env())});
                     builder.CreateBr(done);
@@ -2974,7 +3079,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.SetInsertPoint(done);
 
                 } else {
-                    gcSafepoint(i, 1, true);
                     call(setter, {constant(st->varName, t::SEXP),
                                   loadSxp(i, st->arg<0>().val()),
                                   loadSxp(i, st->env())});
@@ -2995,7 +3099,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 // In case we statically knew the parent PIR already converted
                 // super assigns to standard stores
-                gcSafepoint(i, 1, true);
                 call(NativeBuiltins::defvar,
                      {constant(st->varName, t::SEXP),
                       loadSxp(i, st->arg<0>().val()), loadSxp(i, st->env())});
@@ -3057,16 +3160,14 @@ bool LowerFunctionLLVM::tryCompile() {
             if (phis.count(i)) {
                 auto phi = phis.at(i);
                 auto r = representationOf(phi);
-                if (PirCopy::Cast(i)) {
-                    updateMut(phi, load(i, i->arg(0).val(), r));
-                } else {
-                    updateMut(phi, load(i, i, r));
-                }
+                auto inp = PirCopy::Cast(i) ? load(i, i->arg(0).val(), r)
+                                            : load(i, i, r);
+                variables.at(phi).update(builder, inp);
             }
 
-            if (valueMap.count(i) && representationOf(i) == t::SEXP) {
+            if (variables.count(i) && representationOf(i) == t::SEXP) {
                 if (i->minReferenceCount() < 2 && needsSetShared.count(i))
-                    incrementNamed(loadSxp(i, i), 2);
+                    ensureShared(loadSxp(i, i));
                 else if (i->minReferenceCount() < 1 &&
                          (refcountAnalysisOverflow ||
                           needsEnsureNamed.count(i)))
