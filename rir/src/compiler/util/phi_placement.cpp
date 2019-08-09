@@ -45,6 +45,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
                 input.aValue = nullptr;
                 input.otherPhi = cur;
             }
+
             if (writes.count(cur)) {
                 input.otherPhi = nullptr;
                 input.aValue = writes.at(cur);
@@ -59,15 +60,8 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
 
                 if (phis.includes(next)) {
                     placement[next].insert(input);
-                } else {
-                    SLOWASSERT(
-                        (pendingInput.count(next) == 0 ||
-                         (pendingInput[next].otherPhi == input.otherPhi &&
-                          pendingInput[next].aValue == input.aValue)) &&
-                        "Merging different phi input values (maybe an "
-                        "earlier phi is missing?)");
+                } else
                     pendingInput[next] = input;
-                }
             };
 
             apply(cur->next0);
