@@ -227,7 +227,7 @@ class TheScopeResolution {
                 auto before = analysis.at<ScopeAnalysis::BeforeInstruction>(i);
                 auto after = analysis.at<ScopeAnalysis::AfterInstruction>(i);
 
-                // Force and callees can only see our env only through
+                // Force and callees can see our env only through
                 // reflection
                 if (i->hasEnv() &&
                     (CallInstruction::CastCall(i) || Force::Cast(i))) {
@@ -418,7 +418,7 @@ class TheScopeResolution {
                     // current function (and not through inter procedural
                     // analysis from other functions).
                     //
-                    // Also, we shold only do this for actual loads and not
+                    // Also, we should only do this for actual loads and not
                     // in general. Otherwise there is a danger that we insert
                     // the same phi twice (e.g. if a force returns the result
                     // of a load, we will resolve the load and the force) which
