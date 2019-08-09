@@ -36,7 +36,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
 
     {
         std::unordered_map<BB*, PhiInput> pendingInput;
-        BreadthFirstVisitor::run(cls->entry, [&](BB* cur) {
+        DominatorTreeVisitor<>(dom).run(cls->entry, [&](BB* cur) {
             PhiInput input = {nullptr, nullptr, nullptr};
             if (pendingInput.count(cur))
                 input = pendingInput.at(cur);
