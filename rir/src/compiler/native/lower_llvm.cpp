@@ -2886,7 +2886,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto extract = Extract2_1D::Cast(i);
                 auto resultRep = representationOf(i);
                 // TODO: Extend a fastPath for generic vectors.
-                if (extract->vec()->type.isA(PirType::num().notObject()) &&
+                if (false && extract->vec()->type.isA(PirType::num().notObject()) &&
                     extract->idx()->type.isScalar()) {
                     auto fallback = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
