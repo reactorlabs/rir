@@ -9,6 +9,7 @@ namespace rir {
 namespace pir {
 
 class Closure;
+class ClosureAugments;
 class ClosureVersion;
 class BB;
 class Promise;
@@ -17,7 +18,7 @@ class Code;
 class Env;
 class Instruction;
 class LazyEnv;
-
+class PirSignature;
 }
 }
 

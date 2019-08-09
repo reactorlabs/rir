@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../../runtime/Function.h"
+#include "closure_augment.h"
 #include "optimization_context.h"
 #include "pir.h"
 
@@ -24,9 +25,11 @@ class Module {
     void print(std::ostream& out = std::cout, bool tty = false);
 
     Closure* getOrDeclareRirFunction(const std::string& name, rir::Function* f,
-                                     SEXP formals, SEXP src);
+                                     SEXP formals, SEXP src,
+                                     const ClosureAugments& augments);
     Closure* getOrDeclareRirClosure(const std::string& name, SEXP closure,
-                                    rir::Function* f);
+                                    rir::Function* f,
+                                    const ClosureAugments& augments);
 
     typedef std::function<void(pir::Closure*)> PirClosureIterator;
     typedef std::function<void(pir::ClosureVersion*)> PirClosureVersionIterator;

@@ -227,12 +227,17 @@ void LogStream::header() {
     assumptions << "Assumptions: " << version->assumptions();
     std::stringstream properties;
     properties << "Properties:  " << version->properties;
+    std::stringstream augments;
+    augments << "Augments:    " << version->augments;
     out << "┐\n";
     out << c << "│ " << std::left << std::setw(77) << version->name() << "│\n";
     out << c << "│ " << std::left << std::setw(77) << assumptions.str()
         << "│\n";
     if (properties.str() != "")
         out << c << "│ " << std::left << std::setw(77) << properties.str()
+            << "│\n";
+    if (augments.str() != "")
+        out << c << "│ " << std::left << std::setw(77) << augments.str()
             << "│\n";
     highlightOff();
 }

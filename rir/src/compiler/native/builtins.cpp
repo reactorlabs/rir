@@ -770,25 +770,16 @@ NativeBuiltin NativeBuiltins::length = {
     jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp1, 1, 0),
 };
 
-void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
-    if (!pir::Parameter::DEOPT_CHAOS) {
-        if (cls) {
-            // TODO: this version is still reachable from static call inline
-            // caches. Thus we need to preserve it forever. We need some
-            // dependency management here.
-            Pool::insert(c->container());
-            // remove the deoptimized function. Unless on deopt chaos,
-            // always recompiling would just blow testing time...
-            auto dt = DispatchTable::unpack(BODY(cls));
-            dt->remove(c);
-        } else {
-            // In some cases we don't know the callee here, so we can't properly
-            // remove the deoptimized code. But we can kill the native code,
-            // this will cause a fallback to rir, which will then be able to
-            // deoptimize properly.
-            // TODO: find a way to always know the closure in native code!
-            c->nativeCode = nullptr;
-        }
+void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
+    if (!pir::Parameter::DEOPT_CHAOS && cls) {
+        // TODO: this version is still reachable from static call inline
+        // caches. Thus we need to preserve it forever. We need some
+        // dependency management here.
+        Pool::insert(c->container());
+        // remove the deoptimized function. Unless on deopt chaos,
+        // always recompiling would just blow testing time...
+        auto dt = DispatchTable::unpack(BODY(cls));
+        dt->remove(c);
     }
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
@@ -890,8 +881,8 @@ NativeBuiltin NativeBuiltins::extract21 = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
 };
 
-static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
-                               SEXP env, SEXP callee) {
+static SEXP rirCallTrampoline_(RCNTXT& cntxt, rir::Code* code,
+                               R_bcstack_t* args, SEXP env, SEXP callee) {
     code->registerInvocation();
     if ((SETJMP(cntxt.cjmpbuf))) {
         if (R_ReturnedValue == R_RestartToken) {

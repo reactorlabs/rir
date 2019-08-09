@@ -83,6 +83,31 @@ pir.check <- function(f, ..., warmup=NULL) {
     res
 }
 
+# creates a bitset which represents a ClosureAugment in RIR
+rir.mkAugments <- function(Strict=FALSE,
+                         NoReflection=FALSE,
+                         sig=NULL) {
+    # !!!  This list of arguments *must* be exactly equal to the            !!!
+    # !!!  LIST_OF_CLOSURE_AUGMENTS in compiler/pir/closure_augments.h  !!!
+    .Call(
+        "rir_mkAugments",
+        Strict,
+        NoReflection,
+        sig
+    )
+}
+
+# set closure augments - takes the augment set directly
+rir.setAugments <- function(cls, props) {
+    .Call("rir_setAugments", cls, props)
+}
+
+# set closure augments - these affect closure behavior, adding assertions and optimizations
+rir.augment <- function(cls, ...) {
+    rir.compile(cls)
+    rir.setAugments(cls, rir.mkAugments(...))
+}
+
 # creates a bitset with pir debug options
 pir.debugFlags <- function(ShowWarnings = FALSE,
                            DryRun = FALSE,

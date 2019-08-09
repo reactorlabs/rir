@@ -43,7 +43,8 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                 closureName = CHAR(PRINTNAME(e.tag()));
         }
     }
-    auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun);
+    auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun,
+                                                     tbl->augments);
     OptimizationContext context(assumptions);
     compileClosure(pirClosure, context, success, fail);
 }
@@ -51,11 +52,12 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       const std::string& name, SEXP formals,
                                       SEXP srcRef,
+                                      const ClosureAugments& augments,
                                       const Assumptions& assumptions,
                                       MaybeCls success, Maybe fail) {
     OptimizationContext context(assumptions);
-    auto closure =
-        module->getOrDeclareRirFunction(name, srcFunction, formals, srcRef);
+    auto closure = module->getOrDeclareRirFunction(name, srcFunction, formals,
+                                                   srcRef, augments);
     compileClosure(closure, context, success, fail);
 }
 

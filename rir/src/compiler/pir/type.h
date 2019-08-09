@@ -146,6 +146,10 @@ struct PirType {
         return t;
     }
 
+  private:
+    constexpr PirType(const Type& t, const FlagSet& f) : flags_(f), t_(t) {}
+
+  public:
     constexpr PirType() : flags_(topRTypeFlags()), t_(RTypeSet()) {}
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
@@ -487,6 +491,7 @@ struct PirType {
         return false;
     }
 
+    static PirType parse(const std::string& inp);
     void print(std::ostream& out = std::cout) const;
 
     size_t hash() const {

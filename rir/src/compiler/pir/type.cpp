@@ -11,6 +11,117 @@ namespace pir {
 unsigned Parameter::RIR_CHECK_PIR_TYPES =
     getenv("RIR_CHECK_PIR_TYPES") ? atoi(getenv("RIR_CHECK_PIR_TYPES")) : 0;
 
+static PirType::Type parseBaseType(const std::string& inp, bool& isRType) {
+    if (inp == "val") {
+        isRType = true;
+        return PirType::val().t_;
+    } else if (inp == "ct") {
+        isRType = false;
+        return PirType::NativeTypeSet(NativeType::context);
+    } else if (inp == "t") {
+        isRType = false;
+        return PirType::NativeTypeSet(NativeType::test);
+    } else if (inp == "cp") {
+        isRType = false;
+        return PirType::NativeTypeSet(NativeType::checkpoint);
+    } else if (inp == "fs") {
+        isRType = false;
+        return PirType::NativeTypeSet(NativeType::frameState);
+    } else if (inp == "ast") {
+        isRType = true;
+        return PirType::RTypeSet(RType::ast);
+    } else if (inp == "raw") {
+        isRType = true;
+        return PirType::RTypeSet(RType::raw);
+    } else if (inp == "vec") {
+        isRType = true;
+        return PirType::RTypeSet(RType::vec);
+    } else if (inp == "char") {
+        isRType = true;
+        return PirType::RTypeSet(RType::chr);
+    } else if (inp == "real") {
+        isRType = true;
+        return PirType::RTypeSet(RType::real);
+    } else if (inp == "complex") {
+        isRType = true;
+        return PirType::RTypeSet(RType::cplx);
+    } else if (inp == "str") {
+        isRType = true;
+        return PirType::RTypeSet(RType::str);
+    } else if (inp == "env") {
+        isRType = true;
+        return PirType::RTypeSet(RType::env);
+    } else if (inp == "code") {
+        isRType = true;
+        return PirType::RTypeSet(RType::code);
+    } else if (inp == "cons") {
+        isRType = true;
+        return PirType::RTypeSet(RType::cons);
+    } else if (inp == "prom") {
+        isRType = true;
+        return PirType::RTypeSet(RType::prom);
+    } else if (inp == "nil") {
+        isRType = true;
+        return PirType::RTypeSet(RType::nil);
+    } else if (inp == "cls") {
+        isRType = true;
+        return PirType::RTypeSet(RType::closure);
+    } else if (inp == "sym") {
+        isRType = true;
+        return PirType::RTypeSet(RType::sym);
+    } else if (inp == "int") {
+        isRType = true;
+        return PirType::RTypeSet(RType::integer);
+    } else if (inp == "lgl") {
+        isRType = true;
+        return PirType::RTypeSet(RType::logical);
+    } else if (inp == "miss") {
+        isRType = true;
+        return PirType::RTypeSet(RType::missing);
+    } else if (inp == "_") {
+        isRType = true;
+        return PirType::RTypeSet(RType::unbound);
+    } else {
+        Rf_error("couldn't parse pir type");
+        return PirType::RTypeSet(RType::unbound);
+    }
+}
+
+PirType PirType::parse(const std::string& inp) {
+    std::string s = inp;
+    FlagSet flags = FlagSet(TypeFlags::maybeNotScalar) | TypeFlags::maybeObject;
+    while (true) {
+        char suf = s[s.size() - 1];
+        bool hasFlag = true;
+        switch (suf) {
+        case '$':
+            flags.reset(TypeFlags::maybeNotScalar);
+            break;
+        case '^':
+            flags.set(TypeFlags::lazy);
+            break;
+        case '~':
+            flags.set(TypeFlags::promiseWrapped);
+            break;
+        case '\'':
+            flags.reset(TypeFlags::maybeObject);
+            break;
+        default:
+            hasFlag = false;
+            break;
+        }
+        if (!hasFlag)
+            break;
+        s = s.substr(0, s.size() - 1);
+    }
+    bool isRType = true;
+    ;
+    Type base = parseBaseType(s, isRType);
+    if (isRType)
+        flags.set(TypeFlags::rtype);
+    return PirType(base, flags);
+}
+
 void PirType::print(std::ostream& out) const { out << *this << "\n"; }
 
 void PirType::merge(SEXPTYPE sexptype) {

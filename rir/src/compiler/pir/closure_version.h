@@ -3,6 +3,7 @@
 
 #include "../../runtime/Function.h"
 #include "../debugging/debugging.h"
+#include "closure_augment.h"
 #include "code.h"
 #include "optimization_context.h"
 #include "pir.h"
@@ -49,6 +50,7 @@ class ClosureVersion : public Code {
     std::string nameSuffix_;
     ClosureVersion(Closure* closure,
                    const OptimizationContext& optimizationContext,
+                   const ClosureAugments& augments,
                    const Properties& properties = Properties());
 
     friend class Closure;
@@ -63,6 +65,7 @@ class ClosureVersion : public Code {
         return optimizationContext_;
     }
 
+    ClosureAugments augments;
     Properties properties;
 
     Closure* owner() const { return owner_; }
@@ -102,8 +105,6 @@ class ClosureVersion : public Code {
 
     ~ClosureVersion();
 };
-
-std::ostream& operator<<(std::ostream& out, const ClosureVersion::Property&);
 
 } // namespace pir
 } // namespace rir
