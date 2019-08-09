@@ -1094,13 +1094,13 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
-    Value* rhs() const { return arg(0).val(); }
-    Value* lhs() const { return arg(1).val(); }
+    Value* val() const { return arg(0).val(); }
+    Value* vector() const { return arg(1).val(); }
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(rhs()) | getType(lhs())), type);
+        return ifNonObjectArgs(
+            getType, type & (getType(val()) | getType(vector())), type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1115,13 +1115,13 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
               PirType::valOrLazy(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
-    Value* rhs() const { return arg(0).val(); }
-    Value* lhs() const { return arg(1).val(); }
+    Value* val() const { return arg(0).val(); }
+    Value* vector() const { return arg(1).val(); }
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(rhs()) | getType(lhs())), type);
+        return ifNonObjectArgs(
+            getType, type & (getType(val()) | getType(vector())), type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);

@@ -192,6 +192,11 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::extract21.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
 
+    NativeBuiltins::subassign11.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::subassign21.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+
     NativeBuiltins::nativeCallTrampoline.llvmSignature =
         llvm::FunctionType::get(
             t::SEXP, {t::SEXP, t::voidPtr, t::Int, t::SEXP, t::i64}, false);

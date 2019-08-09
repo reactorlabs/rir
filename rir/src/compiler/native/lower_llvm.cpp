@@ -173,6 +173,8 @@ class LowerFunctionLLVM {
     llvm::Value* load(Instruction* pos, Value* val, PirType type,
                       Representation needed);
     llvm::Value* dataPtr(llvm::Value* v);
+    llvm::Value* accessVector(llvm::Value* vector, llvm::Value* position,
+                              PirType type);
     llvm::Value* unboxIntLgl(llvm::Value* v);
     llvm::Value* unboxInt(llvm::Value* v);
     llvm::Value* unboxLgl(llvm::Value* v);
@@ -224,6 +226,8 @@ class LowerFunctionLLVM {
     void checkSexptype(llvm::Value* v, const std::vector<SEXPTYPE>& types);
     void checkIsSexp(llvm::Value* v, const std::string& msg = "");
     llvm::Value* sexptype(llvm::Value* v);
+    llvm::Value* attr(llvm::Value* v);
+    llvm::Value* vectorLength(llvm::Value* v);
     llvm::Value* tag(llvm::Value* v);
     llvm::Value* car(llvm::Value* v);
     void setCar(llvm::Value* x, llvm::Value* y);
@@ -282,6 +286,10 @@ class LowerFunctionLLVM {
 
     bool success = true;
     bool tryCompile();
+
+  private:
+    llvm::Value* vectorPositionPtr(llvm::Value* vector, llvm::Value* position,
+                                   PirType type);
 };
 
 void LowerFunctionLLVM::setVisible(int i) {
@@ -585,6 +593,30 @@ llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v) {
     return builder.CreateGEP(pos, c(1));
 }
 
+llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
+                                                  llvm::Value* position,
+                                                  PirType type) {
+    assert(vector->getType() == t::SEXP);
+    PointerType* nativeType;
+    if (type.isA(PirType(RType::integer).notObject()) ||
+        type.isA(PirType(RType::logical).notObject())) {
+        nativeType = t::IntPtr;
+    } else if (type.isA(PirType(RType::real).notObject())) {
+        nativeType = t::DoublePtr;
+    } else {
+        nativeType = t::SEXP_ptr;
+        assert(false);
+    }
+    auto pos = builder.CreateBitCast(dataPtr(vector), nativeType);
+    return builder.CreateGEP(pos, position);
+}
+
+llvm::Value* LowerFunctionLLVM::accessVector(llvm::Value* vector,
+                                             llvm::Value* position,
+                                             PirType type) {
+    return builder.CreateLoad(vectorPositionPtr(vector, position, type));
+}
+
 llvm::Value* LowerFunctionLLVM::unboxIntLgl(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     checkSexptype(v, {LGLSXP, INTSXP});
@@ -749,6 +781,17 @@ llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
     return builder.CreateLoad(v);
 }
 
+llvm::Value* LowerFunctionLLVM::attr(llvm::Value* v) {
+    auto pos = builder.CreateGEP(v, {c(0), c(1)});
+    return builder.CreateLoad(pos);
+}
+
+llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
+    assert(v->getType() == t::SEXP);
+    auto pos = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
+    pos = builder.CreateGEP(pos, {c(0), c(4), c(0)});
+    return builder.CreateLoad(pos);
+}
 void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
@@ -2054,6 +2097,17 @@ bool LowerFunctionLLVM::tryCompile() {
                              },
                              BinopKind::LOR);
                 break;
+            case Tag::Mod:
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateSRem(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFRem(a, b);
+                    },
+                    BinopKind::MOD);
+                break;
 
             case Tag::Colon: {
                 assert(representationOf(i) == t::SEXP);
@@ -2454,16 +2508,133 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Extract2_1D: {
                 auto extract = Extract2_1D::Cast(i);
-                auto vector = loadSxp(i, extract->vec());
-                auto idx = loadSxp(i, extract->idx());
+                auto resultRep = representationOf(i);
+                // TODO: Extend a fastPath for generic vectors.
+                if (extract->vec()->type.isA(PirType::num().notObject()) &&
+                    extract->idx()->type.isScalar()) {
+                    auto fallback = BasicBlock::Create(C, "", fun);
+                    auto hit = BasicBlock::Create(C, "", fun);
+                    auto hit2 = BasicBlock::Create(C, "", fun);
+                    auto hit3 = BasicBlock::Create(C, "", fun);
+                    auto done = BasicBlock::Create(C, "", fun);
+                    
+                    llvm::Value* vector = load(i, extract->vec());
+                    llvm::Value* res =
+                        builder.CreateAlloca(representationOf(i));
+                    llvm::Value* index = nullptr;
 
+                    if (extract->vec()->type.maybeObj()) {
+                        auto rNil = constant(R_NilValue, t::SEXP);
+                        auto vectorhasAttr =
+                            builder.CreateICmpEQ(attr(vector), rNil);
+                        builder.CreateCondBr(vectorhasAttr, hit, fallback);
+                        builder.SetInsertPoint(hit);
+                    }
+
+                    if (representationOf(extract->idx()) !=
+                        Representation::Sexp) {
+                        if (representationOf(extract->idx()) ==
+                            Representation::Real) {
+                            index = builder.CreateTrunc(
+                                load(i, extract->idx(), Representation::Real),
+                                t::i64);
+                        } else {
+                            index = builder.CreateZExt(
+                                load(i, extract->idx(),
+                                     Representation::Integer),
+                                t::i64);
+                        }
+                    } else {
+                        // Maybe not needed if we know it is scalar?
+                        if (extract->idx()->type.maybeObj()) {
+                            auto rNil = constant(R_NilValue, t::SEXP);
+                            auto vectorhasAttr = builder.CreateICmpEQ(
+                                attr(loadSxp(i, extract->idx())), rNil);
+                            builder.CreateCondBr(vectorhasAttr, hit2, fallback);
+                            builder.SetInsertPoint(hit2);
+                        }
+                        auto vecIndex = loadSxp(i, extract->idx());
+                        index =
+                            accessVector(vecIndex, c(0), extract->idx()->type);
+                        if (extract->idx()->type.isA(PirType(RType::real))) {
+                            index = builder.CreateTrunc(index, t::i64);
+                        } else {
+                            index = builder.CreateZExt(index, t::i64);
+                        }
+                        nacheck(index, fallback);
+                    }
+
+                    index = builder.CreateSub(index, c(1ul));
+                    auto veclength =
+                        (representationOf(extract->vec()) == t::SEXP)
+                            ? vectorLength(vector)
+                            : c(1);
+                    auto indexOverRange =
+                        builder.CreateICmpUGE(index, veclength);
+                    auto indexUnderRange = builder.CreateICmpULT(index, c(0ul));
+                    builder.CreateCondBr(
+                        builder.CreateOr(indexOverRange, indexUnderRange),
+                        fallback, hit3);
+                    builder.SetInsertPoint(hit3);
+
+                    if (representationOf(extract->vec()) != t::SEXP) {
+                        if (resultRep == t::SEXP)
+                            builder.CreateStore(
+                                box(i, vector, extract->vec()->type), res);
+                        else
+                            builder.CreateStore(vector, res);
+                    } else {
+                        builder.CreateStore(
+                            accessVector(vector, index, extract->vec()->type),
+                            res);
+                    }
+
+                    builder.CreateBr(done);
+
+                    builder.SetInsertPoint(fallback);
+                    auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
+                    gcSafepoint(i, -1, true);
+                    llvm::Value* res0 = call(NativeBuiltins::extract21,
+                                             {loadSxp(i, extract->vec()),
+                                              loadSxp(i, extract->idx()), env,
+                                              c(extract->srcIdx)});
+                    if (resultRep == t::SEXP) {
+                        builder.CreateStore(res0, res);
+                    } else if (resultRep == Representation::Real) {
+                        builder.CreateStore(unboxReal(res0), res);
+                    } else {
+                        builder.CreateStore(unboxIntLgl(res0), res);
+                    }
+
+                    builder.CreateBr(done);
+                    builder.SetInsertPoint(done);
+                    setVal(i, builder.CreateLoad(res));
+                } else {
+                    auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
+                    gcSafepoint(i, -1, true);
+                    setVal(i, call(NativeBuiltins::extract21,
+                                   {loadSxp(i, extract->vec()),
+                                    loadSxp(i, extract->idx()), env,
+                                    c(extract->srcIdx)}));
+                }
+                break;
+            }
+
+            case Tag::Subassign1_1D: {
+                auto subAssign = Subassign1_1D::Cast(i);
+                auto vector = loadSxp(i, subAssign->vector());
+                auto val = loadSxp(i, subAssign->val());
+                auto idx = loadSxp(i, subAssign->idx());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
                 auto env = constant(R_NilValue, t::SEXP);
-                if (extract->hasEnv())
-                    env = loadSxp(i, extract->env());
+                if (subAssign->hasEnv())
+                    env = loadSxp(i, subAssign->env());
 
-                gcSafepoint(i, -1, true);
-                auto res = call(NativeBuiltins::extract21,
-                                {vector, idx, env, c(extract->srcIdx)});
+                gcSafepoint(i, -1, false);
+                auto res = call(NativeBuiltins::subassign11,
+                                {vector, idx, val, env, c(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
             }

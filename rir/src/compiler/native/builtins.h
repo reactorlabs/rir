@@ -42,6 +42,7 @@ enum class BinopKind : int {
     LAND,
     LOR,
     COLON,
+    MOD,
 };
 
 enum class UnopKind : int {
@@ -108,6 +109,8 @@ struct NativeBuiltins {
 
     static NativeBuiltin extract11;
     static NativeBuiltin extract21;
+    static NativeBuiltin subassign11;
+    static NativeBuiltin subassign21;
 
     static NativeBuiltin nativeCallTrampoline;
 };
