@@ -17,7 +17,7 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                              LogStream&) const {
     DominanceGraph dom(function);
 
-    Visitor::run(function->entry, [&](BB* bb) {
+    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;
 

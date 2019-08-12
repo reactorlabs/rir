@@ -11,12 +11,17 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
 
     std::unordered_map<Instruction*, BB*> usedOnlyInDeopt;
 
+    auto isTarget = [](Instruction* j) {
+        return LdFun::Cast(j) || MkArg::Cast(j) ||
+               FrameState::Cast(j);
+    };
+
     Visitor::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* v) {
             if (auto j = Instruction::Cast(v)) {
-                if (LdFun::Cast(j) || MkArg::Cast(j)) {
+                if (isTarget(j)) {
                     auto& u = usedOnlyInDeopt[j];
-                    if (FrameState::Cast(i) && i->bb()->isDeopt()) {
+                    if (i->bb()->isDeopt()) {
                         if (!u)
                             u = i->bb();
                         else
@@ -61,7 +66,7 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
              * sideeffects and the sideeffecting ldfun is moved to the deopt
              * branch.
              */
-            if (LdFun::Cast(i) || MkArg::Cast(i)) {
+            if (isTarget(i)) {
                 if (usedOnlyInDeopt.count(i)) {
                     auto u = usedOnlyInDeopt.at(i);
                     if (u && u != (BB*)-1 && u != i->bb()) {
