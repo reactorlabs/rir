@@ -2992,6 +2992,24 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
+            case Tag::Subassign2_1D: {
+                auto subAssign = Subassign2_1D::Cast(i);
+                auto vector = loadSxp(subAssign->vector());
+                auto val = loadSxp(subAssign->val());
+                auto idx = loadSxp(subAssign->idx());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, t::SEXP);
+                if (subAssign->hasEnv())
+                    env = loadSxp(subAssign->env());
+
+                auto res = call(NativeBuiltins::subassign21,
+                                {vector, idx, val, env, c(subAssign->srcIdx)});
+                setVal(i, res);
+                break;
+            }
+
             case Tag::StVar: {
                 auto st = StVar::Cast(i);
                 auto environment = MkEnv::Cast(st->env());
@@ -3142,7 +3160,6 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::IDiv:
             case Tag::Extract2_2D:
             case Tag::Extract1_2D:
-            case Tag::Subassign2_1D:
             case Tag::Subassign1_2D:
             case Tag::Subassign2_2D:
             case Tag::Seq:
