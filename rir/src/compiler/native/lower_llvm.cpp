@@ -2881,16 +2881,15 @@ bool LowerFunctionLLVM::tryCompile() {
                         if (representationOf(extract->idx()) ==
                             Representation::Real) {
                             index = builder.CreateTrunc(
-                                load(i, extract->idx(), Representation::Real),
+                                load(extract->idx(), Representation::Real),
                                 t::i64);
                         } else {
                             index = builder.CreateZExt(
-                                load(i, extract->idx(),
-                                     Representation::Integer),
+                                load(extract->idx(), Representation::Integer),
                                 t::i64);
                         }
                     } else {
-                        auto vecIndex = loadSxp(i, extract->idx());
+                        auto vecIndex = loadSxp(extract->idx());
                         index =
                             accessVector(vecIndex, c(0), extract->idx()->type);
                         if (extract->idx()->type.isA(PirType(RType::real))) {
@@ -2917,7 +2916,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     if (representationOf(extract->vec()) != t::SEXP) {
                         if (resultRep == t::SEXP)
                             builder.CreateStore(
-                                box(i, vector, extract->vec()->type), res);
+                                box(vector, extract->vec()->type), res);
                         else
                             builder.CreateStore(vector, res);
                     } else {
@@ -2929,12 +2928,13 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(fallback);
-                    auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
-                    gcSafepoint(i, -1, true);
-                    llvm::Value* res0 = call(NativeBuiltins::extract21,
-                                             {loadSxp(i, extract->vec()),
-                                              loadSxp(i, extract->idx()), env,
-                                              c(extract->srcIdx)});
+                    auto env = (extract->hasEnv())
+                                   ? loadSxp(extract->env())
+                                   : constant(R_NilValue, t::SEXP);
+                    llvm::Value* res0 =
+                        call(NativeBuiltins::extract21,
+                             {loadSxp(extract->vec()), loadSxp(extract->idx()),
+                              env, c(extract->srcIdx)});
                     if (resultRep == t::SEXP) {
                         builder.CreateStore(res0, res);
                     } else if (resultRep == Representation::Real) {
@@ -2947,11 +2947,12 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.SetInsertPoint(done);
                     setVal(i, builder.CreateLoad(res));
                 } else {
-                    auto env = (extract->hasEnv()) ? loadSxp(i, extract->env()) : constant(R_NilValue, t::SEXP);
-                    gcSafepoint(i, -1, true);
+                    auto env = (extract->hasEnv())
+                                   ? loadSxp(extract->env())
+                                   : constant(R_NilValue, t::SEXP);
                     setVal(i, call(NativeBuiltins::extract21,
-                                   {loadSxp(i, extract->vec()),
-                                    loadSxp(i, extract->idx()), env,
+                                   {loadSxp(extract->vec()),
+                                    loadSxp(extract->idx()), env,
                                     c(extract->srcIdx)}));
                 }
                 break;
@@ -2959,16 +2960,15 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Subassign1_1D: {
                 auto subAssign = Subassign1_1D::Cast(i);
-                auto vector = loadSxp(i, subAssign->vector());
-                auto val = loadSxp(i, subAssign->val());
-                auto idx = loadSxp(i, subAssign->idx());
+                auto vector = loadSxp(subAssign->vector());
+                auto val = loadSxp(subAssign->val());
+                auto idx = loadSxp(subAssign->idx());
 
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
                 auto env = constant(R_NilValue, t::SEXP);
                 if (subAssign->hasEnv())
-                    env = loadSxp(i, subAssign->env());
-                gcSafepoint(i, -1, false);
+                    env = loadSxp(subAssign->env());
                 auto res = call(NativeBuiltins::subassign11,
                                 {vector, idx, val, env, c(subAssign->srcIdx)});
                 setVal(i, res);
