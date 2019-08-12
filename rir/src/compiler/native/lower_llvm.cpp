@@ -232,6 +232,7 @@ class LowerFunctionLLVM {
     llvm::Value* car(llvm::Value* v);
     void setCar(llvm::Value* x, llvm::Value* y);
     llvm::Value* isObj(llvm::Value*);
+    llvm::Value* isAltrep(llvm::Value*);
     llvm::Value* sxpinfoPtr(llvm::Value*);
 
     void ensureNamed(llvm::Value* v);
@@ -589,6 +590,10 @@ llvm::Value* LowerFunctionLLVM::load(Instruction* pos, Value* val, PirType type,
 
 llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
+#ifdef ENABLE_SLOWASSERT    
+    insn_assert(builder.CreateNot(isAltrep(v)),
+                "Trying to access an altrep vector");
+#endif
     auto pos = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
     return builder.CreateGEP(pos, c(1));
 }
@@ -1343,6 +1348,14 @@ llvm::Value* LowerFunctionLLVM::isObj(llvm::Value* v) {
     return builder.CreateICmpNE(
         c(0, 64),
         builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 1)))));
+};
+
+llvm::Value* LowerFunctionLLVM::isAltrep(llvm::Value* v) {
+    checkIsSexp(v, "in is altrep");
+    auto sxpinfo = builder.CreateLoad(sxpinfoPtr(v));
+    return builder.CreateICmpNE(
+        c(0, 64),
+        builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 2)))));
 };
 
 bool LowerFunctionLLVM::tryCompile() {
@@ -2531,6 +2544,9 @@ bool LowerFunctionLLVM::tryCompile() {
                         builder.SetInsertPoint(hit);
                     }
 
+                    builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                    builder.SetInsertPoint(hit2);
+
                     if (representationOf(extract->idx()) !=
                         Representation::Sexp) {
                         if (representationOf(extract->idx()) ==
@@ -2545,14 +2561,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                 t::i64);
                         }
                     } else {
-                        // Maybe not needed if we know it is scalar?
-                        if (extract->idx()->type.maybeObj()) {
-                            auto rNil = constant(R_NilValue, t::SEXP);
-                            auto vectorhasAttr = builder.CreateICmpEQ(
-                                attr(loadSxp(i, extract->idx())), rNil);
-                            builder.CreateCondBr(vectorhasAttr, hit2, fallback);
-                            builder.SetInsertPoint(hit2);
-                        }
                         auto vecIndex = loadSxp(i, extract->idx());
                         index =
                             accessVector(vecIndex, c(0), extract->idx()->type);
