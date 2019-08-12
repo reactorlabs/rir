@@ -443,6 +443,16 @@ void MkArg::printArgs(std::ostream& out, bool tty) const {
     out << ", ";
 }
 
+bool MkArg::usesPromEnv() const {
+    if (!isEager()) {
+        BB* bb = prom()->entry;
+        if (bb->size() > 0 && LdFunctionEnv::Cast(*bb->begin())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Missing::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName)) << ", ";
 }

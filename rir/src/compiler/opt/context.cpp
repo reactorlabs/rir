@@ -46,6 +46,8 @@ void OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
 
             auto context = toRemove.find(instr);
             if (context != toRemove.end()) {
+                if (auto popc = PopContext::Cast(*context))
+                    popc->replaceUsesWith(popc->result());
                 next = bb->remove(ip);
                 toRemove.erase(context);
             }

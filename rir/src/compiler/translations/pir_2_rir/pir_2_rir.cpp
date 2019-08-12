@@ -290,6 +290,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 #endif
     log.CSSA(code);
 
+    Visitor::run(code->entry,
+                 [](Instruction* i) { i->updateTypeAndEffects(); });
+
     SSAAllocator alloc(code, cls, log);
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
     alloc.verify();
@@ -895,6 +898,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto push = PopContext::Cast(instr)->push();
                 if (!pushContexts.count(push))
                     pushContexts[push] = ctx.cs().mkLabel();
+                cb.add(BC::dup());
                 cb.add(pushContexts.at(push));
                 cb.add(BC::popContext());
                 break;

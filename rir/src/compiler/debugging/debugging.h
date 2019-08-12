@@ -28,6 +28,7 @@ namespace pir {
     V(PrintIntoFiles)                                                          \
     V(PrintIntoStdout)                                                         \
     V(OmitDeoptBranches)                                                       \
+    V(OnlyChanges)                                                             \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
 
 #define LIST_OF_DEBUG_STYLES(V)                                                \

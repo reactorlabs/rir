@@ -22,6 +22,9 @@ extern llvm::Type* Bool;
 extern llvm::PointerType* IntPtr;
 extern llvm::PointerType* DoublePtr;
 
+extern llvm::StructType* setjmp_buf;
+extern llvm::PointerType* setjmp_buf_ptr;
+
 /** Vector length in R. This is equivalent to ptrdiff_t type.
  */
 extern llvm::Type* VectorLength;
@@ -33,8 +36,8 @@ extern llvm::PointerType* VECTOR_SEXPREC_ptr;
 extern llvm::StructType* RirRuntimeObject;
 extern llvm::StructType* LazyEnvironment;
 
-extern llvm::StructType* cntxt;
-extern llvm::PointerType* cntxtPtr;
+extern llvm::StructType* RCNTXT;
+extern llvm::PointerType* RCNTXT_ptr;
 
 extern llvm::StructType* stackCell;
 extern llvm::PointerType* stackCellPtr;
@@ -73,11 +76,6 @@ extern llvm::FunctionType* sexp_double;
 extern llvm::FunctionType* void_argssexp;
 extern llvm::FunctionType* void_argssexpsexp;
 extern llvm::FunctionType* void_argssexpint;
-
-extern llvm::FunctionType* void_cntxtsexpsexpsexpsexpsexp;
-extern llvm::FunctionType* void_cntxtsexp;
-extern llvm::FunctionType* void_cntxtsexpsexp;
-extern llvm::FunctionType* sexp_contxtsexpsexp;
 
 extern llvm::FunctionType* nativeFunction;
 extern llvm::Type* nativeFunctionPtr;

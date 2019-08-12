@@ -941,6 +941,8 @@ class FLIE(MkArg, 2, Effects::None()) {
     size_t gvnBase() const override { return hash_combine(tagHash(), prom_); }
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
+
+    bool usesPromEnv() const;
 };
 
 class FLI(Seq, 3, Effects::Any()) {
@@ -1880,9 +1882,8 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     friend class BuiltinCallFactory;
 };
 
-class VLI(CallSafeBuiltin,
-          Effects(Effect::Warn) | Effect::Error | Effect::Visibility |
-              Effect::DependsOnAssume),
+class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
+                               Effect::Visibility | Effect::DependsOnAssume),
     public CallInstruction {
   public:
     SEXP blt;
@@ -1996,10 +1997,15 @@ class FLIE(PushContext, 3, Effect::ChangesContexts) {
 class FLI(PopContext, 2, Effect::ChangesContexts) {
   public:
     PopContext(Value* res, PushContext* push)
-        : FixedLenInstruction(PirType::voyd(),
+        : FixedLenInstruction(PirType::any(),
                               {{PirType::any(), NativeType::context}},
                               {{res, push}}) {}
-    PushContext* push() { return PushContext::Cast(arg<1>().val()); }
+    PushContext* push() const { return PushContext::Cast(arg<1>().val()); }
+    Value* result() const { return arg<0>().val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        return getType(result());
+    }
 };
 
 class VLI(Phi, Effects::None()) {

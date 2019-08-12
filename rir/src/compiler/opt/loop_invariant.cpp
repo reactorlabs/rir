@@ -8,8 +8,8 @@ namespace rir {
 namespace pir {
 
 bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
-    auto noEnvironmentTainting = [](Instruction* i) {
-        // For this instructions we test later they not change the particular
+    auto noEnvironmentTainting = [&](Instruction* i) {
+        // For these instructions we test later they don't change the particular
         // binding
         if (StVar::Cast(i) || StVarSuper::Cast(i) || MkEnv::Cast(i))
             return true;
@@ -25,37 +25,37 @@ bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
             }
         }
 
-        return !(i->changesEnv());
+        return !i->changesEnv();
     };
     return loop.check(noEnvironmentTainting);
 }
 
 bool overwritesBinding(LoopDetection::Loop& loop, SEXP binding) {
-    return loop.check(
-        [binding](Instruction* i) {
-            SEXP varName = nullptr;
-            if (auto store = StVar::Cast(i))
-                varName = store->varName;
-            else if (auto store = StVarSuper::Cast(i))
-                varName = store->varName;
+    auto noOverwriting = [&](Instruction* i) {
+        SEXP varName = nullptr;
+        if (auto store = StVar::Cast(i))
+            varName = store->varName;
+        else if (auto store = StVarSuper::Cast(i))
+            varName = store->varName;
 
-            if (varName && varName == binding)
-                return true;
-
-            // An environment overwrites the binding
-            if (auto env = MkEnv::Cast(i)) {
-                bool ows = false;
-                env->eachLocalVar([&](SEXP name, Value* v) {
-                    if (name == binding) {
-                        ows = true;
-                        return;
-                    }
-                });
-                return ows;
-            }
-
+        if (varName && varName == binding)
             return false;
-        });
+
+        // An environment overwrites the binding
+        if (auto env = MkEnv::Cast(i)) {
+            bool envOverwrites = false;
+            env->eachLocalVar([&](SEXP name, Value*) {
+                if (name == binding) {
+                    envOverwrites = true;
+                    return;
+                }
+            });
+            return !envOverwrites;
+        }
+
+        return true;
+    };
+    return !loop.check(noOverwriting);
 }
 
 void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
