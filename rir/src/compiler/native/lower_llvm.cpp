@@ -2873,8 +2873,10 @@ bool LowerFunctionLLVM::tryCompile() {
                         builder.SetInsertPoint(hit);
                     }
 
-                    builder.CreateCondBr(isAltrep(vector), fallback, hit2);
-                    builder.SetInsertPoint(hit2);
+                    if (representationOf(extract->vec()) == t::SEXP) {
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                        builder.SetInsertPoint(hit2);
+                    }
 
                     if (representationOf(extract->idx()) !=
                         Representation::Sexp) {
