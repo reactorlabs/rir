@@ -599,6 +599,9 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
     case BinopKind::MOD:
         OPERATION_FALLBACK("%%");
         break;
+    case BinopKind::POW:
+        OPERATION_FALLBACK("^");
+        break;
     }
     UNPROTECT(1);
     SLOWASSERT(res);
@@ -674,6 +677,9 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
         break;
     case BinopKind::MOD:
         OPERATION_FALLBACK("%%");
+        break;
+    case BinopKind::POW:
+        OPERATION_FALLBACK("^");
         break;
     }
     SLOWASSERT(res);
@@ -1005,5 +1011,65 @@ NativeBuiltin NativeBuiltins::subassign21 = {
     5,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp4_int, 5, 0),
 };
+
+int forSeqSizeImpl(SEXP seq) {
+    // TODO: we should extract the length just once at the begining of
+    // the loop and generally have somthing more clever here...
+    int res;
+    if (Rf_isVector(seq)) {
+        res = LENGTH(seq);
+    } else if (Rf_isList(seq) || isNull(seq)) {
+        res = Rf_length(seq);
+    } else {
+        Rf_errorcall(R_NilValue, "invalid for() loop sequence");
+    }
+    // TODO: Even when the for loop sequence is an object, R won't
+    // dispatch on it. Since in RIR we use the normals extract2_1
+    // BC on it, we would. To prevent this we strip the object
+    // flag here. What we should do instead, is use a non-dispatching
+    // extract BC.
+    if (isObject(seq)) {
+        seq = Rf_duplicate(seq);
+        SET_OBJECT(seq, 0);
+        ostack_set(ctx, 0, seq);
+    }
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::forSeqSize = {
+    "forSeqSize",
+    (void*)&forSeqSizeImpl,
+    2,
+    nullptr,
+};
+
+void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op) {
+    if (R_GlobalContext->callflag == CTXT_GENERIC)
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv,
+                        R_GlobalContext->sysparent, symbol::delayedArglist, op);
+    else
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv, sysparent,
+                        symbol::delayedArglist, op);
+}
+
+NativeBuiltin NativeBuiltins::initClosureContext = {
+    "initClosureContext",
+    (void*)&initClosureContextImpl,
+    4,
+    nullptr,
+};
+
+static void endClosureContextImpl(RCNTXT* cntxt, SEXP result) {
+    cntxt->returnValue = result;
+    Rf_endcontext(cntxt);
+}
+
+NativeBuiltin NativeBuiltins::endClosureContext = {
+    "endClosureContext",
+    (void*)&endClosureContextImpl,
+    2,
+    nullptr,
+};
+
 }
 }

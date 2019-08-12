@@ -43,6 +43,7 @@ enum class BinopKind : int {
     LOR,
     COLON,
     MOD,
+    POW,
 };
 
 enum class UnopKind : int {
@@ -100,6 +101,7 @@ struct NativeBuiltins {
     static NativeBuiltin asLogicalBlt;
 
     static NativeBuiltin length;
+    static NativeBuiltin forSeqSize;
 
     static NativeBuiltin deopt;
 
@@ -113,6 +115,9 @@ struct NativeBuiltins {
     static NativeBuiltin subassign21;
 
     static NativeBuiltin nativeCallTrampoline;
+
+    static NativeBuiltin initClosureContext;
+    static NativeBuiltin endClosureContext;
 };
 }
 }

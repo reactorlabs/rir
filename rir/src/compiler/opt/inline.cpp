@@ -298,8 +298,10 @@ class TheInliner {
                         auto ctx = new PushContext(ast, op, theCall->env());
                         copy->insert(copy->begin() + insertPos, ctx);
                         copy->insert(copy->begin() + insertPos, ast);
-                        inlineeReturnblock->append(
-                            new PopContext(inlineeRes, ctx));
+                        auto popc = new PopContext(inlineeRes, ctx);
+                        inlineeReturnblock->append(popc);
+                        popc->updateTypeAndEffects();
+                        inlineeRes = popc;
                     }
 
                     theCall->replaceUsesWith(inlineeRes);
