@@ -1045,14 +1045,11 @@ llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
     return builder.CreateLoad(v);
 }
 
-<<<<<<< HEAD
-=======
 llvm::Value* LowerFunctionLLVM::cdr(llvm::Value* v) {
     v = builder.CreateGEP(v, {c(0), c(4), c(1)});
     return builder.CreateLoad(v);
 }
 
->>>>>>> f4292eccf31022df021e80b4f365c332ff76a908
 llvm::Value* LowerFunctionLLVM::attr(llvm::Value* v) {
     auto pos = builder.CreateGEP(v, {c(0), c(1)});
     return builder.CreateLoad(pos);
