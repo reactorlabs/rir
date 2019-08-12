@@ -837,8 +837,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
 llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT    
-    insn_assert(builder.CreateNot(isAltrep(v)),
-                "Trying to access an altrep vector");
+    //insn_assert(builder.CreateNot(isAltrep(v)), "Trying to access an altrep vector");
 #endif
     auto pos = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
     return builder.CreateGEP(pos, c(1));
