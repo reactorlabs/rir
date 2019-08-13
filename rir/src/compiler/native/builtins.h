@@ -101,6 +101,7 @@ struct NativeBuiltins {
     static NativeBuiltin asLogicalBlt;
 
     static NativeBuiltin length;
+    static NativeBuiltin seq;
     static NativeBuiltin forSeqSize;
 
     static NativeBuiltin deopt;

@@ -1004,9 +1004,63 @@ NativeBuiltin NativeBuiltins::subassign11 = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp4_int, 5, 0),
 };
 
-SEXP subassign21Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
-                     Immediate srcIdx) {
-    SEXP args = CONS_NR(vector, CONS_NR(index, CONS_NR(value, R_NilValue)));
+SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
+
+    // Fast case
+    if (NOT_SHARED(vec) && !isObject(vec)) {
+        SEXPTYPE vectorT = TYPEOF(vec);
+        SEXPTYPE valT = TYPEOF(val);
+        SEXPTYPE idxT = TYPEOF(idx);
+
+        // Fast case only if
+        // 1. index is numerical and scalar
+        // 2. vector is real and shape of value fits into real
+        //      or vector is int and shape of value is int
+        //      or vector is generic
+        // 3. value fits into one cell of the vector
+        if ((idxT == INTSXP || idxT == REALSXP) && (XLENGTH(idx) == 1) &&   // 1
+            ((vectorT == REALSXP && (valT == REALSXP || valT == INTSXP)) || // 2
+             (vectorT == INTSXP && (valT == INTSXP)) || (vectorT == VECSXP)) &&
+            (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 3
+
+            int idx_ = -1;
+
+            if (idxT == REALSXP) {
+                if (*REAL(idx) != NA_REAL)
+                    idx_ = (int)*REAL(idx) - 1;
+            } else {
+                if (*INTEGER(idx) != NA_INTEGER)
+                    idx_ = *INTEGER(idx) - 1;
+            }
+
+            if (idx_ >= 0 && idx_ < XLENGTH(vec)) {
+                switch (vectorT) {
+                case REALSXP:
+                    REAL(vec)
+                    [idx_] =
+                        valT == REALSXP ? *REAL(val) : (double)*INTEGER(val);
+                    break;
+                case INTSXP:
+                    INTEGER(vec)[idx_] = *INTEGER(val);
+                    break;
+                case VECSXP:
+                    // Avoid recursive vectors
+                    if (val == vec)
+                        val = Rf_shallow_duplicate(val);
+                    SET_VECTOR_ELT(vec, idx_, val);
+                    break;
+                }
+
+                return vec;
+            }
+        }
+    }
+
+    if (MAYBE_SHARED(vec)) {
+        vec = Rf_duplicate(vec);
+    }
+
+    SEXP args = CONS_NR(vec, CONS_NR(idx, CONS_NR(val, R_NilValue)));
     SET_TAG(CDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
@@ -1014,9 +1068,9 @@ SEXP subassign21Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
-    if (isObject(vector))
-        res = dispatchApply(call, vector, args, symbol::AssignDoubleBracket,
-                            env, globalContext());
+    if (isObject(vec))
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
+                            globalContext());
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
         SET_NAMED(res, 0);
@@ -1089,6 +1143,54 @@ NativeBuiltin NativeBuiltins::endClosureContext = {
     "endClosureContext",
     (void*)&endClosureContextImpl,
     2,
+    nullptr,
+};
+
+SEXP seqImpl(SEXP from, SEXP to, SEXP by, SEXP env, Immediate srcIdx) {
+    SEXP res = nullptr;
+    if (IS_SIMPLE_SCALAR(from, INTSXP) && IS_SIMPLE_SCALAR(to, INTSXP) &&
+        IS_SIMPLE_SCALAR(by, INTSXP)) {
+        int f = *INTEGER(from);
+        int t = *INTEGER(to);
+        int b = *INTEGER(by);
+        if (f != NA_INTEGER && t != NA_INTEGER && b != NA_INTEGER) {
+            if ((f < t && b > 0) || (t < f && b < 0)) {
+                int size = 1 + (t - f) / b;
+                res = Rf_allocVector(INTSXP, size);
+                int v = f;
+                for (int i = 0; i < size; ++i) {
+                    INTEGER(res)[i] = v;
+                    v += b;
+                }
+            } else if (f == t) {
+                res = Rf_allocVector(INTSXP, 1);
+                *INTEGER(res) = f;
+            }
+        }
+    }
+
+    if (!res) {
+        static SEXP prim = NULL;
+        if (!prim) {
+            // TODO: we could call seq.default here, but it messes up the
+            // error call :(
+            prim = Rf_findFun(Rf_install("seq"), R_GlobalEnv);
+        }
+
+        SLOWASSERT(!isObject(from));
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        SEXP argslist = CONS_NR(from, CONS_NR(to, CONS_NR(by, R_NilValue)));
+        ostack_push(ctx, argslist);
+        res = Rf_applyClosure(call, prim, argslist, env, R_NilValue);
+    }
+
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::seq = {
+    "seq",
+    (void*)&seqImpl,
+    5,
     nullptr,
 };
 }

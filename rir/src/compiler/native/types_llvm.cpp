@@ -228,6 +228,10 @@ int initializeTypes(LLVMContext& context) {
         t::t_void, {t::SEXP, t::RCNTXT_ptr, t::SEXP, t::SEXP}, false);
     NativeBuiltins::endClosureContext.llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::RCNTXT_ptr, t::SEXP}, false);
+
+    NativeBuiltins::seq.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::i32}, false);
+
     return 1;
 }
 
