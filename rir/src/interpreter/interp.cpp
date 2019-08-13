@@ -96,6 +96,8 @@ static RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc,
 
 #define readConst(ctx, idx) (cp_pool_at(ctx, idx))
 
+static bool deoptimizing = false;
+
 void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
                         SEXP arglist, SEXP op) {
     /*  If we have a generic function we need to use the sysparent of
@@ -672,8 +674,10 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!fun->unoptimizable &&
-        fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
+    if (!deoptimizing && !fun->unoptimizable &&
+        ((fun->invocationCount() %
+          ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP)) ==
+         fun->deoptCount())) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -1339,9 +1343,14 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(ctx, stackHeight);
     auto code = f.code;
+    code->registerInvocation();
+    code->registerDeopt();
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
+
+    if (outermostFrame)
+        deoptimizing = true;
 
     RCNTXT fake;
     RCNTXT* cntxt;
@@ -1423,7 +1432,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         ostack_pop(ctx);
         if (!innermostFrame)
             ostack_push(ctx, res);
-        code->registerInvocation();
         return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr,
                            nullptr);
     };
@@ -1434,6 +1442,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     if (!outermostFrame) {
         endClosureContext(cntxt, res);
     } else {
+        deoptimizing = false;
         assert(findFunctionContextFor(deoptEnv) == cntxt);
         // long-jump out of all the inlined contexts
         Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv, res);
@@ -2295,8 +2304,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                              given, ctx);
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
-            bool dispatchFail = !fun->dead && !matches(call, fun->signature());
-            if (fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
+            bool dispatchFail = fun->dead || !matches(call, fun->signature());
+            if (!dispatchFail && !fun->unoptimizable &&
+                (fun->invocationCount() %
+                     ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
+                 fun->deoptCount())) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
                 if (assumptions != fun->signature().assumptions)
