@@ -1684,9 +1684,9 @@ void PirCodeFunction::build() {
                     }
                 });
 
-                setVal(i,
-                       call(NativeBuiltins::createEnvironment,
-                            {parent, arglist, new_constant(mkenv->context)}));
+                setVal(i, call(NativeBuiltins::createEnvironment,
+                               {parent, arglist, arglist,
+                                new_constant(mkenv->context)}));
 
                 // Zero bindings cache
                 if (bindingsCache.count(i))

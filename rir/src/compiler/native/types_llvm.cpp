@@ -157,7 +157,7 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::error.llvmSignature = t::void_void;
 
-    NativeBuiltins::createEnvironment.llvmSignature = t::sexp_sexpsexpint;
+    NativeBuiltins::createEnvironment.llvmSignature = t::sexp_sexp3int;
     NativeBuiltins::createStubEnvironment.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::IntPtr, t::Int},
                                 false);

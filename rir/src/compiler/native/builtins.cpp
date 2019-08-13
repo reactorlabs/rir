@@ -76,12 +76,12 @@ NativeBuiltin NativeBuiltins::createMissingBindingCell = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
 };
 
-SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
+SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, SEXP envArglist,
+                           int contextPos) {
     SLOWASSERT(TYPEOF(parent) == ENVSXP);
     SLOWASSERT(TYPEOF(arglist) == LISTSXP || arglist == R_NilValue);
-    PROTECT(arglist);
-    SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent);
-    UNPROTECT(1);
+    SLOWASSERT(TYPEOF(envArglist) == LISTSXP || envArglist == R_NilValue);
+    SEXP res = Rf_NewEnvironment(R_NilValue, envArglist, parent);
 
     if (contextPos > 0) {
         if (auto cptr = getFunctionContext(contextPos - 1)) {
@@ -97,8 +97,8 @@ SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
 NativeBuiltin NativeBuiltins::createEnvironment = {
     "createEnvironment",
     (void*)&createEnvironmentImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
+    4,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
 };
 
 SEXP createStubEnvironmentImpl(SEXP parent, int n, Immediate* names,
