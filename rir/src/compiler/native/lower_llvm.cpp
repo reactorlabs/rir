@@ -2180,20 +2180,36 @@ bool LowerFunctionLLVM::tryCompile() {
                     break;
                 }
 
+                bool hasMissing = false;
+                mkenv->eachLocalVarRev([&](SEXP name, Value* v) {
+                    if (v == MissingArg::instance())
+                        hasMissing = true;
+                });
+
                 auto arglist = constant(R_NilValue, t::SEXP);
+                auto envArglist = constant(R_NilValue, t::SEXP);
                 mkenv->eachLocalVarRev([&](SEXP name, Value* v) {
                     if (v == MissingArg::instance()) {
-                        arglist = call(NativeBuiltins::createMissingBindingCell,
-                                       {constant(name, t::SEXP), arglist});
+                        envArglist =
+                            call(NativeBuiltins::createMissingBindingCell,
+                                 {constant(name, t::SEXP), envArglist});
                     } else {
-                        arglist = call(
+                        envArglist = call(
                             NativeBuiltins::createBindingCell,
-                            {loadSxp(v), constant(name, t::SEXP), arglist});
+                            {loadSxp(v), constant(name, t::SEXP), envArglist});
+                        if (hasMissing) {
+                            arglist = call(
+                                NativeBuiltins::createBindingCell,
+                                {loadSxp(v), constant(name, t::SEXP), arglist});
+                        }
                     }
                 });
 
-                setVal(i, call(NativeBuiltins::createEnvironment,
-                               {parent, arglist, c(mkenv->context)}));
+                if (!hasMissing)
+                    arglist = envArglist;
+                setVal(i,
+                       call(NativeBuiltins::createEnvironment,
+                            {parent, arglist, envArglist, c(mkenv->context)}));
 
                 if (bindingsCache.count(i))
                     for (auto b : bindingsCache.at(i))
