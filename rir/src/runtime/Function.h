@@ -73,6 +73,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     void registerInvocation() { body()->registerInvocation(); }
     size_t invocationCount() { return body()->funInvocationCount; }
+    void registerDeopt() { body()->registerDeopt(); }
+    size_t deoptCount() { return body()->deoptCount; }
 
     unsigned size; /// Size, in bytes, of the function and its data
 

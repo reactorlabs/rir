@@ -21,9 +21,10 @@ Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      nativeCode(nullptr), uid(UUID::random()), funInvocationCount(0), src(src),
-      stackLength(0), localsCount(localsCnt), bindingCacheSize(bindingsCnt),
-      codeSize(cs), srcLength(sourceLength), extraPoolSize(0) {
+      nativeCode(nullptr), uid(UUID::random()), funInvocationCount(0),
+      deoptCount(0), src(src), stackLength(0), localsCount(localsCnt),
+      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
     allCodes.emplace(uid, this);
 }
@@ -81,6 +82,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->uid = UUID::deserialize(refTable, inp);
     code->nativeCode = nullptr; // not serialized for now
     code->funInvocationCount = InInteger(inp);
+    code->deoptCount = InInteger(inp);
     code->src = InInteger(inp);
     code->stackLength = InInteger(inp);
     *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
@@ -116,6 +118,7 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     // Header
     uid.serialize(refTable, out);
     OutInteger(out, funInvocationCount);
+    OutInteger(out, deoptCount);
     OutInteger(out, src);
     OutInteger(out, stackLength);
     OutInteger(out, localsCount);
