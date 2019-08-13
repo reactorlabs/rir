@@ -2905,7 +2905,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto veclength =
                         (representationOf(extract->vec()) == t::SEXP)
                             ? vectorLength(vector)
-                            : c(1);
+                            : c(1ul);
                     auto indexOverRange =
                         builder.CreateICmpUGE(index, veclength);
                     auto indexUnderRange = builder.CreateICmpULT(index, c(0ul));
