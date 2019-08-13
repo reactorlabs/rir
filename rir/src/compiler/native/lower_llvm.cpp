@@ -2016,11 +2016,6 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                     }
                     if (nativeTarget && nativeTarget->body()->nativeCode) {
-                        auto missing = nativeTarget->signature().numArguments -
-                                       args.size();
-                        for (size_t i = 0; i < missing; ++i)
-                            args.push_back(MissingArg::instance());
-
                         auto res = withCallFrame(args, [&]() {
                             return call(NativeBuiltins::nativeCallTrampoline,
                                         {

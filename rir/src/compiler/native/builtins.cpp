@@ -771,15 +771,25 @@ NativeBuiltin NativeBuiltins::length = {
 };
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
-    if (!pir::Parameter::DEOPT_CHAOS && cls) {
-        // TODO: this version is still reachable from static call inline
-        // caches. Thus we need to preserve it forever. We need some
-        // dependency management here.
-        Pool::insert(c->container());
-        // remove the deoptimized function. Unless on deopt chaos,
-        // always recompiling would just blow testing time...
-        auto dt = DispatchTable::unpack(BODY(cls));
-        dt->remove(c);
+    if (!pir::Parameter::DEOPT_CHAOS) {
+        if (cls) {
+            // TODO: this version is still reachable from static call inline
+            // caches. Thus we need to preserve it forever. We need some
+            // dependency management here.
+            Pool::insert(c->container());
+            // remove the deoptimized function. Unless on deopt chaos,
+            // always recompiling would just blow testing time...
+            auto dt = DispatchTable::unpack(BODY(cls));
+            dt->remove(c);
+        } else {
+            // In some cases we don't know the callee here, so we can't properly
+            // remove the deoptimized code. But we can kill the native code,
+            // this will cause a fallback to rir, which will then be able to
+            // deoptimize properly.
+            // TODO: find a way to always know the closure in native code!
+            c->nativeCode = nullptr;
+            assert(false);
+        }
     }
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
@@ -913,8 +923,17 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
 
+    if (fun->dead) {
+        return callImpl(fun->body(), astP, callee, env, nargs,
+                        Assumptions().toI());
+    }
+
+    auto missing = fun->signature().numArguments - nargs;
+    for (size_t i = 0; i < missing; ++i)
+        ostack_push(globalContext(), R_MissingArg);
+
     auto t = R_BCNodeStackTop;
-    R_bcstack_t* args = ostack_cell_at(ctx, nargs - 1);
+    R_bcstack_t* args = ostack_cell_at(ctx, nargs + missing - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
     ArgsLazyData lazyArgs(nargs, args, nullptr, globalContext());
@@ -944,6 +963,8 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
 
     UNPROTECT(2);
     assert(t == R_BCNodeStackTop);
+
+    ostack_popn(globalContext(), missing);
     return result;
 }
 
