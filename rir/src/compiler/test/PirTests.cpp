@@ -524,6 +524,122 @@ bool testCfg() {
         assert(f.at(&D) == DominanceFrontier::BBList({&A}));
     }
 
+    {
+        /*
+         *    A
+         *   / \
+         *  B   C
+         *   \ /
+         *    D
+         */
+        MockBB::reset();
+        MockBB A, B, C, D;
+        A.next0 = &B;
+        A.next1 = &C;
+        B.next0 = &D;
+        C.next0 = &D;
+
+        std::deque<BB*> expected = {&A, &B, &C, &D};
+        BreadthFirstVisitor::run(&A, [&](BB* bb) {
+            assert(expected.front() == bb);
+            expected.pop_front();
+        });
+    }
+
+    {
+        /*
+         *    A
+         *   / \
+         *  B   C
+         *   \ /
+         *    D
+         */
+        MockBB::reset();
+        MockBB A, B, C, D;
+        A.next0 = &B;
+        A.next1 = &C;
+        B.next0 = &D;
+        C.next0 = &D;
+
+        DominanceGraph dom(&MockBB::code);
+        std::deque<BB*> expected = {&A, &B, &C, &D};
+        DominatorTreeVisitor<>(dom).run(&A, [&](BB* bb) {
+            assert(expected.front() == bb);
+            expected.pop_front();
+        });
+        expected = {&A, &B, &C, &D};
+        DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
+            &A, [&](BB* bb) {
+                assert(expected.front() == bb);
+                expected.pop_front();
+            });
+    }
+
+    {
+        /*
+         *    A
+         *   / \
+         *  B   E
+         *  |   |
+         *  C   |
+         *   \ /
+         *    D
+         */
+        MockBB::reset();
+        MockBB A, B, C, D, E;
+        A.next0 = &B;
+        A.next1 = &E;
+        B.next0 = &C;
+        C.next0 = &D;
+        E.next0 = &D;
+
+        DominanceGraph dom(&MockBB::code);
+        std::deque<BB*> expected = {&A, &B, &C, &E, &D};
+        DominatorTreeVisitor<>(dom).run(&A, [&](BB* bb) {
+            assert(expected.front() == bb);
+            expected.pop_front();
+        });
+        expected = {&A, &B, &C, &E, &D};
+        DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
+            &A, [&](BB* bb) {
+                assert(expected.front() == bb);
+                expected.pop_front();
+            });
+    }
+
+    {
+        /*
+         *    A
+         *   / \
+         *  B   D
+         *  |   |
+         *  C   E
+         *   \ /
+         *    F
+         */
+        MockBB::reset();
+        MockBB A, B, C, D, E, F;
+        A.next0 = &B;
+        A.next1 = &D;
+        B.next0 = &C;
+        C.next0 = &F;
+        D.next0 = &E;
+        E.next0 = &F;
+
+        DominanceGraph dom(&MockBB::code);
+        std::deque<BB*> expected = {&A, &B, &C, &D, &E, &F};
+        DominatorTreeVisitor<>(dom).run(&A, [&](BB* bb) {
+            assert(expected.front() == bb);
+            expected.pop_front();
+        });
+        expected = {&A, &B, &C, &D, &E, &F};
+        DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
+            &A, [&](BB* bb) {
+                assert(expected.front() == bb);
+                expected.pop_front();
+            });
+    }
+
     return true;
 }
 
