@@ -346,6 +346,7 @@ class LowerFunctionLLVM {
     llvm::Value* cdr(llvm::Value* v);
     void setCar(llvm::Value* x, llvm::Value* y);
     llvm::Value* isObj(llvm::Value*);
+    llvm::Value* isAltrep(llvm::Value*);
     llvm::Value* sxpinfoPtr(llvm::Value*);
 
     void protectTemp(llvm::Value* v);
@@ -835,6 +836,9 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
 
 llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
+#ifdef ENABLE_SLOWASSERT    
+    //insn_assert(builder.CreateNot(isAltrep(v)), "Trying to access an altrep vector");
+#endif
     auto pos = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
     return builder.CreateGEP(pos, c(1));
 }
@@ -1576,6 +1580,14 @@ llvm::Value* LowerFunctionLLVM::isObj(llvm::Value* v) {
         builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 1)))));
 };
 
+llvm::Value* LowerFunctionLLVM::isAltrep(llvm::Value* v) {
+    checkIsSexp(v, "in is altrep");
+    auto sxpinfo = builder.CreateLoad(sxpinfoPtr(v));
+    return builder.CreateICmpNE(
+        c(0, 64),
+        builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 2)))));
+};
+
 bool LowerFunctionLLVM::tryCompile() {
     std::unordered_map<BB*, BasicBlock*> blockMapping_;
     auto getBlock = [&](BB* bb) {
@@ -2260,18 +2272,19 @@ bool LowerFunctionLLVM::tryCompile() {
                              BinopKind::DIV);
                 break;
             case Tag::Pow:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateIntrinsic(
-                                     Intrinsic::powi,
-                                     {a->getType(), b->getType()}, {a, b});
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateIntrinsic(
-                                     Intrinsic::pow,
-                                     {a->getType(), b->getType()}, {a, b});
-                             },
-                             BinopKind::POW);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateIntrinsic(
+                            Intrinsic::powi, {a->getType(), b->getType()},
+                            {a, b});
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateIntrinsic(
+                            Intrinsic::pow, {a->getType(), b->getType()},
+                            {a, b});
+                    },
+                    BinopKind::POW);
                 break;
 
             case Tag::Neq:
@@ -2854,7 +2867,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto extract = Extract2_1D::Cast(i);
                 auto resultRep = representationOf(i);
                 // TODO: Extend a fastPath for generic vectors.
-                if (false && extract->vec()->type.isA(PirType::num().notObject()) &&
+                if (extract->vec()->type.isA(PirType::num().notObject()) &&
                     extract->idx()->type.isScalar()) {
                     auto fallback = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
@@ -2875,6 +2888,11 @@ bool LowerFunctionLLVM::tryCompile() {
                         builder.SetInsertPoint(hit);
                     }
 
+                    if (representationOf(extract->vec()) == t::SEXP) {
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                        builder.SetInsertPoint(hit2);
+                    }
+
                     if (representationOf(extract->idx()) !=
                         Representation::Sexp) {
                         if (representationOf(extract->idx()) ==
@@ -2888,14 +2906,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                 t::i64);
                         }
                     } else {
-                        // Maybe not needed if we know it is scalar?
-                        if (extract->idx()->type.maybeObj()) {
-                            auto rNil = constant(R_NilValue, t::SEXP);
-                            auto vectorhasAttr = builder.CreateICmpEQ(
-                                attr(loadSxp(extract->idx())), rNil);
-                            builder.CreateCondBr(vectorhasAttr, hit2, fallback);
-                            builder.SetInsertPoint(hit2);
-                        }
                         auto vecIndex = loadSxp(extract->idx());
                         index =
                             accessVector(vecIndex, c(0), extract->idx()->type);
@@ -2911,7 +2921,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto veclength =
                         (representationOf(extract->vec()) == t::SEXP)
                             ? vectorLength(vector)
-                            : c(1);
+                            : c(1ul);
                     auto indexOverRange =
                         builder.CreateICmpUGE(index, veclength);
                     auto indexUnderRange = builder.CreateICmpULT(index, c(0ul));
@@ -2976,7 +2986,6 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto env = constant(R_NilValue, t::SEXP);
                 if (subAssign->hasEnv())
                     env = loadSxp(subAssign->env());
-
                 auto res = call(NativeBuiltins::subassign11,
                                 {vector, idx, val, env, c(subAssign->srcIdx)});
                 setVal(i, res);

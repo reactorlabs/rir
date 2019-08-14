@@ -1070,6 +1070,5 @@ NativeBuiltin NativeBuiltins::endClosureContext = {
     2,
     nullptr,
 };
-
 }
 }

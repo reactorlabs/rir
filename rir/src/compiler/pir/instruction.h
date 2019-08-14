@@ -426,7 +426,8 @@ class Instruction : public Value {
             COMPILER_INSTRUCTIONS(V)
 #undef V
             return static_cast<Instruction*>(v);
-        default: {}
+        default: {
+        }
         }
         return nullptr;
     }
