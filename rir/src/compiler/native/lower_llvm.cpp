@@ -283,7 +283,7 @@ class LowerFunctionLLVM {
     llvm::Value* load(Value* v);
     llvm::Value* loadSxp(Value* v);
     llvm::Value* load(Value* val, PirType type, Representation needed);
-    llvm::Value* dataPtr(llvm::Value* v);
+    llvm::Value* dataPtr(llvm::Value* v, bool enableAsserts = true);
     llvm::Value* accessVector(llvm::Value* vector, llvm::Value* position,
                               PirType type);
     llvm::Value* unboxIntLgl(llvm::Value* v);
@@ -503,7 +503,8 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
     auto cur = builder.GetInsertBlock();
     builder.SetInsertPoint(entryBlock);
     llvm::Value* pos = builder.CreateLoad(constantpool);
-    pos = builder.CreateBitCast(dataPtr(pos), PointerType::get(t::SEXP, 0));
+    pos = builder.CreateBitCast(dataPtr(pos, false),
+                                PointerType::get(t::SEXP, 0));
     pos = builder.CreateGEP(pos, c(i));
     auto res = builder.CreateLoad(pos);
     builder.SetInsertPoint(cur);
@@ -834,10 +835,12 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     builder.SetInsertPoint(cont);
 }
 
-llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v) {
+llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v, bool enableAsserts) {
     assert(v->getType() == t::SEXP);
-#ifdef ENABLE_SLOWASSERT    
-    //insn_assert(builder.CreateNot(isAltrep(v)), "Trying to access an altrep vector");
+#ifdef ENABLE_SLOWASSERT
+    if (enableAsserts)
+        insn_assert(builder.CreateNot(isAltrep(v)),
+                    "Trying to access an altrep vector");
 #endif
     auto pos = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
     return builder.CreateGEP(pos, c(1));
