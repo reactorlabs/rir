@@ -2446,18 +2446,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     BinopKind::MOD);
                 break;
 
-            case Tag::Seq: {
-                assert(representationOf(i) == t::SEXP);
-                auto from = loadSxp(i->arg(0).val());
-                auto to = loadSxp(i->arg(1).val());
-                auto by = loadSxp(i->arg(2).val());
-                auto e = loadSxp(i->env());
-                auto res =
-                    call(NativeBuiltins::seq, {from, to, by, e, c(i->srcIdx)});
-                setVal(i, res);
-                break;
-            }
-
             case Tag::Colon: {
                 assert(representationOf(i) == t::SEXP);
                 auto a = loadSxp(i->arg(0).val());

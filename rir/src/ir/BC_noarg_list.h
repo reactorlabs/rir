@@ -49,7 +49,6 @@
     V(NESTED, eq, eq)                                                          \
     V(NESTED, identicalNoforce, identical_noforce)                             \
     V(NESTED, ne, ne)                                                          \
-    V(NESTED, seq, seq)                                                        \
     V(NESTED, colon, colon)                                                    \
     V(NESTED, setShared, set_shared)                                           \
     V(NESTED, ensureNamed, ensure_named)                                       \

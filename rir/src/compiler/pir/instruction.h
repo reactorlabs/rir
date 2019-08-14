@@ -945,29 +945,6 @@ class FLIE(MkArg, 2, Effects::None()) {
     bool usesPromEnv() const;
 };
 
-class FLI(Seq, 3, Effects::Any()) {
-  public:
-    Seq(Value* start, Value* end, Value* step)
-        : FixedLenInstruction(
-              PirType::any(),
-              // TODO: require scalars, but this needs some cast support
-              {{PirType::val(), PirType::val(), PirType::val()}},
-              {{start, end, step}}) {}
-
-    PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(
-            getType, type & PirType::num().notObject().notMissing(), type);
-    }
-    Effects inferEffects(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
-    }
-    size_t gvnBase() const override {
-        if (effects.contains(Effect::ExecuteCode))
-            return 0;
-        return tagHash();
-    }
-};
-
 class FLIE(MkCls, 4, Effects::None()) {
   public:
     MkCls(Value* fml, Value* code, Value* src, Value* lexicalEnv)
