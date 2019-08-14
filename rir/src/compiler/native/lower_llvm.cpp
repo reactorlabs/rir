@@ -499,15 +499,11 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
         return convertToPointer(co);
 
     auto i = Pool::insert(co);
-
-    auto cur = builder.GetInsertBlock();
-    builder.SetInsertPoint(entryBlock);
     llvm::Value* pos = builder.CreateLoad(constantpool);
     pos = builder.CreateBitCast(dataPtr(pos, false),
                                 PointerType::get(t::SEXP, 0));
     pos = builder.CreateGEP(pos, c(i));
     auto res = builder.CreateLoad(pos);
-    builder.SetInsertPoint(cur);
     return res;
 }
 
@@ -971,7 +967,7 @@ void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
 llvm::Value* LowerFunctionLLVM::isExternalsxp(llvm::Value* v, uint32_t magic) {
     assert(v->getType() == t::SEXP);
     auto isExternalsxp = builder.CreateICmpEQ(c(EXTERNALSXP), sexptype(v));
-    auto es = builder.CreateBitCast(dataPtr(v),
+    auto es = builder.CreateBitCast(dataPtr(v, false),
                                     PointerType::get(t::RirRuntimeObject, 0));
     auto magicVal = builder.CreateLoad(builder.CreateGEP(es, {c(0), c(2)}));
     auto isCorrectMagic = builder.CreateICmpEQ(magicVal, c(magic));
@@ -1543,7 +1539,7 @@ llvm::Value* LowerFunctionLLVM::envStubGet(llvm::Value* x, int i) {
     insn_assert(isExternalsxp(x, LAZY_ENVIRONMENT_MAGIC),
                 "envStubGet on something which is not an env stub");
 #endif
-    auto le = builder.CreateBitCast(dataPtr(x),
+    auto le = builder.CreateBitCast(dataPtr(x, false),
                                     PointerType::get(t::LazyEnvironment, 0));
     auto payload =
         builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::SEXP_ptr);
@@ -1562,7 +1558,7 @@ void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y) {
                         "envStubGet on something which is not an env stub");
 #endif
             auto le = builder.CreateBitCast(
-                dataPtr(x), PointerType::get(t::LazyEnvironment, 0));
+                dataPtr(x, false), PointerType::get(t::LazyEnvironment, 0));
             auto payload =
                 builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::SEXP_ptr);
             auto pos =
