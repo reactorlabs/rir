@@ -96,6 +96,8 @@ static RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc,
 
 #define readConst(ctx, idx) (cp_pool_at(ctx, idx))
 
+static bool deoptimizing = false;
+
 void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
                         SEXP arglist, SEXP op) {
     /*  If we have a generic function we need to use the sysparent of
@@ -672,8 +674,10 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!fun->unoptimizable &&
-        fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
+    if (!deoptimizing && !fun->unoptimizable &&
+        ((fun->invocationCount() %
+          ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP)) ==
+         fun->deoptCount())) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -1339,9 +1343,13 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(ctx, stackHeight);
     auto code = f.code;
+    code->registerInvocation();
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
+
+    if (outermostFrame)
+        deoptimizing = true;
 
     RCNTXT fake;
     RCNTXT* cntxt;
@@ -1423,7 +1431,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         ostack_pop(ctx);
         if (!innermostFrame)
             ostack_push(ctx, res);
-        code->registerInvocation();
         return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr,
                            nullptr);
     };
@@ -1434,6 +1441,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     if (!outermostFrame) {
         endClosureContext(cntxt, res);
     } else {
+        deoptimizing = false;
         assert(findFunctionContextFor(deoptEnv) == cntxt);
         // long-jump out of all the inlined contexts
         Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv, res);
@@ -2295,8 +2303,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                              given, ctx);
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
-            bool dispatchFail = !fun->dead && !matches(call, fun->signature());
-            if (fun->invocationCount() % pir::Parameter::RIR_WARMUP == 0) {
+            bool dispatchFail = fun->dead || !matches(call, fun->signature());
+            if (!dispatchFail && !fun->unoptimizable &&
+                (fun->invocationCount() %
+                     ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
+                 fun->deoptCount())) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
                 if (assumptions != fun->signature().assumptions)
@@ -3554,61 +3565,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             size_t stackHeight = 0;
             for (size_t i = 0; i < m->numFrames; ++i)
                 stackHeight += m->frames[i].stackSize + 1;
+            c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
                                    m->numFrames - 1, stackHeight, true);
             assert(false);
-        }
-
-        INSTRUCTION(seq_) {
-            static SEXP prim = NULL;
-            if (!prim) {
-                // TODO: we could call seq.default here, but it messes up the
-                // error call :(
-                prim = Rf_findFun(Rf_install("seq"), R_GlobalEnv);
-            }
-
-            // TODO: add a real guard here...
-            assert(prim == Rf_findFun(Rf_install("seq"), env));
-
-            SEXP from = ostack_at(ctx, 2);
-            SEXP to = ostack_at(ctx, 1);
-            SEXP by = ostack_at(ctx, 0);
-            res = NULL;
-
-            if (IS_SIMPLE_SCALAR(from, INTSXP) &&
-                IS_SIMPLE_SCALAR(to, INTSXP) && IS_SIMPLE_SCALAR(by, INTSXP)) {
-                int f = *INTEGER(from);
-                int t = *INTEGER(to);
-                int b = *INTEGER(by);
-                if (f != NA_INTEGER && t != NA_INTEGER && b != NA_INTEGER) {
-                    if ((f < t && b > 0) || (t < f && b < 0)) {
-                        int size = 1 + (t - f) / b;
-                        res = Rf_allocVector(INTSXP, size);
-                        int v = f;
-                        for (int i = 0; i < size; ++i) {
-                            INTEGER(res)[i] = v;
-                            v += b;
-                        }
-                    } else if (f == t) {
-                        res = Rf_allocVector(INTSXP, 1);
-                        *INTEGER(res) = f;
-                    }
-                }
-            }
-
-            if (!res) {
-                SLOWASSERT(!isObject(from));
-                SEXP call = getSrcForCall(c, pc - 1, ctx);
-                SEXP argslist =
-                    CONS_NR(from, CONS_NR(to, CONS_NR(by, R_NilValue)));
-                ostack_push(ctx, argslist);
-                res = Rf_applyClosure(call, prim, argslist, env, R_NilValue);
-                ostack_pop(ctx);
-            }
-
-            ostack_popn(ctx, 3);
-            ostack_push(ctx, res);
-            NEXT();
         }
 
         INSTRUCTION(colon_) {

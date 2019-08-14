@@ -460,11 +460,6 @@ DEF_INSTR(subassign2_2_, 0, 4, 1, 1)
 DEF_INSTR(guard_fun_, 3, 0, 0, 1)
 
 /**
- * seq_ :: seq(scalar, scalar, scalar)
- */
-DEF_INSTR(seq_, 0, 3, 1, 1)
-
-/**
  * colon_:: takes two bounds a and b and pushes a:b
  */
 DEF_INSTR(colon_, 0, 2, 1, 0)

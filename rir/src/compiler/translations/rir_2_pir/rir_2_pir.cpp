@@ -267,8 +267,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldfun_: {
         auto ld = insert(new LdFun(bc.immediateConst(), env));
         if (!inPromise()) {
-            auto cp = addCheckpoint(srcCode, pos, stack, insert);
-            callTargetFeedback[ld].first = cp;
+            auto n = BC::next(pos);
+            if (*n == Opcode::record_call_) {
+                auto cp = addCheckpoint(srcCode, pos, stack, insert);
+                callTargetFeedback[ld].first = cp;
+            }
         }
         push(ld);
         break;
@@ -610,14 +613,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         assert(TYPEOF(target) == BUILTINSXP);
         push(insert(BuiltinCallFactory::New(env, target, args, ast)));
-        break;
-    }
-
-    case Opcode::seq_: {
-        auto step = pop();
-        auto stop = pop();
-        auto start = pop();
-        push(insert(new Seq(start, stop, step)));
         break;
     }
 

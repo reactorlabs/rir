@@ -137,7 +137,7 @@ test_features:
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
     - PIR_NATIVE_BACKEND=2 ./bin/gnur-make-tests check
     - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
-    - RIR_SERIALIZE_CHAOS=10 FAST_TESTS=1 ./bin/tests
+#    - RIR_SERIALIZE_CHAOS=10 FAST_TESTS=1 ./bin/tests
 
 # Run ubsan and gc torture
 test_sanitize:

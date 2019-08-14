@@ -2015,11 +2015,6 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                     }
                     if (nativeTarget && nativeTarget->body()->nativeCode) {
-                        auto missing = nativeTarget->signature().numArguments -
-                                       args.size();
-                        for (size_t i = 0; i < missing; ++i)
-                            args.push_back(MissingArg::instance());
-
                         auto res = withCallFrame(args, [&]() {
                             return call(NativeBuiltins::nativeCallTrampoline,
                                         {
@@ -2866,7 +2861,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto extract = Extract2_1D::Cast(i);
                 auto resultRep = representationOf(i);
                 // TODO: Extend a fastPath for generic vectors.
-                if (extract->vec()->type.isA(PirType::num().notObject()) &&
+                if (false &&
+                    extract->vec()->type.isA(PirType::num().notObject()) &&
                     extract->idx()->type.isScalar()) {
                     auto fallback = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
@@ -2986,6 +2982,24 @@ bool LowerFunctionLLVM::tryCompile() {
                 if (subAssign->hasEnv())
                     env = loadSxp(subAssign->env());
                 auto res = call(NativeBuiltins::subassign11,
+                                {vector, idx, val, env, c(subAssign->srcIdx)});
+                setVal(i, res);
+                break;
+            }
+
+            case Tag::Subassign2_1D: {
+                auto subAssign = Subassign2_1D::Cast(i);
+                auto vector = loadSxp(subAssign->vector());
+                auto val = loadSxp(subAssign->val());
+                auto idx = loadSxp(subAssign->idx());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, t::SEXP);
+                if (subAssign->hasEnv())
+                    env = loadSxp(subAssign->env());
+
+                auto res = call(NativeBuiltins::subassign21,
                                 {vector, idx, val, env, c(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
@@ -3141,10 +3155,8 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::IDiv:
             case Tag::Extract2_2D:
             case Tag::Extract1_2D:
-            case Tag::Subassign2_1D:
             case Tag::Subassign1_2D:
             case Tag::Subassign2_2D:
-            case Tag::Seq:
                 success = false;
                 break;
 

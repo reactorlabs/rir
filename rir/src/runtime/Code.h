@@ -77,12 +77,18 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
             funInvocationCount++;
     }
 
+    void registerDeopt() {
+        if (deoptCount < UINT_MAX)
+            deoptCount++;
+    }
+
     // UID for persistence when serializing/deserializing
     UUID uid;
 
     // number of invocations. only incremented if this code object is the body
     // of a function
     unsigned funInvocationCount;
+    unsigned deoptCount;
 
     unsigned src; /// AST of the function (or promise) represented by the code
 
