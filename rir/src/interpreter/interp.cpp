@@ -1344,7 +1344,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     SEXP deoptEnv = ostack_at(ctx, stackHeight);
     auto code = f.code;
     code->registerInvocation();
-    code->registerDeopt();
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
@@ -3566,6 +3565,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             size_t stackHeight = 0;
             for (size_t i = 0; i < m->numFrames; ++i)
                 stackHeight += m->frames[i].stackSize + 1;
+            c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
                                    m->numFrames - 1, stackHeight, true);
             assert(false);

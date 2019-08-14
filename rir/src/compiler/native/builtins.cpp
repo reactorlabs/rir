@@ -796,6 +796,7 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
         stackHeight += m->frames[i].stackSize + 1;
     }
 
+    c->registerDeopt();
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
     CallContext call(c, cls, /* nargs */ -1,
@@ -922,7 +923,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
 
-    if (fun->dead) {
+    if (fun->dead || !fun->body()->nativeCode) {
         return callImpl(fun->body(), astP, callee, env, nargs,
                         Assumptions().toI());
     }
