@@ -17,7 +17,9 @@ void DominatorTreeVisitor<VisitorHelpers::IDMarker>::run(
         todo.pop_front();
         if (!done.check(cur)) {
             done.set(cur);
-            dom.dominatorTreeNext(cur, [&](BB* bb) { todo.push_back(bb); });
+            std::vector<BB*> temp;
+            dom.dominatorTreeNext(cur, [&](BB* bb) { temp.push_back(bb); });
+            todo.insert(todo.begin(), temp.begin(), temp.end());
             action(cur);
         }
     }
@@ -56,8 +58,8 @@ void DominatorTreeVisitor<VisitorHelpers::PointerMarker>::run(
             todo.pop_front();
             if (!done.check(cur)) {
                 done.set(cur);
-                for (auto& bb : cache[cur])
-                    todo.push_back(bb);
+                // Relies on SmallSet maintaining insertion order
+                todo.insert(todo.begin(), cache[cur].begin(), cache[cur].end());
                 action(cur);
             }
         }
