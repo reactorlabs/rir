@@ -976,6 +976,9 @@ NativeBuiltin NativeBuiltins::nativeCallTrampoline = {
 
 SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
                      Immediate srcIdx) {
+    if (MAYBE_SHARED(vector))
+        vector = Rf_duplicate(vector);
+    PROTECT(vector);
     SEXP args = CONS_NR(vector, CONS_NR(index, CONS_NR(value, R_NilValue)));
     SET_TAG(CDDR(args), symbol::value);
     PROTECT(args);
@@ -992,7 +995,7 @@ SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
         SET_NAMED(res, 0);
     }
     Rf_endcontext(&assignContext);
-    UNPROTECT(1);
+    UNPROTECT(2);
     return res;
 }
 
@@ -1055,9 +1058,9 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
         }
     }
 
-    if (MAYBE_SHARED(vec)) {
+    if (MAYBE_SHARED(vec))
         vec = Rf_duplicate(vec);
-    }
+    PROTECT(vec);
 
     SEXP args = CONS_NR(vec, CONS_NR(idx, CONS_NR(val, R_NilValue)));
     SET_TAG(CDDR(args), symbol::value);
@@ -1075,7 +1078,7 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
         SET_NAMED(res, 0);
     }
     Rf_endcontext(&assignContext);
-    UNPROTECT(1);
+    UNPROTECT(2);
     return res;
 }
 
