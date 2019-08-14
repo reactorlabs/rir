@@ -71,6 +71,9 @@ struct DispatchTable
         size_t i = 1;
         for (; i < size(); ++i) {
             if (get(i)->signature().assumptions == assumptions) {
+                // If we override a version we should ensure that we don't call
+                // the old version anymore, or we might end up in a deopt loop.
+                get(i)->dead = true;
                 setEntry(i, fun->container());
                 return;
             }
