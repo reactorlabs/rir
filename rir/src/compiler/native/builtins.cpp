@@ -788,7 +788,6 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
             // deoptimize properly.
             // TODO: find a way to always know the closure in native code!
             c->nativeCode = nullptr;
-            assert(false);
         }
     }
     assert(m->numFrames >= 1);
