@@ -616,14 +616,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::seq_: {
-        auto step = pop();
-        auto stop = pop();
-        auto start = pop();
-        push(insert(new Seq(start, stop, step)));
-        break;
-    }
-
     case Opcode::for_seq_size_:
         push(insert(new ForSeqSize(top())));
         break;

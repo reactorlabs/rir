@@ -79,7 +79,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::extract1_2_:
     case Opcode::extract2_1_:
     case Opcode::extract2_2_:
-    case Opcode::seq_:
     case Opcode::add_:
     case Opcode::mul_:
     case Opcode::div_:

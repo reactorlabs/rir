@@ -1148,52 +1148,5 @@ NativeBuiltin NativeBuiltins::endClosureContext = {
     nullptr,
 };
 
-SEXP seqImpl(SEXP from, SEXP to, SEXP by, SEXP env, Immediate srcIdx) {
-    SEXP res = nullptr;
-    if (IS_SIMPLE_SCALAR(from, INTSXP) && IS_SIMPLE_SCALAR(to, INTSXP) &&
-        IS_SIMPLE_SCALAR(by, INTSXP)) {
-        int f = *INTEGER(from);
-        int t = *INTEGER(to);
-        int b = *INTEGER(by);
-        if (f != NA_INTEGER && t != NA_INTEGER && b != NA_INTEGER) {
-            if ((f < t && b > 0) || (t < f && b < 0)) {
-                int size = 1 + (t - f) / b;
-                res = Rf_allocVector(INTSXP, size);
-                int v = f;
-                for (int i = 0; i < size; ++i) {
-                    INTEGER(res)[i] = v;
-                    v += b;
-                }
-            } else if (f == t) {
-                res = Rf_allocVector(INTSXP, 1);
-                *INTEGER(res) = f;
-            }
-        }
-    }
-
-    if (!res) {
-        static SEXP prim = NULL;
-        if (!prim) {
-            // TODO: we could call seq.default here, but it messes up the
-            // error call :(
-            prim = Rf_findFun(Rf_install("seq"), R_GlobalEnv);
-        }
-
-        SLOWASSERT(!isObject(from));
-        SEXP call = src_pool_at(globalContext(), srcIdx);
-        SEXP argslist = CONS_NR(from, CONS_NR(to, CONS_NR(by, R_NilValue)));
-        ostack_push(ctx, argslist);
-        res = Rf_applyClosure(call, prim, argslist, env, R_NilValue);
-    }
-
-    return res;
-}
-
-NativeBuiltin NativeBuiltins::seq = {
-    "seq",
-    (void*)&seqImpl,
-    5,
-    nullptr,
-};
 }
 }
