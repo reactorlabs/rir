@@ -1008,57 +1008,6 @@ NativeBuiltin NativeBuiltins::subassign11 = {
 };
 
 SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
-
-    // Fast case
-    if (NOT_SHARED(vec) && !isObject(vec)) {
-        SEXPTYPE vectorT = TYPEOF(vec);
-        SEXPTYPE valT = TYPEOF(val);
-        SEXPTYPE idxT = TYPEOF(idx);
-
-        // Fast case only if
-        // 1. index is numerical and scalar
-        // 2. vector is real and shape of value fits into real
-        //      or vector is int and shape of value is int
-        //      or vector is generic
-        // 3. value fits into one cell of the vector
-        if ((idxT == INTSXP || idxT == REALSXP) && (XLENGTH(idx) == 1) &&   // 1
-            ((vectorT == REALSXP && (valT == REALSXP || valT == INTSXP)) || // 2
-             (vectorT == INTSXP && (valT == INTSXP)) || (vectorT == VECSXP)) &&
-            (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 3
-
-            int idx_ = -1;
-
-            if (idxT == REALSXP) {
-                if (*REAL(idx) != NA_REAL)
-                    idx_ = (int)*REAL(idx) - 1;
-            } else {
-                if (*INTEGER(idx) != NA_INTEGER)
-                    idx_ = *INTEGER(idx) - 1;
-            }
-
-            if (idx_ >= 0 && idx_ < XLENGTH(vec)) {
-                switch (vectorT) {
-                case REALSXP:
-                    REAL(vec)
-                    [idx_] =
-                        valT == REALSXP ? *REAL(val) : (double)*INTEGER(val);
-                    break;
-                case INTSXP:
-                    INTEGER(vec)[idx_] = *INTEGER(val);
-                    break;
-                case VECSXP:
-                    // Avoid recursive vectors
-                    if (val == vec)
-                        val = Rf_shallow_duplicate(val);
-                    SET_VECTOR_ELT(vec, idx_, val);
-                    break;
-                }
-
-                return vec;
-            }
-        }
-    }
-
     if (MAYBE_SHARED(vec))
         vec = Rf_duplicate(vec);
     PROTECT(vec);
