@@ -771,7 +771,6 @@ NativeBuiltin NativeBuiltins::length = {
 };
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
-    std::cerr << "Entre a deopt!!!";
     if (!pir::Parameter::DEOPT_CHAOS) {
         if (cls) {
             // TODO: this version is still reachable from static call inline
