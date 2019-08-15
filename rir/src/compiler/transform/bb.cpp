@@ -185,14 +185,34 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         BB* record = new BB(code, code->nextBBId++);
         for (auto& origin : assume->feedbackOrigin) {
             Value* src = nullptr;
-            if (auto t = IsObject::Cast(assume->condition()))
+            auto cond = assume->condition();
+            auto r = DeoptReason::Typecheck;
+            if (auto t = IsObject::Cast(cond)) {
                 src = t->arg<0>().val();
-            if (auto t = IsType::Cast(assume->condition()))
+            } else if (auto t = IsType::Cast(cond)) {
                 src = t->arg<0>().val();
+            } else if (auto t = Identical::Cast(cond)) {
+                src = t->arg<0>().val();
+                if (LdConst::Cast(src))
+                    src = t->arg<0>().val();
+                assert(!LdConst::Cast(src));
+                r = DeoptReason::Calltarget;
+            } else if (IsEnvStub::Cast(cond)) {
+                // TODO
+            } else {
+                if (auto c = Instruction::Cast(cond))
+                    c->print(std::cerr);
+                assert(src && "Don't know how to report deopt reason");
+            }
             if (src) {
-                auto r = new RecordDeoptReason({DeoptReason::Typecheck, origin},
-                                               src);
-                record->append(r);
+                auto offset =
+                    (uintptr_t)origin.second - (uintptr_t)origin.first;
+                auto o = *((Opcode*)origin.first + offset);
+                assert(o == Opcode::record_call_ || o == Opcode::record_type_);
+                assert((uintptr_t)origin.second > (uintptr_t)origin.first);
+                auto rec = new RecordDeoptReason(
+                    {r, origin.first, (uint32_t)offset}, src);
+                record->append(rec);
             }
         }
         record->setNext(deoptBlock);
@@ -215,11 +235,14 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
 void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
                                BB::Instrs::iterator& position,
-                               bool assumePositive, Opcode* origin) {
+                               bool assumePositive, rir::Code* srcCode,
+                               Opcode* origin) {
     position = bb->insert(position, (Instruction*)condition);
     auto assume = new Assume(condition, cp);
-    if (origin)
-        assume->feedbackOrigin.push_back(origin);
+    if (srcCode) {
+        assert(origin);
+        assume->feedbackOrigin.push_back({srcCode, origin});
+    }
     if (!assumePositive)
         assume->Not();
     position = bb->insert(position + 1, assume);
@@ -227,10 +250,12 @@ void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
 };
 
 void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
-                               bool assumePositive, Opcode* origin) {
+                               bool assumePositive, rir::Code* srcCode,
+                               Opcode* origin) {
     auto contBB = cp->bb()->trueBranch();
     auto contBegin = contBB->begin();
-    insertAssume(condition, cp, contBB, contBegin, assumePositive, origin);
+    insertAssume(condition, cp, contBB, contBegin, assumePositive, srcCode,
+                 origin);
 }
 
 void BBTransform::mergeRedundantBBs(Code* closure) {

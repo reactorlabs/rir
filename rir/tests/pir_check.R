@@ -245,7 +245,7 @@ mandelbrot <- function(size) {
 }
 # This can't be run if PIR_MAX_INPUT_SIZE is too low
 stopifnot(
-  pir.check(mandelbrot, NoExternalCalls, NoPromise, NoStore, warmup=function(f)f(16))
+  pir.check(mandelbrot, NoExternalCalls, NoPromise, NoStore, warmup=function(f) {f(13);f(27)})
 )
 
 # New tests

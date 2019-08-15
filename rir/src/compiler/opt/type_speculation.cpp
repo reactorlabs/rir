@@ -64,7 +64,8 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                                 ? seen
                                 : i->type.notObject();
                         if (!i->type.isA(assume))
-                            speculate[cp][i] = {assume, i->typeFeedback.origin};
+                            speculate[cp][i] = {assume, i->typeFeedback.srcCode,
+                                                i->typeFeedback.origin};
                         // Prevent redundant speculation
                         i->typeFeedback.type = PirType::bottom();
                     }
@@ -99,8 +100,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             } else {
                 condition = new IsType(type, i);
             }
+
             BBTransform::insertAssume(condition, cp, bb, ip, assumeTrue,
-                                      sp.second.origin);
+                                      sp.second.srcCode, sp.second.origin);
 
             auto cast =
                 new CastType(i, CastType::Downcast, PirType::any(), type);
