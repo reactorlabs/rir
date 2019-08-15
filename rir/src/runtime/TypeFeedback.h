@@ -38,10 +38,22 @@ struct ObservedType {
     uint8_t scalar : 1;
     uint8_t object : 1;
     uint8_t attribs : 1;
+
     ObservedType() {}
     explicit ObservedType(SEXP s);
+
     bool operator==(const ObservedType& other) {
         return memcmp(this, &other, sizeof(ObservedType)) == 0;
+    }
+
+    ObservedType operator|(const ObservedType& other) {
+        assert(sexptype == other.sexptype);
+        ObservedType t;
+        t.sexptype = sexptype;
+        t.scalar = scalar && other.scalar;
+        t.object = object || other.object;
+        t.attribs = attribs || other.attribs;
+        return t;
     }
 
     bool isObj() const { return object; }
@@ -73,9 +85,14 @@ struct ObservedValues {
         ObservedType type(e);
         if (numTypes < MaxTypes) {
             int i = 0;
-            for (; i < numTypes; ++i)
+            for (; i < numTypes; ++i) {
                 if (seen[i] == type)
                     break;
+                if (seen[i].sexptype == type.sexptype) {
+                    seen[i] = seen[i] | type;
+                    return;
+                }
+            }
             if (i == numTypes)
                 seen[numTypes++] = type;
         }
@@ -83,8 +100,6 @@ struct ObservedValues {
 };
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
-
-#pragma pack(pop)
 
 enum class TypeChecks : uint32_t {
     // Must be bigger than smallest sexptype
@@ -99,6 +114,21 @@ enum class TypeChecks : uint32_t {
     IsObject = 3338,
     IsObjectWrapped = 3339,
 };
+
+enum class Opcode : uint8_t;
+
+struct DeoptReason {
+    enum Reason : uint32_t {
+        Typecheck,
+        Calltarget,
+    };
+    Reason reason;
+    Opcode* origin;
+};
+static_assert(sizeof(DeoptReason) == 3 * sizeof(uint32_t),
+              "Size needs to fit inside a record_deopt_ bc immediate args");
+
+#pragma pack(pop)
 
 } // namespace rir
 #endif

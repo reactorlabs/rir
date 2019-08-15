@@ -1790,6 +1790,18 @@ bool LowerFunctionLLVM::tryCompile() {
                 return;
 
             switch (i->tag) {
+            case Tag::RecordDeoptReason: {
+                auto rec = RecordDeoptReason::Cast(i);
+                auto reason = builder.CreateAlloca(t::DeoptReason);
+                builder.CreateStore(c(rec->reason.reason, 32),
+                                    builder.CreateGEP(reason, {c(0), c(0)}));
+                builder.CreateStore(convertToPointer(rec->reason.origin),
+                                    builder.CreateGEP(reason, {c(0), c(1)}));
+                call(NativeBuiltins::recordDeopt,
+                     {loadSxp(rec->arg<0>().val()), reason});
+                break;
+            }
+
             case Tag::PushContext: {
                 compilePushContext(i);
                 break;

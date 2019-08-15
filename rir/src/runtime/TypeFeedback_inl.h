@@ -8,7 +8,7 @@ namespace rir {
 
 ObservedType::ObservedType(SEXP s)
     : sexptype((uint8_t)TYPEOF(s)), scalar(IS_SIMPLE_SCALAR(s, TYPEOF(s))),
-      object(OBJECT(s)), attribs(ATTRIB(s) != R_NilValue) {}
+      object(isObject(s)), attribs(ATTRIB(s) != R_NilValue) {}
 
 void ObservedCallees::record(Code* caller, SEXP callee) {
     if (taken < CounterOverflow)

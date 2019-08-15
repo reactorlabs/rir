@@ -33,9 +33,13 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 return;
             }
 
-            auto fb = arg->typeFeedback;
-            if (fb.isVoid())
-                fb = arg->followCastsAndForce()->typeFeedback;
+            auto fb = PirType::bottom();
+            if (auto j = Instruction::Cast(arg))
+                fb = j->typeFeedback.type;
+            if (fb.isVoid()) {
+                if (auto j = Instruction::Cast(arg->followCastsAndForce()))
+                    fb = j->typeFeedback.type;
+            }
 
             if (fb.isVoid() || fb.maybeObj())
                 answer = false;
@@ -120,14 +124,19 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         }
                         // TODO: deduplicate this code with type_speculation
                         // pass
+                        auto argi = Instruction::Cast(arg);
                         assert(!arg->type.maybePromiseWrapped());
-                        PirType seen = arg->typeFeedback;
-                        if (seen.isVoid())
-                            seen = arg->followCastsAndForce()->typeFeedback;
+                        PirType seen = PirType::bottom();
+                        if (argi)
+                            seen = argi->typeFeedback.type;
+                        if (seen.isVoid()) {
+                            if (auto j = Instruction::Cast(
+                                    arg->followCastsAndForce()))
+                                seen = j->typeFeedback.type;
+                        }
                         PirType resType;
                         Instruction* condition = nullptr;
                         bool assumeTrue = true;
-                        auto argi = Instruction::Cast(arg);
                         if (argi && !seen.isVoid() &&
                             (seen.isA(RType::integer) ||
                              seen.isA(RType::real))) {

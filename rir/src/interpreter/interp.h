@@ -53,6 +53,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                             DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight,
                             bool outerHasContext);
-}
+void recordDeoptReason(SEXP val, const DeoptReason& reason);
 
+} // namespace rir
 #endif // RIR_INTERPRETER_C_H

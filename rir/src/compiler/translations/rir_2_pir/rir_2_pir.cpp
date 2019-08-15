@@ -321,22 +321,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::record_type_: {
         if (bc.immediate.typeFeedback.numTypes) {
             auto feedback = bc.immediate.typeFeedback;
-            at(0)->typeFeedback.merge(feedback);
-
-            // TODO: This does not work, if there are multiple force
-            // instructions, then the second one will see an already evaluated
-            // promise and it will always mark the input as already evaluated...
-            // We need to do this differently. if (auto force =
-            // Force::Cast(at(0))) {
-            //     auto arg = force->arg(0).val();
-            //     if (feedback.stateBeforeLastForce ==
-            //         ObservedValues::StateBeforeLastForce::value)
-            //         arg->typeFeedback = at(0)->typeFeedback;
-            //     else if (feedback.stateBeforeLastForce ==
-            //              ObservedValues::StateBeforeLastForce::evaluatedPromise)
-            //         arg->typeFeedback =
-            //         at(0)->typeFeedback.orPromiseWrapped();
-            // }
+            if (auto i = Instruction::Cast(at(0))) {
+                i->typeFeedback.type.merge(feedback);
+                i->typeFeedback.origin = pos;
+            }
         }
         break;
     }
@@ -887,6 +875,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
     case Opcode::assert_type_:
+    case Opcode::record_deopt_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 

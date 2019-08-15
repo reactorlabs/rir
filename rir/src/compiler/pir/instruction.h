@@ -157,6 +157,12 @@ class Instruction : public Value {
         return effects.contains(Effect::Reflection);
     }
 
+    struct TypeFeedback {
+        PirType type = PirType::optimistic();
+        Opcode* origin = nullptr;
+    };
+    TypeFeedback typeFeedback;
+
     Effects getObservableEffects() const {
         auto e = effects;
         // Those are effects, and we are required to have them in the correct
@@ -1635,6 +1641,14 @@ struct RirStack {
     Stack::iterator end() { return stack.end(); }
 };
 
+class FLI(RecordDeoptReason, 1, Effects::Any()) {
+  public:
+    DeoptReason reason;
+    RecordDeoptReason(const DeoptReason& r, Value* value)
+        : FixedLenInstruction(PirType::voyd(), {{PirType::any()}}, {{value}}),
+          reason(r) {}
+};
+
 /*
  *  Collects metadata about the current state of variables
  *  eventually needed for deoptimization purposes
@@ -2071,6 +2085,7 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effects::Any(),
 
 class FLI(Assume, 2, Effect::TriggerDeopt) {
   public:
+    std::vector<Opcode*> feedbackOrigin;
     bool assumeTrue = true;
     Assume(Value* test, Value* checkpoint)
         : FixedLenInstruction(PirType::voyd(),
