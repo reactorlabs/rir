@@ -2928,8 +2928,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto extract = Extract2_1D::Cast(i);
                 auto resultRep = representationOf(i);
                 // TODO: Extend a fastPath for generic vectors.
-                if (false &&
-                    extract->vec()->type.isA(PirType::num().notObject()) &&
+                if (extract->vec()->type.isA(PirType::num().notObject()) &&
                     extract->idx()->type.isScalar()) {
                     auto fallback = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
@@ -3010,21 +3009,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Subassign2_1D: {
                 auto subAssign = Subassign2_1D::Cast(i);
-<<<<<<< HEAD
-                auto vector = loadSxp(subAssign->vector());
-                auto val = loadSxp(subAssign->val());
-                auto idx = loadSxp(subAssign->idx());
-
-                // We should implement the fast cases (known and primitive
-                // types) speculatively here
-                auto env = constant(R_NilValue, t::SEXP);
-                if (subAssign->hasEnv())
-                    env = loadSxp(subAssign->env());
-
-                auto res = call(NativeBuiltins::subassign21,
-                                {vector, idx, val, env, c(subAssign->srcIdx)});
-                setVal(i, res);
-=======
                 auto idx = loadSxp(subAssign->idx());
 
                 // TODO: Extend a fastPath for generic vectors.
@@ -3080,7 +3064,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                     loadSxp(subAssign->val()), env,
                                     c(subAssign->srcIdx)}));
                 }
->>>>>>> 6a2342c1... llvm fast path fpr subassign 2_1D
                 break;
             }
 
