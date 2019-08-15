@@ -1064,14 +1064,15 @@ void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
 
-    unsigned long namedBit = 1ul << 32;
-    auto named = builder.CreateOr(sxpinfo, c(namedBit));
-    auto isNamed = builder.CreateICmpEQ(sxpinfo, named);
+    static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1) << 32;
+    auto named = builder.CreateAnd(sxpinfo, c(namedMask));
+    auto isNotNamed = builder.CreateICmpEQ(named, c(0, 64));
 
     auto notNamed = BasicBlock::Create(C, "notNamed", fun);
     auto ok = BasicBlock::Create(C, "", fun);
 
-    builder.CreateCondBr(isNamed, ok, notNamed);
+    builder.CreateCondBr(isNotNamed, notNamed, ok);
+
     builder.SetInsertPoint(notNamed);
     insn_assert(builder.getFalse(), "Value is not named");
     builder.CreateBr(ok);
@@ -1084,16 +1085,20 @@ void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
 
-    unsigned long namedBit = 1ul << 32;
-    auto named = builder.CreateOr(sxpinfo, c(namedBit));
-    auto isNamed = builder.CreateICmpEQ(sxpinfo, named);
+    static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1) << 32;
+    unsigned long namedLSB = 1ul << 32;
+
+    auto named = builder.CreateAnd(sxpinfo, c(namedMask));
+    auto isNotNamed = builder.CreateICmpEQ(named, c(0, 64));
 
     auto notNamed = BasicBlock::Create(C, "notNamed", fun);
     auto ok = BasicBlock::Create(C, "", fun);
 
-    builder.CreateCondBr(isNamed, ok, notNamed);
+    builder.CreateCondBr(isNotNamed, notNamed, ok);
+
     builder.SetInsertPoint(notNamed);
-    builder.CreateStore(named, sxpinfoP);
+    auto namedSxpinfo = builder.CreateOr(sxpinfo, c(namedLSB));
+    builder.CreateStore(namedSxpinfo, sxpinfoP);
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
