@@ -3012,7 +3012,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto idx = loadSxp(subAssign->idx());
 
                 // TODO: Extend a fastPath for generic vectors.
-                if (subAssign->idx()->type.isA(
+                if (false &&
+                    subAssign->idx()->type.isA(
                         PirType::num().notObject().scalar()) &&
                     subAssign->val()->type.fitsIn(subAssign->vector()->type)) {
                     auto resultRep = representationOf(i);
