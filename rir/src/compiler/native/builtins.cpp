@@ -816,6 +816,12 @@ NativeBuiltin NativeBuiltins::deopt = {
     4,
     jit_type_create_signature(jit_abi_cdecl, jit_type_void, deoptType, 4, 0),
 };
+NativeBuiltin NativeBuiltins::recordDeopt = {
+    "recordDeopt",
+    (void*)&recordDeoptReason,
+    2,
+    nullptr,
+};
 
 void assertFailImpl(const char* msg) {
     std::cout << "Assertion in jitted code failed: '" << msg << "'\n";

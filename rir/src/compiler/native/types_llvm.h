@@ -36,6 +36,8 @@ extern llvm::PointerType* VECTOR_SEXPREC_ptr;
 extern llvm::StructType* RirRuntimeObject;
 extern llvm::StructType* LazyEnvironment;
 
+extern llvm::StructType* DeoptReason;
+
 extern llvm::StructType* RCNTXT;
 extern llvm::PointerType* RCNTXT_ptr;
 

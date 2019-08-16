@@ -118,6 +118,8 @@ struct NativeBuiltins {
 
     static NativeBuiltin initClosureContext;
     static NativeBuiltin endClosureContext;
+
+    static NativeBuiltin recordDeopt;
 };
 }
 }

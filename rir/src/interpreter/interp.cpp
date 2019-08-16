@@ -96,7 +96,22 @@ static RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc,
 
 #define readConst(ctx, idx) (cp_pool_at(ctx, idx))
 
-static bool deoptimizing = false;
+static RCNTXT* deoptimizationStartedAt = nullptr;
+
+static bool isDeoptimizing() {
+    if (!deoptimizationStartedAt)
+        return false;
+    RCNTXT* cur = R_GlobalContext;
+    while (cur) {
+        if (cur == deoptimizationStartedAt)
+            return true;
+        cur = cur->nextcontext;
+    }
+    deoptimizationStartedAt = nullptr;
+    return false;
+}
+static void startDeoptimizing() { deoptimizationStartedAt = R_GlobalContext; }
+static void endDeoptimizing() { deoptimizationStartedAt = nullptr; }
 
 void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
                         SEXP arglist, SEXP op) {
@@ -342,6 +357,15 @@ void checkUserInterrupt() {
         R_CheckUserInterrupt();
         R_RunPendingFinalizers();
         count = 0;
+    }
+}
+
+void recordDeoptReason(SEXP val, const DeoptReason& reason) {
+    if (reason.reason == DeoptReason::Typecheck) {
+        Opcode* pos = reason.origin;
+        assert(*pos == Opcode::record_type_);
+        ObservedValues* feedback = (ObservedValues*)(pos + 1);
+        feedback->record(val);
     }
 }
 
@@ -674,10 +698,10 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!deoptimizing && !fun->unoptimizable &&
+    if (!isDeoptimizing() && !fun->unoptimizable &&
         ((fun->invocationCount() %
           ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP)) ==
-         fun->deoptCount())) {
+         (fun->deoptCount() % pir::Parameter::RIR_WARMUP))) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -1349,7 +1373,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     bool innermostFrame = pos == 0;
 
     if (outermostFrame)
-        deoptimizing = true;
+        startDeoptimizing();
 
     RCNTXT fake;
     RCNTXT* cntxt;
@@ -1441,7 +1465,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     if (!outermostFrame) {
         endClosureContext(cntxt, res);
     } else {
-        deoptimizing = false;
+        endDeoptimizing();
         assert(findFunctionContextFor(deoptEnv) == cntxt);
         // long-jump out of all the inlined contexts
         Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv, res);
@@ -2170,6 +2194,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(record_deopt_) {
+            SEXP val = ostack_pop(ctx);
+            DeoptReason* res = (DeoptReason*)pc;
+            pc += sizeof(DeoptReason);
+            recordDeoptReason(val, *res);
+            NEXT();
+        }
+
         INSTRUCTION(record_type_) {
             ObservedValues* feedback = (ObservedValues*)pc;
             SEXP t = ostack_top(ctx);
@@ -2307,7 +2339,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (!dispatchFail && !fun->unoptimizable &&
                 (fun->invocationCount() %
                      ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
-                 fun->deoptCount())) {
+                 (fun->deoptCount() % pir::Parameter::RIR_WARMUP))) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
                 if (assumptions != fun->signature().assumptions)

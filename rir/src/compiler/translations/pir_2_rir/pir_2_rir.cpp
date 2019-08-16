@@ -566,6 +566,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             switch (instr->tag) {
 
+            case Tag::RecordDeoptReason: {
+                cb.add(BC::recordDeopt(RecordDeoptReason::Cast(instr)->reason));
+                break;
+            }
+
             case Tag::LdConst: {
                 cb.add(BC::push_from_pool(LdConst::Cast(instr)->idx));
                 break;
@@ -1108,11 +1113,9 @@ void Pir2Rir::lower(Code* code) {
                 newDeopt->consumeFrameStates(deopt);
                 bb->replace(it, newDeopt);
             } else if (auto expect = Assume::Cast(*it)) {
-                auto condition = expect->condition();
-                if (Parameter::DEOPT_CHAOS && coinFlip()) {
-                    condition = expect->assumeTrue ? (Value*)False::instance()
-                                                   : (Value*)True::instance();
-                }
+                auto expectation = expect->assumeTrue;
+                if (Parameter::DEOPT_CHAOS && coinFlip())
+                    expectation = !expectation;
                 std::string debugMessage;
                 if (Parameter::DEBUG_DEOPTS) {
                     std::stringstream dump;
@@ -1125,7 +1128,7 @@ void Pir2Rir::lower(Code* code) {
                     debugMessage += dump.str();
                 }
                 BBTransform::lowerExpect(
-                    code, bb, it, condition, expect->assumeTrue,
+                    code, bb, it, expect, expectation,
                     expect->checkpoint()->bb()->falseBranch(), debugMessage);
                 // lowerExpect splits the bb from current position. There
                 // remains nothing to process. Breaking seems more robust

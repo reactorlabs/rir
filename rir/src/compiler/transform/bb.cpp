@@ -158,7 +158,7 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
-                             Value* condition, bool expected, BB* deoptBlock,
+                             Assume* assume, bool condition, BB* deoptBlock,
                              const std::string& debugMessage) {
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
 
@@ -181,8 +181,26 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         deoptBlock = debug;
     }
 
-    src->replace(position, new Branch(condition));
-    if (expected) {
+    if (!assume->feedbackOrigin.empty()) {
+        BB* record = new BB(code, code->nextBBId++);
+        for (auto& origin : assume->feedbackOrigin) {
+            Value* src = nullptr;
+            if (auto t = IsObject::Cast(assume->condition()))
+                src = t->arg<0>().val();
+            if (auto t = IsType::Cast(assume->condition()))
+                src = t->arg<0>().val();
+            if (src) {
+                auto r = new RecordDeoptReason({DeoptReason::Typecheck, origin},
+                                               src);
+                record->append(r);
+            }
+        }
+        record->setNext(deoptBlock);
+        deoptBlock = record;
+    }
+
+    src->replace(position, new Branch(assume->condition()));
+    if (condition) {
         src->next1 = deoptBlock;
         src->next0 = split;
     } else {
@@ -197,9 +215,11 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
 void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
                                BB::Instrs::iterator& position,
-                               bool assumePositive) {
+                               bool assumePositive, Opcode* origin) {
     position = bb->insert(position, (Instruction*)condition);
     auto assume = new Assume(condition, cp);
+    if (origin)
+        assume->feedbackOrigin.push_back(origin);
     if (!assumePositive)
         assume->Not();
     position = bb->insert(position + 1, assume);
@@ -207,10 +227,10 @@ void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
 };
 
 void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
-                               bool assumePositive) {
+                               bool assumePositive, Opcode* origin) {
     auto contBB = cp->bb()->trueBranch();
     auto contBegin = contBB->begin();
-    insertAssume(condition, cp, contBB, contBegin, assumePositive);
+    insertAssume(condition, cp, contBB, contBegin, assumePositive, origin);
 }
 
 void BBTransform::mergeRedundantBBs(Code* closure) {
