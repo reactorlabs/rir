@@ -68,18 +68,16 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
             // next checkpoint available we might as well remove this one.
             if (auto cp = Checkpoint::Cast(instr)) {
                 if (auto cp0 = checkpoint.at(instr)) {
-                    if (checkpoint.next(instr)) {
-                        while (replaced.count(cp0))
-                            cp0 = replaced.at(cp0);
-                        replaced[cp] = cp0;
+                    while (replaced.count(cp0))
+                        cp0 = replaced.at(cp0);
+                    replaced[cp] = cp0;
 
-                        assert(bb->last() == instr);
-                        cp->replaceUsesWith(cp0);
-                        bb->remove(ip);
-                        delete bb->next1;
-                        bb->next1 = nullptr;
-                        return;
-                    }
+                    assert(bb->last() == instr);
+                    cp->replaceUsesWith(cp0);
+                    bb->remove(ip);
+                    delete bb->next1;
+                    bb->next1 = nullptr;
+                    return;
                 }
             }
 
