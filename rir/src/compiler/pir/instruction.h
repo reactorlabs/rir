@@ -159,6 +159,7 @@ class Instruction : public Value {
 
     struct TypeFeedback {
         PirType type = PirType::optimistic();
+        rir::Code* srcCode = nullptr;
         Opcode* origin = nullptr;
     };
     TypeFeedback typeFeedback;
@@ -2085,7 +2086,7 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effects::Any(),
 
 class FLI(Assume, 2, Effect::TriggerDeopt) {
   public:
-    std::vector<Opcode*> feedbackOrigin;
+    std::vector<std::pair<rir::Code*, Opcode*>> feedbackOrigin;
     bool assumeTrue = true;
     Assume(Value* test, Value* checkpoint)
         : FixedLenInstruction(PirType::voyd(),

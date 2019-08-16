@@ -1800,8 +1800,10 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto reason = builder.CreateAlloca(t::DeoptReason);
                 builder.CreateStore(c(rec->reason.reason, 32),
                                     builder.CreateGEP(reason, {c(0), c(0)}));
-                builder.CreateStore(convertToPointer(rec->reason.origin),
+                builder.CreateStore(convertToPointer(rec->reason.srcCode),
                                     builder.CreateGEP(reason, {c(0), c(1)}));
+                builder.CreateStore(c(rec->reason.originOffset),
+                                    builder.CreateGEP(reason, {c(0), c(2)}));
                 call(NativeBuiltins::recordDeopt,
                      {loadSxp(rec->arg<0>().val()), reason});
                 break;

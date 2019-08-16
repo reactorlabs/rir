@@ -361,11 +361,21 @@ void checkUserInterrupt() {
 }
 
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
-    if (reason.reason == DeoptReason::Typecheck) {
-        Opcode* pos = reason.origin;
+    Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
+    switch (reason.reason) {
+    case DeoptReason::Typecheck: {
         assert(*pos == Opcode::record_type_);
         ObservedValues* feedback = (ObservedValues*)(pos + 1);
         feedback->record(val);
+        break;
+    }
+    case DeoptReason::Calltarget: {
+        assert(*pos == Opcode::record_call_);
+        ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
+        feedback->record(reason.srcCode, val);
+        assert(feedback->taken > 0);
+        break;
+    }
     }
 }
 

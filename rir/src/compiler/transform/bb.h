@@ -29,9 +29,11 @@ class BBTransform {
                            const std::string& debugMesage);
     static void insertAssume(Value* condition, Checkpoint* cp, BB* bb,
                              BB::Instrs::iterator& position,
-                             bool assumePositive, Opcode* origin = nullptr);
+                             bool assumePositive, rir::Code* srcCode = nullptr,
+                             Opcode* origin = nullptr);
     static void insertAssume(Value* condition, Checkpoint* cp,
-                             bool assumePositive, Opcode* origin = nullptr);
+                             bool assumePositive, rir::Code* srcCode = nullptr,
+                             Opcode* origin = nullptr);
 
     static void mergeRedundantBBs(Code* closure);
 

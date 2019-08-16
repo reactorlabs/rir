@@ -575,7 +575,8 @@ void BC::print(std::ostream& out) const {
     }
     case Opcode::record_deopt_: {
         out << immediate.deoptReason.reason << " @ "
-            << immediate.deoptReason.origin;
+            << immediate.deoptReason.srcCode << "+"
+            << immediate.deoptReason.originOffset;
         break;
     }
     case Opcode::popn_:

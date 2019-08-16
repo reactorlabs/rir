@@ -107,7 +107,7 @@ int initializeTypes(LLVMContext& context) {
     t::RCNTXT->setBody(fields);
 
     t::DeoptReason = StructType::create(context, "DeoptReason");
-    fields = {t::i32, t::voidPtr};
+    fields = {t::i32, t::voidPtr, t::i32};
     t::DeoptReason->setBody(fields, true);
 
 #define DECLARE(name, ret, ...)                                                \
