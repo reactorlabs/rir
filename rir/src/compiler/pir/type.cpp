@@ -90,10 +90,14 @@ static PirType::Type parseBaseType(const std::string& inp, bool& isRType) {
 PirType PirType::parse(const std::string& inp) {
     std::string s = inp;
     FlagSet flags = FlagSet(TypeFlags::maybeNotScalar) | TypeFlags::maybeObject;
+    bool maybeMiss = false;
     while (true) {
         char suf = s[s.size() - 1];
         bool hasFlag = true;
         switch (suf) {
+        case '?':
+            maybeMiss = true;
+            break;
         case '$':
             flags.reset(TypeFlags::maybeNotScalar);
             break;
@@ -115,10 +119,15 @@ PirType PirType::parse(const std::string& inp) {
         s = s.substr(0, s.size() - 1);
     }
     bool isRType = true;
-    ;
     Type base = parseBaseType(s, isRType);
     if (isRType)
         flags.set(TypeFlags::rtype);
+    if (maybeMiss) {
+        if (isRType)
+            base.r.set(RType::missing);
+        else
+            Rf_error("couldn't parse pir type - native types can't be missing");
+    }
     return PirType(base, flags);
 }
 
