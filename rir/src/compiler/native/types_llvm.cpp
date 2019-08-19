@@ -106,6 +106,10 @@ int initializeTypes(LLVMContext& context) {
     };
     t::RCNTXT->setBody(fields);
 
+    t::DeoptReason = StructType::create(context, "DeoptReason");
+    fields = {t::i32, t::voidPtr, t::i32};
+    t::DeoptReason->setBody(fields, true);
+
 #define DECLARE(name, ret, ...)                                                \
     fields = {__VA_ARGS__};                                                    \
     t::name = FunctionType::get(ret, fields, false)
@@ -229,6 +233,9 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::endClosureContext.llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::RCNTXT_ptr, t::SEXP}, false);
 
+    NativeBuiltins::recordDeopt.llvmSignature = llvm::FunctionType::get(
+        t::t_void, {t::SEXP, PointerType::get(t::DeoptReason, 0)}, false);
+
     return 1;
 }
 
@@ -261,6 +268,8 @@ PointerType* VECTOR_SEXPREC_ptr;
 
 StructType* RCNTXT;
 PointerType* RCNTXT_ptr;
+
+StructType* DeoptReason;
 
 Type* t_void;
 Type* voidPtr;

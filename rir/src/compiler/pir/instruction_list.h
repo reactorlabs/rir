@@ -89,6 +89,7 @@
     V(Visible)                                                                 \
     V(Invisible)                                                               \
     V(PirCopy)                                                                 \
+    V(RecordDeoptReason)                                                       \
     V(Nop)
 
 #endif

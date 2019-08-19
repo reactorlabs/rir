@@ -166,6 +166,7 @@ class BC {
         ObservedValues typeFeedback;
         PoolAndCachePositionRange poolAndCache;
         CachePositionRange cacheIdx;
+        DeoptReason deoptReason;
         ImmediateArguments() {
             memset(reinterpret_cast<void*>(this), 0,
                    sizeof(ImmediateArguments));
@@ -342,6 +343,7 @@ BC_NOARGS(V, _)
     inline static BC recordCall();
     inline static BC recordBinop();
     inline static BC recordType();
+    inline static BC recordDeopt(const DeoptReason& reason);
     inline static BC popn(unsigned n);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
@@ -648,6 +650,9 @@ BC_NOARGS(V, _)
         case Opcode::static_call_:
             memcpy(reinterpret_cast<void*>(&immediate.staticCallFixedArgs), pc,
                    sizeof(StaticCallFixedArgs));
+            break;
+        case Opcode::record_deopt_:
+            memcpy(&immediate.deoptReason, pc, sizeof(DeoptReason));
             break;
         case Opcode::guard_fun_:
             memcpy(&immediate.guard_fun_args, pc, sizeof(GuardFunArgs));

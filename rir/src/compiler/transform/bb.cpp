@@ -158,7 +158,7 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
-                             Value* condition, bool expected, BB* deoptBlock,
+                             Assume* assume, bool condition, BB* deoptBlock,
                              const std::string& debugMessage) {
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
 
@@ -181,8 +181,46 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         deoptBlock = debug;
     }
 
-    src->replace(position, new Branch(condition));
-    if (expected) {
+    if (!assume->feedbackOrigin.empty()) {
+        BB* record = new BB(code, code->nextBBId++);
+        for (auto& origin : assume->feedbackOrigin) {
+            Value* src = nullptr;
+            auto cond = assume->condition();
+            auto r = DeoptReason::Typecheck;
+            if (auto t = IsObject::Cast(cond)) {
+                src = t->arg<0>().val();
+            } else if (auto t = IsType::Cast(cond)) {
+                src = t->arg<0>().val();
+            } else if (auto t = Identical::Cast(cond)) {
+                src = t->arg<0>().val();
+                if (LdConst::Cast(src))
+                    src = t->arg<0>().val();
+                assert(!LdConst::Cast(src));
+                r = DeoptReason::Calltarget;
+            } else if (IsEnvStub::Cast(cond)) {
+                // TODO
+            } else {
+                if (auto c = Instruction::Cast(cond))
+                    c->print(std::cerr);
+                assert(src && "Don't know how to report deopt reason");
+            }
+            if (src) {
+                auto offset =
+                    (uintptr_t)origin.second - (uintptr_t)origin.first;
+                auto o = *((Opcode*)origin.first + offset);
+                assert(o == Opcode::record_call_ || o == Opcode::record_type_);
+                assert((uintptr_t)origin.second > (uintptr_t)origin.first);
+                auto rec = new RecordDeoptReason(
+                    {r, origin.first, (uint32_t)offset}, src);
+                record->append(rec);
+            }
+        }
+        record->setNext(deoptBlock);
+        deoptBlock = record;
+    }
+
+    src->replace(position, new Branch(assume->condition()));
+    if (condition) {
         src->next1 = deoptBlock;
         src->next0 = split;
     } else {
@@ -197,9 +235,14 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
 void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
                                BB::Instrs::iterator& position,
-                               bool assumePositive) {
+                               bool assumePositive, rir::Code* srcCode,
+                               Opcode* origin) {
     position = bb->insert(position, (Instruction*)condition);
     auto assume = new Assume(condition, cp);
+    if (srcCode) {
+        assert(origin);
+        assume->feedbackOrigin.push_back({srcCode, origin});
+    }
     if (!assumePositive)
         assume->Not();
     position = bb->insert(position + 1, assume);
@@ -207,10 +250,12 @@ void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
 };
 
 void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
-                               bool assumePositive) {
+                               bool assumePositive, rir::Code* srcCode,
+                               Opcode* origin) {
     auto contBB = cp->bb()->trueBranch();
     auto contBegin = contBB->begin();
-    insertAssume(condition, cp, contBB, contBegin, assumePositive);
+    insertAssume(condition, cp, contBB, contBegin, assumePositive, srcCode,
+                 origin);
 }
 
 void BBTransform::mergeRedundantBBs(Code* closure) {

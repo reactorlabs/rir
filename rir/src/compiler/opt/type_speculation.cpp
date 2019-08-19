@@ -16,7 +16,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
     AvailableCheckpoints checkpoint(function, log);
 
-    std::unordered_map<Checkpoint*, std::unordered_map<Instruction*, PirType>>
+    std::unordered_map<
+        Checkpoint*,
+        std::unordered_map<Instruction*, Instruction::TypeFeedback>>
         speculate;
 
     Visitor::run(function->entry, [&](BB* bb) {
@@ -25,9 +27,10 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
             auto i = *ip;
             bool trigger = false;
-            if (!i->type.maybePromiseWrapped() && !i->typeFeedback.isVoid() &&
-                !i->type.isA(i->typeFeedback) &&
-                !(i->type & i->typeFeedback).isVoid()) {
+            if (!i->type.maybePromiseWrapped() &&
+                !i->typeFeedback.type.isVoid() &&
+                !i->type.isA(i->typeFeedback.type) &&
+                !(i->type & i->typeFeedback.type).isVoid()) {
                 switch (i->tag) {
                 case Tag::Force: {
                     auto arg = i->arg(0).val()->followCasts();
@@ -45,17 +48,13 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     if (auto ld = LdVarSuper::Cast(arg))
                         if (!Env::isPirEnv(ld->env()))
                             trigger = true;
-                    if (i->arg(0).val()->typeFeedback.orPromiseWrapped() ==
-                            i->typeFeedback.orPromiseWrapped() &&
-                        Instruction::Cast(i->arg(0).val()))
-                        i = Instruction::Cast(i->arg(0).val());
                     break;
                 }
                 default: {}
                 }
             }
             if (trigger) {
-                PirType seen = i->typeFeedback;
+                PirType seen = i->typeFeedback.type;
                 if (!seen.isVoid() && !seen.maybeObj() && !i->type.isA(seen)) {
                     if (auto cp = checkpoint.next(i)) {
                         auto assume =
@@ -65,9 +64,10 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                                 ? seen
                                 : i->type.notObject();
                         if (!i->type.isA(assume))
-                            speculate[cp][i] = assume;
+                            speculate[cp][i] = {assume, i->typeFeedback.srcCode,
+                                                i->typeFeedback.origin};
                         // Prevent redundant speculation
-                        i->typeFeedback = i->type;
+                        i->typeFeedback.type = PirType::bottom();
                     }
                 }
             }
@@ -89,7 +89,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
         for (auto sp : speculate[cp]) {
             auto i = sp.first;
-            PirType type = sp.second;
+            PirType type = sp.second.type;
 
             Instruction* condition = nullptr;
             bool assumeTrue = true;
@@ -100,7 +100,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             } else {
                 condition = new IsType(type, i);
             }
-            BBTransform::insertAssume(condition, cp, bb, ip, assumeTrue);
+
+            BBTransform::insertAssume(condition, cp, bb, ip, assumeTrue,
+                                      sp.second.srcCode, sp.second.origin);
 
             auto cast =
                 new CastType(i, CastType::Downcast, PirType::any(), type);

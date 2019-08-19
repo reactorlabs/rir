@@ -6,10 +6,15 @@
 #include "../util/cfg.h"
 
 namespace rir {
+
+enum class Opcode : uint8_t;
+
 namespace pir {
 
 class FrameState;
 class Checkpoint;
+class Assume;
+
 class BBTransform {
   public:
     static BB* clone(BB* src, Code* target, ClosureVersion* targetClosure);
@@ -19,14 +24,16 @@ class BBTransform {
     static void splitCriticalEdges(Code* fun);
     static std::pair<Value*, BB*> forInline(BB* inlinee, BB* cont);
     static BB* lowerExpect(Code* closure, BB* src,
-                           BB::Instrs::iterator position, Value* condition,
-                           bool expected, BB* deoptBlock,
+                           BB::Instrs::iterator position, Assume* assume,
+                           bool condition, BB* deoptBlock,
                            const std::string& debugMesage);
     static void insertAssume(Value* condition, Checkpoint* cp, BB* bb,
                              BB::Instrs::iterator& position,
-                             bool assumePositive);
+                             bool assumePositive, rir::Code* srcCode = nullptr,
+                             Opcode* origin = nullptr);
     static void insertAssume(Value* condition, Checkpoint* cp,
-                             bool assumePositive);
+                             bool assumePositive, rir::Code* srcCode = nullptr,
+                             Opcode* origin = nullptr);
 
     static void mergeRedundantBBs(Code* closure);
 

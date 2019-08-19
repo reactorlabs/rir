@@ -266,13 +266,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::ldfun_: {
         auto ld = insert(new LdFun(bc.immediateConst(), env));
-        if (!inPromise()) {
-            auto n = BC::next(pos);
-            if (*n == Opcode::record_call_) {
-                auto cp = addCheckpoint(srcCode, pos, stack, insert);
-                callTargetFeedback[ld].first = cp;
-            }
-        }
+        // Add early checkpoint for efficient speculative inlining. The goal is
+        // to be able do move the ldfun into the deoptbranch later.
+        if (!inPromise())
+            std::get<Checkpoint*>(callTargetFeedback[ld]) =
+                addCheckpoint(srcCode, pos, stack, insert);
         push(ld);
         break;
     }
@@ -321,29 +319,37 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::record_type_: {
         if (bc.immediate.typeFeedback.numTypes) {
             auto feedback = bc.immediate.typeFeedback;
-            at(0)->typeFeedback.merge(feedback);
-
-            // TODO: This does not work, if there are multiple force
-            // instructions, then the second one will see an already evaluated
-            // promise and it will always mark the input as already evaluated...
-            // We need to do this differently. if (auto force =
-            // Force::Cast(at(0))) {
-            //     auto arg = force->arg(0).val();
-            //     if (feedback.stateBeforeLastForce ==
-            //         ObservedValues::StateBeforeLastForce::value)
-            //         arg->typeFeedback = at(0)->typeFeedback;
-            //     else if (feedback.stateBeforeLastForce ==
-            //              ObservedValues::StateBeforeLastForce::evaluatedPromise)
-            //         arg->typeFeedback =
-            //         at(0)->typeFeedback.orPromiseWrapped();
-            // }
+            if (auto i = Instruction::Cast(at(0))) {
+                // TODO: deal with multiple locations
+                i->typeFeedback.type.merge(feedback);
+                i->typeFeedback.srcCode = srcCode;
+                i->typeFeedback.origin = pos;
+            }
         }
         break;
     }
 
     case Opcode::record_call_: {
         Value* target = top();
-        callTargetFeedback[target].second = bc.immediate.callFeedback;
+
+        auto feedback = bc.immediate.callFeedback;
+
+        // If this call was never executed. Might as well compile an
+        // unconditional deopt.
+        if (!inPromise() && feedback.taken == 0 &&
+            srcCode->funInvocationCount > 1) {
+            auto sp = insert.registerFrameState(srcCode, pos, stack);
+            auto offset = (uintptr_t)pos - (uintptr_t)srcCode;
+            DeoptReason reason = {DeoptReason::Calltarget, srcCode,
+                                  (uint32_t)offset};
+            insert(new RecordDeoptReason(reason, target));
+            insert(new Deopt(sp));
+            stack.clear();
+        } else {
+            std::get<ObservedCallees>(callTargetFeedback[target]) =
+                bc.immediate.callFeedback;
+            std::get<Opcode*>(callTargetFeedback[target]) = pos;
+        }
         break;
     }
 
@@ -388,35 +394,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // TODO: Deopts in promises are not supported by the promise inliner. So
         // currently it does not pay off to put any deopts in there.
         if (!inPromise() && callTargetFeedback.count(callee)) {
-            auto& feedback = callTargetFeedback.at(callee).second;
-            // If this call was never executed. Might as well compile an
-            // unconditional deopt. We do this by converting the checkpoint at
-            // the ldfun into a goto to the deopt branch.
-            // (We cannot deopt later, ie. at the current position, because then
-            // we would not record the new call target in the baseline and might
-            // end up in a deopt-loop)
-            if (feedback.taken == 0 && srcCode->funInvocationCount > 1) {
-                if (auto cp = callTargetFeedback.at(callee).first) {
-                    auto before = cp->bb();
-                    auto deoptBB = cp->deoptBranch();
-                    auto now = cp->nextBB();
-                    assert(now == insert.getCurrentBB());
-
-                    before->next0 = deoptBB;
-                    before->next1 = nullptr;
-                    before->remove(before->end() - 1);
-
-                    delete now;
-
-                    stack.clear();
-                    insert.reenterBB(deoptBB);
-                    break;
-                }
-            }
-
-            if (feedback.taken > 1 && feedback.numTargets == 1) {
+            auto& feedback =
+                std::get<ObservedCallees>(callTargetFeedback.at(callee));
+            if (feedback.taken > 1 && feedback.numTargets == 1)
                 monomorphic = feedback.getTarget(srcCode, 0);
-            }
         }
 
         bool monomorphicClosure =
@@ -462,10 +443,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // keep the ldfun in this case.
             // TODO: Implement this with a dependency on the binding cell
             // instead of an eager check.
-            auto cp = callTargetFeedback.at(callee).first;
-            if (!cp) {
+            auto cp = std::get<Checkpoint*>(callTargetFeedback.at(callee));
+            if (!cp)
                 cp = addCheckpoint(srcCode, pos, stack, insert);
-            }
+
             auto bb = cp->nextBB();
             auto pos = bb->begin();
 
@@ -486,6 +467,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             pos++;
 
             assumption = new Assume(t, cp);
+            assumption->feedbackOrigin.push_back(
+                {srcCode, std::get<Opcode*>(callTargetFeedback.at(callee))});
             bb->insert(pos, assumption);
         }
 
@@ -887,6 +870,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
     case Opcode::assert_type_:
+    case Opcode::record_deopt_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
