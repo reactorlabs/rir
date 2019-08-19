@@ -11,7 +11,7 @@ namespace pir {
 
 // Remember to update ClosureSignatureFlag::LAST
 #define LIST_OF_CLOSURE_SIGNATURE_FLAGS(V)                                     \
-    V(Strict)                                                                  \
+    V(NoSuperAssign)                                                           \
     V(NoReflection)
 
 enum class ClosureSignatureFlag {
@@ -19,7 +19,7 @@ enum class ClosureSignatureFlag {
     LIST_OF_CLOSURE_SIGNATURE_FLAGS(V)
 #undef V
 
-        FIRST = Strict,
+        FIRST = NoSuperAssign,
     LAST = NoReflection
 };
 

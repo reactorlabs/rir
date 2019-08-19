@@ -84,17 +84,22 @@ pir.check <- function(f, ..., warmup=NULL) {
 }
 
 # creates a bitset which represents a ClosureSignature in RIR
-rir.mkSignature <- function(Strict=FALSE,
-                         NoReflection=FALSE,
-                         sig=NULL) {
+rir.mkSignature <- function(NoSuperAssign=FALSE,
+                            NoReflection=FALSE,
+                            type=NULL) {
     # !!!  This head of the list of arguments *must* be exactly equal to the            !!!
     # !!!  LIST_OF_CLOSURE_SIGNATURE_FLAGS in compiler/pir/closure_signature.h  !!!
     .Call(
         "rir_mkSignature",
-        Strict,
+        NoSuperAssign,
         NoReflection,
-        sig
+        type
     )
+}
+
+# gets closure's signature - the closure must already be compiled (useful for testing)
+rir.signature <- function(cls) {
+    .Call("rir_signature", cls)
 }
 
 # set closure's signature - takes the signature value directly

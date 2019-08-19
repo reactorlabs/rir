@@ -427,6 +427,15 @@ REXPORT SEXP rir_mkSignature(
     return res;
 }
 
+REXPORT SEXP rir_signature(SEXP cls) {
+    if (!isValidClosureSEXP(cls) || !DispatchTable::check(BODY(cls)))
+        Rf_error("first argument must be a RIR compiled closure");
+    auto body = DispatchTable::check(BODY(cls));
+    SEXP res = Rf_allocVector(RAWSXP, sizeof(pir::ClosureSignature));
+    memcpy(DATAPTR(res), &body->signature, sizeof(pir::ClosureSignature));
+    return res;
+}
+
 REXPORT SEXP rir_setSignature(SEXP cls, SEXP signature) {
     if (!isValidClosureSEXP(cls) || !DispatchTable::check(BODY(cls)))
         Rf_error("first argument must be a RIR compiled closure");
