@@ -1,14 +1,14 @@
-#include "signature.h"
+#include "type_signature.h"
 #include <regex>
 
 namespace rir {
 namespace pir {
 
-PirSignature PirSignature::any() { return PirSignature(Form::Any); }
+TypeSignature TypeSignature::any() { return TypeSignature(Form::Any); }
 
-PirSignature PirSignature::nothing() { return PirSignature(Form::Nothing); }
+TypeSignature TypeSignature::nothing() { return TypeSignature(Form::Nothing); }
 
-PirSignature PirSignature::parse(const std::string& inp) {
+TypeSignature TypeSignature::parse(const std::string& inp) {
     auto fail = []() {
         Rf_error("couldn't parse PIR signature: must be of the form <type>* -> "
                  "<type>");
@@ -30,21 +30,21 @@ PirSignature PirSignature::parse(const std::string& inp) {
     if (!argsInp.empty())
         fail();
 
-    return PirSignature(argTypes, retType);
+    return TypeSignature(argTypes, retType);
 }
 
-PirSignature::PirSignature(std::vector<PirType> argsVec, PirType result)
+TypeSignature::TypeSignature(std::vector<PirType> argsVec, PirType result)
     : form(Form::Regular), args(), numArgs(argsVec.size()), result(result) {
-    if (argsVec.size() >= PirSignature::MAX_NUM_ARGS) {
+    if (argsVec.size() >= TypeSignature::MAX_NUM_ARGS) {
         Rf_error("pir signatures can only take up to %d args",
-                 PirSignature::MAX_NUM_ARGS);
+                 TypeSignature::MAX_NUM_ARGS);
     }
     for (unsigned i = 0; i < argsVec.size(); i++) {
         args[i] = argsVec[i];
     }
 }
 
-bool PirSignature::accepts(std::vector<PirType> inArgs) const {
+bool TypeSignature::accepts(std::vector<PirType> inArgs) const {
     switch (form) {
     case Form::Regular:
         if (numArgs != inArgs.size())
@@ -66,21 +66,21 @@ bool PirSignature::accepts(std::vector<PirType> inArgs) const {
     }
 }
 
-PirSignature PirSignature::operator|(const PirSignature& other) const {
+TypeSignature TypeSignature::operator|(const TypeSignature& other) const {
     if (isAny() || other.isNothing())
         return other;
     else if (isNothing() || other.isAny())
         return *this;
     else if (numArgs != other.numArgs)
-        return PirSignature::nothing();
+        return TypeSignature::nothing();
     std::vector<PirType> resArgs;
     for (unsigned i = 0; i < numArgs; i++) {
         resArgs.push_back(args[i] & other.args[i]);
     }
-    return PirSignature(resArgs, result | other.result);
+    return TypeSignature(resArgs, result | other.result);
 }
 
-void PirSignature::print(std::ostream& out) const {
+void TypeSignature::print(std::ostream& out) const {
     switch (form) {
     case Form::Regular:
         for (unsigned i = 0; i < numArgs; i++) {
@@ -101,7 +101,7 @@ void PirSignature::print(std::ostream& out) const {
     }
 }
 
-std::ostream& operator<<(std::ostream& out, const PirSignature& s) {
+std::ostream& operator<<(std::ostream& out, const TypeSignature& s) {
     s.print(out);
     return out;
 }

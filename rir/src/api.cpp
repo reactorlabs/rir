@@ -10,7 +10,7 @@
 #include "R/Serialize.h"
 #include "compiler/native/lower.h"
 #include "compiler/parameter.h"
-#include "compiler/pir/closure_augment.h"
+#include "compiler/pir/closure_signature.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "compiler/translations/pir_2_rir/pir_2_rir.h"
@@ -57,7 +57,7 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
         Rf_error("Not a rir compiled code");
 
     std::cout << "* closure " << what << " (vtable " << t << ", env "
-              << CLOENV(what) << ")\n  augments: " << t->augments << "\n";
+              << CLOENV(what) << ")\n  signature: " << t->signature << "\n";
     for (size_t entry = 0; entry < t->size(); ++entry) {
         Function* f = t->get(entry);
         std::cout << "= vtable slot <" << entry << "> (" << f << ", invoked "
@@ -399,42 +399,42 @@ REXPORT SEXP rir_deserialize(SEXP fileSexp) {
     return res;
 }
 
-static pir::PirSignature parsePirSignature(SEXP sigSexp) {
+static pir::TypeSignature parseTypeSignature(SEXP sigSexp) {
     // TODO: Valid format checks
     if (sigSexp == R_NilValue)
-        return pir::PirSignature::any();
+        return pir::TypeSignature::any();
     if (TYPEOF(sigSexp) != STRSXP)
         Rf_error("can't parse pir signature - must be a string");
-    return pir::PirSignature::parse(CHAR(Rf_asChar(sigSexp)));
+    return pir::TypeSignature::parse(CHAR(Rf_asChar(sigSexp)));
 }
 
-REXPORT SEXP rir_mkAugments(
+REXPORT SEXP rir_mkSignature(
 #define V(n) SEXP n##Sexp,
-    LIST_OF_CLOSURE_AUGMENTS(V)
+    LIST_OF_CLOSURE_SIGNATURE_FLAGS(V)
 #undef V
         SEXP sigSexp) {
-    pir::ClosureAugments augments;
+    pir::ClosureSignature signature;
 
 #define V(n)                                                                   \
     if (Rf_asLogical(n##Sexp))                                                 \
-        augments.set(pir::ClosureAugment::n);
-    LIST_OF_CLOSURE_AUGMENTS(V)
+        signature.set(pir::ClosureSignatureFlag::n);
+    LIST_OF_CLOSURE_SIGNATURE_FLAGS(V)
 #undef V
 
-    augments.signature = parsePirSignature(sigSexp);
-    SEXP res = Rf_allocVector(RAWSXP, sizeof(pir::ClosureAugments));
-    memcpy(DATAPTR(res), (void*)&augments, sizeof(pir::ClosureAugments));
+    signature.type = parseTypeSignature(sigSexp);
+    SEXP res = Rf_allocVector(RAWSXP, sizeof(pir::ClosureSignature));
+    memcpy(DATAPTR(res), (void*)&signature, sizeof(pir::ClosureSignature));
     return res;
 }
 
-REXPORT SEXP rir_setAugments(SEXP cls, SEXP augments) {
+REXPORT SEXP rir_setSignature(SEXP cls, SEXP signature) {
     if (!isValidClosureSEXP(cls) || !DispatchTable::check(BODY(cls)))
         Rf_error("first argument must be a RIR compiled closure");
-    if (TYPEOF(augments) != RAWSXP ||
-        Rf_length(augments) != sizeof(pir::ClosureAugments))
-        Rf_error("second argument must be created by rir.mkAugments");
+    if (TYPEOF(signature) != RAWSXP ||
+        Rf_length(signature) != sizeof(pir::ClosureSignature))
+        Rf_error("second argument must be created by rir.mkSignature");
     auto body = DispatchTable::check(BODY(cls));
-    memcpy(&body->augments, DATAPTR(augments), sizeof(pir::ClosureAugments));
+    memcpy(&body->signature, DATAPTR(signature), sizeof(pir::ClosureSignature));
     R_Visible = (Rboolean) false;
     return R_NilValue;
 }

@@ -26,6 +26,6 @@ extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Assumptions&,
                                     SEXP name);
 REXPORT SEXP rir_serialize(SEXP data, SEXP file);
 REXPORT SEXP rir_deserialize(SEXP file);
-REXPORT SEXP rir_setAugments(SEXP closure, SEXP augments);
+REXPORT SEXP rir_setSignature(SEXP closure, SEXP signature);
 
 #endif // API_H_

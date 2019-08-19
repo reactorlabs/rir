@@ -1087,7 +1087,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             inner << (pos - srcCode->code());
 
             compiler.compileFunction(
-                function, inner.str(), formals, srcRef, dt->augments,
+                function, inner.str(), formals, srcRef, dt->signature,
                 [&](ClosureVersion* innerF) {
                     cur.stack.push(
                         insert(new MkFunCls(innerF->owner(), dt, insert.env)));

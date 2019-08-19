@@ -9,7 +9,7 @@ namespace pir {
 /**
  * A function signature for PIR function assertions.
  */
-class PirSignature {
+class TypeSignature {
     enum class Form { Regular, Any, Nothing };
 
     static const unsigned MAX_NUM_ARGS = 4;
@@ -19,23 +19,23 @@ class PirSignature {
     unsigned numArgs;
     PirType result;
 
-    explicit PirSignature(Form form)
+    explicit TypeSignature(Form form)
         : form(form), args(), numArgs((unsigned)-1), result() {}
 
   public:
-    static PirSignature any();
-    static PirSignature nothing();
-    static PirSignature parse(const std::string& inp);
+    static TypeSignature any();
+    static TypeSignature nothing();
+    static TypeSignature parse(const std::string& inp);
 
-    PirSignature(std::vector<PirType> args, PirType result);
+    TypeSignature(std::vector<PirType> args, PirType result);
     bool accepts(std::vector<PirType> inArgs) const;
     bool isAny() const { return form == Form::Any; }
     bool isNothing() const { return form == Form::Nothing; }
-    PirSignature operator|(const PirSignature& other) const;
+    TypeSignature operator|(const TypeSignature& other) const;
     void print(std::ostream& out) const;
 };
 
-std::ostream& operator<<(std::ostream& out, const PirSignature& sig);
+std::ostream& operator<<(std::ostream& out, const TypeSignature& sig);
 
 } // namespace pir
 } // namespace rir

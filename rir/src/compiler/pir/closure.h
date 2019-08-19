@@ -2,7 +2,7 @@
 #define COMPILER_CLOSURE_H
 
 #include "../../runtime/Function.h"
-#include "closure_augment.h"
+#include "closure_signature.h"
 #include "code.h"
 #include "optimization_context.h"
 #include "pir.h"
@@ -28,9 +28,9 @@ class Closure {
     friend class Module;
 
     Closure(const std::string& name, rir::Function* function, SEXP formals,
-            SEXP srcRef, const ClosureAugments& augments);
+            SEXP srcRef, const ClosureSignature& signature);
     Closure(const std::string& name, SEXP closure, rir::Function* function,
-            Env* env, const ClosureAugments& augments);
+            Env* env, const ClosureSignature& signature);
 
     void invariant() const;
 
@@ -40,7 +40,7 @@ class Closure {
     SEXP srcRef_;
     const std::string name_;
     const FormalArgs formals_;
-    ClosureAugments augments;
+    ClosureSignature signature;
 
     std::map<const OptimizationContext, ClosureVersion*> versions;
 

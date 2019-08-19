@@ -7,16 +7,16 @@ namespace rir {
 namespace pir {
 
 Closure::Closure(const std::string& name, rir::Function* function, SEXP formals,
-                 SEXP srcRef, const ClosureAugments& augments)
+                 SEXP srcRef, const ClosureSignature& signature)
     : origin_(nullptr), function(function), env(Env::notClosed()),
-      srcRef_(srcRef), name_(name), formals_(formals), augments(augments) {
+      srcRef_(srcRef), name_(name), formals_(formals), signature(signature) {
     invariant();
 }
 
 Closure::Closure(const std::string& name, SEXP closure, rir::Function* f,
-                 Env* env, const ClosureAugments& augments)
+                 Env* env, const ClosureSignature& signature)
     : origin_(closure), function(f), env(env), name_(name),
-      formals_(FORMALS(closure)), augments(augments) {
+      formals_(FORMALS(closure)), signature(signature) {
 
     static SEXP srcRefSymbol = Rf_install("srcref");
     srcRef_ = Rf_getAttrib(closure, srcRefSymbol);
@@ -68,7 +68,7 @@ Closure::declareVersion(const OptimizationContext& optimizationContext) {
     assert(!versions.count(optimizationContext));
     versions[optimizationContext] = nullptr;
     auto entry = versions.find(optimizationContext);
-    auto v = new ClosureVersion(this, entry->first, augments);
+    auto v = new ClosureVersion(this, entry->first, signature);
     entry->second = v;
     return v;
 }

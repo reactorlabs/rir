@@ -3,7 +3,7 @@
 
 #include "../../../utils/FormalArgs.h"
 #include "../../debugging/stream_logger.h"
-#include "../../pir/closure_augment.h"
+#include "../../pir/closure_signature.h"
 #include "../rir_compiler.h"
 #include <stack>
 
@@ -31,13 +31,13 @@ class Rir2PirCompiler : public RirCompiler {
                         MaybeCls success, Maybe fail);
     void compileFunction(rir::Function* f, const std::string& name,
                          SEXP formals, SEXP srcRef,
-                         const ClosureAugments& augments, MaybeCls success,
+                         const ClosureSignature& signature, MaybeCls success,
                          Maybe fail) {
-        compileFunction(f, name, formals, srcRef, augments, defaultAssumptions,
+        compileFunction(f, name, formals, srcRef, signature, defaultAssumptions,
                         success, fail);
     }
     void compileFunction(rir::Function*, const std::string& name, SEXP formals,
-                         SEXP srcRef, const ClosureAugments& augments,
+                         SEXP srcRef, const ClosureSignature& signature,
                          const Assumptions& ctx, MaybeCls success, Maybe fail);
     void optimizeModule();
 

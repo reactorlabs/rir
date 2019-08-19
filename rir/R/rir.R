@@ -83,29 +83,29 @@ pir.check <- function(f, ..., warmup=NULL) {
     res
 }
 
-# creates a bitset which represents a ClosureAugment in RIR
-rir.mkAugments <- function(Strict=FALSE,
+# creates a bitset which represents a ClosureSignature in RIR
+rir.mkSignature <- function(Strict=FALSE,
                          NoReflection=FALSE,
                          sig=NULL) {
-    # !!!  This list of arguments *must* be exactly equal to the            !!!
-    # !!!  LIST_OF_CLOSURE_AUGMENTS in compiler/pir/closure_augments.h  !!!
+    # !!!  This head of the list of arguments *must* be exactly equal to the            !!!
+    # !!!  LIST_OF_CLOSURE_SIGNATURE_FLAGS in compiler/pir/closure_signature.h  !!!
     .Call(
-        "rir_mkAugments",
+        "rir_mkSignature",
         Strict,
         NoReflection,
         sig
     )
 }
 
-# set closure augments - takes the augment set directly
-rir.setAugments <- function(cls, props) {
-    .Call("rir_setAugments", cls, props)
+# set closure's signature - takes the signature value directly
+rir.setSignatureExplicit <- function(cls, props) {
+    .Call("rir_setSignature", cls, props)
 }
 
-# set closure augments - these affect closure behavior, adding assertions and optimizations
-rir.augment <- function(cls, ...) {
+# set closure's signature - a signature adds assertions to the closure and can trigger additional optimizations
+rir.setSignature <- function(cls, ...) {
     rir.compile(cls)
-    rir.setAugments(cls, rir.mkAugments(...))
+    rir.setSignatureExplicit(cls, rir.mkSignature(...))
 }
 
 # creates a bitset with pir debug options
