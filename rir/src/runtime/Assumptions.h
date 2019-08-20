@@ -59,10 +59,10 @@ struct Assumptions {
         // Silences unused warning:
         (void)unused;
         (void)unused2;
-        memcpy(this, pos, sizeof(*this));
+        memcpy((void*)this, pos, sizeof(*this));
     }
     explicit Assumptions(unsigned long val) {
-        memcpy(this, &val, sizeof(*this));
+        memcpy((void*)this, &val, sizeof(*this));
     }
 
     unsigned long toI() {
