@@ -57,7 +57,7 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
         Rf_error("Not a rir compiled code");
 
     std::cout << "* closure " << what << " (vtable " << t << ", env "
-              << CLOENV(what) << ")\n  signature: " << t->signature << "\n";
+              << CLOENV(what) << ")\n  signature: " << t->signature() << "\n";
     for (size_t entry = 0; entry < t->size(); ++entry) {
         Function* f = t->get(entry);
         std::cout << "= vtable slot <" << entry << "> (" << f << ", invoked "
@@ -432,7 +432,7 @@ REXPORT SEXP rir_signature(SEXP cls) {
         Rf_error("first argument must be a RIR compiled closure");
     auto body = DispatchTable::check(BODY(cls));
     SEXP res = Rf_allocVector(RAWSXP, sizeof(pir::ClosureSignature));
-    memcpy(DATAPTR(res), &body->signature, sizeof(pir::ClosureSignature));
+    *(pir::ClosureSignature*)DATAPTR(res) = body->signature();
     return res;
 }
 
@@ -443,7 +443,7 @@ REXPORT SEXP rir_setSignature(SEXP cls, SEXP signature) {
         Rf_length(signature) != sizeof(pir::ClosureSignature))
         Rf_error("second argument must be created by rir.mkSignature");
     auto body = DispatchTable::check(BODY(cls));
-    memcpy(&body->signature, DATAPTR(signature), sizeof(pir::ClosureSignature));
+    body->setSignature(*(pir::ClosureSignature*)DATAPTR(signature));
     R_Visible = (Rboolean) false;
     return R_NilValue;
 }

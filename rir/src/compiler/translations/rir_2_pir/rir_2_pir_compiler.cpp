@@ -44,7 +44,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
         }
     }
     auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun,
-                                                     tbl->signature);
+                                                     tbl->signature());
     OptimizationContext context(assumptions);
     compileClosure(pirClosure, context, success, fail);
 }

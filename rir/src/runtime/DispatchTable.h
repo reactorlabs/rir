@@ -20,8 +20,6 @@ typedef SEXP DispatchTableEntry;
 #pragma pack(1)
 struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
-    pir::ClosureSignature signature;
-
     size_t size() const { return size_; }
 
     Function* get(size_t i) const {
@@ -61,6 +59,14 @@ struct DispatchTable
         }
         setEntry(i, nullptr);
         size_--;
+    }
+
+    void clear() {
+        for (size_t i = 1; i < size(); i++) {
+            get(i)->dead = true;
+            setEntry(i, nullptr);
+        }
+        size_ = 1;
     }
 
     // insert function ordered by increasing number of assumptions
@@ -141,7 +147,7 @@ struct DispatchTable
             table->setEntry(i,
                             Function::deserialize(refTable, inp)->container());
         }
-        InBytes(inp, &table->signature, sizeof(pir::ClosureSignature));
+        InBytes(inp, &table->signature_, sizeof(pir::ClosureSignature));
         UNPROTECT(1);
         return table;
     }
@@ -152,7 +158,18 @@ struct DispatchTable
         for (size_t i = 0; i < size(); i++) {
             get(i)->serialize(refTable, out);
         }
-        OutBytes(out, &signature, sizeof(pir::ClosureSignature));
+        OutBytes(out, &signature_, sizeof(pir::ClosureSignature));
+    }
+
+    const pir::ClosureSignature& signature() { return signature_; }
+
+    void setSignature(const pir::ClosureSignature& sig) {
+        if (size() != 1) {
+            Rf_warning("changing a PIR-compiled closure's signature: will "
+                       "remove the old PIR versions");
+            clear();
+        }
+        signature_ = sig;
     }
 
   private:
@@ -165,6 +182,7 @@ struct DispatchTable
               cap) {}
 
     size_t size_ = 0;
+    pir::ClosureSignature signature_;
 };
 #pragma pack(pop)
 } // namespace rir
