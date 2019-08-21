@@ -80,4 +80,9 @@ LibExtern AccuracyInfo R_AccuracyInfo;
 
 extern int R_PPStackTop;
 
+typedef struct RPRSTACK {
+    SEXP promise;
+    struct RPRSTACK* next;
+} RPRSTACK;
+
 #endif

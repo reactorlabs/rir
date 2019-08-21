@@ -17,7 +17,7 @@ namespace pir {
 
 static SEXP forcePromiseImpl(SEXP prom) {
     SLOWASSERT(TYPEOF(prom) == PROMSXP);
-    return forcePromise(prom);
+    return rirForcePromise(prom, globalContext());
 }
 static jit_type_t sxp1[1] = {sxp};
 static jit_type_t sxp2[2] = {sxp, sxp};

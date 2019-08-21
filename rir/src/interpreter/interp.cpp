@@ -143,7 +143,7 @@ static RIR_INLINE SEXP promiseValue(SEXP promise, InterpreterInstance* ctx) {
         assert(TYPEOF(promise) != PROMSXP);
         return promise;
     } else {
-        SEXP res = forcePromise(promise);
+        SEXP res = rirForcePromise(promise, ctx);
         assert(TYPEOF(res) != PROMSXP && "promise returned promise");
         return res;
     }
@@ -239,7 +239,7 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
         SEXP arg = ostack_at_cell(args + i);
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
-            arg = forcePromise(arg);
+            arg = rirForcePromise(arg, ctx);
         }
         // This is to ensure we pass named arguments to GNU-R builtins because
         // who knows what assumptions does GNU-R do??? We SHOULD test this.

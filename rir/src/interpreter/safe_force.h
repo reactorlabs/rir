@@ -1,6 +1,7 @@
 #ifndef RIR_SAFE_FORCE_H
 #define RIR_SAFE_FORCE_H
 
+#include "interp_incl.h"
 #include <R/r.h>
 
 namespace rir {
@@ -10,6 +11,8 @@ namespace rir {
 SEXP safeEval(SEXP e, SEXP rho);
 // Will try to evaluate the promise if it definitely doesn't cause side effects
 SEXP safeForcePromise(SEXP e);
+
+SEXP rirForcePromise(SEXP e, InterpreterInstance* ctx);
 
 } // namespace rir
 
