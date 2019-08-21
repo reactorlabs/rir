@@ -11,7 +11,8 @@ namespace pir {
 bool taintsEnvironment(Instruction* i) {
     // For these instructions we test later they don't change the particular
     // binding
-    if (StVar::Cast(i) || StVarSuper::Cast(i) || MkEnv::Cast(i))
+    if (StVar::Cast(i) || StVarSuper::Cast(i) || MkEnv::Cast(i) ||
+        LdFun::Cast(i))
         return false;
 
     /*If there is a force for the load, and we can prove the loop does not
@@ -31,18 +32,23 @@ bool taintsEnvironment(Instruction* i) {
         }
     }
 
-    if (i->changesEnv()) {
-        std::cout << "change env:";
+    /*if (i->changesEnv()) {
+        std::cout << "change env: ";
         i->print(std::cout);
-    }
+    }*/
     return i->changesEnv();
 }
 
 bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
     for (auto bb : loop) {
-        for (auto instruction : *bb) {
-            if (taintsEnvironment(instruction))
-                return false;
+        if (!bb->isDeopt()) {
+            for (auto instruction : *bb) {
+                if (taintsEnvironment(instruction)) {
+                    /*instruction->print(std::cout);
+                    std::cout << "   taints environment\n";*/
+                    return false;
+                }
+            }
         }
     }
     return true;
@@ -95,16 +101,18 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
         binding = ldVar->varName;
     }
 
-    while (current != nullptr && found != nullptr) {
+    while (current != nullptr && found == nullptr) {
         auto it = current->rbegin();
         while (it != current->rend()) {
             auto currentInst = *it;
+
             SEXP otherBinding = nullptr;
             if (auto ldFun = LdFun::Cast(currentInst)) {
-                binding = ldFun->varName;
+                otherBinding = ldFun->varName;
             } else if (auto ldVar = LdVar::Cast(currentInst)) {
-                binding = ldVar->varName;
+                otherBinding = ldVar->varName;
             }
+
             if (currentInst->tag == instruction->tag &&
                 binding == otherBinding &&
                 instruction->env() == currentInst->env()) {
@@ -115,7 +123,10 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
             }
             it++;
         }
-        current = dom.immediateDominator(current);
+        if (dom.hasImmediateDominator(current))
+            current = dom.immediateDominator(current);
+        else
+            break;
     }
 
     if (found != nullptr) {
@@ -124,11 +135,12 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
                 taintsEnvironment(instruction))
                 return false;
         }
+        instruction->replaceUsesWith(found);
+        instruction->bb()->remove(instruction);
+        return true;
     }
 
-    instruction->replaceUsesWith(found);
-    instruction->bb()->remove(instruction);
-    return true;
+    return false;
 }
 
 void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
@@ -139,12 +151,9 @@ void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
     for (auto& loop : loops) {
         std::unordered_map<Instruction*, BB*> loads;
         BB* targetBB = loop.preheader(cfg);
-        std::cout << "entre";
-        targetBB->print(std::cout, false);
-        loop.print(std::cout, false);
-        std::cout << isSafeToHoistLoads(loop);
-        std::cout << "\n";
         auto safeToHoist = false;
+        /*loop.print(std::cout, false);
+        std::cout << "is safe " << isSafeToHoistLoads(loop);*/
         if (targetBB && isSafeToHoistLoads(loop)) {
             safeToHoist = true;
             for (auto bb : loop) {
@@ -160,10 +169,12 @@ void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
                         binding = ldVar->varName;
                     }
 
-                    if (binding && !loopOverwritesBinding(loop, binding))
-                        loads.emplace(i, bb);
-                    else
-                        safeToHoist = false;
+                    if (binding) {
+                        if (!loopOverwritesBinding(loop, binding))
+                            loads.emplace(i, bb);
+                        else
+                            safeToHoist = false;
+                    }
 
                     ip = next;
                 }
@@ -175,7 +186,8 @@ void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
             for (auto loadAndBB : loads) {
                 auto load = loadAndBB.first;
                 auto bb = loadAndBB.second;
-                // This should be the case if loop peeling succeded
+                // The replacement should happen in the case the loop was
+                // previously peeled
                 if (!replaceWithOuterLoopEquivalent(load, dom, targetBB)) {
                     bb->moveToEnd(bb->atPosition(load), targetBB);
                 }

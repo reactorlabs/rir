@@ -52,6 +52,7 @@ class DominanceGraph {
     bool dominates(BB* a, BB* b) const;
     bool immediatelyDominates(BB* a, BB* b) const;
 
+    bool hasImmediateDominator(BB* bb) const;
     BB* immediateDominator(BB*) const;
     const BBList& dominators(BB*) const;
     void dominatorTreeNext(BB* bb, const std::function<void(BB*)>&) const;

@@ -46,6 +46,14 @@ stopifnot(pir.check(
   }, LdVarVectorInFirstBB, warmup=function(f) f()))
 rir.enableLoopPeeling()
 
+stopifnot(
+  pir.check(function() {
+      for (i in 1:5) {
+          a <- c(1)
+      }
+      a
+  }, OneLdFun))
+
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
 stopifnot(pir.check(function(x = 4) {
   print("PIR does support default args")
