@@ -35,7 +35,6 @@ stopifnot(pir.check(
 
 # This checks that loop-invariant hoisting is working, but it's a bit brittle,
 # and it requires loop peeling to be disabled.
-rir.disableLoopPeeling()
 stopifnot(pir.check(
   f <- function(){
     j <- 0
@@ -43,8 +42,8 @@ stopifnot(pir.check(
       vector("integer",0)
       j <- j + 1
     }
-  }, LdVarVectorInFirstBB, warmup=function(f) f()))
-rir.enableLoopPeeling()
+  }, OneLdVar, warmup=function(f) f()))
+
 
 stopifnot(
   pir.check(function() {

@@ -125,6 +125,15 @@ static bool testOneEq(ClosureVersion* f) {
     return numEqs == 1;
 }
 
+static bool testOneLdVar(ClosureVersion* f) {
+    int numLdVar = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (LdVar::Cast(i))
+            numLdVar++;
+    });
+    return numLdVar == 1;
+}
+
 static bool testOneLdFun(ClosureVersion* f) {
     int numLdFun = 0;
     Visitor::run(f->entry, [&](Instruction* i) {

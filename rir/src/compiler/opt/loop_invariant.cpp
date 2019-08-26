@@ -15,12 +15,6 @@ bool taintsEnvironment(Instruction* i) {
         LdFun::Cast(i))
         return false;
 
-    /*If there is a force for the load, and we can prove the loop does not
-    overload the binding, then the force is redudant*/
-    if (auto force = Force::Cast(i)) {
-        return LdVar::Cast(force->input()->followCastsAndForce()) == nullptr;
-    }
-
     if (auto call = CallBuiltin::Cast(i)) {
         if (SafeBuiltinsList::nonObject(call->builtinId)) {
             auto taints = false;
@@ -44,8 +38,6 @@ bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
         if (!bb->isDeopt()) {
             for (auto instruction : *bb) {
                 if (taintsEnvironment(instruction)) {
-                    /*instruction->print(std::cout);
-                    std::cout << "   taints environment\n";*/
                     return false;
                 }
             }
@@ -152,8 +144,6 @@ void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
         std::unordered_map<Instruction*, BB*> loads;
         BB* targetBB = loop.preheader(cfg);
         auto safeToHoist = false;
-        /*loop.print(std::cout, false);
-        std::cout << "is safe " << isSafeToHoistLoads(loop);*/
         if (targetBB && isSafeToHoistLoads(loop)) {
             safeToHoist = true;
             for (auto bb : loop) {
