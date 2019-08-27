@@ -52,11 +52,30 @@ struct AvailableAssumptions
 
 void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                                 LogStream& log) const {
-    CFG cfg(function);
+    {
+        CFG cfg(function);
+        Visitor::run(function->entry, [&](BB* bb) {
+            if (bb->isBranch()) {
+                if (auto cp = Checkpoint::Cast(bb->last())) {
+                    if (cfg.isMergeBlock(cp->nextBB())) {
+                        // Ensure that bb at the beginning of a loop has a bb
+                        // to hoist assumes out of the loop.
+                        auto preheader = new BB(function, function->nextBBId++);
+                        preheader->setNext(cp->nextBB());
+                        assert(cp->nextBB() == bb->next0);
+                        bb->next0 = preheader;
+                    }
+                }
+            }
+        });
+    }
+
     AvailableCheckpoints checkpoint(function, log);
     AvailableAssumptions assumptions(function, log);
     std::unordered_map<Checkpoint*, Checkpoint*> replaced;
 
+    std::unordered_map<Instruction*, std::pair<Instruction*, Checkpoint*>>
+        hoistAssume;
     Visitor::runPostChange(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -68,18 +87,16 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
             // next checkpoint available we might as well remove this one.
             if (auto cp = Checkpoint::Cast(instr)) {
                 if (auto cp0 = checkpoint.at(instr)) {
-                    if (checkpoint.next(instr)) {
-                        while (replaced.count(cp0))
-                            cp0 = replaced.at(cp0);
-                        replaced[cp] = cp0;
+                    while (replaced.count(cp0))
+                        cp0 = replaced.at(cp0);
+                    replaced[cp] = cp0;
 
-                        assert(bb->last() == instr);
-                        cp->replaceUsesWith(cp0);
-                        bb->remove(ip);
-                        delete bb->next1;
-                        bb->next1 = nullptr;
-                        return;
-                    }
+                    assert(bb->last() == instr);
+                    cp->replaceUsesWith(cp0);
+                    bb->remove(ip);
+                    delete bb->next1;
+                    bb->next1 = nullptr;
+                    return;
                 }
             }
 
@@ -101,9 +118,34 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                         if (assume->checkpoint() != cp0)
                             assume->checkpoint(cp0);
                     }
+                    auto guard = Instruction::Cast(assume->condition());
+                    auto cp = assume->checkpoint();
+                    if (guard && guard->bb() != cp->bb()) {
+                        if (auto cp0 = checkpoint.at(guard)) {
+                            while (replaced.count(cp0))
+                                cp0 = replaced.at(cp0);
+                            if (assume->checkpoint() != cp0) {
+                                hoistAssume[guard] = {guard, cp0};
+                                next = bb->remove(ip);
+                            }
+                        }
+                    }
                 }
             }
             ip = next;
+        }
+    });
+
+    Visitor::run(function->entry, [&](BB* bb) {
+        auto ip = bb->begin();
+        while (ip != bb->end()) {
+            auto h = hoistAssume.find(*ip);
+            if (h != hoistAssume.end()) {
+                auto g = h->second;
+                ip++;
+                ip = bb->insert(ip, new Assume(g.first, g.second));
+            }
+            ip++;
         }
     });
 }

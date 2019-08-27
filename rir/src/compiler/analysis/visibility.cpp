@@ -7,7 +7,14 @@ namespace pir {
 AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
                                          Instruction* i) const {
     AbstractResult res;
-    if (i->effects.contains(Effect::Visibility)) {
+    if (Deopt::Cast(i)) {
+        // There is a dependency cycle:
+        //   Deopt observes visibility <=> visibility keeps checkpoint alive
+        // In case of deopt we risk getting visibility wrong, so let's not
+        // bother here either.
+        vis.observable.clear();
+        res.update();
+    } else if (i->effects.contains(Effect::Visibility)) {
         switch (i->visibilityFlag()) {
         case VisibilityFlag::On:
         case VisibilityFlag::Off:
