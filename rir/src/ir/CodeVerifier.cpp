@@ -185,6 +185,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
     case Opcode::assert_type_:
+    case Opcode::check_global_cache_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

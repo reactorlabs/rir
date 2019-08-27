@@ -555,4 +555,11 @@ DEF_INSTR(printInvocation_, 0, 0, 0, 0)
  */
 DEF_INSTR(assert_type_, 3, 1, 1, 1)
 
+/*
+ * check_global_cache_ :: stores a local version number for the global cache.
+ * Pushes a boolean indicating if that version matches the current version,
+ * and if not, updates the local version.
+ */
+DEF_INSTR(check_global_cache_, 2, 0, 1, 1)
+
 #undef DEF_INSTR

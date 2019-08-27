@@ -383,6 +383,12 @@ BC BC::assertType(pir::PirType typ, SignedImmediate instr) {
     return BC(Opcode::assert_type_, i);
 }
 
+BC BC::checkGlobalCache() {
+    ImmediateArguments i;
+    i.cacheVersion = 0;
+    return BC(Opcode::check_global_cache_, i);
+}
+
 } // namespace rir
 
 #endif

@@ -3238,6 +3238,7 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Extract1_2D:
             case Tag::Subassign1_2D:
             case Tag::Subassign2_2D:
+            case Tag::CheckGlobalCache:
                 success = false;
                 break;
 
