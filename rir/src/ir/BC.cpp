@@ -10,6 +10,7 @@
 #include "R/RList.h"
 #include "R/Serialize.h"
 #include "R/r.h"
+#include "interpreter/global_cache.h"
 
 namespace rir {
 
@@ -139,6 +140,10 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.assertTypeArgs);
         return;
 
+    case Opcode::check_global_cache_:
+        cs.insert(immediate.cacheVersion);
+        return;
+
     case Opcode::invalid_:
     case Opcode::num_of:
         assert(false);
@@ -246,6 +251,9 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
                 i.assertTypeArgs.instr = Pool::insert(ReadItem(refTable, inp));
             else
                 i.assertTypeArgs.instr = -1;
+            break;
+        case Opcode::check_global_cache_:
+            i.cacheVersion = 0; // We must update
             break;
         case Opcode::record_deopt_:
         case Opcode::record_call_:
@@ -383,6 +391,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
                 WriteItem(Pool::get(i.assertTypeArgs.instr), refTable, out);
             }
             break;
+        case Opcode::check_global_cache_:
+            break; // We must update, discard version
         case Opcode::record_deopt_:
         case Opcode::record_call_:
         case Opcode::record_type_:
@@ -683,6 +693,10 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::assert_type_:
         out << immediate.assertTypeArgs.pirType();
+        break;
+    case Opcode::check_global_cache_:
+        out << immediate.cacheVersion << " (global: " << globalCacheVersion
+            << ")";
         break;
     }
     out << "\n";

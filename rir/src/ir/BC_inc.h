@@ -167,6 +167,7 @@ class BC {
         PoolAndCachePositionRange poolAndCache;
         CachePositionRange cacheIdx;
         DeoptReason deoptReason;
+        size_t cacheVersion;
         ImmediateArguments() {
             memset(reinterpret_cast<void*>(this), 0,
                    sizeof(ImmediateArguments));
@@ -402,6 +403,7 @@ BC_NOARGS(V, _)
                            SignedImmediate contextPos, bool stub);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
     inline static BC assertType(pir::PirType typ, SignedImmediate instr);
+    inline static BC checkGlobalCache();
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -703,6 +705,9 @@ BC_NOARGS(V, _)
             break;
         case Opcode::assert_type_:
             memcpy(&immediate.assertTypeArgs, pc, sizeof(AssertTypeArgs));
+            break;
+        case Opcode::check_global_cache_:
+            memcpy(&immediate.cacheVersion, pc, sizeof(size_t));
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

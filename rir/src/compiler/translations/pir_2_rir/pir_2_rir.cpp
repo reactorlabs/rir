@@ -566,6 +566,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             switch (instr->tag) {
 
+            case Tag::CheckGlobalCache: {
+                cb.add(BC::checkGlobalCache());
+                break;
+            }
+
             case Tag::RecordDeoptReason: {
                 cb.add(BC::recordDeopt(RecordDeoptReason::Cast(instr)->reason));
                 break;

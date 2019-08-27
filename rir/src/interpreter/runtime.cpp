@@ -1,4 +1,5 @@
 #include "api.h"
+#include "global_cache.h"
 #include "interp.h"
 
 #include <iomanip>
@@ -37,7 +38,7 @@ void initializeRuntime() {
     globalContext_ = context_create();
     registerExternalCode(rirEval_f, rirApplyClosure, rir_compile, rirDecompile,
                          deserializeRir, serializeRir, materialize,
-                         keepAliveSEXPs);
+                         keepAliveSEXPs, invalidateGlobalCache);
 }
 
 InterpreterInstance* globalContext() { return globalContext_; }

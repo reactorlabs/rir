@@ -1608,6 +1608,12 @@ class FLI(Length, 1, Effects::None()) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
+class FLI(CheckGlobalCache, 0, Effects::None()) {
+  public:
+    explicit CheckGlobalCache(Value* v)
+        : FixedLenInstruction(NativeType::test, {{}}, {{}}) {}
+};
+
 struct RirStack {
   private:
     typedef std::deque<Value*> Stack;

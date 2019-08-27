@@ -8,6 +8,7 @@
 #include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "event_counters.h"
+#include "global_cache.h"
 #include "ir/Deoptimization.h"
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
@@ -3795,6 +3796,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 std::cout << "\n";
                 assert(false);
             }
+            NEXT();
+        }
+
+        INSTRUCTION(check_global_cache_) {
+            size_t* versionRef = (size_t*)pc;
+            bool invalid = *versionRef < globalCacheVersion;
+            if (invalid)
+                *versionRef = globalCacheVersion;
+            ostack_push(ctx, invalid ? R_FalseValue : R_TrueValue);
             NEXT();
         }
 
