@@ -102,6 +102,11 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     auto envOnlyForObj = [&](Instruction* i) {
         if (i->envOnlyForObj())
             return true;
+        // Subassign is not mark as envOnlyForObject because the environment is
+        // also needed to track error messages.
+        if (Subassign1_1D::Cast(i) || Subassign2_1D::Cast(i)) {
+            return true;
+        }
         if (auto blt = CallBuiltin::Cast(i))
             if (SafeBuiltinsList::nonObject(blt->blt))
                 return true;
