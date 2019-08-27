@@ -36,3 +36,4 @@ benchmarks/
 *.DS_Store
 external/llvm-8.0.0*
 external/clang+llvm-8.0.0*
+.history
