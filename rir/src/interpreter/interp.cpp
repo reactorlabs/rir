@@ -379,8 +379,6 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     }
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
                            const CallContext* callCtxt, Opcode* pc,
@@ -405,7 +403,6 @@ static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
     assert(res == loopTrampolineMarker);
     Rf_endcontext(&cntxt);
 }
-#pragma GCC diagnostic pop
 
 static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
                                     SEXP ast, SEXP sysparent, SEXP op,

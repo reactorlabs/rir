@@ -118,6 +118,7 @@ tests_fullverify:
     - cd /opt/rir/build/fullverifier
     - bin/tests
     - bin/gnur-make-tests check-devel
+    - ../../tools/check-gnur-make-tests-error
 
 # Test particular features, like deoptimization and serialization
 test_features:

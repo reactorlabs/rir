@@ -370,6 +370,7 @@ class LowerFunctionLLVM {
     llvm::Value* boxInt(llvm::Value* v, bool protect = true);
     llvm::Value* boxReal(llvm::Value* v, bool protect = true);
     llvm::Value* boxLgl(llvm::Value* v, bool protect = true);
+    llvm::Value* boxTst(llvm::Value* v, bool protect = true);
     llvm::Value* depromise(llvm::Value* arg);
     void insn_assert(llvm::Value* v, const char* msg);
 
@@ -686,7 +687,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
         else if (type.isA(PirType() | RType::logical))
             res = boxLgl(res);
         else if (type.isA(NativeType::test))
-            res = boxLgl(res);
+            res = boxTst(res);
         else if (type.isA(RType::real)) {
             res = boxReal(res);
         } else {
@@ -1239,6 +1240,7 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, BasicBlock* isNa,
         auto isNotNa = builder.CreateFCmpOEQ(v, v);
         br = builder.CreateCondBr(isNotNa, notNa, isNa);
     } else {
+        assert(v->getType() == t::Int);
         auto isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
         br = builder.CreateCondBr(isNotNa, notNa, isNa);
     }
@@ -1322,6 +1324,12 @@ llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v, bool protect) {
     assert(v->getType() == t::Double);
     return call(NativeBuiltins::newLglFromReal, {v});
 }
+llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v, bool protect) {
+    assert(v->getType() == t::Int);
+    return builder.CreateSelect(builder.CreateICmpNE(v, c(0)),
+                                constant(R_TrueValue, t::SEXP),
+                                constant(R_FalseValue, t::SEXP));
+}
 
 void LowerFunctionLLVM::protectTemp(llvm::Value* val) {
     assert(numTemps < MAX_TEMPS);
@@ -1381,7 +1389,7 @@ void LowerFunctionLLVM::compileRelop(
         return;
     }
 
-    BasicBlock* isNaBr = BasicBlock::Create(C, "isNa", fun);
+    auto isNaBr = BasicBlock::Create(C, "isNa", fun);
     auto done = BasicBlock::Create(C, "", fun);
 
     llvm::Value* res = builder.CreateAlloca(t::Int);
@@ -3284,7 +3292,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 variables.at(phi).update(builder, inp);
             }
 
-            if (variables.count(i) && representationOf(i) == t::SEXP) {
+            if (variables.count(i) && variables.at(i).initialized &&
+                representationOf(i) == t::SEXP) {
                 if (i->minReferenceCount() < 2 && needsSetShared.count(i))
                     ensureShared(loadSxp(i));
                 else if (i->minReferenceCount() < 1 &&

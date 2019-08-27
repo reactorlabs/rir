@@ -177,3 +177,38 @@ run <- function() {
 }
 
 run()
+findGeneric = function ()
+{
+  print("=======================================================================================");
+    f = as;
+    isUMEbrace <- function(e) {
+        for (ee in as.list(e[-1L])) if (nzchar(res <- isUME(ee))) 
+            return(res)
+        ""
+    }
+
+    isUMEif <- function(e) {
+        print("now")
+        if (length(e) == 3L)
+            isUME(e[[3L]])
+        else {
+            e[[4L]]
+            1
+        }
+    }
+
+    isUME <- function(e) {
+        if (is.call(e) && (is.name(e[[1L]]) || is.character(e[[1L]]))) {
+            switch(as.character(e[[1L]]), UseMethod = as.character(e[[2L]]), 
+                `{` = isUMEbrace(e), `if` = isUMEif(e), "")
+        }
+        else ""
+    }
+    isUME(body(f))
+}
+
+
+findGeneric()
+findGeneric()
+findGeneric()
+findGeneric()

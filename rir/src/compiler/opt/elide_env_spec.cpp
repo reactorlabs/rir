@@ -131,22 +131,22 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         // pass
                         auto argi = Instruction::Cast(arg);
                         assert(!arg->type.maybePromiseWrapped());
-                        PirType seen = PirType::bottom();
+                        Instruction::TypeFeedback seen;
                         if (argi)
-                            seen = argi->typeFeedback.type;
-                        if (seen.isVoid()) {
+                            seen = argi->typeFeedback;
+                        if (seen.type.isVoid()) {
                             if (auto j = Instruction::Cast(
                                     arg->followCastsAndForce()))
-                                seen = j->typeFeedback.type;
+                                seen = j->typeFeedback;
                         }
                         PirType resType;
                         Instruction* condition = nullptr;
                         bool assumeTrue = true;
-                        if (argi && !seen.isVoid() &&
-                            (seen.isA(RType::integer) ||
-                             seen.isA(RType::real))) {
-                            resType = seen;
-                            condition = new IsType(seen, arg);
+                        if (argi && !seen.type.isVoid() &&
+                            (seen.type.isA(RType::integer) ||
+                             seen.type.isA(RType::real))) {
+                            resType = seen.type;
+                            condition = new IsType(seen.type, arg);
                         } else {
                             condition = new IsObject(arg);
                             assumeTrue = false;
@@ -154,7 +154,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         }
 
                         BBTransform::insertAssume(condition, cp, bb, ip,
-                                                  assumeTrue);
+                                                  assumeTrue, seen.srcCode,
+                                                  seen.origin);
 
                         if (argi) {
                             auto cast = new CastType(argi, CastType::Downcast,
