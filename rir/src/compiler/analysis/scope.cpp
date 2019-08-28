@@ -84,6 +84,11 @@ void ScopeAnalysis::lookupAt(const ScopeAnalysisState& state,
             return;
         }
 
+        // This contains a get
+        if (auto chk = CheckVar::Cast(instr)) {
+            action(load(state, chk->varName, chk->env()));
+        }
+
         notFound();
     });
 }
@@ -181,6 +186,9 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         storeResult(res);
     } else if (auto ld = LdVarSuper::Cast(i)) {
         auto res = superLoad(state, ld->varName, ld->env());
+        storeResult(res);
+    } else if (auto chk = CheckVar::Cast(i)) {
+        auto res = load(state, chk->varName, chk->env());
         storeResult(res);
     } else if (auto s = StVar::Cast(i)) {
         state.envs.at(s->env()).set(s->varName, s->val(), s, depth);

@@ -8,7 +8,6 @@
 #include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "event_counters.h"
-#include "global_cache.h"
 #include "ir/Deoptimization.h"
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
@@ -822,6 +821,12 @@ class SlowcaseCounter {
 SlowcaseCounter SLOWCASE_COUNTER;
 #endif
 
+//#define DEBUG_CACHE
+#ifdef DEBUG_CACHE
+static size_t CACHE_SUCCESSES = 0;
+static size_t CACHE_FAILS = 0;
+#endif
+
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
     if (!call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
@@ -1530,6 +1535,44 @@ static size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     for (const auto& a : args)
         ostack_push(ctx, a);
     return args.size();
+}
+
+bool isIdenticalNoForce(SEXP lhs, SEXP rhs) {
+    // This instruction does not force, but we should still compare
+    // the actual promise value if it is already forced.
+    // Especially important since all the inlined functions are probably
+    // behind lazy loading stub promises.
+    if (TYPEOF(rhs) == PROMSXP && PRVALUE(rhs) != R_UnboundValue)
+        rhs = PRVALUE(rhs);
+    if (TYPEOF(lhs) == PROMSXP && PRVALUE(lhs) != R_UnboundValue)
+        lhs = PRVALUE(lhs);
+    // Special case for closures: (level 1) deep compare with body
+    // expression instead of body object, to ensure that a compiled
+    // closure is equal to the uncompiled one
+    if (lhs != rhs && TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP &&
+        CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
+        BODY_EXPR(lhs) == BODY_EXPR(rhs))
+        return true;
+    else
+        return rhs == lhs;
+}
+
+// Like findVar but changes rho to be the environment the value was found
+// (or EmptyEnv if unbound).
+SEXP findVarTrackEnv(SEXP sym, SEXP& rho) {
+    // From GNU-R findVar
+    SEXP vl;
+    if (TYPEOF(rho) == NILSXP)
+        Rf_error("use of NULL environment is defunct");
+    if (!isEnvironment(rho))
+        Rf_error("argument to '%s' is not an environment", "findVarTrackEnv");
+    while (rho != R_EmptyEnv) {
+        vl = findVarInFrame3(rho, sym, TRUE);
+        if (vl != R_UnboundValue)
+            return vl;
+        rho = ENCLOS(rho);
+    }
+    return R_UnboundValue;
 }
 
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
@@ -2787,24 +2830,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(identical_noforce_) {
             SEXP rhs = ostack_pop(ctx);
             SEXP lhs = ostack_pop(ctx);
-            // This instruction does not force, but we should still compare
-            // the actual promise value if it is already forced.
-            // Especially important since all the inlined functions are probably
-            // behind lazy loading stub promises.
-            if (TYPEOF(rhs) == PROMSXP && PRVALUE(rhs) != R_UnboundValue)
-                rhs = PRVALUE(rhs);
-            if (TYPEOF(lhs) == PROMSXP && PRVALUE(lhs) != R_UnboundValue)
-                lhs = PRVALUE(lhs);
-            // Special case for closures: (level 1) deep compare with body
-            // expression instead of body object, to ensure that a compiled
-            // closure is equal to the uncompiled one
-            if (lhs != rhs && TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP &&
-                CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
-                BODY_EXPR(lhs) == BODY_EXPR(rhs))
-                ostack_push(ctx, R_TrueValue);
-            else
-                ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
-
+            ostack_push(ctx, isIdenticalNoForce(lhs, rhs) ? R_TrueValue
+                                                          : R_FalseValue);
             NEXT();
         }
 
@@ -3802,12 +3829,62 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(check_global_cache_) {
+        INSTRUCTION(check_var_) {
             size_t* versionRef = (size_t*)pc;
-            bool invalid = *versionRef < globalCacheVersion;
-            if (invalid)
-                *versionRef = globalCacheVersion;
-            ostack_push(ctx, invalid ? R_FalseValue : R_TrueValue);
+#ifdef DEBUG_CACHE
+            std::cout << "## current=" << *versionRef
+                      << ", global=" << globalCacheVersion << " =>";
+#endif
+            bool cached = *versionRef >= globalCacheVersion;
+            if (cached) {
+#ifdef DEBUG_CACHE
+                std::cout << " use cached";
+                CACHE_SUCCESSES++;
+#endif
+                SLOWASSERT(*versionRef == globalCacheVersion);
+                pc += sizeof(size_t);
+                advanceImmediate();
+                advanceImmediate();
+                ostack_push(ctx, R_TrueValue);
+            } else {
+                pc += sizeof(size_t);
+                // Actually do the check:
+                SEXP expected = readConst(ctx, readImmediate());
+                advanceImmediate();
+                // - load variable (unbound / missing check is unnecessary)
+                SEXP sym = readConst(ctx, readImmediate());
+                advanceImmediate();
+                SEXP resEnv = env;
+                SEXP actual = findVarTrackEnv(sym, resEnv);
+                // - check identical
+                bool identical = isIdenticalNoForce(expected, actual);
+                // - check that the variable is in the global env
+                // (otherwise someone could've swapped an env with an identical
+                // closure,
+                //  and then later changed the closure in the swapped env,
+                //  although this is very unlikely)
+                bool envIsGlobal =
+                    (resEnv == R_GlobalEnv || resEnv == R_BaseNamespace ||
+                     resEnv == R_BaseEnv);
+                if (identical && envIsGlobal) {
+#ifdef DEBUG_CACHE
+                    std::cout << " update version";
+                    CACHE_FAILS++;
+#endif
+                    // Check succeeded - can update version
+                    *versionRef = globalCacheVersion;
+                    ostack_push(ctx, R_TrueValue);
+                } else {
+#ifdef DEBUG_CACHE
+                    std::cout << " fail";
+#endif
+                    ostack_push(ctx, R_FalseValue);
+                }
+            }
+#ifdef DEBUG_CACHE
+            std::cout << " (" << CACHE_SUCCESSES << " reuse vs. " << CACHE_FAILS
+                      << " update)\n";
+#endif
             NEXT();
         }
 

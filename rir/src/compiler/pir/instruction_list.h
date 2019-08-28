@@ -90,7 +90,7 @@
     V(Invisible)                                                               \
     V(PirCopy)                                                                 \
     V(RecordDeoptReason)                                                       \
-    V(CheckGlobalCache)                                                        \
+    V(CheckVar)                                                                \
     V(Nop)
 
 #endif

@@ -556,10 +556,14 @@ DEF_INSTR(printInvocation_, 0, 0, 0, 0)
 DEF_INSTR(assert_type_, 3, 1, 1, 1)
 
 /*
- * check_global_cache_ :: stores a local version number for the global cache.
- * Pushes a boolean indicating if that version matches the current version,
- * and if not, updates the local version.
+ * chkvar_:: load variable and check that it's identical to a local version,
+ * push the result. This instruction stores a global version number, so that it
+ * can skip the load/check if:
+ * 1. no new variables were defined in any environment
+ * 2. no new variables were set in the namespace or base environment
+ * 3. no environments changed parents (FIXME: Do this)
+ * 4. the variable was last found in the namespace or base environment
  */
-DEF_INSTR(check_global_cache_, 2, 0, 1, 1)
+DEF_INSTR(check_var_, 4, 0, 1, 1)
 
 #undef DEF_INSTR

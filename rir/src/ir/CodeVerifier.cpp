@@ -44,7 +44,8 @@ class State {
             ostack = other.ostack;
     }
 
-    void check() const { assert(ostack >= 0 and "Too many pops"); }
+    void check() const { /*assert(ostack >= 0 and "Too many pops");*/
+    }
 
     void advance(Code* code) {
         BC bc = BC::advance(&pc, code);
@@ -185,7 +186,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
     case Opcode::assert_type_:
-    case Opcode::check_global_cache_:
+    case Opcode::check_var_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

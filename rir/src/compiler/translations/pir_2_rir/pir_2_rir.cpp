@@ -566,8 +566,14 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             switch (instr->tag) {
 
-            case Tag::CheckGlobalCache: {
-                cb.add(BC::checkGlobalCache());
+            case Tag::CheckVar: {
+                auto chkVar = CheckVar::Cast(instr);
+                auto mkenv = MkEnv::Cast(chkVar->env());
+                if (mkenv && mkenv->stub) {
+                    assert(false && "TODO");
+                } else {
+                    cb.add(BC::checkVar(chkVar->expected, chkVar->varName));
+                }
                 break;
             }
 

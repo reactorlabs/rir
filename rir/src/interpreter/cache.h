@@ -28,6 +28,15 @@ static_assert((sizeof(BindingCache) +
                   0,
               "Cache should be cache line sized");
 
+extern size_t globalCacheVersion;
+
+static void invalidateGlobalCache(SEXP env, unsigned type) {
+    if ((type == 0 &&
+         (env == R_GlobalEnv || env == R_BaseNamespace || env == R_BaseEnv)) ||
+        type == 1)
+        globalCacheVersion++;
+}
+
 static RIR_INLINE void clearCache(BindingCache* cache) {
     memset(cache->entry, 0, sizeof(BindingCacheEntry) * cache->length);
 }
@@ -96,6 +105,7 @@ static void rirDefineVarWrapper(SEXP symbol, SEXP value, SEXP rho) {
 
     if (FRAME_IS_LOCKED(rho))
         Rf_error("cannot add bindings to a locked environment");
+    invalidateGlobalCache(rho, 0);
     PROTECT(value);
     INCREMENT_NAMED(value);
     SET_FRAME(rho, Rf_cons(value, FRAME(rho)));
@@ -180,6 +190,7 @@ static inline void rirSetVarWrapper(SEXP sym, SEXP val, SEXP env) {
                 ENSURE_NAMED(val);
                 return;
             }
+            invalidateGlobalCache(env, 1);
             INCREMENT_NAMED(val);
             SETCAR(loc.cell, val);
             SET_MISSING(loc.cell, 0);

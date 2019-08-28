@@ -139,6 +139,13 @@ class BC {
         CacheIdx start;
         unsigned size;
     };
+    struct CheckVarArgs {
+        size_t cacheVersion;
+        PoolIdx expected;
+        PoolIdx sym;
+    } __attribute__((packed));
+    static_assert(sizeof(CheckVarArgs) == sizeof(Immediate) * 4,
+                  "check_var_ size in insns.h is wrong");
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
@@ -167,7 +174,7 @@ class BC {
         PoolAndCachePositionRange poolAndCache;
         CachePositionRange cacheIdx;
         DeoptReason deoptReason;
-        size_t cacheVersion;
+        CheckVarArgs checkVarArgs;
         ImmediateArguments() {
             memset(reinterpret_cast<void*>(this), 0,
                    sizeof(ImmediateArguments));
@@ -403,7 +410,7 @@ BC_NOARGS(V, _)
                            SignedImmediate contextPos, bool stub);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
     inline static BC assertType(pir::PirType typ, SignedImmediate instr);
-    inline static BC checkGlobalCache();
+    inline static BC checkVar(SEXP expected, SEXP sym);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -706,8 +713,8 @@ BC_NOARGS(V, _)
         case Opcode::assert_type_:
             memcpy(&immediate.assertTypeArgs, pc, sizeof(AssertTypeArgs));
             break;
-        case Opcode::check_global_cache_:
-            memcpy(&immediate.cacheVersion, pc, sizeof(size_t));
+        case Opcode::check_var_:
+            memcpy(&immediate.checkVarArgs, pc, sizeof(CheckVarArgs));
             break;
         case Opcode::invalid_:
         case Opcode::num_of:
