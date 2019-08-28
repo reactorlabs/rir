@@ -1608,10 +1608,18 @@ class FLI(Length, 1, Effects::None()) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(CheckGlobalCache, 0, Effects::None()) {
+class FLIE(CheckVar, 1, Effect::ReadsEnv) {
   public:
-    explicit CheckGlobalCache(Value* v)
-        : FixedLenInstruction(NativeType::test, {{}}, {{}}) {}
+    SEXP expected;
+    SEXP varName;
+
+    CheckVar(SEXP expected_, SEXP name, Value* env)
+        : FixedLenInstructionWithEnvSlot(NativeType::test, env),
+          expected(expected_), varName(name) {
+        assert(TYPEOF(name) == SYMSXP);
+    }
+
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 struct RirStack {

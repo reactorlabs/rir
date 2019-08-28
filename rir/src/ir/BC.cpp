@@ -10,7 +10,7 @@
 #include "R/RList.h"
 #include "R/Serialize.h"
 #include "R/r.h"
-#include "interpreter/global_cache.h"
+#include "interpreter/cache.h"
 
 namespace rir {
 
@@ -140,8 +140,8 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.assertTypeArgs);
         return;
 
-    case Opcode::check_global_cache_:
-        cs.insert(immediate.cacheVersion);
+    case Opcode::check_var_:
+        cs.insert(immediate.checkVarArgs);
         return;
 
     case Opcode::invalid_:
@@ -252,8 +252,10 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             else
                 i.assertTypeArgs.instr = -1;
             break;
-        case Opcode::check_global_cache_:
-            i.cacheVersion = 0; // We must update
+        case Opcode::check_var_:
+            i.checkVarArgs.cacheVersion = 0; // We must update
+            i.checkVarArgs.expected = Pool::insert(ReadItem(refTable, inp));
+            i.checkVarArgs.sym = Pool::insert(ReadItem(refTable, inp));
             break;
         case Opcode::record_deopt_:
         case Opcode::record_call_:
@@ -391,8 +393,11 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
                 WriteItem(Pool::get(i.assertTypeArgs.instr), refTable, out);
             }
             break;
-        case Opcode::check_global_cache_:
-            break; // We must update, discard version
+        case Opcode::check_var_:
+            // We must update, discard version
+            WriteItem(Pool::get(i.checkVarArgs.expected), refTable, out);
+            WriteItem(Pool::get(i.checkVarArgs.sym), refTable, out);
+            break;
         case Opcode::record_deopt_:
         case Opcode::record_call_:
         case Opcode::record_type_:
@@ -694,9 +699,11 @@ void BC::print(std::ostream& out) const {
     case Opcode::assert_type_:
         out << immediate.assertTypeArgs.pirType();
         break;
-    case Opcode::check_global_cache_:
-        out << immediate.cacheVersion << " (global: " << globalCacheVersion
-            << ")";
+    case Opcode::check_var_:
+        out << immediate.checkVarArgs.expected << " =? "
+            << CHAR(PRINTNAME(Pool::get(immediate.checkVarArgs.sym)))
+            << " (cache: " << immediate.checkVarArgs.cacheVersion
+            << ", global: " << globalCacheVersion << ")";
         break;
     }
     out << "\n";

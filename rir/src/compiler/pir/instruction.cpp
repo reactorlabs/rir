@@ -463,6 +463,10 @@ void LdVar::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName)) << ", ";
 }
 
+void CheckVar::printArgs(std::ostream& out, bool tty) const {
+    out << expected << " =? " << CHAR(PRINTNAME(varName)) << ", ";
+}
+
 void LdFun::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName)) << ", ";
     if (guessedBinding()) {

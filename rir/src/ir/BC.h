@@ -383,10 +383,14 @@ BC BC::assertType(pir::PirType typ, SignedImmediate instr) {
     return BC(Opcode::assert_type_, i);
 }
 
-BC BC::checkGlobalCache() {
+BC BC::checkVar(SEXP expected, SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
-    i.cacheVersion = 0;
-    return BC(Opcode::check_global_cache_, i);
+    i.checkVarArgs.cacheVersion = 0;
+    i.checkVarArgs.expected = Pool::insert(expected);
+    i.checkVarArgs.sym = Pool::insert(sym);
+    return BC(Opcode::check_var_, i);
 }
 
 } // namespace rir

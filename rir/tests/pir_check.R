@@ -33,8 +33,6 @@ stopifnot(pir.check(
 
 # Copied / cross-validated from pir_tests
 
-# This checks that loop-invariant hoisting is working, but it's a bit brittle,
-# and it requires loop peeling to be disabled.
 stopifnot(pir.check(
   f <- function(){
     j <- 0
@@ -42,7 +40,7 @@ stopifnot(pir.check(
       vector("integer",0)
       j <- j + 1
     }
-  }, OneLdVar, warmup=function(f) f()))
+  }, OneCheckVar, warmup=function(f) f()))
 
 
 stopifnot(
@@ -51,7 +49,7 @@ stopifnot(
           a <- c(1)
       }
       a
-  }, OneLdFun))
+  }, OneCheckVar))
 
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
 stopifnot(pir.check(function(x = 4) {

@@ -1,5 +1,5 @@
 #include "api.h"
-#include "global_cache.h"
+#include "cache.h"
 #include "interp.h"
 
 #include <iomanip>

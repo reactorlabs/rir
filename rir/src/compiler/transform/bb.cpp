@@ -193,9 +193,10 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 src = t->arg<0>().val();
             } else if (auto t = Identical::Cast(cond)) {
                 src = t->arg<0>().val();
-                if (LdConst::Cast(src))
-                    src = t->arg<0>().val();
                 assert(!LdConst::Cast(src));
+                r = DeoptReason::Calltarget;
+            } else if (CheckVar::Cast(cond)) {
+                src = UnboundValue::instance();
                 r = DeoptReason::Calltarget;
             } else if (IsEnvStub::Cast(cond)) {
                 // TODO

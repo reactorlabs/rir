@@ -450,22 +450,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto bb = cp->nextBB();
             auto pos = bb->begin();
 
-            auto expected = new LdConst(monomorphic);
-            pos = bb->insert(pos, expected);
-            pos++;
-
-            Value* given = callee;
-            if (ldfun && ldfun->varName != symbol::c) {
-                auto ldvar = new LdVar(ldfun->varName, ldfun->env());
-                pos = bb->insert(pos, ldvar);
+            Instruction* t;
+            if (ldfun)
+                t = new CheckVar(monomorphic, ldfun->varName, ldfun->env());
+            else {
+                auto expected = new LdConst(monomorphic);
+                pos = bb->insert(pos, expected);
                 pos++;
-                given = ldvar;
+
+                Value* given = callee;
+                t = new Identical(given, expected);
             }
 
-            auto t = new Identical(given, expected);
             pos = bb->insert(pos, t);
             pos++;
-
             assumption = new Assume(t, cp);
             assumption->feedbackOrigin.push_back(
                 {srcCode, std::get<Opcode*>(callTargetFeedback.at(callee))});
@@ -871,7 +869,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::stvar_stubbed_:
     case Opcode::assert_type_:
     case Opcode::record_deopt_:
-    case Opcode::check_global_cache_:
+    case Opcode::check_var_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
