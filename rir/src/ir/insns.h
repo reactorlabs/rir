@@ -556,14 +556,13 @@ DEF_INSTR(printInvocation_, 0, 0, 0, 0)
 DEF_INSTR(assert_type_, 3, 1, 1, 1)
 
 /*
- * chkvar_:: load variable and check that it's identical to a local version,
- * push the result. This instruction stores a global version number, so that it
- * can skip the load/check if:
- * 1. no new variables were defined in any environment
- * 2. no new variables were set in the namespace or base environment
- * 3. no environments changed parents (FIXME: Do this)
- * 4. the variable was last found in the namespace or base environment
+ * check_var_:: load variable and check that it's identical to a local version,
+ * push the result. This instruction stores the versions and hash of each
+ * environment in the search path, so it can skip the load/check if:
+ * 1. the search path is the same
+ * 1. no new variables were defined in any environment above the last
+ * 2. no new variables were set in the last environment
  */
-DEF_INSTR(check_var_, 4, 0, 1, 1)
+DEF_INSTR(check_var_, 14, 0, 1, 1)
 
 #undef DEF_INSTR

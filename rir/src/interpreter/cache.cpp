@@ -2,7 +2,9 @@
 
 namespace rir {
 
-// Starts at 1 so cacheVersion = 0 is always invalid
-size_t globalCacheVersion = 1;
+unsigned baseCacheSetVersion = 0;
+unsigned baseCacheDefineVersion = 0;
+unsigned globalCacheSetVersion = 0;
+unsigned globalCacheDefineVersion = 0;
 
 } // namespace rir

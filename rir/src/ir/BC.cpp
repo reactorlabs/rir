@@ -253,9 +253,10 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
                 i.assertTypeArgs.instr = -1;
             break;
         case Opcode::check_var_:
-            i.checkVarArgs.cacheVersion = 0; // We must update
             i.checkVarArgs.expected = Pool::insert(ReadItem(refTable, inp));
             i.checkVarArgs.sym = Pool::insert(ReadItem(refTable, inp));
+            i.checkVarArgs.searchPath[0].env = NULL;
+            // We must update the search path
             break;
         case Opcode::record_deopt_:
         case Opcode::record_call_:
@@ -394,9 +395,9 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             }
             break;
         case Opcode::check_var_:
-            // We must update, discard version
             WriteItem(Pool::get(i.checkVarArgs.expected), refTable, out);
             WriteItem(Pool::get(i.checkVarArgs.sym), refTable, out);
+            // We must update, discard search path
             break;
         case Opcode::record_deopt_:
         case Opcode::record_call_:
@@ -701,9 +702,14 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::check_var_:
         out << immediate.checkVarArgs.expected << " =? "
-            << CHAR(PRINTNAME(Pool::get(immediate.checkVarArgs.sym)))
-            << " (cache: " << immediate.checkVarArgs.cacheVersion
-            << ", global: " << globalCacheVersion << ")";
+            << CHAR(PRINTNAME(Pool::get(immediate.checkVarArgs.sym))) << " [ ";
+        for (unsigned i = 0; i < MAX_SEARCH_PATH &&
+                             immediate.checkVarArgs.searchPath[i].env != NULL;
+             i++) {
+            const SearchPathEntry& entry = immediate.checkVarArgs.searchPath[i];
+            out << entry.env << "." << entry.version << " ";
+        }
+        out << "]";
         break;
     }
     out << "\n";

@@ -28,13 +28,47 @@ static_assert((sizeof(BindingCache) +
                   0,
               "Cache should be cache line sized");
 
-extern size_t globalCacheVersion;
+extern unsigned baseCacheSetVersion;
+extern unsigned baseCacheDefineVersion;
+extern unsigned globalCacheSetVersion;
+extern unsigned globalCacheDefineVersion;
 
-static void invalidateGlobalCache(SEXP env, unsigned type) {
-    if ((type == 0 &&
-         (env == R_GlobalEnv || env == R_BaseNamespace || env == R_BaseEnv)) ||
-        type == 1)
-        globalCacheVersion++;
+__attribute__((unused)) static unsigned getEnvVersion(SEXP env, unsigned type,
+                                                      unsigned& max) {
+    if (env == R_BaseEnv || env == R_BaseNamespace || env == R_GlobalEnv) {
+        max = UINT32_MAX;
+        return (env == R_BaseEnv || env == R_BaseNamespace)
+                   ? ((type == 0) ? baseCacheDefineVersion
+                                  : baseCacheSetVersion)
+                   : ((type == 0) ? globalCacheDefineVersion
+                                  : globalCacheSetVersion);
+    } else {
+        max = UINT8_MAX;
+        if (type == 0)
+            return (env->sxpinfo.extra & (UINT8_MAX << 8)) >> 8;
+        else
+            return env->sxpinfo.extra;
+    }
+}
+
+static void invalidateEnvCache(SEXP env, unsigned type) {
+    if (env == R_BaseEnv || env == R_BaseNamespace || env == R_GlobalEnv) {
+        unsigned& version =
+            (env == R_BaseEnv || env == R_BaseNamespace)
+                ? ((type == 0) ? baseCacheDefineVersion : baseCacheSetVersion)
+                : ((type == 0) ? globalCacheDefineVersion
+                               : globalCacheSetVersion);
+        if (version != UINT32_MAX)
+            version++;
+    } else {
+        if (type == 0) {
+            if ((env->sxpinfo.extra & (UINT8_MAX << 8)) != UINT8_MAX << 8)
+                env->sxpinfo.extra += 256;
+        } else {
+            if ((env->sxpinfo.extra & UINT8_MAX) != UINT8_MAX)
+                env->sxpinfo.extra++;
+        }
+    }
 }
 
 static RIR_INLINE void clearCache(BindingCache* cache) {
@@ -105,7 +139,7 @@ static void rirDefineVarWrapper(SEXP symbol, SEXP value, SEXP rho) {
 
     if (FRAME_IS_LOCKED(rho))
         Rf_error("cannot add bindings to a locked environment");
-    invalidateGlobalCache(rho, 0);
+    invalidateEnvCache(rho, 0);
     PROTECT(value);
     INCREMENT_NAMED(value);
     SET_FRAME(rho, Rf_cons(value, FRAME(rho)));
@@ -190,7 +224,7 @@ static inline void rirSetVarWrapper(SEXP sym, SEXP val, SEXP env) {
                 ENSURE_NAMED(val);
                 return;
             }
-            invalidateGlobalCache(env, 1);
+            invalidateEnvCache(env, 1);
             INCREMENT_NAMED(val);
             SETCAR(loc.cell, val);
             SET_MISSING(loc.cell, 0);
