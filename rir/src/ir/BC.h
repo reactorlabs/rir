@@ -387,9 +387,9 @@ BC BC::checkVar(SEXP expected, SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
-    i.checkVarArgs.cacheVersion = 0;
     i.checkVarArgs.expected = Pool::insert(expected);
     i.checkVarArgs.sym = Pool::insert(sym);
+    i.checkVarArgs.searchPath[0].env = NULL;
     return BC(Opcode::check_var_, i);
 }
 

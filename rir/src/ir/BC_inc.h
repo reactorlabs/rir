@@ -62,6 +62,12 @@ enum class Opcode : uint8_t {
     num_of
 };
 
+struct SearchPathEntry {
+    SEXP env;
+    unsigned version;
+} __attribute__((packed));
+static constexpr size_t MAX_SEARCH_PATH = 4;
+
 // ============================================================
 // ==== Creation and decoding of Bytecodes
 //
@@ -140,12 +146,12 @@ class BC {
         unsigned size;
     };
     struct CheckVarArgs {
-        size_t cacheVersion;
         PoolIdx expected;
         PoolIdx sym;
+        SearchPathEntry searchPath[MAX_SEARCH_PATH];
     } __attribute__((packed));
-    static_assert(sizeof(CheckVarArgs) == sizeof(Immediate) * 4,
-                  "check_var_ size in insns.h is wrong");
+    static_assert(sizeof(CheckVarArgs) == sizeof(Immediate) * 14,
+                  "update check_var_ size in insns.h");
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
@@ -444,6 +450,9 @@ BC_NOARGS(V, _)
     struct MkEnvExtraInformation : public ExtraInformation {
         std::vector<BC::PoolIdx> names;
     };
+    struct CheckVarExtraInformation : public ExtraInformation {
+        std::vector<SearchPathEntry> searchPath;
+    };
     std::unique_ptr<ExtraInformation> extraInformation = nullptr;
 
   public:
@@ -477,6 +486,13 @@ BC_NOARGS(V, _)
             extraInformation.get());
     }
 
+    CheckVarExtraInformation& checkVarExtra() const {
+        assert(bc == Opcode::check_var_ && "Not a check_var_ instruction");
+        assert(extraInformation.get() &&
+               "missing extra information. created through decodeShallow?");
+        return *static_cast<CheckVarExtraInformation*>(extraInformation.get());
+    }
+
   private:
     void allocExtraInformation() {
         assert(extraInformation == nullptr);
@@ -498,6 +514,9 @@ BC_NOARGS(V, _)
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
             extraInformation.reset(new MkEnvExtraInformation);
+            break;
+        case Opcode::check_var_:
+            extraInformation.reset(new CheckVarExtraInformation);
             break;
         }
         default: {}
@@ -528,7 +547,6 @@ BC_NOARGS(V, _)
                 mkEnvExtra().names.push_back(readImmediate(&pc));
             break;
         }
-
         case Opcode::record_call_: {
             // Read call target feedback from the extra pool
             for (size_t i = 0; i < immediate.callFeedback.numTargets; ++i)
