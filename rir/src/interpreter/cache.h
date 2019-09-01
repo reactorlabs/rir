@@ -52,14 +52,22 @@ __attribute__((unused)) static unsigned getEnvVersion(SEXP env, unsigned type,
 }
 
 static void invalidateEnvCache(SEXP env, unsigned type) {
-    if (env == R_BaseEnv || env == R_BaseNamespace || env == R_GlobalEnv) {
-        unsigned& version =
-            (env == R_BaseEnv || env == R_BaseNamespace)
-                ? ((type == 0) ? baseCacheDefineVersion : baseCacheSetVersion)
-                : ((type == 0) ? globalCacheDefineVersion
-                               : globalCacheSetVersion);
-        if (version != UINT32_MAX)
-            version++;
+    if (env == R_BaseEnv || env == R_BaseNamespace) {
+        if (type == 0) {
+            if (baseCacheDefineVersion != UINT32_MAX)
+                baseCacheDefineVersion++;
+        } else {
+            if (baseCacheSetVersion != UINT32_MAX)
+                baseCacheSetVersion++;
+        }
+    } else if (env == R_GlobalEnv) {
+        if (type == 0) {
+            if (globalCacheDefineVersion != UINT32_MAX)
+                globalCacheDefineVersion++;
+        } else {
+            if (globalCacheSetVersion != UINT32_MAX)
+                globalCacheSetVersion++;
+        }
     } else {
         if (type == 0) {
             if ((env->sxpinfo.extra & (UINT8_MAX << 8)) != UINT8_MAX << 8)
