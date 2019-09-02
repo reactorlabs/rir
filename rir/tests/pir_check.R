@@ -52,6 +52,7 @@ stopifnot(
       }
       a
   }, OneLdFun))
+<<<<<<< HEAD
 
 stopifnot(
   pir.check(function() {
@@ -61,6 +62,8 @@ stopifnot(
       }
       balls[[2]]
   }, OneLdFun, warmup=function(f) f()))  
+=======
+>>>>>>> eae6721b011302187a61fa11135ef3c465e745c2
 
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
 stopifnot(pir.check(function(x = 4) {
