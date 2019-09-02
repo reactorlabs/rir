@@ -3789,8 +3789,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             if (!typ.isInstance(val)) {
                 std::cerr << "type assert failed in:\n" << instr << "\n";
-                std::cerr << "type " << typ << " not accurate for value ("
-                          << pir::PirType(val) << "):\n";
+                std::cerr << "got " << pir::PirType(val) << " but expexted a "
+                          << typ << ":\n";
                 Rf_PrintValue(val);
                 std::cout << "\n";
                 assert(false);
