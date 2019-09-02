@@ -136,8 +136,11 @@ bool PirType::isInstance(SEXP val) const {
     if (isRType()) {
         if (TYPEOF(val) == PROMSXP) {
             assert(!Rf_isObject(val));
-            return maybePromiseWrapped() || maybeLazy() ||
-                   PirType(RType::prom).isA(*this);
+            if (maybePromiseWrapped() && !maybeLazy()) {
+                auto v = PRVALUE(val);
+                return v != R_UnboundValue && forced().isInstance(v);
+            }
+            return maybe(RType::prom) || (maybeLazy() && maybePromiseWrapped());
         }
         if (LazyEnvironment::check(val))
             return PirType(RType::env).isA(*this);
