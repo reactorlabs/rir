@@ -1554,38 +1554,6 @@ bool isIdenticalNoForce(SEXP lhs, SEXP rhs) {
         return rhs == lhs;
 }
 
-SEXP findVarUpdateCache(SEXP sym, SEXP rho, Opcode*& pc) {
-    // From GNU-R findVar
-    if (TYPEOF(rho) == NILSXP)
-        Rf_error("use of NULL environment is defunct");
-    if (!isEnvironment(rho))
-        Rf_error("argument to '%s' is not an environment", "findVarTrackEnv");
-    SEXP res = R_UnboundValue;
-    unsigned remainingSlots = MAX_SEARCH_PATH;
-    while (res == R_UnboundValue && rho != R_EmptyEnv) {
-        if (remainingSlots != 0) {
-            *((SEXP*)pc) = rho;
-            pc += sizeof(SEXP);
-        }
-        unsigned max;
-        res = findVarInFrame3(rho, sym, TRUE);
-        unsigned version =
-            getEnvVersion(rho, res == R_UnboundValue ? 0 : 1, max);
-        rho = ENCLOS(rho);
-        if (res == R_UnboundValue && remainingSlots == 1)
-            version = max;
-        if (remainingSlots != 0) {
-            *((unsigned*)pc) = version;
-            pc += sizeof(unsigned);
-            remainingSlots--;
-        }
-        if (res != R_UnboundValue && remainingSlots != 0)
-            *((SEXP*)pc) = NULL;
-    }
-    pc += remainingSlots * sizeof(SearchPathEntry);
-    return res;
-}
-
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  R_bcstack_t* localsBase, BindingCache* cache) {
@@ -3844,92 +3812,139 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             BC::PoolIdx expectedIdx = readImmediate();
             advanceImmediate();
             BC::PoolIdx symIdx = readImmediate();
+            SEXP sym = NULL;
             advanceImmediate();
 #ifdef DEBUG_CACHE
             std::cout << "check var";
 #endif
-            // This works as follows:
-            // - Check that the cached env / version match the corresponding
-            // real env / version,
-            //   until there are no cached envs left (remainingSlots == 0)
-            // - The last cached env MUST contain the variable, so if the real
-            // env and version match,
-            //   the real env contains the variable
-            // - If nextEnv == NULL then cenv is the last cached env, if cenv ==
-            // NULL then the check failed
+            // The general case works as follows:
+            // - Compare real vs. cached env and version.
+            //   1. If the real env or version is different, lookup the variable
+            //   and update the cache.
+            //   2. Otherwise, we can skip the lookup, we know that the variable
+            //   is either not in the env or same as before.
+            // - Repeat until we know the variable is in this env: either the
+            // variable was explicitly found, or we followed the cache and the
+            // next entry is NULL)
+            // - Check if the variable equals our static version
+            //   1. If the variable is unbound, we got to the target env and
+            //   reused its cache, so we can skip comparing
+            //   2. Otherwise we must compare. Furthermore, if it changed, we
+            //   invalidate the cache so 1) won't happen next time
+            // There are 2 edge cases:
+            // - If we run out of cache slots, then we must always lookup
+            // - If the version is too large, we can't increase or it would
+            // exceed storage, so we must always lookup
+            // - If we get to the empty env, then the variable was deleted, so
+            // the check fails
             unsigned remainingSlots = MAX_SEARCH_PATH;
             SEXP aenv = env;
-            SEXP cenv = *((SEXP*)pc);
-            SEXP nextCEnv;
-            do {
+            SEXP avalue;
+            while (true) {
+                avalue = R_UnboundValue;
+                bool pastCache = remainingSlots == 1;
+#ifdef DEBUG_CACHE
+                if (pastCache)
+                    std::cout << " past-cache";
+#endif
+                SEXP* cenvRef = (SEXP*)pc;
+#ifdef DEBUG_CACHE
+                std::cout << " -> " << *cenvRef << "/" << aenv;
+#endif
+                bool updateEntry = pastCache || *cenvRef != aenv;
+                if (updateEntry) {
+#ifdef DEBUG_CACHE
+                    std::cout << " update";
+#endif
+                    *cenvRef = aenv;
+                    if (sym == NULL)
+                        sym = readConst(ctx, symIdx);
+                    avalue = findVarInFrame3(aenv, sym, TRUE);
+                }
                 pc += sizeof(SEXP);
-                unsigned cversion = *((unsigned*)pc);
-                pc += sizeof(unsigned);
-                remainingSlots--;
-                if (cenv == NULL)
-                    break;
-                nextCEnv = (remainingSlots == 0) ? NULL : *((SEXP*)pc);
+
+                bool isLastEntry =
+                    updateEntry ? (avalue != R_UnboundValue)
+                                : (*((SEXP*)(pc + sizeof(unsigned))) == NULL);
 #ifdef DEBUG_CACHE
-                std::cout << " -> " << cenv << "/" << aenv << ".";
+                if (isLastEntry)
+                    std::cout << " last";
 #endif
-                if (cenv != aenv) {
-                    cenv = NULL;
-                    continue;
-                }
-                unsigned max = 0;
+                unsigned* cversionRef = (unsigned*)pc;
+                unsigned max;
                 unsigned aversion =
-                    getEnvVersion(aenv, nextCEnv == NULL ? 1 : 0, max);
+                    getEnvVersion(aenv, isLastEntry ? 1 : 0, max);
 #ifdef DEBUG_CACHE
-                std::cout << cversion << "/" << aversion;
+                std::cout << " . " << *cversionRef << "/" << aversion;
 #endif
-                if (cversion == max) {
-                    cenv = NULL;
-                    continue;
+                if (aversion == max)
+                    updateEntry = true;
+                if (updateEntry || *cversionRef != aversion) {
+#ifdef DEBUG_CACHE
+                    std::cout << " update";
+#endif
+                    if (!updateEntry) {
+                        updateEntry = true;
+                        if (sym == NULL)
+                            sym = readConst(ctx, symIdx);
+                        avalue = findVarInFrame3(aenv, sym, TRUE);
+                        isLastEntry = avalue != R_UnboundValue;
+                    }
+                    *cversionRef = aversion;
                 }
-                if (aversion != cversion) {
-                    SLOWASSERT(aversion > cversion);
-                    cenv = NULL;
-                    continue;
+                pc += sizeof(unsigned);
+
+                remainingSlots--;
+                if (isLastEntry)
+                    break;
+
+                if (remainingSlots == 0) {
+                    // Reuse the last slot (slowcase)
+                    // The last slot is only there to check if the cached search
+                    // path ended, if its env is NULL
+                    pc -= sizeof(SEXP) + sizeof(unsigned);
+                    remainingSlots++;
                 }
                 aenv = ENCLOS(aenv);
-                if (nextCEnv != NULL)
-                    cenv = nextCEnv;
-            } while (nextCEnv != NULL);
-            if (cenv != NULL) {
-                // Success
-                pc += remainingSlots * sizeof(SearchPathEntry);
+                if (aenv == R_EmptyEnv) {
 #ifdef DEBUG_CACHE
-                std::cout << " -> reuse cached ";
+                    std::cout << "fail deleted\n";
+#endif
+                    ostack_push(ctx, R_FalseValue);
+                    NEXT();
+                }
+            }
+
+#ifdef DEBUG_CACHE
+            std::cout << " -> ";
+#endif
+            if (remainingSlots > 0)
+                *((SEXP*)pc) = NULL;
+            pc += remainingSlots * sizeof(SearchPathEntry);
+
+            if (avalue == R_UnboundValue) {
+#ifdef DEBUG_CACHE
+                std::cout << "success cached ";
                 CACHE_SUCCESSES++;
 #endif
                 ostack_push(ctx, R_TrueValue);
             } else {
-                pc -= (MAX_SEARCH_PATH - remainingSlots) *
-                      sizeof(SearchPathEntry);
-#ifdef DEBUG_CACHE
-                std::cout << " -> slowcase + update cache -> ";
-#endif
-                SLOWASSERT(*(pc - (sizeof(Immediate) * 2) - 1) ==
-                           Opcode::check_var_);
-                // Actually do the check:
+                // Actually do the check
                 SEXP expected = readConst(ctx, expectedIdx);
-                // - load variable (unbound / missing check is unnecessary)
-                SEXP sym = readConst(ctx, symIdx);
-                SEXP actual = findVarUpdateCache(sym, env, pc);
-                if (isIdenticalNoForce(expected, actual)) {
+                if (isIdenticalNoForce(expected, avalue)) {
 #ifdef DEBUG_CACHE
-                    std::cout << "success";
+                    std::cout << "success compare ";
                     CACHE_FAILS++;
 #endif
                     ostack_push(ctx, R_TrueValue);
                 } else {
 #ifdef DEBUG_CACHE
-                    std::cout << "fail";
+                    std::cout << "fail different\n";
 #endif
-                    // Invalidate the cache
-                    *(SEXP*)(pc - (MAX_SEARCH_PATH * sizeof(SearchPathEntry))) =
-                        NULL;
+                    // Invalidate the cache (forces explicit lookup)
+                    *(unsigned*)(pc - sizeof(unsigned)) = UINT32_MAX;
                     ostack_push(ctx, R_FalseValue);
+                    NEXT();
                 }
             }
 #ifdef DEBUG_CACHE
