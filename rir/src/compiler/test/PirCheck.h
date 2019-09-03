@@ -24,8 +24,8 @@ namespace rir {
     V(OneAdd)                                                                  \
     V(OneLdFun)                                                                \
     V(OneLdVar)                                                                \
-    V(TwoAdd)                                                                  \
-    V(LdVarVectorInFirstBB)
+    V(OneCheckVar)                                                             \
+    V(TwoAdd)
 
 struct PirCheck {
     enum class Type : unsigned {

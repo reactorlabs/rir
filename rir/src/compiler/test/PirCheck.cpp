@@ -161,6 +161,15 @@ static bool testOneAdd(ClosureVersion* f) {
     return numAdds == 1;
 }
 
+static bool testOneCheckVar(ClosureVersion* f) {
+    int numCheckVars = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (CheckVar::Cast(i))
+            numCheckVars++;
+    });
+    return numCheckVars == 1;
+}
+
 static bool testTwoAdd(ClosureVersion* f) {
     int numAdds = 0;
     Visitor::run(f->entry, [&](Instruction* i) {
@@ -168,15 +177,6 @@ static bool testTwoAdd(ClosureVersion* f) {
             numAdds++;
     });
     return numAdds == 2;
-}
-
-static bool testLdVarVectorInFirstBB(ClosureVersion* f) {
-    for (auto instruction : *f->entry) {
-        if (auto ldvar = LdVar::Cast(instruction)) {
-            return ldvar->varName == Rf_install("vector");
-        }
-    }
-    return false;
 }
 
 PirCheck::Type PirCheck::parseType(const char* str) {

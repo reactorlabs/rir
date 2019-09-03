@@ -91,6 +91,8 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
         binding = ldFun->varName;
     } else if (auto ldVar = LdVar::Cast(instruction)) {
         binding = ldVar->varName;
+    } else if (auto checkVar = CheckVar::Cast(instruction)) {
+        binding = checkVar->varName;
     }
 
     while (current != nullptr && found == nullptr) {
@@ -103,6 +105,8 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
                 otherBinding = ldFun->varName;
             } else if (auto ldVar = LdVar::Cast(currentInst)) {
                 otherBinding = ldVar->varName;
+            } else if (auto checkVar = CheckVar::Cast(currentInst)) {
+                otherBinding = checkVar->varName;
             }
 
             if (currentInst->tag == instruction->tag &&
@@ -157,6 +161,8 @@ void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
                         binding = ldFun->varName;
                     } else if (auto ldVar = LdVar::Cast(i)) {
                         binding = ldVar->varName;
+                    } else if (auto checkVar = CheckVar::Cast(i)) {
+                        binding = checkVar->varName;
                     }
 
                     if (binding) {

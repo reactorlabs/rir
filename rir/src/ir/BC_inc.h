@@ -66,7 +66,7 @@ struct SearchPathEntry {
     SEXP env;
     unsigned version;
 } __attribute__((packed));
-static constexpr size_t MAX_SEARCH_PATH = 8;
+static constexpr size_t MAX_SEARCH_PATH = 16;
 
 // ============================================================
 // ==== Creation and decoding of Bytecodes
@@ -150,7 +150,7 @@ class BC {
         PoolIdx sym;
         SearchPathEntry searchPath[MAX_SEARCH_PATH];
     } __attribute__((packed));
-    static_assert(sizeof(CheckVarArgs) == sizeof(Immediate) * 26,
+    static_assert(sizeof(CheckVarArgs) == sizeof(Immediate) * 50,
                   "update check_var_ size in insns.h");
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));

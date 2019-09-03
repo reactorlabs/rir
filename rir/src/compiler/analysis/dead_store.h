@@ -256,6 +256,22 @@ class DeadStoreAnalysis {
             if (handled)
                 return effect;
 
+            auto observeLoad = [&](Instruction* ld, SEXP varName) {
+                for (auto& e :
+                     withPotentialParents(aliases.resolveEnv(i->env()))) {
+                    Variable var({varName, e});
+                    if (!state.partiallyObserved.count(var)) {
+                        state.partiallyObserved.insert(var);
+                        effect.update();
+                    }
+                    auto i = state.ignoreStore.find(var);
+                    if (i != state.ignoreStore.end()) {
+                        state.ignoreStore.erase(i);
+                        effect.update();
+                    }
+                }
+            };
+
             auto observeFullEnv = [&](Value* env) {
                 for (auto& e : withPotentialParents(env)) {
                     if (!state.completelyObserved.count(e)) {
@@ -275,19 +291,9 @@ class DeadStoreAnalysis {
             };
 
             if (auto ld = LdVar::Cast(i)) {
-                for (auto& e :
-                     withPotentialParents(aliases.resolveEnv(i->env()))) {
-                    Variable var({ld->varName, e});
-                    if (!state.partiallyObserved.count(var)) {
-                        state.partiallyObserved.insert(var);
-                        effect.update();
-                    }
-                    auto i = state.ignoreStore.find(var);
-                    if (i != state.ignoreStore.end()) {
-                        state.ignoreStore.erase(i);
-                        effect.update();
-                    }
-                }
+                observeLoad(i, ld->varName);
+            } else if (auto chk = CheckVar::Cast(i)) {
+                observeLoad(i, chk->varName);
             } else if (auto st = StVar::Cast(i)) {
                 Variable var({st->varName, st->env()});
                 // Two consecutive stores between observations => the first one
