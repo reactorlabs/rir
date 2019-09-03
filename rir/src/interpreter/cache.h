@@ -33,26 +33,49 @@ extern unsigned baseCacheDefineVersion;
 extern unsigned globalCacheSetVersion;
 extern unsigned globalCacheDefineVersion;
 
+// If the check succeeds or fails once, will mark the env so that it doesn't
+// have to lookup a namespace symbol. This relies on the assumption that a
+// non-namespace env will never become a namespace env, or vice versa.
+static bool isNamespaceEnvFast(SEXP env) {
+    switch (env->sxpinfo.extra) {
+    case 0:
+        if (R_IsNamespaceEnv(env)) {
+            env->sxpinfo.extra = 2;
+            return true;
+        } else {
+            env->sxpinfo.extra = 1;
+            return false;
+        }
+    case 2:
+        return true;
+    default:
+        return false;
+    }
+}
+
 __attribute__((unused)) static unsigned getEnvVersion(SEXP env, unsigned type,
                                                       unsigned& max) {
-    if (env == R_BaseEnv || env == R_BaseNamespace || env == R_GlobalEnv) {
+    if (isNamespaceEnvFast(env) || env == R_GlobalEnv) {
+        SLOWASSERT(R_IsNamespaceEnv(env) || env == R_GlobalEnv);
         max = UINT32_MAX;
-        return (env == R_BaseEnv || env == R_BaseNamespace)
+        return (env == R_BaseEnv || R_IsNamespaceEnv(env))
                    ? ((type == 0) ? baseCacheDefineVersion
                                   : baseCacheSetVersion)
                    : ((type == 0) ? globalCacheDefineVersion
                                   : globalCacheSetVersion);
     } else {
-        max = UINT8_MAX;
-        if (type == 0)
+        if (type == 0) {
+            max = UINT8_MAX / 2;
+            return (env->sxpinfo.extra & ((UINT8_MAX / 2) << 1)) >> 1;
+        } else {
+            max = UINT8_MAX;
             return (env->sxpinfo.extra & (UINT8_MAX << 8)) >> 8;
-        else
-            return env->sxpinfo.extra;
+        }
     }
 }
 
 static void invalidateEnvCache(SEXP env, unsigned type) {
-    if (env == R_BaseEnv || env == R_BaseNamespace) {
+    if (isNamespaceEnvFast(env)) {
         if (type == 0) {
             if (baseCacheDefineVersion != UINT32_MAX)
                 baseCacheDefineVersion++;
@@ -70,11 +93,12 @@ static void invalidateEnvCache(SEXP env, unsigned type) {
         }
     } else {
         if (type == 0) {
+            if ((env->sxpinfo.extra & ((UINT8_MAX / 2) << 1)) != (UINT8_MAX / 2)
+                                                                     << 1)
+                env->sxpinfo.extra += 2;
+        } else {
             if ((env->sxpinfo.extra & (UINT8_MAX << 8)) != UINT8_MAX << 8)
                 env->sxpinfo.extra += 256;
-        } else {
-            if ((env->sxpinfo.extra & UINT8_MAX) != UINT8_MAX)
-                env->sxpinfo.extra++;
         }
     }
 }

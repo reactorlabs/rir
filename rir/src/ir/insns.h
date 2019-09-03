@@ -563,6 +563,6 @@ DEF_INSTR(assert_type_, 3, 1, 1, 1)
  * 1. no new variables were defined in any environment above the last
  * 2. no new variables were set in the last environment
  */
-DEF_INSTR(check_var_, 50, 0, 1, 1)
+DEF_INSTR(check_var_, 26, 0, 1, 1)
 
 #undef DEF_INSTR

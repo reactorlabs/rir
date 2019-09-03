@@ -3840,7 +3840,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             unsigned remainingSlots = MAX_SEARCH_PATH;
             SEXP aenv = env;
             SEXP avalue;
+            bool enteringNamespace = false;
+            bool inNamespace = false;
             while (true) {
+                enteringNamespace = !inNamespace && isNamespaceEnvFast(aenv);
                 avalue = R_UnboundValue;
                 bool pastCache = remainingSlots == 1;
 #ifdef DEBUG_CACHE
@@ -3849,6 +3852,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 #endif
                 SEXP* cenvRef = (SEXP*)pc;
 #ifdef DEBUG_CACHE
+                if (enteringNamespace)
+                    std::cout << " (entering namespace)";
                 std::cout << " -> " << *cenvRef << "/" << aenv;
 #endif
                 bool updateEntry = pastCache || *cenvRef != aenv;
@@ -3856,12 +3861,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 #ifdef DEBUG_CACHE
                     std::cout << " update";
 #endif
-                    *cenvRef = aenv;
+                    if (!inNamespace)
+                        *cenvRef = aenv;
                     if (sym == NULL)
                         sym = readConst(ctx, symIdx);
                     avalue = findVarInFrame3(aenv, sym, TRUE);
                 }
-                pc += sizeof(SEXP);
+                if (!inNamespace)
+                    pc += sizeof(SEXP);
 
                 bool isLastEntry =
                     updateEntry ? (avalue != R_UnboundValue)
@@ -3890,11 +3897,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         avalue = findVarInFrame3(aenv, sym, TRUE);
                         isLastEntry = avalue != R_UnboundValue;
                     }
-                    *cversionRef = aversion;
+                    if (!inNamespace)
+                        *cversionRef = aversion;
                 }
-                pc += sizeof(unsigned);
+                if (!inNamespace)
+                    pc += sizeof(unsigned);
 
-                remainingSlots--;
+                if (!inNamespace)
+                    remainingSlots--;
+                if (enteringNamespace)
+                    inNamespace = true;
                 if (isLastEntry)
                     break;
 
@@ -3911,6 +3923,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     std::cout << "fail deleted\n";
 #endif
                     ostack_push(ctx, R_FalseValue);
+                    pc += remainingSlots * sizeof(SearchPathEntry);
+                    SLOWASSERT(*(pc - sizeof(BC::CheckVarArgs) - 1) ==
+                               Opcode::check_var_);
                     NEXT();
                 }
             }
@@ -3944,15 +3959,17 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     // Invalidate the cache (forces explicit lookup)
                     *(unsigned*)(pc - sizeof(unsigned)) = UINT32_MAX;
                     ostack_push(ctx, R_FalseValue);
+                    SLOWASSERT(*(pc - sizeof(BC::CheckVarArgs) - 1) ==
+                               Opcode::check_var_);
                     NEXT();
                 }
             }
 #ifdef DEBUG_CACHE
-            std::cout << " (" << CACHE_SUCCESSES << " reuse vs. " << CACHE_FAILS
+            std::cout << "(" << CACHE_SUCCESSES << " reuse vs. " << CACHE_FAILS
                       << " update)\n";
+#endif
             SLOWASSERT(*(pc - sizeof(BC::CheckVarArgs) - 1) ==
                        Opcode::check_var_);
-#endif
             NEXT();
         }
 
