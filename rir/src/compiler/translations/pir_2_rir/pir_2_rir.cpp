@@ -30,6 +30,9 @@
 namespace rir {
 namespace pir {
 
+unsigned Parameter::PIR_NATIVE_BACKEND =
+    getenv("PIR_NATIVE_BACKEND") ? atoi(getenv("PIR_NATIVE_BACKEND")) : 0;
+
 namespace {
 
 class Context {
@@ -261,9 +264,6 @@ static unsigned MkEnvStubEmited =
 static unsigned ClosuresCompiled =
     EventCounters::instance().registerCounter("closures compiled");
 #endif
-
-static int PIR_NATIVE_BACKEND =
-    getenv("PIR_NATIVE_BACKEND") ? atoi(getenv("PIR_NATIVE_BACKEND")) : 0;
 
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 #ifdef ENABLE_EVENT_COUNTERS
@@ -1063,13 +1063,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto localsCnt = alloc.slots();
     auto res = ctx.finalizeCode(localsCnt, cache.size());
-    if (PIR_NATIVE_BACKEND == 1) {
+    if (Parameter::PIR_NATIVE_BACKEND == 1) {
         Lower native;
         if (auto n = native.tryCompile(cls, code, promMap, needsEnsureNamed)) {
             res->nativeCode = (NativeCode)n;
         }
     }
-    if (PIR_NATIVE_BACKEND == 2) {
+    if (Parameter::PIR_NATIVE_BACKEND == 2) {
         LowerLLVM native;
         if (auto n =
                 native.tryCompile(cls, code, promMap, needsEnsureNamed,

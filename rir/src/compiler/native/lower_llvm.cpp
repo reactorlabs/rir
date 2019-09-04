@@ -3246,7 +3246,6 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Extract1_2D:
             case Tag::Subassign1_2D:
             case Tag::Subassign2_2D:
-            case Tag::CheckVar:
                 success = false;
                 break;
 
@@ -3260,6 +3259,15 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Assume:
             case Tag::Deopt:
                 assert(false && "Expected scheduled deopt");
+                success = false;
+                break;
+
+            case Tag::CheckVar:
+                // I'm not sure it's even possible to implement this in llvm,
+                // because we would need arbitrary data for each instruction
+                // (its local cache) which can be updated at runtime.
+                assert(false && "CheckVar shouldn't be created when native "
+                                "backend is enabled.");
                 success = false;
                 break;
 

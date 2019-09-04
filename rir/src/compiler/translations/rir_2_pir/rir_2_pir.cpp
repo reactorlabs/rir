@@ -1,6 +1,7 @@
 #include "rir_2_pir.h"
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
+#include "../../parameter.h"
 #include "../../pir/pir_impl.h"
 #include "../../transform/insert_cast.h"
 #include "../../util/ConvertAssumptions.h"
@@ -451,7 +452,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto pos = bb->begin();
 
             Instruction* t;
-            if (ldfun)
+            if (ldfun && Parameter::PIR_NATIVE_BACKEND == 0)
                 t = new CheckVar(monomorphic, ldfun->varName, ldfun->env());
             else {
                 auto expected = new LdConst(monomorphic);
