@@ -17,7 +17,7 @@ using namespace rir::pir;
  *
  * For that we need to compute a dominance graph of forces.
  *
- * Additionally, if know the promise being forced, we try to inline it. For
+ * Additionally, if we know the promise being forced, we try to inline it. For
  * example:
  *
  * a = mkArg(prom(0))
@@ -47,6 +47,7 @@ using namespace rir::pir;
 struct ForcedBy {
     std::unordered_map<Value*, Force*> forcedBy;
     rir::SmallSet<Value*> inScope;
+    std::unordered_map<Value*, BB*> escapeOnDeopt;
     rir::SmallSet<Value*> escaped;
 
     std::vector<size_t> argumentForceOrder;
@@ -73,19 +74,35 @@ struct ForcedBy {
             escaped.erase(e);
             changed = true;
         }
+        auto ed = escapeOnDeopt.find(arg);
+        if (ed != escapeOnDeopt.end()) {
+            escapeOnDeopt.erase(ed);
+            changed = true;
+        }
         return changed;
     }
 
-    bool sideeffect() {
+    bool sideeffect(const CFG& cfg, Instruction* sideEffect) {
         bool changed = false;
         // when we execute an instruction that could force promises as a
         // sideeffect, we have to assume that all escaped promises might have
         // been forced
+
         for (auto& e : escaped)
             if (!forcedBy.count(e)) {
                 forcedBy[e] = ambiguous();
                 changed = true;
             }
+        for (auto& e : escapeOnDeopt) {
+            // std::cout << "Is predecessor: " << sideEffect->bb()->id << "of"
+            // << e.second->id << "  " << cfg.isPredecessor(sideEffect->bb(),
+            // e.second) << "\n";
+            if (!forcedBy.count(e.first) &&
+                cfg.isPredecessor(sideEffect->bb(), e.second)) {
+                forcedBy[e.first] = ambiguous();
+                changed = true;
+            }
+        }
         return changed;
     }
 
@@ -97,10 +114,17 @@ struct ForcedBy {
         return false;
     }
 
-    bool escape(Value* val) {
-        if (!escaped.count(val)) {
-            escaped.insert(val);
-            return true;
+    bool escape(Value* val, Instruction* instruction) {
+        if (instruction->bb()->isDeopt()) {
+            if (!escaped.count(val) && !escapeOnDeopt.count(val)) {
+                escapeOnDeopt.emplace(val, instruction->bb());
+                return true;
+            }
+        } else {
+            if (!escaped.count(val)) {
+                escaped.insert(val);
+                return true;
+            }
         }
 
         return false;
@@ -135,7 +159,16 @@ struct ForcedBy {
         }
         for (auto& e : other.escaped) {
             if (!escaped.count(e)) {
+                if (escapeOnDeopt.count(e))
+                    escapeOnDeopt.erase(e);
                 escaped.insert(e);
+                res.update();
+            }
+        }
+
+        for (auto& e : other.escapeOnDeopt) {
+            if (!escaped.count(e.first) && !escapeOnDeopt.count(e.first)) {
+                escapeOnDeopt.insert(e);
                 res.update();
             }
         }
@@ -229,11 +262,13 @@ struct ForcedBy {
 
     Force* getDominatingForce(Force* f) const {
         auto a = f->arg<0>().val()->followCasts();
-        if (!forcedBy.count(a))
+        if (!forcedBy.count(a)) {
             return nullptr;
+        }
         auto res = forcedBy.at(a);
-        if (res == ambiguous())
+        if (res == ambiguous()) {
             return nullptr;
+        }
         return res;
     }
 
@@ -269,6 +304,12 @@ struct ForcedBy {
             out << " ";
         }
         out << "\n";
+        out << "Escaped proms only because of deopts: ";
+        for (auto& p : escapeOnDeopt) {
+            p.first->printRef(out);
+            out << " ";
+        }
+        out << "\n";
         for (auto& e : forcedBy) {
             e.first->printRef(out);
             if (e.second == ambiguous()) {
@@ -282,13 +323,16 @@ struct ForcedBy {
     }
 };
 
+//, DummyState, AnalysisDebugLevel::Taint
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
     using StaticAnalysis::PositioningStyle;
 
     explicit ForceDominanceAnalysis(ClosureVersion* cls, Code* code,
                                     LogStream& log)
-        : StaticAnalysis("ForceDominance", cls, code, log) {}
+        : StaticAnalysis("ForceDominance", cls, code, log), cfg(code) {}
+
+    CFG cfg;
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         AbstractResult res;
@@ -296,10 +340,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             i->eachArg([&](Value* v) {
                 v = v->followCasts();
                 if (auto arg = MkArg::Cast(v))
-                    if (state.escape(arg))
+                    if (state.escape(arg, i))
                         res.update();
                 if (auto arg = LdArg::Cast(v))
-                    if (state.escape(arg))
+                    if (state.escape(arg, i))
                         res.update();
             });
         };
@@ -331,9 +375,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else {
             apply(i);
 
-            if (i->effects.contains(Effect::Force))
-                if (state.sideeffect())
+            if (i->effects.contains(Effect::Force)) {
+                if (state.sideeffect(cfg, i))
                     res.taint();
+            }
 
             if (i->hasEffect() && !state.ambiguousForceOrder &&
                 state.argumentForceOrder.size() < closure->nargs()) {

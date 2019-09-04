@@ -108,6 +108,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         findBuiltin("tcrossprod"),
         // Would be safe if not a vector of objects
         // findBuiltin("lengths"),
+        findBuiltin("length"),
         findBuiltin("round"),
         findBuiltin("signif"),
         findBuiltin("log"),
