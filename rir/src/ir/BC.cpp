@@ -255,8 +255,9 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::check_var_:
             i.checkVarArgs.expected = Pool::insert(ReadItem(refTable, inp));
             i.checkVarArgs.sym = Pool::insert(ReadItem(refTable, inp));
-            i.checkVarArgs.searchPath[0].env = NULL;
-            // We must update the search path
+            i.checkVarArgs.globalVersion = 0;
+            i.checkVarArgs.namespaceVersion = 0;
+            // We must update the versions
             break;
         case Opcode::record_deopt_:
         case Opcode::record_call_:
@@ -397,7 +398,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::check_var_:
             WriteItem(Pool::get(i.checkVarArgs.expected), refTable, out);
             WriteItem(Pool::get(i.checkVarArgs.sym), refTable, out);
-            // We must update, discard search path
+            // We must update, discard versions
             break;
         case Opcode::record_deopt_:
         case Opcode::record_call_:
@@ -702,14 +703,10 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::check_var_:
         out << immediate.checkVarArgs.expected << " =? "
-            << CHAR(PRINTNAME(Pool::get(immediate.checkVarArgs.sym))) << " [ ";
-        for (unsigned i = 0; i < MAX_SEARCH_PATH &&
-                             immediate.checkVarArgs.searchPath[i].env != NULL;
-             i++) {
-            const SearchPathEntry& entry = immediate.checkVarArgs.searchPath[i];
-            out << entry.env << "." << entry.version << " ";
-        }
-        out << "]";
+            << CHAR(PRINTNAME(Pool::get(immediate.checkVarArgs.sym)))
+            << " [global: " << immediate.checkVarArgs.globalVersion
+            << ", namespace: " << immediate.checkVarArgs.namespaceVersion
+            << "]";
         break;
     }
     out << "\n";

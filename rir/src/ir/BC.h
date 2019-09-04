@@ -389,7 +389,8 @@ BC BC::checkVar(SEXP expected, SEXP sym) {
     ImmediateArguments i;
     i.checkVarArgs.expected = Pool::insert(expected);
     i.checkVarArgs.sym = Pool::insert(sym);
-    i.checkVarArgs.searchPath[0].env = NULL;
+    i.checkVarArgs.globalVersion = 0;
+    i.checkVarArgs.namespaceVersion = 0;
     return BC(Opcode::check_var_, i);
 }
 

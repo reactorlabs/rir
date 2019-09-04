@@ -83,7 +83,7 @@ class ScopeAnalysisState {
 class ScopeAnalysis
     : public StaticAnalysis<
           ScopeAnalysisState,
-          ScopeAnalysisResults /*, AnalysisDebugLevel::Taint*/> {
+          ScopeAnalysisResults /*, AnalysisDebugLevel::Instruction */> {
   private:
     const std::vector<Value*> args;
 

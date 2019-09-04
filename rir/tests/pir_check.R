@@ -1,5 +1,6 @@
 jitOn <- as.numeric(Sys.getenv("R_ENABLE_JIT", unset=2)) != 0
 jitOn <- jitOn && (Sys.getenv("PIR_ENABLE", unset="on") == "on")
+isNative <- as.numeric(Sys.getenv("PIR_NATIVE_BACKEND", unset=0)) != 0
 
 if (!jitOn)
   quit()
@@ -33,14 +34,16 @@ stopifnot(pir.check(
 
 # Copied / cross-validated from pir_tests
 
-stopifnot(pir.check(
-  f <- function(){
-    j <- 0
-    while (j < 2) {
-      vector("integer",0)
-      j <- j + 1
-    }
-  }, OneCheckVar, warmup=function(f) f()))
+if (!isNative) {
+  stopifnot(pir.check(
+    f <- function(){
+      j <- 0
+      while (j < 2) {
+        vector("integer",0)
+        j <- j + 1
+      }
+    }, OneCheckVar, warmup=function(f) f()))
+}
 
 stopifnot(
   pir.check(function() {

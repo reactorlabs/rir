@@ -28,10 +28,8 @@ static_assert((sizeof(BindingCache) +
                   0,
               "Cache should be cache line sized");
 
-extern unsigned baseCacheSetVersion;
-extern unsigned baseCacheDefineVersion;
-extern unsigned globalCacheSetVersion;
-extern unsigned globalCacheDefineVersion;
+extern unsigned globalEnvVersion;
+extern unsigned namespaceEnvVersion;
 
 // If the check succeeds or fails once, will mark the env so that it doesn't
 // have to lookup a namespace symbol. This relies on the assumption that a
@@ -40,66 +38,27 @@ static bool isNamespaceEnvFast(SEXP env) {
     switch (env->sxpinfo.extra) {
     case 0:
         if (R_IsNamespaceEnv(env)) {
-            env->sxpinfo.extra = 2;
+            env->sxpinfo.extra = 1;
             return true;
         } else {
-            env->sxpinfo.extra = 1;
+            env->sxpinfo.extra = 2;
             return false;
         }
-    case 2:
+    case 1:
         return true;
+    case 2:
+        return false;
     default:
+        assert(false);
         return false;
     }
 }
 
-__attribute__((unused)) static unsigned getEnvVersion(SEXP env, unsigned type,
-                                                      unsigned& max) {
-    if (isNamespaceEnvFast(env) || env == R_GlobalEnv) {
-        SLOWASSERT(R_IsNamespaceEnv(env) || env == R_GlobalEnv);
-        max = UINT32_MAX;
-        return (env == R_BaseEnv || R_IsNamespaceEnv(env))
-                   ? ((type == 0) ? baseCacheDefineVersion
-                                  : baseCacheSetVersion)
-                   : ((type == 0) ? globalCacheDefineVersion
-                                  : globalCacheSetVersion);
-    } else {
-        if (type == 0) {
-            max = UINT8_MAX / 2;
-            return (env->sxpinfo.extra & ((UINT8_MAX / 2) << 1)) >> 1;
-        } else {
-            max = UINT8_MAX;
-            return (env->sxpinfo.extra & (UINT8_MAX << 8)) >> 8;
-        }
-    }
-}
-
 static void invalidateEnvCache(SEXP env, unsigned type) {
-    if (isNamespaceEnvFast(env)) {
-        if (type == 0) {
-            if (baseCacheDefineVersion != UINT32_MAX)
-                baseCacheDefineVersion++;
-        } else {
-            if (baseCacheSetVersion != UINT32_MAX)
-                baseCacheSetVersion++;
-        }
-    } else if (env == R_GlobalEnv) {
-        if (type == 0) {
-            if (globalCacheDefineVersion != UINT32_MAX)
-                globalCacheDefineVersion++;
-        } else {
-            if (globalCacheSetVersion != UINT32_MAX)
-                globalCacheSetVersion++;
-        }
-    } else {
-        if (type == 0) {
-            if ((env->sxpinfo.extra & ((UINT8_MAX / 2) << 1)) != (UINT8_MAX / 2)
-                                                                     << 1)
-                env->sxpinfo.extra += 2;
-        } else {
-            if ((env->sxpinfo.extra & (UINT8_MAX << 8)) != UINT8_MAX << 8)
-                env->sxpinfo.extra += 256;
-        }
+    if (env == R_GlobalEnv) {
+        globalEnvVersion++;
+    } else if (isNamespaceEnvFast(env)) {
+        namespaceEnvVersion++;
     }
 }
 
