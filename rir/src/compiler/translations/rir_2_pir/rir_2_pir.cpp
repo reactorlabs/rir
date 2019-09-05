@@ -455,11 +455,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (ldfun && Parameter::PIR_NATIVE_BACKEND == 0)
                 t = new CheckVar(monomorphic, ldfun->varName, ldfun->env());
             else {
+                Value* given = callee;
                 auto expected = new LdConst(monomorphic);
                 pos = bb->insert(pos, expected);
                 pos++;
-
-                Value* given = callee;
+                if (ldfun && ldfun->varName != symbol::c) {
+                    auto ldvar = new LdVar(ldfun->varName, ldfun->env());
+                    pos = bb->insert(pos, ldvar);
+                    pos++;
+                    given = ldvar;
+                }
                 t = new Identical(given, expected);
             }
 

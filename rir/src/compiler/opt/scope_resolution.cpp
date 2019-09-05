@@ -508,20 +508,6 @@ class TheScopeResolution {
                         }
                     }
 
-                    // CheckVar loads a variable and checks that it's equal to a
-                    // static closure. If we statically know the variable will
-                    // be equal to the closure we could simply remove it. This
-                    // could be useful for local closures. TODO: Actually
-                    // implement
-                    /*if (auto chk = CheckVar::Cast(i)) {
-                        if (!res.isUnknown() && res.checkEachSource([&](const
-                    ValOrig& orig){ return orig.val->asRValue() ==
-                    chk->expected;
-                        })) {
-                            chk->replaceUsesWith(True::instance());
-                        }
-                    }*/
-
                     // If nothing else, narrow down the environment (in case we
                     // found something more concrete).
                     if (i->hasEnv() &&

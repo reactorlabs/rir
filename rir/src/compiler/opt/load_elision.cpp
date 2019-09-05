@@ -21,11 +21,16 @@ struct ALoad {
     static ALoad empty() { return ALoad(); }
 
     // cppcheck-suppress noExplicitConstructor
-    ALoad(LdVar* ld)
-        : origin(ld), type(ld->type), env(ld->env()), name(ld->varName) {}
-    // cppcheck-suppress noExplicitConstructor
-    ALoad(LdFun* ld)
-        : origin(ld), type(ld->type), env(ld->env()), name(ld->varName) {}
+    ALoad(Instruction* ld)
+        : origin(ld), type(ld->type), env(ld->env()), name(NULL) {
+        if (auto ldv = LdVar::Cast(ld)) {
+            name = ldv->varName;
+        } else if (auto chk = CheckVar::Cast(ld)) {
+            name = chk->varName;
+        } else {
+            assert(false);
+        }
+    }
     Instruction* origin;
     PirType type;
     Value* env;
@@ -39,6 +44,9 @@ struct ALoad {
                    ld->varName == name;
         else if (auto ld = LdFun::Cast(i))
             return LdFun::Cast(origin) && ld->env() == env &&
+                   ld->varName == name;
+        else if (auto ld = CheckVar::Cast(i))
+            return CheckVar::Cast(origin) && ld->env() == env &&
                    ld->varName == name;
         else
             return false;
@@ -54,17 +62,17 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
         : StaticAnalysis("AvailableLoads", cls, cls, log) {}
     AbstractResult apply(IntersectionSet<ALoad>& state, Instruction* i) const {
         AbstractResult res;
-        if (auto ld = LdVar::Cast(i)) {
+        if (LdVar::Cast(i) || CheckVar::Cast(i)) {
             for (auto& ald : state.available) {
-                if (ald.same(ld)) {
-                    if (ld->type.isA(ald.type)) {
-                        ald.type = ld->type;
+                if (ald.same(i)) {
+                    if (i->type.isA(ald.type)) {
+                        ald.type = i->type;
                         res.update();
                     }
                     return res;
                 }
             }
-            state.available.insert(ld);
+            state.available.insert(i);
             res.update();
         } else if (i->changesEnv()) {
             state.available.clear();
@@ -94,7 +102,8 @@ void LoadElision::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
             auto instr = *ip;
 
-            if (LdVar::Cast(instr) || LdFun::Cast(instr)) {
+            if (LdVar::Cast(instr) || LdFun::Cast(instr) ||
+                CheckVar::Cast(instr)) {
                 auto domald = loads.get(instr);
                 if (auto domld = domald.origin) {
                     domld->type = domald.type;

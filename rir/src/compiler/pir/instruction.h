@@ -1608,7 +1608,7 @@ class FLI(Length, 1, Effects::None()) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLIE(CheckVar, 1, Effect::ReadsEnv) {
+class FLIE(CheckVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
   public:
     SEXP expected;
     SEXP varName;
