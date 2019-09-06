@@ -201,9 +201,14 @@ SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
         SEXP val = wrapper->getArg(i);
         INCREMENT_NAMED(val);
         SEXP name = cp_pool_at(ctx, names[i]);
+        bool isMissing = false;
+        if (TYPEOF(name) == LISTSXP) {
+            isMissing = true;
+            name = CAR(name);
+        }
         arglist = CONS_NR(val, arglist);
         SET_TAG(arglist, name);
-        SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
+        SET_MISSING(arglist, isMissing ? 2 : 0);
     }
 
     SEXP environment =
@@ -1776,12 +1781,17 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 SEXP val = ostack_pop(ctx);
                 INCREMENT_NAMED(val);
                 SEXP name = cp_pool_at(ctx, names[i]);
+                bool isMissing = val == R_MissingArg;
+                if (TYPEOF(name) == LISTSXP) {
+                    isMissing = true;
+                    name = CAR(name);
+                }
                 if (name == R_DotsSymbol)
                     hasDots = true;
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
-                hasMissing = hasMissing || val == R_MissingArg;
-                SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
+                hasMissing = hasMissing || isMissing;
+                SET_MISSING(arglist, isMissing ? 2 : 0);
             }
             res = Rf_NewEnvironment(R_NilValue, arglist, parent);
 
@@ -1796,19 +1806,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             // arguments from the list, otherwise nargs()
                             // reports the wrong value.
                             promargs = Rf_shallow_duplicate(arglist);
-                            // Need to test for R_MissingArg because
-                            // shallowDuplicate does not copy the missing flag.
-                            while (CAR(promargs) == R_MissingArg &&
-                                   promargs != R_NilValue) {
-                                promargs = CDR(promargs);
-                            }
                             auto p = promargs;
+                            auto a = arglist;
                             auto prev = p;
                             while (p != R_NilValue) {
-                                if (CAR(p) == R_MissingArg)
+                                if (MISSING(a))
                                     SETCDR(prev, CDR(p));
                                 prev = p;
                                 p = CDR(p);
+                                a = CDR(a);
                             }
                         }
                         cptr->promargs = promargs;

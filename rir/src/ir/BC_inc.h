@@ -415,6 +415,7 @@ BC_NOARGS(V, _)
                                 SEXP targetVersion, const Assumptions& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
     inline static BC mkEnv(const std::vector<SEXP>& names,
+                           const std::vector<bool>& missing,
                            SignedImmediate contextPos, bool stub);
     inline static BC mkDotlist(const std::vector<SEXP>& names);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);

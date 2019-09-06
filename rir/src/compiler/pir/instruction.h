@@ -678,7 +678,7 @@ class VarLenInstructionWithEnvSlot
         Super::pushArg(env, RType::env);
     }
 
-    void pushArg(Value* a, PirType t) override final {
+    void pushArg(Value* a, PirType t) override {
         assert(a);
         assert(args_.size() > 0);
         assert(args_.back().type() == RType::env);
@@ -1963,31 +1963,56 @@ class BuiltinCallFactory {
 class VLIE(MkEnv, Effects::None()) {
   public:
     std::vector<SEXP> varName;
+    std::vector<bool> missing;
     bool stub = false;
     int context = 1;
 
-    typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
-    typedef std::function<void(SEXP name, InstrArg&)> MutableLocalVarIt;
+    typedef std::function<void(SEXP name, Value* val, bool missing)> LocalVarIt;
+    typedef std::function<void(SEXP name, InstrArg&, bool& missing)>
+        MutableLocalVarIt;
 
     RIR_INLINE void eachLocalVar(MutableLocalVarIt it) {
-        for (size_t i = 0; i < envSlot(); ++i)
-            it(varName[i], arg(i));
+        for (size_t i = 0; i < envSlot(); ++i) {
+            bool m = missing[i];
+            it(varName[i], arg(i), m);
+            missing[i] = m;
+        }
     }
 
     RIR_INLINE void eachLocalVar(LocalVarIt it) const {
         for (size_t i = 0; i < envSlot(); ++i)
-            it(varName[i], arg(i).val());
+            it(varName[i], arg(i).val(), missing[i]);
     }
 
     RIR_INLINE void eachLocalVarRev(LocalVarIt it) const {
         for (long i = envSlot() - 1; i >= 0; --i)
-            it(varName[i], arg(i).val());
+            it(varName[i], arg(i).val(), missing[i]);
+    }
+
+    MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args,
+          const std::vector<bool>& missing)
+        : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names),
+          missing(missing) {
+        for (unsigned i = 0; i < varName.size(); ++i) {
+            pushArg(args[i], PirType::any());
+        }
     }
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args)
         : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names) {
-        for (unsigned i = 0; i < varName.size(); ++i)
+        for (unsigned i = 0; i < varName.size(); ++i) {
             pushArg(args[i], PirType::any());
+        }
+    }
+
+    void pushArg(Value* a, PirType t) override final {
+        VarLenInstructionWithEnvSlot::pushArg(a, t);
+        missing.push_back(a == MissingArg::instance());
+    }
+
+    void pushArg(Value* a) override final {
+        VarLenInstructionWithEnvSlot::pushArg(a);
+        missing.push_back(a == MissingArg::instance());
     }
 
     Value* lexicalEnv() const { return env(); }

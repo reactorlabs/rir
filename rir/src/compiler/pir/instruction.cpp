@@ -306,8 +306,18 @@ void Instruction::replaceUsesIn(Value* replace, BB* start) {
                     changed = true;
                 }
             });
-            if (changed)
+            if (changed) {
                 i->updateTypeAndEffects();
+                if (replace == MissingArg::instance()) {
+                    if (auto mk = MkEnv::Cast(i)) {
+                        mk->eachLocalVar(
+                            [&](SEXP n, InstrArg& a, bool& missing) {
+                                if (a.val() == replace)
+                                    missing = true;
+                            });
+                    }
+                }
+            }
         }
     });
 
@@ -497,8 +507,11 @@ void LdVarSuper::printArgs(std::ostream& out, bool tty) const {
 }
 
 void MkEnv::printArgs(std::ostream& out, bool tty) const {
-    eachLocalVar([&](SEXP name, Value* v) {
-        out << CHAR(PRINTNAME(name)) << "=";
+    eachLocalVar([&](SEXP name, Value* v, bool miss) {
+        out << CHAR(PRINTNAME(name));
+        if (miss)
+            out << "(miss)";
+        out << "=";
         v->printRef(out);
         out << ", ";
     });

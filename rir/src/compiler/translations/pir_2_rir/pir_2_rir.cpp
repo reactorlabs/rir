@@ -977,7 +977,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-                cb.add(BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub));
+                cb.add(BC::mkEnv(mkenv->varName, mkenv->missing, mkenv->context,
+                                 mkenv->stub));
                 cache.ifCacheRange(mkenv, [&](CachePosition::StartSize range) {
                     if (range.second > 0)
                         cb.add(

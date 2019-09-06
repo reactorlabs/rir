@@ -1664,7 +1664,7 @@ void PirCodeFunction::build() {
                                      new_constant(namesBuffer.data()),
                                      new_constant(mkenv->context)});
                     size_t pos = 0;
-                    mkenv->eachLocalVar([&](SEXP name, Value* v) {
+                    mkenv->eachLocalVar([&](SEXP name, Value* v, bool m) {
                         envStubSet(env, pos++, loadSxp(i, v));
                     });
                     setVal(i, env);
@@ -1673,10 +1673,11 @@ void PirCodeFunction::build() {
 
                 gcSafepoint(i, mkenv->nargs() + 1, true);
                 auto arglist = constant(R_NilValue, sxp);
-                mkenv->eachLocalVarRev([&](SEXP name, Value* v) {
-                    if (v == MissingArg::instance()) {
-                        arglist = call(NativeBuiltins::createMissingBindingCell,
-                                       {constant(name, sxp), arglist});
+                mkenv->eachLocalVarRev([&](SEXP name, Value* v, bool miss) {
+                    if (miss) {
+                        arglist =
+                            call(NativeBuiltins::createMissingBindingCell,
+                                 {loadSxp(i, v), constant(name, sxp), arglist});
                     } else {
                         arglist =
                             call(NativeBuiltins::createBindingCell,
@@ -1684,9 +1685,9 @@ void PirCodeFunction::build() {
                     }
                 });
 
-                setVal(i, call(NativeBuiltins::createEnvironment,
-                               {parent, arglist, arglist,
-                                new_constant(mkenv->context)}));
+                setVal(i,
+                       call(NativeBuiltins::createEnvironment,
+                            {parent, arglist, new_constant(mkenv->context)}));
 
                 // Zero bindings cache
                 if (bindingsCache.count(i))

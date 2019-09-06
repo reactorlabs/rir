@@ -64,8 +64,8 @@ NativeBuiltin NativeBuiltins::createBindingCell = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
 };
 
-static SEXP createMissingBindingCellImpl(SEXP name, SEXP rest) {
-    SEXP res = CONS_NR(R_MissingArg, rest);
+static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
+    SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
     SET_MISSING(res, 2);
     return res;
@@ -74,22 +74,46 @@ static SEXP createMissingBindingCellImpl(SEXP name, SEXP rest) {
 NativeBuiltin NativeBuiltins::createMissingBindingCell = {
     "createMissingBindingCell",
     (void*)&createMissingBindingCellImpl,
-    2,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
+    3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 2, 0),
 };
 
-SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, SEXP envArglist,
-                           int contextPos) {
+SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
     SLOWASSERT(TYPEOF(parent) == ENVSXP);
     SLOWASSERT(TYPEOF(arglist) == LISTSXP || arglist == R_NilValue);
-    SLOWASSERT(TYPEOF(envArglist) == LISTSXP || envArglist == R_NilValue);
-    SEXP res = Rf_NewEnvironment(R_NilValue, envArglist, parent);
+    SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent);
 
     if (contextPos > 0) {
         if (auto cptr = getFunctionContext(contextPos - 1)) {
             cptr->cloenv = res;
-            if (cptr->promargs == symbol::delayedArglist)
-                cptr->promargs = arglist;
+            if (cptr->promargs == symbol::delayedArglist) {
+                auto promargs = arglist;
+                bool hasMissing = false;
+                auto a = arglist;
+                while (a != R_NilValue) {
+                    if (CAR(a) == R_MissingArg)
+                        hasMissing = true;
+                    a = CDR(a);
+                }
+
+                if (hasMissing) {
+                    // For the promargs we need to strip missing
+                    // arguments from the list, otherwise nargs()
+                    // reports the wrong value.
+                    promargs = Rf_shallow_duplicate(arglist);
+                    auto p = promargs;
+                    auto a = arglist;
+                    auto prev = p;
+                    while (p != R_NilValue) {
+                        if (MISSING(a))
+                            SETCDR(prev, CDR(p));
+                        prev = p;
+                        p = CDR(p);
+                        a = CDR(a);
+                    }
+                }
+                cptr->promargs = promargs;
+            }
         }
     }
 
@@ -99,8 +123,8 @@ SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, SEXP envArglist,
 NativeBuiltin NativeBuiltins::createEnvironment = {
     "createEnvironment",
     (void*)&createEnvironmentImpl,
-    4,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
+    3,
+    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 
 SEXP createStubEnvironmentImpl(SEXP parent, int n, Immediate* names,

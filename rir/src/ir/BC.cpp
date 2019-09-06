@@ -467,8 +467,12 @@ void BC::printNames(std::ostream& out,
     out << "[";
     for (auto name : names) {
         SEXP n = Pool::get(name);
-        out << " "
-            << (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n)));
+        out << " ";
+        if (TYPEOF(n) == LISTSXP) {
+            out << "(miss)";
+            n = CAR(n);
+        }
+        out << (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n)));
     }
     out << " ]";
 }

@@ -190,7 +190,7 @@ class ScopeAnalysis
     }
 
     typedef std::function<void(
-        const std::unordered_map<SEXP, AbstractPirValue>&)>
+        const std::unordered_map<SEXP, std::pair<AbstractPirValue, bool>>&)>
         MaybeMaterialized;
     void tryMaterializeEnv(const ScopeAnalysisState& state, Value* env,
                            const MaybeMaterialized&);

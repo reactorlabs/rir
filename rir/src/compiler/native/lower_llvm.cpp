@@ -2376,9 +2376,13 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto parent = loadSxp(mkenv->env());
 
                 auto namesStore = topAlloca(t::Int, mkenv->nLocals());
-                for (size_t i = 0; i < mkenv->nLocals(); ++i)
-                    builder.CreateStore(c(Pool::insert(mkenv->varName[i])),
+                for (size_t i = 0; i < mkenv->nLocals(); ++i) {
+                    auto n = mkenv->varName[i];
+                    if (mkenv->missing[i])
+                        n = CONS_NR(n, R_NilValue);
+                    builder.CreateStore(c(Pool::insert(n)),
                                         builder.CreateGEP(namesStore, c(i)));
+                }
 
                 if (mkenv->stub) {
                     auto env =
@@ -2387,43 +2391,29 @@ bool LowerFunctionLLVM::tryCompile() {
                               builder.CreateBitCast(namesStore, t::IntPtr),
                               c(mkenv->context)});
                     size_t pos = 0;
-                    mkenv->eachLocalVar([&](SEXP name, Value* v) {
+                    mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
+                        // TODO deal with missing!!!
                         envStubSet(env, pos++, loadSxp(v));
                     });
                     setVal(i, env);
                     break;
                 }
 
-                bool hasMissing = false;
-                mkenv->eachLocalVarRev([&](SEXP name, Value* v) {
-                    if (v == MissingArg::instance())
-                        hasMissing = true;
-                });
-
                 auto arglist = constant(R_NilValue, t::SEXP);
-                auto envArglist = constant(R_NilValue, t::SEXP);
-                mkenv->eachLocalVarRev([&](SEXP name, Value* v) {
-                    if (v == MissingArg::instance()) {
-                        envArglist =
-                            call(NativeBuiltins::createMissingBindingCell,
-                                 {constant(name, t::SEXP), envArglist});
+                mkenv->eachLocalVarRev([&](SEXP name, Value* v, bool miss) {
+                    if (miss) {
+                        arglist = call(
+                            NativeBuiltins::createMissingBindingCell,
+                            {loadSxp(v), constant(name, t::SEXP), arglist});
                     } else {
-                        envArglist = call(
+                        arglist = call(
                             NativeBuiltins::createBindingCell,
-                            {loadSxp(v), constant(name, t::SEXP), envArglist});
-                        if (hasMissing) {
-                            arglist = call(
-                                NativeBuiltins::createBindingCell,
-                                {loadSxp(v), constant(name, t::SEXP), arglist});
-                        }
+                            {loadSxp(v), constant(name, t::SEXP), arglist});
                     }
                 });
 
-                if (!hasMissing)
-                    arglist = envArglist;
-                setVal(i,
-                       call(NativeBuiltins::createEnvironment,
-                            {parent, arglist, envArglist, c(mkenv->context)}));
+                setVal(i, call(NativeBuiltins::createEnvironment,
+                               {parent, arglist, c(mkenv->context)}));
 
                 if (bindingsCache.count(i))
                     for (auto b : bindingsCache.at(i))
