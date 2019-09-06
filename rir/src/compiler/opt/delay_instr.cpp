@@ -12,7 +12,7 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
     std::unordered_map<Instruction*, BB*> usedOnlyInDeopt;
 
     auto isTarget = [](Instruction* j) {
-        return LdFun::Cast(j) || MkArg::Cast(j) ||
+        return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
                FrameState::Cast(j);
     };
 

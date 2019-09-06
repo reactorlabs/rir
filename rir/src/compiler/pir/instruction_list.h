@@ -41,11 +41,14 @@
     V(LdVar)                                                                   \
     V(LdConst)                                                                 \
     V(LdArg)                                                                   \
+    V(LdDots)                                                                  \
     V(StVarSuper)                                                              \
     V(LdVarSuper)                                                              \
     V(StVar)                                                                   \
     V(Branch)                                                                  \
     V(Phi)                                                                     \
+    V(DotsList)                                                                \
+    V(ExpandDots)                                                              \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
     V(AsInt)                                                                   \

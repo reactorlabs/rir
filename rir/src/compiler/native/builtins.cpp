@@ -17,7 +17,9 @@ namespace pir {
 
 static SEXP forcePromiseImpl(SEXP prom) {
     SLOWASSERT(TYPEOF(prom) == PROMSXP);
-    return forcePromise(prom);
+    auto res = forcePromise(prom);
+    ENSURE_NAMEDMAX(res);
+    return res;
 }
 static jit_type_t sxp1[1] = {sxp};
 static jit_type_t sxp2[2] = {sxp, sxp};
@@ -181,7 +183,7 @@ void stargImpl(SEXP sym, SEXP val, SEXP env) {
         }
     }
 
-    Rf_defineVar(sym, val, env);
+    rirDefineVarWrapper(sym, val, env);
 };
 NativeBuiltin NativeBuiltins::starg = {
     "starg",
@@ -232,9 +234,46 @@ NativeBuiltin NativeBuiltins::defvar = {
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
 };
 
+SEXP chkfunImpl(SEXP sym, SEXP res) {
+    switch (TYPEOF(res)) {
+    case CLOSXP:
+        jit(res, sym, globalContext());
+        break;
+    case SPECIALSXP:
+    case BUILTINSXP:
+        // special and builtin functions are ok
+        break;
+    default:
+        Rf_error("attempt to apply non-function");
+    }
+    return res;
+}
+
+SEXP ldfunImpl(SEXP sym, SEXP env) {
+    SEXP res = Rf_findFun(sym, env);
+
+    // TODO something should happen here
+    if (res == R_UnboundValue)
+        assert(false && "Unbound var");
+    if (res == R_MissingArg)
+        assert(false && "Missing argument");
+
+    chkfunImpl(sym, res);
+    return res;
+}
+
 NativeBuiltin NativeBuiltins::ldfun = {
-    "Rf_findFun", (void*)&Rf_findFun, 2,
+    "findFun",
+    (void*)&Rf_findFun,
+    2,
     jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
+};
+
+NativeBuiltin NativeBuiltins::chkfun = {
+    "chkfun",
+    (void*)&chkfunImpl,
+    2,
+    nullptr,
 };
 
 static void errorImpl() { Rf_error("Some error in compiled code"); };
@@ -315,6 +354,42 @@ static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
 NativeBuiltin NativeBuiltins::namedCall = {
     "namedCall",
     (void*)&namedCallImpl,
+    7,
+    nullptr,
+};
+
+static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
+                         size_t nargs, Immediate* names,
+                         unsigned long available) {
+    auto ctx = globalContext();
+    auto given = Assumptions(available);
+    auto toPop = nargs;
+
+    if (TYPEOF(callee) != SPECIALSXP) {
+        nargs = expandDotDotDotCallArgs(
+            ctx, nargs, names, env,
+            given.includes(Assumption::StaticallyArgmatched));
+        auto namesStore = ostack_at(ctx, nargs);
+        if (namesStore == R_NilValue)
+            names = nullptr;
+        else
+            names = (Immediate*)DATAPTR(namesStore);
+        toPop = nargs + 1;
+    }
+
+    CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
+                     names, env, given, ctx);
+    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+               LazyEnvironment::check(env) || env == R_NilValue);
+    SLOWASSERT(ctx);
+    auto res = doCall(call, ctx);
+    ostack_popn(ctx, toPop);
+    return res;
+};
+
+NativeBuiltin NativeBuiltins::dotsCall = {
+    "dotsCall",
+    (void*)&dotsCallImpl,
     7,
     nullptr,
 };
@@ -925,14 +1000,13 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
 }
 
 static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
-                                     Immediate astP, SEXP env, size_t nargs) {
+                                     Immediate astP, SEXP env, size_t nargs,
+                                     unsigned long available) {
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
 
-    if (fun->dead || !fun->body()->nativeCode) {
-        return callImpl(fun->body(), astP, callee, env, nargs,
-                        Assumptions().toI());
-    }
+    if (fun->dead || !fun->body()->nativeCode)
+        return callImpl(fun->body(), astP, callee, env, nargs, available);
 
     auto missing = fun->signature().numArguments - nargs;
     for (size_t i = 0; i < missing; ++i)
@@ -977,7 +1051,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
 NativeBuiltin NativeBuiltins::nativeCallTrampoline = {
     "nativeCallTrampoline",
     (void*)&nativeCallTrampolineImpl,
-    5,
+    6,
     nullptr,
 };
 

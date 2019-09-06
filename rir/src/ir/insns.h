@@ -24,6 +24,11 @@ DEF_INSTR(pop_context_, 0, 1, 0, 0)
 DEF_INSTR(mk_env_, 2, -1, 1, 0)
 
 /*
+ *  creates a dotsxp with provided names
+ */
+DEF_INSTR(mk_dotlist_, 1, -1, 1, 0)
+
+/*
  * clear_binding_cache_. Clear binding cache entries from start to start+size
  * (two
  * immediates).

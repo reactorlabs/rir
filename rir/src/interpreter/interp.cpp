@@ -149,7 +149,7 @@ static RIR_INLINE SEXP promiseValue(SEXP promise, InterpreterInstance* ctx) {
     }
 }
 
-static void jit(SEXP cls, SEXP name, InterpreterInstance* ctx) {
+void jit(SEXP cls, SEXP name, InterpreterInstance* ctx) {
     assert(TYPEOF(cls) == CLOSXP);
     if (TYPEOF(BODY(cls)) == EXTERNALSXP)
         return;
@@ -229,6 +229,8 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
                                          const Immediate* names,
                                          bool eagerCallee,
                                          InterpreterInstance* ctx) {
+    assert(args && "Cannot materialize promargs for statically reordered "
+                   "arguments. Static Call to UseMethod function?");
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -681,6 +683,8 @@ static Function* dispatch(const CallContext& call, DispatchTable* vt) {
 
 unsigned pir::Parameter::RIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
+unsigned pir::Parameter::DEOPT_ABANDON =
+    getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 10;
 
 static unsigned serializeCounter = 0;
 
@@ -706,9 +710,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     fun->registerInvocation();
 
     if (!isDeoptimizing() && !fun->unoptimizable &&
+        fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
         ((fun->invocationCount() %
-          ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP)) ==
-         (fun->deoptCount() % pir::Parameter::RIR_WARMUP))) {
+          ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP)) == 0)) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -747,7 +751,56 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         if (!arglist)
             arglist = createLegacyLazyArgsList(call, ctx);
         PROTECT(arglist);
-        SEXP env = closureArgumentAdaptor(call, arglist, R_NilValue);
+        SEXP env;
+        if (call.givenAssumptions.includes(Assumption::StaticallyArgmatched)) {
+            auto formals = FORMALS(call.callee);
+            env = Rf_NewEnvironment(formals, arglist, CLOENV(call.callee));
+
+            // Add missing arguments. Stattically argmatched means that still
+            // some missing args might need to be supplied.
+            if (!call.givenAssumptions.includes(
+                    Assumption::NoExplicitlyMissingArgs) ||
+                call.passedArgs != fun->numArgs) {
+                auto f = formals;
+                auto a = arglist;
+                SEXP prevA = nullptr;
+                size_t pos = 0;
+                while (f != R_NilValue) {
+                    if (a == R_NilValue) {
+                        a = CONS_NR(R_MissingArg, R_NilValue);
+                        SET_TAG(a, TAG(f));
+                        SET_MISSING(a, 2);
+                        if (auto dflt = fun->defaultArg(pos)) {
+                            SETCAR(a, createPromise(dflt, env));
+                        }
+                        if (prevA) {
+                            SETCDR(prevA, a);
+                        } else {
+                            assert(arglist == R_NilValue);
+                            SET_FRAME(env, a);
+                        }
+                    } else if (CAR(a) == R_MissingArg) {
+                        if (auto dflt = fun->defaultArg(pos))
+                            SETCAR(a, createPromise(dflt, env));
+                    }
+
+                    f = CDR(f);
+                    prevA = a;
+                    a = CDR(a);
+                    pos++;
+                }
+            }
+
+            // Currently we cannot recreate the original arglist if we
+            // statically reordered arguments. TODO this needs to be fixed
+            // by remembering the original order.
+            if (auto a = ArgsLazyData::cast(arglist))
+                a->args = nullptr;
+            else
+                arglist = symbol::delayedArglist;
+        } else {
+            env = closureArgumentAdaptor(call, arglist, R_NilValue);
+        }
         PROTECT(env);
         result = rirCallTrampoline(call, fun, env, arglist, ctx);
         UNPROTECT(2);
@@ -759,6 +812,13 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                                   ctx);
             if (!arglist)
                 arglist = (SEXP)&lazyArgs;
+
+            // Currently we cannot recreate the original arglist if we
+            // statically reordered arguments. TODO this needs to be fixed
+            // by remembering the original order.
+            if (call.givenAssumptions.includes(
+                    Assumption::StaticallyArgmatched))
+                lazyArgs.args = nullptr;
             supplyMissingArgs(call, fun);
             result = rirCallTrampoline(call, fun, arglist, ctx);
     }
@@ -1489,17 +1549,23 @@ static unsigned EnvStubAllocated =
     EventCounters::instance().registerCounter("envstub allocated");
 #endif
 
-static size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
-                                      Immediate* names_, SEXP env) {
+size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
+                               Immediate* names_, SEXP env, bool explicitDots) {
     std::vector<SEXP> args;
     std::vector<SEXP> names;
+    bool hasNames = false;
     for (size_t i = 0; i < n; ++i) {
         auto arg = ostack_at(ctx, n - i - 1);
-        if (arg != R_DotsSymbol) {
+        auto name = cp_pool_at(ctx, names_[i]);
+        if (name != R_DotsSymbol) {
             args.push_back(arg);
-            names.push_back(cp_pool_at(ctx, names_[i]));
+            names.push_back(name);
+            if (name != R_NilValue)
+                hasNames = true;
         } else {
-            SEXP ellipsis = Rf_findVar(R_DotsSymbol, env);
+            SEXP ellipsis = arg;
+            if (ellipsis == R_DotsSymbol)
+                ellipsis = Rf_findVar(R_DotsSymbol, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     auto arg = CAR(ellipsis);
@@ -1507,20 +1573,38 @@ static size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                         arg = Rf_mkPROMISE(arg, env);
                     args.push_back(arg);
                     names.push_back(TAG(ellipsis));
+                    if (TAG(ellipsis) != R_NilValue)
+                        hasNames = true;
                     ellipsis = CDR(ellipsis);
                 }
+            } else if (ellipsis == R_MissingArg) {
+                // empty ... occurring in the middle of an argument list needs
+                // to be explicit, since pir optimized functions expect it that
+                // way.
+                if (explicitDots) {
+                    args.push_back(R_MissingArg);
+                    names.push_back(R_NilValue);
+                }
+            } else {
+                assert(ellipsis == R_UnboundValue);
             }
         }
     }
-    ostack_popn(ctx, n);
-    SEXP namesStore = Rf_allocVector(RAWSXP, sizeof(Immediate) * names.size());
-    ostack_push(ctx, namesStore);
-    {
-        Immediate* nstore = (Immediate*)DATAPTR(namesStore);
-        for (const auto& n : names) {
-            *nstore = Pool::insert(n);
-            nstore++;
+    if (hasNames) {
+        SEXP namesStore =
+            Rf_allocVector(RAWSXP, sizeof(Immediate) * names.size());
+        ostack_popn(ctx, n);
+        ostack_push(ctx, namesStore);
+        {
+            Immediate* nstore = (Immediate*)DATAPTR(namesStore);
+            for (const auto& n : names) {
+                *nstore = Pool::insert(n);
+                nstore++;
+            }
         }
+    } else {
+        ostack_popn(ctx, n);
+        ostack_push(ctx, R_NilValue);
     }
 
     for (const auto& a : args)
@@ -1653,6 +1737,27 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(pop_context_) { return ostack_pop(ctx); }
 
+        INSTRUCTION(mk_dotlist_) {
+            size_t n = readImmediate();
+            advanceImmediate();
+            SEXP res = R_NilValue;
+            auto names = (Immediate*)pc;
+            advanceImmediateN(n);
+            assert(n > 0);
+            for (long i = n - 1; i >= 0; --i) {
+                SEXP val = ostack_pop(ctx);
+                INCREMENT_NAMED(val);
+                SEXP name = cp_pool_at(ctx, names[i]);
+                res = CONS_NR(val, res);
+                SET_TAG(res, name);
+            }
+
+            SET_TYPEOF(res, DOTSXP);
+            ostack_push(ctx, res);
+
+            NEXT();
+        }
+
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
             advanceImmediate();
@@ -1666,10 +1771,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             bool hasMissing = false;
+            bool hasDots = false;
             for (long i = n - 1; i >= 0; --i) {
                 SEXP val = ostack_pop(ctx);
                 INCREMENT_NAMED(val);
                 SEXP name = cp_pool_at(ctx, names[i]);
+                if (name == R_DotsSymbol)
+                    hasDots = true;
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
                 hasMissing = hasMissing || val == R_MissingArg;
@@ -1680,7 +1788,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (contextPos > 0) {
                 if (auto cptr = getFunctionContext(contextPos - 1)) {
                     cptr->cloenv = res;
-                    if (cptr->promargs == symbol::delayedArglist) {
+                    // TODO proper handling of promargs if we have ... args
+                    if (!hasDots && cptr->promargs == symbol::delayedArglist) {
                         auto promargs = arglist;
                         if (hasMissing) {
                             // For the promargs we need to strip missing
@@ -2284,13 +2393,24 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto names_ = (Immediate*)pc;
             advanceImmediateN(n);
 
-            n = expandDotDotDotCallArgs(ctx, n, names_, env);
-            auto namesStore = ostack_at(ctx, n);
-            CallContext call(c, ostack_at(ctx, n + 1), n, ast,
-                             ostack_cell_at(ctx, n - 1),
-                             (Immediate*)DATAPTR(namesStore), env, given, ctx);
+            SEXP callee = ostack_at(ctx, n);
+            Immediate* names = names_;
+            size_t toPop = n + 1;
+            if (TYPEOF(callee) != SPECIALSXP) {
+                n = expandDotDotDotCallArgs(
+                    ctx, n, names_, env,
+                    given.includes(Assumption::StaticallyArgmatched));
+                auto namesStore = ostack_at(ctx, n);
+                if (namesStore == R_NilValue)
+                    names = nullptr;
+                else
+                    names = (Immediate*)DATAPTR(namesStore);
+                toPop = n + 2;
+            }
+            CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
+                             names, env, given, ctx);
             res = doCall(call, ctx);
-            ostack_popn(ctx, call.passedArgs + 2);
+            ostack_popn(ctx, toPop);
             ostack_push(ctx, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
@@ -2344,9 +2464,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             addDynamicAssumptionsFromContext(call);
             bool dispatchFail = fun->dead || !matches(call, fun->signature());
             if (!dispatchFail && !fun->unoptimizable &&
+                fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
                 (fun->invocationCount() %
                      ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
-                 (fun->deoptCount() % pir::Parameter::RIR_WARMUP))) {
+                 0)) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
                 if (assumptions != fun->signature().assumptions)
@@ -2364,10 +2485,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (fun->signature().envCreation ==
                 FunctionSignature::Environment::CallerProvided) {
-                res = doCall(call, ctx);
+                res = rirCall(call, ctx);
             } else {
                 ArgsLazyData lazyArgs(call.suppliedArgs, call.stackArgs,
                                       call.names, ctx);
+                // Currently we cannot recreate the original arglist if we
+                // statically reordered arguments. TODO this needs to be fixed
+                // by remembering the original order.
+                if (given.includes(Assumption::StaticallyArgmatched))
+                    lazyArgs.args = nullptr;
                 fun->registerInvocation();
                 supplyMissingArgs(call, fun);
                 res = rirCallTrampoline(call, fun, symbol::delayedEnv,

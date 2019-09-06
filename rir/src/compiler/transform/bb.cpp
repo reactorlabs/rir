@@ -175,7 +175,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         ldmsg = new CastType(ldmsg, CastType::Downcast, PirType::any(),
                              RType::prom);
         debug->append(ldmsg);
-        debug->append(new Call(Env::elided(), ldprint, {ldmsg},
+        debug->append(new Call(Env::global(), ldprint, {ldmsg},
                                Tombstone::framestate(), 0));
         debug->setNext(deoptBlock);
         deoptBlock = debug;

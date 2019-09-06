@@ -12,6 +12,7 @@ struct Parameter {
     static bool DEOPT_CHAOS_SEED;
     static size_t MAX_INPUT_SIZE;
     static unsigned RIR_WARMUP;
+    static unsigned DEOPT_ABANDON;
 
     static size_t INLINER_MAX_SIZE;
     static size_t INLINER_MAX_INLINEE_SIZE;

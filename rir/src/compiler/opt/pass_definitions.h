@@ -125,6 +125,8 @@ class PASS(OptimizeContexts);
 
 class PASS(DeadStoreRemoval);
 
+class PASS(DotDotDots);
+
 /*
  * At this point, loop code invariant mainly tries to hoist ldFun operations
  * outside the loop in case it can prove that the loop body will not change

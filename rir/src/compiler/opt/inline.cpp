@@ -55,6 +55,14 @@ class TheInliner {
                             inlinee->assumptions().numMissing() !=
                         call->nCallArgs())
                         continue;
+                    bool hasDotArgs = false;
+                    call->eachCallArg([&](Value* v) {
+                        if (ExpandDots::Cast(v))
+                            hasDotArgs = true;
+                    });
+                    // TODO do some argument matching
+                    if (hasDotArgs)
+                        continue;
                     staticEnv = mkcls->lexicalEnv();
                     callerFrameState = call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
@@ -73,6 +81,8 @@ class TheInliner {
                     if (inlineeCls->closureEnv() == Env::notClosed() &&
                         inlinee != version)
                         continue;
+                    call->eachCallArg(
+                        [&](Value* v) { assert(!ExpandDots::Cast(v)); });
                     staticEnv = inlineeCls->closureEnv();
                     callerFrameState = call->frameState();
                 } else {
@@ -91,11 +101,12 @@ class TheInliner {
                 // TODO: instead of blacklisting those, we could also create
                 // contexts for inlined functions.
                 SafeToInline allowInline = SafeToInline::Yes;
-                auto updateAllowInline = [&](Code* code) {
+                std::function<void(Code*)> updateAllowInline = [&](Code* code) {
                     Visitor::check(code->entry, [&](Instruction* i) {
-                        if (auto ld = LdFun::Cast(i)) {
-                            if (!SafeBuiltinsList::forInlineByName(
-                                    ld->varName)) {
+                        if (LdFun::Cast(i) || LdVar::Cast(i)) {
+                            auto n = LdFun::Cast(i) ? LdFun::Cast(i)->varName
+                                                    : LdVar::Cast(i)->varName;
+                            if (!SafeBuiltinsList::forInlineByName(n)) {
                                 allowInline = SafeToInline::No;
                                 return false;
                             }
@@ -108,6 +119,9 @@ class TheInliner {
                         }
                         if (CallInstruction::CastCall(i)) {
                             allowInline = SafeToInline::NeedsContext;
+                        }
+                        if (auto mk = MkArg::Cast(i)) {
+                            updateAllowInline(mk->prom());
                         }
                         return true;
                     });
@@ -334,7 +348,7 @@ size_t Parameter::INLINER_MAX_SIZE = getenv("PIR_INLINER_MAX_SIZE")
 size_t Parameter::INLINER_MAX_INLINEE_SIZE =
     getenv("PIR_INLINER_MAX_INLINEE_SIZE")
         ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
-        : 100;
+        : 200;
 size_t Parameter::INLINER_INITIAL_FUEL =
     getenv("PIR_INLINER_INITIAL_FUEL")
         ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))

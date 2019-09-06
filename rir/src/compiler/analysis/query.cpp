@@ -1,6 +1,8 @@
 #include "query.h"
 #include "../pir/pir_impl.h"
 #include "../util/visitor.h"
+#include "R/Symbols.h"
+#include "utils/Pool.h"
 
 namespace rir {
 namespace pir {
@@ -37,6 +39,29 @@ std::unordered_set<Value*> Query::returned(Code* c) {
             returned.insert(bb->last()->arg(0).val());
     });
     return returned;
+}
+
+bool Query::needsPromargs(rir::Function* f) { return needsPromargs(f->body()); }
+
+bool Query::needsPromargs(rir::Code* c) {
+    auto pc = c->code();
+    std::vector<BC::FunIdx> promises;
+    while (pc != c->endCode()) {
+        auto bc = BC::advance(&pc, c);
+        if (bc.bc == Opcode::ldfun_) {
+            auto sym = Pool::get(bc.immediate.pool);
+            if (sym == symbol::UseMethod || sym == symbol::Recall ||
+                sym == symbol::eval || sym == symbol::standardGeneric ||
+                sym == symbol::dispatchGeneric)
+                return true;
+        }
+        bc.addMyPromArgsTo(promises);
+    }
+    for (auto& p : promises)
+        if (needsPromargs(c->getPromise(p)))
+            return true;
+
+    return false;
 }
 
 } // namespace pir
