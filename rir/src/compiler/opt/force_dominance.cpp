@@ -47,7 +47,6 @@ using namespace rir::pir;
 struct ForcedBy {
     std::unordered_map<Value*, Force*> forcedBy;
     rir::SmallSet<Value*> inScope;
-    std::unordered_map<Value*, BB*> escapeOnDeopt;
     rir::SmallSet<Value*> escaped;
 
     std::vector<size_t> argumentForceOrder;
@@ -74,11 +73,6 @@ struct ForcedBy {
             escaped.erase(e);
             changed = true;
         }
-        auto ed = escapeOnDeopt.find(arg);
-        if (ed != escapeOnDeopt.end()) {
-            escapeOnDeopt.erase(ed);
-            changed = true;
-        }
         return changed;
     }
 
@@ -88,21 +82,13 @@ struct ForcedBy {
         // sideeffect, we have to assume that all escaped promises might have
         // been forced
 
-        for (auto& e : escaped)
+        for (auto& e : escaped) {
             if (!forcedBy.count(e)) {
                 forcedBy[e] = ambiguous();
                 changed = true;
             }
-        for (auto& e : escapeOnDeopt) {
-            // std::cout << "Is predecessor: " << sideEffect->bb()->id << "of"
-            // << e.second->id << "  " << cfg.isPredecessor(sideEffect->bb(),
-            // e.second) << "\n";
-            if (!forcedBy.count(e.first) &&
-                cfg.isPredecessor(sideEffect->bb(), e.second)) {
-                forcedBy[e.first] = ambiguous();
-                changed = true;
-            }
         }
+
         return changed;
     }
 
@@ -115,16 +101,9 @@ struct ForcedBy {
     }
 
     bool escape(Value* val, Instruction* instruction) {
-        if (instruction->bb()->isDeopt()) {
-            if (!escaped.count(val) && !escapeOnDeopt.count(val)) {
-                escapeOnDeopt.emplace(val, instruction->bb());
-                return true;
-            }
-        } else {
-            if (!escaped.count(val)) {
-                escaped.insert(val);
-                return true;
-            }
+        if (!escaped.count(val)) {
+            escaped.insert(val);
+            return true;
         }
 
         return false;
@@ -159,16 +138,7 @@ struct ForcedBy {
         }
         for (auto& e : other.escaped) {
             if (!escaped.count(e)) {
-                if (escapeOnDeopt.count(e))
-                    escapeOnDeopt.erase(e);
                 escaped.insert(e);
-                res.update();
-            }
-        }
-
-        for (auto& e : other.escapeOnDeopt) {
-            if (!escaped.count(e.first) && !escapeOnDeopt.count(e.first)) {
-                escapeOnDeopt.insert(e);
                 res.update();
             }
         }
@@ -304,12 +274,6 @@ struct ForcedBy {
             out << " ";
         }
         out << "\n";
-        out << "Escaped proms only because of deopts: ";
-        for (auto& p : escapeOnDeopt) {
-            p.first->printRef(out);
-            out << " ";
-        }
-        out << "\n";
         for (auto& e : forcedBy) {
             e.first->printRef(out);
             if (e.second == ambiguous()) {
@@ -416,7 +380,8 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
             Visitor::run(code->entry, [&](BB* bb) {
                 for (const auto& i : *bb) {
                     if (auto f = Force::Cast(i)) {
-                        if (result.isDominatingForce(f)) {
+                        if (analysis.resultIgnoringUnreachableExits(f)
+                                .isDominatingForce(f)) {
                             f->strict = true;
                             if (auto mkarg =
                                     MkArg::Cast(f->followCastsAndForce())) {
