@@ -2,7 +2,7 @@
 
 namespace rir {
 
-unsigned globalEnvVersion = 0;
-unsigned namespaceEnvVersion = 0;
+unsigned globalEnvVersion = 1;
+unsigned namespaceEnvVersion = 1;
 
 } // namespace rir

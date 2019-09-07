@@ -394,6 +394,28 @@ BC BC::checkVar(SEXP expected, SEXP sym) {
     return BC(Opcode::check_var_, i);
 }
 
+BC BC::ldvarNoForceToplevelCached(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.toplevelCacheArgs.sym = Pool::insert(sym);
+    i.toplevelCacheArgs.globalVersion = 0;
+    i.toplevelCacheArgs.namespaceVersion = 0;
+    i.toplevelCacheArgs.cached = NULL;
+    return BC(Opcode::ldvar_noforce_toplevel_cached_, i);
+}
+
+BC BC::ldfunToplevelCached(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.toplevelCacheArgs.sym = Pool::insert(sym);
+    i.toplevelCacheArgs.globalVersion = 0;
+    i.toplevelCacheArgs.namespaceVersion = 0;
+    i.toplevelCacheArgs.cached = NULL;
+    return BC(Opcode::ldfun_toplevel_cached_, i);
+}
+
 } // namespace rir
 
 #endif

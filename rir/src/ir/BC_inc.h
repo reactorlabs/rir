@@ -145,6 +145,12 @@ class BC {
         unsigned globalVersion;
         unsigned namespaceVersion;
     };
+    struct ToplevelCacheArgs {
+        PoolIdx sym;
+        unsigned globalVersion;
+        unsigned namespaceVersion;
+        SEXP cached;
+    } __attribute__((packed));
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
@@ -174,6 +180,7 @@ class BC {
         CachePositionRange cacheIdx;
         DeoptReason deoptReason;
         CheckVarArgs checkVarArgs;
+        ToplevelCacheArgs toplevelCacheArgs;
         ImmediateArguments() {
             memset(reinterpret_cast<void*>(this), 0,
                    sizeof(ImmediateArguments));
@@ -410,6 +417,8 @@ BC_NOARGS(V, _)
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
     inline static BC assertType(pir::PirType typ, SignedImmediate instr);
     inline static BC checkVar(SEXP expected, SEXP sym);
+    inline static BC ldvarNoForceToplevelCached(SEXP sym);
+    inline static BC ldfunToplevelCached(SEXP sym);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -713,6 +722,10 @@ BC_NOARGS(V, _)
             break;
         case Opcode::check_var_:
             memcpy(&immediate.checkVarArgs, pc, sizeof(CheckVarArgs));
+            break;
+        case Opcode::ldvar_noforce_toplevel_cached_:
+        case Opcode::ldfun_toplevel_cached_:
+            memcpy(&immediate.toplevelCacheArgs, pc, sizeof(ToplevelCacheArgs));
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

@@ -91,6 +91,18 @@ DEF_INSTR(ldvar_noforce_, 1, 0, 1, 1)
 DEF_INSTR(ldvar_noforce_cached_, 2, 0, 1, 1)
 
 /**
+ * ldvar_toplevel_cached:: like ldvar_noforce_, but keeps a cached version
+ * and can skip looking in the global / package envs if they were not updated.
+ */
+DEF_INSTR(ldvar_noforce_toplevel_cached_, 5, 0, 1, 1)
+
+/**
+ * ldfun_toplevel_cached:: like ldfun_, but keeps a cached version and can
+ * skip looking in the global / package envs if they were not updated.
+ */
+DEF_INSTR(ldfun_toplevel_cached_, 5, 0, 1, 1)
+
+/**
  * ldvar_super_:: take immediate CP index of symbol, finding binding in
  * enclosing env and push.
  */

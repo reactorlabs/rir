@@ -143,6 +143,10 @@ void BC::write(CodeStream& cs) const {
     case Opcode::check_var_:
         cs.insert(immediate.checkVarArgs);
         return;
+    case Opcode::ldvar_noforce_toplevel_cached_:
+    case Opcode::ldfun_toplevel_cached_:
+        cs.insert(immediate.toplevelCacheArgs);
+        return;
 
     case Opcode::invalid_:
     case Opcode::num_of:
@@ -257,6 +261,14 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             i.checkVarArgs.sym = Pool::insert(ReadItem(refTable, inp));
             i.checkVarArgs.globalVersion = 0;
             i.checkVarArgs.namespaceVersion = 0;
+            // We must update the versions
+            break;
+        case Opcode::ldvar_noforce_toplevel_cached_:
+        case Opcode::ldfun_toplevel_cached_:
+            i.toplevelCacheArgs.sym = Pool::insert(ReadItem(refTable, inp));
+            i.toplevelCacheArgs.globalVersion = 0;
+            i.toplevelCacheArgs.namespaceVersion = 0;
+            i.toplevelCacheArgs.cached = NULL;
             // We must update the versions
             break;
         case Opcode::record_deopt_:
@@ -398,6 +410,11 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::check_var_:
             WriteItem(Pool::get(i.checkVarArgs.expected), refTable, out);
             WriteItem(Pool::get(i.checkVarArgs.sym), refTable, out);
+            // We must update, discard versions
+            break;
+        case Opcode::ldvar_noforce_toplevel_cached_:
+        case Opcode::ldfun_toplevel_cached_:
+            WriteItem(Pool::get(i.toplevelCacheArgs.sym), refTable, out);
             // We must update, discard versions
             break;
         case Opcode::record_deopt_:
@@ -706,6 +723,14 @@ void BC::print(std::ostream& out) const {
             << CHAR(PRINTNAME(Pool::get(immediate.checkVarArgs.sym)))
             << " [global: " << immediate.checkVarArgs.globalVersion
             << ", namespace: " << immediate.checkVarArgs.namespaceVersion
+            << "]";
+        break;
+    case Opcode::ldvar_noforce_toplevel_cached_:
+    case Opcode::ldfun_toplevel_cached_:
+        out << CHAR(PRINTNAME(Pool::get(immediate.toplevelCacheArgs.sym)))
+            << " [ ?= " << immediate.toplevelCacheArgs.cached
+            << ", global: " << immediate.toplevelCacheArgs.globalVersion
+            << ", namespace: " << immediate.toplevelCacheArgs.namespaceVersion
             << "]";
         break;
     }

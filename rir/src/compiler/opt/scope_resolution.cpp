@@ -511,8 +511,19 @@ class TheScopeResolution {
                     // If nothing else, narrow down the environment (in case we
                     // found something more concrete).
                     if (i->hasEnv() &&
-                        aLoad.env != AbstractREnvironment::UnknownParent)
-                        i->env(aLoad.env);
+                        aLoad.env != AbstractREnvironment::UnknownParent) {
+                        Value* env = aLoad.env;
+                        i->env(env);
+                        if (auto ld = LdVar::Cast(i)) {
+                            if (Env* e = Env::Cast(env)) {
+                                if (Env::isStaticEnv(e) &&
+                                    (e->rho == R_GlobalEnv ||
+                                     R_IsNamespaceEnv(e->rho))) {
+                                    ld->useToplevelCache = true;
+                                }
+                            }
+                        }
+                    }
                 });
 
                 // TODO move this to a pass where it fits...

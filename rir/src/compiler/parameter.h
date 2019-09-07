@@ -23,6 +23,7 @@ struct Parameter {
     static unsigned RIR_CHECK_PIR_TYPES;
 
     static unsigned PIR_NATIVE_BACKEND;
+    static unsigned PIR_CHECK_VAR;
 };
 } // namespace pir
 } // namespace rir

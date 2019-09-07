@@ -1,6 +1,6 @@
 jitOn <- as.numeric(Sys.getenv("R_ENABLE_JIT", unset=2)) != 0
 jitOn <- jitOn && (Sys.getenv("PIR_ENABLE", unset="on") == "on")
-isNative <- as.numeric(Sys.getenv("PIR_NATIVE_BACKEND", unset=0)) != 0
+checkVar <- as.numeric(Sys.getenv("PIR_CHECK_VAR", unset=0)) != 0
 
 if (!jitOn)
   quit()
@@ -34,7 +34,7 @@ stopifnot(pir.check(
 
 # Copied / cross-validated from pir_tests
 
-if (!isNative) {
+if (checkVar) {
   stopifnot(pir.check(
     f <- function(){
       j <- 0

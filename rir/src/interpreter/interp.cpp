@@ -1548,6 +1548,101 @@ bool isIdenticalNoForce(SEXP lhs, SEXP rhs) {
         return rhs == lhs;
 }
 
+SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
+                   InterpreterInstance* ctx) {
+    if (TYPEOF(rho) == NILSXP)
+        Rf_error("use of NULL environment is defunct");
+    if (!isEnvironment(rho))
+        Rf_error("argument to 'findVar' is not an environment");
+// #define DEBUG_CACHE
+#ifdef DEBUG_CACHE
+    std::cout << "find var cached -> ";
+#endif
+    SEXP res = R_UnboundValue;
+    bool pastGlobal = false;
+    bool pastNamespace = false;
+    while (rho != R_EmptyEnv) {
+        if (!pastNamespace) {
+            if (pastGlobal || isNamespaceEnvFast(rho)) {
+                if (!pastGlobal) {
+                    *(unsigned*)pc = globalEnvVersion;
+                    advanceImmediate();
+                    pastGlobal = true;
+                }
+                pastNamespace = true;
+                unsigned* cachedNamespaceEnvVersion = (unsigned*)pc;
+                if (*cachedNamespaceEnvVersion == namespaceEnvVersion) {
+#ifdef DEBUG_CACHE
+                    std::cout << "cache in namespace - ";
+#endif
+                    res = NULL;
+                    advanceImmediate();
+                    break;
+                }
+                SLOWASSERT(*cachedNamespaceEnvVersion < namespaceEnvVersion);
+                *cachedNamespaceEnvVersion = namespaceEnvVersion;
+                advanceImmediate();
+            } else if (rho == R_GlobalEnv) {
+                pastGlobal = true; // Global parent = namespace
+                unsigned* cachedGlobalEnvVersion = (unsigned*)pc;
+                if (*cachedGlobalEnvVersion == globalEnvVersion) {
+#ifdef DEBUG_CACHE
+                    std::cout << "cache in global - ";
+#endif
+                    res = NULL;
+                    advanceImmediate();
+                    break;
+                }
+                SLOWASSERT(*cachedGlobalEnvVersion < globalEnvVersion);
+                *cachedGlobalEnvVersion = globalEnvVersion;
+                advanceImmediate();
+            }
+        }
+
+        res = findVarInFrame3(rho, sym, TRUE);
+        if (res != R_UnboundValue) {
+            if (!isFun)
+                break;
+            if (TYPEOF(res) == PROMSXP)
+                res = promiseValue(res, ctx);
+            if (TYPEOF(res) == CLOSXP || TYPEOF(res) == BUILTINSXP ||
+                TYPEOF(res) == SPECIALSXP)
+                break;
+            res = R_UnboundValue;
+        }
+
+        rho = ENCLOS(rho);
+    }
+    if (!pastGlobal) {
+        unsigned* cachedGlobalEnvVersion = (unsigned*)pc;
+        *cachedGlobalEnvVersion = globalEnvVersion;
+        advanceImmediate();
+    }
+    if (!pastNamespace) {
+        unsigned* cachedNamespaceEnvVersion = (unsigned*)pc;
+        *cachedNamespaceEnvVersion = namespaceEnvVersion;
+        advanceImmediate();
+    }
+    SEXP* cachedRef = (SEXP*)pc;
+    if (res == NULL) {
+#ifdef DEBUG_CACHE
+        std::cout << "cached\n";
+#endif
+        res = *cachedRef;
+    } else {
+#ifdef DEBUG_CACHE
+        std::cout << "update\n";
+#endif
+        *cachedRef = res;
+    }
+    pc += sizeof(SEXP);
+    if (res == R_UnboundValue && isFun) {
+        Rf_errorcall(R_CurrentExpression, "could not find function \"%s\"",
+                     CHAR(PRINTNAME(sym)));
+    }
+    return res;
+}
+
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  R_bcstack_t* localsBase, BindingCache* cache) {
@@ -1822,6 +1917,34 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(ldfun_toplevel_cached_) {
+            SEXP sym = readConst(ctx, readImmediate());
+            advanceImmediate();
+            res = findVarCached(sym, env, true, pc, ctx);
+            SLOWASSERT(*(pc - sizeof(BC::ToplevelCacheArgs) - 1) ==
+                       Opcode::ldfun_toplevel_cached_);
+
+            // TODO something should happen here
+            if (res == R_UnboundValue)
+                assert(false && "Unbound var");
+            if (res == R_MissingArg)
+                assert(false && "Missing argument");
+
+            switch (TYPEOF(res)) {
+            case CLOSXP:
+                jit(res, sym, ctx);
+                break;
+            case SPECIALSXP:
+            case BUILTINSXP:
+                // special and builtin functions are ok
+                break;
+            default:
+                Rf_error("attempt to apply non-function");
+            }
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(ldvar_for_update_) {
             Immediate id = readImmediate();
             advanceImmediate();
@@ -2010,6 +2133,26 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            }
+
+            if (res != R_NilValue)
+                ENSURE_NAMED(res);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_noforce_toplevel_cached_) {
+            // TODO
+            SEXP sym = readConst(ctx, readImmediate());
+            advanceImmediate();
+            res = findVarCached(sym, env, false, pc, ctx);
+
+            if (res == R_UnboundValue) {
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
                 Rf_error("argument \"%s\" is missing, with no default",
                          CHAR(PRINTNAME(sym)));
             }
@@ -3807,7 +3950,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
-// #define DEBUG_CACHE
 #ifdef DEBUG_CACHE
             std::cout << "check var -> ";
 #endif

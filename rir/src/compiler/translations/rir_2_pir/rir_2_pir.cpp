@@ -137,6 +137,9 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
+unsigned Parameter::PIR_CHECK_VAR =
+    getenv("PIR_CHECK_VAR") ? atoi(getenv("PIR_CHECK_VAR")) : 0;
+
 Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
                                    const RirStack& stack,
                                    Builder& insert) const {
@@ -452,7 +455,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto pos = bb->begin();
 
             Instruction* t;
-            if (ldfun && Parameter::PIR_NATIVE_BACKEND == 0)
+            if (ldfun && Parameter::PIR_CHECK_VAR)
                 t = new CheckVar(monomorphic, ldfun->varName, ldfun->env());
             else {
                 Value* given = callee;
@@ -461,6 +464,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 pos++;
                 if (ldfun && ldfun->varName != symbol::c) {
                     auto ldvar = new LdVar(ldfun->varName, ldfun->env());
+                    ldvar->useToplevelCache = true;
                     pos = bb->insert(pos, ldvar);
                     pos++;
                     given = ldvar;
@@ -876,6 +880,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::assert_type_:
     case Opcode::record_deopt_:
     case Opcode::check_var_:
+    case Opcode::ldvar_noforce_toplevel_cached_:
+    case Opcode::ldfun_toplevel_cached_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 

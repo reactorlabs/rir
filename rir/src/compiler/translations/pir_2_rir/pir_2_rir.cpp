@@ -589,7 +589,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::LdFun: {
                 auto ldfun = LdFun::Cast(instr);
-                cb.add(BC::ldfun(ldfun->varName));
+                // Currently all ldfuns are toplevel cached.
+                cb.add(BC::ldfunToplevelCached(ldfun->varName));
                 break;
             }
 
@@ -612,6 +613,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                     if (cache.isCached(key)) {
                         cb.add(BC::ldvarNoForceCached(ldvar->varName,
                                                       cache.indexOf(key)));
+                    } else if (ldvar->useToplevelCache) {
+                        cb.add(BC::ldvarNoForceToplevelCached(ldvar->varName));
                     } else {
                         cb.add(BC::ldvarNoForce(ldvar->varName));
                     }
