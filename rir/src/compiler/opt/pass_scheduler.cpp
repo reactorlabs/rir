@@ -23,6 +23,7 @@ void PassScheduler::add(std::unique_ptr<const PirTranslator>&& t) {
 PassScheduler::PassScheduler() {
     auto addDefaultOpt = [&]() {
         add<OptimizeVisibility>();
+        add<DotDotDots>();
         add<ForceDominance>();
         add<ScopeResolution>();
         add<DeadStoreRemoval>();

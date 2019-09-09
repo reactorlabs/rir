@@ -56,6 +56,9 @@ bool SafeBuiltinsList::always(int builtin) {
         findBuiltin("as.function.default"),
         findBuiltin("typeof"),
         findBuiltin("is.vector"),
+
+        findBuiltin("stdout"),
+        findBuiltin("("),
     };
 
     for (auto i : safeBuiltins)
@@ -272,6 +275,8 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         findBuiltin("is.nan"),
         findBuiltin("is.finite"),
         findBuiltin("is.infinite"),
+
+        findBuiltin("cat"),
     };
 
     for (auto i : safeBuiltins)

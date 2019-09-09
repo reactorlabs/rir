@@ -1078,7 +1078,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     for (RListIter arg = RList(args).begin(); arg != RList::end(); ++i, ++arg) {
         if (*arg == R_DotsSymbol) {
             cs << BC::push(R_DotsSymbol);
-            names.push_back(R_NilValue);
+            names.push_back(R_DotsSymbol);
             hasDots = true;
             continue;
         }

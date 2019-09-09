@@ -65,6 +65,7 @@ struct NativeBuiltins {
     static NativeBuiltin defvar;
     static NativeBuiltin starg;
     static NativeBuiltin ldfun;
+    static NativeBuiltin chkfun;
 
     static NativeBuiltin setCar;
 
@@ -86,6 +87,7 @@ struct NativeBuiltins {
 
     static NativeBuiltin call;
     static NativeBuiltin namedCall;
+    static NativeBuiltin dotsCall;
     static NativeBuiltin callBuiltin;
 
     static NativeBuiltin notOp;

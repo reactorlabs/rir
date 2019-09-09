@@ -102,6 +102,12 @@ void BC::write(CodeStream& cs) const {
             cs.insert(name);
         break;
 
+    case Opcode::mk_dotlist_:
+        cs.insert(immediate.mkDotlistFixedArgs);
+        for (PoolIdx name : mkEnvExtra().names)
+            cs.insert(name);
+        break;
+
     case Opcode::br_:
     case Opcode::brtrue_:
     case Opcode::beginloop_:
@@ -200,6 +206,14 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             BC::PoolIdx* names =
                 (BC::PoolIdx*)(code + 1 + sizeof(MkEnvFixedArgs));
             for (unsigned j = 0; j < i.mkEnvFixedArgs.nargs; j++)
+                names[j] = Pool::insert(ReadItem(refTable, inp));
+            break;
+        }
+        case Opcode::mk_dotlist_: {
+            InBytes(inp, code + 1, sizeof(MkDotlistFixedArgs));
+            BC::PoolIdx* names =
+                (BC::PoolIdx*)(code + 1 + sizeof(MkDotlistFixedArgs));
+            for (unsigned j = 0; j < i.mkDotlistFixedArgs.nargs; j++)
                 names[j] = Pool::insert(ReadItem(refTable, inp));
             break;
         }
@@ -339,6 +353,11 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::mk_env_:
             OutBytes(out, code + 1, sizeof(MkEnvFixedArgs));
             for (unsigned j = 0; j < i.mkEnvFixedArgs.nargs; j++)
+                WriteItem(Pool::get(bc.mkEnvExtra().names[j]), refTable, out);
+            break;
+        case Opcode::mk_dotlist_:
+            OutBytes(out, code + 1, sizeof(MkDotlistFixedArgs));
+            for (unsigned j = 0; j < i.mkDotlistFixedArgs.nargs; j++)
                 WriteItem(Pool::get(bc.mkEnvExtra().names[j]), refTable, out);
             break;
         case Opcode::call_:
@@ -535,6 +554,13 @@ void BC::print(std::ostream& out) const {
         auto args = immediate.mkEnvFixedArgs;
         BC::NumArgs nargs = args.nargs;
         out << nargs << ", c" << args.context << "  ";
+        printNames(out, mkEnvExtra().names);
+        break;
+    }
+    case Opcode::mk_dotlist_: {
+        auto args = immediate.mkDotlistFixedArgs;
+        BC::NumArgs nargs = args.nargs;
+        out << nargs << ", ";
         printNames(out, mkEnvExtra().names);
         break;
     }

@@ -153,6 +153,7 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::defvar.llvmSignature = t::void_sexpsexpsexp;
     NativeBuiltins::starg.llvmSignature = t::void_sexpsexpsexp;
     NativeBuiltins::ldfun.llvmSignature = t::sexp_sexpsexp;
+    NativeBuiltins::chkfun.llvmSignature = t::sexp_sexpsexp;
 
     NativeBuiltins::setCar.llvmSignature = t::void_sexpsexp;
 
@@ -185,7 +186,15 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::call.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64}, false);
+    NativeBuiltins::dotsCall.llvmSignature = llvm::FunctionType::get(
+        t::SEXP,
+        {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
+        false);
     NativeBuiltins::namedCall.llvmSignature = llvm::FunctionType::get(
+        t::SEXP,
+        {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
+        false);
+    NativeBuiltins::dotsCall.llvmSignature = llvm::FunctionType::get(
         t::SEXP,
         {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
         false);
@@ -223,7 +232,8 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::nativeCallTrampoline.llvmSignature =
         llvm::FunctionType::get(
-            t::SEXP, {t::SEXP, t::voidPtr, t::Int, t::SEXP, t::i64}, false);
+            t::SEXP, {t::SEXP, t::voidPtr, t::Int, t::SEXP, t::i64, t::i64},
+            false);
 
     NativeBuiltins::unop.llvmSignature = t::sexp_sexpint;
     NativeBuiltins::unopEnv.llvmSignature = t::sexp_sexp2int2;

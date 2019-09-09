@@ -73,6 +73,7 @@
     V(attributes, "attributes")                                                \
     V(c, "c")                                                                  \
     V(standardGeneric, "standardGeneric")                                      \
+    V(dispatchGeneric, "dispatchGeneric")                                      \
     SIMPLE_INSTRUCTIONS(SYMBOLS_SIMPLE_INSTRUCTION_V, V)                       \
     V(UseMethod, "UseMethod")                                                  \
     V(sysframe, "sys.frame")                                                   \
@@ -80,6 +81,8 @@
     V(srcref, "srcref")                                                        \
     V(ambiguousCallTarget, ".ambiguousCallTarget.")                            \
     V(delayedArglist, ".delayedArglist.")                                      \
-    V(delayedEnv, ".delayedEnv.")
+    V(delayedEnv, ".delayedEnv.")                                              \
+    V(eval, "eval")                                                            \
+    V(Recall, "Recall")
 
 #endif // SYMBOLS_LIST_H_

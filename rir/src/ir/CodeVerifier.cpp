@@ -146,6 +146,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::nop_:
     case Opcode::mk_env_:
     case Opcode::mk_stub_env_:
+    case Opcode::mk_dotlist_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:

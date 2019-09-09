@@ -346,6 +346,18 @@ BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     return BC(Opcode::call_builtin_, im);
 }
 
+BC BC::mkDotlist(const std::vector<SEXP>& names) {
+    ImmediateArguments im;
+    im.mkDotlistFixedArgs.nargs = names.size();
+    std::vector<PoolIdx> nameIdxs;
+    for (auto n : names)
+        nameIdxs.push_back(Pool::insert(n));
+    BC cur;
+    cur = BC(Opcode::mk_dotlist_, im);
+    cur.mkEnvExtra().names = nameIdxs;
+    return cur;
+}
+
 BC BC::mkEnv(const std::vector<SEXP>& names, SignedImmediate contextPos,
              bool stub) {
     ImmediateArguments im;

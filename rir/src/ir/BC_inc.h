@@ -127,6 +127,9 @@ class BC {
         Immediate target;
         Immediate source;
     };
+    struct MkDotlistFixedArgs {
+        NumArgs nargs;
+    };
     struct MkEnvFixedArgs {
         NumArgs nargs;
         SignedImmediate context;
@@ -150,6 +153,7 @@ class BC {
     // space required.
     union ImmediateArguments {
         MkEnvFixedArgs mkEnvFixedArgs;
+        MkDotlistFixedArgs mkDotlistFixedArgs;
         StaticCallFixedArgs staticCallFixedArgs;
         CallFixedArgs callFixedArgs;
         CallBuiltinFixedArgs callBuiltinFixedArgs;
@@ -210,6 +214,10 @@ class BC {
             return immediate.mkEnvFixedArgs.nargs * sizeof(FunIdx) +
                    fixedSize(bc);
 
+        if (bc == Opcode::mk_dotlist_)
+            return immediate.mkDotlistFixedArgs.nargs * sizeof(FunIdx) +
+                   fixedSize(bc);
+
         // the others have no variable length part
         return fixedSize(bc);
     }
@@ -226,6 +234,8 @@ class BC {
             return immediate.callBuiltinFixedArgs.nargs;
         if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
             return immediate.mkEnvFixedArgs.nargs + 1;
+        if (bc == Opcode::mk_dotlist_)
+            return immediate.mkDotlistFixedArgs.nargs;
         if (bc == Opcode::popn_)
             return immediate.i;
         return popCount(bc);
@@ -319,6 +329,12 @@ class BC {
             memcpy(&nargs, pc, sizeof(Immediate));
             return 1 + (2 + nargs) * sizeof(Immediate);
         }
+        case Opcode::mk_dotlist_: {
+            pc++;
+            Immediate nargs;
+            memcpy(&nargs, pc, sizeof(Immediate));
+            return 1 + (1 + nargs) * sizeof(Immediate);
+        }
         default: {}
         }
         return fixedSize(bc);
@@ -400,6 +416,7 @@ BC_NOARGS(V, _)
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            SignedImmediate contextPos, bool stub);
+    inline static BC mkDotlist(const std::vector<SEXP>& names);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
     inline static BC assertType(pir::PirType typ, SignedImmediate instr);
 
@@ -439,7 +456,8 @@ BC_NOARGS(V, _)
 
   public:
     MkEnvExtraInformation& mkEnvExtra() const {
-        assert((bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_) &&
+        assert((bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_ ||
+                bc == Opcode::mk_dotlist_) &&
                "Not a varlen call instruction");
         assert(extraInformation.get() &&
                "missing extra information. created through decodeShallow?");
@@ -486,6 +504,7 @@ BC_NOARGS(V, _)
             extraInformation.reset(new CallFeedbackExtraInformation);
             break;
         }
+        case Opcode::mk_dotlist_:
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
             extraInformation.reset(new MkEnvExtraInformation);
@@ -516,6 +535,13 @@ BC_NOARGS(V, _)
         case Opcode::mk_env_: {
             pc += sizeof(MkEnvFixedArgs);
             for (size_t i = 0; i < immediate.mkEnvFixedArgs.nargs; ++i)
+                mkEnvExtra().names.push_back(readImmediate(&pc));
+            break;
+        }
+
+        case Opcode::mk_dotlist_: {
+            pc += sizeof(MkDotlistFixedArgs);
+            for (size_t i = 0; i < immediate.mkDotlistFixedArgs.nargs; ++i)
                 mkEnvExtra().names.push_back(readImmediate(&pc));
             break;
         }
@@ -642,6 +668,10 @@ BC_NOARGS(V, _)
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_:
             memcpy(&immediate.mkEnvFixedArgs, pc, sizeof(MkEnvFixedArgs));
+            break;
+        case Opcode::mk_dotlist_:
+            memcpy(&immediate.mkDotlistFixedArgs, pc,
+                   sizeof(MkDotlistFixedArgs));
             break;
         case Opcode::call_builtin_:
             memcpy(&immediate.callBuiltinFixedArgs, pc,

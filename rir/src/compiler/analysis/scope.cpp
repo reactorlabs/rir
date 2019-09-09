@@ -65,6 +65,11 @@ void ScopeAnalysis::lookupAt(const ScopeAnalysisState& state,
             return;
         }
 
+        if (auto ld = LdDots::Cast(instr)) {
+            action(load(state, R_DotsSymbol, ld->env()));
+            return;
+        }
+
         // If this is a ldfun, we perform a getFun on the abstract environment
         // and
         // if possible recurse on the result. The loadFun is an abstract version

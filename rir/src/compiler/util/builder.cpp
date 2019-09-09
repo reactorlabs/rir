@@ -93,10 +93,13 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     size_t nargs = closure->nargs() - assumptions.numMissing();
     for (long i = nargs - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
+        if (closure->formals().names()[i] == R_DotsSymbol)
+            args[i]->type = PirType::dotsArg();
         readArgTypeFromAssumptions(assumptions, args[i]->type, i);
     }
-    for (size_t i = nargs; i < closure->nargs(); ++i)
+    for (size_t i = nargs; i < closure->nargs(); ++i) {
         args[i] = MissingArg::instance();
+    }
 
     auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
     add(mkenv);
