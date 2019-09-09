@@ -3,7 +3,6 @@
 
 #include "R/r_incl.h"
 #include "R_ext/Boolean.h"
-#include "jit/jit.h"
 #include <cstddef>
 
 extern "C" {
@@ -18,13 +17,9 @@ class FunctionType;
 namespace rir {
 namespace pir {
 
-static const auto sxp = jit_type_void_ptr;
-
 struct NativeBuiltin {
     const char* name;
     void* fun;
-    size_t nargs;
-    jit_type_t signature;
     llvm::FunctionType* llvmSignature;
 };
 

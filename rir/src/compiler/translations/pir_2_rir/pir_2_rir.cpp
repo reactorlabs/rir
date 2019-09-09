@@ -8,7 +8,6 @@
 #include "allocators.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
-#include "compiler/native/lower.h"
 #include "compiler/native/lower_llvm.h"
 #include "compiler/parameter.h"
 #include "event_counters.h"
@@ -1125,13 +1124,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto localsCnt = alloc.slots();
     auto res = ctx.finalizeCode(localsCnt, cache.size());
-    if (PIR_NATIVE_BACKEND == 1) {
-        Lower native;
-        if (auto n = native.tryCompile(cls, code, promMap, needsEnsureNamed)) {
-            res->nativeCode = (NativeCode)n;
-        }
-    }
-    if (PIR_NATIVE_BACKEND == 2) {
+    if (PIR_NATIVE_BACKEND) {
         LowerLLVM native;
         if (auto n =
                 native.tryCompile(cls, code, promMap, needsEnsureNamed,
