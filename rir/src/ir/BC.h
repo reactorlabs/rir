@@ -69,6 +69,11 @@ BC BC::ldddvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
 }
+BC BC::stargStubbed(unsigned pos) {
+    ImmediateArguments i;
+    i.i = pos;
+    return BC(Opcode::starg_stubbed_, i);
+}
 BC BC::stvarStubbed(unsigned pos) {
     ImmediateArguments i;
     i.i = pos;

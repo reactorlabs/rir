@@ -41,20 +41,19 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
 
                 auto consumeStVar = [&](StVar* st) {
                     bool exists = false;
-                    bool aMissingArg = false;
                     envInstr->eachLocalVar(
                         [&](SEXP name, InstrArg& arg, bool& missing) {
                             if (name == st->varName) {
                                 exists = true;
                                 arg.val() = st->val();
-                                if (!st->isStArg)
+                                if (!st->isStArg) {
                                     missing = false;
+                                }
                             }
                         });
-                    if (aMissingArg)
-                        return false;
 
                     if (!exists) {
+                        assert(!st->isStArg);
                         envInstr->pushArg(st->val(), PirType::any());
                         envInstr->varName.push_back(st->varName);
                     }

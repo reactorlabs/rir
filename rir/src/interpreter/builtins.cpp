@@ -120,7 +120,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
              cptr = cptr->nextcontext) {
             if ((cptr->callflag & CTXT_FUNCTION) &&
                 cptr->cloenv == call.callerEnv) {
-                if (auto l = ArgsLazyData::cast(cptr->promargs)) {
+                if (auto l = ArgsLazyDataContent::check(cptr->promargs)) {
                     nargs = l->length;
                     break;
                 }

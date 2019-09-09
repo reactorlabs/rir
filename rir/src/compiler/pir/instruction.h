@@ -250,12 +250,18 @@ class Instruction : public Value {
 
     Instruction* hasSingleUse();
     void eraseAndRemove();
-    void replaceUsesWith(Value* val);
+    void replaceUsesWith(
+        Value* val,
+        const std::function<void(Instruction*, size_t)>& postAction =
+            [](Instruction*, size_t) {});
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
     void replaceDominatedUses(Instruction* replacement);
-    void replaceUsesIn(Value* val, BB* target);
+    void
+    replaceUsesIn(Value* val, BB* target,
+                  const std::function<void(Instruction*, size_t)>& postAction =
+                      [](Instruction*, size_t) {});
 
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);

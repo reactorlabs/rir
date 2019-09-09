@@ -295,28 +295,25 @@ void Instruction::replaceDominatedUses(Instruction* replace) {
     }
 }
 
-void Instruction::replaceUsesIn(Value* replace, BB* start) {
+void Instruction::replaceUsesIn(
+    Value* replace, BB* start,
+    const std::function<void(Instruction*, size_t)>& postAction) {
     checkReplace(this, replace);
     Visitor::run(start, [&](BB* bb) {
         for (auto& i : *bb) {
-            bool changed = false;
+            std::vector<size_t> changed;
+            size_t pos = 0;
             i->eachArg([&](InstrArg& arg) {
                 if (arg.val() == this) {
                     arg.val() = replace;
-                    changed = true;
+                    changed.push_back(pos);
                 }
+                pos++;
             });
-            if (changed) {
+            if (!changed.empty()) {
+                for (auto c : changed)
+                    postAction(i, c);
                 i->updateTypeAndEffects();
-                if (replace == MissingArg::instance()) {
-                    if (auto mk = MkEnv::Cast(i)) {
-                        mk->eachLocalVar(
-                            [&](SEXP n, InstrArg& a, bool& missing) {
-                                if (a.val() == replace)
-                                    missing = true;
-                            });
-                    }
-                }
             }
         }
     });
@@ -329,8 +326,10 @@ void Instruction::replaceUsesIn(Value* replace, BB* start) {
     }
 }
 
-void Instruction::replaceUsesWith(Value* replace) {
-    replaceUsesIn(replace, bb());
+void Instruction::replaceUsesWith(
+    Value* replace,
+    const std::function<void(Instruction*, size_t)>& postAction) {
+    replaceUsesIn(replace, bb(), postAction);
 }
 
 void Instruction::replaceUsesAndSwapWith(

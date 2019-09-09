@@ -298,8 +298,9 @@ class LowerFunctionLLVM {
 
     void writeBarrier(llvm::Value* x, llvm::Value* y, std::function<void()> no,
                       std::function<void()> yes);
-    llvm::Value* envStubGet(llvm::Value* x, int i);
-    void envStubSet(llvm::Value* x, int i, llvm::Value* y);
+    llvm::Value* envStubGet(llvm::Value* x, int i, size_t size);
+    void envStubSet(llvm::Value* x, int i, llvm::Value* y, size_t size,
+                    bool setNotMissing);
 
     void setVisible(int i);
 
@@ -1681,7 +1682,7 @@ bool LowerFunctionLLVM::compileDotcall(
     return true;
 }
 
-llvm::Value* LowerFunctionLLVM::envStubGet(llvm::Value* x, int i) {
+llvm::Value* LowerFunctionLLVM::envStubGet(llvm::Value* x, int i, size_t size) {
     // We could use externalsxpGetEntry, but this is faster
     assert(x->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
@@ -1690,13 +1691,16 @@ llvm::Value* LowerFunctionLLVM::envStubGet(llvm::Value* x, int i) {
 #endif
     auto le = builder.CreateBitCast(dataPtr(x, false),
                                     PointerType::get(t::LazyEnvironment, 0));
-    auto payload =
-        builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::SEXP_ptr);
+    auto missingBits =
+        builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::i8ptr);
+    auto payload = builder.CreateBitCast(
+        builder.CreateGEP(missingBits, c(size)), t::SEXP_ptr);
     auto pos = builder.CreateGEP(payload, c(i + LazyEnvironment::ArgOffset));
     return builder.CreateLoad(pos);
 }
 
-void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y) {
+void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y,
+                                   size_t size, bool setNotMissing) {
     // We could use externalsxpSetEntry, but this is faster
     writeBarrier(
         x, y,
@@ -1708,8 +1712,10 @@ void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y) {
 #endif
             auto le = builder.CreateBitCast(
                 dataPtr(x, false), PointerType::get(t::LazyEnvironment, 0));
-            auto payload =
-                builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::SEXP_ptr);
+            auto missingBits =
+                builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::i8ptr);
+            auto payload = builder.CreateBitCast(
+                builder.CreateGEP(missingBits, c(size)), t::SEXP_ptr);
             auto pos =
                 builder.CreateGEP(payload, c(i + LazyEnvironment::ArgOffset));
             builder.CreateStore(y, pos);
@@ -1718,6 +1724,14 @@ void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y) {
             call(NativeBuiltins::externalsxpSetEntry,
                  {{x, c(i + LazyEnvironment::ArgOffset), y}});
         });
+    if (setNotMissing) {
+        auto le = builder.CreateBitCast(
+            dataPtr(x, false), PointerType::get(t::LazyEnvironment, 0));
+        auto missingBits =
+            builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::i8ptr);
+        auto pos = builder.CreateGEP(missingBits, {c(0), c(i)});
+        builder.CreateStore(c(1, 8), pos);
+    }
 }
 
 llvm::Value* LowerFunctionLLVM::isObj(llvm::Value* v) {
@@ -2392,8 +2406,8 @@ bool LowerFunctionLLVM::tryCompile() {
                               c(mkenv->context)});
                     size_t pos = 0;
                     mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
-                        // TODO deal with missing!!!
-                        envStubSet(env, pos++, loadSxp(v));
+                        envStubSet(env, pos++, loadSxp(v), mkenv->nLocals(),
+                                   false);
                     });
                     setVal(i, env);
                     break;
@@ -2691,6 +2705,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::IsEnvStub: {
                 auto arg = loadSxp(i->arg(0).val());
+                auto env = MkEnv::Cast(i->env());
 
                 auto isStub = BasicBlock::Create(C, "", fun);
                 auto isNotMaterialized = BasicBlock::Create(C, "", fun);
@@ -2707,7 +2722,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 br->setMetadata(LLVMContext::MD_prof, WeightNode);
 
                 builder.SetInsertPoint(isStub);
-                auto materialized = envStubGet(arg, -2);
+                auto materialized = envStubGet(arg, -2, env->nLocals());
                 br = builder.CreateCondBr(
                     builder.CreateICmpEQ(materialized,
                                          convertToPointer(nullptr, t::SEXP)),
@@ -3004,7 +3019,8 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 auto env = MkEnv::Cast(i->env());
                 if (env && env->stub) {
-                    setVal(i, envStubGet(loadSxp(env), env->indexOf(varName)));
+                    setVal(i, envStubGet(loadSxp(env), env->indexOf(varName),
+                                         env->nLocals()));
                     break;
                 }
 
@@ -3227,7 +3243,8 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto val = loadSxp(st->val());
                     incrementNamed(val);
                     envStubSet(loadSxp(environment),
-                               environment->indexOf(st->varName), val);
+                               environment->indexOf(st->varName), val,
+                               environment->nLocals(), !st->isStArg);
                     break;
                 }
 

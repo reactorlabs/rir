@@ -246,7 +246,15 @@ class TheInliner {
                                     a = cast;
                                 }
                             }
-                            ld->replaceUsesWith(a);
+                            if (a == MissingArg::instance()) {
+                                ld->replaceUsesWith(
+                                    a, [&](Instruction* usage, size_t arg) {
+                                        if (auto mk = MkEnv::Cast(usage))
+                                            mk->missing[arg] = true;
+                                    });
+                            } else {
+                                ld->replaceUsesWith(a);
+                            }
                             next = bb->remove(ip);
                         }
                         ip = next;
