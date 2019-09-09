@@ -1554,6 +1554,21 @@ SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
         Rf_error("use of NULL environment is defunct");
     if (!isEnvironment(rho))
         Rf_error("argument to 'findVar' is not an environment");
+        // The algorithm works as follows:
+        // - Lookup in the current environment, then parent, etc.
+        // - Once we reach the global environment, if the global version hasn't
+        // changed (the global environment hasn't changed since last lookup),
+        //   return our cached value. Otherwise update the global version.
+        // - Once we reach a namespace environment, if the namespace version
+        // hasn't changed, return our cached value. Otherwise update the
+        // namespace version.
+        //   We keep one version for all namespace environments, and if we must
+        //   invalidate the cache, we only do so once and then lookup in all
+        //   namespace environments.
+        // - If we reach the global or namespace environment but can't cache, we
+        // update the version counter and cached value. Bytecode data is as
+        // follows: pc | unsigned cachedGlobalVersion | unsigned
+        // cachedNamespaceVersion | SEXP cachedValue |
 // #define DEBUG_CACHE
 #ifdef DEBUG_CACHE
     std::cout << "find var cached -> ";
@@ -1562,14 +1577,21 @@ SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
     bool pastGlobal = false;
     bool pastNamespace = false;
     while (rho != R_EmptyEnv) {
+        // If pastNamespace == true we already looked at a namespace environment
+        // and invalidated the cache, so we are in another namespace environment
+        // but must explicitly lookup
         if (!pastNamespace) {
             if (pastGlobal || isNamespaceEnvFast(rho)) {
+                // Here we are in a namespace environment
                 if (!pastGlobal) {
-                    *(unsigned*)pc = globalEnvVersion;
+                    // We have skipped the global environment, so we must
+                    // advance the pc past the global version to access the
+                    // namespace version
                     advanceImmediate();
                     pastGlobal = true;
                 }
                 pastNamespace = true;
+                // Check version, either use cached or update version
                 unsigned* cachedNamespaceEnvVersion = (unsigned*)pc;
                 if (*cachedNamespaceEnvVersion == namespaceEnvVersion) {
 #ifdef DEBUG_CACHE
@@ -1580,10 +1602,13 @@ SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
                     break;
                 }
                 SLOWASSERT(*cachedNamespaceEnvVersion < namespaceEnvVersion);
+                // Update the namespace version
                 *cachedNamespaceEnvVersion = namespaceEnvVersion;
                 advanceImmediate();
             } else if (rho == R_GlobalEnv) {
-                pastGlobal = true; // Global parent = namespace
+                // Here we are in the global environment
+                pastGlobal = true;
+                // Check version, either use cached or update version
                 unsigned* cachedGlobalEnvVersion = (unsigned*)pc;
                 if (*cachedGlobalEnvVersion == globalEnvVersion) {
 #ifdef DEBUG_CACHE
@@ -1594,15 +1619,20 @@ SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
                     break;
                 }
                 SLOWASSERT(*cachedGlobalEnvVersion < globalEnvVersion);
+                // Update the global version
                 *cachedGlobalEnvVersion = globalEnvVersion;
                 advanceImmediate();
             }
         }
 
+        // Do the explicit lookup in the environment (from GNU-R Rf_findVar and
+        // Rf_findFun)
         res = findVarInFrame3(rho, sym, TRUE);
         if (res != R_UnboundValue) {
             if (!isFun)
                 break;
+            // Extra for Rf_findFun, since it forces promises and only returns
+            // functions
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
             if (TYPEOF(res) == CLOSXP || TYPEOF(res) == BUILTINSXP ||
@@ -1611,31 +1641,38 @@ SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
             res = R_UnboundValue;
         }
 
+        // Move to enclosing environment
         rho = ENCLOS(rho);
     }
-    if (!pastGlobal) {
-        unsigned* cachedGlobalEnvVersion = (unsigned*)pc;
-        *cachedGlobalEnvVersion = globalEnvVersion;
+    // Move the pc to the cached SEXP
+    if (!pastGlobal)
         advanceImmediate();
-    }
-    if (!pastNamespace) {
-        unsigned* cachedNamespaceEnvVersion = (unsigned*)pc;
-        *cachedNamespaceEnvVersion = namespaceEnvVersion;
+    if (!pastNamespace)
         advanceImmediate();
-    }
     SEXP* cachedRef = (SEXP*)pc;
     if (res == NULL) {
+        // We reached the global/namespace env and can use the SEXP cached from
+        // last time
+        SLOWASSERT(pastGlobal || pastNamespace);
 #ifdef DEBUG_CACHE
         std::cout << "cached\n";
 #endif
         res = *cachedRef;
-    } else {
+    } else if (pastGlobal || pastNamespace) {
+        // We reached the global/namespace env but it was updated, so we update
+        // the cached value
 #ifdef DEBUG_CACHE
         std::cout << "update\n";
 #endif
         *cachedRef = res;
-    }
+    } // else we didn't reach the global/namespace env, so we can't update the
+      // cached value because it came from a local env
+#ifdef DEBUG_CACHE
+    else
+        std::cout << "skipped\n";
+#endif
     pc += sizeof(SEXP);
+    // Rf_findFun throws an explicit error, Rf_findVar doesn't
     if (res == R_UnboundValue && isFun) {
         Rf_errorcall(R_CurrentExpression, "could not find function \"%s\"",
                      CHAR(PRINTNAME(sym)));
