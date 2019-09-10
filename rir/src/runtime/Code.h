@@ -4,7 +4,6 @@
 #include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
 #include "utils/UUID.h"
-#include "jit/jit-function.h"
 
 #include <cassert>
 #include <cstdint>

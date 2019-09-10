@@ -122,7 +122,7 @@ script:
   - ./bin/tests
   - PIR_ENABLE=off ./bin/tests
   - PIR_ENABLE=force ./bin/tests
-  - PIR_NATIVE_BACKEND=2 ./bin/tests
+  - PIR_NATIVE_BACKEND=1 ./bin/tests
   - if [[ "$TEST_GCTORTURE" != "" ]];  then  R_GCTORTURE=200   ./bin/tests; fi
   # Run a particular portion of the gnur testsuite
   - if [[ "$CHECK" != "" ]]; then ./bin/gnur-make-tests $CHECK; fi

@@ -21,32 +21,10 @@ static SEXP forcePromiseImpl(SEXP prom) {
     ENSURE_NAMEDMAX(res);
     return res;
 }
-static jit_type_t sxp1[1] = {sxp};
-static jit_type_t sxp2[2] = {sxp, sxp};
-static jit_type_t sxp3[3] = {sxp, sxp, sxp};
-static jit_type_t sxp4[4] = {sxp, sxp, sxp, sxp};
-static jit_type_t int1[1] = {jit_type_int};
-static jit_type_t double1[1] = {jit_type_float64};
+NativeBuiltin NativeBuiltins::forcePromise = {"forcePromise",
+                                              (void*)&forcePromiseImpl};
 
-static jit_type_t sxp2_int[3] = {sxp, sxp, jit_type_int};
-static jit_type_t sxp2_void[3] = {sxp, sxp, jit_type_void_ptr};
-
-static jit_type_t sxp3_int[4] = {sxp, sxp, sxp, jit_type_int};
-
-static jit_type_t sxp4_int[5] = {sxp, sxp, sxp, sxp, jit_type_int};
-static jit_type_t sxp3_int2[5] = {sxp, sxp, sxp, jit_type_int, jit_type_int};
-
-static jit_type_t ptr1[1] = {jit_type_void_ptr};
-
-NativeBuiltin NativeBuiltins::forcePromise = {
-    "forcePromise", (void*)&forcePromiseImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp1, 1, 0),
-};
-
-NativeBuiltin NativeBuiltins::consNr = {
-    "consNr", (void*)&CONS_NR, 2,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
-};
+NativeBuiltin NativeBuiltins::consNr = {"consNr", (void*)&CONS_NR};
 
 static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
@@ -58,11 +36,7 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
 }
 
 NativeBuiltin NativeBuiltins::createBindingCell = {
-    "createBindingCellImpl",
-    (void*)&createBindingCellImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
-};
+    "createBindingCellImpl", (void*)&createBindingCellImpl};
 
 static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
@@ -72,11 +46,7 @@ static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
 }
 
 NativeBuiltin NativeBuiltins::createMissingBindingCell = {
-    "createMissingBindingCell",
-    (void*)&createMissingBindingCellImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 2, 0),
-};
+    "createMissingBindingCell", (void*)&createMissingBindingCellImpl};
 
 SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
     SLOWASSERT(TYPEOF(parent) == ENVSXP);
@@ -121,11 +91,7 @@ SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
 }
 
 NativeBuiltin NativeBuiltins::createEnvironment = {
-    "createEnvironment",
-    (void*)&createEnvironmentImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
-};
+    "createEnvironment", (void*)&createEnvironmentImpl};
 
 SEXP createStubEnvironmentImpl(SEXP parent, int n, Immediate* names,
                                int contextPos) {
@@ -139,14 +105,9 @@ SEXP createStubEnvironmentImpl(SEXP parent, int n, Immediate* names,
     return res;
 }
 
-static jit_type_t createStubEnvironmentSignature[4] = {
-    sxp, jit_type_sys_int, jit_type_void_ptr, jit_type_sys_int};
 NativeBuiltin NativeBuiltins::createStubEnvironment = {
     "createStubEnvironment",
     (void*)&createStubEnvironmentImpl,
-    4,
-    jit_type_create_signature(jit_abi_cdecl, sxp,
-                              createStubEnvironmentSignature, 4, 0),
 };
 
 SEXP ldvarImpl(SEXP a, SEXP b) {
@@ -158,8 +119,8 @@ SEXP ldvarImpl(SEXP a, SEXP b) {
 };
 
 NativeBuiltin NativeBuiltins::ldvar = {
-    "ldvar", (void*)&ldvarImpl, 2,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
+    "ldvar",
+    (void*)&ldvarImpl,
 };
 
 SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
@@ -181,14 +142,14 @@ SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
 };
 
 NativeBuiltin NativeBuiltins::ldvarCacheMiss = {
-    "ldvarCacheMiss", (void*)&ldvarCachedImpl, 3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_void, 3, 0),
+    "ldvarCacheMiss",
+    (void*)&ldvarCachedImpl,
 };
 
 void stvarImpl(SEXP a, SEXP val, SEXP c) { rirDefineVarWrapper(a, val, c); };
 NativeBuiltin NativeBuiltins::stvar = {
-    "stvar", (void*)&stvarImpl, 3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
+    "stvar",
+    (void*)&stvarImpl,
 };
 
 void stargImpl(SEXP sym, SEXP val, SEXP env) {
@@ -212,8 +173,6 @@ void stargImpl(SEXP sym, SEXP val, SEXP env) {
 NativeBuiltin NativeBuiltins::starg = {
     "starg",
     (void*)&stargImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
 };
 
 void setCarImpl(SEXP x, SEXP y) {
@@ -226,8 +185,6 @@ void setCarImpl(SEXP x, SEXP y) {
 NativeBuiltin NativeBuiltins::setCar = {
     "setCar",
     (void*)&setCarImpl,
-    2,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
 };
 
 void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
@@ -237,14 +194,9 @@ void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
     EXTERNALSXP_SET_ENTRY(x, i, y);
 }
 
-static jit_type_t externalsxpSetEntrySignature[4] = {sxp, jit_type_sys_int,
-                                                     sxp};
 NativeBuiltin NativeBuiltins::externalsxpSetEntry = {
     "externalsxpSetEntry",
     (void*)&externalsxpSetEntryImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, externalsxpSetEntrySignature,
-                              3, 0),
 };
 
 void defvarImpl(SEXP var, SEXP value, SEXP env) {
@@ -254,8 +206,6 @@ void defvarImpl(SEXP var, SEXP value, SEXP env) {
 NativeBuiltin NativeBuiltins::defvar = {
     "defvar",
     (void*)&defvarImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3, 3, 0),
 };
 
 SEXP chkfunImpl(SEXP sym, SEXP res) {
@@ -289,22 +239,18 @@ SEXP ldfunImpl(SEXP sym, SEXP env) {
 NativeBuiltin NativeBuiltins::ldfun = {
     "findFun",
     (void*)&Rf_findFun,
-    2,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2, 2, 0),
 };
 
 NativeBuiltin NativeBuiltins::chkfun = {
     "chkfun",
     (void*)&chkfunImpl,
-    2,
-    nullptr,
 };
 
 static void errorImpl() { Rf_error("Some error in compiled code"); };
 
 NativeBuiltin NativeBuiltins::error = {
-    "error", (void*)&errorImpl, 0,
-    jit_type_create_signature(jit_abi_cdecl, jit_type_void, {}, 0, 0),
+    "error",
+    (void*)&errorImpl,
 };
 
 static bool debugPrintCallBuiltinImpl = false;
@@ -334,13 +280,9 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     SLOWASSERT(res);
     return res;
 };
-static jit_type_t callArgs[6] = {jit_type_void_ptr, jit_type_uint, sxp, sxp,
-                                 jit_type_ulong,    jit_type_ulong};
 NativeBuiltin NativeBuiltins::callBuiltin = {
     "callBuiltin",
     (void*)&callBuiltinImpl,
-    5,
-    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 5, 0),
 };
 
 static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
@@ -358,8 +300,6 @@ static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
 NativeBuiltin NativeBuiltins::call = {
     "call",
     (void*)&callImpl,
-    6,
-    jit_type_create_signature(jit_abi_cdecl, sxp, callArgs, 6, 0),
 };
 
 static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
@@ -378,8 +318,6 @@ static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
 NativeBuiltin NativeBuiltins::namedCall = {
     "namedCall",
     (void*)&namedCallImpl,
-    7,
-    nullptr,
 };
 
 static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
@@ -414,8 +352,6 @@ static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
 NativeBuiltin NativeBuiltins::dotsCall = {
     "dotsCall",
     (void*)&dotsCallImpl,
-    7,
-    nullptr,
 };
 
 SEXP createPromiseImpl(rir::Code* c, unsigned id, SEXP env, SEXP value) {
@@ -428,11 +364,9 @@ SEXP createPromiseImpl(rir::Code* c, unsigned id, SEXP env, SEXP value) {
     return res;
 }
 
-static jit_type_t createPromiseArgs[4] = {jit_type_void_ptr, jit_type_uint, sxp,
-                                          sxp};
 NativeBuiltin NativeBuiltins::createPromise = {
-    "createPromise", (void*)&createPromiseImpl, 4,
-    jit_type_create_signature(jit_abi_cdecl, sxp, createPromiseArgs, 4, 0),
+    "createPromise",
+    (void*)&createPromiseImpl,
 };
 
 SEXP createClosureImpl(SEXP body, SEXP formals, SEXP env, SEXP srcref) {
@@ -447,8 +381,6 @@ SEXP createClosureImpl(SEXP body, SEXP formals, SEXP env, SEXP srcref) {
 NativeBuiltin NativeBuiltins::createClosure = {
     "createClosure",
     (void*)&createClosureImpl,
-    4,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp4, 4, 0),
 };
 
 SEXP newLglImpl(int i) {
@@ -496,28 +428,28 @@ SEXP newRealFromIntImpl(int i) {
 }
 
 NativeBuiltin NativeBuiltins::newIntFromReal = {
-    "newIntFromReal", (void*)&newIntFromRealImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, sxp, double1, 1, 0),
+    "newIntFromReal",
+    (void*)&newIntFromRealImpl,
 };
 NativeBuiltin NativeBuiltins::newRealFromInt = {
-    "newRealFromInt", (void*)&newRealFromIntImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, sxp, int1, 1, 0),
+    "newRealFromInt",
+    (void*)&newRealFromIntImpl,
 };
 NativeBuiltin NativeBuiltins::newLglFromReal = {
-    "newLglFromReal", (void*)&newLglFromRealImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, sxp, double1, 1, 0),
+    "newLglFromReal",
+    (void*)&newLglFromRealImpl,
 };
 NativeBuiltin NativeBuiltins::newInt = {
-    "newInt", (void*)&newIntImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, sxp, int1, 1, 0),
+    "newInt",
+    (void*)&newIntImpl,
 };
 NativeBuiltin NativeBuiltins::newReal = {
-    "newReal", (void*)&newRealImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, sxp, double1, 1, 0),
+    "newReal",
+    (void*)&newRealImpl,
 };
 NativeBuiltin NativeBuiltins::newLgl = {
-    "newLgl", (void*)&newLglImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, sxp, int1, 1, 0),
+    "newLgl",
+    (void*)&newLglImpl,
 };
 
 #define OPERATION_FALLBACK(op)                                                 \
@@ -579,8 +511,6 @@ static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
 NativeBuiltin NativeBuiltins::unopEnv = {
     "unopEnv",
     (void*)&unopEnvImpl,
-    4,
-    nullptr,
 };
 
 static SEXP unopImpl(SEXP argument, UnopKind op) {
@@ -605,8 +535,6 @@ static SEXP unopImpl(SEXP argument, UnopKind op) {
 NativeBuiltin NativeBuiltins::unop = {
     "unop",
     (void*)&unopImpl,
-    2,
-    nullptr,
 };
 
 static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
@@ -623,8 +551,6 @@ static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
 NativeBuiltin NativeBuiltins::notEnv = {
     "notEnv",
     (void*)&notEnvImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 
 static SEXP notImpl(SEXP argument) {
@@ -640,12 +566,7 @@ static SEXP notImpl(SEXP argument) {
     return res;
 }
 
-NativeBuiltin NativeBuiltins::notOp = {
-    "not",
-    (void*)&notImpl,
-    1,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp1, 1, 0),
-};
+NativeBuiltin NativeBuiltins::notOp = {"not", (void*)&notImpl};
 
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
                          BinopKind kind) {
@@ -708,8 +629,8 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
 }
 
 NativeBuiltin NativeBuiltins::binopEnv = {
-    "binopEnv", (void*)&binopEnvImpl, 5,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int2, 5, 0),
+    "binopEnv",
+    (void*)&binopEnvImpl,
 };
 
 bool debugBinopImpl = false;
@@ -797,8 +718,6 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
 NativeBuiltin NativeBuiltins::binop = {
     "binop",
     (void*)&binopImpl,
-    3,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp2_int, 3, 0),
 };
 
 int isMissingImpl(SEXP symbol, SEXP environment) {
@@ -809,8 +728,6 @@ int isMissingImpl(SEXP symbol, SEXP environment) {
 NativeBuiltin NativeBuiltins::isMissing = {
     "isMissing",
     (void*)&isMissingImpl,
-    2,
-    jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp2, 2, 0),
 };
 
 int astestImpl(SEXP val) {
@@ -849,24 +766,20 @@ int astestImpl(SEXP val) {
 }
 
 NativeBuiltin NativeBuiltins::asTest = {
-    "astest", (void*)&astestImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp1, 1, 0),
+    "astest",
+    (void*)&astestImpl,
 };
 
 int asLogicalImpl(SEXP a) { return Rf_asLogical(a); }
 
-NativeBuiltin NativeBuiltins::asLogicalBlt = {
-    "aslogical",
-    (void*)&asLogicalImpl,
-    1,
-    jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp1, 1, 0),
-};
+NativeBuiltin NativeBuiltins::asLogicalBlt = {"aslogical",
+                                              (void*)&asLogicalImpl};
 
 int lengthImpl(SEXP e) { return Rf_length(e); }
 
 NativeBuiltin NativeBuiltins::length = {
-    "length", (void*)&lengthImpl, 1,
-    jit_type_create_signature(jit_abi_cdecl, jit_type_int, sxp1, 1, 0),
+    "length",
+    (void*)&lengthImpl,
 };
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
@@ -907,38 +820,26 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     assert(false);
 }
 
-static jit_type_t deoptType[4] = {jit_type_void_ptr, sxp, jit_type_void_ptr,
-                                  jit_type_void_ptr};
 NativeBuiltin NativeBuiltins::deopt = {
     "deopt",
     (void*)&deoptImpl,
-    4,
-    jit_type_create_signature(jit_abi_cdecl, jit_type_void, deoptType, 4, 0),
 };
 NativeBuiltin NativeBuiltins::recordDeopt = {
     "recordDeopt",
     (void*)&recordDeoptReason,
-    2,
-    nullptr,
 };
 
 void assertFailImpl(const char* msg) {
     std::cout << "Assertion in jitted code failed: '" << msg << "'\n";
     asm("int3");
 }
-NativeBuiltin NativeBuiltins::assertFail = {
-    "assertFail",
-    (void*)&assertFailImpl,
-    1,
-    jit_type_create_signature(jit_abi_cdecl, jit_type_void, ptr1, 1, 0),
-};
+NativeBuiltin NativeBuiltins::assertFail = {"assertFail",
+                                            (void*)&assertFailImpl};
 
 void printValueImpl(SEXP v) { Rf_PrintValue(v); }
 NativeBuiltin NativeBuiltins::printValue = {
     "printValue",
     (void*)printValueImpl,
-    1,
-    jit_type_create_signature(jit_abi_cdecl, jit_type_void, sxp1, 1, 0),
 };
 
 SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
@@ -961,8 +862,6 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
 NativeBuiltin NativeBuiltins::extract11 = {
     "extract1_1D",
     (void*)&extract11Impl,
-    4,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
 };
 
 SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
@@ -985,8 +884,6 @@ SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
 NativeBuiltin NativeBuiltins::extract21 = {
     "extract2_1D",
     (void*)&extract21Impl,
-    4,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp3_int, 4, 0),
 };
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
@@ -1075,8 +972,6 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
 NativeBuiltin NativeBuiltins::nativeCallTrampoline = {
     "nativeCallTrampoline",
     (void*)&nativeCallTrampolineImpl,
-    6,
-    nullptr,
 };
 
 SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
@@ -1107,8 +1002,6 @@ SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
 NativeBuiltin NativeBuiltins::subassign11 = {
     "subassign1_1D",
     (void*)subassign11Impl,
-    5,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp4_int, 5, 0),
 };
 
 SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
@@ -1139,8 +1032,6 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
 NativeBuiltin NativeBuiltins::subassign21 = {
     "subassign2_1D",
     (void*)subassign21Impl,
-    5,
-    jit_type_create_signature(jit_abi_cdecl, sxp, sxp4_int, 5, 0),
 };
 
 int forSeqSizeImpl(SEXP seq) {
@@ -1167,12 +1058,8 @@ int forSeqSizeImpl(SEXP seq) {
     return res;
 }
 
-NativeBuiltin NativeBuiltins::forSeqSize = {
-    "forSeqSize",
-    (void*)&forSeqSizeImpl,
-    2,
-    nullptr,
-};
+NativeBuiltin NativeBuiltins::forSeqSize = {"forSeqSize",
+                                            (void*)&forSeqSizeImpl};
 
 void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op) {
     if (R_GlobalContext->callflag == CTXT_GENERIC)
@@ -1186,8 +1073,6 @@ void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op) {
 NativeBuiltin NativeBuiltins::initClosureContext = {
     "initClosureContext",
     (void*)&initClosureContextImpl,
-    4,
-    nullptr,
 };
 
 static void endClosureContextImpl(RCNTXT* cntxt, SEXP result) {
@@ -1198,9 +1083,6 @@ static void endClosureContextImpl(RCNTXT* cntxt, SEXP result) {
 NativeBuiltin NativeBuiltins::endClosureContext = {
     "endClosureContext",
     (void*)&endClosureContextImpl,
-    2,
-    nullptr,
 };
-
 }
 }
