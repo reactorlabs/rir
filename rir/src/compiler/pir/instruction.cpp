@@ -393,8 +393,17 @@ bool Instruction::envOnlyForObj() {
     }
     BINOP_INSTRUCTIONS(V)
 #undef V
-    if (tag == Tag::Extract1_1D || tag == Tag::Extract2_1D)
+    switch (tag) {
+    case Tag::Extract1_1D:
+    case Tag::Extract2_1D:
+    case Tag::Not:
+    case Tag::LOr:
+    case Tag::LAnd:
+    case Tag::Minus:
+    case Tag::Plus:
         return true;
+    default: {}
+    }
     return false;
 }
 
