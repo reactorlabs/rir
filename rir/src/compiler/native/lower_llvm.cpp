@@ -1208,9 +1208,10 @@ llvm::Value* LowerFunctionLLVM::shared(llvm::Value* v) {
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
 
-    unsigned long namedBit = (unsigned long)REFCNTMAX << 31;
-    auto named = builder.CreateOr(sxpinfo, c(namedBit));
-    return builder.CreateICmpEQ(named, c(0));
+    static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1);
+    auto named = builder.CreateLShr(sxpinfo, c(32, 64));
+    named = builder.CreateAnd(named, c(namedMask));
+    return builder.CreateICmpUGT(named, c(1, 64));
 }
 
 void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
