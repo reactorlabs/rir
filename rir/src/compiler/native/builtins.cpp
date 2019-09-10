@@ -270,6 +270,13 @@ NativeBuiltin NativeBuiltins::chkfun = {
     (void*)&chkfunImpl,
 };
 
+static void warnImpl(const char* w) { Rf_warning(w); }
+
+NativeBuiltin NativeBuiltins::warn = {
+    "warn",
+    (void*)&warnImpl,
+};
+
 static void errorImpl() { Rf_error("Some error in compiled code"); };
 
 NativeBuiltin NativeBuiltins::error = {
@@ -610,6 +617,9 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
     case BinopKind::MUL:
         OPERATION_FALLBACK("*");
         break;
+    case BinopKind::IDIV:
+        OPERATION_FALLBACK("%/%");
+        break;
     case BinopKind::DIV:
         OPERATION_FALLBACK("/");
         break;
@@ -688,6 +698,9 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
         break;
     case BinopKind::MUL:
         OPERATION_FALLBACK("*");
+        break;
+    case BinopKind::IDIV:
+        OPERATION_FALLBACK("%/%");
         break;
     case BinopKind::DIV:
         OPERATION_FALLBACK("/");

@@ -28,6 +28,7 @@ enum class BinopKind : int {
     MUL,
     SUB,
     DIV,
+    IDIV,
     EQ,
     NE,
     LT,
@@ -69,6 +70,7 @@ struct NativeBuiltins {
     static NativeBuiltin externalsxpSetEntry;
 
     static NativeBuiltin error;
+    static NativeBuiltin warn;
 
     static NativeBuiltin createEnvironment;
     static NativeBuiltin createStubEnvironment;
