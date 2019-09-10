@@ -81,7 +81,7 @@ void DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
                                 if (mk->isEager())
                                     a = mk->eagerArg();
                             }
-                            if (a->type.maybeLazy() && i->hasEnv()) {
+                            if (a->type.maybeLazy()) {
                                 ip = bb->insert(ip, new Force(a, i->env()));
                                 a = *ip;
                                 ip++;

@@ -304,21 +304,14 @@ class TheScopeResolution {
                     if (!res.result.type.maybeMissing()) {
                         // Missing still returns TRUE, if the argument was
                         // initially missing, but then overwritten by a default
-                        // argument. Currently our analysis cannot really
-                        // distinguish those cases. Therefore, if the current
-                        // value of the variable is guaranteed to not be a
-                        // missing value, we additionally need verify that the
-                        // initial argument (the argument to the mkenv) was also
-                        // guaranteed to not be a missing value.
-                        // TODO: this is a bit brittle and might break as soon
-                        // as we start improving the handling of missing args in
-                        // MkEnv.
+                        // argument.
                         if (auto env = MkEnv::Cast(missing->env())) {
                             bool initiallyMissing = false;
-                            env->eachLocalVar([&](SEXP name, Value* val) {
-                                if (name == missing->varName)
-                                    initiallyMissing = val->type.maybeMissing();
-                            });
+                            env->eachLocalVar(
+                                [&](SEXP name, Value* val, bool m) {
+                                    if (name == missing->varName)
+                                        initiallyMissing = m;
+                                });
                             if (!initiallyMissing) {
                                 auto theFalse = new LdConst(R_FalseValue);
                                 missing->replaceUsesAndSwapWith(theFalse, ip);
@@ -346,27 +339,32 @@ class TheScopeResolution {
                                 analysis.tryMaterializeEnv(
                                     before, mk,
                                     [&](const std::unordered_map<
-                                        SEXP, AbstractPirValue>& env) {
+                                        SEXP, std::pair<AbstractPirValue,
+                                                        bool>>& env) {
                                         std::vector<SEXP> names;
                                         std::vector<Value*> values;
+                                        std::vector<bool> missing;
                                         for (auto& e : env) {
                                             names.push_back(e.first);
-                                            if (e.second.isUnknown())
+                                            auto v = e.second.first;
+                                            auto miss = e.second.second;
+                                            if (v.isUnknown())
                                                 return;
-                                            if (auto val = getSingleLocalValue(
-                                                    e.second)) {
+                                            if (auto val =
+                                                    getSingleLocalValue(v)) {
                                                 values.push_back(val);
                                             } else {
                                                 auto phi = tryInsertPhis(
-                                                    mk, e.second, bb, ip, true);
+                                                    mk, v, bb, ip, true);
                                                 if (!phi)
                                                     return;
                                                 values.push_back(phi);
                                             }
+                                            missing.push_back(miss);
                                         }
                                         auto deoptEnv =
                                             new MkEnv(mk->lexicalEnv(), names,
-                                                      values.data());
+                                                      values.data(), missing);
                                         ip = bb->insert(ip, deoptEnv);
                                         ip++;
                                         next = ip + 1;

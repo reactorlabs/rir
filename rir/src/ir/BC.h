@@ -69,6 +69,11 @@ BC BC::ldddvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
 }
+BC BC::stargStubbed(unsigned pos) {
+    ImmediateArguments i;
+    i.i = pos;
+    return BC(Opcode::starg_stubbed_, i);
+}
 BC BC::stvarStubbed(unsigned pos) {
     ImmediateArguments i;
     i.i = pos;
@@ -358,14 +363,22 @@ BC BC::mkDotlist(const std::vector<SEXP>& names) {
     return cur;
 }
 
-BC BC::mkEnv(const std::vector<SEXP>& names, SignedImmediate contextPos,
-             bool stub) {
+BC BC::mkEnv(const std::vector<SEXP>& names, const std::vector<bool>& missing,
+             SignedImmediate contextPos, bool stub) {
     ImmediateArguments im;
     im.mkEnvFixedArgs.nargs = names.size();
     im.mkEnvFixedArgs.context = contextPos;
     std::vector<PoolIdx> nameIdxs;
-    for (auto n : names)
-        nameIdxs.push_back(Pool::insert(n));
+    size_t pos = 0;
+    for (auto n : names) {
+        // bindings which need the missing flag set are indicated by wrapping
+        // the name in a cons cell.
+        if (missing[pos])
+            n = CONS_NR(n, R_NilValue);
+        auto p = Pool::insert(n);
+        nameIdxs.push_back(p);
+        pos++;
+    }
     BC cur;
     if (stub)
         cur = BC(Opcode::mk_stub_env_, im);

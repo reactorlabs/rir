@@ -385,6 +385,7 @@ BC_NOARGS(V, _)
     inline static BC mkEagerPromise(FunIdx prom);
     inline static BC starg(SEXP sym);
     inline static BC stvarStubbed(unsigned stubbed);
+    inline static BC stargStubbed(unsigned stubbed);
     inline static BC stvar(SEXP sym);
     inline static BC stargCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarCached(SEXP sym, uint32_t cacheSlot);
@@ -415,6 +416,7 @@ BC_NOARGS(V, _)
                                 SEXP targetVersion, const Assumptions& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
     inline static BC mkEnv(const std::vector<SEXP>& names,
+                           const std::vector<bool>& missing,
                            SignedImmediate contextPos, bool stub);
     inline static BC mkDotlist(const std::vector<SEXP>& names);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
@@ -708,6 +710,7 @@ BC_NOARGS(V, _)
         case Opcode::alloc_:
         case Opcode::ldvar_noforce_stubbed_:
         case Opcode::stvar_stubbed_:
+        case Opcode::starg_stubbed_:
             memcpy(&immediate.i, pc, sizeof(uint32_t));
             break;
         case Opcode::ldarg_:

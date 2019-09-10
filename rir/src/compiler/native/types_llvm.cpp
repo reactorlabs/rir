@@ -144,7 +144,8 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::consNr.llvmSignature = t::sexp_sexpsexp;
     NativeBuiltins::createBindingCell.llvmSignature = t::sexp_sexpsexpsexp;
-    NativeBuiltins::createMissingBindingCell.llvmSignature = t::sexp_sexpsexp;
+    NativeBuiltins::createMissingBindingCell.llvmSignature =
+        t::sexp_sexpsexpsexp;
 
     NativeBuiltins::ldvar.llvmSignature = t::sexp_sexpsexp;
     NativeBuiltins::ldvarCacheMiss.llvmSignature = llvm::FunctionType::get(
@@ -162,7 +163,8 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::error.llvmSignature = t::void_void;
 
-    NativeBuiltins::createEnvironment.llvmSignature = t::sexp_sexp3int;
+    NativeBuiltins::createEnvironment.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::Int}, false);
     NativeBuiltins::createStubEnvironment.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::IntPtr, t::Int},
                                 false);

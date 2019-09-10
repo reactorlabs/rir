@@ -684,15 +684,19 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto stvar = StVar::Cast(instr);
                 auto key =
                     CachePosition::NameAndEnv(stvar->varName, stvar->env());
+                auto mkenv = MkEnv::Cast(stvar->env());
+                assert(!MkEnv::Cast(stvar->arg(0).val()));
                 if (stvar->isStArg) {
-                    if (cache.isCached(key)) {
+                    if (mkenv && mkenv->stub) {
+                        cb.add(
+                            BC::stargStubbed(mkenv->indexOf(stvar->varName)));
+                    } else if (cache.isCached(key)) {
                         cb.add(BC::stargCached(stvar->varName,
                                                cache.indexOf(key)));
                     } else {
                         cb.add(BC::starg(stvar->varName));
                     }
                 } else {
-                    auto mkenv = MkEnv::Cast(stvar->env());
                     if (mkenv && mkenv->stub) {
                         cb.add(
                             BC::stvarStubbed(mkenv->indexOf(stvar->varName)));
@@ -977,7 +981,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-                cb.add(BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub));
+                cb.add(BC::mkEnv(mkenv->varName, mkenv->missing, mkenv->context,
+                                 mkenv->stub));
                 cache.ifCacheRange(mkenv, [&](CachePosition::StartSize range) {
                     if (range.second > 0)
                         cb.add(

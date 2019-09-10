@@ -201,9 +201,15 @@ SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
         SEXP val = wrapper->getArg(i);
         INCREMENT_NAMED(val);
         SEXP name = cp_pool_at(ctx, names[i]);
+        bool isMissing = val == R_MissingArg;
+        if (TYPEOF(name) == LISTSXP) {
+            isMissing = true;
+            name = CAR(name);
+        }
+        isMissing = isMissing && !wrapper->notMissing[i];
         arglist = CONS_NR(val, arglist);
         SET_TAG(arglist, name);
-        SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
+        SET_MISSING(arglist, isMissing ? 2 : 0);
     }
 
     SEXP environment =
@@ -221,7 +227,8 @@ static SEXP materializeCallerEnv(CallContext& callCtx,
             callCtx.callerEnv = createEnvironment(ctx, callCtx.callerEnv);
     }
     SLOWASSERT(callCtx.callerEnv == symbol::delayedEnv ||
-               TYPEOF(callCtx.callerEnv) == ENVSXP);
+               TYPEOF(callCtx.callerEnv) == ENVSXP ||
+               callCtx.callerEnv == R_NilValue);
     return callCtx.callerEnv;
 }
 
@@ -256,23 +263,14 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
     return result;
 }
 
-SEXP materialize(void* rirDataWrapper) {
-    if (auto promargs = ArgsLazyData::cast(rirDataWrapper)) {
+SEXP materialize(SEXP rirDataWrapper) {
+    if (auto promargs = ArgsLazyDataContent::check(rirDataWrapper)) {
         return promargs->createArgsLists();
     } else if (LazyEnvironment::check((SEXP)rirDataWrapper)) {
         return createEnvironment(globalContext(), (SEXP)rirDataWrapper);
     }
     assert(false);
     return nullptr;
-}
-
-SEXP* keepAliveSEXPs(void* rirDataWrapper) {
-    assert(false);
-    return nullptr;
-}
-
-SEXP lazyPromargsCreation(void* rirDataWrapper) {
-    return ArgsLazyData::cast(rirDataWrapper)->createArgsLists();
 }
 
 static RIR_INLINE SEXP createLegacyLazyArgsList(CallContext& call,
@@ -794,7 +792,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             // Currently we cannot recreate the original arglist if we
             // statically reordered arguments. TODO this needs to be fixed
             // by remembering the original order.
-            if (auto a = ArgsLazyData::cast(arglist))
+            if (auto a = ArgsLazyDataContent::check(arglist))
                 a->args = nullptr;
             else
                 arglist = symbol::delayedArglist;
@@ -818,7 +816,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             // by remembering the original order.
             if (call.givenAssumptions.includes(
                     Assumption::StaticallyArgmatched))
-                lazyArgs.args = nullptr;
+                lazyArgs.content.args = nullptr;
             supplyMissingArgs(call, fun);
             result = rirCallTrampoline(call, fun, arglist, ctx);
     }
@@ -1776,12 +1774,17 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 SEXP val = ostack_pop(ctx);
                 INCREMENT_NAMED(val);
                 SEXP name = cp_pool_at(ctx, names[i]);
+                bool isMissing = val == R_MissingArg;
+                if (TYPEOF(name) == LISTSXP) {
+                    isMissing = true;
+                    name = CAR(name);
+                }
                 if (name == R_DotsSymbol)
                     hasDots = true;
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
-                hasMissing = hasMissing || val == R_MissingArg;
-                SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
+                hasMissing = hasMissing || isMissing;
+                SET_MISSING(arglist, isMissing ? 2 : 0);
             }
             res = Rf_NewEnvironment(R_NilValue, arglist, parent);
 
@@ -1796,19 +1799,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             // arguments from the list, otherwise nargs()
                             // reports the wrong value.
                             promargs = Rf_shallow_duplicate(arglist);
-                            // Need to test for R_MissingArg because
-                            // shallowDuplicate does not copy the missing flag.
-                            while (CAR(promargs) == R_MissingArg &&
-                                   promargs != R_NilValue) {
-                                promargs = CDR(promargs);
-                            }
                             auto p = promargs;
+                            auto a = arglist;
                             auto prev = p;
                             while (p != R_NilValue) {
-                                if (CAR(p) == R_MissingArg)
+                                if (MISSING(a))
                                     SETCDR(prev, CDR(p));
                                 prev = p;
                                 p = CDR(p);
+                                a = CDR(a);
                             }
                         }
                         cptr->promargs = promargs;
@@ -2194,6 +2193,19 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(starg_stubbed_) {
+            unsigned pos = readImmediate();
+            advanceImmediate();
+            SEXP val = ostack_top(ctx);
+
+            auto le = LazyEnvironment::check(env);
+            assert(le);
+            assert(!le->materialized());
+            le->setArg(pos, val, false);
+            ostack_pop(ctx);
+            NEXT();
+        }
+
         INSTRUCTION(stvar_stubbed_) {
             unsigned pos = readImmediate();
             advanceImmediate();
@@ -2202,7 +2214,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto le = LazyEnvironment::check(env);
             assert(le);
             assert(!le->materialized());
-            le->setArg(pos, val);
+            le->setArg(pos, val, true);
             ostack_pop(ctx);
             NEXT();
         }
@@ -2493,7 +2505,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // statically reordered arguments. TODO this needs to be fixed
                 // by remembering the original order.
                 if (given.includes(Assumption::StaticallyArgmatched))
-                    lazyArgs.args = nullptr;
+                    lazyArgs.content.args = nullptr;
                 fun->registerInvocation();
                 supplyMissingArgs(call, fun);
                 res = rirCallTrampoline(call, fun, symbol::delayedEnv,
