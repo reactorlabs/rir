@@ -187,6 +187,30 @@ NativeBuiltin NativeBuiltins::setCar = {
     (void*)&setCarImpl,
 };
 
+void setCdrImpl(SEXP x, SEXP y) {
+    assert(x->sxpinfo.mark && "Use fastpath setCdr");
+    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
+           "use fast path setCdr");
+    SETCDR(x, y);
+}
+
+NativeBuiltin NativeBuiltins::setCdr = {
+    "setCdr",
+    (void*)&setCdrImpl,
+};
+
+void setTagImpl(SEXP x, SEXP y) {
+    assert(x->sxpinfo.mark && "Use fastpath setTag");
+    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
+           "use fast path setTag");
+    SETCAR(x, y);
+}
+
+NativeBuiltin NativeBuiltins::setTag = {
+    "setTag",
+    (void*)&setTagImpl,
+};
+
 void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
     assert(x->sxpinfo.mark && "Use fastpath setEntry");
     assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&

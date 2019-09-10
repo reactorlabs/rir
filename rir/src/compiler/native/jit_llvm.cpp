@@ -81,10 +81,10 @@ class JitLLVMImplementation {
         OptimizeLayer;
     MangleAndInterner Mangle;
 
-    llvm::Module* module = nullptr;
     orc::VModuleKey moduleKey;
 
   public:
+    llvm::Module* module = nullptr;
     JitLLVMImplementation()
         : Resolver(createLegacyLookupResolver(
               ES,
@@ -333,6 +333,10 @@ llvm::Value* JitLLVM::getFunctionDeclaration(const std::string& name,
     llvm::Type* tp = PointerType::get(signature, 0);
     auto ptr = llvm::ConstantInt::get(C, APInt(64, (uintptr_t)*sym));
     return builder.CreateIntToPtr(ptr, tp);
+}
+
+llvm::Module& JitLLVM::module() {
+    return *JitLLVMImplementation::instance().module;
 }
 
 } // namespace pir
