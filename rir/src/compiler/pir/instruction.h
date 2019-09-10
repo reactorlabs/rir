@@ -937,6 +937,7 @@ class FLIE(MkArg, 2, Effects::None()) {
                                          env),
           prom_(prom) {
         assert(eagerArg() == v);
+        assert(!MkArg::Cast(eagerArg()->followCasts()));
         if (isEager())
             noReflection = true;
     }
