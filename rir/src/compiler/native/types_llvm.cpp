@@ -157,6 +157,8 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::chkfun.llvmSignature = t::sexp_sexpsexp;
 
     NativeBuiltins::setCar.llvmSignature = t::void_sexpsexp;
+    NativeBuiltins::setCdr.llvmSignature = t::void_sexpsexp;
+    NativeBuiltins::setTag.llvmSignature = t::void_sexpsexp;
 
     NativeBuiltins::externalsxpSetEntry.llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::SEXP, t::Int, t::SEXP}, false);

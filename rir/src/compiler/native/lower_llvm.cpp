@@ -311,29 +311,46 @@ class LowerFunctionLLVM {
     llvm::Value* paramEnv() { return args[2]; }
     llvm::Value* paramClosure() { return args[3]; }
 
-    static llvm::Value* c(void* i) {
+    static llvm::Constant* c(void* i) {
         return llvm::ConstantInt::get(C, APInt(64, (intptr_t)i));
     }
 
-    static llvm::Value* c(unsigned long i, int bs = 64) {
+    static llvm::Constant* c(unsigned long i, int bs = 64) {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
-    static llvm::Value* c(long i, int bs = 64) {
+    static llvm::Constant* c(long i, int bs = 64) {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
-    static llvm::Value* c(unsigned int i, int bs = 32) {
+    static llvm::Constant* c(unsigned int i, int bs = 32) {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
-    static llvm::Value* c(int i, int bs = 32) {
+    static llvm::Constant* c(int i, int bs = 32) {
         return llvm::ConstantInt::get(C, APInt(bs, i));
     }
 
-    static llvm::Value* c(double d) {
+    static llvm::Constant* c(double d) {
         return llvm::ConstantFP::get(C, llvm::APFloat(d));
     }
+
+    static llvm::Constant* c(const std::vector<unsigned int>& array) {
+        std::vector<llvm::Constant*> init;
+        for (const auto& e : array)
+            init.push_back(c(e));
+        auto ty = llvm::ArrayType::get(t::Int, array.size());
+        return llvm::ConstantArray::get(ty, init);
+    }
+
+    static llvm::Value* globalConst(llvm::Constant* init,
+                                    llvm::Type* ty = nullptr) {
+        if (!ty)
+            ty = init->getType();
+        return new llvm::GlobalVariable(JitLLVM::module(), ty, true,
+                                        llvm::GlobalValue::PrivateLinkage,
+                                        init);
+    };
 
     llvm::AllocaInst* topAlloca(llvm::Type* t, size_t len = 1);
 
@@ -352,7 +369,9 @@ class LowerFunctionLLVM {
     llvm::Value* tag(llvm::Value* v);
     llvm::Value* car(llvm::Value* v);
     llvm::Value* cdr(llvm::Value* v);
-    void setCar(llvm::Value* x, llvm::Value* y);
+    void setCar(llvm::Value* x, llvm::Value* y, bool writeBarrier = true);
+    void setCdr(llvm::Value* x, llvm::Value* y, bool writeBarrier = true);
+    void setTag(llvm::Value* x, llvm::Value* y, bool writeBarrier = true);
     llvm::Value* isObj(llvm::Value*);
     llvm::Value* isAltrep(llvm::Value*);
     llvm::Value* sxpinfoPtr(llvm::Value*);
@@ -1103,15 +1122,43 @@ llvm::Value* LowerFunctionLLVM::tag(llvm::Value* v) {
     return builder.CreateLoad(pos);
 }
 
-void LowerFunctionLLVM::setCar(llvm::Value* x, llvm::Value* y) {
-    writeBarrier(x, y,
-                 [&]() {
-                     auto xx = builder.CreateGEP(x, {c(0), c(4), c(0)});
-                     builder.CreateStore(y, xx);
-                 },
-                 [&]() {
-                     call(NativeBuiltins::setCar, {x, y});
-                 });
+void LowerFunctionLLVM::setCar(llvm::Value* x, llvm::Value* y,
+                               bool needsWriteBarrier) {
+    auto fast = [&]() {
+        auto xx = builder.CreateGEP(x, {c(0), c(4), c(0)});
+        builder.CreateStore(y, xx);
+    };
+    if (!needsWriteBarrier) {
+        fast();
+        return;
+    }
+    writeBarrier(x, y, fast, [&]() { call(NativeBuiltins::setCar, {x, y}); });
+}
+
+void LowerFunctionLLVM::setCdr(llvm::Value* x, llvm::Value* y,
+                               bool needsWriteBarrier) {
+    auto fast = [&]() {
+        auto xx = builder.CreateGEP(x, {c(0), c(4), c(1)});
+        builder.CreateStore(y, xx);
+    };
+    if (!needsWriteBarrier) {
+        fast();
+        return;
+    }
+    writeBarrier(x, y, fast, [&]() { call(NativeBuiltins::setCdr, {x, y}); });
+}
+
+void LowerFunctionLLVM::setTag(llvm::Value* x, llvm::Value* y,
+                               bool needsWriteBarrier) {
+    auto fast = [&]() {
+        auto xx = builder.CreateGEP(x, {c(0), c(4), c(2)});
+        builder.CreateStore(y, xx);
+    };
+    if (!needsWriteBarrier) {
+        fast();
+        return;
+    }
+    writeBarrier(x, y, fast, [&]() { call(NativeBuiltins::setTag, {x, y}); });
 }
 
 llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
@@ -1638,17 +1685,17 @@ bool LowerFunctionLLVM::compileDotcall(
     auto calli = CallInstruction::CastCall(i);
     assert(calli);
     std::vector<Value*> args;
-    std::vector<SEXP> newNames;
+    std::vector<BC::PoolIdx> newNames;
     bool seenDots = false;
     size_t pos = 0;
     calli->eachCallArg([&](Value* v) {
         if (auto exp = ExpandDots::Cast(v)) {
             args.push_back(exp->arg(0).val());
-            newNames.push_back(R_DotsSymbol);
+            newNames.push_back(Pool::insert(R_DotsSymbol));
             seenDots = true;
         } else {
             assert(!DotsList::Cast(v));
-            newNames.push_back(names(pos));
+            newNames.push_back(Pool::insert(names(pos)));
             args.push_back(v);
         }
         pos++;
@@ -1656,10 +1703,8 @@ bool LowerFunctionLLVM::compileDotcall(
     if (!seenDots)
         return false;
     Assumptions asmpt = calli->inferAvailableAssumptions();
-    auto namesStore = topAlloca(t::Int, newNames.size());
-    for (size_t i = 0; i < newNames.size(); ++i)
-        builder.CreateStore(c(Pool::insert(newNames[i])),
-                            builder.CreateGEP(namesStore, c(i)));
+    auto namesConst = c(newNames);
+    auto namesStore = globalConst(namesConst);
 
     setVal(i,
            withCallFrame(
@@ -1897,8 +1942,9 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto arglist = constant(R_NilValue, t::SEXP);
                 mk->eachElementRev([&](SEXP name, Value* v) {
                     auto val = loadSxp(v);
-                    arglist = call(NativeBuiltins::createBindingCell,
-                                   {val, constant(name, t::SEXP), arglist});
+                    incrementNamed(val);
+                    arglist = call(NativeBuiltins::consNr, {val, arglist});
+                    setTag(arglist, constant(name, t::SEXP), false);
                 });
                 setSexptype(arglist, DOTSXP);
                 setVal(i, arglist);
@@ -2189,10 +2235,11 @@ bool LowerFunctionLLVM::tryCompile() {
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
                 Assumptions asmpt = b->inferAvailableAssumptions();
 
-                auto namesStore = topAlloca(t::Int, b->names.size());
+                std::vector<BC::PoolIdx> names;
                 for (size_t i = 0; i < b->names.size(); ++i)
-                    builder.CreateStore(c(Pool::insert(b->names[i])),
-                                        builder.CreateGEP(namesStore, c(i)));
+                    names.push_back(Pool::insert((b->names[i])));
+                auto namesConst = c(names);
+                auto namesStore = globalConst(namesConst);
 
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(
@@ -2389,14 +2436,15 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto mkenv = MkEnv::Cast(i);
                 auto parent = loadSxp(mkenv->env());
 
-                auto namesStore = topAlloca(t::Int, mkenv->nLocals());
+                std::vector<BC::PoolIdx> names;
                 for (size_t i = 0; i < mkenv->nLocals(); ++i) {
                     auto n = mkenv->varName[i];
                     if (mkenv->missing[i])
                         n = CONS_NR(n, R_NilValue);
-                    builder.CreateStore(c(Pool::insert(n)),
-                                        builder.CreateGEP(namesStore, c(i)));
+                    names.push_back(Pool::insert(n));
                 }
+                auto namesConst = c(names);
+                auto namesStore = globalConst(namesConst);
 
                 if (mkenv->stub) {
                     auto env =

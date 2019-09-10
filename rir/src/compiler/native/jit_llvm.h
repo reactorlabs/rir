@@ -13,6 +13,7 @@ class JitLLVM {
     static std::string mangle(const std::string&);
     static llvm::LLVMContext C;
     static void createModule();
+    static llvm::Module& module();
     static void* tryCompile(llvm::Function*);
     static llvm::Function* declare(const std::string& name,
                                    llvm::FunctionType* signature);

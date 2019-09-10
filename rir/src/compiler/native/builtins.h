@@ -63,6 +63,8 @@ struct NativeBuiltins {
     static NativeBuiltin chkfun;
 
     static NativeBuiltin setCar;
+    static NativeBuiltin setCdr;
+    static NativeBuiltin setTag;
 
     static NativeBuiltin externalsxpSetEntry;
 
