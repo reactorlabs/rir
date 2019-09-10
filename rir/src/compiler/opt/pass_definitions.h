@@ -142,6 +142,8 @@ class PASS(TypeInference);
 
 class PASS(TypeSpeculation);
 
+class PASS(PromiseSplitter);
+
 /*
  * Loop Invariant Code motion
  */

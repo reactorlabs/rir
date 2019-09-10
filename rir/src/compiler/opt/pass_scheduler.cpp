@@ -26,6 +26,7 @@ PassScheduler::PassScheduler() {
         add<DotDotDots>();
         add<ForceDominance>();
         add<ScopeResolution>();
+        add<PromiseSplitter>();
         add<DeadStoreRemoval>();
         add<EagerCalls>();
         add<Constantfold>();
