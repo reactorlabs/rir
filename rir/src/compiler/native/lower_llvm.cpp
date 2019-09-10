@@ -2697,6 +2697,62 @@ bool LowerFunctionLLVM::tryCompile() {
                              },
                              BinopKind::LOR);
                 break;
+            case Tag::IDiv:
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto isZero = BasicBlock::Create(C, "", fun);
+                        auto notZero = BasicBlock::Create(C, "", fun);
+                        auto cnt = BasicBlock::Create(C, "", fun);
+                        llvm::Value* res = builder.CreateAlloca(t::Int);
+                        builder.CreateCondBr(builder.CreateICmpEQ(b, c(0)),
+                                             isZero, notZero);
+
+                        builder.SetInsertPoint(isZero);
+                        builder.CreateStore(c(NA_INTEGER), res);
+                        builder.CreateBr(cnt);
+
+                        builder.SetInsertPoint(notZero);
+                        auto r = builder.CreateFDiv(
+                            builder.CreateSIToFP(a, t::Double),
+                            builder.CreateSIToFP(b, t::Double));
+                        builder.CreateStore(builder.CreateFPToSI(r, t::Int),
+                                            res);
+                        builder.CreateBr(cnt);
+
+                        builder.SetInsertPoint(cnt);
+                        return builder.CreateLoad(res);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // from myfloor
+                        auto q = builder.CreateFDiv(a, b);
+                        auto isZero = BasicBlock::Create(C, "", fun);
+                        auto notZero = BasicBlock::Create(C, "", fun);
+                        auto cnt = BasicBlock::Create(C, "", fun);
+                        llvm::Value* res = builder.CreateAlloca(t::Double);
+                        builder.CreateCondBr(builder.CreateFCmpOEQ(b, c(0.0)),
+                                             isZero, notZero);
+
+                        builder.SetInsertPoint(isZero);
+                        builder.CreateStore(q, res);
+                        builder.CreateBr(cnt);
+
+                        builder.SetInsertPoint(notZero);
+                        auto fq = builder.CreateIntrinsic(Intrinsic::floor,
+                                                          {t::Double}, {q});
+                        auto tmp =
+                            builder.CreateFSub(a, builder.CreateFMul(fq, b));
+                        auto frem = builder.CreateIntrinsic(
+                            Intrinsic::floor, {t::Double},
+                            {builder.CreateFDiv(tmp, b)});
+                        builder.CreateStore(builder.CreateFAdd(fq, frem), res);
+                        builder.CreateBr(cnt);
+
+                        builder.SetInsertPoint(cnt);
+                        return builder.CreateLoad(res);
+                    },
+                    BinopKind::IDIV);
+                break;
             case Tag::Mod:
                 compileBinop(
                     i,
@@ -2723,9 +2779,60 @@ bool LowerFunctionLLVM::tryCompile() {
                         builder.SetInsertPoint(cnt);
                         return builder.CreateLoad(res);
                     },
-                    nullptr, BinopKind::MOD);
-                break;
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // from myfmod
+                        auto isZero = BasicBlock::Create(C, "", fun);
+                        auto notZero = BasicBlock::Create(C, "", fun);
+                        auto cnt = BasicBlock::Create(C, "", fun);
+                        llvm::Value* res = builder.CreateAlloca(t::Double);
+                        builder.CreateCondBr(builder.CreateFCmpOEQ(b, c(0.0)),
+                                             isZero, notZero);
 
+                        builder.SetInsertPoint(isZero);
+                        builder.CreateStore(c(R_NaN), res);
+                        builder.CreateBr(cnt);
+
+                        builder.SetInsertPoint(notZero);
+                        auto q = builder.CreateFDiv(a, b);
+                        auto fq = builder.CreateIntrinsic(Intrinsic::floor,
+                                                          {t::Double}, {q});
+
+                        auto absq = builder.CreateIntrinsic(Intrinsic::fabs,
+                                                            {t::Double}, {q});
+                        auto finite = builder.CreateFCmpONE(
+                            absq, c((double)0x7FF0000000000000));
+                        auto gt = builder.CreateFCmpOGT(
+                            absq, c(1 / R_AccuracyInfo.eps));
+
+                        auto warn = BasicBlock::Create(C, "", fun);
+                        auto noWarn = BasicBlock::Create(C, "", fun);
+                        builder.CreateCondBr(builder.CreateAnd(finite, gt),
+                                             warn, noWarn);
+
+                        builder.SetInsertPoint(warn);
+                        auto msg = builder.CreateGlobalString(
+                            "probable complete loss of accuracy in modulus");
+                        call(NativeBuiltins::warn,
+                             {builder.CreateBitCast(msg, t::voidPtr)});
+                        builder.CreateBr(noWarn);
+
+                        builder.SetInsertPoint(noWarn);
+                        auto tmp =
+                            builder.CreateFSub(a, builder.CreateFMul(fq, b));
+                        auto frem = builder.CreateIntrinsic(
+                            Intrinsic::floor, {t::Double},
+                            {builder.CreateFDiv(tmp, b)});
+                        builder.CreateStore(
+                            builder.CreateFSub(tmp,
+                                               builder.CreateFMul(frem, b)),
+                            res);
+                        builder.CreateBr(cnt);
+
+                        builder.SetInsertPoint(cnt);
+                        return builder.CreateLoad(res);
+                    },
+                    BinopKind::MOD);
+                break;
             case Tag::Colon: {
                 assert(representationOf(i) == t::SEXP);
                 auto a = loadSxp(i->arg(0).val());
@@ -3421,7 +3528,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Int3:
             case Tag::PrintInvocation:
-            case Tag::IDiv:
             case Tag::Extract2_2D:
             case Tag::Extract1_2D:
             case Tag::Subassign1_2D:
