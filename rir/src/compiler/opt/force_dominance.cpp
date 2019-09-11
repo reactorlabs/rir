@@ -427,6 +427,7 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                             Value* promRes =
                                 BBTransform::forInline(prom_copy, split).first;
 
+                            assert(!promRes->type.maybePromiseWrapped());
                             f = Force::Cast(*split->begin());
                             assert(f);
                             f->replaceUsesWith(promRes);
@@ -459,7 +460,6 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 auto f = Force::Cast(*ip);
-                auto cast = CastType::Cast(*ip);
                 auto next = ip + 1;
                 if (f) {
                     // If this force instruction is dominated by another force
@@ -473,12 +473,6 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                             next = bb->remove(ip);
                         }
                     }
-                }
-                if (cast) {
-                    // Collect aliases of promises for step 3 bellow
-                    auto in = Instruction::Cast(cast->arg<0>().val());
-                    if (in && forcedMkArg.count(in))
-                        forcedMkArg[cast] = forcedMkArg.at(in);
                 }
                 ip = next;
             }

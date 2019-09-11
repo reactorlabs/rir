@@ -21,10 +21,11 @@ void PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
             if (auto mk = MkArg::Cast(ct->arg(0).val())) {
                 candidates.insert(ct);
                 candidateProms[mk] = ct;
-                return;
             }
         }
+    });
 
+    Visitor::run(function->entry, [&](Instruction* i) {
         size_t count = 0;
         i->eachArg([&](Value* v) {
             if (auto ct = CastType::Cast(v)) {

@@ -654,11 +654,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::extract1_1_: {
-        if (!inPromise()) {
-            forceIfPromised(1); // <- ensure forced captured in framestate
-            forceIfPromised(0);
+        forceIfPromised(1); // <- ensure forced captured in framestate
+        if (!inPromise())
             addCheckpoint(srcCode, pos, stack, insert);
-        }
+        forceIfPromised(0);
+        if (!inPromise())
+            addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
@@ -666,12 +667,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract2_1_: {
-        if (!inPromise()) {
-            forceIfPromised(
-                1); // <- ensure forced version are captured in framestate
-            forceIfPromised(0);
+        forceIfPromised(1); // <- forced version are captured in framestate
+        if (!inPromise())
             addCheckpoint(srcCode, pos, stack, insert);
-        }
+        forceIfPromised(0);
+        if (!inPromise())
+            addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
@@ -679,15 +680,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract1_2_: {
-        // TODO: checkpoint here is broken. What we should do here is insert a
-        // checkpoint between every force, and then deopt between forcing. E.g.
-        // if in a[b,c] b turns out to be an object, we need a deopt exit that
-        // captures the forced a, forced b and unforced c. So we cannot have
-        // deopt like now right in front of the Extract2_2D, but instead we need
-        // 3 different deopts after every force.
-        // For that we need to fix elide_env_spec to insert the assumes in the
-        // right place (ie, after the force and not before the Extract)
-        // insert.addCheckpoint(srcCode, pos, stack);
+        forceIfPromised(2);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -696,15 +692,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract2_2_: {
-        // TODO: checkpoint here is broken. What we should do here is insert a
-        // checkpoint between every force, and then deopt between forcing. E.g.
-        // if in a[b,c] b turns out to be an object, we need a deopt exit that
-        // captures the forced a, forced b and unforced c. So we cannot have
-        // deopt like now right in front of the Extract2_2D, but instead we need
-        // 3 different deopts after every force.
-        // For that we need to fix elide_env_spec to insert the assumes in the
-        // right place (ie, after the force and not before the Extract)
-        // insert.addCheckpoint(srcCode, pos, stack);
+        forceIfPromised(2);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -713,6 +704,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign1_1_: {
+        forceIfPromised(1);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -721,6 +716,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign2_1_: {
+        forceIfPromised(1);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -729,6 +728,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign1_2_: {
+        forceIfPromised(2);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -738,6 +741,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign2_2_: {
+        forceIfPromised(2);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();

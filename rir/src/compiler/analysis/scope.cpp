@@ -279,8 +279,6 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 prom();
 
                 auto res = prom.result();
-                if (!res.mayUseReflection)
-                    mkarg->noReflection = true;
 
                 state.mergeCall(code, res);
                 updateReturnValue(res.returnValue);

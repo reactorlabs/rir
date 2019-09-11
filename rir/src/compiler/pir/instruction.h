@@ -932,15 +932,7 @@ class FLIE(MkArg, 2, Effects::None()) {
   public:
     bool noReflection = false;
 
-    MkArg(Promise* prom, Value* v, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
-                                         env),
-          prom_(prom) {
-        assert(eagerArg() == v);
-        assert(!MkArg::Cast(eagerArg()->followCasts()));
-        if (isEager())
-            noReflection = true;
-    }
+    MkArg(Promise* prom, Value* v, Value* env);
 
     Value* eagerArg() const { return arg(0).val(); }
     void eagerArg(Value* eager) {
@@ -1004,7 +996,12 @@ class FLIE(Force, 2, Effects::Any()) {
     bool strict = false;
     Force(Value* in, Value* env)
         : FixedLenInstructionWithEnvSlot(in->type.forced(), {{PirType::any()}},
-                                         {{in}}, env) {}
+                                         {{in}}, env) {
+        if (auto mk = MkArg::Cast(in)) {
+            if (mk->noReflection)
+                elideEnv();
+        }
+    }
     Value* input() const { return arg(0).val(); }
     const char* name() const override { return strict ? "Force!" : "Force"; }
 

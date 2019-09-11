@@ -2754,32 +2754,8 @@ bool LowerFunctionLLVM::tryCompile() {
                     },
                     BinopKind::IDIV);
                 break;
-            case Tag::Mod:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        auto isZero = BasicBlock::Create(C, "", fun);
-                        auto notZero = BasicBlock::Create(C, "", fun);
-                        auto cnt = BasicBlock::Create(C, "", fun);
-                        llvm::Value* res = builder.CreateAlloca(t::Int);
-                        builder.CreateCondBr(builder.CreateICmpEQ(b, c(0)),
-                                             isZero, notZero);
-
-                        builder.SetInsertPoint(isZero);
-                        builder.CreateStore(c(NA_INTEGER), res);
-                        builder.CreateBr(cnt);
-
-                        builder.SetInsertPoint(notZero);
-                        auto r = builder.CreateSRem(a, b);
-                        auto r2 =
-                            builder.CreateSelect(builder.CreateICmpSLT(b, c(0)),
-                                                 builder.CreateNeg(r), r);
-                        builder.CreateStore(r2, res);
-                        builder.CreateBr(cnt);
-
-                        builder.SetInsertPoint(cnt);
-                        return builder.CreateLoad(res);
-                    },
+            case Tag::Mod: {
+                auto myfmod =
                     [&](llvm::Value* a, llvm::Value* b) {
                         // from myfmod
                         auto isZero = BasicBlock::Create(C, "", fun);
@@ -2831,9 +2807,42 @@ bool LowerFunctionLLVM::tryCompile() {
 
                         builder.SetInsertPoint(cnt);
                         return builder.CreateLoad(res);
+                    };
+
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto fast = BasicBlock::Create(C, "", fun);
+                        auto fast1 = BasicBlock::Create(C, "", fun);
+                        auto slow = BasicBlock::Create(C, "", fun);
+                        auto cnt = BasicBlock::Create(C, "", fun);
+                        llvm::Value* res = builder.CreateAlloca(t::Int);
+                        builder.CreateCondBr(builder.CreateICmpSGE(a, c(0)),
+                                             fast1, slow);
+
+                        builder.SetInsertPoint(fast1);
+                        builder.CreateCondBr(builder.CreateICmpSGT(b, c(0)),
+                                             fast, slow);
+
+                        builder.SetInsertPoint(fast);
+                        builder.CreateStore(builder.CreateSRem(a, b), res);
+                        builder.CreateBr(cnt);
+
+                        builder.SetInsertPoint(slow);
+                        builder.CreateStore(
+                            builder.CreateFPToSI(
+                                myfmod(builder.CreateSIToFP(a, t::Double),
+                                       builder.CreateSIToFP(b, t::Double)),
+                                t::Int),
+                            res);
+                        builder.CreateBr(cnt);
+
+                        builder.SetInsertPoint(cnt);
+                        return builder.CreateLoad(res);
                     },
-                    BinopKind::MOD);
+                    myfmod, BinopKind::MOD);
                 break;
+            }
             case Tag::Colon: {
                 assert(representationOf(i) == t::SEXP);
                 auto a = loadSxp(i->arg(0).val());

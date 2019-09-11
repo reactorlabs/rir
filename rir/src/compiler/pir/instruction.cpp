@@ -396,6 +396,12 @@ bool Instruction::envOnlyForObj() {
     switch (tag) {
     case Tag::Extract1_1D:
     case Tag::Extract2_1D:
+    case Tag::Extract1_2D:
+    case Tag::Extract2_2D:
+    case Tag::Subassign1_1D:
+    case Tag::Subassign2_1D:
+    case Tag::Subassign1_2D:
+    case Tag::Subassign2_2D:
     case Tag::Not:
     case Tag::LOr:
     case Tag::LAnd:
@@ -453,6 +459,17 @@ void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
         << " [color=green];  // -> BB" << trueBB->id << "\n"
         << "  BB" << bbId << " -> BB" << falseBB->uid()
         << " [color=red];  // -> BB" << falseBB->id << "\n";
+}
+
+MkArg::MkArg(Promise* prom, Value* v, Value* env)
+    : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
+                                     env),
+      prom_(prom) {
+    assert(eagerArg() == v);
+    assert(!MkArg::Cast(eagerArg()->followCasts()));
+    if (isEager()) {
+        noReflection = true;
+    }
 }
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
