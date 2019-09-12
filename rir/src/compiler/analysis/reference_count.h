@@ -13,10 +13,12 @@ struct AUses {
      * Lattice:
      *
      *                    Multiple
-     *                     /      \
-     *   AlreadyIncremented        Once
-     *                     \      /
-     *                       None
+     *                       |
+     *                      Once
+     *                       |
+     *                 AlreadyIncremented
+     *                       |
+     *                      None
      *
      * Definitions:
      *   reuse            :=   override if refcount is == 0
@@ -25,8 +27,8 @@ struct AUses {
     enum Kind {
         // 1) Static refcount is safe
         None,
-        Once,               // At least one use, which reuses input
         AlreadyIncremented, // Refcount is known to be 1 (ie. used by stvar)
+        Once,               // At least one use, which reuses input
 
         // 2) Need an ensureNamed
         Multiple, // At least two uses, at least one (but the last) is reusing
@@ -36,16 +38,7 @@ struct AUses {
         if (a == b)
             return a;
 
-        Kind bigger = a > b ? a : b;
-        Kind smaller = a < b ? a : b;
-        if (smaller == None)
-            return bigger;
-
-        if (bigger == Multiple || bigger == AlreadyIncremented)
-            return Multiple;
-
-        assert(false);
-        return Multiple;
+        return a > b ? a : b;
     }
 
     bool overflow = false;
@@ -162,8 +155,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
     AbstractResult apply(AUses& state, Instruction* i) const override {
         AbstractResult res;
 
-        if (state.overflow || Phi::Cast(i) || PirCopy::Cast(i) ||
-            CastType::Cast(i))
+        if (state.overflow || Phi::Cast(i) || PirCopy::Cast(i))
             return res;
 
         if (i->minReferenceCount() < 1) {
@@ -176,32 +168,39 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             }
         }
 
-        auto count = [&](Value* v, bool constantUse) {
-            auto i = Instruction::Cast(v);
-            if (!i)
+        auto count = [&](Value* v, bool constantUse, bool increments) {
+            auto vi = Instruction::Cast(v);
+            if (!vi)
                 return;
 
-            auto use = state.uses.find(i);
+            auto use = state.uses.find(vi);
             if (use == state.uses.end()) {
-                if (!constantUse) {
+                if (!constantUse && vi != i) {
                     // duplicate case AUses::None from below. This avoids
                     // creating an entry if not needed
-                    state.uses[i] = AUses::Once;
+                    state.uses[vi] =
+                        increments ? AUses::AlreadyIncremented : AUses::Once;
                     res.update();
                 }
                 return;
             }
+
             switch (use->second) {
             case AUses::None:
                 // multiple non-reusing uses are ok, as long as the are not
                 // preceeded by a reusing use (in which case we are at Once)
-                if (!constantUse) {
-                    use->second = AUses::Once;
+                if (!constantUse && vi != i) {
+                    use->second =
+                        increments ? AUses::AlreadyIncremented : AUses::Once;
                     res.update();
                 }
                 break;
             case AUses::Once:
-                use->second = AUses::Multiple;
+                // self input = overrides itself...
+                if (vi == i)
+                    use->second = AUses::None;
+                else
+                    use->second = AUses::Multiple;
                 res.update();
                 break;
             case AUses::AlreadyIncremented:
@@ -210,28 +209,29 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             }
         };
 
-        std::function<void(Value*, bool)> apply = [&](Value* v,
-                                                      bool constantUse) {
-            v = v->followCasts();
-            while (auto cp = PirCopy::Cast(v->followCasts()))
-                v = cp->arg<0>().val();
-            v = v->followCasts();
+        std::function<void(Value*, bool, bool)> apply =
+            [&](Value* v, bool constantUse, bool increments) {
+                v = v->followCasts();
+                while (auto cp = PirCopy::Cast(v->followCasts()))
+                    v = cp->arg<0>().val();
+                v = v->followCasts();
 
-            if (auto j = Instruction::Cast(v)) {
-                if (j->minReferenceCount() >= 1)
-                    return;
+                if (auto j = Instruction::Cast(v)) {
+                    if (j->minReferenceCount() >= 1)
+                        return;
 
-                if (alias.count(j))
-                    for (auto a : alias.at(j))
-                        count(a, constantUse);
-                else
-                    count(j, constantUse);
-            }
-        };
+                    if (alias.count(j))
+                        for (auto a : alias.at(j))
+                            count(a, constantUse, increments);
+                    else
+                        count(j, constantUse, increments);
+                }
+            };
 
         switch (i->tag) {
         // (1) Instructions which never reuse SEXPS
         //
+        case Tag::RecordDeoptReason:
         case Tag::Return:
         case Tag::Length:
         case Tag::Colon:
@@ -239,6 +239,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         case Tag::IsType:
         case Tag::IsObject:
         case Tag::IsEnvStub:
+        case Tag::ChkMissing:
         case Tag::Deopt:
         case Tag::AsTest:
         case Tag::Identical:
@@ -248,7 +249,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         case Tag::MkArg:
         case Tag::MkCls:
         case Tag::MkFunCls:
-            i->eachArg([&](Value* v) { apply(v, true); });
+            i->eachArg([&](Value* v) { apply(v, true, false); });
             break;
 
         // (2) Instructions which update the named count
@@ -259,14 +260,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             i->eachArg([&](Value* v) {
                 if (v == i->env())
                     return;
-                if (auto val = Instruction::Cast(v)) {
-                    apply(val, false);
-                    if (!state.uses.count(val) ||
-                        state.uses.at(val) <= AUses::Once) {
-                        state.uses[val] = AUses::AlreadyIncremented;
-                        res.update();
-                    }
-                }
+                apply(v, true, true);
             });
             break;
 
@@ -274,7 +268,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         // count is 0
         //
         default:
-            i->eachArg([&](Value* v) { apply(v, false); });
+            i->eachArg([&](Value* v) { apply(v, false, false); });
             break;
         };
 

@@ -368,6 +368,32 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 if (u.second == AUses::Multiple)
                     needsEnsureNamed.insert(u.first);
             }
+
+        // This part is a bit of a hack... If we have the pattern:
+        //   subassign
+        //   stvar
+        // then the stvar takes care of the ensure named and we should
+        // absolutely not do it beforehand, because it will cause the stvar to
+        // increment to 2.
+        Visitor::run(code->entry, [&](BB* bb) {
+            for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
+                auto i = *ip;
+                switch (i->tag) {
+                case Tag::Subassign1_1D:
+                case Tag::Subassign2_1D:
+                case Tag::Subassign1_2D:
+                case Tag::Subassign2_2D:
+                    if (!needsEnsureNamed.count(i))
+                        break;
+                    if (ip + 1 != bb->end()) {
+                        auto next = *(ip + 1);
+                        if (StVar::Cast(next) && next->arg(0).val() == i)
+                            needsEnsureNamed.erase(i);
+                    }
+                default: {}
+                }
+            }
+        });
     }
 
     std::unordered_map<Promise*, unsigned> promMap;

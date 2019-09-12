@@ -643,7 +643,8 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
     if (vali && variables.count(vali))
         res = variables.at(vali).get(builder);
     else if (val == Env::elided())
-        res = constant(R_NilValue, needed);
+        // Some "safe" builtins still look up functions in the global env
+        res = constant(R_GlobalEnv, needed);
     else if (auto e = Env::Cast(val)) {
         if (e == Env::notClosed()) {
             res = tag(paramClosure());
@@ -1707,24 +1708,22 @@ bool LowerFunctionLLVM::compileDotcall(
     auto namesConst = c(newNames);
     auto namesStore = globalConst(namesConst);
 
-    setVal(i,
-           withCallFrame(
-               args,
-               [&]() -> llvm::Value* {
-                   return call(NativeBuiltins::dotsCall,
-                               {
-                                   paramCode(),
-                                   c(i->srcIdx),
-                                   callee(),
-                                   i->hasEnv()
-                                       ? loadSxp(i->env())
-                                       : constant(symbol::delayedEnv, t::SEXP),
-                                   c(calli->nCallArgs()),
-                                   builder.CreateBitCast(namesStore, t::IntPtr),
-                                   c(asmpt.toI()),
-                               });
-               },
-               /* dotCall pops arguments : */ false));
+    setVal(i, withCallFrame(
+                  args,
+                  [&]() -> llvm::Value* {
+                      return call(
+                          NativeBuiltins::dotsCall,
+                          {
+                              paramCode(),
+                              c(i->srcIdx),
+                              callee(),
+                              loadSxp(i->hasEnv() ? i->env() : Env::elided()),
+                              c(calli->nCallArgs()),
+                              builder.CreateBitCast(namesStore, t::IntPtr),
+                              c(asmpt.toI()),
+                          });
+                  },
+                  /* dotCall pops arguments : */ false));
     return true;
 }
 
@@ -2171,15 +2170,14 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                           return call(
-                               NativeBuiltins::callBuiltin,
-                               {
-                                   paramCode(),
-                                   c(b->srcIdx),
-                                   constant(b->blt, t::SEXP),
-                                   constant(symbol::delayedEnv, t::SEXP),
-                                   c(b->nCallArgs()),
-                               });
+                           return call(NativeBuiltins::callBuiltin,
+                                       {
+                                           paramCode(),
+                                           c(b->srcIdx),
+                                           constant(b->blt, t::SEXP),
+                                           load(Env::elided()),
+                                           c(b->nCallArgs()),
+                                       });
                        }));
                 break;
             }

@@ -304,8 +304,7 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
         debugPrintCallBuiltinImpl = true;
     }
     SLOWASSERT(TYPEOF(callee) == BUILTINSXP);
-    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
-               LazyEnvironment::check(env) || env == R_NilValue);
+    SLOWASSERT(TYPEOF(env) == ENVSXP || LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = builtinCall(call, ctx);
     SLOWASSERT(res);
@@ -322,7 +321,7 @@ static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
                      Assumptions(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
-               LazyEnvironment::check(env) || env == R_NilValue);
+               LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
     return res;
@@ -340,7 +339,7 @@ static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
                      names, env, Assumptions(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
-               LazyEnvironment::check(env) || env == R_NilValue);
+               LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
     return res;
@@ -373,7 +372,7 @@ static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
                      names, env, given, ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
-               LazyEnvironment::check(env) || env == R_NilValue);
+               LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
     ostack_popn(ctx, toPop);
@@ -961,7 +960,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
                                      Immediate astP, SEXP env, size_t nargs,
                                      unsigned long available) {
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
-               LazyEnvironment::check(env) || env == R_NilValue);
+               LazyEnvironment::check(env));
 
     if (fun->dead || !fun->body()->nativeCode)
         return callImpl(fun->body(), astP, callee, env, nargs, available);
