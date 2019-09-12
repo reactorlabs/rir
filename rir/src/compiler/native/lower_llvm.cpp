@@ -355,8 +355,7 @@ class LowerFunctionLLVM {
     llvm::AllocaInst* topAlloca(llvm::Type* t, size_t len = 1);
 
     llvm::Value* argument(int i);
-    llvm::Value* castToType(llvm::Value* val, Representation type,
-                            PirType pirType);
+    llvm::Value* convert(llvm::Value* val, PirType to, bool protect = true);
     void setVal(Instruction* i, llvm::Value* val);
 
     llvm::Value* isExternalsxp(llvm::Value* v, uint32_t magic);
@@ -398,8 +397,9 @@ class LowerFunctionLLVM {
 
     llvm::Value* force(Instruction* i, llvm::Value* arg);
 
-    void computeAndCheckIndex(llvm::Value* reg, Value* index, Value* vector,
-                              BasicBlock* fallback, BasicBlock* hit);
+    llvm::Value* computeAndCheckIndex(Value* index, llvm::Value* vector,
+                                      BasicBlock* fallback,
+                                      BasicBlock* hit = nullptr);
     bool compileDotcall(Instruction* i,
                         const std::function<llvm::Value*()>& callee,
                         const std::function<SEXP(size_t)>& names);
@@ -740,10 +740,12 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
     return res;
 }
 
-void LowerFunctionLLVM::computeAndCheckIndex(llvm::Value* reg, Value* index,
-                                             Value* vector,
-                                             BasicBlock* fallback,
-                                             BasicBlock* hit) {
+llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
+                                                     llvm::Value* vector,
+                                                     BasicBlock* fallback,
+                                                     BasicBlock* hit) {
+    if (!hit)
+        hit = BasicBlock::Create(C, "", fun);
     llvm::Value* nativeIndex = nullptr;
     if (representationOf(index) == Representation::Sexp) {
         auto vectorizedIndex = loadSxp(index);
@@ -763,15 +765,15 @@ void LowerFunctionLLVM::computeAndCheckIndex(llvm::Value* reg, Value* index,
     }
 
     nativeIndex = builder.CreateSub(nativeIndex, c(1ul));
-    auto veclength = (representationOf(vector) == t::SEXP)
-                         ? vectorLength(loadSxp(vector))
-                         : c(1ul);
+    auto ty = vector->getType();
+    assert(ty == t::SEXP || ty == t::Int || ty == t::Double);
+    auto veclength = (ty == t::SEXP) ? vectorLength(vector) : c(1ul);
     auto indexOverRange = builder.CreateICmpUGE(nativeIndex, veclength);
     auto indexUnderRange = builder.CreateICmpULT(nativeIndex, c(0ul));
     builder.CreateCondBr(builder.CreateOr(indexOverRange, indexUnderRange),
                          fallback, hit);
     builder.SetInsertPoint(hit);
-    builder.CreateStore(nativeIndex, reg);
+    return nativeIndex;
 }
 
 void LowerFunctionLLVM::compilePopContext(Instruction* i) {
@@ -940,8 +942,8 @@ llvm::Value* LowerFunctionLLVM::accessVector(llvm::Value* vector,
 llvm::Value* LowerFunctionLLVM::assignVector(llvm::Value* vector,
                                              llvm::Value* position,
                                              llvm::Value* value, PirType type) {
-    return builder.CreateStore(vectorPositionPtr(vector, position, type),
-                               value);
+    return builder.CreateStore(value,
+                               vectorPositionPtr(vector, position, type));
 }
 
 llvm::Value* LowerFunctionLLVM::unboxIntLgl(llvm::Value* v) {
@@ -1017,32 +1019,30 @@ AllocaInst* LowerFunctionLLVM::topAlloca(llvm::Type* t, size_t len) {
     return res;
 }
 
-llvm::Value* LowerFunctionLLVM::castToType(llvm::Value* val,
-                                           Representation nativeType,
-                                           PirType pirType) {
-    auto valueType = val->getType();
-    if (nativeType != valueType) {
-        if (valueType == t::SEXP && nativeType == t::Int)
-            return unboxIntLgl(val);
-        if (valueType == t::SEXP && nativeType == t::Double)
-            return unboxRealIntLgl(val);
-        if (nativeType == t::SEXP && valueType != t::SEXP)
-            return box(val, pirType, false);
-        val->getType()->print(outs());
-        outs() << "\n";
-        // i->print(std::cout);
-        std::cout << "\nWanted a " << nativeType << " but got a "
-                  << Representation(val->getType()) << "\n";
-        std::cout << "\n";
-        assert(false);
-    }
-    return val;
+llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
+                                        bool protect) {
+    auto to = representationOf(toType);
+    auto from = val->getType();
+    if (from == to)
+        return val;
+
+    if (from == t::SEXP && to == t::Int)
+        return unboxIntLgl(val);
+    if (from == t::SEXP && to == t::Double)
+        return unboxRealIntLgl(val);
+    if (from == t::SEXP && to != t::SEXP)
+        return box(val, toType, protect);
+
+    std::cout << "\nFailed to convert a " << val->getType() << " to " << toType
+              << "\n";
+    assert(false);
+    return nullptr;
 }
 
 void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
     assert(i->producesRirResult() && !CastType::Cast(i) &&
            !PushContext::Cast(i));
-    val = castToType(val, representationOf(i), i->type);
+    val = convert(val, i->type, false);
     if (!val->hasName())
         val->setName(i->getRef());
 
@@ -3259,14 +3259,12 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Extract2_1D: {
                 auto extract = Extract2_1D::Cast(i);
-                auto resultRep = representationOf(i);
                 // TODO: Extend a fastPath for generic vectors.
                 if (extract->vec()->type.isA(PirType::num().notObject()) &&
                     extract->idx()->type.isScalar()) {
                     auto fallback = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
                     auto hit2 = BasicBlock::Create(C, "", fun);
-                    auto hit3 = BasicBlock::Create(C, "", fun);
                     auto done = BasicBlock::Create(C, "", fun);
 
                     llvm::Value* vector = load(extract->vec());
@@ -3286,16 +3284,13 @@ bool LowerFunctionLLVM::tryCompile() {
                         builder.SetInsertPoint(hit2);
                     }
 
-                    llvm::Value* index = builder.CreateAlloca(t::i64);
-                    computeAndCheckIndex(index, extract->idx(), extract->vec(),
-                                         fallback, hit3);
+                    llvm::Value* index =
+                        computeAndCheckIndex(extract->idx(), vector, fallback);
                     auto res0 =
-                        (representationOf(extract->vec()) == t::SEXP)
-                            ? accessVector(vector, builder.CreateLoad(index),
-                                           extract->vec()->type)
-                            : vector;
-                    res0 = castToType(res0, resultRep, i->type);
-                    builder.CreateStore(res0, res);
+                        extract->vec()->type.isScalar()
+                            ? vector
+                            : accessVector(vector, index, extract->vec()->type);
+                    builder.CreateStore(convert(res0, i->type), res);
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(fallback);
@@ -3306,9 +3301,9 @@ bool LowerFunctionLLVM::tryCompile() {
                         call(NativeBuiltins::extract21,
                              {loadSxp(extract->vec()), loadSxp(extract->idx()),
                               env, c(extract->srcIdx)});
-                    res0 = castToType(res0, resultRep, i->type);
-                    builder.CreateStore(res0, res);
+                    builder.CreateStore(convert(res0, i->type), res);
                     builder.CreateBr(done);
+
                     builder.SetInsertPoint(done);
                     setVal(i, builder.CreateLoad(res));
                 } else {
@@ -3345,13 +3340,18 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto idx = loadSxp(subAssign->idx());
 
                 // TODO: Extend a fastPath for generic vectors.
-                if (subAssign->idx()->type.isA(
-                        PirType::num().notObject().scalar()) &&
-                    subAssign->val()->type.fitsIn(subAssign->vector()->type)) {
+                // TODO: Support type conversions
+                auto vecType = subAssign->vector()->type;
+                auto valType = subAssign->val()->type;
+                auto idxType = subAssign->idx()->type;
+                if (idxType.isA(PirType::num().notObject().scalar()) &&
+                    valType.isScalar() &&
+                    ((vecType.isA(RType::integer) &&
+                      valType.isA(RType::integer)) ||
+                     (vecType.isA(RType::real) && valType.isA(RType::real)))) {
                     auto resultRep = representationOf(i);
                     auto fallback = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
-                    auto hit2 = BasicBlock::Create(C, "", fun);
                     auto done = BasicBlock::Create(C, "", fun);
 
                     llvm::Value* vector = load(subAssign->vector());
@@ -3361,31 +3361,31 @@ bool LowerFunctionLLVM::tryCompile() {
                         builder.SetInsertPoint(hit);
                     }
 
-                    llvm::Value* index = builder.CreateAlloca(t::i64);
-                    computeAndCheckIndex(index, subAssign->idx(),
-                                         subAssign->vector(), fallback, hit2);
+                    llvm::Value* index = computeAndCheckIndex(subAssign->idx(),
+                                                              vector, fallback);
 
-                    if (representationOf(subAssign->vector()) == t::SEXP)
-                        assignVector(vector, builder.CreateLoad(index),
-                                     load(subAssign->val()),
+                    auto val = load(subAssign->val());
+                    if (i->type.isScalar()) {
+                        builder.CreateStore(convert(val, i->type), res);
+                    } else {
+                        assignVector(vector, index, val,
                                      subAssign->vector()->type);
+                        builder.CreateStore(convert(vector, i->type), res);
+                    }
 
-                    auto res0 =
-                        castToType(load(subAssign->val()), resultRep, i->type);
-                    builder.CreateStore(res0, res);
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(fallback);
                     auto env = (subAssign->hasEnv())
                                    ? loadSxp(subAssign->env())
                                    : constant(R_NilValue, t::SEXP);
-                    res0 = call(NativeBuiltins::subassign21,
-                                {loadSxp(subAssign->vector()), idx,
-                                 loadSxp(subAssign->val()), env,
-                                 c(subAssign->srcIdx)});
-                    res0 = castToType(res0, resultRep, i->type);
-                    builder.CreateStore(res0, res);
+                    auto res0 = call(NativeBuiltins::subassign21,
+                                     {loadSxp(subAssign->vector()), idx,
+                                      loadSxp(subAssign->val()), env,
+                                      c(subAssign->srcIdx)});
+                    builder.CreateStore(convert(res0, i->type), res);
                     builder.CreateBr(done);
+
                     builder.SetInsertPoint(done);
                     setVal(i, builder.CreateLoad(res));
                 } else {

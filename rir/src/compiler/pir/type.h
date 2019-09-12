@@ -488,18 +488,6 @@ struct PirType {
     // Is val an instance of this type?
     bool isInstance(SEXP val) const;
 
-    bool fitsIn(PirType& anotherType) const {
-        // This is enough for now, extend later if needed
-        if (this->isA(RType::real) &&
-            (anotherType.isA(RType::real) || anotherType.isA(RType::integer))) {
-            return true;
-        } else if (this->isA(RType::integer) &&
-                   anotherType.isA(RType::integer)) {
-            return true;
-        }
-        return false;
-    }
-
     void print(std::ostream& out = std::cout) const;
 
     size_t hash() const {
