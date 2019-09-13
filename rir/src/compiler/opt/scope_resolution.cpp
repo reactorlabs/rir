@@ -240,17 +240,13 @@ class TheScopeResolution {
                     }
                 }
 
-                if (auto call = CallInstruction::CastCall(i)) {
-                    call->eachCallArg([&](Value* v) {
-                        if (auto mk = MkArg::Cast(v)) {
-                            if (!mk->noReflection)
-                                if (noReflection(mk->prom(),
-                                                 i->hasEnv() ? i->env()
-                                                             : Env::notClosed(),
-                                                 analysis, before))
-                                    mk->noReflection = true;
-                        }
-                    });
+                if (auto mk = MkArg::Cast(i)) {
+                    if (!mk->noReflection)
+                        if (noReflection(mk->prom(),
+                                         i->hasEnv() ? i->env()
+                                                     : Env::notClosed(),
+                                         analysis, before))
+                            mk->noReflection = true;
                 }
 
                 // If no reflective argument is passed to us, then forcing an
@@ -397,6 +393,8 @@ class TheScopeResolution {
                                 }
                                 replacedValue[i] = val;
                                 i->replaceUsesWith(val);
+                                assert(!val->type.maybePromiseWrapped() ||
+                                       i->type.maybePromiseWrapped());
                                 next = bb->remove(ip);
                                 return;
                             }
@@ -435,6 +433,8 @@ class TheScopeResolution {
                             }
                             i->replaceUsesWith(val);
                             replacedValue[i] = val;
+                            assert(!val->type.maybePromiseWrapped() ||
+                                   i->type.maybePromiseWrapped());
                             next = bb->remove(ip);
                             return;
                         }
@@ -448,6 +448,8 @@ class TheScopeResolution {
                             auto r = new LdVar(lds->varName, e);
                             bb->replace(ip, r);
                             lds->replaceUsesWith(r);
+                            assert(!r->type.maybePromiseWrapped() ||
+                                   i->type.maybePromiseWrapped());
                             replacedValue[lds] = r;
                         }
                         return;
@@ -536,6 +538,8 @@ class TheScopeResolution {
                         });
                         auto safe =
                             new CallSafeBuiltin(b->blt, args, b->srcIdx);
+                        assert(!b->type.maybePromiseWrapped() ||
+                               safe->type.maybePromiseWrapped());
                         b->replaceUsesWith(safe);
                         bb->replace(ip, safe);
                         replacedValue[b] = safe;

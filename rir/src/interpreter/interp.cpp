@@ -3343,6 +3343,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             case VECSXP: {
                 res = VECTOR_ELT(val, i);
+                ENSURE_NAMED(res);
                 break;
             }
 
@@ -3522,11 +3523,20 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
                     if (idx_ >= 0 && idx_ < XLENGTH(vec)) {
                         switch (vectorT) {
-                        case REALSXP:
-                            REAL(vec)
-                            [idx_] = valT == REALSXP ? *REAL(val)
-                                                     : (double)*INTEGER(val);
+                        case REALSXP: {
+                            double realRes = 0;
+                            if (valT == REALSXP) {
+                                realRes = *REAL(val);
+                            } else {
+                                if (*INTEGER(val) == NA_INTEGER) {
+                                    realRes = R_NaN;
+                                } else {
+                                    realRes = (double)*INTEGER(val);
+                                }
+                            }
+                            REAL(vec)[idx_] = realRes;
                             break;
+                        }
                         case INTSXP:
                             INTEGER(vec)[idx_] = *INTEGER(val);
                             break;
