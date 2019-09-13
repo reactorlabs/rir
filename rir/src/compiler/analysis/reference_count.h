@@ -158,16 +158,6 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         if (state.overflow || Phi::Cast(i) || PirCopy::Cast(i))
             return res;
 
-        if (i->minReferenceCount() < 1) {
-            // This value was used only once in a loop, we can thus
-            // reset the count on redefinition.
-            auto u = state.uses.find(i);
-            if (u != state.uses.end() && u->second == AUses::Once) {
-                u->second = AUses::None;
-                res.update();
-            }
-        }
-
         auto count = [&](Value* v, bool constantUse, bool increments) {
             auto vi = Instruction::Cast(v);
             if (!vi)
@@ -271,6 +261,16 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             i->eachArg([&](Value* v) { apply(v, false, false); });
             break;
         };
+
+        if (i->minReferenceCount() < 1) {
+            // This value was used only once in a loop, we can thus
+            // reset the count on redefinition.
+            auto u = state.uses.find(i);
+            if (u != state.uses.end() && u->second <= AUses::Once) {
+                u->second = AUses::None;
+                res.update();
+            }
+        }
 
         // The abstract state is expensive to merge. To lift this limit, we'd
         // need to find a better strategy, or a less expensive analysis...

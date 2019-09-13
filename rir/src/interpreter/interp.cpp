@@ -3343,6 +3343,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             case VECSXP: {
                 res = VECTOR_ELT(val, i);
+                ENSURE_NAMED(res);
                 break;
             }
 

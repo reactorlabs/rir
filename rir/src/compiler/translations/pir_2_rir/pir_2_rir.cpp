@@ -390,6 +390,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         if (StVar::Cast(next) && next->arg(0).val() == i)
                             needsEnsureNamed.erase(i);
                     }
+                    break;
                 default: {}
                 }
             }
