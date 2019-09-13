@@ -98,7 +98,7 @@ struct ForcedBy {
     }
 
     bool escape(Value* val) {
-        if (!escaped.count(val)) {
+        if (!forcedBy.count(val) && !escaped.count(val)) {
             escaped.insert(val);
             return true;
         }
