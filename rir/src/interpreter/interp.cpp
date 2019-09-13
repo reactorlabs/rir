@@ -1548,8 +1548,8 @@ bool isIdenticalNoForce(SEXP lhs, SEXP rhs) {
         return rhs == lhs;
 }
 
-SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
-                   InterpreterInstance* ctx) {
+RIR_INLINE SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
+                              InterpreterInstance* ctx) {
     if (TYPEOF(rho) == NILSXP)
         Rf_error("use of NULL environment is defunct");
     if (!isEnvironment(rho))
@@ -1574,57 +1574,32 @@ SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
     std::cout << "find var cached -> ";
 #endif
     SEXP res = R_UnboundValue;
-    bool pastGlobal = false;
-    bool pastNamespace = false;
+    unsigned cachedGlobalEnvVersion = *(unsigned*)pc;
+    bool update = false;
+    pc += sizeof(unsigned);
+    unsigned cachedNamespaceEnvVersion = *(unsigned*)pc;
     while (rho != R_EmptyEnv) {
-        // If pastNamespace == true we already looked at a namespace environment
-        // and invalidated the cache, so we are in another namespace environment
-        // but must explicitly lookup
-        if (!pastNamespace) {
-            if (pastGlobal || isNamespaceEnvFast(rho)) {
-                // Here we are in a namespace environment
-                if (!pastGlobal) {
-                    // We have skipped the global environment, so we must
-                    // advance the pc past the global version to access the
-                    // namespace version
-                    advanceImmediate();
-                    pastGlobal = true;
-                }
-                pastNamespace = true;
-                // Check version, either use cached or update version
-                unsigned* cachedNamespaceEnvVersion = (unsigned*)pc;
-                if (*cachedNamespaceEnvVersion == namespaceEnvVersion) {
+        if (isNamespaceEnvFast(rho)) {
+            if (cachedNamespaceEnvVersion == namespaceEnvVersion) {
 #ifdef DEBUG_CACHE
-                    std::cout << "cache in namespace - ";
+                std::cout << "cache in namespace - ";
 #endif
-                    res = NULL;
-                    advanceImmediate();
-                    break;
-                }
-                SLOWASSERT(*cachedNamespaceEnvVersion < namespaceEnvVersion);
-                // Update the namespace version
-                *cachedNamespaceEnvVersion = namespaceEnvVersion;
-                advanceImmediate();
-            } else if (rho == R_GlobalEnv) {
-                // Here we are in the global environment
-                pastGlobal = true;
-                // Check version, either use cached or update version
-                unsigned* cachedGlobalEnvVersion = (unsigned*)pc;
-                if (*cachedGlobalEnvVersion == globalEnvVersion) {
-#ifdef DEBUG_CACHE
-                    std::cout << "cache in global - ";
-#endif
-                    res = NULL;
-                    advanceImmediate();
-                    break;
-                }
-                SLOWASSERT(*cachedGlobalEnvVersion < globalEnvVersion);
-                // Update the global version
-                *cachedGlobalEnvVersion = globalEnvVersion;
-                advanceImmediate();
+                res = NULL;
+                break;
             }
+            SLOWASSERT(cachedNamespaceEnvVersion < namespaceEnvVersion);
+            update = true;
+        } else if (rho == R_GlobalEnv) {
+            if (cachedGlobalEnvVersion == globalEnvVersion) {
+#ifdef DEBUG_CACHE
+                std::cout << "cache in global - ";
+#endif
+                res = NULL;
+                break;
+            }
+            SLOWASSERT(cachedGlobalEnvVersion < globalEnvVersion);
+            update = true;
         }
-
         // Do the explicit lookup in the environment (from GNU-R Rf_findVar and
         // Rf_findFun)
         res = findVarInFrame3(rho, sym, TRUE);
@@ -1640,31 +1615,30 @@ SEXP findVarCached(SEXP sym, SEXP rho, bool isFun, Opcode*& pc,
                 break;
             res = R_UnboundValue;
         }
-
         // Move to enclosing environment
         rho = ENCLOS(rho);
     }
-    // Move the pc to the cached SEXP
-    if (!pastGlobal)
-        advanceImmediate();
-    if (!pastNamespace)
-        advanceImmediate();
-    SEXP* cachedRef = (SEXP*)pc;
+    if (update) {
+        pc -= sizeof(unsigned);
+        *(unsigned*)pc = cachedGlobalEnvVersion;
+        pc += sizeof(unsigned);
+        *(unsigned*)pc = cachedNamespaceEnvVersion;
+    }
+    pc += sizeof(unsigned);
     if (res == NULL) {
         // We reached the global/namespace env and can use the SEXP cached from
         // last time
-        SLOWASSERT(pastGlobal || pastNamespace);
 #ifdef DEBUG_CACHE
         std::cout << "cached\n";
 #endif
-        res = *cachedRef;
-    } else if (pastGlobal || pastNamespace) {
+        res = *(SEXP*)pc;
+    } else if (update) {
         // We reached the global/namespace env but it was updated, so we update
         // the cached value
 #ifdef DEBUG_CACHE
         std::cout << "update\n";
 #endif
-        *cachedRef = res;
+        *(SEXP*)pc = res;
     } // else we didn't reach the global/namespace env, so we can't update the
       // cached value because it came from a local env
 #ifdef DEBUG_CACHE
