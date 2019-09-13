@@ -130,6 +130,13 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             };
 
+            if (LOr::Cast(i) || LAnd::Cast(i)) {
+                if (i->arg(0).val() == i->arg(1).val()) {
+                    i->replaceUsesWith(i->arg(0).val());
+                    next = bb->remove(ip);
+                }
+            }
+
             // Constantfolding of some common operations
             FOLD_BINARY_NATIVE(Add, symbol::Add);
             FOLD_BINARY_NATIVE(Sub, symbol::Sub);
@@ -235,17 +242,41 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     next = bb->remove(ip);
             }
 
-            if (auto callb = CallBuiltin::Cast(i)) {
-                static int nargs = findBuiltin("nargs");
+            if (CallSafeBuiltin::Cast(i) || CallBuiltin::Cast(i)) {
+                int builtinId = CallBuiltin::Cast(i)
+                                    ? CallBuiltin::Cast(i)->builtinId
+                                    : CallSafeBuiltin::Cast(i)->builtinId;
+                size_t nargs = CallInstruction::CastCall(i)->nCallArgs();
+                static int nargsBlt = findBuiltin("nargs");
+                static int isatomicBlt = findBuiltin("is.atomic");
+                static int isobjectBlt = findBuiltin("is.object");
                 assert(function->assumptions().includes(
                     Assumption::NotTooManyArguments));
                 // PIR functions are always compiled for a particular number
                 // of arguments
-                if (callb->builtinId == nargs) {
+                if (builtinId == nargsBlt) {
                     auto nargsC = new LdConst(
                         ScalarInteger(function->nargs() -
                                       function->assumptions().numMissing()));
-                    callb->replaceUsesAndSwapWith(nargsC, ip);
+                    i->replaceUsesAndSwapWith(nargsC, ip);
+                } else if (builtinId == isatomicBlt && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    static auto atomicType =
+                        PirType() | RType::nil | RType::chr | RType::logical |
+                        RType::integer | RType::real | RType::cplx |
+                        RType::str | RType::raw;
+                    if (t.isA(atomicType)) {
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                    } else if (!t.maybe(atomicType)) {
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                    }
+                } else if (builtinId == isobjectBlt && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (!t.maybeObj()) {
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                    }
                 }
             }
 

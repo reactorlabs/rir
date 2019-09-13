@@ -274,6 +274,9 @@ struct PirType {
     RIR_INLINE constexpr bool isRType(const RType& o) const {
         return isRType() && t_.r == o;
     }
+    RIR_INLINE constexpr bool maybe(PirType type) const {
+        return (*this & type).isA(type);
+    }
     RIR_INLINE constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
@@ -468,9 +471,9 @@ struct PirType {
                (isRType() ? t_.r == o.t_.r : t_.n == o.t_.n);
     }
 
-    bool isA(const PirType& o) const { return o.isSuper(*this); }
+    constexpr bool isA(const PirType& o) const { return o.isSuper(*this); }
 
-    bool isSuper(const PirType& o) const {
+    constexpr bool isSuper(const PirType& o) const {
         if (isRType() != o.isRType()) {
             return false;
         }
