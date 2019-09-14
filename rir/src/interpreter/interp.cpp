@@ -2185,7 +2185,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             assert(callCtxt);
 
-                ostack_push(ctx, callCtxt->stackArg(idx));
+            ostack_push(ctx, callCtxt->stackArg(idx));
             NEXT();
         }
 
@@ -2205,7 +2205,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto le = LazyEnvironment::check(env);
             assert(le);
             assert(!le->materialized());
-            le->setArg(pos, val, false);
+            if (le->getArg(pos) != val) {
+                INCREMENT_NAMED(val);
+                le->setArg(pos, val, false);
+            }
             ostack_pop(ctx);
             NEXT();
         }
@@ -2218,7 +2221,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto le = LazyEnvironment::check(env);
             assert(le);
             assert(!le->materialized());
-            le->setArg(pos, val, true);
+            if (le->getArg(pos) != val) {
+                INCREMENT_NAMED(val);
+            }
+            if (le->getArg(pos) != val || !le->notMissing[pos]) {
+                le->setArg(pos, val, true);
+            }
             ostack_pop(ctx);
             NEXT();
         }

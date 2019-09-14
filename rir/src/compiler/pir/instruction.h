@@ -1011,7 +1011,7 @@ class FLIE(Force, 2, Effects::Any()) {
     Effects inferEffects(const GetType& getType) const override final {
         return getType(input()).maybeLazy() ? effects : Effect::DependsOnAssume;
     }
-    int minReferenceCount() const override { return MAX_REFCOUNT; }
+    int minReferenceCount() const override { return 0; }
 
     size_t gvnBase() const override {
         if (effects.contains(Effect::ExecuteCode))

@@ -61,8 +61,11 @@ struct LazyEnvironment
 
     static LazyEnvironment* New(SEXP parent, size_t nargs, Immediate* names) {
         auto le = BasicNew(parent, nargs, names);
-        for (long i = nargs - 1; i >= 0; --i)
-            le->setArg(i, ostack_pop(ctx), false);
+        for (long i = nargs - 1; i >= 0; --i) {
+            auto v = ostack_pop(ctx);
+            INCREMENT_NAMED(v);
+            le->setArg(i, v, false);
+        }
         return le;
     }
 

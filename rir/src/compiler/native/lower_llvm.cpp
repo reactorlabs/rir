@@ -1774,7 +1774,7 @@ void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y,
             dataPtr(x, false), PointerType::get(t::LazyEnvironment, 0));
         auto missingBits =
             builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::i8ptr);
-        auto pos = builder.CreateGEP(missingBits, {c(0), c(i)});
+        auto pos = builder.CreateGEP(missingBits, c(i));
         builder.CreateStore(c(1, 8), pos);
     }
 }
