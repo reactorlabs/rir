@@ -47,7 +47,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         return answer;
     };
 
-    std::unordered_set<Value*> bannedEnvs;
+    SmallSet<Value*> bannedEnvs;
 
     // If we only see these (and call instructions) then we stub an environment,
     // since it can only be accessed reflectively.
@@ -84,11 +84,10 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     return;
                 // We can only stub an environment if all uses have a checkpoint
                 // available after every use.
-                if (auto cp = checkpoint.next(i)) {
+                if (auto cp = checkpoint.next(i))
                     checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
-                } else {
+                else
                     bannedEnvs.insert(mk);
-                }
             }
         }
     });
@@ -107,7 +106,20 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             Instruction* i = *ip;
             auto next = ip + 1;
 
-            if (i->hasEnv()) {
+            if (checks.count(i)) {
+                // Speculatively elide instructions that only require them
+                // in case they access promises reflectively
+                if (!bannedEnvs.count(i->env())) {
+                    auto env = checks[i].second;
+                    if (!env->stub) {
+                        env->stub = true;
+                        auto cp = checks[i].first;
+                        auto condition = new IsEnvStub(env);
+                        BBTransform::insertAssume(condition, cp, true);
+                        assert(cp->bb()->trueBranch() != bb);
+                    }
+                }
+            } else if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which
                 // all operators are primitive values
                 auto cp = checkpoint.at(i);
@@ -166,21 +178,9 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     }
                     i->updateTypeAndEffects();
                     next = ip + 1;
-                } else if (checks.count(i)) {
-                    // Speculatively elide instructions that only require them
-                    // in case they access promises reflectively
-                    if (!bannedEnvs.count(i->env())) {
-                        auto env = checks[i].second;
-                        if (!env->stub) {
-                            env->stub = true;
-                            auto cp = checks[i].first;
-                            auto condition = new IsEnvStub(env);
-                            BBTransform::insertAssume(condition, cp, true);
-                            assert(cp->bb()->trueBranch() != bb);
-                        }
-                    }
                 }
             }
+
             ip = next;
         }
     });

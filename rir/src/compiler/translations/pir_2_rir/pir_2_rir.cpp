@@ -322,6 +322,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     std::unordered_set<Instruction*> needsLdVarForUpdate;
     bool refcountAnalysisOverflow = false;
     {
+        SmallMap<Instruction*, size_t> uses;
         Visitor::run(code->entry, [&](Instruction* i) {
             switch (i->tag) {
             case Tag::ForSeqSize:
@@ -349,16 +350,38 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         }
                         if (ld->env() != i->env())
                             needsLdVarForUpdate.insert(vec);
-                    } else {
-                        if (vec->minReferenceCount() < 2 &&
-                            !vec->hasSingleUse())
-                            needsSetShared.insert(vec);
                     }
                 }
                 break;
             default: {}
             }
+
+            i->eachArg([&](Value* arg) {
+                switch (arg->tag) {
+                case Tag::Subassign1_1D:
+                case Tag::Subassign2_1D:
+                case Tag::Subassign1_2D:
+                case Tag::Subassign2_2D: {
+                    if (auto vec =
+                            Instruction::Cast(Instruction::Cast(arg)
+                                                  ->arg(1)
+                                                  .val()
+                                                  ->followCastsAndForce())) {
+                        // Don't count self-input as a use.
+                        // TODO: improve analysis to trace through phis
+                        if (i != vec && vec->minReferenceCount() < 2) {
+                            uses[vec]++;
+                        }
+                    }
+                } break;
+                default: {}
+                }
+            });
         });
+        for (auto u = uses.begin(); u != uses.end(); u++) {
+            if (u->second > 1)
+                needsEnsureNamed.insert(u->first);
+        }
 
         StaticReferenceCount analysis(cls, log);
         if (analysis.result().overflow)
