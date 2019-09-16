@@ -11,7 +11,6 @@
 #include "compiler/parameter.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
-#include "compiler/native/lower.h"
 #include "compiler/translations/pir_2_rir/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"

@@ -8,7 +8,6 @@
 #include "allocators.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
-#include "compiler/native/lower.h"
 #include "compiler/native/lower_llvm.h"
 #include "compiler/parameter.h"
 #include "event_counters.h"
@@ -323,6 +322,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     std::unordered_set<Instruction*> needsLdVarForUpdate;
     bool refcountAnalysisOverflow = false;
     {
+        SmallMap<Instruction*, size_t> uses;
         Visitor::run(code->entry, [&](Instruction* i) {
             switch (i->tag) {
             case Tag::ForSeqSize:
@@ -350,16 +350,38 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         }
                         if (ld->env() != i->env())
                             needsLdVarForUpdate.insert(vec);
-                    } else {
-                        if (vec->minReferenceCount() < 2 &&
-                            !vec->hasSingleUse())
-                            needsSetShared.insert(vec);
                     }
                 }
                 break;
             default: {}
             }
+
+            i->eachArg([&](Value* arg) {
+                switch (arg->tag) {
+                case Tag::Subassign1_1D:
+                case Tag::Subassign2_1D:
+                case Tag::Subassign1_2D:
+                case Tag::Subassign2_2D: {
+                    if (auto vec =
+                            Instruction::Cast(Instruction::Cast(arg)
+                                                  ->arg(1)
+                                                  .val()
+                                                  ->followCastsAndForce())) {
+                        // Don't count self-input as a use.
+                        // TODO: improve analysis to trace through phis
+                        if (i != vec && vec->minReferenceCount() < 2) {
+                            uses[vec]++;
+                        }
+                    }
+                } break;
+                default: {}
+                }
+            });
         });
+        for (auto u = uses.begin(); u != uses.end(); u++) {
+            if (u->second > 1)
+                needsEnsureNamed.insert(u->first);
+        }
 
         StaticReferenceCount analysis(cls, log);
         if (analysis.result().overflow)
@@ -369,6 +391,33 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 if (u.second == AUses::Multiple)
                     needsEnsureNamed.insert(u.first);
             }
+
+        // This part is a bit of a hack... If we have the pattern:
+        //   subassign
+        //   stvar
+        // then the stvar takes care of the ensure named and we should
+        // absolutely not do it beforehand, because it will cause the stvar to
+        // increment to 2.
+        Visitor::run(code->entry, [&](BB* bb) {
+            for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
+                auto i = *ip;
+                switch (i->tag) {
+                case Tag::Subassign1_1D:
+                case Tag::Subassign2_1D:
+                case Tag::Subassign1_2D:
+                case Tag::Subassign2_2D:
+                    if (!needsEnsureNamed.count(i))
+                        break;
+                    if (ip + 1 != bb->end()) {
+                        auto next = *(ip + 1);
+                        if (StVar::Cast(next) && next->arg(0).val() == i)
+                            needsEnsureNamed.erase(i);
+                    }
+                    break;
+                default: {}
+                }
+            }
+        });
     }
 
     std::unordered_map<Promise*, unsigned> promMap;
@@ -564,7 +613,51 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 }
             }
 
+            auto compileCallDots =
+                [&](CallInstruction* call, unsigned srcIdx,
+                    const std::function<void()>& loadCallee,
+                    const std::function<SEXP(size_t)>& getName) {
+                    bool hasDotsArgs = false;
+                    call->eachCallArg([&](Value* v) {
+                        if (ExpandDots::Cast(v))
+                            hasDotsArgs = true;
+                    });
+                    if (!hasDotsArgs)
+                        return false;
+
+                    std::vector<SEXP> names;
+                    size_t p = 0;
+                    call->eachCallArg([&](Value* v) {
+                        if (ExpandDots::Cast(v))
+                            names.push_back(R_DotsSymbol);
+                        else
+                            names.push_back(getName(p));
+                        p++;
+                    });
+                    loadCallee();
+                    cb.add(BC::callDots(call->nCallArgs(), names,
+                                        Pool::get(srcIdx),
+                                        call->inferAvailableAssumptions()));
+                    return true;
+                };
+
             switch (instr->tag) {
+            case Tag::LdDots: {
+                SLOWASSERT(instr->usesAreOnly(bb, {Tag::ExpandDots}));
+                cb.add(BC::push(R_DotsSymbol));
+                break;
+            }
+
+            case Tag::ExpandDots: {
+                // handled in calls
+                break;
+            }
+
+            case Tag::DotsList: {
+                auto d = DotsList::Cast(instr);
+                cb.add(BC::mkDotlist(d->names));
+                break;
+            }
 
             case Tag::RecordDeoptReason: {
                 cb.add(BC::recordDeopt(RecordDeoptReason::Cast(instr)->reason));
@@ -640,15 +733,19 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto stvar = StVar::Cast(instr);
                 auto key =
                     CachePosition::NameAndEnv(stvar->varName, stvar->env());
+                auto mkenv = MkEnv::Cast(stvar->env());
+                assert(!MkEnv::Cast(stvar->arg(0).val()));
                 if (stvar->isStArg) {
-                    if (cache.isCached(key)) {
+                    if (mkenv && mkenv->stub) {
+                        cb.add(
+                            BC::stargStubbed(mkenv->indexOf(stvar->varName)));
+                    } else if (cache.isCached(key)) {
                         cb.add(BC::stargCached(stvar->varName,
                                                cache.indexOf(key)));
                     } else {
                         cb.add(BC::starg(stvar->varName));
                     }
                 } else {
-                    auto mkenv = MkEnv::Cast(stvar->env());
                     if (mkenv && mkenv->stub) {
                         cb.add(
                             BC::stvarStubbed(mkenv->indexOf(stvar->varName)));
@@ -826,6 +923,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::Call: {
                 auto call = Call::Cast(instr);
+                if (compileCallDots(call, call->srcIdx, []() {},
+                                    [](size_t) { return R_NilValue; }))
+                    break;
+
                 cb.add(BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
                                 call->inferAvailableAssumptions()));
                 break;
@@ -833,6 +934,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::NamedCall: {
                 auto call = NamedCall::Cast(instr);
+                if (compileCallDots(call, call->srcIdx, []() {},
+                                    [&](size_t i) { return call->names[i]; }))
+                    break;
+
                 cb.add(BC::call(call->nCallArgs(), call->names,
                                 Pool::get(call->srcIdx),
                                 call->inferAvailableAssumptions()));
@@ -841,6 +946,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
+                call->eachArg([](Value* v) { assert(!ExpandDots::Cast(v)); });
                 SEXP originalClosure = call->cls()->rirClosure();
                 auto dt = DispatchTable::unpack(BODY(originalClosure));
                 if (auto trg = call->tryOptimisticDispatch()) {
@@ -879,6 +985,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::CallBuiltin: {
                 auto blt = CallBuiltin::Cast(instr);
+                if (compileCallDots(blt, blt->srcIdx,
+                                    [&]() {
+                                        cb.add(BC::push(blt->blt));
+                                        cb.add(BC::put(blt->nCallArgs()));
+                                    },
+                                    [](size_t) { return R_NilValue; }))
+                    break;
                 cb.add(BC::callBuiltin(blt->nCallArgs(), Pool::get(blt->srcIdx),
                                        blt->blt));
                 break;
@@ -886,6 +999,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::CallSafeBuiltin: {
                 auto blt = CallSafeBuiltin::Cast(instr);
+                if (compileCallDots(blt, blt->srcIdx,
+                                    [&]() {
+                                        cb.add(BC::push(blt->blt));
+                                        cb.add(BC::put(blt->nCallArgs()));
+                                    },
+                                    [](size_t) { return R_NilValue; }))
+                    break;
                 cb.add(BC::callBuiltin(blt->nargs(), Pool::get(blt->srcIdx),
                                        blt->blt));
                 break;
@@ -910,7 +1030,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-                cb.add(BC::mkEnv(mkenv->varName, mkenv->context, mkenv->stub));
+                cb.add(BC::mkEnv(mkenv->varName, mkenv->missing, mkenv->context,
+                                 mkenv->stub));
                 cache.ifCacheRange(mkenv, [&](CachePosition::StartSize range) {
                     if (range.second > 0)
                         cb.add(
@@ -1011,6 +1132,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             // Check the return type
             if (pir::Parameter::RIR_CHECK_PIR_TYPES > 0 &&
                 instr->type != PirType::voyd() &&
+                instr->type != RType::expandedDots &&
                 instr->type != NativeType::context && !CastType::Cast(instr) &&
                 Visitor::check(code->entry, [&](Instruction* i) {
                     if (auto cast = CastType::Cast(i)) {
@@ -1052,13 +1174,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto localsCnt = alloc.slots();
     auto res = ctx.finalizeCode(localsCnt, cache.size());
-    if (PIR_NATIVE_BACKEND == 1) {
-        Lower native;
-        if (auto n = native.tryCompile(cls, code, promMap, needsEnsureNamed)) {
-            res->nativeCode = (NativeCode)n;
-        }
-    }
-    if (PIR_NATIVE_BACKEND == 2) {
+    if (PIR_NATIVE_BACKEND) {
         LowerLLVM native;
         if (auto n =
                 native.tryCompile(cls, code, promMap, needsEnsureNamed,
@@ -1118,14 +1234,19 @@ void Pir2Rir::lower(Code* code) {
                     expectation = !expectation;
                 std::string debugMessage;
                 if (Parameter::DEBUG_DEOPTS) {
-                    std::stringstream dump;
                     debugMessage = "DEOPT, assumption ";
-                    expect->condition()->printRef(dump);
-                    debugMessage += dump.str();
-                    debugMessage += " failed in\n";
-                    dump.str("");
-                    code->printCode(dump, false, false);
-                    debugMessage += dump.str();
+                    {
+                        std::stringstream dump;
+                        if (auto i = Instruction::Cast(expect->condition())) {
+                            dump << "\n";
+                            i->printRecursive(dump, 2);
+                            dump << "\n";
+                        } else {
+                            expect->condition()->printRef(dump);
+                        }
+                        debugMessage += dump.str();
+                    }
+                    debugMessage += " failed\n";
                 }
                 BBTransform::lowerExpect(
                     code, bb, it, expect, expectation,

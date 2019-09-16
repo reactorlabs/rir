@@ -146,6 +146,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::nop_:
     case Opcode::mk_env_:
     case Opcode::mk_stub_env_:
+    case Opcode::mk_dotlist_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:
@@ -184,6 +185,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::clear_binding_cache_:
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
+    case Opcode::starg_stubbed_:
     case Opcode::assert_type_:
         return Sources::NotNeeded;
 
@@ -369,7 +371,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = cur.mkEnvExtra().names[i];
                     SEXP name = cp_pool_at(ctx, offset);
-                    if (TYPEOF(name) != SYMSXP)
+                    if (TYPEOF(name) != SYMSXP && (TYPEOF(name) != LISTSXP &&
+                                                   TYPEOF(CAR(name)) != SYMSXP))
                         Rf_error(
                             "RIR Verifier: environment argument not a symbol");
                 }

@@ -24,6 +24,9 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
     case Assumption::CorrectOrderOfArguments:
         out << "CorrOrd";
         break;
+    case Assumption::StaticallyArgmatched:
+        out << "Argmatch";
+        break;
     case Assumption::NotTooManyArguments:
         out << "!TMany";
         break;

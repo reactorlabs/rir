@@ -48,12 +48,15 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
 
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx);
 SEXP doCall(CallContext& call, InterpreterInstance* ctx);
+size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
+                               Immediate* names_, SEXP env, bool explicitDots);
 void deoptFramesWithContext(InterpreterInstance* ctx,
                             const CallContext* callCtxt,
                             DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight,
                             bool outerHasContext);
 void recordDeoptReason(SEXP val, const DeoptReason& reason);
+void jit(SEXP cls, SEXP name, InterpreterInstance* ctx);
 
 } // namespace rir
 #endif // RIR_INTERPRETER_C_H

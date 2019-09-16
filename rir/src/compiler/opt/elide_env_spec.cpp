@@ -47,37 +47,31 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         return answer;
     };
 
-    std::unordered_set<Value*> bannedEnvs;
+    SmallSet<Value*> bannedEnvs;
 
     // If we only see these (and call instructions) then we stub an environment,
     // since it can only be accessed reflectively.
-    static std::unordered_set<Tag> allowed{Tag::Force, Tag::FrameState,
-                                           Tag::PushContext, Tag::LdVar};
+    static std::unordered_set<Tag> allowed{
+        Tag::Force, Tag::FrameState, Tag::PushContext, Tag::LdVar, Tag::StVar};
 
     Visitor::run(function->entry, [&](Instruction* i) {
-        if (i->hasEnv()) {
-            if (auto mk = MkEnv::Cast(i->env())) {
-                if (mk->stub)
-                    return;
-                // StArg is not implemented for stub envs
-                if (auto st = StVar::Cast(i))
-                    if (!st->isStArg)
-                        return;
-                if (allowed.count(i->tag))
-                    return;
+        i->eachArg([&](Value* val) {
+            if (auto m = MkEnv::Cast(val)) {
+                // Prevent us from leaking stub envs
+                if (!i->hasEnv() || i->env() != m)
+                    bannedEnvs.insert(m);
                 if (CallInstruction::CastCall(i)) {
-                    if (auto bt = CallBuiltin::Cast(i)) {
-                        // Calling a builtin materializes environment, except
-                        // for the fastcases
-                        if (supportsFastBuiltinCall(bt->blt))
-                            return;
-                    } else {
-                        return;
-                    }
+                    // Call builtin materializes env right away, so no point in
+                    // stubbing, unless we have a fastcase.
+                    if (auto bt = CallBuiltin::Cast(i))
+                        if (!supportsFastBuiltinCall(bt->blt))
+                            bannedEnvs.insert(m);
+                    return;
                 }
-                bannedEnvs.insert(mk);
+                if (!allowed.count(i->tag))
+                    bannedEnvs.insert(m);
             }
-        }
+        });
     });
 
     std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
@@ -90,11 +84,10 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     return;
                 // We can only stub an environment if all uses have a checkpoint
                 // available after every use.
-                if (auto cp = checkpoint.next(i)) {
+                if (auto cp = checkpoint.next(i))
                     checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
-                } else {
+                else
                     bannedEnvs.insert(mk);
-                }
             }
         }
     });
@@ -118,7 +111,20 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             Instruction* i = *ip;
             auto next = ip + 1;
 
-            if (i->hasEnv()) {
+            if (checks.count(i)) {
+                // Speculatively elide instructions that only require them
+                // in case they access promises reflectively
+                if (!bannedEnvs.count(i->env())) {
+                    auto env = checks[i].second;
+                    if (!env->stub) {
+                        env->stub = true;
+                        auto cp = checks[i].first;
+                        auto condition = new IsEnvStub(env);
+                        BBTransform::insertAssume(condition, cp, true);
+                        assert(cp->bb()->trueBranch() != bb);
+                    }
+                }
+            } else if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which
                 // all operators are primitive values
                 auto cp = checkpoint.at(i);
@@ -177,19 +183,9 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     }
                     i->updateTypeAndEffects();
                     next = ip + 1;
-                } else if (checks.count(i)) {
-                    // Speculatively elide instructions that only require them
-                    // in case they access promises reflectively
-                    if (!bannedEnvs.count(i->env())) {
-                        auto env = checks[i].second;
-                        env->stub = true;
-                        auto cp = checks[i].first;
-                        auto condition = new IsEnvStub(env);
-                        BBTransform::insertAssume(condition, cp, true);
-                        assert(cp->bb()->trueBranch() != bb);
-                    }
                 }
             }
+
             ip = next;
         }
     });

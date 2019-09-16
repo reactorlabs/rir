@@ -102,6 +102,12 @@ void BC::write(CodeStream& cs) const {
             cs.insert(name);
         break;
 
+    case Opcode::mk_dotlist_:
+        cs.insert(immediate.mkDotlistFixedArgs);
+        for (PoolIdx name : mkEnvExtra().names)
+            cs.insert(name);
+        break;
+
     case Opcode::br_:
     case Opcode::brtrue_:
     case Opcode::beginloop_:
@@ -118,6 +124,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::put_:
     case Opcode::alloc_:
     case Opcode::stvar_stubbed_:
+    case Opcode::starg_stubbed_:
     case Opcode::ldvar_noforce_stubbed_:
         cs.insert(immediate.i);
         return;
@@ -203,6 +210,14 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
                 names[j] = Pool::insert(ReadItem(refTable, inp));
             break;
         }
+        case Opcode::mk_dotlist_: {
+            InBytes(inp, code + 1, sizeof(MkDotlistFixedArgs));
+            BC::PoolIdx* names =
+                (BC::PoolIdx*)(code + 1 + sizeof(MkDotlistFixedArgs));
+            for (unsigned j = 0; j < i.mkDotlistFixedArgs.nargs; j++)
+                names[j] = Pool::insert(ReadItem(refTable, inp));
+            break;
+        }
         case Opcode::call_:
         case Opcode::named_call_:
         case Opcode::call_dots_: {
@@ -273,6 +288,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::movloc_:
         case Opcode::ldvar_noforce_stubbed_:
         case Opcode::stvar_stubbed_:
+        case Opcode::starg_stubbed_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             InBytes(inp, code + 1, size - 1);
@@ -339,6 +355,11 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::mk_env_:
             OutBytes(out, code + 1, sizeof(MkEnvFixedArgs));
             for (unsigned j = 0; j < i.mkEnvFixedArgs.nargs; j++)
+                WriteItem(Pool::get(bc.mkEnvExtra().names[j]), refTable, out);
+            break;
+        case Opcode::mk_dotlist_:
+            OutBytes(out, code + 1, sizeof(MkDotlistFixedArgs));
+            for (unsigned j = 0; j < i.mkDotlistFixedArgs.nargs; j++)
                 WriteItem(Pool::get(bc.mkEnvExtra().names[j]), refTable, out);
             break;
         case Opcode::call_:
@@ -409,6 +430,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::movloc_:
         case Opcode::ldvar_noforce_stubbed_:
         case Opcode::stvar_stubbed_:
+        case Opcode::starg_stubbed_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             if (size != 0)
@@ -448,8 +470,12 @@ void BC::printNames(std::ostream& out,
     out << "[";
     for (auto name : names) {
         SEXP n = Pool::get(name);
-        out << " "
-            << (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n)));
+        out << " ";
+        if (TYPEOF(n) == LISTSXP) {
+            out << "(miss)";
+            n = CAR(n);
+        }
+        out << (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n)));
     }
     out << " ]";
 }
@@ -538,6 +564,13 @@ void BC::print(std::ostream& out) const {
         printNames(out, mkEnvExtra().names);
         break;
     }
+    case Opcode::mk_dotlist_: {
+        auto args = immediate.mkDotlistFixedArgs;
+        BC::NumArgs nargs = args.nargs;
+        out << nargs << ", ";
+        printNames(out, mkEnvExtra().names);
+        break;
+    }
     case Opcode::deopt_: {
         DeoptMetadata* m = (DeoptMetadata*)DATAPTR(immediateConst());
         m->print(out);
@@ -584,6 +617,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::pull_:
     case Opcode::put_:
     case Opcode::stvar_stubbed_:
+    case Opcode::starg_stubbed_:
     case Opcode::ldvar_noforce_stubbed_:
         out << immediate.i;
         break;

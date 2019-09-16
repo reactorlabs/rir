@@ -65,6 +65,11 @@ void ScopeAnalysis::lookupAt(const ScopeAnalysisState& state,
             return;
         }
 
+        if (auto ld = LdDots::Cast(instr)) {
+            action(load(state, R_DotsSymbol, ld->env()));
+            return;
+        }
+
         // If this is a ldfun, we perform a getFun on the abstract environment
         // and
         // if possible recurse on the result. The loadFun is an abstract version
@@ -147,8 +152,9 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         }
         auto& env = state.envs.at(mk);
         env.parentEnv(lexicalEnv);
-        mk->eachLocalVar(
-            [&](SEXP name, Value* val) { env.set(name, val, mk, depth); });
+        mk->eachLocalVar([&](SEXP name, Value* val, bool m) {
+            env.set(name, val, mk, depth);
+        });
         handled = true;
         effect.update();
     } else if (auto le = LdFunctionEnv::Cast(i)) {
@@ -273,8 +279,6 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 prom();
 
                 auto res = prom.result();
-                if (!res.mayUseReflection)
-                    mkarg->noReflection = true;
 
                 state.mergeCall(code, res);
                 updateReturnValue(res.returnValue);
@@ -432,27 +436,33 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
                                       Value* env,
                                       const MaybeMaterialized& action) {
     auto envState = state.envs.at(env);
-    std::unordered_map<SEXP, AbstractPirValue> theEnv;
+    std::unordered_map<SEXP, std::pair<AbstractPirValue, bool>> theEnv;
     for (const auto& entry : envState.entries) {
         auto& name = entry.first;
         auto& val = entry.second;
         if (val.isUnknown())
             return;
-        // If any of the stores are StArg, then we cannot do this trick. The
-        // reason is in the following case:
-        //   e = MKEnv         x=missingArg
-        //       StVar (StArg) x, ...
-        // in this case starg must be preserved, since it does not override the
-        // missing flag on the environment binding
-        auto maybeStarg = val.checkEachSource([&](const ValOrig& src) {
-            if (!src.origin)
-                return false;
-            auto st = StVar::Cast(src.origin);
-            return st && st->isStArg;
+        bool seenMissingFlagSet = false;
+        bool seenMissingFlagOverride = false;
+        val.eachSource([&](const ValOrig& src) {
+            if (!src.origin) {
+            } else if (auto mk = MkEnv::Cast(src.origin)) {
+                mk->eachLocalVar([&](SEXP n, Value* v, bool miss) {
+                    if (name == n)
+                        if (miss)
+                            seenMissingFlagSet = true;
+                });
+            } else if (auto st = StVar::Cast(src.origin)) {
+                if (!st->isStArg)
+                    seenMissingFlagOverride = true;
+            } else {
+                seenMissingFlagOverride = true;
+            }
         });
-        if (maybeStarg)
+        // Ambiguous, we don't know if missing is set or not
+        if (seenMissingFlagSet && seenMissingFlagOverride)
             return;
-        theEnv[name] = val;
+        theEnv[name] = {val, seenMissingFlagSet};
     };
 
     action(theEnv);

@@ -35,9 +35,10 @@ enum class Assumption {
     CorrectOrderOfArguments, // Ie. the args are not named
     NotTooManyArguments,     // The number of args supplied is <= nargs
     NoReflectiveArgument,    // Argument promises are not reflective
+    StaticallyArgmatched,    // Arguments are statically matched
 
     FIRST = Arg0IsEager_,
-    LAST = NoReflectiveArgument
+    LAST = StaticallyArgmatched,
 };
 
 #pragma pack(push)

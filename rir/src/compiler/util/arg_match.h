@@ -3,13 +3,14 @@
 
 #include "../pir/pir.h"
 #include "R/RList.h"
+#include "builder.h"
 #include "ir/BC_inc.h"
 
 namespace rir {
 namespace pir {
 
 struct ArgumentMatcher {
-    static bool reorder(SEXP formals,
+    static bool reorder(Builder& insert, SEXP formals,
                         const std::vector<BC::PoolIdx>& actualNames,
                         std::vector<Value*>& given);
 };

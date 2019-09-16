@@ -1,4 +1,5 @@
 #include "builtins.h"
+#include "ArgsLazyData.h"
 #include "interp.h"
 #include <algorithm>
 
@@ -110,6 +111,26 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     }
 
     switch (call.callee->u.primsxp.offset) {
+    case 32: { // "nargs"
+        if (nargs != 0)
+            return nullptr;
+
+        int nargs = -1;
+        for (RCNTXT* cptr = R_GlobalContext; cptr != NULL;
+             cptr = cptr->nextcontext) {
+            if ((cptr->callflag & CTXT_FUNCTION) &&
+                cptr->cloenv == call.callerEnv) {
+                if (auto l = ArgsLazyDataContent::check(cptr->promargs)) {
+                    nargs = l->length;
+                    break;
+                }
+                nargs = Rf_length(cptr->promargs);
+                break;
+            }
+        }
+        return ScalarInteger(nargs);
+    }
+
     case 88: { // "length"
         if (nargs != 1)
             return nullptr;

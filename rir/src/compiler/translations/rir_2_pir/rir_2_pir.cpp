@@ -205,12 +205,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::push_: {
         auto c = bc.immediateConst();
-        if (c == R_UnboundValue)
+        if (c == R_UnboundValue) {
             push(UnboundValue::instance());
-        else if (c == R_MissingArg)
+        } else if (c == R_MissingArg) {
             push(MissingArg::instance());
-        else
+        } else if (c == R_DotsSymbol) {
+            auto d = insert(new LdDots(insert.env));
+            push(insert(new ExpandDots(d)));
+        } else {
             push(insert(new LdConst(bc.immediateConst())));
+        }
         break;
     }
 
@@ -379,6 +383,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::call_dots_:
     case Opcode::named_call_:
     case Opcode::call_: {
         long nargs = bc.immediate.callFixedArgs.nargs;
@@ -387,9 +392,28 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         for (long i = 0; i < nargs; ++i)
             args[nargs - i - 1] = at(i);
 
+        std::vector<BC::PoolIdx> callArgumentNames;
+        bool namedArguments = false;
+        if (bc.bc == Opcode::named_call_) {
+            callArgumentNames = bc.callExtra().callArgumentNames;
+            namedArguments = true;
+        } else if (bc.bc == Opcode::call_dots_) {
+            for (auto n : bc.callExtra().callArgumentNames) {
+                // The dots symbol as a name is used as a marker symbol for
+                // call_dots_ and is not an actual name of the argument.
+                auto name = Pool::get(n);
+                if (name == R_DotsSymbol) {
+                    callArgumentNames.push_back(Pool::insert(R_NilValue));
+                } else {
+                    if (name != R_NilValue)
+                        namedArguments = true;
+                    callArgumentNames.push_back(n);
+                }
+            }
+        }
+
         SEXP monomorphic = nullptr;
         auto callee = at(nargs);
-
         // See if the call feedback suggests a monomorphic target
         // TODO: Deopts in promises are not supported by the promise inliner. So
         // currently it does not pay off to put any deopts in there.
@@ -414,10 +438,23 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 monomorphicBuiltin = false;
         }
         if (monomorphicClosure) {
-            if (DispatchTable::unpack(BODY(monomorphic))
-                    ->baseline()
-                    ->unoptimizable)
+            auto bl = DispatchTable::unpack(BODY(monomorphic))->baseline();
+            if (bl->unoptimizable) {
                 monomorphicClosure = false;
+            } else {
+                // TODO: this is a complete hack, but right now we don't have a
+                // better solution. What happens if we statically reorder
+                // arguments (and create dotdotdot lists) is that we loose the
+                // original promargs order. But for upon calling usemethod a
+                // second environment (and thus new argument matching) is done,
+                // which needs the original order. What we should do is to
+                // somehow record the original order before static shuffling,
+                // such that we can restore it in createLegaxyArgsList in the
+                // interpreter. At the moment however this will just result in
+                // an assert.
+                if (Query::needsPromargs(bl))
+                    monomorphicClosure = false;
+            }
         }
 
         auto ldfun = LdFun::Cast(callee);
@@ -502,15 +539,28 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // Currently we only match callsites with the correct number of
         // arguments passed. Thus, we set those given assumptions below.
         if (monomorphicClosure) {
-            bool correctOrder = bc.bc != Opcode::named_call_;
-
-            if (!correctOrder) {
-                correctOrder = ArgumentMatcher::reorder(
-                    FORMALS(monomorphic), bc.callExtra().callArgumentNames,
-                    matchedArgs);
+            auto formals = RList(FORMALS(monomorphic));
+            size_t needed = 0;
+            bool hasDotsFormals = false;
+            for (auto a = formals.begin(); a != formals.end(); ++a) {
+                needed++;
+                hasDotsFormals =
+                    hasDotsFormals || (a.hasTag() && a.tag() == R_DotsSymbol);
             }
 
-            size_t needed = RList(FORMALS(monomorphic)).length();
+            bool correctOrder = !namedArguments && !hasDotsFormals &&
+                                bc.bc != Opcode::call_dots_;
+
+            if (!correctOrder) {
+                if (namedArguments) {
+                    correctOrder = ArgumentMatcher::reorder(
+                        insert, FORMALS(monomorphic), callArgumentNames,
+                        matchedArgs);
+                } else {
+                    correctOrder = ArgumentMatcher::reorder(
+                        insert, FORMALS(monomorphic), {}, matchedArgs);
+                }
+            }
 
             if (!correctOrder || needed < matchedArgs.size()) {
                 monomorphicClosure = false;
@@ -526,9 +576,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
             popn(toPop);
-            if (bc.bc == Opcode::named_call_) {
-                push(insert(new NamedCall(env, callee, args,
-                                          bc.callExtra().callArgumentNames,
+            if (namedArguments) {
+                push(insert(new NamedCall(env, callee, args, callArgumentNames,
                                           bc.immediate.callFixedArgs.ast)));
             } else {
                 Value* fs = nullptr;
@@ -552,6 +601,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             given.numMissing(missingArgs);
             given.add(Assumption::NotTooManyArguments);
             given.add(Assumption::CorrectOrderOfArguments);
+            given.add(Assumption::StaticallyArgmatched);
 
             {
                 size_t i = 0;
@@ -571,7 +621,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     popn(toPop);
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(insert.env, f->owner(),
+                    push(insert(new StaticCall(insert.env, f->owner(), given,
                                                matchedArgs, fs, ast)));
                 },
                 insertGenericCall);
@@ -604,11 +654,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::extract1_1_: {
-        if (!inPromise()) {
-            forceIfPromised(1); // <- ensure forced captured in framestate
-            forceIfPromised(0);
+        forceIfPromised(1); // <- ensure forced captured in framestate
+        if (!inPromise())
             addCheckpoint(srcCode, pos, stack, insert);
-        }
+        forceIfPromised(0);
+        if (!inPromise())
+            addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
@@ -616,12 +667,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract2_1_: {
-        if (!inPromise()) {
-            forceIfPromised(
-                1); // <- ensure forced version are captured in framestate
-            forceIfPromised(0);
+        forceIfPromised(1); // <- forced version are captured in framestate
+        if (!inPromise())
             addCheckpoint(srcCode, pos, stack, insert);
-        }
+        forceIfPromised(0);
+        if (!inPromise())
+            addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
@@ -629,15 +680,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract1_2_: {
-        // TODO: checkpoint here is broken. What we should do here is insert a
-        // checkpoint between every force, and then deopt between forcing. E.g.
-        // if in a[b,c] b turns out to be an object, we need a deopt exit that
-        // captures the forced a, forced b and unforced c. So we cannot have
-        // deopt like now right in front of the Extract2_2D, but instead we need
-        // 3 different deopts after every force.
-        // For that we need to fix elide_env_spec to insert the assumes in the
-        // right place (ie, after the force and not before the Extract)
-        // insert.addCheckpoint(srcCode, pos, stack);
+        forceIfPromised(2);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -646,15 +692,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract2_2_: {
-        // TODO: checkpoint here is broken. What we should do here is insert a
-        // checkpoint between every force, and then deopt between forcing. E.g.
-        // if in a[b,c] b turns out to be an object, we need a deopt exit that
-        // captures the forced a, forced b and unforced c. So we cannot have
-        // deopt like now right in front of the Extract2_2D, but instead we need
-        // 3 different deopts after every force.
-        // For that we need to fix elide_env_spec to insert the assumes in the
-        // right place (ie, after the force and not before the Extract)
-        // insert.addCheckpoint(srcCode, pos, stack);
+        forceIfPromised(2);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -663,6 +704,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign1_1_: {
+        forceIfPromised(1);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -671,6 +716,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign2_1_: {
+        forceIfPromised(1);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -679,6 +728,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign1_2_: {
+        forceIfPromised(2);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -688,6 +741,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign2_2_: {
+        forceIfPromised(2);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -851,6 +908,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::force_:
     case Opcode::mk_stub_env_:
     case Opcode::mk_env_:
+    case Opcode::mk_dotlist_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:
@@ -869,6 +927,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::push_context_:
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
+    case Opcode::starg_stubbed_:
     case Opcode::assert_type_:
     case Opcode::record_deopt_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
@@ -879,7 +938,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::beginloop_:
     case Opcode::endloop_:
     case Opcode::ldddvar_:
-    case Opcode::call_dots_:
         log.unsupportedBC("Unsupported BC", bc);
         return false;
     }

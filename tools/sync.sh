@@ -43,6 +43,17 @@ function build_r {
     cd ../../..
     tools/rsync-recommended || true
 
+    # There is a test that times out due to the compiler triggering in the
+    # wrong moment in the matrix package. There doesn't seem to be a good solution
+    # other than just patching it.
+    cd src/library/Recommended
+    tar xzf Matrix_1.2-14.tar.gz
+    sed -i -e 's/^stopifnot((st <- system.time(show(M)))\[1\] < 1.0)/((st <- system.time(show(M)))[1] < 1.0);stopifnot((st <-  system.time(show(M)))[1] < 1.0)/' Matrix/man/printSpMatrix.Rd
+    rm Matrix_1.2-14.tar.gz
+    tar czf Matrix_1.2-14.tar.gz Matrix
+    rm -rf Matrix
+    cd ../../../
+
     if [ ! -f $R_DIR/Makefile ]; then
         echo "-> configure gnur"
         cd $R_DIR

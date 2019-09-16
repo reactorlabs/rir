@@ -59,7 +59,7 @@ bool instructionOverwritesBinding(Instruction* i, SEXP binding) {
     // An environment overwrites the binding
     if (auto env = MkEnv::Cast(i)) {
         bool overwrites = false;
-        env->eachLocalVar([&](SEXP name, Value*) {
+        env->eachLocalVar([&](SEXP name, Value*, bool) {
             if (name == binding) {
                 overwrites = true;
                 return;

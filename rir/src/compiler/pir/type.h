@@ -66,6 +66,9 @@ enum class RType : uint8_t {
     env,
     ast,
 
+    dots,
+    expandedDots,
+
     other,
 
     FIRST = nil,
@@ -207,11 +210,15 @@ struct PirType {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
                        RType::missing | RType::unbound | RType::ast |
-                       RType::other)
+                       RType::dots | RType::expandedDots | RType::other)
             .orObject();
     }
     static constexpr PirType vecs() { return num() | RType::str | RType::vec; }
     static constexpr PirType closure() { return RType::closure; }
+
+    static constexpr PirType dotsArg() {
+        return (PirType() | RType::missing | RType::dots).notPromiseWrapped();
+    }
 
     static constexpr PirType simpleScalarInt() {
         return PirType(RType::integer).scalar();
@@ -266,6 +273,9 @@ struct PirType {
     }
     RIR_INLINE constexpr bool isRType(const RType& o) const {
         return isRType() && t_.r == o;
+    }
+    RIR_INLINE constexpr bool maybe(PirType type) const {
+        return (*this & type).isA(type);
     }
     RIR_INLINE constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
@@ -345,6 +355,11 @@ struct PirType {
         return PirType(t_.r, flags_ | TypeFlags::maybeObject);
     }
 
+    PirType constexpr notPromiseWrapped() const {
+        return PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::lazy |
+                                        TypeFlags::promiseWrapped));
+    }
+
     PirType constexpr notLazy() const {
         return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
     }
@@ -417,7 +432,8 @@ struct PirType {
             if (numArgs > 1)
                 t.setNotScalar();
             return t;
-        } else if (t_.r.contains(RType::prom)) {
+        } else if (t_.r.contains(RType::prom) ||
+                   t_.r.contains(RType::expandedDots)) {
             return val();
         } else {
             return forced().notObject().orNotScalar() | RType::vec;
@@ -455,9 +471,9 @@ struct PirType {
                (isRType() ? t_.r == o.t_.r : t_.n == o.t_.n);
     }
 
-    bool isA(const PirType& o) const { return o.isSuper(*this); }
+    constexpr bool isA(const PirType& o) const { return o.isSuper(*this); }
 
-    bool isSuper(const PirType& o) const {
+    constexpr bool isSuper(const PirType& o) const {
         if (isRType() != o.isRType()) {
             return false;
         }
@@ -474,18 +490,6 @@ struct PirType {
 
     // Is val an instance of this type?
     bool isInstance(SEXP val) const;
-
-    bool fitsIn(PirType& anotherType) const {
-        // This is enough for now, extend later if needed
-        if (this->isA(RType::real) &&
-            (anotherType.isA(RType::real) || anotherType.isA(RType::integer))) {
-            return true;
-        } else if (this->isA(RType::integer) &&
-                   anotherType.isA(RType::integer)) {
-            return true;
-        }
-        return false;
-    }
 
     void print(std::ostream& out = std::cout) const;
 
@@ -568,6 +572,12 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
         break;
     case RType::missing:
         out << "miss";
+        break;
+    case RType::dots:
+        out << "dots";
+        break;
+    case RType::expandedDots:
+        out << "*dots";
         break;
     case RType::other:
         out << "other";
