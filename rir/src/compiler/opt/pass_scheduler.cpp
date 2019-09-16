@@ -61,6 +61,7 @@ PassScheduler::PassScheduler() {
     add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();
+    add<ElideEnvSpec>();
     addDefaultOpt();
 
     add<PhaseMarker>("Phase 2: Env speculation");
