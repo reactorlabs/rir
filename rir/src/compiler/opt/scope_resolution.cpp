@@ -240,17 +240,13 @@ class TheScopeResolution {
                     }
                 }
 
-                if (auto call = CallInstruction::CastCall(i)) {
-                    call->eachCallArg([&](Value* v) {
-                        if (auto mk = MkArg::Cast(v)) {
-                            if (!mk->noReflection)
-                                if (noReflection(mk->prom(),
-                                                 i->hasEnv() ? i->env()
-                                                             : Env::notClosed(),
-                                                 analysis, before))
-                                    mk->noReflection = true;
-                        }
-                    });
+                if (auto mk = MkArg::Cast(i)) {
+                    if (!mk->noReflection)
+                        if (noReflection(mk->prom(),
+                                         i->hasEnv() ? i->env()
+                                                     : Env::notClosed(),
+                                         analysis, before))
+                            mk->noReflection = true;
                 }
 
                 // If no reflective argument is passed to us, then forcing an
@@ -304,21 +300,14 @@ class TheScopeResolution {
                     if (!res.result.type.maybeMissing()) {
                         // Missing still returns TRUE, if the argument was
                         // initially missing, but then overwritten by a default
-                        // argument. Currently our analysis cannot really
-                        // distinguish those cases. Therefore, if the current
-                        // value of the variable is guaranteed to not be a
-                        // missing value, we additionally need verify that the
-                        // initial argument (the argument to the mkenv) was also
-                        // guaranteed to not be a missing value.
-                        // TODO: this is a bit brittle and might break as soon
-                        // as we start improving the handling of missing args in
-                        // MkEnv.
+                        // argument.
                         if (auto env = MkEnv::Cast(missing->env())) {
                             bool initiallyMissing = false;
-                            env->eachLocalVar([&](SEXP name, Value* val) {
-                                if (name == missing->varName)
-                                    initiallyMissing = val->type.maybeMissing();
-                            });
+                            env->eachLocalVar(
+                                [&](SEXP name, Value* val, bool m) {
+                                    if (name == missing->varName)
+                                        initiallyMissing = m;
+                                });
                             if (!initiallyMissing) {
                                 auto theFalse = new LdConst(R_FalseValue);
                                 missing->replaceUsesAndSwapWith(theFalse, ip);
@@ -346,27 +335,32 @@ class TheScopeResolution {
                                 analysis.tryMaterializeEnv(
                                     before, mk,
                                     [&](const std::unordered_map<
-                                        SEXP, AbstractPirValue>& env) {
+                                        SEXP, std::pair<AbstractPirValue,
+                                                        bool>>& env) {
                                         std::vector<SEXP> names;
                                         std::vector<Value*> values;
+                                        std::vector<bool> missing;
                                         for (auto& e : env) {
                                             names.push_back(e.first);
-                                            if (e.second.isUnknown())
+                                            auto v = e.second.first;
+                                            auto miss = e.second.second;
+                                            if (v.isUnknown())
                                                 return;
-                                            if (auto val = getSingleLocalValue(
-                                                    e.second)) {
+                                            if (auto val =
+                                                    getSingleLocalValue(v)) {
                                                 values.push_back(val);
                                             } else {
                                                 auto phi = tryInsertPhis(
-                                                    mk, e.second, bb, ip, true);
+                                                    mk, v, bb, ip, true);
                                                 if (!phi)
                                                     return;
                                                 values.push_back(phi);
                                             }
+                                            missing.push_back(miss);
                                         }
                                         auto deoptEnv =
                                             new MkEnv(mk->lexicalEnv(), names,
-                                                      values.data());
+                                                      values.data(), missing);
                                         ip = bb->insert(ip, deoptEnv);
                                         ip++;
                                         next = ip + 1;
@@ -399,6 +393,8 @@ class TheScopeResolution {
                                 }
                                 replacedValue[i] = val;
                                 i->replaceUsesWith(val);
+                                assert(!val->type.maybePromiseWrapped() ||
+                                       i->type.maybePromiseWrapped());
                                 next = bb->remove(ip);
                                 return;
                             }
@@ -437,6 +433,8 @@ class TheScopeResolution {
                             }
                             i->replaceUsesWith(val);
                             replacedValue[i] = val;
+                            assert(!val->type.maybePromiseWrapped() ||
+                                   i->type.maybePromiseWrapped());
                             next = bb->remove(ip);
                             return;
                         }
@@ -450,6 +448,8 @@ class TheScopeResolution {
                             auto r = new LdVar(lds->varName, e);
                             bb->replace(ip, r);
                             lds->replaceUsesWith(r);
+                            assert(!r->type.maybePromiseWrapped() ||
+                                   i->type.maybePromiseWrapped());
                             replacedValue[lds] = r;
                         }
                         return;
@@ -538,6 +538,8 @@ class TheScopeResolution {
                         });
                         auto safe =
                             new CallSafeBuiltin(b->blt, args, b->srcIdx);
+                        assert(!b->type.maybePromiseWrapped() ||
+                               safe->type.maybePromiseWrapped());
                         b->replaceUsesWith(safe);
                         bb->replace(ip, safe);
                         replacedValue[b] = safe;

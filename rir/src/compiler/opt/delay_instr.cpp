@@ -12,8 +12,8 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
     std::unordered_map<Instruction*, BB*> usedOnlyInDeopt;
 
     auto isTarget = [](Instruction* j) {
-        return LdFun::Cast(j) || MkArg::Cast(j) || FrameState::Cast(j) ||
-               CastType::Cast(j);
+        return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
+               FrameState::Cast(j) || CastType::Cast(j);
     };
 
     Visitor::run(function->entry, [&](Instruction* i) {

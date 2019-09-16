@@ -295,19 +295,26 @@ void Instruction::replaceDominatedUses(Instruction* replace) {
     }
 }
 
-void Instruction::replaceUsesIn(Value* replace, BB* start) {
+void Instruction::replaceUsesIn(
+    Value* replace, BB* start,
+    const std::function<void(Instruction*, size_t)>& postAction) {
     checkReplace(this, replace);
     Visitor::run(start, [&](BB* bb) {
         for (auto& i : *bb) {
-            bool changed = false;
+            std::vector<size_t> changed;
+            size_t pos = 0;
             i->eachArg([&](InstrArg& arg) {
                 if (arg.val() == this) {
                     arg.val() = replace;
-                    changed = true;
+                    changed.push_back(pos);
                 }
+                pos++;
             });
-            if (changed)
+            if (!changed.empty()) {
+                for (auto c : changed)
+                    postAction(i, c);
                 i->updateTypeAndEffects();
+            }
         }
     });
 
@@ -319,8 +326,10 @@ void Instruction::replaceUsesIn(Value* replace, BB* start) {
     }
 }
 
-void Instruction::replaceUsesWith(Value* replace) {
-    replaceUsesIn(replace, bb());
+void Instruction::replaceUsesWith(
+    Value* replace,
+    const std::function<void(Instruction*, size_t)>& postAction) {
+    replaceUsesIn(replace, bb(), postAction);
 }
 
 void Instruction::replaceUsesAndSwapWith(
@@ -384,8 +393,23 @@ bool Instruction::envOnlyForObj() {
     }
     BINOP_INSTRUCTIONS(V)
 #undef V
-    if (tag == Tag::Extract1_1D || tag == Tag::Extract2_1D)
+    switch (tag) {
+    case Tag::Extract1_1D:
+    case Tag::Extract2_1D:
+    case Tag::Extract1_2D:
+    case Tag::Extract2_2D:
+    case Tag::Subassign1_1D:
+    case Tag::Subassign2_1D:
+    case Tag::Subassign1_2D:
+    case Tag::Subassign2_2D:
+    case Tag::Not:
+    case Tag::LOr:
+    case Tag::LAnd:
+    case Tag::Minus:
+    case Tag::Plus:
         return true;
+    default: {}
+    }
     return false;
 }
 
@@ -435,6 +459,17 @@ void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
         << " [color=green];  // -> BB" << trueBB->id << "\n"
         << "  BB" << bbId << " -> BB" << falseBB->uid()
         << " [color=red];  // -> BB" << falseBB->id << "\n";
+}
+
+MkArg::MkArg(Promise* prom, Value* v, Value* env)
+    : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
+                                     env),
+      prom_(prom) {
+    assert(eagerArg() == v);
+    assert(!MkArg::Cast(eagerArg()->followCasts()));
+    if (isEager()) {
+        noReflection = true;
+    }
 }
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
@@ -497,14 +532,29 @@ void LdVarSuper::printArgs(std::ostream& out, bool tty) const {
 }
 
 void MkEnv::printArgs(std::ostream& out, bool tty) const {
-    eachLocalVar([&](SEXP name, Value* v) {
-        out << CHAR(PRINTNAME(name)) << "=";
+    eachLocalVar([&](SEXP name, Value* v, bool miss) {
+        out << CHAR(PRINTNAME(name));
+        if (miss)
+            out << "(miss)";
+        out << "=";
         v->printRef(out);
         out << ", ";
     });
     out << "parent=";
     Instruction::printEnv(out, tty);
     out << ", context " << context;
+}
+
+void DotsList::printArgs(std::ostream& out, bool tty) const {
+    size_t pos = 0;
+    eachArg([&](Value* v) {
+        auto n = names[pos++];
+        if (n != R_NilValue)
+            out << CHAR(PRINTNAME(n)) << "=";
+        v->printRef(out);
+        if (pos != names.size())
+            out << ", ";
+    });
 }
 
 void Is::printArgs(std::ostream& out, bool tty) const {
@@ -748,15 +798,24 @@ ClosureVersion* StaticCall::tryOptimisticDispatch() const {
 }
 
 StaticCall::StaticCall(Value* callerEnv, Closure* cls,
+                       Assumptions givenAssumptions,
                        const std::vector<Value*>& args, FrameState* fs,
                        unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls) {
+      cls_(cls), givenAssumptions(givenAssumptions) {
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    for (unsigned i = 0; i < args.size(); ++i)
-        pushArg(args[i], PirType() | RType::prom | RType::missing);
+    for (unsigned i = 0; i < args.size(); ++i) {
+        assert(!ExpandDots::Cast(args[i]) &&
+               "Static Call cannot accept dynamic number of arguments");
+        if (cls->formals().names()[i] == R_DotsSymbol) {
+            pushArg(args[i],
+                    PirType() | RType::prom | RType::missing | RType::dots);
+        } else {
+            pushArg(args[i], PirType() | RType::prom | RType::missing);
+        }
+    }
     assert(tryDispatch());
 }
 
@@ -797,10 +856,27 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {
+        if (arg->type.maybe(RType::expandedDots))
+            given.remove(Assumption::CorrectOrderOfArguments);
         writeArgTypeToAssumptions(given, arg, i);
         ++i;
     });
     return given;
+}
+
+NamedCall::NamedCall(Value* callerEnv, Value* fun,
+                     const std::vector<Value*>& args,
+                     const std::vector<SEXP>& names_, unsigned srcIdx)
+    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
+    assert(names_.size() == args.size());
+    pushArg(fun, RType::closure);
+    for (unsigned i = 0; i < args.size(); ++i) {
+        pushArg(args[i],
+                PirType(RType::prom) | RType::missing | RType::expandedDots);
+        auto name = names_[i];
+        assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
+        names.push_back(name);
+    }
 }
 
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
@@ -810,7 +886,8 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
     for (unsigned i = 0; i < args.size(); ++i) {
-        pushArg(args[i], PirType(RType::prom) | RType::missing);
+        pushArg(args[i],
+                PirType(RType::prom) | RType::missing | RType::expandedDots);
         auto name = Pool::get(names_[i]);
         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
         names.push_back(name);

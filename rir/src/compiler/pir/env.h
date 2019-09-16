@@ -31,6 +31,11 @@ class Env : public Value {
         return &u;
     }
 
+    static Env* global() {
+        static Env u(R_GlobalEnv, nullptr);
+        return &u;
+    }
+
     static Env* notClosed() {
         static Env u(nullptr, nullptr);
         return &u;

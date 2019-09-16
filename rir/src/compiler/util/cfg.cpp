@@ -189,6 +189,11 @@ bool DominanceGraph::immediatelyDominates(BB* a, BB* b) const {
     return doms[doms.size() - 1] == a;
 }
 
+bool DominanceGraph::hasImmediateDominator(BB* bb) const {
+    const auto& doms = dominating[bb->id].container;
+    return doms.size() > 0;
+}
+
 BB* DominanceGraph::immediateDominator(BB* bb) const {
     const auto& doms = dominating[bb->id].container;
     return doms[doms.size() - 1];

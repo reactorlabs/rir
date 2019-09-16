@@ -144,7 +144,8 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::consNr.llvmSignature = t::sexp_sexpsexp;
     NativeBuiltins::createBindingCell.llvmSignature = t::sexp_sexpsexpsexp;
-    NativeBuiltins::createMissingBindingCell.llvmSignature = t::sexp_sexpsexp;
+    NativeBuiltins::createMissingBindingCell.llvmSignature =
+        t::sexp_sexpsexpsexp;
 
     NativeBuiltins::ldvar.llvmSignature = t::sexp_sexpsexp;
     NativeBuiltins::ldvarCacheMiss.llvmSignature = llvm::FunctionType::get(
@@ -153,15 +154,20 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::defvar.llvmSignature = t::void_sexpsexpsexp;
     NativeBuiltins::starg.llvmSignature = t::void_sexpsexpsexp;
     NativeBuiltins::ldfun.llvmSignature = t::sexp_sexpsexp;
+    NativeBuiltins::chkfun.llvmSignature = t::sexp_sexpsexp;
 
     NativeBuiltins::setCar.llvmSignature = t::void_sexpsexp;
+    NativeBuiltins::setCdr.llvmSignature = t::void_sexpsexp;
+    NativeBuiltins::setTag.llvmSignature = t::void_sexpsexp;
 
     NativeBuiltins::externalsxpSetEntry.llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::SEXP, t::Int, t::SEXP}, false);
 
     NativeBuiltins::error.llvmSignature = t::void_void;
+    NativeBuiltins::warn.llvmSignature = t::void_voidPtr;
 
-    NativeBuiltins::createEnvironment.llvmSignature = t::sexp_sexp3int;
+    NativeBuiltins::createEnvironment.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::Int}, false);
     NativeBuiltins::createStubEnvironment.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::IntPtr, t::Int},
                                 false);
@@ -185,7 +191,15 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::call.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64}, false);
+    NativeBuiltins::dotsCall.llvmSignature = llvm::FunctionType::get(
+        t::SEXP,
+        {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
+        false);
     NativeBuiltins::namedCall.llvmSignature = llvm::FunctionType::get(
+        t::SEXP,
+        {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
+        false);
+    NativeBuiltins::dotsCall.llvmSignature = llvm::FunctionType::get(
         t::SEXP,
         {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
         false);
@@ -223,7 +237,8 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::nativeCallTrampoline.llvmSignature =
         llvm::FunctionType::get(
-            t::SEXP, {t::SEXP, t::voidPtr, t::Int, t::SEXP, t::i64}, false);
+            t::SEXP, {t::SEXP, t::voidPtr, t::Int, t::SEXP, t::i64, t::i64},
+            false);
 
     NativeBuiltins::unop.llvmSignature = t::sexp_sexpint;
     NativeBuiltins::unopEnv.llvmSignature = t::sexp_sexp2int2;

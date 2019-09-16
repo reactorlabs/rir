@@ -9,7 +9,7 @@ namespace pir {
 #define SET_ARGUSED(x, v) SETLEVELS(x, v)
 #define streql(s, t) (!strcmp((s), (t)))
 
-bool ArgumentMatcher::reorder(SEXP formals,
+bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
                               const std::vector<BC::PoolIdx>& actualNames,
                               std::vector<Value*>& givenArgs) {
     // Build up the list of supplied args. We use the names from actualNames
@@ -212,33 +212,89 @@ bool ArgumentMatcher::reorder(SEXP formals,
 
     // End of copy/paste snippt. Collecting results.
 
-    if (seendots)
-        return false;
-
     RList result(actuals);
     for (auto r : result) {
-        if (r == R_DotsSymbol || TYPEOF(r) == DOTSXP) {
+        auto expected =
+            TYPEOF(r) == DOTSXP || r == R_MissingArg || TYPEOF(r) == INTSXP;
+        assert(expected && "Static argument matching bug, this "
+                           "actual value was not put there by us");
+        if (!expected)
             return false;
+    }
+
+    // passing ... is impossible to statically match, we first need to figure
+    // out what's in the ... list.
+    for (auto r : result) {
+        if (TYPEOF(r) == INTSXP) {
+            int idx = INTEGER(r)[0];
+            if (ExpandDots::Cast(givenArgs[idx]))
+                return false;
         }
-        assert((r == R_MissingArg || TYPEOF(r) == INTSXP) &&
-               "Static argument matching bug, this "
-               "actual value was not put there by us");
-        if (TYPEOF(r) != INTSXP && r != R_MissingArg)
-            return false;
+        if (TYPEOF(r) == DOTSXP) {
+            auto dal = RList(r);
+            for (auto da = dal.begin(); da != dal.end(); ++da) {
+                int idx = INTEGER(*da)[0];
+                if (ExpandDots::Cast(givenArgs[idx]))
+                    return false;
+            }
+        }
     }
 
     std::vector<Value*> copy(givenArgs);
     givenArgs.resize(result.length());
     size_t pos = 0;
+    const static bool DEBUG = false;
+    if (DEBUG)
+        std::cout << "MATCHED : ";
+    f = formals;
     for (auto r : result) {
+        if (DEBUG)
+            std::cout << CHAR(PRINTNAME(TAG(f))) << "=";
         if (TYPEOF(r) == INTSXP) {
             int idx = INTEGER(r)[0];
             givenArgs[pos++] = copy[idx];
-        } else {
-            assert(r == R_MissingArg);
+            if (DEBUG)
+                copy[idx]->printRef(std::cout);
+        } else if (r == R_MissingArg) {
             givenArgs[pos++] = MissingArg::instance();
+            if (DEBUG)
+                std::cout << "miss";
+        } else if (TYPEOF(r) == DOTSXP) {
+            // We pass individual arguments, but the callee receives them as
+            // `...` list. Therefore we gobble all arguments up into a dotslist
+            // and pass them as a single arg.
+            auto dal = RList(r);
+            auto conv = new DotsList;
+            if (DEBUG)
+                std::cout << "(";
+            for (auto da = dal.begin(); da != dal.end(); ++da) {
+                assert(TYPEOF(*da) == INTSXP);
+                int idx = INTEGER(*da)[0];
+                conv->addInput(da.tag(), copy[idx]);
+                if (DEBUG) {
+                    if (da.tag() != R_NilValue)
+                        std::cout << CHAR(PRINTNAME(da.tag())) << "=";
+                    copy[idx]->printRef(std::cout);
+                    if (da + 1 != dal.end())
+                        std::cout << ", ";
+                }
+            }
+            if (DEBUG)
+                std::cout << ")";
+            givenArgs[pos++] = conv;
+            insert(conv);
+        } else {
+            assert(false);
         }
+        f = CDR(f);
+        if (DEBUG && f != R_NilValue)
+            std::cout << ", ";
     }
+    if (DEBUG)
+        std::cout << "\n";
+
+    while (!givenArgs.empty() && givenArgs.back() == MissingArg::instance())
+        givenArgs.pop_back();
 
     return true;
 }

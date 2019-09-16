@@ -51,8 +51,7 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp);
 // Will serialize and deserialize the SEXP, returning a deep copy.
 SEXP copyBySerial(SEXP x);
 
-SEXP materialize(void* rirDataWrapper);
-SEXP* keepAliveSEXPs(void* rirDataWrapper);
+SEXP materialize(SEXP rirDataWrapper);
 } // namespace rir
 
 #endif

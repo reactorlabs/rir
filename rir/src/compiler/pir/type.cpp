@@ -75,6 +75,8 @@ void PirType::merge(SEXPTYPE sexptype) {
         t_.r.set(RType::cplx);
         break;
     case DOTSXP:
+        t_.r.set(RType::dots);
+        break;
     case ANYSXP:
     case EXTPTRSXP:
     case WEAKREFSXP:
@@ -136,9 +138,14 @@ bool PirType::isInstance(SEXP val) const {
     if (isRType()) {
         if (TYPEOF(val) == PROMSXP) {
             assert(!Rf_isObject(val));
-            return maybePromiseWrapped() || maybeLazy() ||
-                   PirType(RType::prom).isA(*this);
+            if (maybePromiseWrapped() && !maybeLazy()) {
+                auto v = PRVALUE(val);
+                return v != R_UnboundValue && forced().isInstance(v);
+            }
+            return maybe(RType::prom) || (maybeLazy() && maybePromiseWrapped());
         }
+        if (val == R_DotsSymbol)
+            return maybe(RType::dots);
         if (LazyEnvironment::check(val))
             return PirType(RType::env).isA(*this);
         return PirType(val).isA(*this);

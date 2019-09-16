@@ -23,8 +23,10 @@ void PassScheduler::add(std::unique_ptr<const PirTranslator>&& t) {
 PassScheduler::PassScheduler() {
     auto addDefaultOpt = [&]() {
         add<OptimizeVisibility>();
+        add<DotDotDots>();
         add<ForceDominance>();
         add<ScopeResolution>();
+        add<PromiseSplitter>();
         add<DeadStoreRemoval>();
         add<EagerCalls>();
         add<Constantfold>();
@@ -56,10 +58,11 @@ PassScheduler::PassScheduler() {
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
-    add<TypeSpeculation>();
+    add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();
     add<ElideEnvSpec>();
+    addDefaultOpt();
 
     add<PhaseMarker>("Phase 2: Env speculation");
 

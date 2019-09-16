@@ -3,7 +3,6 @@
 
 #include "R/r_incl.h"
 #include "R_ext/Boolean.h"
-#include "jit/jit.h"
 #include <cstddef>
 
 extern "C" {
@@ -18,13 +17,9 @@ class FunctionType;
 namespace rir {
 namespace pir {
 
-static const auto sxp = jit_type_void_ptr;
-
 struct NativeBuiltin {
     const char* name;
     void* fun;
-    size_t nargs;
-    jit_type_t signature;
     llvm::FunctionType* llvmSignature;
 };
 
@@ -33,6 +28,7 @@ enum class BinopKind : int {
     MUL,
     SUB,
     DIV,
+    IDIV,
     EQ,
     NE,
     LT,
@@ -65,12 +61,16 @@ struct NativeBuiltins {
     static NativeBuiltin defvar;
     static NativeBuiltin starg;
     static NativeBuiltin ldfun;
+    static NativeBuiltin chkfun;
 
     static NativeBuiltin setCar;
+    static NativeBuiltin setCdr;
+    static NativeBuiltin setTag;
 
     static NativeBuiltin externalsxpSetEntry;
 
     static NativeBuiltin error;
+    static NativeBuiltin warn;
 
     static NativeBuiltin createEnvironment;
     static NativeBuiltin createStubEnvironment;
@@ -86,6 +86,7 @@ struct NativeBuiltins {
 
     static NativeBuiltin call;
     static NativeBuiltin namedCall;
+    static NativeBuiltin dotsCall;
     static NativeBuiltin callBuiltin;
 
     static NativeBuiltin notOp;

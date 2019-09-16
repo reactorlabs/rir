@@ -27,7 +27,7 @@ struct ObservedCallees {
     uint32_t numTargets : TargetBits;
     uint32_t taken : CounterBits;
 
-    RIR_INLINE void record(Code* caller, SEXP callee);
+    void record(Code* caller, SEXP callee);
     SEXP getTarget(const Code* code, size_t pos) const;
 
     std::array<unsigned, MaxTargets> targets;
@@ -40,7 +40,9 @@ struct ObservedType {
     uint8_t attribs : 1;
 
     ObservedType() {}
-    explicit ObservedType(SEXP s);
+    explicit ObservedType(SEXP s)
+        : sexptype((uint8_t)TYPEOF(s)), scalar(IS_SIMPLE_SCALAR(s, TYPEOF(s))),
+          object(isObject(s)), attribs(ATTRIB(s) != R_NilValue) {}
 
     bool operator==(const ObservedType& other) {
         return memcmp(this, &other, sizeof(ObservedType)) == 0;

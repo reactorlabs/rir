@@ -5,7 +5,8 @@
 namespace rir {
 
 RList::RList(SEXP list) : list(list ? list : R_NilValue) {
-    assert(TYPEOF(list) == LISTSXP || TYPEOF(list) == LANGSXP || TYPEOF(list) == NILSXP);
+    assert(TYPEOF(list) == LISTSXP || TYPEOF(list) == LANGSXP ||
+           TYPEOF(list) == NILSXP || TYPEOF(list) == DOTSXP);
 }
 
 SEXP RListIter::tag() { return TAG(pos); }

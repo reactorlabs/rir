@@ -35,9 +35,10 @@ enum class Assumption {
     CorrectOrderOfArguments, // Ie. the args are not named
     NotTooManyArguments,     // The number of args supplied is <= nargs
     NoReflectiveArgument,    // Argument promises are not reflective
+    StaticallyArgmatched,    // Arguments are statically matched
 
     FIRST = Arg0IsEager_,
-    LAST = NoReflectiveArgument
+    LAST = StaticallyArgmatched,
 };
 
 #pragma pack(push)
@@ -59,10 +60,10 @@ struct Assumptions {
         // Silences unused warning:
         (void)unused;
         (void)unused2;
-        memcpy(this, pos, sizeof(*this));
+        memcpy((void*)this, pos, sizeof(*this));
     }
     explicit Assumptions(unsigned long val) {
-        memcpy(this, &val, sizeof(*this));
+        memcpy((void*)this, &val, sizeof(*this));
     }
 
     unsigned long toI() {

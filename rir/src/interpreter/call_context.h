@@ -9,8 +9,10 @@
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
 
+#include "R/Symbols.h"
 #include "R/r.h"
 
+#include "LazyEnvironment.h"
 #include "instance.h"
 #include "interp_incl.h"
 #include "safe_force.h"
@@ -28,6 +30,9 @@ struct CallContext {
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
                 TYPEOF(callee) == BUILTINSXP));
+        SLOWASSERT(callerEnv == symbol::delayedEnv ||
+                   TYPEOF(callerEnv) == ENVSXP || callerEnv == R_NilValue ||
+                   LazyEnvironment::check(callerEnv));
     }
 
     // cppcheck-suppress uninitMemberVar

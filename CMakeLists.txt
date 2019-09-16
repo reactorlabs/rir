@@ -7,7 +7,6 @@ set(R_HOME ${CMAKE_SOURCE_DIR}/external/custom-r)
 set(R_LIBRARY_TREE ${CMAKE_SOURCE_DIR}/packages)
 set(R_ROOT_DIR ${R_HOME})
 set(R_INCLUDE_DIR ${R_HOME}/include)
-set(LIBJIT_DIR ${CMAKE_SOURCE_DIR}/external/libjit)
 set(LLVM_DIR ${CMAKE_SOURCE_DIR}/external/llvm-8.0.0)
 
 set(R_COMMAND ${R_HOME}/bin/R)
@@ -24,7 +23,7 @@ set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT -DMEASURE")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT -DMEASURE")
-set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} -Wall -DLLVM_DISABLE_ABI_BREAKING_CHECKS_ENFORCING=1 -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough")
+set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} -Wall -DLLVM_DISABLE_ABI_BREAKING_CHECKS_ENFORCING=1 -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough -Wno-init-list-lifetime -Wno-unknown-warning-option")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 set(CMAKE_C_FLAGS_RELEASENOASSERT "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_C_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
@@ -86,11 +85,6 @@ include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rir/src)
 message(STATUS "Using R from ${R_HOME}")
 
-# Find the LibJIT headers
-set(LIBJIT_INCLUDE_DIR ${LIBJIT_DIR}/include)
-include_directories(${LIBJIT_INCLUDE_DIR})
-set(LIBJIT_LIB ${LIBJIT_DIR}/jit/.libs/libjit.a ${LIBJIT_DIR}/jitplus/.libs/libjitplus.a)
-
 add_custom_target(setup-build-dir
     COMMAND ${CMAKE_SOURCE_DIR}/tools/setup-build-dir ${CMAKE_SOURCE_DIR} ${R_HOME}
 )
@@ -104,14 +98,8 @@ add_custom_target(default-gnur
     COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh custom-r
 )
 
-add_custom_target(libjit-build
-    DEPENDS dependencies
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-libjit.sh
-)
-
 add_custom_target(setup
     DEPENDS dependencies
-    DEPENDS libjit-build
     DEPENDS default-gnur
 )
 
@@ -130,7 +118,6 @@ add_dependencies(${PROJECT_NAME} setup-build-dir)
 # dummy target so that IDEs show the tools folder in solution explorers
 add_custom_target(tools SOURCES ${BIN})
 
-target_link_libraries(${PROJECT_NAME} ${LIBJIT_LIB})
 if (DEFINED LLVM_PACKAGE_VERSION)
   llvm_map_components_to_libnames(LLVM_LIBS ${LLVM_COMPONENTS_USED})
   target_link_libraries(${PROJECT_NAME} ${LLVM_LIBS})
