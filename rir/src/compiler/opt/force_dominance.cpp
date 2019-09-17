@@ -291,10 +291,10 @@ struct ForcedBy {
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
     using StaticAnalysis::PositioningStyle;
-
+    const CFG cfg;
     explicit ForceDominanceAnalysis(ClosureVersion* cls, Code* code,
                                     LogStream& log)
-        : StaticAnalysis("ForceDominance", cls, code, log) {}
+        : StaticAnalysis("ForceDominance", cls, code, log), cfg(code) {}
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         AbstractResult res;
@@ -378,7 +378,8 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
             Visitor::run(code->entry, [&](BB* bb) {
                 for (const auto& i : *bb) {
                     if (auto f = Force::Cast(i)) {
-                        if (analysis.resultIgnoringUnreachableExits(f)
+                        if (analysis
+                                .resultIgnoringUnreachableExits(f, analysis.cfg)
                                 .isDominatingForce(f)) {
                             f->strict = true;
                             if (auto mkarg =

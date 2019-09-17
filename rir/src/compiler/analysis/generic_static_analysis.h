@@ -140,13 +140,12 @@ class StaticAnalysis {
         return exitState();
     }
 
-    const AbstractState
-    resultIgnoringUnreachableExits(Instruction* instruction) const {
+    const AbstractState resultIgnoringUnreachableExits(Instruction* instruction,
+                                                       const CFG& cfg) const {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
         std::vector<AbstractState> exitsAfterInst;
-        CFG cfg(code);
         for (auto exit : exitpoints) {
             if (cfg.isPredecessor(instruction->bb(), exit.first)) 
                 exitsAfterInst.push_back(exit.second);
