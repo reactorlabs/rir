@@ -76,7 +76,7 @@ struct ForcedBy {
         return changed;
     }
 
-    bool sideeffect(const CFG& cfg, Instruction* sideEffect) {
+    bool sideeffect() {
         bool changed = false;
         // when we execute an instruction that could force promises as a
         // sideeffect, we have to assume that all escaped promises might have
@@ -294,9 +294,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 
     explicit ForceDominanceAnalysis(ClosureVersion* cls, Code* code,
                                     LogStream& log)
-        : StaticAnalysis("ForceDominance", cls, code, log), cfg(code) {}
-
-    CFG cfg;
+        : StaticAnalysis("ForceDominance", cls, code, log) {}
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         AbstractResult res;
@@ -340,7 +338,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             apply(i);
 
             if (i->effects.contains(Effect::Force)) {
-                if (state.sideeffect(cfg, i))
+                if (state.sideeffect())
                     res.taint();
             }
 
