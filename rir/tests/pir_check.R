@@ -53,6 +53,15 @@ stopifnot(
       a
   }, OneLdFun))
 
+stopifnot(
+  pir.check(function() {
+      balls = vector("list", length = 3)
+      for (i in 1:3){
+          balls[[i]] = c(1, 2) 
+      }
+      balls[[2]]
+  }, OneLdFun, warmup=function(f) f()))  
+
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
 stopifnot(pir.check(function(x = 4) {
   print("PIR does support default args")
