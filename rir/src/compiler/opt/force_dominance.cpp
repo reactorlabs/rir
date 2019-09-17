@@ -17,7 +17,7 @@ using namespace rir::pir;
  *
  * For that we need to compute a dominance graph of forces.
  *
- * Additionally, if know the promise being forced, we try to inline it. For
+ * Additionally, if we know the promise being forced, we try to inline it. For
  * example:
  *
  * a = mkArg(prom(0))
@@ -81,11 +81,14 @@ struct ForcedBy {
         // when we execute an instruction that could force promises as a
         // sideeffect, we have to assume that all escaped promises might have
         // been forced
-        for (auto& e : escaped)
+
+        for (auto& e : escaped) {
             if (!forcedBy.count(e)) {
                 forcedBy[e] = ambiguous();
                 changed = true;
             }
+        }
+
         return changed;
     }
 
@@ -229,11 +232,13 @@ struct ForcedBy {
 
     Force* getDominatingForce(Force* f) const {
         auto a = f->arg<0>().val()->followCasts();
-        if (!forcedBy.count(a))
+        if (!forcedBy.count(a)) {
             return nullptr;
+        }
         auto res = forcedBy.at(a);
-        if (res == ambiguous())
+        if (res == ambiguous()) {
             return nullptr;
+        }
         return res;
     }
 
@@ -282,13 +287,14 @@ struct ForcedBy {
     }
 };
 
+//, DummyState, AnalysisDebugLevel::Taint
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
     using StaticAnalysis::PositioningStyle;
-
+    const CFG cfg;
     explicit ForceDominanceAnalysis(ClosureVersion* cls, Code* code,
                                     LogStream& log)
-        : StaticAnalysis("ForceDominance", cls, code, log) {}
+        : StaticAnalysis("ForceDominance", cls, code, log), cfg(code) {}
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         AbstractResult res;
@@ -331,9 +337,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else {
             apply(i);
 
-            if (i->effects.contains(Effect::Force))
+            if (i->effects.contains(Effect::Force)) {
                 if (state.sideeffect())
                     res.taint();
+            }
 
             if (i->hasEffect() && !state.ambiguousForceOrder &&
                 state.argumentForceOrder.size() < closure->nargs()) {
@@ -371,7 +378,9 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
             Visitor::run(code->entry, [&](BB* bb) {
                 for (const auto& i : *bb) {
                     if (auto f = Force::Cast(i)) {
-                        if (result.isDominatingForce(f)) {
+                        if (analysis
+                                .resultIgnoringUnreachableExits(f, analysis.cfg)
+                                .isDominatingForce(f)) {
                             f->strict = true;
                             if (auto mkarg =
                                     MkArg::Cast(f->followCastsAndForce())) {

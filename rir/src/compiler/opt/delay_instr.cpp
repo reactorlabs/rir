@@ -13,7 +13,7 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
 
     auto isTarget = [](Instruction* j) {
         return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
-               FrameState::Cast(j);
+               FrameState::Cast(j) || CastType::Cast(j);
     };
 
     Visitor::run(function->entry, [&](Instruction* i) {
@@ -21,7 +21,7 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
             if (auto j = Instruction::Cast(v)) {
                 if (isTarget(j)) {
                     auto& u = usedOnlyInDeopt[j];
-                    if (i->bb()->isDeopt()) {
+                    if (i->bb()->isDeopt() || usedOnlyInDeopt[i]) {
                         if (!u)
                             u = i->bb();
                         else

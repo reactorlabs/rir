@@ -97,7 +97,7 @@ class StaticAnalysis {
     }
   protected:
     GlobalAbstractState* globalState = nullptr;
-    AbstractState exitpoint;
+    std::unordered_map<BB*, AbstractState> exitpoints;
 
     bool done = false;
     LogStream& log;
@@ -105,6 +105,18 @@ class StaticAnalysis {
     ClosureVersion* closure;
     Code* code;
     BB* entry;
+
+    const AbstractState exitState() const {
+        AbstractState result;
+        auto it = exitpoints.begin();
+        if (it != exitpoints.end()) {
+            result = it->second;
+            while (++it != exitpoints.end()) {
+                result.mergeExit(it->second);
+            }
+        }
+        return result;
+    }
 
   public:
     StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
@@ -121,11 +133,32 @@ class StaticAnalysis {
         snapshots[entry->id].entry = initialState;
     }
 
-    const AbstractState& result() const {
+    const AbstractState result() const {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
-        return exitpoint;
+        return exitState();
+    }
+
+    const AbstractState resultIgnoringUnreachableExits(Instruction* instruction,
+                                                       const CFG& cfg) const {
+        if (!done)
+            const_cast<StaticAnalysis*>(this)->operator()();
+        assert(done);
+        std::vector<AbstractState> exitsAfterInst;
+        for (auto exit : exitpoints) {
+            if (cfg.isPredecessor(instruction->bb(), exit.first)) 
+                exitsAfterInst.push_back(exit.second);
+        }
+        AbstractState result;
+        auto it = exitsAfterInst.begin();
+        if (it != exitsAfterInst.end()) {
+            result = *it;
+            while (++it != exitsAfterInst.end()) {
+                result.mergeExit(*it);
+            }
+        }
+        return result;
     }
 
     void logHeader() const {
@@ -270,8 +303,6 @@ class StaticAnalysis {
     }
 
     void operator()() {
-        bool reachedExit = false;
-
         std::vector<bool> changed(snapshots.size(), false);
         changed[entry->id] = true;
 
@@ -323,12 +354,11 @@ class StaticAnalysis {
 
                 if (bb->isExit()) {
                     logExit(state);
-                    if (reachedExit) {
-                        exitpoint.mergeExit(state);
-                    } else {
-                        exitpoint = state;
-                        reachedExit = true;
-                    }
+                    if (!exitpoints.count(bb))
+                        exitpoints.emplace(bb, state);
+                    else
+                        exitpoints[bb] = state;
+
                     changed[id] = false;
                     return;
                 }
@@ -344,14 +374,14 @@ class StaticAnalysis {
                     auto& extra = snapshots[bb].extra;
                     const auto& entry = extra.find(rec.second);
                     if (entry != extra.end()) {
-                        auto mres = entry->second.mergeExit(exitpoint);
+                        auto mres = entry->second.mergeExit(exitState());
                         if (mres > AbstractResult::None) {
                             logChange(entry->second, mres, rec.second);
                             changed[bb] = true;
                             done = false;
                         }
                     } else {
-                        extra.emplace(rec.second, exitpoint);
+                        extra.emplace(rec.second, exitState());
                         changed[bb] = true;
                         done = false;
                     }
