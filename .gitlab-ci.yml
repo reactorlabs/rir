@@ -172,6 +172,9 @@ test_big_inline:
     - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=1 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=1000 ./bin/gnur-make-tests check
+  timeout: 4 hours
+
+
 
 # Test the benchmarks container before deploying
 test_benchmarks:
