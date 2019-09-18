@@ -171,7 +171,7 @@ test_big_inline:
     - cd /opt/rir/build/release
     - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=1 ./bin/tests
-    - PIR_INLINER_MAX_INLINEE_SIZE=1000 ./bin/gnur-make-tests check
+    - PIR_INLINER_MAX_INLINEE_SIZE=800 ./bin/gnur-make-tests check
 
 # Test the benchmarks container before deploying
 test_benchmarks:
