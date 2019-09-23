@@ -117,6 +117,21 @@ class SmallMap {
         return false;
     }
 
+    iterator find(const K& k) {
+        if (big) {
+            auto idx = index.find(k);
+            if (idx == index.end()) {
+                return end();
+            } else {
+                return begin() + idx->second;
+            }
+        }
+        for (auto idx = begin(); idx != end(); ++idx)
+            if (idx->first == k)
+                return idx;
+        return end();
+    }
+
     const_iterator find(const K& k) const {
         if (big) {
             auto idx = index.find(k);
