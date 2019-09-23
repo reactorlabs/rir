@@ -375,7 +375,7 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                 cls->properties.set(ClosureVersion::Property::IsEager);
             cls->properties.argumentForceOrder = result.argumentForceOrder;
 
-            Visitor::run(code->entry, [&](BB* bb) {
+            VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
                 for (const auto& i : *bb) {
                     if (auto f = Force::Cast(i)) {
                         if (analysis

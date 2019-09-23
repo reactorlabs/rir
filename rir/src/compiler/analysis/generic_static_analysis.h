@@ -98,6 +98,7 @@ class StaticAnalysis {
   protected:
     GlobalAbstractState* globalState = nullptr;
     std::unordered_map<BB*, AbstractState> exitpoints;
+    AbstractState exitpoint;
 
     bool done = false;
     LogStream& log;
@@ -105,18 +106,6 @@ class StaticAnalysis {
     ClosureVersion* closure;
     Code* code;
     BB* entry;
-
-    const AbstractState exitState() const {
-        AbstractState result;
-        auto it = exitpoints.begin();
-        if (it != exitpoints.end()) {
-            result = it->second;
-            while (++it != exitpoints.end()) {
-                result.mergeExit(it->second);
-            }
-        }
-        return result;
-    }
 
   public:
     StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
@@ -133,11 +122,11 @@ class StaticAnalysis {
         snapshots[entry->id].entry = initialState;
     }
 
-    const AbstractState result() const {
+    const AbstractState& result() const {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
-        return exitState();
+        return exitpoint;
     }
 
     const AbstractState resultIgnoringUnreachableExits(Instruction* instruction,
@@ -145,20 +134,12 @@ class StaticAnalysis {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
-        std::vector<AbstractState> exitsAfterInst;
-        for (auto exit : exitpoints) {
-            if (cfg.isPredecessor(instruction->bb(), exit.first)) 
-                exitsAfterInst.push_back(exit.second);
+        AbstractState exitState;
+        for (auto& exit : exitpoints) {
+            if (cfg.isPredecessor(instruction->bb(), exit.first))
+                exitState.mergeExit(exit.second);
         }
-        AbstractState result;
-        auto it = exitsAfterInst.begin();
-        if (it != exitsAfterInst.end()) {
-            result = *it;
-            while (++it != exitsAfterInst.end()) {
-                result.mergeExit(*it);
-            }
-        }
-        return result;
+        return exitState;
     }
 
     void logHeader() const {
@@ -303,6 +284,8 @@ class StaticAnalysis {
     }
 
     void operator()() {
+        bool reachedExit = false;
+
         std::vector<bool> changed(snapshots.size(), false);
         changed[entry->id] = true;
 
@@ -335,8 +318,9 @@ class StaticAnalysis {
                         logChange(state, res, i);
                     }
 
+                    auto& snapshot = snapshots[bb->id];
                     if (res.needRecursion) {
-                        auto& extra = snapshots[bb->id].extra;
+                        auto& extra = snapshot.extra;
                         const auto& entry = extra.find(i);
                         if (entry != extra.end()) {
                             entry->second.merge(state);
@@ -347,17 +331,26 @@ class StaticAnalysis {
                         recursiveTodo.push_back(Position(bb, i));
                     }
 
-                    if (res.keepSnapshot || snapshots[bb->id].extra.count(i)) {
-                        snapshots[bb->id].extra[i] = state;
+                    if (res.keepSnapshot || snapshot.extra.count(i)) {
+                        snapshot.extra[i] = state;
                     }
                 }
 
                 if (bb->isExit()) {
                     logExit(state);
-                    if (!exitpoints.count(bb))
+
+                    auto exitStateIt = exitpoints.find(bb);
+                    if (exitStateIt == exitpoints.end())
                         exitpoints.emplace(bb, state);
                     else
-                        exitpoints[bb] = state;
+                        exitStateIt->second = state;
+
+                    if (reachedExit) {
+                        exitpoint.mergeExit(state);
+                    } else {
+                        exitpoint = state;
+                        reachedExit = true;
+                    }
 
                     changed[id] = false;
                     return;
@@ -374,14 +367,14 @@ class StaticAnalysis {
                     auto& extra = snapshots[bb].extra;
                     const auto& entry = extra.find(rec.second);
                     if (entry != extra.end()) {
-                        auto mres = entry->second.mergeExit(exitState());
+                        auto mres = entry->second.mergeExit(exitpoint);
                         if (mres > AbstractResult::None) {
                             logChange(entry->second, mres, rec.second);
                             changed[bb] = true;
                             done = false;
                         }
                     } else {
-                        extra.emplace(rec.second, exitState());
+                        extra.emplace(rec.second, exitpoint);
                         changed[bb] = true;
                         done = false;
                     }
