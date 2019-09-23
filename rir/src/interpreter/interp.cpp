@@ -412,7 +412,7 @@ static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
                                     SEXP ast, SEXP sysparent, SEXP op,
                                     InterpreterInstance* ctx, Opcode* pc,
                                     R_bcstack_t* localsBase,
-                                    BindingCache* cache) {
+                                    BindingCache* cache, int32_t stackOffset) {
     RCNTXT cntxt;
     // The first env should be the callee env, but that will be done by the
     // callee. We store sysparent there, because our optimizer may actually
@@ -428,6 +428,13 @@ static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
                 return evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc, nullptr,
                                    nullptr);
             } else {
+                // Non-local return through Rf_findcontext restores the ostack
+                // to the size at the push_context_ location. However that is
+                // not what we want, since there might be a stack difference
+                // between push and pop context. Thus we need to account for
+                // the relative stack height difference between push and pop
+                // context here. (This diff is calculated by the CodeVerifier)
+                R_BCNodeStackTop += stackOffset;
                 return R_ReturnedValue;
             }
         }
@@ -1737,22 +1744,33 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             ostack_popn(ctx, 2);
             int offset = readJumpOffset();
             advanceJump();
-            // Recursively call myself through a inlineContextTrampoline. The
-            // trampoline creates an RCNTXT, and then continues executing the
-            // same code.
-            inlineContextTrampoline(c, callCtxt, ast, env, op, ctx, pc,
-                                    localsBase, bindingCache);
+            auto curPc = pc;
+
             // After returning from the inlined context we need to skip all the
             // instructions inside the context. Otherwise we would execute them
             // twice. Effectively this updates our pc to match the one the
             // pop_context_ had in the inlined context.
             pc += offset;
-            assert(*pc == Opcode::pop_context_);
+            SLOWASSERT(*pc == Opcode::pop_context_);
             advanceOpcode();
+            auto stackOffset = readSignedImmediate();
+            advanceImmediate();
+
+            // Recursively call myself through a inlineContextTrampoline. The
+            // trampoline creates an RCNTXT, and then continues executing the
+            // same code.
+            res =
+                inlineContextTrampoline(c, callCtxt, ast, env, op, ctx, curPc,
+                                        localsBase, bindingCache, stackOffset);
+
+            ostack_push(ctx, res);
             NEXT();
         }
 
-        INSTRUCTION(pop_context_) { return ostack_pop(ctx); }
+        INSTRUCTION(pop_context_) {
+            advanceImmediate();
+            return ostack_pop(ctx);
+        }
 
         INSTRUCTION(mk_dotlist_) {
             size_t n = readImmediate();
@@ -2603,6 +2621,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(update_promise_) {
             auto val = ostack_pop(ctx);
             auto prom = ostack_pop(ctx);
+            SLOWASSERT(TYPEOF(prom) == PROMSXP);
+            SLOWASSERT(TYPEOF(val) != PROMSXP);
             SET_PRVALUE(prom, val);
             NEXT();
         }
@@ -3937,7 +3957,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(endloop_) { return loopTrampolineMarker; }
 
         INSTRUCTION(return_) {
-            res = ostack_top(ctx);
+            res = ostack_pop(ctx);
             // this restores stack pointer to the value from the target context
             Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
             // not reached

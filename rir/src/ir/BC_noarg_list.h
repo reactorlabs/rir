@@ -8,7 +8,6 @@
 #define BC_NOARGS(V, NESTED)                                                   \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_BC_NOARGS, V)                  \
     V(NESTED, updatePromise, update_promise)                                   \
-    V(NESTED, popContext, pop_context)                                         \
     V(NESTED, nop, nop)                                                        \
     V(NESTED, parentEnv, parent_env)                                           \
     V(NESTED, getEnv, get_env)                                                 \

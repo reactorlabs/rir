@@ -1028,11 +1028,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto push = PopContext::Cast(instr)->push();
                 if (!pushContexts.count(push))
                     pushContexts[push] = ctx.cs().mkLabel();
-                cb.add(BC::dup());
                 auto label = pushContexts.at(push);
                 cb.add(label);
                 pushContextsPopped.insert(label);
-                cb.add(BC::popContext());
+                cb.add(BC::popContext(INT_MAX));
                 break;
             }
 

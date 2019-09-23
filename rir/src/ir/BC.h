@@ -252,6 +252,11 @@ BC BC::pushContext(Jmp j) {
     i.offset = j;
     return BC(Opcode::push_context_, i);
 }
+BC BC::popContext(Jmp stackOffset) {
+    ImmediateArguments i;
+    i.offset = stackOffset;
+    return BC(Opcode::pop_context_, i);
+}
 BC BC::beginloop(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
