@@ -118,6 +118,7 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
             CASE(TriggerDeopt, "D")
             CASE(ExecuteCode, "X")
             CASE(DependsOnAssume, "d")
+            CASE(MutatesArgument, "M")
 #undef CASE
         }
     }

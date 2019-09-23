@@ -114,6 +114,9 @@ enum class Effect : uint8_t {
     // assumptions.
     DependsOnAssume,
 
+    // Modifies an input. For example update promise.
+    MutatesArgument,
+
     FIRST = Visibility,
     LAST = DependsOnAssume,
 };
@@ -957,6 +960,13 @@ class FLIE(MkArg, 2, Effects::None()) {
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
     bool usesPromEnv() const;
+};
+
+class FLI(UpdatePromise, 2, Effect::MutatesArgument) {
+  public:
+    UpdatePromise(MkArg* prom, Value* v)
+        : FixedLenInstruction(PirType::voyd(), {{RType::prom, PirType::val()}},
+                              {{prom, v}}) {}
 };
 
 class FLIE(MkCls, 4, Effects::None()) {

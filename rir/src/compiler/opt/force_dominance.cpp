@@ -242,22 +242,26 @@ struct ForcedBy {
         return res;
     }
 
-    bool isSafeToInline(MkArg* a) const {
+    enum PromiseInlineable {
+        SafeToInline,
+        SafeToInlineWithUpdate,
+        NotSafeToInline
+    };
+
+    PromiseInlineable isSafeToInline(MkArg* a) const {
         // To inline promises with a deopt instruction we need to be able to
         // synthesize promises and promise call framse.
         auto prom = a->prom();
         if (hasDeopt.count(prom)) {
             if (hasDeopt.at(prom))
-                return false;
+                return NotSafeToInline;
         } else {
             auto deopt = !Query::noDeopt(prom);
             const_cast<ForcedBy*>(this)->hasDeopt[prom] = deopt;
             if (deopt)
-                return false;
+                return NotSafeToInline;
         }
-        // We cannot inline escaped promises, since we have currently no way of
-        // updating the promise value slot
-        return !escaped.count(a);
+        return escaped.count(a) ? SafeToInlineWithUpdate : SafeToInline;
     }
     std::unordered_map<Promise*, bool> hasDeopt;
 
@@ -363,7 +367,8 @@ namespace pir {
 void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                            LogStream& log) const {
     auto apply = [&](Code* code) {
-        std::unordered_set<Force*> toInline;
+        SmallSet<Force*> toInline;
+        SmallSet<Force*> needsUpdate;
         ForcedBy result;
 
         {
@@ -376,26 +381,48 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
             cls->properties.argumentForceOrder = result.argumentForceOrder;
 
             VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
-                for (const auto& i : *bb) {
+                auto ip = bb->begin();
+                while (ip != bb->end()) {
+                    auto next = ip + 1;
+                    auto i = *ip;
+
                     if (auto f = Force::Cast(i)) {
                         if (analysis
-                                .resultIgnoringUnreachableExits(f, analysis.cfg)
+                                .resultIgnoringUnreachableExits(i, analysis.cfg)
                                 .isDominatingForce(f)) {
                             f->strict = true;
                             if (auto mkarg =
                                     MkArg::Cast(f->followCastsAndForce())) {
                                 if (!mkarg->isEager()) {
-                                    if (analysis
+                                    auto inlineable =
+                                        analysis
                                             .at<ForceDominanceAnalysis::
                                                     PositioningStyle::
-                                                        BeforeInstruction>(f)
-                                            .isSafeToInline(mkarg)) {
+                                                        BeforeInstruction>(i)
+                                            .isSafeToInline(mkarg);
+                                    if (inlineable !=
+                                        ForcedBy::NotSafeToInline) {
                                         toInline.insert(f);
+                                        if (inlineable ==
+                                            ForcedBy::SafeToInlineWithUpdate)
+                                            needsUpdate.insert(f);
                                     }
                                 }
                             }
                         }
+                    } else if (auto u = UpdatePromise::Cast(i)) {
+                        if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
+                            auto escaped = analysis
+                                               .at<ForceDominanceAnalysis::
+                                                       PositioningStyle::
+                                                           BeforeInstruction>(i)
+                                               .escaped.count(mkarg);
+                            if (!escaped)
+                                next = bb->remove(ip);
+                        }
                     }
+
+                    ip = next;
                 }
             });
         }
@@ -448,6 +475,10 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                             forcedMkArg[mkarg] = fixedMkArg;
 
                             inlinedPromise[f] = promRes;
+                            if (needsUpdate.count(f))
+                                next = split->insert(
+                                    next, new UpdatePromise(mkarg, promRes));
+
                             break;
                         }
                     }
@@ -491,7 +522,6 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
         for (auto m : forcedMkArg) {
             m.first->replaceDominatedUses(m.second);
         }
-
     };
     apply(cls);
 }

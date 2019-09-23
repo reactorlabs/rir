@@ -3160,6 +3160,11 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
+            case Tag::UpdatePromise: {
+                setCar(loadSxp(i->arg(0).val()), loadSxp(i->arg(1).val()));
+                break;
+            }
+
             case Tag::LdVarSuper: {
                 auto ld = LdVarSuper::Cast(i);
 

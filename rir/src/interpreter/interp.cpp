@@ -2600,6 +2600,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(update_promise_) {
+            auto val = ostack_pop(ctx);
+            auto prom = ostack_pop(ctx);
+            SET_PRVALUE(prom, val);
+            NEXT();
+        }
+
         INSTRUCTION(force_) {
             if (TYPEOF(ostack_top(ctx)) == PROMSXP) {
                 SEXP val = ostack_pop(ctx);

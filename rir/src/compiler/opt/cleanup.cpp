@@ -24,7 +24,7 @@ class TheCleanup {
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
         std::deque<Promise*> todo;
 
-        DeadInstructions dead(function);
+        DeadInstructions dead(function, DeadInstructions::IgnoreUpdatePromise);
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -97,6 +97,11 @@ class TheCleanup {
                     } else {
                         used_p.insert(arg->prom()->id);
                         todo.push_back(arg->prom());
+                    }
+                } else if (auto upd = UpdatePromise::Cast(i)) {
+                    if (dead.unused(upd->arg(0).val())) {
+                        removed = true;
+                        next = bb->remove(ip);
                     }
                 } else if (auto tt = IsType::Cast(i)) {
                     auto arg = tt->arg<0>().val();

@@ -5,10 +5,18 @@
 namespace rir {
 namespace pir {
 
-DeadInstructions::DeadInstructions(Code* code) {
+DeadInstructions::DeadInstructions(Code* code, DeadInstructionsMode mode) {
     Visitor::run(code->entry, [&](Instruction* i) {
         i->eachArg([&](Value* v) {
             if (auto j = Instruction::Cast(v)) {
+                switch (mode) {
+                case IgnoreUpdatePromise:
+                    if (i->tag == Tag::UpdatePromise && v == i->arg(0).val())
+                        return;
+                    break;
+                case CountAll:
+                    break;
+                }
                 used_.insert(j);
             }
         });

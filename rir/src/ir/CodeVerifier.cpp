@@ -1,4 +1,3 @@
-#include <map>
 #include <stack>
 
 #include <cassert>
@@ -187,6 +186,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::stvar_stubbed_:
     case Opcode::starg_stubbed_:
     case Opcode::assert_type_:
+    case Opcode::update_promise_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

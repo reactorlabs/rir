@@ -216,6 +216,7 @@ DEF_INSTR(isfun_, 0, 1, 1, 1)
  */
 DEF_INSTR(mk_eager_promise_, 1, 1, 1, 1)
 DEF_INSTR(mk_promise_, 1, 0, 1, 1)
+DEF_INSTR(update_promise_, 0, 2, 0, 0)
 
 /**
  * force_:: pop from objet stack, evaluate, push promise's value
