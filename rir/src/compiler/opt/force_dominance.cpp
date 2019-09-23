@@ -444,6 +444,21 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                         Replace::usesOfValue(prom_copy, e, mkarg->promEnv());
                         prom_copy->remove(prom_copy->begin());
 
+                        // Update environment dependency of inlined forces:
+                        // the inlined forces can see local env of this
+                        // function if it is stored on the context.
+                        if (auto mkenv = MkEnv::Cast(f->env())) {
+                            if (mkenv->context) {
+                                Visitor::run(prom_copy, [&](Instruction* i) {
+                                    if (auto fi = Force::Cast(i)) {
+                                        if (fi->hasEnv()) {
+                                            fi->env(f->env());
+                                        }
+                                    }
+                                });
+                            }
+                        }
+
                         // Create a return value phi of the promise
                         Value* promRes =
                             BBTransform::forInline(prom_copy, split).first;
