@@ -134,10 +134,17 @@ class StaticAnalysis {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
+        bool foundAny = false;
         AbstractState exitState;
         for (auto& exit : exitpoints) {
-            if (cfg.isPredecessor(instruction->bb(), exit.first))
-                exitState.mergeExit(exit.second);
+            if (cfg.isPredecessor(instruction->bb(), exit.first)) {
+                if (foundAny) {
+                    exitState.mergeExit(exit.second);
+                } else {
+                    exitState = exit.second;
+                    foundAny = true;
+                }
+            }
         }
         return exitState;
     }
