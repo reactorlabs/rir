@@ -48,7 +48,7 @@ PassScheduler::PassScheduler() {
     add<PhaseMarker>("Initial");
 
     // ==== Phase 1) Run the default passes a couple of times
-    for (size_t i = 0; i < 2; ++i)
+    for (size_t i = 0; i < 1; ++i)
         addDefaultOpt();
 
     add<PhaseMarker>("Phase 1");
@@ -73,7 +73,7 @@ PassScheduler::PassScheduler() {
     //
     // After this phase it is no longer possible to add assumptions at any point
     add<CleanupCheckpoints>();
-    for (size_t i = 0; i < 2; ++i)
+    for (size_t i = 0; i < 1; ++i)
         addDefaultOpt();
 
     // ==== Phase 3.1) Remove Framestates we did not use
@@ -88,7 +88,7 @@ PassScheduler::PassScheduler() {
     add<PhaseMarker>("Phase 3: Cleanup Checkpoints");
 
     // ==== Phase 4) Final round of default opts
-    for (size_t i = 0; i < 3; ++i) {
+    for (size_t i = 0; i < 2; ++i) {
         addDefaultOpt();
         add<CleanupCheckpoints>();
     }
