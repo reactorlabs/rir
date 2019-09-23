@@ -18,7 +18,6 @@ namespace pir {
 
 void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                        LogStream& log) const {
-    std::unordered_set<MkArg*> todo;
     auto code = closure->entry;
     AvailableCheckpoints checkpoint(closure, log);
 
@@ -64,19 +63,31 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
         return ip;
     };
 
-    auto replaceCallWithCallBuiltin = [&](BB* bb, BB::Instrs::iterator ip,
-                                          Call* call, SEXP builtin) {
+    auto replaceCallWithCallBuiltin = [](BB* bb, BB::Instrs::iterator ip,
+                                         Call* call, SEXP builtin) {
         std::vector<Value*> args;
         call->eachCallArg([&](Value* a) {
-            args.push_back(a);
-            if (auto mk = MkArg::Cast(a))
-                if (!mk->isEager())
-                    todo.insert(mk);
+            if (auto mk = MkArg::Cast(a->followCasts())) {
+                if (mk->isEager()) {
+                    args.push_back(mk->eagerArg());
+                } else {
+                    ip = bb->insert(ip, new Force(mk, call->env()));
+                    args.push_back(*ip);
+                    ip++;
+                }
+            } else if (a->type.maybePromiseWrapped()) {
+                ip = bb->insert(ip, new Force(a, call->env()));
+                args.push_back(*ip);
+                ip++;
+            } else {
+                args.push_back(a);
+            }
         });
         auto bt =
             BuiltinCallFactory::New(call->env(), builtin, args, call->srcIdx);
         call->replaceUsesWith(bt);
         bb->replace(ip, bt);
+        return ip;
     };
 
     // Search for calls that likely point to a builtin.
@@ -84,8 +95,6 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
     Visitor::run(code, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
-            auto next = ip + 1;
-
             if (auto call = Call::Cast(*ip)) {
                 if (auto ldfun = LdFun::Cast(call->cls())) {
                     if (ldfun->hint) {
@@ -95,8 +104,8 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                             // forcing arguments.
                             if (checkpoint.at(ldfun)) {
                                 replaced.emplace(ldfun, ldfun->hint);
-                                replaceCallWithCallBuiltin(bb, ip, call,
-                                                           replaced.at(ldfun));
+                                ip = replaceCallWithCallBuiltin(
+                                    bb, ip, call, replaced.at(ldfun));
                             }
                         }
                     } else {
@@ -110,7 +119,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                                 if (TYPEOF(builtin) == BUILTINSXP) {
                                     if (checkpoint.at(ldfun)) {
                                         replaced.emplace(ldfun, builtin);
-                                        replaceCallWithCallBuiltin(
+                                        ip = replaceCallWithCallBuiltin(
                                             bb, ip, call, replaced.at(ldfun));
                                     }
                                 }
@@ -120,7 +129,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 }
             }
 
-            ip = next;
+            ip++;
         }
     });
 
@@ -157,7 +166,8 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 // We picked up more assumptions, let's compile a better
                 // version. Maybe we should limit this at some point, to avoid
                 // version explosion.
-                if (availableAssumptions.includes(
+                if (cls->nargs() > 0 &&
+                    availableAssumptions.includes(
                         Assumption::NoReflectiveArgument) &&
                     !version->assumptions().includes(
                         Assumption::NoReflectiveArgument)) {
@@ -206,17 +216,10 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                     return false;
                 };
 
-                std::unordered_set<MkArg*> args;
                 bool noMissing = true;
-                size_t i = 0;
                 call->eachCallArg([&](Value* v) {
-                    if (auto mk = MkArg::Cast(v)) {
-                        if (!mk->isEager() && isEager(i))
-                            args.insert(mk);
-                    } else {
+                    if (!MkArg::Cast(v))
                         noMissing = false;
-                    }
-                    i++;
                 });
                 if (!noMissing) {
                     ip = next;
@@ -226,7 +229,18 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 // Remember which arguments are already expected to be eager by
                 // the callee and ensure that we will evaluate them eagerly
                 // below.
-                todo.insert(args.begin(), args.end());
+                call->eachCallArg([&](InstrArg& arg) {
+                    if (auto mk = MkArg::Cast(arg.val())) {
+                        if (mk->isEager()) {
+                            arg.val() = mk->eagerArg();
+                        } else {
+                            auto forced = new Force(mk, call->env());
+                            arg.val() = forced;
+                            ip = bb->insert(ip, forced);
+                        }
+                    }
+                });
+                next = ip + 1;
 
                 Assumptions newAssumptions = availableAssumptions;
                 for (size_t i = 0; i < call->nCallArgs(); ++i) {
@@ -258,36 +272,12 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
             ip = next;
         }
     });
-    if (todo.empty())
-        return;
 
     // Third step: eagerly evaluate arguments if we know from above that we will
     // call a function that expects them to be eager.
     Visitor::run(code, [&](BB* bb) {
         for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
-            if (auto mk = MkArg::Cast(*ip)) {
-                if (!todo.count(mk))
-                    continue;
-
-                BB* split =
-                    BBTransform::split(closure->nextBBId++, bb, ip, closure);
-
-                auto prom = mk->prom();
-                BB* prom_copy =
-                    BBTransform::clone(prom->entry, closure, closure);
-                bb->overrideNext(prom_copy);
-
-                LdFunctionEnv* e = LdFunctionEnv::Cast(*prom_copy->begin());
-                assert(e);
-                Replace::usesOfValue(prom_copy, e, mk->promEnv());
-                prom_copy->remove(prom_copy->begin());
-
-                Value* promRes = BBTransform::forInline(prom_copy, split).first;
-                mk->eagerArg(promRes);
-
-                bb = split;
-                ip = bb->begin();
-            } else if (auto call = StaticCall::Cast(*ip)) {
+            if (auto call = StaticCall::Cast(*ip)) {
                 auto version = call->tryDispatch();
                 if (version && version->properties.includes(
                                    ClosureVersion::Property::NoReflection)) {

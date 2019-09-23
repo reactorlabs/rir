@@ -32,13 +32,12 @@ static bool noReflection(Code* code, Value* callEnv, ScopeAnalysis& analysis,
             return SafeBuiltinsList::forInline(b->builtinId);
 
         auto anyReflection = [&](AbstractPirValue& res) -> bool {
+            if (res.isUnknown())
+                return true;
             bool anyReflection = false;
             res.eachSource([&](ValOrig vo) {
-                if (auto j = Instruction::Cast(vo.val)) {
-                    if (j->effects.includes(Effect::Reflection)) {
-                        anyReflection = true;
-                    }
-                }
+                if (vo.val->type.maybeLazy())
+                    anyReflection = true;
             });
             return anyReflection;
         };
