@@ -19,8 +19,8 @@ using namespace rir::pir;
 
 // Checks (using the local state of the caller) if forcing a promise can have
 // reflective effects
-static bool noReflection(Code* code, Value* callEnv, ScopeAnalysis& analysis,
-                         ScopeAnalysisState& state) {
+static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
+                         ScopeAnalysis& analysis, ScopeAnalysisState& state) {
     auto entry = code->entry;
     assert(!entry->isEmpty());
     auto funEnv = LdFunctionEnv::Cast(*entry->begin());
@@ -36,41 +36,55 @@ static bool noReflection(Code* code, Value* callEnv, ScopeAnalysis& analysis,
                 return true;
             bool anyReflection = false;
             res.eachSource([&](ValOrig vo) {
-                if (vo.val->type.maybeLazy())
+                auto v = vo.val->followCastsAndForce();
+                if (v->type.maybeLazy()) {
+                    if (auto ld = LdArg::Cast(v))
+                        if (cls->assumptions().includes(
+                                rir::Assumption::NoReflectiveArgument) ||
+                            cls->assumptions().isEager(ld->id))
+                            return;
                     anyReflection = true;
+                }
             });
             return anyReflection;
         };
 
-        if (auto ld = LdVar::Cast(i)) {
-            auto e = ld->env() == funEnv ? callEnv : ld->env();
-            auto res = analysis.load(state, ld->varName, e);
-            if (anyReflection(res.result))
-                return false;
-            return true;
-        }
+        auto anyReflectionBy = [&](Instruction* i) {
+            if (auto ld = LdVar::Cast(i)) {
+                auto e = ld->env() == funEnv ? callEnv : ld->env();
+                auto res = analysis.load(state, ld->varName, e);
+                if (anyReflection(res.result))
+                    return false;
+                return true;
+            }
 
-        if (auto ld = LdVarSuper::Cast(i)) {
-            auto e = ld->env() == funEnv ? callEnv : ld->env();
-            auto res = analysis.superLoad(state, ld->varName, e);
-            if (anyReflection(res.result))
-                return false;
-            return true;
-        }
+            if (auto ld = LdVarSuper::Cast(i)) {
+                auto e = ld->env() == funEnv ? callEnv : ld->env();
+                auto res = analysis.superLoad(state, ld->varName, e);
+                if (anyReflection(res.result))
+                    return false;
+                return true;
+            }
 
-        if (auto ld = LdFun::Cast(i)) {
-            auto e = ld->env() == funEnv ? callEnv : ld->env();
-            auto res = analysis.loadFun(state, ld->varName, e);
-            if (anyReflection(res.result))
-                return false;
-            return true;
-        }
+            if (auto ld = LdFun::Cast(i)) {
+                auto e = ld->env() == funEnv ? callEnv : ld->env();
+                auto res = analysis.loadFun(state, ld->varName, e);
+                if (anyReflection(res.result))
+                    return false;
+                return true;
+            }
+
+            assert(false);
+            return false;
+        };
+
+        if (LdFun::Cast(i))
+            return anyReflectionBy(i);
 
         if (auto force = Force::Cast(i)) {
-            auto arg = force->arg<0>().val();
-            // Handled above
+            auto arg = force->arg<0>().val()->followCastsAndForce();
             if (LdFun::Cast(arg) || LdVar::Cast(arg) || LdVarSuper::Cast(arg))
-                return true;
+                return anyReflectionBy(Instruction::Cast(arg));
         }
 
         return !i->effects.includes(Effect::Reflection);
@@ -241,7 +255,7 @@ class TheScopeResolution {
 
                 if (auto mk = MkArg::Cast(i)) {
                     if (!mk->noReflection)
-                        if (noReflection(mk->prom(),
+                        if (noReflection(function, mk->prom(),
                                          i->hasEnv() ? i->env()
                                                      : Env::notClosed(),
                                          analysis, before))
