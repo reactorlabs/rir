@@ -24,10 +24,10 @@ PassScheduler::PassScheduler() {
     auto addDefaultOpt = [&]() {
         add<OptimizeVisibility>();
         add<DotDotDots>();
+        add<EagerCalls>();
         add<ForceDominance>();
         add<ScopeResolution>();
         add<DeadStoreRemoval>();
-        add<EagerCalls>();
         add<Constantfold>();
         add<Cleanup>();
         add<DelayInstr>();
