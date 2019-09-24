@@ -364,166 +364,149 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 namespace rir {
 namespace pir {
 
-void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
+void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                            LogStream& log) const {
-    auto apply = [&](Code* code) {
-        SmallSet<Force*> toInline;
-        SmallSet<Force*> needsUpdate;
-        ForcedBy result;
+    SmallSet<Force*> toInline;
+    SmallSet<Force*> needsUpdate;
+    ForcedBy result;
 
-        {
-            ForceDominanceAnalysis analysis(cls, code, log);
-            analysis();
+    {
+        ForceDominanceAnalysis analysis(code, code, log);
+        analysis();
 
-            result = analysis.result();
-            if (result.eagerLikeFunction(cls))
-                cls->properties.set(ClosureVersion::Property::IsEager);
-            cls->properties.argumentForceOrder = result.argumentForceOrder;
+        result = analysis.result();
+        if (result.eagerLikeFunction(code))
+            code->properties.set(ClosureVersion::Property::IsEager);
+        code->properties.argumentForceOrder = result.argumentForceOrder;
 
-            VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
-                auto ip = bb->begin();
-                while (ip != bb->end()) {
-                    auto next = ip + 1;
-                    auto i = *ip;
+        VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
+            auto ip = bb->begin();
+            while (ip != bb->end()) {
+                auto next = ip + 1;
+                auto i = *ip;
 
-                    if (auto f = Force::Cast(i)) {
-                        if (analysis
-                                .resultIgnoringUnreachableExits(i, analysis.cfg)
-                                .isDominatingForce(f)) {
-                            f->strict = true;
-                            if (auto mkarg =
-                                    MkArg::Cast(f->followCastsAndForce())) {
-                                if (!mkarg->isEager()) {
-                                    auto inlineable =
-                                        analysis
-                                            .at<ForceDominanceAnalysis::
-                                                    PositioningStyle::
-                                                        BeforeInstruction>(i)
-                                            .isSafeToInline(mkarg);
-                                    if (inlineable !=
-                                        ForcedBy::NotSafeToInline) {
-                                        toInline.insert(f);
-                                        if (inlineable ==
-                                            ForcedBy::SafeToInlineWithUpdate)
-                                            needsUpdate.insert(f);
-                                    }
+                if (auto f = Force::Cast(i)) {
+                    if (analysis.resultIgnoringUnreachableExits(i, analysis.cfg)
+                            .isDominatingForce(f)) {
+                        f->strict = true;
+                        if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
+                            if (!mk->isEager()) {
+                                auto query = analysis.after(i);
+                                auto inl = query.isSafeToInline(mk);
+                                if (inl != ForcedBy::NotSafeToInline) {
+                                    toInline.insert(f);
+                                    if (inl == ForcedBy::SafeToInlineWithUpdate)
+                                        needsUpdate.insert(f);
                                 }
                             }
                         }
-                    } else if (auto u = UpdatePromise::Cast(i)) {
-                        if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
-                            auto escaped = analysis
-                                               .at<ForceDominanceAnalysis::
-                                                       PositioningStyle::
-                                                           BeforeInstruction>(i)
-                                               .escaped.count(mkarg);
-                            if (!escaped)
-                                next = bb->remove(ip);
-                        }
                     }
-
-                    ip = next;
-                }
-            });
-        }
-
-        std::unordered_map<Force*, Value*> inlinedPromise;
-        std::unordered_map<Instruction*, MkArg*> forcedMkArg;
-
-        // 1. Inline dominating promises
-        Visitor::runPostChange(code->entry, [&](BB* bb) {
-            auto ip = bb->begin();
-            while (ip != bb->end()) {
-                auto next = ip + 1;
-                if (auto f = Force::Cast(*ip)) {
-                    if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
-                        if (mkarg->isEager()) {
-                            Value* eager = mkarg->eagerArg();
-                            f->replaceUsesWith(eager);
+                } else if (auto u = UpdatePromise::Cast(i)) {
+                    if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
+                        if (!analysis.before(i).escaped.count(mkarg))
                             next = bb->remove(ip);
-                        } else if (toInline.count(f)) {
-                            Promise* prom = mkarg->prom();
-                            BB* split = BBTransform::split(code->nextBBId++, bb,
-                                                           ip, code);
-                            BB* prom_copy =
-                                BBTransform::clone(prom->entry, code, cls);
-                            bb->overrideNext(prom_copy);
-
-                            // For now we assume every promise starts with a
-                            // LdFunctionEnv instruction. We replace it's
-                            // usages with the caller environment.
-                            LdFunctionEnv* e =
-                                LdFunctionEnv::Cast(*prom_copy->begin());
-                            assert(e);
-                            Replace::usesOfValue(prom_copy, e,
-                                                 mkarg->promEnv());
-                            prom_copy->remove(prom_copy->begin());
-
-                            // Create a return value phi of the promise
-                            Value* promRes =
-                                BBTransform::forInline(prom_copy, split).first;
-
-                            assert(!promRes->type.maybePromiseWrapped());
-                            f = Force::Cast(*split->begin());
-                            assert(f);
-                            f->replaceUsesWith(promRes);
-                            split->remove(split->begin());
-
-                            MkArg* fixedMkArg = new MkArg(
-                                mkarg->prom(), promRes, mkarg->promEnv());
-                            next = split->insert(split->begin(), fixedMkArg);
-                            forcedMkArg[mkarg] = fixedMkArg;
-
-                            inlinedPromise[f] = promRes;
-                            if (needsUpdate.count(f))
-                                next = split->insert(
-                                    next, new UpdatePromise(mkarg, promRes));
-
-                            break;
-                        }
-                    }
-                } else if (auto cast = CastType::Cast(*ip)) {
-                    if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
-                        if (mk->isEager()) {
-                            auto eager = mk->eagerArg();
-                            cast->replaceUsesWith(eager);
-                            next = bb->remove(ip);
-                        }
                     }
                 }
+
                 ip = next;
             }
         });
+    }
 
-        // 2. replace dominated promises
-        Visitor::run(code->entry, [&](BB* bb) {
-            auto ip = bb->begin();
-            while (ip != bb->end()) {
-                auto f = Force::Cast(*ip);
-                auto next = ip + 1;
-                if (f) {
-                    // If this force instruction is dominated by another force
-                    // we can replace it with the dominating instruction
-                    if (auto dom = result.getDominatingForce(f)) {
-                        if (f != dom) {
-                            if (inlinedPromise.count(dom))
-                                f->replaceUsesWith(inlinedPromise.at(dom));
-                            else
-                                f->replaceUsesWith(dom);
-                            next = bb->remove(ip);
-                        }
+    std::unordered_map<Force*, Value*> inlinedPromise;
+    std::unordered_map<Instruction*, MkArg*> forcedMkArg;
+
+    // 1. Inline dominating promises
+    Visitor::runPostChange(code->entry, [&](BB* bb) {
+        auto ip = bb->begin();
+        while (ip != bb->end()) {
+            auto next = ip + 1;
+            if (auto f = Force::Cast(*ip)) {
+                if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
+                    if (mkarg->isEager()) {
+                        Value* eager = mkarg->eagerArg();
+                        f->replaceUsesWith(eager);
+                        next = bb->remove(ip);
+                    } else if (toInline.count(f)) {
+                        Promise* prom = mkarg->prom();
+                        BB* split =
+                            BBTransform::split(code->nextBBId++, bb, ip, code);
+                        BB* prom_copy =
+                            BBTransform::clone(prom->entry, code, code);
+                        bb->overrideNext(prom_copy);
+
+                        // For now we assume every promise starts with a
+                        // LdFunctionEnv instruction. We replace it's
+                        // usages with the caller environment.
+                        LdFunctionEnv* e =
+                            LdFunctionEnv::Cast(*prom_copy->begin());
+                        assert(e);
+                        Replace::usesOfValue(prom_copy, e, mkarg->promEnv());
+                        prom_copy->remove(prom_copy->begin());
+
+                        // Create a return value phi of the promise
+                        Value* promRes =
+                            BBTransform::forInline(prom_copy, split).first;
+
+                        assert(!promRes->type.maybePromiseWrapped());
+                        f = Force::Cast(*split->begin());
+                        assert(f);
+                        f->replaceUsesWith(promRes);
+                        split->remove(split->begin());
+
+                        MkArg* fixedMkArg =
+                            new MkArg(mkarg->prom(), promRes, mkarg->promEnv());
+                        next = split->insert(split->begin(), fixedMkArg);
+                        forcedMkArg[mkarg] = fixedMkArg;
+
+                        inlinedPromise[f] = promRes;
+                        if (needsUpdate.count(f))
+                            next = split->insert(
+                                next, new UpdatePromise(mkarg, promRes));
+
+                        break;
                     }
                 }
-                ip = next;
+            } else if (auto cast = CastType::Cast(*ip)) {
+                if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
+                    if (mk->isEager()) {
+                        auto eager = mk->eagerArg();
+                        cast->replaceUsesWith(eager);
+                        next = bb->remove(ip);
+                    }
+                }
             }
-        });
-
-        // 3. replace remaining uses of the mkarg itself
-        for (auto m : forcedMkArg) {
-            m.first->replaceDominatedUses(m.second);
+            ip = next;
         }
-    };
-    apply(cls);
+    });
+
+    // 2. replace dominated promises
+    Visitor::run(code->entry, [&](BB* bb) {
+        auto ip = bb->begin();
+        while (ip != bb->end()) {
+            auto f = Force::Cast(*ip);
+            auto next = ip + 1;
+            if (f) {
+                // If this force instruction is dominated by another force
+                // we can replace it with the dominating instruction
+                if (auto dom = result.getDominatingForce(f)) {
+                    if (f != dom) {
+                        if (inlinedPromise.count(dom))
+                            f->replaceUsesWith(inlinedPromise.at(dom));
+                        else
+                            f->replaceUsesWith(dom);
+                        next = bb->remove(ip);
+                    }
+                }
+            }
+            ip = next;
+        }
+    });
+
+    // 3. replace remaining uses of the mkarg itself
+    for (auto m : forcedMkArg) {
+        m.first->replaceDominatedUses(m.second);
+    }
 }
 } // namespace pir
 } // namespace rir
