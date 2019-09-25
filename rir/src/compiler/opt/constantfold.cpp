@@ -254,11 +254,21 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     Assumption::NotTooManyArguments));
                 // PIR functions are always compiled for a particular number
                 // of arguments
-                if (builtinId == nargsBlt) {
-                    auto nargsC = new LdConst(
-                        ScalarInteger(function->nargs() -
-                                      function->assumptions().numMissing()));
-                    i->replaceUsesAndSwapWith(nargsC, ip);
+                auto noExplMissing = function->assumptions().includes(
+                    Assumption::NoExplicitlyMissingArgs);
+                if (builtinId == nargsBlt && noExplMissing) {
+                    // nargs inside inlinee refers to nargs passed to inlinee,
+                    // which is something we cannot recover.
+                    bool notInlined =
+                        Visitor::check(function->entry, [](Instruction* i) {
+                            return !PushContext::Cast(i);
+                        });
+                    if (notInlined) {
+                        auto nargsC = new LdConst(ScalarInteger(
+                            function->nargs() -
+                            function->assumptions().numMissing()));
+                        i->replaceUsesAndSwapWith(nargsC, ip);
+                    }
                 } else if (builtinId == isatomicBlt && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     static auto atomicType =

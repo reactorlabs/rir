@@ -310,6 +310,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     LastEnv lastEnv(cls, code, log);
     std::unordered_map<Value*, BC::Label> pushContexts;
+    std::unordered_set<BC::Label> pushContextsPopped;
 
     std::deque<unsigned> order;
     LoweringVisitor::run(code->entry, [&](BB* bb) {
@@ -1023,7 +1024,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 if (!pushContexts.count(push))
                     pushContexts[push] = ctx.cs().mkLabel();
                 cb.add(BC::dup());
-                cb.add(pushContexts.at(push));
+                auto label = pushContexts.at(push);
+                cb.add(label);
+                pushContextsPopped.insert(label);
                 cb.add(BC::popContext());
                 break;
             }
@@ -1170,6 +1173,26 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         auto next = jumpThroughEmpty(bb->trueBranch());
         cb.add(BC::br(bbLabels[next]));
     });
+
+    // Edge case: if the push context was deadcode removed (e.g. since we
+    // certainly deopt before ending a context) the pushContext label is not
+    // bound, which trips the code writer. We artificially bind the label to
+    // point to an int3 instruction.
+    {
+        bool fixed = false;
+        for (auto pc : pushContexts) {
+            auto l = pc.second;
+            if (!pushContextsPopped.count(l)) {
+                fixed = true;
+                // must be unreachable
+                cb.add(l);
+                cb.add(BC::int3());
+            }
+        }
+        if (fixed)
+            cb.add(BC::ret());
+    }
+
     cb.flush();
 
     auto localsCnt = alloc.slots();

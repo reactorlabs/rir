@@ -150,6 +150,7 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
         assert(!found);
 
         found = ret->arg<0>().val();
+        assert(ret->bb() == bb);
         bb->next0 = splice;
         bb->remove(bb->end() - 1);
     });
@@ -200,9 +201,10 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
             } else if (IsEnvStub::Cast(cond)) {
                 // TODO
             } else {
-                if (auto c = Instruction::Cast(cond))
+                if (auto c = Instruction::Cast(cond)) {
                     c->print(std::cerr);
-                assert(src && "Don't know how to report deopt reason");
+                    assert(src && "Don't know how to report deopt reason");
+                }
             }
             if (src) {
                 auto offset =
