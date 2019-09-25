@@ -577,37 +577,52 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
         given.add(Assumption::CorrectOrderOfArguments);
 
     given.add(Assumption::NoExplicitlyMissingArgs);
-        auto testArg = [&](size_t i) {
-            SEXP arg = call.stackArg(i);
-            bool notObj = true;
-            bool isEager = true;
-            if (TYPEOF(arg) == PROMSXP) {
-                arg = PRVALUE(arg);
-                if (arg == R_UnboundValue) {
-                    notObj = false;
-                    isEager = false;
-                }
-            }
-            if (arg == R_MissingArg) {
-                given.remove(Assumption::NoExplicitlyMissingArgs);
-                isEager = false;
-            }
-            if (isObject(arg)) {
+    given.add(Assumption::NoReflectiveArgument);
+    auto testArg = [&](size_t i) {
+        SEXP arg = call.stackArg(i);
+        bool notObj = true;
+        bool isEager = true;
+        if (TYPEOF(arg) == PROMSXP) {
+            auto prom = arg;
+            arg = PRVALUE(arg);
+            if (arg == R_UnboundValue) {
                 notObj = false;
+                isEager = false;
+                bool reflectionPossible = true;
+                // If this is a simple promis, that just looks up an eager value
+                // we do not reset the no-reflection flag. The callee can assume
+                // that (as long as he does not trigger any other reflection)
+                // evaluating this promise does not trigger reflection either.
+                if (TYPEOF(PREXPR(prom)) == SYMSXP) {
+                    auto v = Rf_findVar(PREXPR(prom), PRENV(prom));
+                    if (v != R_UnboundValue &&
+                        (TYPEOF(v) != PROMSXP || PRVALUE(v) != R_UnboundValue))
+                        reflectionPossible = false;
+                }
+                if (reflectionPossible)
+                    given.remove(Assumption::NoReflectiveArgument);
             }
-            if (isEager)
-                given.setEager(i);
-            if (notObj)
-                given.setNotObj(i);
-            if (isEager && notObj && IS_SIMPLE_SCALAR(arg, REALSXP))
-                given.setSimpleReal(i);
-            if (isEager && notObj && IS_SIMPLE_SCALAR(arg, INTSXP))
-                given.setSimpleInt(i);
-        };
-
-        for (size_t i = 0; i < call.suppliedArgs; ++i) {
-            testArg(i);
         }
+        if (arg == R_MissingArg) {
+            given.remove(Assumption::NoExplicitlyMissingArgs);
+            isEager = false;
+        }
+        if (isObject(arg)) {
+            notObj = false;
+        }
+        if (isEager)
+            given.setEager(i);
+        if (notObj)
+            given.setNotObj(i);
+        if (isEager && notObj && IS_SIMPLE_SCALAR(arg, REALSXP))
+            given.setSimpleReal(i);
+        if (isEager && notObj && IS_SIMPLE_SCALAR(arg, INTSXP))
+            given.setSimpleInt(i);
+    };
+
+    for (size_t i = 0; i < call.suppliedArgs; ++i) {
+        testArg(i);
+    }
 }
 
 static RIR_INLINE Assumptions addDynamicAssumptionsForOneTarget(
