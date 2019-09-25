@@ -22,34 +22,48 @@ void PassScheduler::add(std::unique_ptr<const PirTranslator>&& t) {
 
 PassScheduler::PassScheduler() {
     auto addDefaultOpt = [&]() {
-        add<OptimizeVisibility>();
         add<DotDotDots>();
         add<EagerCalls>();
-        add<ForceDominance>();
-        add<ScopeResolution>();
-        add<DeadStoreRemoval>();
-        add<Constantfold>();
-        add<Cleanup>();
-        add<DelayInstr>();
-        add<LoopInvariant>();
-        add<HoistInstruction>();
-        add<ElideEnv>();
-        add<DelayEnv>();
-        add<Cleanup>();
+
         add<Inline>();
         add<OptimizeContexts>();
-        add<LoadElision>();
+
+        add<ForceDominance>();
+        add<ScopeResolution>();
         add<GVN>();
+        add<Constantfold>();
+        add<DeadStoreRemoval>();
+
+        add<Inline>();
+        add<OptimizeContexts>();
+
         add<OptimizeAssumptions>();
         add<Cleanup>();
+
+        add<ElideEnv>();
+        add<DelayEnv>();
+        add<DelayInstr>();
+        add<Cleanup>();
+
+        add<OptimizeAssumptions>();
+        add<Cleanup>();
+
         add<TypeInference>();
+    };
+    auto addDefaultPrePhaseOpt = [&]() { add<OptimizeVisibility>(); };
+    auto addDefaultPostPhaseOpt = [&]() {
+        add<HoistInstruction>();
+        add<LoopInvariant>();
+        add<LoadElision>();
     };
 
     add<PhaseMarker>("Initial");
 
+    addDefaultPrePhaseOpt();
     // ==== Phase 1) Run the default passes a couple of times
     for (size_t i = 0; i < 2; ++i)
         addDefaultOpt();
+    addDefaultPostPhaseOpt();
 
     add<PhaseMarker>("Phase 1");
 
@@ -57,11 +71,13 @@ PassScheduler::PassScheduler() {
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
+    addDefaultPrePhaseOpt();
     add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();
     add<ElideEnvSpec>();
     addDefaultOpt();
+    addDefaultPostPhaseOpt();
 
     add<PhaseMarker>("Phase 2: Env speculation");
 
@@ -72,9 +88,11 @@ PassScheduler::PassScheduler() {
     // Since for example even unused checkpoints keep variables live.
     //
     // After this phase it is no longer possible to add assumptions at any point
+    addDefaultPrePhaseOpt();
     add<CleanupCheckpoints>();
     for (size_t i = 0; i < 2; ++i)
         addDefaultOpt();
+    addDefaultPostPhaseOpt();
 
     // ==== Phase 3.1) Remove Framestates we did not use
     //
@@ -88,10 +106,13 @@ PassScheduler::PassScheduler() {
     add<PhaseMarker>("Phase 3: Cleanup Checkpoints");
 
     // ==== Phase 4) Final round of default opts
+    addDefaultPrePhaseOpt();
     for (size_t i = 0; i < 3; ++i) {
         addDefaultOpt();
         add<CleanupCheckpoints>();
     }
+    addDefaultPostPhaseOpt();
+    add<CleanupCheckpoints>();
     add<PhaseMarker>("Phase 4: finished");
 }
 }
