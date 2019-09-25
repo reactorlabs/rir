@@ -1,4 +1,3 @@
-#include <map>
 #include <stack>
 
 #include <cassert>
@@ -46,7 +45,9 @@ class State {
 
     void check() const { assert(ostack >= 0 and "Too many pops"); }
 
-    void advance(Code* code) {
+    void advance(Code* code,
+                 std::unordered_map<Opcode*, int32_t>& pushContextStackHeight) {
+        auto oldPc = pc;
         BC bc = BC::advance(&pc, code);
         // Those two instructions deal with cleanly returning from the function
         // themselves, so we can ignore leftover values on the stack. Note that
@@ -57,6 +58,23 @@ class State {
         else
             ostack -= bc.popCount();
         check();
+
+        if (bc.bc == Opcode::push_context_) {
+            uint32_t popCtxt = *reinterpret_cast<Immediate*>(oldPc + 1);
+            auto popCtxtPos = pc + popCtxt;
+            assert(*popCtxtPos == Opcode::pop_context_);
+            assert(!pushContextStackHeight.count(popCtxtPos));
+            pushContextStackHeight[popCtxtPos] = ostack;
+        }
+
+        if (bc.bc == Opcode::pop_context_) {
+            int32_t* stackOffset = reinterpret_cast<int32_t*>(oldPc + 1);
+            if (*stackOffset == INT_MAX) {
+                assert(pushContextStackHeight.count(oldPc));
+                *stackOffset = ostack - pushContextStackHeight.at(oldPc);
+            }
+        }
+
         ostack += bc.pushCount();
     }
 
@@ -187,6 +205,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::stvar_stubbed_:
     case Opcode::starg_stubbed_:
     case Opcode::assert_type_:
+    case Opcode::update_promise_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:
@@ -210,6 +229,7 @@ SIMPLE_INSTRUCTIONS(V, _)
 void CodeVerifier::calculateAndVerifyStack(Code* code) {
     State max; // max state
     std::map<Opcode*, State> state;
+    std::unordered_map<Opcode*, int32_t> pushContextStackHeight;
     std::stack<State> q;
 
     Opcode* cptr = code->code();
@@ -230,7 +250,7 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
             Opcode* pc = i.pc;
             assert(pc >= code->code() && pc < code->endCode());
             BC cur = BC::decode(pc, code);
-            i.advance(code);
+            i.advance(code, pushContextStackHeight);
             max.updateMax(i);
             if (cur.isExit()) {
                 i.checkClear();

@@ -108,6 +108,10 @@ void BC::write(CodeStream& cs) const {
             cs.insert(name);
         break;
 
+    case Opcode::pop_context_:
+        cs.insert(immediate.offset);
+        return;
+
     case Opcode::br_:
     case Opcode::brtrue_:
     case Opcode::beginloop_:
@@ -706,6 +710,7 @@ void BC::print(std::ostream& out) const {
         out << std::hex << immediate.fun << std::dec;
         break;
     case Opcode::beginloop_:
+    case Opcode::pop_context_:
     case Opcode::push_context_:
     case Opcode::brtrue_:
     case Opcode::brfalse_:

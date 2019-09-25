@@ -212,6 +212,14 @@ class StaticAnalysis {
         }
     }
 
+    AbstractState before(Instruction* i) const {
+        return at<PositioningStyle::BeforeInstruction>(i);
+    }
+
+    AbstractState after(Instruction* i) const {
+        return at<PositioningStyle::AfterInstruction>(i);
+    }
+
     template <PositioningStyle POS>
     AbstractState at(Instruction* i) const {
         if (!done)

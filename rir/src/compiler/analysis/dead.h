@@ -2,6 +2,7 @@
 #define PIR_DEAD_H
 
 #include "compiler/pir/pir.h"
+#include "compiler/pir/tag.h"
 #include <unordered_set>
 
 namespace rir {
@@ -11,7 +12,12 @@ class DeadInstructions {
     std::unordered_set<Instruction*> used_;
 
   public:
-    explicit DeadInstructions(Code*);
+    enum DeadInstructionsMode {
+        CountAll,
+        IgnoreUpdatePromise,
+    };
+
+    DeadInstructions(Code*, DeadInstructionsMode mode = CountAll);
     bool used(Value* v);
     bool used(Instruction* v);
     bool unused(Value* v);

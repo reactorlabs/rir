@@ -394,6 +394,7 @@ BC_NOARGS(V, _)
     inline static BC alloc(int type);
     inline static BC asint(bool ceil);
     inline static BC pushContext(Jmp);
+    inline static BC popContext(Jmp);
     inline static BC beginloop(Jmp);
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
@@ -699,6 +700,7 @@ BC_NOARGS(V, _)
         case Opcode::brfalse_:
         case Opcode::beginloop_:
         case Opcode::push_context_:
+        case Opcode::pop_context_:
             memcpy(&immediate.offset, pc, sizeof(Jmp));
             break;
         case Opcode::popn_:

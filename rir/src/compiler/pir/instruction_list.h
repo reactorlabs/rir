@@ -56,6 +56,7 @@
     V(IsEnvStub)                                                               \
     V(Return)                                                                  \
     V(MkArg)                                                                   \
+    V(UpdatePromise)                                                           \
     V(MkFunCls)                                                                \
     V(MkCls)                                                                   \
     V(ChkMissing)                                                              \
