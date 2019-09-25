@@ -56,13 +56,14 @@ class SmallMap {
         container.push_back(Element(k, v));
     }
 
-    void insert(const K& k, const V& v) {
+    iterator insert(const K& k, const V& v) {
         SLOWASSERT(!contains(k));
         if (!big)
             checkSize();
         if (big)
             index[k] = container.size();
         container.push_back(Element(k, v));
+        return end() - 1;
     }
 
     const V& at(const K& k) const {

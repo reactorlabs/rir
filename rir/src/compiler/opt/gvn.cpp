@@ -4,6 +4,7 @@
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
+#include "utils/Map.h"
 #include <set>
 
 namespace rir {
@@ -12,9 +13,9 @@ namespace pir {
 void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<size_t, Value*> firstValue;
+    std::unordered_map<Value*, size_t> number;
     {
         std::unordered_map<size_t, std::vector<size_t>> classes;
-        std::unordered_map<Value*, size_t> number;
         std::unordered_map<SEXP, size_t> constants;
 
         bool changed = true;
@@ -170,6 +171,17 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
         std::unordered_map<Value*, Value*> replacements;
         DominanceGraph dom(cls);
 
+        typedef std::set<std::pair<size_t, size_t>> PhiClass;
+        auto computePhiClass = [&](Phi* phi) -> PhiClass {
+            std::set<std::pair<size_t, size_t>> res;
+            phi->eachArg([&](BB* bb, Value* a) {
+                assert(number.count(a));
+                res.insert({number.at(a), bb->id});
+            });
+            return res;
+        };
+
+        SmallMap<Phi*, PhiClass> phiClassCache;
         for (auto& g : reverseNumber) {
             auto p = g.second.begin();
             auto first = firstValue.at(g.first);
@@ -188,6 +200,32 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                         } else {
                             if (!dom.dominates(firstInstr->bb(), i->bb()))
                                 continue;
+                        }
+                    }
+
+                    // Phi GNV numbers might clash and actual classes are
+                    // checked lazily.
+                    if (auto p1 = Phi::Cast(i)) {
+                        if (auto p2 = Phi::Cast(first)) {
+
+                            auto p1ci = phiClassCache.find(p1);
+                            if (p1ci == phiClassCache.end())
+                                p1ci = phiClassCache.insert(
+                                    p1, computePhiClass(p1));
+                            auto p1c = p1ci->second;
+
+                            auto p2ci = phiClassCache.find(p2);
+                            if (p2ci == phiClassCache.end())
+                                p2ci = phiClassCache.insert(
+                                    p2, computePhiClass(p2));
+                            auto p2c = p2ci->second;
+
+                            if (p1c.size() != p2c.size() ||
+                                !std::equal(p1c.begin(), p1c.end(),
+                                            p2c.begin()))
+                                continue;
+                        } else {
+                            continue;
                         }
                     }
                     i->replaceUsesWith(first);
