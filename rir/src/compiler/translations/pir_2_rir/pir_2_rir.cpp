@@ -466,10 +466,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 #endif
                 };
 
-                auto explicitEnvValue = [](Instruction* instr) {
-                    return MkEnv::Cast(instr) || IsEnvStub::Cast(instr);
-                };
-
                 auto moveToTOS = [&](size_t offset) {
                     cb.add(BC::pick(offset));
                 };
@@ -585,7 +581,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         }
 
                         if (instr->hasEnv() && instr->env() == what) {
-                            if (explicitEnvValue(instr)) {
+                            if (LastEnv::explicitEnvValue(instr)) {
                                 loadEnv(what, argNumber);
                             } else {
                                 auto env = instr->env();

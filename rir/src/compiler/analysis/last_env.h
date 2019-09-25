@@ -12,9 +12,13 @@ class LastEnv : public StaticAnalysis<AbstractUnique<Value>> {
     LastEnv(ClosureVersion* cls, Code* code, LogStream& log)
         : StaticAnalysis("Last Env", cls, code, log) {}
 
+    static bool explicitEnvValue(Instruction* instr) {
+        return MkEnv::Cast(instr) || IsEnvStub::Cast(instr);
+    }
+
     AbstractResult apply(AbstractUnique<Value>& state,
                          Instruction* i) const override {
-        if (i->hasEnv() && !MkEnv::Cast(i) && i->env() != state.get()) {
+        if (i->hasEnv() && !explicitEnvValue(i) && i->env() != state.get()) {
             state.set(i->env());
             return AbstractResult::Updated;
         }
