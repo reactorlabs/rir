@@ -172,13 +172,15 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
         DominanceGraph dom(cls);
 
         typedef std::set<std::pair<size_t, size_t>> PhiClass;
-        auto computePhiClass = [&](Phi* phi) -> PhiClass {
-            std::set<std::pair<size_t, size_t>> res;
+        auto computePhiClass = [&](Phi* phi, PhiClass& res) -> bool {
+            bool success = true;
             phi->eachArg([&](BB* bb, Value* a) {
-                assert(number.count(a));
-                res.insert({number.at(a), bb->id});
+                if (number.count(a))
+                    res.insert({number.at(a), bb->id});
+                else
+                    success = true;
             });
-            return res;
+            return success;
         };
 
         SmallMap<Phi*, PhiClass> phiClassCache;
@@ -209,15 +211,25 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                         if (auto p2 = Phi::Cast(first)) {
 
                             auto p1ci = phiClassCache.find(p1);
-                            if (p1ci == phiClassCache.end())
-                                p1ci = phiClassCache.insert(
-                                    p1, computePhiClass(p1));
+                            if (p1ci == phiClassCache.end()) {
+                                PhiClass cl;
+                                if (computePhiClass(p1, cl)) {
+                                    p1ci = phiClassCache.insert(p1, cl);
+                                } else {
+                                    continue;
+                                }
+                            }
                             auto p1c = p1ci->second;
 
                             auto p2ci = phiClassCache.find(p2);
-                            if (p2ci == phiClassCache.end())
-                                p2ci = phiClassCache.insert(
-                                    p2, computePhiClass(p2));
+                            if (p2ci == phiClassCache.end()) {
+                                PhiClass cl;
+                                if (computePhiClass(p2, cl)) {
+                                    p2ci = phiClassCache.insert(p2, cl);
+                                } else {
+                                    continue;
+                                }
+                            }
                             auto p2c = p2ci->second;
 
                             if (p1c.size() != p2c.size() ||

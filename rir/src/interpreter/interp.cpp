@@ -596,18 +596,25 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
                 notObj = false;
                 isEager = false;
                 bool reflectionPossible = true;
-                // If this is a simple promis, that just looks up an eager value
-                // we do not reset the no-reflection flag. The callee can assume
-                // that (as long as he does not trigger any other reflection)
-                // evaluating this promise does not trigger reflection either.
-                if (TYPEOF(PREXPR(prom)) == SYMSXP) {
+                // If this is a simple promise, that just looks up an eager
+                // value we do not reset the no-reflection flag. The callee can
+                // assume that (as long as he does not trigger any other
+                // reflection) evaluating this promise does not trigger
+                // reflection either.
+                while (TYPEOF(PREXPR(prom)) == SYMSXP) {
                     auto v = Rf_findVar(PREXPR(prom), PRENV(prom));
-                    if (v != R_UnboundValue &&
-                        (TYPEOF(v) != PROMSXP || PRVALUE(v) != R_UnboundValue))
+                    if (v == R_UnboundValue)
+                        break;
+                    if (TYPEOF(v) != PROMSXP || PRVALUE(v) != R_UnboundValue) {
                         reflectionPossible = false;
+                        break;
+                    }
+                    assert(TYPEOF(v) == PROMSXP);
+                    prom = v;
                 }
-                if (reflectionPossible)
+                if (reflectionPossible) {
                     given.remove(Assumption::NoReflectiveArgument);
+                }
             }
         }
         if (arg == R_MissingArg) {
@@ -1466,6 +1473,11 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     if (outermostFrame)
         startDeoptimizing();
 
+    if (auto le = LazyEnvironment::check(deoptEnv)) {
+        if (le->materialized())
+            deoptEnv = le->materialized();
+    }
+
     RCNTXT fake;
     RCNTXT* cntxt;
     auto originalCntxt = findFunctionContextFor(deoptEnv);
@@ -1487,10 +1499,8 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     }
 
     if (auto le = LazyEnvironment::check(deoptEnv)) {
-        if (le->materialized())
-            deoptEnv = le->materialized();
-        else
-            deoptEnv = createEnvironment(globalContext(), deoptEnv);
+        assert(!le->materialized());
+        deoptEnv = createEnvironment(globalContext(), deoptEnv);
         cntxt->cloenv = deoptEnv;
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
