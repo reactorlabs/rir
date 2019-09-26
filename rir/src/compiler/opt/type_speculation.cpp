@@ -31,9 +31,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                 !i->typeFeedback.type.isVoid() &&
                 !i->type.isA(i->typeFeedback.type) &&
                 !(i->type & i->typeFeedback.type).isVoid()) {
-                switch (i->tag) {
-                case Tag::Force: {
-                    auto arg = i->arg(0).val()->followCasts();
+
+                if (auto force = Force::Cast(i)) {
+                    auto arg = force->input()->followCasts();
                     // Blacklist of where it is not worthwhile
                     if (!LdConst::Cast(arg) &&
                         // leave this to the promise inliner
@@ -48,9 +48,50 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     if (auto ld = LdVarSuper::Cast(arg))
                         if (!Env::isPirEnv(ld->env()))
                             trigger = true;
-                    break;
-                }
-                default: {}
+
+                    switch (force->observed) {
+                    case Force::ArgumentKind::value:
+                    case Force::ArgumentKind::evaluatedPromise: {
+
+                        Instruction* input = Instruction::Cast(force->input());
+                        PirType seen = force->typeFeedback.type;
+                        if (force->observed ==
+                            Force::ArgumentKind::evaluatedPromise)
+                            seen = seen.orPromiseWrapped();
+                        if (!seen.isVoid() && !seen.maybeObj() && input &&
+                            !input->type.isA(seen)) {
+                            if (auto cp = checkpoint.at(force)) {
+                                auto assume = input->type.notObject();
+                                if (seen.isA(PirType(RType::integer)
+                                                 .orPromiseWrapped()) ||
+                                    seen.isA(PirType(RType::real)
+                                                 .orPromiseWrapped()) ||
+                                    seen.isA(PirType(RType::logical)
+                                                 .orPromiseWrapped())) {
+                                    assume = seen;
+                                }
+                                if (!input->type.isA(assume)) {
+                                    speculate[cp][input] = {
+                                        assume, force->typeFeedback.srcCode,
+                                        force->typeFeedback.origin};
+                                    force->observed =
+                                        Force::ArgumentKind::unknown;
+                                    trigger = false;
+                                }
+                            }
+                        }
+                        break;
+                    }
+
+                    case Force::ArgumentKind::promise:
+                    case Force::ArgumentKind::unknown: {
+                        force->observed = Force::ArgumentKind::unknown;
+                        break;
+                    }
+
+                    default:
+                        assert(false && "unknown observed force input kind");
+                    }
                 }
             }
             if (trigger) {
@@ -60,7 +101,10 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                         auto assume =
                             (seen.isA(
                                  PirType(RType::integer).orPromiseWrapped()) ||
-                             seen.isA(PirType(RType::real).orPromiseWrapped()))
+                             seen.isA(
+                                 PirType(RType::real).orPromiseWrapped()) ||
+                             seen.isA(
+                                 PirType(RType::logical).orPromiseWrapped()))
                                 ? seen
                                 : i->type.notObject();
                         if (!i->type.isA(assume))

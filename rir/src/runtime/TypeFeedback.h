@@ -105,6 +105,10 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
 
 enum class TypeChecks : uint32_t {
     // Must be bigger than smallest sexptype
+    LogicalNonObject = 3326,
+    LogicalNonObjectWrapped = 3327,
+    LogicalSimpleScalar = 3328,
+    LogicalSimpleScalarWrapped = 3329,
     IntegerNonObject = 3330,
     IntegerNonObjectWrapped = 3331,
     IntegerSimpleScalar = 3332,

@@ -18,6 +18,7 @@
 #include <deque>
 #include <functional>
 #include <iostream>
+#include <sstream>
 #include <unordered_set>
 
 /*
@@ -1004,6 +1005,11 @@ class FLIE(Force, 2, Effects::Any()) {
   public:
     // Set to true if we are sure that the promise will be forced here
     bool strict = false;
+
+    // Observed behavior for speculation
+    using ArgumentKind = ObservedValues::StateBeforeLastForce;
+    ArgumentKind observed = ArgumentKind::unknown;
+
     Force(Value* in, Value* env)
         : FixedLenInstructionWithEnvSlot(in->type.forced(), {{PirType::any()}},
                                          {{in}}, env) {
@@ -1013,7 +1019,20 @@ class FLIE(Force, 2, Effects::Any()) {
         }
     }
     Value* input() const { return arg(0).val(); }
-    const char* name() const override { return strict ? "Force!" : "Force"; }
+
+    const char* name() const override {
+        std::stringstream ss;
+        ss << "Force";
+        if (strict)
+            ss << "!";
+        if (observed == ArgumentKind::promise)
+            ss << "<lazy>";
+        else if (observed == ArgumentKind::evaluatedPromise)
+            ss << "<wrapped>";
+        else if (observed == ArgumentKind::value)
+            ss << "<value>";
+        return ss.str().c_str();
+    }
 
     PirType inferType(const GetType& getType) const override final {
         return getType(input()).forced();
