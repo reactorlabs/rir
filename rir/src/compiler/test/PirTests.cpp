@@ -663,6 +663,21 @@ bool testTypeRules() {
     assert(!r2.subsetType(PirType::any()).maybeObj());
     auto t = PirType(RType::logical).notObject().notMissing().scalar();
     assert(t.mergeWithConversion(t).isA(t));
+
+    auto a = (PirType() | RType::real | RType::integer)
+                 .notPromiseWrapped()
+                 .notObject();
+    auto b = (PirType() | RType::integer).notPromiseWrapped().notObject();
+    assert(a.mergeWithConversion(b) == a);
+    assert(b.mergeWithConversion(a) == a);
+    t = PirType::bottom();
+    t = t.mergeWithConversion(a);
+    t = t.mergeWithConversion(b);
+    assert(t == a);
+    t = t & PirType::num().notMissing();
+    assert(t == a);
+    t = PirType::any() & t;
+    assert(t == a);
     return true;
 }
 
