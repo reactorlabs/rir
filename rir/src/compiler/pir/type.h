@@ -191,7 +191,8 @@ struct PirType {
             return false;
         };
 
-        fixup(*this, other) || fixup(other, *this);
+        if (!isVoid() && !other.isVoid())
+            fixup(*this, other) || fixup(other, *this);
 
         return res;
     }

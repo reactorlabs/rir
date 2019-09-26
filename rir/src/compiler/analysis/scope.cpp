@@ -31,8 +31,10 @@ void ScopeAnalysis::lookup(Value* v, const LoadMaybe& action,
                    [&]() { action(AbstractLoad(res)); });
             return;
         }
-        action(AbstractLoad(res));
-        return;
+        if (!res.isUnknown()) {
+            action(AbstractLoad(res));
+            return;
+        }
     }
 
     if (globalState->results.count(instr)) {
@@ -42,8 +44,10 @@ void ScopeAnalysis::lookup(Value* v, const LoadMaybe& action,
                    [&]() { action(res); });
             return;
         }
-        action(res);
-        return;
+        if (!res.result.isUnknown()) {
+            action(res);
+            return;
+        }
     }
 
     notFound();
@@ -55,8 +59,7 @@ void ScopeAnalysis::lookupAt(const ScopeAnalysisState& state,
 
     lookup(instr, action, [&]() {
         // IMPORTANT: Dead store elimination relies on the fact that we handle
-        // all
-        // possible loads here
+        // all possible loads here
 
         // If this is a ldvar, we perform a get on the abstract environment and
         // if possible recurse on the result
@@ -71,12 +74,10 @@ void ScopeAnalysis::lookupAt(const ScopeAnalysisState& state,
         }
 
         // If this is a ldfun, we perform a getFun on the abstract environment
-        // and
-        // if possible recurse on the result. The loadFun is an abstract version
-        // of
-        // ldFun and considers the special case of skipping non-closure
-        // bindings.
-        // Thus it is a lot less reliable than normal load.
+        // and if possible recurse on the result. The loadFun is an abstract
+        // version of ldFun and considers the special case of skipping
+        // non-closure bindings. Thus it is a lot less reliable than normal
+        // load.
         if (auto ldf = LdFun::Cast(instr)) {
             action(loadFun(state, ldf->varName, ldf->env()));
             return;
