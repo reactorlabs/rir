@@ -91,7 +91,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
     };
 
     // Search for calls that likely point to a builtin.
-    std::unordered_map<LdFun*, SEXP> replaced;
+    std::unordered_map<LdFun*, std::pair<SEXP, Checkpoint*>> needsGuard;
     Visitor::run(code, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -102,10 +102,10 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                             // We can only speculate if we have a checkpoint at
                             // the ldfun position, since we want to deopt before
                             // forcing arguments.
-                            if (checkpoint.at(ldfun)) {
-                                replaced.emplace(ldfun, ldfun->hint);
-                                ip = replaceCallWithCallBuiltin(
-                                    bb, ip, call, replaced.at(ldfun));
+                            if (auto cp = checkpoint.at(ldfun)) {
+                                ip = replaceCallWithCallBuiltin(bb, ip, call,
+                                                                ldfun->hint);
+                                needsGuard[ldfun] = {ldfun->hint, cp};
                             }
                         }
                     } else {
@@ -114,13 +114,28 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                             auto env =
                                 Env::Cast(closure->owner()->closureEnv());
                             if (env != Env::notClosed() && env->rho) {
-                                auto builtin =
-                                    Rf_findVar(ldfun->varName, env->rho);
+                                auto name = ldfun->varName;
+                                auto builtin = Rf_findVar(name, env->rho);
+                                if (TYPEOF(builtin) == PROMSXP)
+                                    builtin = PRVALUE(builtin);
                                 if (TYPEOF(builtin) == BUILTINSXP) {
-                                    if (checkpoint.at(ldfun)) {
-                                        replaced.emplace(ldfun, builtin);
+                                    auto rho = env->rho;
+                                    bool inBase = false;
+                                    if (rho == R_BaseEnv ||
+                                        rho == R_BaseNamespace) {
+                                        inBase =
+                                            SYMVALUE(name) == builtin &&
+                                            SafeBuiltinsList::
+                                                assumeStableInBaseEnv(name);
+                                    }
+
+                                    auto cp = checkpoint.at(ldfun);
+
+                                    if (inBase || cp) {
                                         ip = replaceCallWithCallBuiltin(
-                                            bb, ip, call, replaced.at(ldfun));
+                                            bb, ip, call, builtin);
+                                        if (!inBase)
+                                            needsGuard[ldfun] = {builtin, cp};
                                     }
                                 }
                             }
@@ -140,11 +155,11 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
 
             // Insert the actual guards needed for the above transformation
             if (auto ldfun = LdFun::Cast(*ip)) {
-                auto r = replaced.find(ldfun);
-                if (r != replaced.end()) {
-                    ip = replaceLdFunBuiltinWithDeopt(
-                        bb, ip, checkpoint.at(*ip), r->second, ldfun);
-                    replaced.erase(r);
+                auto r = needsGuard.find(ldfun);
+                if (r != needsGuard.end()) {
+                    ip = replaceLdFunBuiltinWithDeopt(bb, ip, r->second.second,
+                                                      r->second.first, ldfun);
+                    needsGuard.erase(r);
                     continue;
                 }
             }

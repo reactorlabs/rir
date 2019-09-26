@@ -335,5 +335,10 @@ bool SafeBuiltinsList::forInlineByName(SEXP name) {
     return true;
 }
 
+bool SafeBuiltinsList::assumeStableInBaseEnv(SEXP name) {
+    return R_BindingIsLocked(name, R_BaseEnv) &&
+           !R_BindingIsActive(name, R_BaseEnv);
+}
+
 } // namespace pir
 } // namespace rir

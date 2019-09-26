@@ -524,8 +524,42 @@ class TheScopeResolution {
                     // If nothing else, narrow down the environment (in case we
                     // found something more concrete).
                     if (i->hasEnv() &&
-                        aLoad.env != AbstractREnvironment::UnknownParent)
+                        aLoad.env != AbstractREnvironment::UnknownParent) {
                         i->env(aLoad.env);
+
+                        // Assume bindings in base namespace stay unchanged
+                        if (!bb->isDeopt()) {
+                            if (auto env = Env::Cast(aLoad.env)) {
+                                if (env->rho == R_BaseEnv ||
+                                    env->rho == R_BaseNamespace) {
+                                    SEXP name = nullptr;
+                                    if (auto ld = LdVar::Cast(i))
+                                        name = ld->varName;
+                                    if (auto ldfun = LdFun::Cast(i))
+                                        name = ldfun->varName;
+                                    if (name &&
+                                        SafeBuiltinsList::assumeStableInBaseEnv(
+                                            name)) {
+                                        auto value = SYMVALUE(name);
+                                        assert(Rf_findVar(name, env->rho) ==
+                                               value);
+                                        if (TYPEOF(value) == PROMSXP)
+                                            value = PRVALUE(value);
+                                        if (value != R_UnboundValue)
+                                            if (LdVar::Cast(i) ||
+                                                TYPEOF(value) == BUILTINSXP ||
+                                                TYPEOF(value) == SPECIALSXP ||
+                                                TYPEOF(value) == CLOSXP) {
+                                                auto con = new LdConst(value);
+                                                i->replaceUsesAndSwapWith(con,
+                                                                          ip);
+                                                return;
+                                            }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 });
 
                 // TODO move this to a pass where it fits...
