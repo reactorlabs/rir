@@ -276,6 +276,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::brtrue_:
         case Opcode::beginloop_:
         case Opcode::push_context_:
+        case Opcode::pop_context_:
         case Opcode::brfalse_:
         case Opcode::popn_:
         case Opcode::pick_:
@@ -299,7 +300,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             break;
         case Opcode::invalid_:
         case Opcode::num_of:
-        default:
             assert(false);
             break;
         }
@@ -418,6 +418,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::brtrue_:
         case Opcode::beginloop_:
         case Opcode::push_context_:
+        case Opcode::pop_context_:
         case Opcode::brfalse_:
         case Opcode::popn_:
         case Opcode::pick_:
@@ -442,7 +443,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             break;
         case Opcode::invalid_:
         case Opcode::num_of:
-        default:
             assert(false);
             break;
         }
