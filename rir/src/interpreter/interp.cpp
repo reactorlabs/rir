@@ -1473,6 +1473,11 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     if (outermostFrame)
         startDeoptimizing();
 
+    if (auto le = LazyEnvironment::check(deoptEnv)) {
+        if (le->materialized())
+            deoptEnv = le->materialized();
+    }
+
     RCNTXT fake;
     RCNTXT* cntxt;
     auto originalCntxt = findFunctionContextFor(deoptEnv);
@@ -1494,10 +1499,8 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     }
 
     if (auto le = LazyEnvironment::check(deoptEnv)) {
-        if (le->materialized())
-            deoptEnv = le->materialized();
-        else
-            deoptEnv = createEnvironment(globalContext(), deoptEnv);
+        assert(!le->materialized());
+        deoptEnv = createEnvironment(globalContext(), deoptEnv);
         cntxt->cloenv = deoptEnv;
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
