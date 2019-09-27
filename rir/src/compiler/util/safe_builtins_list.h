@@ -14,6 +14,7 @@ class SafeBuiltinsList {
     static bool nonObject(int builtin);
     static bool forInline(int builtin);
     static bool forInlineByName(SEXP name);
+    static bool assumeStableInBaseEnv(SEXP name);
 };
 
 } // namespace pir

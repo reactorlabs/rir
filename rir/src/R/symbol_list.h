@@ -83,6 +83,7 @@
     V(delayedArglist, ".delayedArglist.")                                      \
     V(delayedEnv, ".delayedEnv.")                                              \
     V(eval, "eval")                                                            \
+    V(lazyLoadDBexec, "lazyLoadDBexec")                                        \
     V(Recall, "Recall")
 
 #endif // SYMBOLS_LIST_H_

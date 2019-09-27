@@ -15,20 +15,23 @@ class DeadStoreAnalysis {
       protected:
         SubAnalysis() {}
 
-        bool applyRecurse(AbstractResult& effect, State& state,
-                          Instruction* i) const {
-            if (auto force = Force::Cast(i)) {
-                if (auto mk = MkArg::Cast(force->input()->followCasts())) {
-                    if (mk->usesPromEnv()) {
+        void applyRecurse(AbstractResult& effect, State& state, Instruction* i,
+                          Value* promEnv) const {
+            i->eachArg([&](Value* v) {
+                if (auto mk = MkArg::Cast(v->followCasts())) {
+                    if (mk->usesPromEnv() && !state.visited.count(mk)) {
                         // The promise could get forced here and
                         // use variables in the parent environment
-                        effect.max(
-                            handleRecurse(state, i, mk->prom(), mk->promEnv()));
-                        return true;
+                        state.visited.insert(mk);
+                        auto env = mk->promEnv();
+                        if (LdFunctionEnv::Cast(env)) {
+                            assert(promEnv);
+                            env = promEnv;
+                        }
+                        effect.max(handleRecurse(state, i, mk->prom(), env));
                     }
                 }
-            }
-            return false;
+            });
         }
 
         virtual AbstractResult handleRecurse(State& state, Instruction* i,
@@ -36,74 +39,11 @@ class DeadStoreAnalysis {
                                              Value* env) const = 0;
     };
 
-    // 1. keep track of LdFunctionEnv aliases.
-    class AliasSet {
-      public:
-        std::unordered_map<Value*, Value*> aliases;
-
-        AbstractResult mergeExit(const AliasSet& other) { return merge(other); }
-        AbstractResult merge(const AliasSet& other) {
-            AbstractResult res;
-            for (const auto& x : other.aliases) {
-                if (!aliases.count(x.first)) {
-                    aliases[x.first] = x.second;
-                    res.update();
-                }
-            }
-            return res;
-        }
-        void print(std::ostream& out, bool tty) const {
-            // TODO
-        }
-    };
-
-    class AliasAnalysis : public StaticAnalysis<AliasSet>,
-                          private SubAnalysis<AliasSet> {
-        Value* resolveEnv(const AliasSet& state, Value* env) const {
-            if (LdFunctionEnv::Cast(env)) {
-                env = state.aliases.at(env);
-            }
-            return env;
-        }
-
-        AbstractResult apply(AliasSet& state, Instruction* i) const override {
-            AbstractResult effect;
-            applyRecurse(effect, state, i);
-            return effect;
-        }
-
-        AbstractResult handleRecurse(AliasSet& state, Instruction* i,
-                                     Promise* prom, Value* env) const override {
-            AbstractResult res;
-
-            auto ld = LdFunctionEnv::Cast(*prom->entry->begin());
-            assert(ld != NULL);
-            if (!state.aliases.count(ld)) {
-                state.aliases[ld] = resolveEnv(state, env);
-                res.update();
-            }
-
-            AliasAnalysis analysis(closure, prom, log);
-            analysis();
-            res.max(state.merge(analysis.result()));
-
-            return res;
-        }
-
-      public:
-        AliasAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
-            : StaticAnalysis("aliasEnv", cls, code, log),
-              SubAnalysis<AliasSet>() {}
-
-        Value* resolveEnv(Value* env) const {
-            return resolveEnv(result(), env);
-        }
-    };
-
-    // 2. perfom an escape analysis on the environment.
+    // perfom an escape analysis on the environment.
     class EnvSet {
       public:
         typedef std::unordered_set<Value*> Envs;
+        std::unordered_set<MkArg*> visited;
         Envs envs;
         AbstractResult mergeExit(const EnvSet& other) { return merge(other); }
         AbstractResult merge(const EnvSet& other) {
@@ -111,6 +51,12 @@ class DeadStoreAnalysis {
             for (const auto& f : other.envs) {
                 if (!envs.count(f)) {
                     envs.insert(f);
+                    res.update();
+                }
+            }
+            for (const auto& a : other.visited) {
+                if (!visited.count(a)) {
+                    visited.insert(a);
                     res.update();
                 }
             }
@@ -123,18 +69,18 @@ class DeadStoreAnalysis {
 
     class EnvLeakAnalysis : public StaticAnalysis<EnvSet>,
                             private SubAnalysis<EnvSet> {
-        const AliasAnalysis& aliases;
+        Value* promEnv = nullptr;
 
       public:
-        EnvLeakAnalysis(ClosureVersion* cls, Code* code,
-                        const AliasAnalysis& aliases, LogStream& log)
-            : EnvLeakAnalysis(cls, code, EnvSet(), aliases, log) {}
+        EnvLeakAnalysis(ClosureVersion* cls, Code* code, Value* promEnv,
+                        LogStream& log)
+            : EnvLeakAnalysis(cls, code, EnvSet(), promEnv, log) {}
 
         EnvLeakAnalysis(ClosureVersion* cls, Code* code,
-                        const EnvSet& initialState,
-                        const AliasAnalysis& aliases, LogStream& log)
+                        const EnvSet& initialState, Value* promEnv,
+                        LogStream& log)
             : StaticAnalysis("envLeak", cls, code, initialState, NULL, log),
-              SubAnalysis(), aliases(aliases) {}
+              SubAnalysis(), promEnv(promEnv) {}
 
         EnvSet leakedAt(Instruction* i) const {
             return at<StaticAnalysis::PositioningStyle::BeforeInstruction>(i);
@@ -143,9 +89,13 @@ class DeadStoreAnalysis {
       protected:
         AbstractResult apply(EnvSet& state, Instruction* i) const override {
             AbstractResult effect;
-            applyRecurse(effect, state, i);
+            applyRecurse(effect, state, i, promEnv);
             if (i->leaksEnv()) {
-                Value* env = aliases.resolveEnv(i->env());
+                Value* env = i->env();
+                if (LdFunctionEnv::Cast(env)) {
+                    assert(promEnv);
+                    env = promEnv;
+                }
                 if (auto mk = MkEnv::Cast(env)) {
                     // stubs cannot leak, or we deopt
                     if (mk->stub)
@@ -161,7 +111,7 @@ class DeadStoreAnalysis {
 
         AbstractResult handleRecurse(EnvSet& state, Instruction* i,
                                      Promise* prom, Value* env) const override {
-            EnvLeakAnalysis analysis(closure, prom, aliases, log);
+            EnvLeakAnalysis analysis(closure, prom, env, log);
             analysis();
             return state.merge(analysis.result());
         }
@@ -185,6 +135,7 @@ class DeadStoreAnalysis {
         std::unordered_set<Value*> completelyObserved;
         std::unordered_set<Variable, pairhash> partiallyObserved;
         std::unordered_set<Variable, pairhash> ignoreStore;
+        std::unordered_set<MkArg*> visited;
 
         AbstractResult mergeExit(const ObservedStores& other) {
             return merge(other);
@@ -211,6 +162,12 @@ class DeadStoreAnalysis {
                     res.update();
                 }
             }
+            for (const auto& a : other.visited) {
+                if (!visited.count(a)) {
+                    visited.insert(a);
+                    res.update();
+                }
+            }
             return res;
         }
         void print(std::ostream& out, bool tty) const {
@@ -220,15 +177,15 @@ class DeadStoreAnalysis {
 
     class ObservedStoreAnalysis : public BackwardStaticAnalysis<ObservedStores>,
                                   private SubAnalysis<ObservedStores> {
-        const AliasAnalysis& aliases;
+        Value* promEnv = nullptr;
         const EnvLeakAnalysis& leaked;
 
       public:
         ObservedStoreAnalysis(ClosureVersion* cls, Code* code, const CFG& cfg,
-                              const AliasAnalysis& aliases,
-                              const EnvLeakAnalysis& leaked, LogStream& log)
+                              Value* promEnv, const EnvLeakAnalysis& leaked,
+                              LogStream& log)
             : BackwardStaticAnalysis("observedEnv", cls, code, cfg, log),
-              SubAnalysis(), aliases(aliases), leaked(leaked) {}
+              SubAnalysis(), promEnv(promEnv), leaked(leaked) {}
 
       private:
         static std::unordered_set<Value*> withPotentialParents(Value* env) {
@@ -249,12 +206,18 @@ class DeadStoreAnalysis {
             return apply(state, i, NULL);
         }
 
+        Value* resolveEnv(Value* env) const {
+            if (LdFunctionEnv::Cast(env)) {
+                assert(promEnv);
+                return promEnv;
+            }
+            return env;
+        }
+
         AbstractResult apply(ObservedStores& state, Instruction* i,
                              Value* alias) const {
             AbstractResult effect;
-            bool handled = applyRecurse(effect, state, i);
-            if (handled)
-                return effect;
+            applyRecurse(effect, state, i, promEnv);
 
             auto observeFullEnv = [&](Value* env) {
                 for (auto& e : withPotentialParents(env)) {
@@ -275,8 +238,7 @@ class DeadStoreAnalysis {
             };
 
             if (auto ld = LdVar::Cast(i)) {
-                for (auto& e :
-                     withPotentialParents(aliases.resolveEnv(i->env()))) {
+                for (auto& e : withPotentialParents(resolveEnv(i->env()))) {
                     Variable var({ld->varName, e});
                     if (!state.partiallyObserved.count(var)) {
                         state.partiallyObserved.insert(var);
@@ -301,7 +263,7 @@ class DeadStoreAnalysis {
                 for (auto& l : leakedEnvs.envs)
                     observeFullEnv(l);
             } else if (i->readsEnv()) {
-                observeFullEnv(aliases.resolveEnv(i->env()));
+                observeFullEnv(resolveEnv(i->env()));
             }
 
             return effect;
@@ -310,9 +272,9 @@ class DeadStoreAnalysis {
         AbstractResult handleRecurse(ObservedStores& state, Instruction* i,
                                      Promise* prom, Value* env) const override {
             CFG cfg(prom);
-            EnvLeakAnalysis subLeak(closure, prom, leaked.leakedAt(i), aliases,
+            EnvLeakAnalysis subLeak(closure, prom, leaked.leakedAt(i), env,
                                     log);
-            ObservedStoreAnalysis analysis(closure, prom, cfg, aliases, subLeak,
+            ObservedStoreAnalysis analysis(closure, prom, cfg, env, subLeak,
                                            log);
             analysis();
             return state.merge(analysis.result());
@@ -330,7 +292,6 @@ class DeadStoreAnalysis {
         }
     };
 
-    AliasAnalysis aliases;
     EnvLeakAnalysis leak;
     ObservedStoreAnalysis observed;
 
@@ -338,8 +299,8 @@ class DeadStoreAnalysis {
 
   public:
     DeadStoreAnalysis(ClosureVersion* cls, const CFG& cfg, LogStream& log)
-        : aliases(cls, cls, log), leak(cls, cls, aliases, log),
-          observed(cls, cls, cfg, aliases, leak, log) {}
+        : leak(cls, cls, nullptr, log),
+          observed(cls, cls, cfg, nullptr, leak, log) {}
 
     bool isDead(StVar* st) const {
         if (!isLocal(st->env()))

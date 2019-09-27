@@ -293,6 +293,7 @@ bool SafeBuiltinsList::nonObject(SEXP builtin) {
 #define UNSAFE_BUILTINS_FOR_INLINE(V)                                          \
     V(exists)                                                                  \
     V(parent.env)                                                              \
+    V(parent.env<-)                                                            \
     V(sys.nframe)                                                              \
     V(lockBinding)                                                             \
     V(lockEnvironment)                                                         \
@@ -307,6 +308,7 @@ bool SafeBuiltinsList::nonObject(SEXP builtin) {
     V(sys.call)                                                                \
     V(parent.frame)                                                            \
     V(UseMethod)                                                               \
+    V(eval)                                                                    \
     V(standardGeneric)
 
 bool SafeBuiltinsList::forInline(int builtin) {
@@ -333,6 +335,11 @@ bool SafeBuiltinsList::forInlineByName(SEXP name) {
         if (i == name)
             return false;
     return true;
+}
+
+bool SafeBuiltinsList::assumeStableInBaseEnv(SEXP name) {
+    return R_BindingIsLocked(name, R_BaseEnv) &&
+           !R_BindingIsActive(name, R_BaseEnv);
 }
 
 } // namespace pir
