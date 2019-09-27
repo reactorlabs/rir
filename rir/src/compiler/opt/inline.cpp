@@ -127,11 +127,29 @@ class TheInliner {
                     });
                 };
 
+                size_t weight = inlinee->size();
+                // The taken information of the call instruction tells us how
+                // many times a call was executed relative to function
+                // invocation. 0 means never, 1 means on every call, above 1
+                // means more than once per call, ie. in a loop.
+                if (auto c = CallInstruction::CastCall(*it)) {
+                    if (c->taken != CallInstruction::UnknownTaken) {
+                        // Policy: for calls taken about 80% the time the weight
+                        // stays unchanged. Below it's increased and above it
+                        // is decreased, but not more than 4x
+                        double adjust = 1.25 * c->taken;
+                        if (adjust > 4)
+                            adjust = 4;
+                        if (adjust < 0.25)
+                            adjust = 0.25;
+                        weight = (double)weight / adjust;
+                    }
+                }
+
                 // No recursive inlining
                 if (inlinee->owner() == version->owner()) {
                     continue;
-                } else if (inlinee->size() >
-                           Parameter::INLINER_MAX_INLINEE_SIZE) {
+                } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
                     inlineeCls->rirFunction()->uninlinable = true;
                     continue;
                 } else {

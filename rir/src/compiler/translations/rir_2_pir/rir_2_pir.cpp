@@ -412,15 +412,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         }
 
+        size_t taken = -1;
         SEXP monomorphic = nullptr;
         auto callee = at(nargs);
         // See if the call feedback suggests a monomorphic target
         // TODO: Deopts in promises are not supported by the promise inliner. So
         // currently it does not pay off to put any deopts in there.
-        if (!inPromise() && callTargetFeedback.count(callee)) {
-            auto& feedback =
-                std::get<ObservedCallees>(callTargetFeedback.at(callee));
-            if (feedback.taken > 1 && feedback.numTargets == 1)
+        auto feedbackIt = callTargetFeedback.find(callee);
+        if (!inPromise() && feedbackIt != callTargetFeedback.end()) {
+            auto& feedback = std::get<ObservedCallees>(feedbackIt->second);
+            taken = feedback.taken;
+            if (taken > 1 && feedback.numTargets == 1)
                 monomorphic = feedback.getTarget(srcCode, 0);
         }
 
@@ -631,6 +633,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         } else {
             insertGenericCall();
         }
+        if (taken != (size_t)-1 && srcCode->funInvocationCount)
+            if (auto c = CallInstruction::CastCall(top()))
+                c->taken = (double)taken / (double)srcCode->funInvocationCount;
         break;
     }
 
