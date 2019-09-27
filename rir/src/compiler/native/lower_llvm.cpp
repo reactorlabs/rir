@@ -2945,7 +2945,13 @@ bool LowerFunctionLLVM::tryCompile() {
                 if (representationOf(arg) == Representation::Sexp) {
                     llvm::Value* res = nullptr;
                     auto a = loadSxp(arg);
-                    if (t->typeTest.isA(RType::integer)) {
+                    if (t->typeTest.isA(RType::logical)) {
+                        res = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
+                    } else if (t->typeTest.isA(PirType(RType::logical)
+                                                   .orPromiseWrapped())) {
+                        a = depromise(a);
+                        res = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
+                    } else if (t->typeTest.isA(RType::integer)) {
                         res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
                     } else if (t->typeTest.isA(PirType(RType::integer)
                                                    .orPromiseWrapped())) {

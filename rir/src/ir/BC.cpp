@@ -652,6 +652,12 @@ void BC::print(std::ostream& out) const {
         case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
             out << "IntegerSimpleScalar";
             break;
+        case static_cast<Immediate>(TypeChecks::LogicalNonObject):
+            out << "LogicalNotObject";
+            break;
+        case static_cast<Immediate>(TypeChecks::LogicalSimpleScalar):
+            out << "LogicalSimpleScalar";
+            break;
         case static_cast<Immediate>(TypeChecks::RealNonObjectWrapped):
             out << "RealNonObjectWrapped";
             break;
@@ -663,6 +669,12 @@ void BC::print(std::ostream& out) const {
             break;
         case static_cast<Immediate>(TypeChecks::IntegerSimpleScalarWrapped):
             out << "IntegerSimpleScalarWrapped";
+            break;
+        case static_cast<Immediate>(TypeChecks::LogicalNonObjectWrapped):
+            out << "LogicalNotObjectWrapped";
+            break;
+        case static_cast<Immediate>(TypeChecks::LogicalSimpleScalarWrapped):
+            out << "LogicalSimpleScalarWrapped";
             break;
         case static_cast<Immediate>(TypeChecks::IsObject):
             out << "IsObject";

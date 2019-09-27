@@ -819,7 +819,18 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto t = is->typeTest;
                 assert(!t.isVoid() && !t.maybeObj() && !t.maybeLazy());
 
-                if (t.isA(RType::integer)) {
+                if (t.isA(RType::logical)) {
+                    if (t.isScalar())
+                        cb.add(BC::isType(TypeChecks::LogicalSimpleScalar));
+                    else
+                        cb.add(BC::isType(TypeChecks::LogicalNonObject));
+                } else if (t.isA(PirType(RType::logical).orPromiseWrapped())) {
+                    if (t.isScalar())
+                        cb.add(
+                            BC::isType(TypeChecks::LogicalSimpleScalarWrapped));
+                    else
+                        cb.add(BC::isType(TypeChecks::LogicalNonObjectWrapped));
+                } else if (t.isA(RType::integer)) {
                     if (t.isScalar())
                         cb.add(BC::isType(TypeChecks::IntegerSimpleScalar));
                     else

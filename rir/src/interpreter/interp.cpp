@@ -3190,6 +3190,24 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             bool res;
             switch (i) {
 
+            case static_cast<Immediate>(TypeChecks::LogicalNonObject):
+                res = TYPEOF(val) == LGLSXP && !isObject(val);
+                break;
+            case static_cast<Immediate>(TypeChecks::LogicalNonObjectWrapped):
+                if (TYPEOF(val) == PROMSXP)
+                    val = PRVALUE(val);
+                res = TYPEOF(val) == LGLSXP && !isObject(val);
+                break;
+
+            case static_cast<Immediate>(TypeChecks::LogicalSimpleScalar):
+                res = IS_SIMPLE_SCALAR(val, LGLSXP);
+                break;
+            case static_cast<Immediate>(TypeChecks::LogicalSimpleScalarWrapped):
+                if (TYPEOF(val) == PROMSXP)
+                    val = PRVALUE(val);
+                res = IS_SIMPLE_SCALAR(val, LGLSXP);
+                break;
+
             case static_cast<Immediate>(TypeChecks::IntegerNonObject):
                 res = TYPEOF(val) == INTSXP && !isObject(val);
                 break;

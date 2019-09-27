@@ -328,6 +328,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 i->typeFeedback.type.merge(feedback);
                 i->typeFeedback.srcCode = srcCode;
                 i->typeFeedback.origin = pos;
+                if (auto force = Force::Cast(i)) {
+                    force->observed = static_cast<Force::ArgumentKind>(
+                        feedback.stateBeforeLastForce);
+                }
             }
         }
         break;
