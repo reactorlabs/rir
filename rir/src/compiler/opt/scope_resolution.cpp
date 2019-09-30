@@ -31,10 +31,10 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
         if (auto b = CallBuiltin::Cast(i))
             return SafeBuiltinsList::forInline(b->builtinId);
 
-        auto anyReflection = [&](AbstractPirValue& res) -> bool {
+        auto maybeLazy = [&](AbstractPirValue& res) -> bool {
             if (res.isUnknown())
                 return true;
-            bool anyReflection = false;
+            bool maybe = false;
             res.eachSource([&](ValOrig vo) {
                 auto v = vo.val->followCastsAndForce();
                 if (v->type.maybeLazy()) {
@@ -43,48 +43,42 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
                                 rir::Assumption::NoReflectiveArgument) ||
                             cls->assumptions().isEager(ld->id))
                             return;
-                    anyReflection = true;
+                    maybe = true;
                 }
             });
-            return anyReflection;
+            return maybe;
         };
 
-        auto anyReflectionBy = [&](Instruction* i) {
+        auto maybeLazyRes = [&](Instruction* i) {
             if (auto ld = LdVar::Cast(i)) {
                 auto e = ld->env() == funEnv ? callEnv : ld->env();
                 auto res = analysis.load(state, ld->varName, e);
-                if (anyReflection(res.result))
-                    return false;
-                return true;
+                return maybeLazy(res.result);
             }
 
             if (auto ld = LdVarSuper::Cast(i)) {
                 auto e = ld->env() == funEnv ? callEnv : ld->env();
                 auto res = analysis.superLoad(state, ld->varName, e);
-                if (anyReflection(res.result))
-                    return false;
-                return true;
+                return maybeLazy(res.result);
             }
 
             if (auto ld = LdFun::Cast(i)) {
                 auto e = ld->env() == funEnv ? callEnv : ld->env();
                 auto res = analysis.loadFun(state, ld->varName, e);
-                if (anyReflection(res.result))
-                    return false;
-                return true;
+                return maybeLazy(res.result);
             }
 
             assert(false);
-            return false;
+            return true;
         };
 
         if (LdFun::Cast(i))
-            return anyReflectionBy(i);
+            return !maybeLazyRes(i);
 
         if (auto force = Force::Cast(i)) {
             auto arg = force->arg<0>().val()->followCastsAndForce();
             if (LdFun::Cast(arg) || LdVar::Cast(arg) || LdVarSuper::Cast(arg))
-                return anyReflectionBy(Instruction::Cast(arg));
+                return !maybeLazyRes(Instruction::Cast(arg));
         }
 
         return !i->effects.includes(Effect::Reflection);
