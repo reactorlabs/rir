@@ -17,6 +17,7 @@ struct Parameter {
     static size_t INLINER_MAX_SIZE;
     static size_t INLINER_MAX_INLINEE_SIZE;
     static size_t INLINER_INITIAL_FUEL;
+    static size_t INLINER_INLINE_UNLIKELY;
 
     static bool RIR_PRESERVE;
     static unsigned RIR_SERIALIZE_CHAOS;

@@ -142,6 +142,8 @@ class TheInliner {
                             adjust = 4;
                         if (adjust < 0.25)
                             adjust = 0.25;
+                        if (Parameter::INLINER_INLINE_UNLIKELY && adjust < 1)
+                            adjust = 1;
                         weight = (double)weight / adjust;
                     }
                 }
@@ -378,7 +380,11 @@ size_t Parameter::INLINER_MAX_INLINEE_SIZE =
 size_t Parameter::INLINER_INITIAL_FUEL =
     getenv("PIR_INLINER_INITIAL_FUEL")
         ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
-        : 5;
+        : 10;
+size_t Parameter::INLINER_INLINE_UNLIKELY =
+    getenv("PIR_INLINER_INLINE_UNLIKELY")
+        ? atoi(getenv("PIR_INLINER_INLINE_UNLIKELY"))
+        : 0;
 
 void Inline::apply(RirCompiler&, ClosureVersion* version, LogStream&) const {
     TheInliner s(version);
