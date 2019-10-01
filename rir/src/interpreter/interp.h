@@ -58,5 +58,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 void recordDeoptReason(SEXP val, const DeoptReason& reason);
 void jit(SEXP cls, SEXP name, InterpreterInstance* ctx);
 
+int asInt(SEXP val, bool ceil_, Immediate srcIdx, InterpreterInstance* ctx);
+
 } // namespace rir
 #endif // RIR_INTERPRETER_C_H

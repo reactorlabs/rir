@@ -112,8 +112,15 @@ struct NativeBuiltins {
 
     static NativeBuiltin extract11;
     static NativeBuiltin extract21;
+    static NativeBuiltin extract12;
+    static NativeBuiltin extract22;
     static NativeBuiltin subassign11;
     static NativeBuiltin subassign21;
+    static NativeBuiltin subassign12;
+    static NativeBuiltin subassign22;
+
+    static NativeBuiltin asIntFloor;
+    static NativeBuiltin asIntCeil;
 
     static NativeBuiltin nativeCallTrampoline;
 
@@ -121,6 +128,9 @@ struct NativeBuiltins {
     static NativeBuiltin endClosureContext;
 
     static NativeBuiltin recordDeopt;
+
+    static NativeBuiltin matrixNrows;
+    static NativeBuiltin matrixNcols;
 };
 }
 }
