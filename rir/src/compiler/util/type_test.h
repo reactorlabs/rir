@@ -15,8 +15,7 @@ class TypeTest {
         rir::Code* srcCode;
         Opcode* origin;
     };
-    static void Create(Instruction* i,
-                       const Instruction::TypeFeedback& feedback,
+    static void Create(Value* i, const Instruction::TypeFeedback& feedback,
                        const std::function<void(Info)>& action) {
         auto possible = i->type & feedback.type;
 

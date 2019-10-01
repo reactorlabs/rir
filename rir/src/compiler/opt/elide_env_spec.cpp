@@ -2,6 +2,7 @@
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
+#include "../util/type_test.h"
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "compiler/util/safe_builtins_list.h"
@@ -133,8 +134,6 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         if (arg == i->env() || !arg->type.maybeObj()) {
                             return;
                         }
-                        // TODO: deduplicate this code with type_speculation
-                        // pass
                         auto argi = Instruction::Cast(arg);
                         assert(!arg->type.maybePromiseWrapped());
                         Instruction::TypeFeedback seen;
@@ -145,31 +144,23 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                                     arg->followCastsAndForce()))
                                 seen = j->typeFeedback;
                         }
-                        PirType resType;
-                        Instruction* condition = nullptr;
-                        bool assumeTrue = true;
-                        if (argi && !seen.type.isVoid() &&
-                            (seen.type.isA(RType::integer) ||
-                             seen.type.isA(RType::real))) {
-                            resType = seen.type;
-                            condition = new IsType(seen.type, arg);
-                        } else {
-                            condition = new IsObject(arg);
-                            assumeTrue = false;
-                            resType = arg->type.notObject();
-                        }
+                        if (seen.type.isVoid())
+                            seen.type = arg->type.notObject();
 
-                        BBTransform::insertAssume(condition, cp, bb, ip,
-                                                  assumeTrue, seen.srcCode,
-                                                  seen.origin);
+                        TypeTest::Create(arg, seen, [&](TypeTest::Info info) {
+                            BBTransform::insertAssume(
+                                info.test, cp, bb, ip, info.expectation,
+                                info.srcCode, info.origin);
 
-                        if (argi) {
-                            auto cast = new CastType(argi, CastType::Downcast,
-                                                     PirType::val(), resType);
-                            ip = bb->insert(ip, cast);
-                            ip++;
-                            argi->replaceDominatedUses(cast);
-                        }
+                            if (argi) {
+                                auto cast =
+                                    new CastType(argi, CastType::Downcast,
+                                                 PirType::val(), info.result);
+                                ip = bb->insert(ip, cast);
+                                ip++;
+                                argi->replaceDominatedUses(cast);
+                            }
+                        });
                     });
                     if (auto blt = CallBuiltin::Cast(i)) {
                         std::vector<Value*> args;
