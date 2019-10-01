@@ -19,8 +19,7 @@ class TypeTest {
                        const std::function<void(Info)>& action) {
         auto possible = i->type & feedback.type;
 
-        assert(!possible.isVoid());
-        if (i->type.isA(possible))
+        if (possible.isVoid() || i->type.isA(possible))
             return;
 
         if (possible.isA(PirType(RType::integer).orPromiseWrapped()) ||
