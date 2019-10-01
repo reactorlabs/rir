@@ -757,7 +757,7 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
     }
 
     if (representation == Representation::Real) {
-        auto indexUnderRange = builder.CreateFCmpOLT(nativeIndex, c(0.0));
+        auto indexUnderRange = builder.CreateFCmpOLT(nativeIndex, c(1.0));
         auto indexOverRange =
             builder.CreateFCmpOGE(nativeIndex, c((double)ULONG_MAX));
         auto indexNa = builder.CreateFCmpONE(nativeIndex, nativeIndex);
@@ -770,7 +770,7 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
         nativeIndex = builder.CreateFPToUI(nativeIndex, t::i64);
     } else {
         assert(representation == Representation::Integer);
-        auto indexUnderRange = builder.CreateICmpSLT(nativeIndex, c(0));
+        auto indexUnderRange = builder.CreateICmpSLT(nativeIndex, c(1));
         auto indexNa = builder.CreateICmpEQ(nativeIndex, c(NA_INTEGER));
         auto fail = builder.CreateOr(indexUnderRange, indexNa);
 
@@ -779,6 +779,8 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
 
         nativeIndex = builder.CreateZExt(nativeIndex, t::i64);
     }
+    // R indexing is 1-based
+    nativeIndex = builder.CreateSub(nativeIndex, c(1ul));
 
     auto ty = vector->getType();
     assert(ty == t::SEXP || ty == t::Int || ty == t::Double);
@@ -1223,9 +1225,9 @@ llvm::Value* LowerFunctionLLVM::shared(llvm::Value* v) {
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
 
     static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1);
-    auto named = builder.CreateLShr(sxpinfo, c(32, 64));
+    auto named = builder.CreateLShr(sxpinfo, c(32ul));
     named = builder.CreateAnd(named, c(namedMask));
-    return builder.CreateICmpUGT(named, c(1, 64));
+    return builder.CreateICmpUGT(named, c(1ul));
 }
 
 void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
@@ -3334,12 +3336,10 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.SetInsertPoint(fallback);
                 }
 
-                auto env = (extract->hasEnv()) ? loadSxp(extract->env())
-                                               : constant(R_NilValue, t::SEXP);
                 auto res0 =
                     call(NativeBuiltins::extract21,
-                         {loadSxp(extract->vec()), loadSxp(extract->idx()), env,
-                          c(extract->srcIdx)});
+                         {loadSxp(extract->vec()), loadSxp(extract->idx()),
+                          loadSxp(extract->env()), c(extract->srcIdx)});
                 if (fastcase) {
                     builder.CreateStore(convert(res0, i->type), res);
                     builder.CreateBr(done);
@@ -3402,12 +3402,11 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.SetInsertPoint(fallback);
                 }
 
-                auto env = (extract->hasEnv()) ? loadSxp(extract->env())
-                                               : constant(R_NilValue, t::SEXP);
                 auto res0 =
                     call(NativeBuiltins::extract22,
                          {loadSxp(extract->vec()), loadSxp(extract->idx1()),
-                          loadSxp(extract->idx2()), env, c(extract->srcIdx)});
+                          loadSxp(extract->idx2()), loadSxp(extract->env()),
+                          c(extract->srcIdx)});
 
                 if (fastcase) {
                     builder.CreateStore(convert(res0, i->type), res);
@@ -3431,12 +3430,10 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
-                auto env = constant(R_NilValue, t::SEXP);
-                if (subAssign->hasEnv())
-                    env = loadSxp(subAssign->env());
                 auto res =
                     call(NativeBuiltins::subassign12,
-                         {vector, idx1, idx2, val, env, c(subAssign->srcIdx)});
+                         {vector, idx1, idx2, val, loadSxp(subAssign->env()),
+                          c(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
             }
@@ -3502,13 +3499,11 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto idx1 = loadSxp(subAssign->idx1());
                 auto idx2 = loadSxp(subAssign->idx2());
 
-                auto env = (subAssign->hasEnv())
-                               ? loadSxp(subAssign->env())
-                               : constant(R_NilValue, t::SEXP);
-                auto assign = call(NativeBuiltins::subassign22,
-                                   {loadSxp(subAssign->lhs()), idx1, idx2,
-                                    loadSxp(subAssign->rhs()), env,
-                                    c(subAssign->srcIdx)});
+                auto assign =
+                    call(NativeBuiltins::subassign22,
+                         {loadSxp(subAssign->lhs()), idx1, idx2,
+                          loadSxp(subAssign->rhs()), loadSxp(subAssign->env()),
+                          c(subAssign->srcIdx)});
 
                 if (fastcase) {
                     builder.CreateStore(assign, res);
@@ -3531,11 +3526,9 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
-                auto env = constant(R_NilValue, t::SEXP);
-                if (subAssign->hasEnv())
-                    env = loadSxp(subAssign->env());
                 auto res = call(NativeBuiltins::subassign11,
-                                {vector, idx, val, env, c(subAssign->srcIdx)});
+                                {vector, idx, val, loadSxp(subAssign->env()),
+                                 c(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
             }
@@ -3591,13 +3584,11 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.SetInsertPoint(fallback);
                 }
 
-                auto env = (subAssign->hasEnv())
-                               ? loadSxp(subAssign->env())
-                               : constant(R_NilValue, t::SEXP);
-                auto res0 = call(
-                    NativeBuiltins::subassign21,
-                    {loadSxp(subAssign->vector()), loadSxp(subAssign->idx()),
-                     loadSxp(subAssign->val()), env, c(subAssign->srcIdx)});
+                auto res0 =
+                    call(NativeBuiltins::subassign21,
+                         {loadSxp(subAssign->vector()),
+                          loadSxp(subAssign->idx()), loadSxp(subAssign->val()),
+                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                 if (fastcase) {
                     builder.CreateStore(convert(res0, i->type), res);
                     builder.CreateBr(done);
