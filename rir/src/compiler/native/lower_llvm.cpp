@@ -399,7 +399,7 @@ class LowerFunctionLLVM {
 
     llvm::Value* computeAndCheckIndex(Value* index, llvm::Value* vector,
                                       BasicBlock* fallback,
-                                      BasicBlock* hit = nullptr);
+                                      llvm::Value* max = nullptr);
     bool compileDotcall(Instruction* i,
                         const std::function<llvm::Value*()>& callee,
                         const std::function<SEXP(size_t)>& names);
@@ -643,8 +643,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
     if (vali && variables.count(vali))
         res = variables.at(vali).get(builder);
     else if (val == Env::elided())
-        // Some "safe" builtins still look up functions in the global env
-        res = constant(R_GlobalEnv, needed);
+        res = constant(R_NilValue, needed);
     else if (auto e = Env::Cast(val)) {
         if (e == Env::notClosed()) {
             res = tag(paramClosure());
@@ -744,35 +743,50 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
 llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
                                                      llvm::Value* vector,
                                                      BasicBlock* fallback,
-                                                     BasicBlock* hit) {
-    if (!hit)
-        hit = BasicBlock::Create(C, "", fun);
-    llvm::Value* nativeIndex = nullptr;
-    if (representationOf(index) == Representation::Sexp) {
-        auto vectorizedIndex = loadSxp(index);
-        nativeIndex = accessVector(vectorizedIndex, c(0), index->type);
-        if (index->type.isA(PirType(RType::real))) {
-            nativeIndex = builder.CreateTrunc(nativeIndex, t::i64);
-        } else {
-            nativeIndex = builder.CreateZExt(nativeIndex, t::i64);
-        }
-        nacheck(nativeIndex, fallback);
-    } else if (representationOf(index) == Representation::Real) {
-        nativeIndex =
-            builder.CreateFPToUI(load(index, Representation::Real), t::i64);
-    } else {
-        nativeIndex =
-            builder.CreateZExt(load(index, Representation::Integer), t::i64);
+                                                     llvm::Value* max) {
+    BasicBlock* hit1 = BasicBlock::Create(C, "", fun);
+    BasicBlock* hit = BasicBlock::Create(C, "", fun);
+
+    auto representation = representationOf(index);
+    llvm::Value* nativeIndex = load(index);
+
+    if (representation == Representation::Sexp) {
+        nativeIndex = accessVector(nativeIndex, c(0), index->type);
+        representation = representationOf(index->type);
     }
 
+    if (representation == Representation::Real) {
+        auto indexUnderRange = builder.CreateFCmpOLT(nativeIndex, c(1.0));
+        auto indexOverRange =
+            builder.CreateFCmpOGE(nativeIndex, c((double)ULONG_MAX));
+        auto indexNa = builder.CreateFCmpONE(nativeIndex, nativeIndex);
+        auto fail = builder.CreateOr(indexUnderRange,
+                                     builder.CreateOr(indexOverRange, indexNa));
+
+        builder.CreateCondBr(fail, fallback, hit1);
+        builder.SetInsertPoint(hit1);
+
+        nativeIndex = builder.CreateFPToUI(nativeIndex, t::i64);
+    } else {
+        assert(representation == Representation::Integer);
+        auto indexUnderRange = builder.CreateICmpSLT(nativeIndex, c(1));
+        auto indexNa = builder.CreateICmpEQ(nativeIndex, c(NA_INTEGER));
+        auto fail = builder.CreateOr(indexUnderRange, indexNa);
+
+        builder.CreateCondBr(fail, fallback, hit1);
+        builder.SetInsertPoint(hit1);
+
+        nativeIndex = builder.CreateZExt(nativeIndex, t::i64);
+    }
+    // R indexing is 1-based
     nativeIndex = builder.CreateSub(nativeIndex, c(1ul));
+
     auto ty = vector->getType();
     assert(ty == t::SEXP || ty == t::Int || ty == t::Double);
-    auto veclength = (ty == t::SEXP) ? vectorLength(vector) : c(1ul);
-    auto indexOverRange = builder.CreateICmpUGE(nativeIndex, veclength);
-    auto indexUnderRange = builder.CreateICmpULT(nativeIndex, c(0ul));
-    builder.CreateCondBr(builder.CreateOr(indexOverRange, indexUnderRange),
-                         fallback, hit);
+    if (!max)
+        max = (ty == t::SEXP) ? vectorLength(vector) : c(1ul);
+    auto indexOverRange = builder.CreateICmpUGE(nativeIndex, max);
+    builder.CreateCondBr(indexOverRange, fallback, hit);
     builder.SetInsertPoint(hit);
     return nativeIndex;
 }
@@ -1210,9 +1224,9 @@ llvm::Value* LowerFunctionLLVM::shared(llvm::Value* v) {
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
 
     static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1);
-    auto named = builder.CreateLShr(sxpinfo, c(32, 64));
+    auto named = builder.CreateLShr(sxpinfo, c(32ul));
     named = builder.CreateAnd(named, c(namedMask));
-    return builder.CreateICmpUGT(named, c(1, 64));
+    return builder.CreateICmpUGT(named, c(1ul));
 }
 
 void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
@@ -1708,22 +1722,23 @@ bool LowerFunctionLLVM::compileDotcall(
     auto namesConst = c(newNames);
     auto namesStore = globalConst(namesConst);
 
-    setVal(i, withCallFrame(
-                  args,
-                  [&]() -> llvm::Value* {
-                      return call(
-                          NativeBuiltins::dotsCall,
-                          {
-                              paramCode(),
-                              c(i->srcIdx),
-                              callee(),
-                              loadSxp(i->hasEnv() ? i->env() : Env::elided()),
-                              c(calli->nCallArgs()),
-                              builder.CreateBitCast(namesStore, t::IntPtr),
-                              c(asmpt.toI()),
-                          });
-                  },
-                  /* dotCall pops arguments : */ false));
+    setVal(i,
+           withCallFrame(
+               args,
+               [&]() -> llvm::Value* {
+                   return call(NativeBuiltins::dotsCall,
+                               {
+                                   paramCode(),
+                                   c(i->srcIdx),
+                                   callee(),
+                                   i->hasEnv() ? loadSxp(i->env())
+                                               : constant(R_BaseEnv, t::SEXP),
+                                   c(calli->nCallArgs()),
+                                   builder.CreateBitCast(namesStore, t::IntPtr),
+                                   c(asmpt.toI()),
+                               });
+               },
+               /* dotCall pops arguments : */ false));
     return true;
 }
 
@@ -2175,7 +2190,9 @@ bool LowerFunctionLLVM::tryCompile() {
                                            paramCode(),
                                            c(b->srcIdx),
                                            constant(b->blt, t::SEXP),
-                                           load(Env::elided()),
+                                           // Some "safe" builtins still look up
+                                           // functions in the base env
+                                           constant(R_BaseEnv, t::SEXP),
                                            c(b->nCallArgs()),
                                        });
                        }));
@@ -2197,7 +2214,11 @@ bool LowerFunctionLLVM::tryCompile() {
                                            paramCode(),
                                            c(b->srcIdx),
                                            constant(b->blt, t::SEXP),
-                                           loadSxp(b->env()),
+                                           // Some "safe" builtins still look up
+                                           // functions in the base env
+                                           b->hasEnv()
+                                               ? loadSxp(b->env())
+                                               : constant(R_BaseEnv, t::SEXP),
                                            c(b->nCallArgs()),
                                        });
                        }));
@@ -2333,9 +2354,9 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                     res = builder.CreateFPToSI(res, t::Int);
                 } else {
-                    // TODO!!
-                    success = false;
-                    break;
+                    auto bt = asint->ceil ? NativeBuiltins::asIntCeil
+                                          : NativeBuiltins::asIntFloor;
+                    res = call(bt, {loadSxp(arg), c(i->srcIdx)});
                 }
                 setVal(i, res);
                 break;
@@ -3266,27 +3287,43 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
+            case Tag::Extract1_2D: {
+                auto extract = Extract1_2D::Cast(i);
+                auto vector = loadSxp(extract->vec());
+                auto idx1 = loadSxp(extract->idx1());
+                auto idx2 = loadSxp(extract->idx2());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, t::SEXP);
+                if (extract->hasEnv())
+                    env = loadSxp(extract->env());
+
+                auto res = call(NativeBuiltins::extract12,
+                                {vector, idx1, idx2, env, c(extract->srcIdx)});
+                setVal(i, res);
+
+                break;
+            }
+
             case Tag::Extract2_1D: {
                 auto extract = Extract2_1D::Cast(i);
                 // TODO: Extend a fastPath for generic vectors.
-                if (extract->vec()->type.isA(PirType::num().notObject()) &&
-                    extract->idx()->type.isScalar()) {
+                bool fastcase = extract->vec()->type.isA(
+                                    PirType::intRealLgl().notObject()) &&
+                                extract->idx()->type.isA(
+                                    PirType::intRealLgl().notObject().scalar());
+
+                BasicBlock* done;
+                llvm::Value* res;
+
+                if (fastcase) {
                     auto fallback = BasicBlock::Create(C, "", fun);
-                    auto hit = BasicBlock::Create(C, "", fun);
                     auto hit2 = BasicBlock::Create(C, "", fun);
-                    auto done = BasicBlock::Create(C, "", fun);
+                    done = BasicBlock::Create(C, "", fun);
 
                     llvm::Value* vector = load(extract->vec());
-                    llvm::Value* res =
-                        builder.CreateAlloca(representationOf(i));
-
-                    if (extract->vec()->type.maybeObj()) {
-                        auto rNil = constant(R_NilValue, t::SEXP);
-                        auto vectorhasAttr =
-                            builder.CreateICmpEQ(attr(vector), rNil);
-                        builder.CreateCondBr(vectorhasAttr, hit, fallback);
-                        builder.SetInsertPoint(hit);
-                    }
+                    res = builder.CreateAlloca(representationOf(i));
 
                     if (representationOf(extract->vec()) == t::SEXP) {
                         builder.CreateCondBr(isAltrep(vector), fallback, hit2);
@@ -3303,27 +3340,187 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(fallback);
-                    auto env = (extract->hasEnv())
-                                   ? loadSxp(extract->env())
-                                   : constant(R_NilValue, t::SEXP);
-                    res0 =
-                        call(NativeBuiltins::extract21,
-                             {loadSxp(extract->vec()), loadSxp(extract->idx()),
-                              env, c(extract->srcIdx)});
+                }
+
+                auto res0 =
+                    call(NativeBuiltins::extract21,
+                         {loadSxp(extract->vec()), loadSxp(extract->idx()),
+                          loadSxp(extract->env()), c(extract->srcIdx)});
+                if (fastcase) {
                     builder.CreateStore(convert(res0, i->type), res);
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
                     setVal(i, builder.CreateLoad(res));
                 } else {
-                    auto env = (extract->hasEnv())
-                                   ? loadSxp(extract->env())
-                                   : constant(R_NilValue, t::SEXP);
-                    setVal(i, call(NativeBuiltins::extract21,
-                                   {loadSxp(extract->vec()),
-                                    loadSxp(extract->idx()), env,
-                                    c(extract->srcIdx)}));
+                    setVal(i, res0);
                 }
+                break;
+            }
+
+            case Tag::Extract2_2D: {
+                auto extract = Extract2_2D::Cast(i);
+
+                bool fastcase =
+                    extract->vec()->type.isA(
+                        PirType::intRealLgl().notObject()) &&
+                    extract->idx1()->type.isA(
+                        PirType::intRealLgl().notObject().scalar()) &&
+                    extract->idx2()->type.isA(
+                        PirType::intRealLgl().notObject().scalar());
+
+                BasicBlock* done;
+                llvm::Value* res;
+
+                if (fastcase) {
+                    auto fallback = BasicBlock::Create(C, "", fun);
+                    auto hit2 = BasicBlock::Create(C, "", fun);
+                    done = BasicBlock::Create(C, "", fun);
+
+                    llvm::Value* vector = load(extract->vec());
+                    res = builder.CreateAlloca(representationOf(i));
+
+                    if (representationOf(extract->vec()) == t::SEXP) {
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                        builder.SetInsertPoint(hit2);
+                    }
+
+                    auto ncol = builder.CreateZExt(
+                        call(NativeBuiltins::matrixNcols, {vector}), t::i64);
+                    llvm::Value* index1 = computeAndCheckIndex(
+                        extract->idx1(), vector, fallback, ncol);
+                    auto nrow = builder.CreateZExt(
+                        call(NativeBuiltins::matrixNrows, {vector}), t::i64);
+                    llvm::Value* index2 = computeAndCheckIndex(
+                        extract->idx2(), vector, fallback, nrow);
+
+                    llvm::Value* index = builder.CreateMul(ncol, index1);
+                    index = builder.CreateAdd(index, index2);
+
+                    auto res0 =
+                        extract->vec()->type.isScalar()
+                            ? vector
+                            : accessVector(vector, index, extract->vec()->type);
+
+                    builder.CreateStore(convert(res0, i->type), res);
+                    builder.CreateBr(done);
+
+                    builder.SetInsertPoint(fallback);
+                }
+
+                auto res0 =
+                    call(NativeBuiltins::extract22,
+                         {loadSxp(extract->vec()), loadSxp(extract->idx1()),
+                          loadSxp(extract->idx2()), loadSxp(extract->env()),
+                          c(extract->srcIdx)});
+
+                if (fastcase) {
+                    builder.CreateStore(convert(res0, i->type), res);
+                    builder.CreateBr(done);
+
+                    builder.SetInsertPoint(done);
+                    setVal(i, builder.CreateLoad(res));
+                } else {
+                    setVal(i, res0);
+                }
+
+                break;
+            }
+
+            case Tag::Subassign1_2D: {
+                auto subAssign = Subassign1_2D::Cast(i);
+                auto vector = loadSxp(subAssign->lhs());
+                auto val = loadSxp(subAssign->rhs());
+                auto idx1 = loadSxp(subAssign->idx1());
+                auto idx2 = loadSxp(subAssign->idx2());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto res =
+                    call(NativeBuiltins::subassign12,
+                         {vector, idx1, idx2, val, loadSxp(subAssign->env()),
+                          c(subAssign->srcIdx)});
+                setVal(i, res);
+                break;
+            }
+
+            case Tag::Subassign2_2D: {
+                auto subAssign = Subassign2_2D::Cast(i);
+
+                auto idx1Type = subAssign->idx1()->type;
+                auto idx2Type = subAssign->idx2()->type;
+                auto valType = subAssign->rhs()->type;
+                auto vecType = subAssign->lhs()->type;
+
+                BasicBlock* done = nullptr;
+                llvm::Value* res = nullptr;
+
+                // Missing cases: store int into double matrix / store double
+                // into int matrix
+                auto fastcase =
+                    idx1Type.isA(PirType::intRealLgl().notObject().scalar()) &&
+                    idx2Type.isA(PirType::intRealLgl().notObject().scalar()) &&
+                    valType.isScalar() && !vecType.maybeObj() &&
+                    ((vecType.isA(RType::integer) &&
+                      valType.isA(RType::integer)) ||
+                     (vecType.isA(RType::real) && valType.isA(RType::real)));
+
+                if (fastcase) {
+                    auto resultRep = representationOf(i);
+                    auto fallback = BasicBlock::Create(C, "", fun);
+                    auto hit = BasicBlock::Create(C, "", fun);
+                    done = BasicBlock::Create(C, "", fun);
+
+                    llvm::Value* vector = load(subAssign->lhs());
+                    res = builder.CreateAlloca(resultRep);
+                    if (representationOf(subAssign->lhs()) == t::SEXP) {
+                        builder.CreateCondBr(shared(vector), fallback, hit);
+                        builder.SetInsertPoint(hit);
+                    }
+
+                    auto ncol = builder.CreateZExt(
+                        call(NativeBuiltins::matrixNcols, {vector}), t::i64);
+                    llvm::Value* index1 = computeAndCheckIndex(
+                        subAssign->idx1(), vector, fallback, ncol);
+                    auto nrow = builder.CreateZExt(
+                        call(NativeBuiltins::matrixNrows, {vector}), t::i64);
+                    llvm::Value* index2 = computeAndCheckIndex(
+                        subAssign->idx2(), vector, fallback, nrow);
+
+                    auto val = load(subAssign->rhs());
+                    if (representationOf(i) == Representation::Sexp) {
+                        llvm::Value* index = builder.CreateMul(ncol, index1);
+                        index = builder.CreateAdd(index, index2);
+                        assignVector(vector, index, val, vecType);
+                        builder.CreateStore(convert(vector, i->type), res);
+                    } else {
+                        builder.CreateStore(convert(val, i->type), res);
+                    }
+
+                    builder.CreateBr(done);
+
+                    builder.SetInsertPoint(fallback);
+                }
+
+                auto idx1 = loadSxp(subAssign->idx1());
+                auto idx2 = loadSxp(subAssign->idx2());
+
+                auto assign =
+                    call(NativeBuiltins::subassign22,
+                         {loadSxp(subAssign->lhs()), idx1, idx2,
+                          loadSxp(subAssign->rhs()), loadSxp(subAssign->env()),
+                          c(subAssign->srcIdx)});
+
+                if (fastcase) {
+                    builder.CreateStore(assign, res);
+                    builder.CreateBr(done);
+
+                    builder.SetInsertPoint(done);
+                    setVal(i, builder.CreateLoad(res));
+                } else {
+                    setVal(i, assign);
+                }
+
                 break;
             }
 
@@ -3335,36 +3532,42 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
-                auto env = constant(R_NilValue, t::SEXP);
-                if (subAssign->hasEnv())
-                    env = loadSxp(subAssign->env());
                 auto res = call(NativeBuiltins::subassign11,
-                                {vector, idx, val, env, c(subAssign->srcIdx)});
+                                {vector, idx, val, loadSxp(subAssign->env()),
+                                 c(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
             }
 
             case Tag::Subassign2_1D: {
                 auto subAssign = Subassign2_1D::Cast(i);
-                auto idx = loadSxp(subAssign->idx());
 
                 // TODO: Extend a fastPath for generic vectors.
                 // TODO: Support type conversions
                 auto vecType = subAssign->vector()->type;
                 auto valType = subAssign->val()->type;
                 auto idxType = subAssign->idx()->type;
-                if (idxType.isA(PirType::num().notObject().scalar()) &&
-                    valType.isScalar() &&
+
+                BasicBlock* done = nullptr;
+                llvm::Value* res = nullptr;
+
+                // Missing cases: store int into double vect / store double into
+                // int vect
+                bool fastcase =
+                    idxType.isA(PirType::intRealLgl().notObject().scalar()) &&
+                    valType.isScalar() && !vecType.maybeObj() &&
                     ((vecType.isA(RType::integer) &&
                       valType.isA(RType::integer)) ||
-                     (vecType.isA(RType::real) && valType.isA(RType::real)))) {
+                     (vecType.isA(RType::real) && valType.isA(RType::real)));
+
+                if (fastcase) {
                     auto resultRep = representationOf(i);
                     auto fallback = BasicBlock::Create(C, "", fun);
                     auto hit = BasicBlock::Create(C, "", fun);
-                    auto done = BasicBlock::Create(C, "", fun);
+                    done = BasicBlock::Create(C, "", fun);
 
                     llvm::Value* vector = load(subAssign->vector());
-                    llvm::Value* res = builder.CreateAlloca(resultRep);
+                    res = builder.CreateAlloca(resultRep);
                     if (representationOf(subAssign->vector()) == t::SEXP) {
                         builder.CreateCondBr(shared(vector), fallback, hit);
                         builder.SetInsertPoint(hit);
@@ -3374,37 +3577,32 @@ bool LowerFunctionLLVM::tryCompile() {
                                                               vector, fallback);
 
                     auto val = load(subAssign->val());
-                    if (i->type.isScalar()) {
-                        builder.CreateStore(convert(val, i->type), res);
-                    } else {
+                    if (representationOf(i) == Representation::Sexp) {
                         assignVector(vector, index, val,
                                      subAssign->vector()->type);
                         builder.CreateStore(convert(vector, i->type), res);
+                    } else {
+                        builder.CreateStore(convert(val, i->type), res);
                     }
 
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(fallback);
-                    auto env = (subAssign->hasEnv())
-                                   ? loadSxp(subAssign->env())
-                                   : constant(R_NilValue, t::SEXP);
-                    auto res0 = call(NativeBuiltins::subassign21,
-                                     {loadSxp(subAssign->vector()), idx,
-                                      loadSxp(subAssign->val()), env,
-                                      c(subAssign->srcIdx)});
+                }
+
+                auto res0 =
+                    call(NativeBuiltins::subassign21,
+                         {loadSxp(subAssign->vector()),
+                          loadSxp(subAssign->idx()), loadSxp(subAssign->val()),
+                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                if (fastcase) {
                     builder.CreateStore(convert(res0, i->type), res);
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
                     setVal(i, builder.CreateLoad(res));
                 } else {
-                    auto env = (subAssign->hasEnv())
-                                   ? loadSxp(subAssign->env())
-                                   : constant(R_NilValue, t::SEXP);
-                    setVal(i, call(NativeBuiltins::subassign21,
-                                   {loadSxp(subAssign->vector()), idx,
-                                    loadSxp(subAssign->val()), env,
-                                    c(subAssign->srcIdx)}));
+                    setVal(i, res0);
                 }
                 break;
             }
@@ -3547,10 +3745,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Int3:
             case Tag::PrintInvocation:
-            case Tag::Extract2_2D:
-            case Tag::Extract1_2D:
-            case Tag::Subassign1_2D:
-            case Tag::Subassign2_2D:
                 success = false;
                 break;
 

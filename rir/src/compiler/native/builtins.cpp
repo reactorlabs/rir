@@ -922,6 +922,52 @@ NativeBuiltin NativeBuiltins::extract21 = {
     (void*)&extract21Impl,
 };
 
+SEXP extract12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
+                   Immediate srcIdx) {
+    SEXP args = CONS_NR(vector, CONS_NR(index1, CONS_NR(index2, R_NilValue)));
+    PROTECT(args);
+    SEXP res = nullptr;
+    if (isObject(vector)) {
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        res = dispatchApply(call, vector, args, symbol::Bracket, env,
+                            globalContext());
+        if (!res)
+            res = do_subset_dflt(call, symbol::Bracket, args, env);
+    } else {
+        res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+    }
+    UNPROTECT(1);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::extract12 = {
+    "extract1_2D",
+    (void*)&extract12Impl,
+};
+
+SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
+                   Immediate srcIdx) {
+    SEXP args = CONS_NR(vector, CONS_NR(index1, CONS_NR(index2, R_NilValue)));
+    PROTECT(args);
+    SEXP res = nullptr;
+    if (isObject(vector)) {
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
+                            globalContext());
+        if (!res)
+            res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+    } else {
+        res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
+    }
+    UNPROTECT(1);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::extract22 = {
+    "extract2_2D",
+    (void*)&extract22Impl,
+};
+
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
                                SEXP env, SEXP callee) {
     code->registerInvocation();
@@ -1070,6 +1116,69 @@ NativeBuiltin NativeBuiltins::subassign21 = {
     (void*)subassign21Impl,
 };
 
+SEXP subassign12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP value,
+                     SEXP env, Immediate srcIdx) {
+    if (MAYBE_SHARED(vector))
+        vector = Rf_duplicate(vector);
+    PROTECT(vector);
+    SEXP args = CONS_NR(
+        vector, CONS_NR(index1, CONS_NR(index2, CONS_NR(value, R_NilValue))));
+    SET_TAG(CDDDR(args), symbol::value);
+    PROTECT(args);
+    SEXP res = nullptr;
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    RCNTXT assignContext;
+    Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
+                    symbol::AssignBracket);
+    if (isObject(vector))
+        res = dispatchApply(call, vector, args, symbol::AssignBracket, env,
+                            globalContext());
+    if (!res) {
+        res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
+        SET_NAMED(res, 0);
+    }
+    Rf_endcontext(&assignContext);
+    UNPROTECT(2);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::subassign12 = {
+    "subassign1_22",
+    (void*)subassign12Impl,
+};
+
+SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
+                     Immediate srcIdx) {
+    if (MAYBE_SHARED(vec))
+        vec = Rf_duplicate(vec);
+    PROTECT(vec);
+
+    SEXP args =
+        CONS_NR(vec, CONS_NR(idx1, CONS_NR(idx2, CONS_NR(val, R_NilValue))));
+    SET_TAG(CDDDR(args), symbol::value);
+    PROTECT(args);
+    SEXP res = nullptr;
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    RCNTXT assignContext;
+    Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
+                    symbol::AssignDoubleBracket);
+    if (isObject(vec))
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
+                            globalContext());
+    if (!res) {
+        res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
+        SET_NAMED(res, 0);
+    }
+    Rf_endcontext(&assignContext);
+    UNPROTECT(2);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::subassign22 = {
+    "subassign2_2D",
+    (void*)subassign22Impl,
+};
+
 int forSeqSizeImpl(SEXP seq) {
     // TODO: we should extract the length just once at the begining of
     // the loop and generally have somthing more clever here...
@@ -1119,6 +1228,36 @@ static void endClosureContextImpl(RCNTXT* cntxt, SEXP result) {
 NativeBuiltin NativeBuiltins::endClosureContext = {
     "endClosureContext",
     (void*)&endClosureContextImpl,
+};
+
+static int asIntFloorImpl(SEXP val, Immediate srcIdx) {
+    return asInt(val, false, srcIdx, globalContext());
+}
+
+NativeBuiltin NativeBuiltins::asIntFloor = {
+    "asIntFloor",
+    (void*)asIntFloorImpl,
+};
+
+static int asIntCeilImpl(SEXP val, Immediate srcIdx) {
+    return asInt(val, true, srcIdx, globalContext());
+}
+
+NativeBuiltin NativeBuiltins::asIntCeil = {
+    "asIntCeil",
+    (void*)asIntCeilImpl,
+};
+
+int ncolsImpl(SEXP v) { return Rf_ncols(v); }
+NativeBuiltin NativeBuiltins::matrixNcols = {
+    "ncols",
+    (void*)ncolsImpl,
+};
+
+int nrowsImpl(SEXP v) { return Rf_ncols(v); }
+NativeBuiltin NativeBuiltins::matrixNrows = {
+    "nrows",
+    (void*)nrowsImpl,
 };
 }
 }

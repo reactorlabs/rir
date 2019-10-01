@@ -2,6 +2,7 @@
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
+#include "../util/type_test.h"
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -16,106 +17,67 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
     AvailableCheckpoints checkpoint(function, log);
 
-    std::unordered_map<
-        Checkpoint*,
-        std::unordered_map<Instruction*, Instruction::TypeFeedback>>
+    std::unordered_map<Checkpoint*,
+                       std::unordered_map<Instruction*, TypeTest::Info>>
         speculate;
 
-    Visitor::run(function->entry, [&](BB* bb) {
-        auto ip = bb->begin();
-        while (ip != bb->end()) {
-            auto next = ip + 1;
-            auto i = *ip;
-            bool trigger = false;
-            if (!i->type.maybePromiseWrapped() &&
-                !i->typeFeedback.type.isVoid() &&
-                !i->type.isA(i->typeFeedback.type) &&
-                !(i->type & i->typeFeedback.type).isVoid()) {
+    Visitor::run(function->entry, [&](Instruction* i) {
+        if (i->typeFeedback.type.isVoid() || i->type.isA(i->typeFeedback.type))
+            return;
 
-                if (auto force = Force::Cast(i)) {
-                    auto arg = force->input()->followCasts();
-                    // Blacklist of where it is not worthwhile
-                    if (!LdConst::Cast(arg) &&
-                        // leave this to the promise inliner
-                        !MkArg::Cast(arg) && !Force::Cast(arg) &&
-                        // leave this to scope resolution
-                        !LdVar::Cast(arg) && !LdVarSuper::Cast(arg)) {
-                        trigger = true;
-                    }
-                    if (auto ld = LdVar::Cast(arg))
-                        if (!Env::isPirEnv(ld->env()))
-                            trigger = true;
-                    if (auto ld = LdVarSuper::Cast(arg))
-                        if (!Env::isPirEnv(ld->env()))
-                            trigger = true;
+        Instruction* speculateOn = nullptr;
+        Instruction::TypeFeedback feedback;
 
+        if (auto force = Force::Cast(i)) {
+            if (auto arg = Instruction::Cast(force->input()->followCasts())) {
+                // Blacklist of where it is not worthwhile
+                if (!LdConst::Cast(arg) &&
+                    // leave this to the promise inliner
+                    !MkArg::Cast(arg) && !Force::Cast(arg) &&
+                    // leave this to scope resolution
+                    !LdVar::Cast(arg) && !LdVarSuper::Cast(arg)) {
+                    speculateOn = i;
+                }
+                if (auto ld = LdVar::Cast(arg))
+                    if (!Env::isPirEnv(ld->env()))
+                        speculateOn = i;
+                if (auto ld = LdVarSuper::Cast(arg))
+                    if (!Env::isPirEnv(ld->env()))
+                        speculateOn = i;
+
+                if (speculateOn) {
+                    feedback = i->typeFeedback;
+
+                    // If this force was observed to receive evaluated
+                    // promises, better speculate on the input already.
                     switch (force->observed) {
                     case Force::ArgumentKind::value:
-                    case Force::ArgumentKind::evaluatedPromise: {
-
-                        Instruction* input = Instruction::Cast(force->input());
-                        PirType seen = force->typeFeedback.type;
-                        if (force->observed ==
-                            Force::ArgumentKind::evaluatedPromise)
-                            seen = seen.orPromiseWrapped();
-                        if (!seen.isVoid() && !seen.maybeObj() && input &&
-                            !input->type.isA(seen)) {
-                            if (auto cp = checkpoint.at(force)) {
-                                auto assume = input->type.notObject();
-                                if (seen.isA(PirType(RType::integer)
-                                                 .orPromiseWrapped()) ||
-                                    seen.isA(PirType(RType::real)
-                                                 .orPromiseWrapped()) ||
-                                    seen.isA(PirType(RType::logical)
-                                                 .orPromiseWrapped())) {
-                                    assume = seen;
-                                }
-                                if (!input->type.isA(assume)) {
-                                    speculate[cp][input] = {
-                                        assume, force->typeFeedback.srcCode,
-                                        force->typeFeedback.origin};
-                                    force->observed =
-                                        Force::ArgumentKind::unknown;
-                                    trigger = false;
-                                }
-                            }
-                        }
+                        speculateOn = arg;
                         break;
-                    }
-
+                    case Force::ArgumentKind::evaluatedPromise:
+                        speculateOn = arg;
+                        feedback.type = feedback.type.orPromiseWrapped();
+                        break;
                     case Force::ArgumentKind::promise:
-                    case Force::ArgumentKind::unknown: {
-                        force->observed = Force::ArgumentKind::unknown;
+                    case Force::ArgumentKind::unknown:
                         break;
                     }
+                }
+            }
+        }
 
-                    default:
-                        assert(false && "unknown observed force input kind");
-                    }
-                }
-            }
-            if (trigger) {
-                PirType seen = i->typeFeedback.type;
-                if (!seen.isVoid() && !seen.maybeObj() && !i->type.isA(seen)) {
-                    if (auto cp = checkpoint.next(i)) {
-                        auto assume =
-                            (seen.isA(
-                                 PirType(RType::integer).orPromiseWrapped()) ||
-                             seen.isA(
-                                 PirType(RType::real).orPromiseWrapped()) ||
-                             seen.isA(
-                                 PirType(RType::logical).orPromiseWrapped()))
-                                ? seen
-                                : i->type.notObject();
-                        if (!i->type.isA(assume))
-                            speculate[cp][i] = {assume, i->typeFeedback.srcCode,
-                                                i->typeFeedback.origin};
-                        // Prevent redundant speculation
-                        i->typeFeedback.type = PirType::bottom();
-                    }
-                }
-            }
-            ip = next;
+        if (!speculateOn)
+            return;
+
+        if (auto cp = checkpoint.next(speculateOn)) {
+            TypeTest::Create(speculateOn, feedback,
+                             [&](TypeTest::Info info) {
+                                 speculate[cp][speculateOn] = info;
+                                 // Prevent redundant speculation
+                                 speculateOn->typeFeedback.type =
+                                     PirType::bottom();
+                             },
+                             []() {});
         }
     });
 
@@ -133,23 +95,13 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
         for (auto sp : speculate[cp]) {
             auto i = sp.first;
-            PirType type = sp.second.type;
+            TypeTest::Info& info = sp.second;
 
-            Instruction* condition = nullptr;
-            bool assumeTrue = true;
+            BBTransform::insertAssume(info.test, cp, bb, ip, info.expectation,
+                                      info.srcCode, info.origin);
 
-            if (type == i->type.notObject()) {
-                condition = new IsObject(i);
-                assumeTrue = false;
-            } else {
-                condition = new IsType(type, i);
-            }
-
-            BBTransform::insertAssume(condition, cp, bb, ip, assumeTrue,
-                                      sp.second.srcCode, sp.second.origin);
-
-            auto cast =
-                new CastType(i, CastType::Downcast, PirType::any(), type);
+            auto cast = new CastType(i, CastType::Downcast, PirType::any(),
+                                     info.result);
             ip = bb->insert(ip, cast);
             ip++;
             i->replaceDominatedUses(cast);

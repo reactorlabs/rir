@@ -1330,29 +1330,22 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
-                               InterpreterInstance* ctx) {
-    SEXP val = ostack_top(ctx);
+int asInt(SEXP val, bool ceil_, Immediate srcIdx, InterpreterInstance* ctx) {
     // Scalar integers (already done)
     if (IS_SIMPLE_SCALAR(val, INTSXP) && *INTEGER(val) != NA_INTEGER) {
-        return;
-    } else if (IS_SIMPLE_SCALAR(val, REALSXP) && NO_REFERENCES(val) &&
-               !ISNAN(*REAL(val))) {
+        return INTEGER(val)[0];
+    } else if (IS_SIMPLE_SCALAR(val, REALSXP) && !ISNAN(*REAL(val))) {
         double r = *REAL(val);
-        TYPEOF(val) = INTSXP;
-        *INTEGER(val) = (int)(ceil_ ? ceil(r) : floor(r));
-        return;
-    } else if (IS_SIMPLE_SCALAR(val, LGLSXP) && NO_REFERENCES(val) &&
-               *LOGICAL(val) != NA_LOGICAL) {
-        TYPEOF(val) = INTSXP;
-        return;
+        return (int)(ceil_ ? ceil(r) : floor(r));
+    } else if (IS_SIMPLE_SCALAR(val, LGLSXP) && *LOGICAL(val) != NA_LOGICAL) {
+        return LOGICAL(val)[0];
     }
-    int x = -20;
+    int x;
     bool isNaOrNan = false;
     if (TYPEOF(val) == INTSXP || TYPEOF(val) == REALSXP ||
         TYPEOF(val) == LGLSXP) {
         if (XLENGTH(val) == 0) {
-            Rf_errorcall(getSrcAt(c, pc - 1, ctx), "argument of length 0");
+            Rf_errorcall(src_pool_at(ctx, srcIdx), "argument of length 0");
             x = NA_INTEGER;
             isNaOrNan = false;
         } else {
@@ -1394,7 +1387,7 @@ RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
                 assert(false);
             }
             if (XLENGTH(val) > 1) {
-                Rf_warningcall(getSrcAt(c, pc - 1, ctx),
+                Rf_warningcall(src_pool_at(ctx, srcIdx),
                                "numerical expression has multiple "
                                "elements: only the first used");
             }
@@ -1404,12 +1397,9 @@ RIR_INLINE static void castInt(bool ceil_, Code* c, Opcode* pc,
         isNaOrNan = true;
     }
     if (isNaOrNan) {
-        Rf_errorcall(getSrcAt(c, pc - 1, ctx), "NA/NaN argument");
+        Rf_errorcall(src_pool_at(ctx, srcIdx), "NA/NaN argument");
     }
-    SEXP res = Rf_allocVector(INTSXP, 1);
-    *INTEGER(res) = x;
-    ostack_pop(ctx);
-    ostack_push(ctx, res);
+    return x;
 }
 
 bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
@@ -3131,12 +3121,26 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ceil_) {
-            castInt(true, c, pc, ctx);
+            res = ostack_pop(ctx);
+            auto x = asInt(res, true, c->getSrcIdxAt(pc - 1, true), ctx);
+            if (NO_REFERENCES(res) && XLENGTH(res) == 1)
+                TYPEOF(res) = INTSXP;
+            else
+                res = Rf_allocVector(INTSXP, 1);
+            INTEGER(res)[0] = x;
+            ostack_push(ctx, res);
             NEXT();
         }
 
         INSTRUCTION(floor_) {
-            castInt(false, c, pc, ctx);
+            res = ostack_pop(ctx);
+            auto x = asInt(res, false, c->getSrcIdxAt(pc - 1, true), ctx);
+            if (NO_REFERENCES(res) && XLENGTH(res) == 1)
+                TYPEOF(res) = INTSXP;
+            else
+                res = Rf_allocVector(INTSXP, 1);
+            INTEGER(res)[0] = x;
+            ostack_push(ctx, res);
             NEXT();
         }
 
