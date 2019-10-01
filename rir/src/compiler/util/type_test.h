@@ -16,11 +16,12 @@ class TypeTest {
         Opcode* origin;
     };
     static void Create(Value* i, const Instruction::TypeFeedback& feedback,
-                       const std::function<void(Info)>& action) {
+                       const std::function<void(Info)>& action,
+                       const std::function<void()>& failed) {
         auto possible = i->type & feedback.type;
 
         if (possible.isVoid() || i->type.isA(possible))
-            return;
+            return failed();
 
         if (possible.isA(PirType(RType::integer).orPromiseWrapped()) ||
             possible.isA(PirType(RType::real).orPromiseWrapped()) ||
@@ -33,6 +34,8 @@ class TypeTest {
             return action({i->type.notObject(), new IsObject(i), false,
                            feedback.srcCode, feedback.origin});
         }
+
+        failed();
     }
 };
 

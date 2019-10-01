@@ -70,11 +70,14 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             return;
 
         if (auto cp = checkpoint.next(speculateOn)) {
-            TypeTest::Create(speculateOn, feedback, [&](TypeTest::Info info) {
-                speculate[cp][speculateOn] = info;
-                // Prevent redundant speculation
-                speculateOn->typeFeedback.type = PirType::bottom();
-            });
+            TypeTest::Create(speculateOn, feedback,
+                             [&](TypeTest::Info info) {
+                                 speculate[cp][speculateOn] = info;
+                                 // Prevent redundant speculation
+                                 speculateOn->typeFeedback.type =
+                                     PirType::bottom();
+                             },
+                             []() {});
         }
     });
 

@@ -130,6 +130,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 // all operators are primitive values
                 auto cp = checkpoint.at(i);
                 if (cp && envOnlyForObj(i) && nonObjectArgs(i)) {
+                    bool successful = true;
                     i->eachArg([&](Value* arg) {
                         if (arg == i->env() || !arg->type.maybeObj()) {
                             return;
@@ -147,32 +148,38 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         if (seen.type.isVoid())
                             seen.type = arg->type.notObject();
 
-                        TypeTest::Create(arg, seen, [&](TypeTest::Info info) {
-                            BBTransform::insertAssume(
-                                info.test, cp, bb, ip, info.expectation,
-                                info.srcCode, info.origin);
+                        TypeTest::Create(
+                            arg, seen,
+                            [&](TypeTest::Info info) {
+                                BBTransform::insertAssume(
+                                    info.test, cp, bb, ip, info.expectation,
+                                    info.srcCode, info.origin);
 
-                            if (argi) {
-                                auto cast =
-                                    new CastType(argi, CastType::Downcast,
-                                                 PirType::val(), info.result);
-                                ip = bb->insert(ip, cast);
-                                ip++;
-                                argi->replaceDominatedUses(cast);
-                            }
-                        });
+                                if (argi) {
+                                    auto cast = new CastType(
+                                        argi, CastType::Downcast,
+                                        PirType::val(), info.result);
+                                    ip = bb->insert(ip, cast);
+                                    ip++;
+                                    argi->replaceDominatedUses(cast);
+                                }
+                            },
+                            [&]() { successful = false; });
                     });
-                    if (auto blt = CallBuiltin::Cast(i)) {
-                        std::vector<Value*> args;
-                        blt->eachCallArg([&](Value* v) { args.push_back(v); });
-                        auto safe =
-                            new CallSafeBuiltin(blt->blt, args, blt->srcIdx);
-                        blt->replaceUsesWith(safe);
-                        bb->replace(ip, safe);
-                    } else {
-                        i->elideEnv();
+                    if (successful) {
+                        if (auto blt = CallBuiltin::Cast(i)) {
+                            std::vector<Value*> args;
+                            blt->eachCallArg(
+                                [&](Value* v) { args.push_back(v); });
+                            auto safe = new CallSafeBuiltin(blt->blt, args,
+                                                            blt->srcIdx);
+                            blt->replaceUsesWith(safe);
+                            bb->replace(ip, safe);
+                        } else {
+                            i->elideEnv();
+                        }
+                        i->updateTypeAndEffects();
                     }
-                    i->updateTypeAndEffects();
                     next = ip + 1;
                 }
             }
