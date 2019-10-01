@@ -1756,6 +1756,9 @@ class VLIE(FrameState, Effects(Effect::LeaksEnv) | Effect::ReadsEnv) {
 // Common interface to all call instructions
 class CallInstruction {
   public:
+    static constexpr double UnknownTaken = -1;
+    double taken = UnknownTaken;
+
     static CallInstruction* CastCall(Value* v);
 
     virtual size_t nCallArgs() const = 0;
