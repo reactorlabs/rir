@@ -69,7 +69,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
         if (!speculateOn)
             return;
 
-        if (auto cp = checkpoint.next(i)) {
+        if (auto cp = checkpoint.next(speculateOn)) {
             TypeTest::Create(speculateOn, feedback, [&](TypeTest::Info info) {
                 speculate[cp][speculateOn] = info;
                 // Prevent redundant speculation
