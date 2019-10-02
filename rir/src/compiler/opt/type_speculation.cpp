@@ -26,6 +26,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             return;
 
         Instruction* speculateOn = nullptr;
+        Checkpoint* guardPos = nullptr;
         Instruction::TypeFeedback feedback;
 
         if (auto force = Force::Cast(i)) {
@@ -53,32 +54,32 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     switch (force->observed) {
                     case Force::ArgumentKind::value:
                         speculateOn = arg;
+                        guardPos = checkpoint.at(i);
                         break;
                     case Force::ArgumentKind::evaluatedPromise:
                         speculateOn = arg;
+                        guardPos = checkpoint.at(i);
                         feedback.type = feedback.type.orPromiseWrapped();
                         break;
                     case Force::ArgumentKind::promise:
                     case Force::ArgumentKind::unknown:
+                        guardPos = checkpoint.next(i);
                         break;
                     }
                 }
             }
         }
 
-        if (!speculateOn)
+        if (!speculateOn || !guardPos)
             return;
 
-        if (auto cp = checkpoint.next(speculateOn)) {
-            TypeTest::Create(speculateOn, feedback,
-                             [&](TypeTest::Info info) {
-                                 speculate[cp][speculateOn] = info;
-                                 // Prevent redundant speculation
-                                 speculateOn->typeFeedback.type =
-                                     PirType::bottom();
-                             },
-                             []() {});
-        }
+        TypeTest::Create(speculateOn, feedback,
+                         [&](TypeTest::Info info) {
+                             speculate[guardPos][speculateOn] = info;
+                             // Prevent redundant speculation
+                             speculateOn->typeFeedback.type = PirType::bottom();
+                         },
+                         []() {});
     });
 
     Visitor::run(function->entry, [&](BB* bb) {
