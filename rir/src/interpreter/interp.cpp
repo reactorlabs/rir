@@ -595,25 +595,28 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             if (arg == R_UnboundValue) {
                 notObj = false;
                 isEager = false;
-                bool reflectionPossible = true;
-                // If this is a simple promise, that just looks up an eager
-                // value we do not reset the no-reflection flag. The callee can
-                // assume that (as long as he does not trigger any other
-                // reflection) evaluating this promise does not trigger
-                // reflection either.
-                while (TYPEOF(PREXPR(prom)) == SYMSXP) {
-                    auto v = Rf_findVar(PREXPR(prom), PRENV(prom));
-                    if (v == R_UnboundValue)
-                        break;
-                    if (TYPEOF(v) != PROMSXP || PRVALUE(v) != R_UnboundValue) {
-                        reflectionPossible = false;
-                        break;
+                if (given.includes(Assumption::NoReflectiveArgument)) {
+                    bool reflectionPossible = true;
+                    // If this is a simple promise, that just looks up an eager
+                    // value we do not reset the no-reflection flag. The callee
+                    // can assume that (as long as he does not trigger any other
+                    // reflection) evaluating this promise does not trigger
+                    // reflection either.
+                    while (TYPEOF(PREXPR(prom)) == SYMSXP) {
+                        auto v = Rf_findVar(PREXPR(prom), PRENV(prom));
+                        if (v == R_UnboundValue)
+                            break;
+                        if (TYPEOF(v) != PROMSXP ||
+                            PRVALUE(v) != R_UnboundValue) {
+                            reflectionPossible = false;
+                            break;
+                        }
+                        assert(TYPEOF(v) == PROMSXP);
+                        prom = v;
                     }
-                    assert(TYPEOF(v) == PROMSXP);
-                    prom = v;
-                }
-                if (reflectionPossible) {
-                    given.remove(Assumption::NoReflectiveArgument);
+                    if (reflectionPossible) {
+                        given.remove(Assumption::NoReflectiveArgument);
+                    }
                 }
             }
         }
