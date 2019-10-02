@@ -1006,7 +1006,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
                                      Immediate astP, SEXP env, size_t nargs,
                                      unsigned long available) {
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
-               LazyEnvironment::check(env));
+               env == R_NilValue || LazyEnvironment::check(env));
 
     if (fun->dead || !fun->body()->nativeCode)
         return callImpl(fun->body(), astP, callee, env, nargs, available);
