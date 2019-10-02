@@ -20,7 +20,10 @@ class TypeTest {
                        const std::function<void()>& failed) {
         auto possible = i->type & feedback.type;
 
-        if (possible.isVoid() || i->type.isA(possible))
+        if (i->type.isA(possible))
+            return;
+
+        if (possible.isVoid())
             return failed();
 
         if (possible.isA(PirType(RType::integer).orPromiseWrapped()) ||
