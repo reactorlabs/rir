@@ -92,10 +92,14 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             return;
 
         bb = bb->trueBranch();
-        auto ip = bb->begin();
 
         for (auto sp : speculate[cp]) {
             auto i = sp.first;
+
+            auto ip = bb->begin();
+            if (i->bb() == bb)
+                ip = bb->atPosition(i) + 1;
+
             TypeTest::Info& info = sp.second;
 
             BBTransform::insertAssume(info.test, cp, bb, ip, info.expectation,
@@ -103,8 +107,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
             auto cast = new CastType(i, CastType::Downcast, PirType::any(),
                                      info.result);
-            ip = bb->insert(ip, cast);
-            ip++;
+            bb->insert(ip, cast);
             i->replaceDominatedUses(cast);
         }
     });
