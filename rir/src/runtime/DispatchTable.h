@@ -83,6 +83,7 @@ struct DispatchTable
         }
         assert(!contains(fun->signature().assumptions));
         if (size() == capacity()) {
+#ifdef ENABLE_SLOWASSERT
             std::cout << "Tried to insert into a full Dispatch table. Have: \n";
             for (size_t i = 0; i < size(); ++i) {
                 auto e = getEntry(i);
@@ -92,8 +93,12 @@ struct DispatchTable
             }
             std::cout << "\n";
             std::cout << "Tried to insert: " << assumptions << "\n";
-            Rf_error("failed");
-            return;
+            Rf_error("dispatch table overflow");
+#endif
+            // Evict one element and retry
+            // TODO: find a better solution here!
+            size_--;
+            return insert(fun);
         }
 
         size_++;
