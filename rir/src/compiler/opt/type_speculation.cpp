@@ -107,6 +107,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
             auto cast = new CastType(i, CastType::Downcast, PirType::any(),
                                      info.result);
+            cast->effects.set(Effect::DependsOnAssume);
             bb->insert(ip, cast);
             i->replaceDominatedUses(cast);
         }

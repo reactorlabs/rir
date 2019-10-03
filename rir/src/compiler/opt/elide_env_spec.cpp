@@ -159,6 +159,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                                     auto cast = new CastType(
                                         argi, CastType::Downcast,
                                         PirType::val(), info.result);
+                                    cast->effects.set(Effect::DependsOnAssume);
                                     ip = bb->insert(ip, cast);
                                     ip++;
                                     argi->replaceDominatedUses(cast);

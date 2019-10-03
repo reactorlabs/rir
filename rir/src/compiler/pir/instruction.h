@@ -261,7 +261,8 @@ class Instruction : public Value {
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
-    void replaceDominatedUses(Instruction* replacement);
+    void replaceDominatedUses(Instruction* replacement,
+                              std::unordered_set<Tag> skip = {});
     void
     replaceUsesIn(Value* val, BB* target,
                   const std::function<void(Instruction*, size_t)>& postAction =

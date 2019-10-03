@@ -173,10 +173,13 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                                     expected = tt->typeTest;
                                 }
                                 ip++;
-                                ip = bb->insert(
-                                    ip, new CastType(tested, CastType::Downcast,
-                                                     PirType::any(), expected));
-                                tested->replaceDominatedUses(*ip);
+                                auto cast =
+                                    new CastType(tested, CastType::Downcast,
+                                                 PirType::any(), expected);
+                                cast->effects.set(Effect::DependsOnAssume);
+                                ip = bb->insert(ip, cast);
+                                tested->replaceDominatedUses(
+                                    *ip, {Tag::IsObject, Tag::IsType});
                                 next = ip + 1;
                             }
                         }

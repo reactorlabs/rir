@@ -241,7 +241,8 @@ static void checkReplace(Instruction* origin, Value* replace) {
     }
 }
 
-void Instruction::replaceDominatedUses(Instruction* replace) {
+void Instruction::replaceDominatedUses(Instruction* replace,
+                                       std::unordered_set<Tag> skip) {
     checkReplace(this, replace);
 
     auto start = false;
@@ -249,7 +250,8 @@ void Instruction::replaceDominatedUses(Instruction* replace) {
     // TODO: ensure graph is numbered in dominance order so we don't need this
     DominanceGraph dom(replace->bb()->owner);
 
-    Visitor::run(replace->bb(), bb(), [&](BB* bb) {
+    auto stop = replace->bb() != bb() ? bb() : nullptr;
+    Visitor::run(replace->bb(), stop, [&](BB* bb) {
         if (bb != replace->bb() && !dom.dominates(replace->bb(), bb))
             return;
         for (auto& i : *bb) {
@@ -261,15 +263,17 @@ void Instruction::replaceDominatedUses(Instruction* replace) {
                 continue;
             }
 
-            bool changed = false;
-            i->eachArg([&](InstrArg& arg) {
-                if (arg.val() == this) {
-                    arg.val() = replace;
-                    changed = true;
-                }
-            });
-            if (changed)
-                i->updateTypeAndEffects();
+            if (skip.empty() || !skip.count(i->tag)) {
+                bool changed = false;
+                i->eachArg([&](InstrArg& arg) {
+                    if (arg.val() == this) {
+                        arg.val() = replace;
+                        changed = true;
+                    }
+                });
+                if (changed)
+                    i->updateTypeAndEffects();
+            }
 
             // If we reach the original instruction we have to stop replacing.
             // E.g. in  i->replaceReachableUses(j)
