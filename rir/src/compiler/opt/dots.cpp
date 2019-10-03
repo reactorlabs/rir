@@ -81,8 +81,17 @@ void DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
                                 if (mk->isEager())
                                     a = mk->eagerArg();
                             }
-                            if (a->type.maybeLazy()) {
-                                ip = bb->insert(ip, new Force(a, i->env()));
+                            auto mk = MkArg::Cast(a);
+                            if (a->type.maybeLazy() || mk) {
+                                Value* env = nullptr;
+                                if (mk && mk->noReflection)
+                                    env = Env::elided();
+                                if (!env && i->hasEnv())
+                                    env = i->env();
+                                if (!env)
+                                    env = Env::elided();
+
+                                ip = bb->insert(ip, new Force(a, env));
                                 a = *ip;
                                 ip++;
                                 next = ip + 1;
