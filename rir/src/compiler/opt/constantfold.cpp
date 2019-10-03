@@ -248,6 +248,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     : CallSafeBuiltin::Cast(i)->builtinId;
                 size_t nargs = CallInstruction::CastCall(i)->nCallArgs();
                 static int nargsBlt = findBuiltin("nargs");
+                static int lengthBlt = findBuiltin("length");
+                static int asintBlt = findBuiltin("as.integer");
                 static int isatomicBlt = findBuiltin("is.atomic");
                 static int isobjectBlt = findBuiltin("is.object");
                 assert(function->assumptions().includes(
@@ -268,6 +270,18 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             function->nargs() -
                             function->assumptions().numMissing()));
                         i->replaceUsesAndSwapWith(nargsC, ip);
+                    }
+                } else if (builtinId == lengthBlt && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isScalar())
+                        i->replaceUsesAndSwapWith(new LdConst(1), ip);
+                } else if (builtinId == asintBlt && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(PirType(RType::integer)
+                                  .notPromiseWrapped()
+                                  .notObject())) {
+                        i->replaceUsesWith(i->arg(0).val());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == isatomicBlt && nargs == 1) {
                     auto t = i->arg(0).val()->type;
