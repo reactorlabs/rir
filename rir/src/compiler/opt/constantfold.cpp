@@ -274,9 +274,10 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesAndSwapWith(nargsC, ip);
                     }
                 } else if (builtinId == lengthBlt && nargs == 1) {
-                    auto t = i->arg(0).val()->type;
-                    if (t.isScalar())
-                        i->replaceUsesAndSwapWith(new LdConst(1), ip);
+                    //     auto t = i->arg(0).val()->type;
+                    //     if (t.isA(PirType::simpleScalar())) {
+                    //         i->replaceUsesAndSwapWith(new LdConst(1), ip);
+                    //     }
                 } else if (builtinId == asintBlt && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(PirType(RType::integer)
