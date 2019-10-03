@@ -251,6 +251,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 static int lengthBlt = findBuiltin("length");
                 static int asintBlt = findBuiltin("as.integer");
                 static int isatomicBlt = findBuiltin("is.atomic");
+                static int isfunctionBlt = findBuiltin("is.function");
                 static int isobjectBlt = findBuiltin("is.object");
                 static int isCharacterBlt = findBuiltin("is.character");
                 assert(function->assumptions().includes(
@@ -284,6 +285,10 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesWith(i->arg(0).val());
                         next = bb->remove(ip);
                     }
+                } else if (builtinId == isfunctionBlt && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(RType::closure))
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
                 } else if (builtinId == isCharacterBlt && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::str)) {
