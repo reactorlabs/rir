@@ -636,7 +636,12 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
 
     if (auto cast = CastType::Cast(val)) {
         auto arg = cast->arg(0).val();
-        return load(arg, cast->type, needed);
+        if (cast->kind == CastType::Upcast && !cast->type.isA(type))
+            type = cast->type;
+        if (cast->kind == CastType::Downcast && !type.isA(cast->type))
+            type = cast->type;
+
+        return load(arg, type, needed);
     }
 
     auto vali = Instruction::Cast(val);
