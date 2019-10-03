@@ -15,7 +15,7 @@ class DeadInstructions {
     enum DeadInstructionsMode {
         CountAll,
         IgnoreUpdatePromise,
-        IgnoreIsType,
+        IgnoreTypeTests,
     };
 
     DeadInstructions(Code*, DeadInstructionsMode mode = CountAll);

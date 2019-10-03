@@ -71,7 +71,8 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         });
     }
 
-    DeadInstructions exceptTypecheck(function, DeadInstructions::IgnoreIsType);
+    DeadInstructions exceptTypecheck(function,
+                                     DeadInstructions::IgnoreTypeTests);
     AvailableCheckpoints checkpoint(function, log);
     AvailableAssumptions assumptions(function, log);
     std::unordered_map<Checkpoint*, Checkpoint*> replaced;
