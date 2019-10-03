@@ -252,6 +252,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 static int asintBlt = findBuiltin("as.integer");
                 static int isatomicBlt = findBuiltin("is.atomic");
                 static int isobjectBlt = findBuiltin("is.object");
+                static int isCharacterBlt = findBuiltin("is.character");
                 assert(function->assumptions().includes(
                     Assumption::NotTooManyArguments));
                 // PIR functions are always compiled for a particular number
@@ -282,6 +283,14 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                   .notObject())) {
                         i->replaceUsesWith(i->arg(0).val());
                         next = bb->remove(ip);
+                    }
+                } else if (builtinId == isCharacterBlt && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(RType::str)) {
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                    } else if (!t.maybe(RType::str)) {
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
                     }
                 } else if (builtinId == isatomicBlt && nargs == 1) {
                     auto t = i->arg(0).val()->type;
