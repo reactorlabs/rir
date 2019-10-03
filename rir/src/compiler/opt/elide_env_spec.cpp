@@ -58,19 +58,28 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     Visitor::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
-                // Prevent us from leaking stub envs
-                if (!i->hasEnv() || i->env() != m)
-                    bannedEnvs.insert(m);
-                if (CallInstruction::CastCall(i)) {
-                    // Call builtin materializes env right away, so no point in
-                    // stubbing, unless we have a fastcase.
-                    if (auto bt = CallBuiltin::Cast(i))
-                        if (!supportsFastBuiltinCall(bt->blt))
-                            bannedEnvs.insert(m);
-                    return;
+                if (!m->stub && !bannedEnvs.count(m)) {
+                    // Prevent us from leaking stub envs
+                    if (!i->hasEnv() || i->env() != m)
+                        bannedEnvs.insert(m);
+                    if (CallInstruction::CastCall(i)) {
+                        // Call builtin materializes env right away, so no point in
+                        // stubbing, unless we have a fastcase.
+                        if (auto bt = CallBuiltin::Cast(i))
+                            if (!supportsFastBuiltinCall(bt->blt))
+                                bannedEnvs.insert(m);
+                        return;
+                    }
+                    if (!allowed.count(i->tag)){
+                        /*std::cout << "Baneo: ";
+                        m->print(std::cout);
+                        std::cout << " por: ";
+                        i->print(std::cout);
+                        std::cout << "\n";*/
+                        bannedEnvs.insert(m);
+                        //function->print(std::cout, false);
+                    }
                 }
-                if (!allowed.count(i->tag))
-                    bannedEnvs.insert(m);
             }
         });
     });
@@ -81,14 +90,21 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i))
                 return;
             if (auto mk = MkEnv::Cast(i->env())) {
-                if (bannedEnvs.count(mk))
+                if (mk->stub || bannedEnvs.count(mk))
                     return;
                 // We can only stub an environment if all uses have a checkpoint
                 // available after every use.
                 if (auto cp = checkpoint.next(i))
                     checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
-                else
+                else {
+                    std::cout << "Baneo: ";
+                    mk->print(std::cout);
+                    std::cout << " por: ";
+                    i->print(std::cout);
+                    std::cout << "\n";
                     bannedEnvs.insert(mk);
+                    //function->print(std::cout, false);
+                }
             }
         }
     });
@@ -106,6 +122,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 return true;
         return false;
     };
+
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -115,7 +132,10 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             if (checks.count(i)) {
                 // Speculatively elide instructions that only require them
                 // in case they access promises reflectively
+                i->print(std::cout);
+                std::cout << "\n";
                 if (!bannedEnvs.count(i->env())) {
+                    std::cout << "No baneado\n";
                     auto env = checks[i].second;
                     if (!env->stub) {
                         env->stub = true;
@@ -124,6 +144,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         BBTransform::insertAssume(condition, cp, true);
                         assert(cp->bb()->trueBranch() != bb);
                     }
+                } else {
+                    std::cout << "baneado\n";
                 }
             } else if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which

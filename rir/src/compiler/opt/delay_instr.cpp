@@ -9,34 +9,43 @@ namespace pir {
 void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const {
 
-    std::unordered_map<Instruction*, BB*> usedOnlyInDeopt;
+    std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
 
     auto isTarget = [](Instruction* j) {
         return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
                FrameState::Cast(j) || CastType::Cast(j);
     };
 
-    Visitor::run(function->entry, [&](Instruction* i) {
-        i->eachArg([&](Value* v) {
-            if (auto j = Instruction::Cast(v)) {
-                if (isTarget(j)) {
-                    auto& u = usedOnlyInDeopt[j];
-                    if (i->bb()->isDeopt() || usedOnlyInDeopt[i]) {
-                        if (!u)
-                            u = i->bb();
-                        else
-                            u = (BB*)-1;
-                    } else {
-                        u = (BB*)-1;
+    CFG cfg(function);
+    for (auto entry : cfg.exits()) {
+        Visitor::runBackward(entry, cfg, [&](Instruction* i) {
+            i->eachArg([&](Value* v) {
+                if (auto j = Instruction::Cast(v)) {
+                    if (isTarget(j)) {
+                        auto& u = usedOnlyInDeopt[j];
+                        if (i->bb()->isDeopt()) {
+                            u.insert(i->bb());
+                        } else {
+                            if (!usedOnlyInDeopt[i].empty()) {
+                                for (auto targetBB : usedOnlyInDeopt[i])
+                                    usedOnlyInDeopt[j].insert(targetBB);
+                            } else {
+                                u.insert((BB*)-1);
+                            }
+                        }
                     }
                 }
-            }
+            });
         });
-    });
+    }
 
-    Visitor::run(function->entry, [&](BB* bb) {
-        auto ip = bb->begin();
-        while (ip != bb->end()) {
+    for (auto entry : cfg.exits()) {
+        Visitor::runBackward(entry, cfg, [&](BB* bb) {
+        if (bb->isDeopt())
+            return;
+
+        auto ip = bb->rbegin();
+        while (ip != bb->rend()) {
             auto i = *ip;
             auto next = ip + 1;
 
@@ -67,17 +76,21 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
              * branch.
              */
             if (isTarget(i)) {
-                if (usedOnlyInDeopt.count(i)) {
-                    auto u = usedOnlyInDeopt.at(i);
-                    if (u && u != (BB*)-1 && u != i->bb()) {
-                        next = bb->moveToBegin(ip, u);
+                if (!usedOnlyInDeopt[i].empty() && !usedOnlyInDeopt[i].count((BB*)-1)) {
+                    std::cout << "entre";
+                    i->print(std::cout);
+                    std::cout << "\n";
+                    for (auto targetBB : usedOnlyInDeopt[i]){
+                        auto newInstr = i->clone();
+                        targetBB->insert(targetBB->begin(), newInstr);
+                        i->replaceUsesIn(newInstr, targetBB);
                     }
+                    bb->remove(bb->atPosition(i));
                 }
             }
-
             ip = next;
         }
-    });
+    });}
 }
 } // namespace pir
 } // namespace rir

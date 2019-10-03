@@ -28,8 +28,14 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
 
             if (!envInstr)
                 break;
-            done.insert(envInstr);
+            
+            if (bb->size() == 1) {
+                bb->moveToBegin(it, bb->next());
+                return;
+            }
 
+            done.insert(envInstr);
+            
             while (it != bb->end() && (it + 1) != bb->end()) {
                 assert(*it == envInstr);
 
