@@ -160,7 +160,8 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                              Assume* assume, bool condition, BB* deoptBlock,
-                             const std::string& debugMessage) {
+                             const std::string& debugMessage,
+                             bool triggerAnyway) {
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
 
     static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
@@ -221,7 +222,12 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         deoptBlock = record;
     }
 
-    src->replace(position, new Branch(assume->condition()));
+    Value* test = assume->condition();
+    if (triggerAnyway) {
+        test = condition ? (Value*)False::instance() : (Value*)True::instance();
+    }
+
+    src->replace(position, new Branch(test));
     if (condition) {
         src->next1 = deoptBlock;
         src->next0 = split;

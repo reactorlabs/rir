@@ -1264,8 +1264,6 @@ void Pir2Rir::lower(Code* code) {
                 bb->replace(it, newDeopt);
             } else if (auto expect = Assume::Cast(*it)) {
                 auto expectation = expect->assumeTrue;
-                if (Parameter::DEOPT_CHAOS && coinFlip())
-                    expectation = !expectation;
                 std::string debugMessage;
                 if (Parameter::DEBUG_DEOPTS) {
                     debugMessage = "DEOPT, assumption ";
@@ -1284,7 +1282,8 @@ void Pir2Rir::lower(Code* code) {
                 }
                 BBTransform::lowerExpect(
                     code, bb, it, expect, expectation,
-                    expect->checkpoint()->bb()->falseBranch(), debugMessage);
+                    expect->checkpoint()->bb()->falseBranch(), debugMessage,
+                    Parameter::DEOPT_CHAOS && coinFlip());
                 // lowerExpect splits the bb from current position. There
                 // remains nothing to process. Breaking seems more robust
                 // than trusting the modified iterator.

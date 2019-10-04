@@ -26,7 +26,8 @@ class BBTransform {
     static BB* lowerExpect(Code* closure, BB* src,
                            BB::Instrs::iterator position, Assume* assume,
                            bool condition, BB* deoptBlock,
-                           const std::string& debugMesage);
+                           const std::string& debugMesage,
+                           bool triggerAnyway = false);
     static void insertAssume(Value* condition, Checkpoint* cp, BB* bb,
                              BB::Instrs::iterator& position,
                              bool assumePositive, rir::Code* srcCode = nullptr,
