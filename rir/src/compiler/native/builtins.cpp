@@ -11,6 +11,7 @@
 
 #include "R/Funtab.h"
 #include "R/Symbols.h"
+#include <R_ext/RS.h> /* for Memzero */
 
 namespace rir {
 namespace pir {
@@ -811,7 +812,7 @@ int asLogicalImpl(SEXP a) { return Rf_asLogical(a); }
 NativeBuiltin NativeBuiltins::asLogicalBlt = {"aslogical",
                                               (void*)&asLogicalImpl};
 
-int lengthImpl(SEXP e) { return Rf_length(e); }
+size_t lengthImpl(SEXP e) { return Rf_length(e); }
 
 NativeBuiltin NativeBuiltins::length = {
     "length",
@@ -1258,6 +1259,23 @@ int nrowsImpl(SEXP v) { return Rf_ncols(v); }
 NativeBuiltin NativeBuiltins::matrixNrows = {
     "nrows",
     (void*)nrowsImpl,
+};
+
+SEXP makeVectorImpl(int mode, size_t len) {
+    auto s = Rf_allocVector(mode, len);
+    if (mode == INTSXP || mode == LGLSXP)
+        Memzero(INTEGER(s), len);
+    else if (mode == REALSXP)
+        Memzero(REAL(s), len);
+    else if (mode == CPLXSXP)
+        Memzero(COMPLEX(s), len);
+    else if (mode == RAWSXP)
+        Memzero(RAW(s), len);
+    return s;
+}
+NativeBuiltin NativeBuiltins::makeVector = {
+    "makeVector",
+    (void*)makeVectorImpl,
 };
 }
 }

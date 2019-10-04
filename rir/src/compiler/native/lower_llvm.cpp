@@ -442,6 +442,8 @@ class LowerFunctionLLVM {
     bool success = true;
     bool tryCompile();
 
+    bool tryInlineBuiltin(int builtin);
+
   private:
     llvm::Value* vectorPositionPtr(llvm::Value* vector, llvm::Value* position,
                                    PirType type);
@@ -1815,6 +1817,11 @@ llvm::Value* LowerFunctionLLVM::isAltrep(llvm::Value* v) {
         builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 2)))));
 };
 
+bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
+    switch (builtin) {}
+    return false;
+};
+
 bool LowerFunctionLLVM::tryCompile() {
     std::unordered_map<BB*, BasicBlock*> blockMapping_;
     auto getBlock = [&](BB* bb) {
@@ -2187,6 +2194,146 @@ bool LowerFunctionLLVM::tryCompile() {
                             }
                         }
                     }
+                }
+
+                if (b->nargs() == 1) {
+                    auto a = load(b->arg(0).val());
+                    auto irep = representationOf(b->arg(0).val());
+                    auto orep = representationOf(i);
+                    bool done = true;
+
+                    auto doTypetest = [&](int type) {
+                        if (irep == t::SEXP) {
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateICmpEQ(sexptype(a),
+                                                               c(type)),
+                                          constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_FalseValue, orep));
+                        }
+                    };
+
+                    switch (b->builtinId) {
+                    case 88: // "length"
+                        if (irep == t::SEXP) {
+                            auto r = call(NativeBuiltins::length, {a});
+                            if (orep == t::SEXP) {
+                                r = builder.CreateSelect(
+                                    builder.CreateICmpUGT(r, c(INT_MAX, 64)),
+                                    boxReal(builder.CreateUIToFP(r, t::Double)),
+                                    boxInt(builder.CreateTrunc(r, t::Int)));
+                            } else if (orep == t::Double) {
+                                r = builder.CreateUIToFP(r, t::Double);
+                            } else {
+                                assert(orep == Representation::Integer);
+                                r = builder.CreateTrunc(r, t::Int);
+                            }
+                            setVal(i, r);
+                        } else {
+                            setVal(i, constant(ScalarInteger(1), orep));
+                        }
+                        break;
+                    case 311: // "as.integer"
+                        if (irep == Representation::Integer &&
+                            orep == Representation::Integer) {
+                            setVal(i, a);
+                        } else if (irep == Representation::Real &&
+                                   orep == Representation::Integer) {
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpONE(a, a),
+                                          c(NA_INTEGER),
+                                          builder.CreateFPToSI(a, t::Int)));
+                        } else if (irep == Representation::Real &&
+                                   orep == Representation::Real) {
+                            setVal(i, a);
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    case 372: // "is.logical"
+                        if (b->arg(0).val()->type.isA(RType::logical)) {
+                            // ensure that logicals represented as ints are
+                            // handled.
+                            setVal(i, constant(R_TrueValue, orep));
+                        } else {
+                            doTypetest(LGLSXP);
+                        }
+                        break;
+                    case 376: // "is.character"
+                        doTypetest(STRSXP);
+                        break;
+                    case 377: // "is.symbol"
+                        doTypetest(SYMSXP);
+                        break;
+                    case 382: // "is.expression"
+                        doTypetest(EXPRSXP);
+                        break;
+                    case 391: // "is.call"
+                        doTypetest(LANGSXP);
+                        break;
+                    case 395: // "is.na"
+                        if (irep == Representation::Integer) {
+                            setVal(i,
+                                   builder.CreateSelect(
+                                       builder.CreateICmpEQ(a, c(NA_INTEGER)),
+                                       constant(R_TrueValue, orep),
+                                       constant(R_FalseValue, orep)));
+                        } else if (irep == Representation::Real) {
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpONE(a, a),
+                                          constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    default:
+                        done = false;
+                    };
+                    if (done)
+                        break;
+                }
+
+                if (b->nargs() == 2) {
+                    bool success = false;
+                    switch (b->builtinId) {
+                    case 109: { // "vector"
+                        auto l = b->arg(1).val();
+                        if (l->type.isA(PirType::simpleScalarInt())) {
+                            if (auto con = LdConst::Cast(b->arg(0).val())) {
+                                if (TYPEOF(con->c()) == STRSXP &&
+                                    XLENGTH(con->c()) == 1) {
+                                    SEXPTYPE type =
+                                        str2type(CHAR(STRING_ELT(con->c(), 0)));
+                                    switch (type) {
+                                    case LGLSXP:
+                                    case INTSXP:
+                                    case REALSXP:
+                                    case CPLXSXP:
+                                    case STRSXP:
+                                    case EXPRSXP:
+                                    case VECSXP:
+                                    case RAWSXP:
+                                        setVal(
+                                            i,
+                                            call(NativeBuiltins::makeVector,
+                                                 {c(type),
+                                                  builder.CreateZExt(
+                                                      load(l, Representation::
+                                                                  Integer),
+                                                      t::i64)}));
+                                        success = true;
+                                        break;
+                                    default: {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    }
+                    if (success)
+                        break;
                 }
 
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
