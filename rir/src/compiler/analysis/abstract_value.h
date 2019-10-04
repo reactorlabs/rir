@@ -387,9 +387,7 @@ class AbstractUnique {
         val = val_;
     }
 
-    void clear() {
-        val = nullptr;
-    }
+    virtual void clear() { val = nullptr; }
 
     Kind* get() const { return val; }
 

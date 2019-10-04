@@ -10,6 +10,12 @@ DeadInstructions::DeadInstructions(Code* code, DeadInstructionsMode mode) {
         i->eachArg([&](Value* v) {
             if (auto j = Instruction::Cast(v)) {
                 switch (mode) {
+                case IgnoreTypeTests:
+                    if ((i->tag == Tag::CastType || i->tag == Tag::IsType ||
+                         i->tag == Tag::IsObject) &&
+                        v == i->arg(0).val())
+                        return;
+                    break;
                 case IgnoreUpdatePromise:
                     if (i->tag == Tag::UpdatePromise && v == i->arg(0).val())
                         return;

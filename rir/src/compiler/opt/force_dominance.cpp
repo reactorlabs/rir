@@ -4,6 +4,7 @@
 #include "../transform/bb.h"
 #include "../transform/replace.h"
 #include "pass_definitions.h"
+#include "utils/Map.h"
 #include "utils/Set.h"
 
 namespace {
@@ -368,13 +369,13 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                            LogStream& log) const {
     SmallSet<Force*> toInline;
     SmallSet<Force*> needsUpdate;
-    ForcedBy result;
+    SmallMap<Force*, Force*> dominatedBy;
 
     {
         ForceDominanceAnalysis analysis(code, code, log);
         analysis();
 
-        result = analysis.result();
+        auto result = analysis.result();
         if (result.eagerLikeFunction(code))
             code->properties.set(ClosureVersion::Property::IsEager);
         code->properties.argumentForceOrder = result.argumentForceOrder;
@@ -386,8 +387,9 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                 auto i = *ip;
 
                 if (auto f = Force::Cast(i)) {
-                    if (analysis.resultIgnoringUnreachableExits(i, analysis.cfg)
-                            .isDominatingForce(f)) {
+                    auto a = analysis.resultIgnoringUnreachableExits(
+                        i, analysis.cfg);
+                    if (a.isDominatingForce(f)) {
                         f->strict = true;
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
                             if (!mk->isEager()) {
@@ -400,6 +402,9 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                                 }
                             }
                         }
+                    } else if (auto dom = a.getDominatingForce(f)) {
+                        if (f != dom)
+                            dominatedBy[f] = dom;
                     }
                 } else if (auto u = UpdatePromise::Cast(i)) {
                     if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
@@ -504,14 +509,14 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
             if (f) {
                 // If this force instruction is dominated by another force
                 // we can replace it with the dominating instruction
-                if (auto dom = result.getDominatingForce(f)) {
-                    if (f != dom) {
-                        if (inlinedPromise.count(dom))
-                            f->replaceUsesWith(inlinedPromise.at(dom));
-                        else
-                            f->replaceUsesWith(dom);
-                        next = bb->remove(ip);
-                    }
+                auto dom = dominatedBy.find(f);
+                if (dom != dominatedBy.end()) {
+                    assert(f != dom->second);
+                    if (inlinedPromise.count(dom->second))
+                        f->replaceUsesWith(inlinedPromise.at(dom->second));
+                    else
+                        f->replaceUsesWith(dom->second);
+                    next = bb->remove(ip);
                 }
             }
             ip = next;

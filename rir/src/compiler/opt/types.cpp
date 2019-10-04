@@ -61,6 +61,11 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         break;
                     }
 
+                    if ("abs" == name) {
+                        inferred = c->arg(0).type() & PirType::num();
+                        break;
+                    }
+
                     if ("typeof" == name) {
                         inferred = PirType(RType::str).scalar();
                         break;

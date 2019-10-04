@@ -29,6 +29,11 @@ struct UnnecessaryContextsState : public AbstractUnique<PushContext> {
         }
         return res;
     }
+    void clear() override final {
+        AbstractUnique::clear();
+        needed = false;
+        affected.clear();
+    }
 };
 
 class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
@@ -39,8 +44,8 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
     AbstractResult apply(UnnecessaryContextsState& state,
                          Instruction* i) const override {
         if (auto p = PushContext::Cast(i)) {
+            state.clear();
             state.set(p);
-            state.affected.clear();
             return AbstractResult::Updated;
         } else if (CallInstruction::CastCall(i) && !CallSafeBuiltin::Cast(i)) {
             // Contexts are needed for non-local returns and reflection. On
@@ -52,7 +57,6 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
             if (state.get()) {
                 assert(state.get() == PopContext::Cast(i)->push());
                 state.clear();
-                state.affected.clear();
                 return AbstractResult::Updated;
             }
         } else if (auto mk = MkEnv::Cast(i)) {

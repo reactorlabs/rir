@@ -1,4 +1,5 @@
 #include "../analysis/available_checkpoints.h"
+#include "../analysis/dead.h"
 #include "../pir/pir_impl.h"
 #include "../translations/pir_translator.h"
 #include "../util/cfg.h"
@@ -36,10 +37,11 @@ struct AvailableAssumptions
                          Instruction* i) const {
         AbstractResult res;
         if (auto a = Assume::Cast(i)) {
-            if (!state.available.includes(a)) {
-                state.available.insert(a);
-                res.update();
-            }
+            if (!IsEnvStub::Cast(a->arg(0).val()))
+                if (!state.available.includes(a)) {
+                    state.available.insert(a);
+                    res.update();
+                }
         }
         return res;
     }
@@ -70,6 +72,8 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         });
     }
 
+    DeadInstructions exceptTypecheck(function,
+                                     DeadInstructions::IgnoreTypeTests);
     AvailableCheckpoints checkpoint(function, log);
     AvailableAssumptions assumptions(function, log);
     std::unordered_map<Checkpoint*, Checkpoint*> replaced;
@@ -86,23 +90,27 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
             // the previous checkpoint is still available, and there is also a
             // next checkpoint available we might as well remove this one.
             if (auto cp = Checkpoint::Cast(instr)) {
-                if (auto cp0 = checkpoint.at(instr)) {
-                    while (replaced.count(cp0))
-                        cp0 = replaced.at(cp0);
-                    replaced[cp] = cp0;
+                if (!cp->nextBB()->isEmpty() &&
+                    checkpoint.next(*cp->nextBB()->begin()))
+                    if (auto cp0 = checkpoint.at(instr)) {
+                        while (replaced.count(cp0))
+                            cp0 = replaced.at(cp0);
+                        replaced[cp] = cp0;
 
-                    assert(bb->last() == instr);
-                    cp->replaceUsesWith(cp0);
-                    bb->remove(ip);
-                    delete bb->next1;
-                    bb->next1 = nullptr;
-                    return;
-                }
+                        assert(bb->last() == instr);
+                        cp->replaceUsesWith(cp0);
+                        bb->remove(ip);
+                        delete bb->next1;
+                        bb->next1 = nullptr;
+                        return;
+                    }
             }
 
             if (auto assume = Assume::Cast(instr)) {
+                bool changed = false;
                 if (assumptions.at(instr).includes(assume)) {
                     next = bb->remove(ip);
+                    changed = true;
                 } else {
                     // We are trying to group multiple assumes into the same
                     // checkpoint by finding for each assume the topmost
@@ -127,6 +135,53 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                             if (assume->checkpoint() != cp0) {
                                 hoistAssume[guard] = {guard, cp0};
                                 next = bb->remove(ip);
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+
+                // This check tries to find type tests, whose result is not
+                // consumed by all uses of the value. E.g. something like:
+                //
+                //     q = isType(a, t)
+                //     b = castType(a, t)
+                //     assume(q)
+                //     someUse(b)
+                //     someUse(a)
+                //
+                // here, the someUse(a) does not use the available assumption,
+                // that a is of type t.
+                if (!changed) {
+                    auto argv = assume->arg(0).val();
+                    auto ot = IsObject::Cast(argv);
+                    auto tt = IsType::Cast(argv);
+                    if ((assume->assumeTrue && tt) ||
+                        (!assume->assumeTrue && ot)) {
+                        auto arg = Instruction::Cast(argv);
+                        if (auto tested =
+                                Instruction::Cast(arg->arg(0).val())) {
+                            if (exceptTypecheck.used(tested)) {
+                                // The tested value is used outside the
+                                // typecheck. Let's cast it to the checked
+                                // value and propagate this, so all uses can
+                                // benefit from the typecheck.
+                                PirType expected;
+                                if (ot) {
+                                    expected = tested->type.notObject();
+                                } else {
+                                    assert(tt);
+                                    expected = tt->typeTest;
+                                }
+                                ip++;
+                                auto cast =
+                                    new CastType(tested, CastType::Downcast,
+                                                 PirType::any(), expected);
+                                cast->effects.set(Effect::DependsOnAssume);
+                                ip = bb->insert(ip, cast);
+                                tested->replaceDominatedUses(
+                                    *ip, {Tag::IsObject, Tag::IsType});
+                                next = ip + 1;
                             }
                         }
                     }
