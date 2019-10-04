@@ -37,10 +37,11 @@ struct AvailableAssumptions
                          Instruction* i) const {
         AbstractResult res;
         if (auto a = Assume::Cast(i)) {
-            if (!state.available.includes(a)) {
-                state.available.insert(a);
-                res.update();
-            }
+            if (!IsEnvStub::Cast(a->arg(0).val()))
+                if (!state.available.includes(a)) {
+                    state.available.insert(a);
+                    res.update();
+                }
         }
         return res;
     }
