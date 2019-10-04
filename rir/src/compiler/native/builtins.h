@@ -84,6 +84,8 @@ struct NativeBuiltins {
     static NativeBuiltin newLglFromReal;
     static NativeBuiltin newRealFromInt;
 
+    static NativeBuiltin makeVector;
+
     static NativeBuiltin call;
     static NativeBuiltin namedCall;
     static NativeBuiltin dotsCall;

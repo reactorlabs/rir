@@ -285,6 +285,16 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                   .notObject())) {
                         i->replaceUsesWith(i->arg(0).val());
                         next = bb->remove(ip);
+                    } else if (auto con = isConst(i->arg(0).val())) {
+                        if (IS_SIMPLE_SCALAR(con->c(), REALSXP)) {
+                            if (REAL(con->c())[0] == REAL(con->c())[0]) {
+                                i->replaceUsesAndSwapWith(
+                                    new LdConst((int)REAL(con->c())[0]), ip);
+                            } else {
+                                i->replaceUsesAndSwapWith(
+                                    new LdConst(NA_INTEGER), ip);
+                            }
+                        }
                     }
                 } else if (builtinId == isfunctionBlt && nargs == 1) {
                     auto t = i->arg(0).val()->type;

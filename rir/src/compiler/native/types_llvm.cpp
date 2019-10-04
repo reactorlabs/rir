@@ -215,8 +215,12 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::asTest.llvmSignature = t::int_sexp;
     NativeBuiltins::asLogicalBlt.llvmSignature = t::int_sexp;
 
-    NativeBuiltins::length.llvmSignature = t::int_sexp;
+    NativeBuiltins::length.llvmSignature =
+        llvm::FunctionType::get(t::i64, {t::SEXP}, false);
     NativeBuiltins::forSeqSize.llvmSignature = t::int_sexp;
+
+    NativeBuiltins::makeVector.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::Int, t::i64}, false);
 
     NativeBuiltins::deopt.llvmSignature = llvm::FunctionType::get(
         t::t_void, {t::voidPtr, t::SEXP, t::voidPtr, t::stackCellPtr}, false);

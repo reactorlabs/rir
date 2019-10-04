@@ -442,6 +442,8 @@ class LowerFunctionLLVM {
     bool success = true;
     bool tryCompile();
 
+    bool tryInlineBuiltin(int builtin);
+
   private:
     bool vectorTypeSupport(Value* v);
     llvm::Value* vectorPositionPtr(llvm::Value* vector, llvm::Value* position,
@@ -762,10 +764,10 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
     }
 
     if (representation == Representation::Real) {
-        auto indexUnderRange = builder.CreateFCmpOLT(nativeIndex, c(1.0));
+        auto indexUnderRange = builder.CreateFCmpULT(nativeIndex, c(1.0));
         auto indexOverRange =
-            builder.CreateFCmpOGE(nativeIndex, c((double)ULONG_MAX));
-        auto indexNa = builder.CreateFCmpONE(nativeIndex, nativeIndex);
+            builder.CreateFCmpUGE(nativeIndex, c((double)ULONG_MAX));
+        auto indexNa = builder.CreateFCmpUNE(nativeIndex, nativeIndex);
         auto fail = builder.CreateOr(indexUnderRange,
                                      builder.CreateOr(indexOverRange, indexNa));
 
@@ -1331,7 +1333,7 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, BasicBlock* isNa,
         notNa = BasicBlock::Create(C, "", fun);
     llvm::Instruction* br;
     if (v->getType() == t::Double) {
-        auto isNotNa = builder.CreateFCmpOEQ(v, v);
+        auto isNotNa = builder.CreateFCmpUEQ(v, v);
         br = builder.CreateCondBr(isNotNa, notNa, isNa);
     } else {
         assert(v->getType() == t::Int);
@@ -1823,6 +1825,11 @@ llvm::Value* LowerFunctionLLVM::isAltrep(llvm::Value* v) {
         builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 2)))));
 };
 
+bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
+    switch (builtin) {}
+    return false;
+};
+
 bool LowerFunctionLLVM::tryCompile() {
     std::unordered_map<BB*, BasicBlock*> blockMapping_;
     auto getBlock = [&](BB* bb) {
@@ -2195,6 +2202,146 @@ bool LowerFunctionLLVM::tryCompile() {
                             }
                         }
                     }
+                }
+
+                if (b->nargs() == 1) {
+                    auto a = load(b->arg(0).val());
+                    auto irep = representationOf(b->arg(0).val());
+                    auto orep = representationOf(i);
+                    bool done = true;
+
+                    auto doTypetest = [&](int type) {
+                        if (irep == t::SEXP) {
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateICmpEQ(sexptype(a),
+                                                               c(type)),
+                                          constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_FalseValue, orep));
+                        }
+                    };
+
+                    switch (b->builtinId) {
+                    case 88: // "length"
+                        if (irep == t::SEXP) {
+                            auto r = call(NativeBuiltins::length, {a});
+                            if (orep == t::SEXP) {
+                                r = builder.CreateSelect(
+                                    builder.CreateICmpUGT(r, c(INT_MAX, 64)),
+                                    boxReal(builder.CreateUIToFP(r, t::Double)),
+                                    boxInt(builder.CreateTrunc(r, t::Int)));
+                            } else if (orep == t::Double) {
+                                r = builder.CreateUIToFP(r, t::Double);
+                            } else {
+                                assert(orep == Representation::Integer);
+                                r = builder.CreateTrunc(r, t::Int);
+                            }
+                            setVal(i, r);
+                        } else {
+                            setVal(i, constant(ScalarInteger(1), orep));
+                        }
+                        break;
+                    case 311: // "as.integer"
+                        if (irep == Representation::Integer &&
+                            orep == Representation::Integer) {
+                            setVal(i, a);
+                        } else if (irep == Representation::Real &&
+                                   orep == Representation::Integer) {
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpUNE(a, a),
+                                          c(NA_INTEGER),
+                                          builder.CreateFPToSI(a, t::Int)));
+                        } else if (irep == Representation::Real &&
+                                   orep == Representation::Real) {
+                            setVal(i, a);
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    case 372: // "is.logical"
+                        if (b->arg(0).val()->type.isA(RType::logical)) {
+                            // ensure that logicals represented as ints are
+                            // handled.
+                            setVal(i, constant(R_TrueValue, orep));
+                        } else {
+                            doTypetest(LGLSXP);
+                        }
+                        break;
+                    case 376: // "is.character"
+                        doTypetest(STRSXP);
+                        break;
+                    case 377: // "is.symbol"
+                        doTypetest(SYMSXP);
+                        break;
+                    case 382: // "is.expression"
+                        doTypetest(EXPRSXP);
+                        break;
+                    case 391: // "is.call"
+                        doTypetest(LANGSXP);
+                        break;
+                    case 395: // "is.na"
+                        if (irep == Representation::Integer) {
+                            setVal(i,
+                                   builder.CreateSelect(
+                                       builder.CreateICmpEQ(a, c(NA_INTEGER)),
+                                       constant(R_TrueValue, orep),
+                                       constant(R_FalseValue, orep)));
+                        } else if (irep == Representation::Real) {
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpUNE(a, a),
+                                          constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    default:
+                        done = false;
+                    };
+                    if (done)
+                        break;
+                }
+
+                if (b->nargs() == 2) {
+                    bool success = false;
+                    switch (b->builtinId) {
+                    case 109: { // "vector"
+                        auto l = b->arg(1).val();
+                        if (l->type.isA(PirType::simpleScalarInt())) {
+                            if (auto con = LdConst::Cast(b->arg(0).val())) {
+                                if (TYPEOF(con->c()) == STRSXP &&
+                                    XLENGTH(con->c()) == 1) {
+                                    SEXPTYPE type =
+                                        str2type(CHAR(STRING_ELT(con->c(), 0)));
+                                    switch (type) {
+                                    case LGLSXP:
+                                    case INTSXP:
+                                    case REALSXP:
+                                    case CPLXSXP:
+                                    case STRSXP:
+                                    case EXPRSXP:
+                                    case VECSXP:
+                                    case RAWSXP:
+                                        setVal(
+                                            i,
+                                            call(NativeBuiltins::makeVector,
+                                                 {c(type),
+                                                  builder.CreateZExt(
+                                                      load(l, Representation::
+                                                                  Integer),
+                                                      t::i64)}));
+                                        success = true;
+                                        break;
+                                    default: {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    }
+                    if (success)
+                        break;
                 }
 
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
@@ -2580,7 +2727,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpNE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpONE(a, b);
+                                 return builder.CreateFCmpUNE(a, b);
                              },
                              BinopKind::NE);
                 break;
@@ -2653,7 +2800,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpEQ(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOEQ(a, b);
+                                 return builder.CreateFCmpUEQ(a, b);
                              },
                              BinopKind::EQ);
                 break;
@@ -2664,7 +2811,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpSLE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOLE(a, b);
+                                 return builder.CreateFCmpULE(a, b);
                              },
                              BinopKind::LTE);
                 break;
@@ -2674,7 +2821,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpSLT(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOLT(a, b);
+                                 return builder.CreateFCmpULT(a, b);
                              },
                              BinopKind::LT);
                 break;
@@ -2684,7 +2831,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpSGE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOGE(a, b);
+                                 return builder.CreateFCmpUGE(a, b);
                              },
                              BinopKind::GTE);
                 break;
@@ -2694,7 +2841,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpSGT(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOGT(a, b);
+                                 return builder.CreateFCmpUGT(a, b);
                              },
                              BinopKind::GT);
                 break;
@@ -2709,9 +2856,9 @@ bool LowerFunctionLLVM::tryCompile() {
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
                                  a = builder.CreateZExt(
-                                     builder.CreateFCmpONE(a, c(0.0)), t::Int);
+                                     builder.CreateFCmpUNE(a, c(0.0)), t::Int);
                                  b = builder.CreateZExt(
-                                     builder.CreateFCmpONE(b, c(0.0)), t::Int);
+                                     builder.CreateFCmpUNE(b, c(0.0)), t::Int);
                                  return builder.CreateAnd(a, b);
                              },
                              BinopKind::LAND);
@@ -2723,9 +2870,9 @@ bool LowerFunctionLLVM::tryCompile() {
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
                                  a = builder.CreateZExt(
-                                     builder.CreateFCmpONE(a, c(0.0)), t::Int);
+                                     builder.CreateFCmpUNE(a, c(0.0)), t::Int);
                                  b = builder.CreateZExt(
-                                     builder.CreateFCmpONE(b, c(0.0)), t::Int);
+                                     builder.CreateFCmpUNE(b, c(0.0)), t::Int);
                                  return builder.CreateOr(a, b);
                              },
                              BinopKind::LOR);
@@ -2763,7 +2910,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto notZero = BasicBlock::Create(C, "", fun);
                         auto cnt = BasicBlock::Create(C, "", fun);
                         llvm::Value* res = builder.CreateAlloca(t::Double);
-                        builder.CreateCondBr(builder.CreateFCmpOEQ(b, c(0.0)),
+                        builder.CreateCondBr(builder.CreateFCmpUEQ(b, c(0.0)),
                                              isZero, notZero);
 
                         builder.SetInsertPoint(isZero);
@@ -2794,7 +2941,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto notZero = BasicBlock::Create(C, "", fun);
                         auto cnt = BasicBlock::Create(C, "", fun);
                         llvm::Value* res = builder.CreateAlloca(t::Double);
-                        builder.CreateCondBr(builder.CreateFCmpOEQ(b, c(0.0)),
+                        builder.CreateCondBr(builder.CreateFCmpUEQ(b, c(0.0)),
                                              isZero, notZero);
 
                         builder.SetInsertPoint(isZero);
@@ -2808,9 +2955,9 @@ bool LowerFunctionLLVM::tryCompile() {
 
                         auto absq = builder.CreateIntrinsic(Intrinsic::fabs,
                                                             {t::Double}, {q});
-                        auto finite = builder.CreateFCmpONE(
+                        auto finite = builder.CreateFCmpUNE(
                             absq, c((double)0x7FF0000000000000));
-                        auto gt = builder.CreateFCmpOGT(
+                        auto gt = builder.CreateFCmpUGT(
                             absq, c(1 / R_AccuracyInfo.eps));
 
                         auto warn = BasicBlock::Create(C, "", fun);
@@ -3106,7 +3253,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 if (r == Representation::Real) {
                     auto narg = load(arg, r);
-                    auto isNotNa = builder.CreateFCmpOEQ(narg, narg);
+                    auto isNotNa = builder.CreateFCmpUEQ(narg, narg);
                     narg = builder.CreateFPToSI(narg, t::Int);
                     setVal(i, narg);
                     auto br = builder.CreateCondBr(isNotNa, done, isNa);

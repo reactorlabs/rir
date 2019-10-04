@@ -1,5 +1,6 @@
 #include "builtins.h"
 #include "ArgsLazyData.h"
+#include "R/Funtab.h"
 #include "interp.h"
 #include <algorithm>
 
@@ -268,6 +269,47 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return res;
     }
 
+    case 157: { // "abs"
+        if (nargs != 1)
+            return nullptr;
+        auto x = args[0];
+        SEXP s = R_NilValue;
+        if (isInteger(x) || isLogical(x)) {
+            /* integer or logical ==> return integer,
+               factor was covered by Math.factor. */
+            R_xlen_t i, n = XLENGTH(x);
+            s = (NO_REFERENCES(x) && TYPEOF(x) == INTSXP)
+                    ? x
+                    : allocVector(INTSXP, n);
+            /* Note: relying on INTEGER(.) === LOGICAL(.) : */
+            int* pa = INTEGER(s);
+            const int* px = INTEGER_RO(x);
+            for (i = 0; i < n; i++) {
+                int xi = px[i];
+                pa[i] = (xi == NA_INTEGER) ? xi : abs(xi);
+            }
+            return s;
+        } else if (TYPEOF(x) == REALSXP) {
+            R_xlen_t i, n = XLENGTH(x);
+            s = NO_REFERENCES(x) ? x : allocVector(REALSXP, n);
+            double* pa = REAL(s);
+            const double* px = REAL_RO(x);
+            for (i = 0; i < n; i++)
+                pa[i] = fabs(px[i]);
+            return s;
+        } else if (isComplex(x)) {
+            const Rcomplex* px = COMPLEX_RO(x);
+            R_xlen_t i, n = XLENGTH(x);
+
+            auto y = allocVector(REALSXP, n);
+            double* py = REAL(y);
+            for (i = 0; i < n; i++)
+                py[0] = hypot(px[0].r, px[0].i);
+            return y;
+        }
+        return nullptr;
+    }
+
     case 301: { // "min"
         if (nargs != 2)
             return nullptr;
@@ -304,6 +346,41 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         default:
             return nullptr;
         }
+    }
+
+    case 311: { // "as.integer"
+        if (nargs != 1)
+            return nullptr;
+        if (TYPEOF(args[0]) == INTSXP)
+            return args[0];
+        break;
+    }
+
+    case 326:   // "stdin"
+    case 327:   // "stdout"
+    case 328: { // "stderr"
+        if (nargs != 0)
+            return nullptr;
+        auto f = getBuiltin(call.callee);
+        return f(R_NilValue, call.callee, R_NilValue, R_NilValue);
+    }
+
+    case 372: { // "is.logical"
+        if (nargs != 1)
+            return nullptr;
+        return TYPEOF(args[0]) == LGLSXP ? R_TrueValue : R_FalseValue;
+    }
+
+    case 377: { // "is.symbol"
+        if (nargs != 1)
+            return nullptr;
+        return TYPEOF(args[0]) == SYMSXP ? R_TrueValue : R_FalseValue;
+    }
+
+    case 382: { // "is.expression"
+        if (nargs != 1)
+            return nullptr;
+        return TYPEOF(args[0]) == EXPRSXP ? R_TrueValue : R_FalseValue;
     }
 
     case 384: { // "is.object"
@@ -349,6 +426,12 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return R_FalseValue;
         }
         assert(false);
+    }
+
+    case 391: { // "is.call"
+        if (nargs != 1)
+            return nullptr;
+        return TYPEOF(args[0]) == LANGSXP ? R_TrueValue : R_FalseValue;
     }
 
     case 393: { // "is.function"
