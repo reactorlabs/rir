@@ -133,7 +133,8 @@ class TheInliner {
                 // invocation. 0 means never, 1 means on every call, above 1
                 // means more than once per call, ie. in a loop.
                 if (auto c = CallInstruction::CastCall(*it)) {
-                    if (c->taken != CallInstruction::UnknownTaken) {
+                    if (c->taken != CallInstruction::UnknownTaken &&
+                        !Parameter::INLINER_INLINE_UNLIKELY) {
                         // Policy: for calls taken about 80% the time the weight
                         // stays unchanged. Below it's increased and above it
                         // is decreased, but not more than 4x
@@ -142,8 +143,6 @@ class TheInliner {
                             adjust = 4;
                         if (adjust < 0.25)
                             adjust = 0.25;
-                        if (Parameter::INLINER_INLINE_UNLIKELY && adjust < 1)
-                            adjust = 1;
                         weight = (double)weight / adjust;
                     }
                 }
