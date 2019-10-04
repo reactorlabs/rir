@@ -28,7 +28,7 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                         } else {
                             if (!usedOnlyInDeopt[i].empty()) {
                                 for (auto targetBB : usedOnlyInDeopt[i])
-                                    usedOnlyInDeopt[j].insert(targetBB);
+                                    u.insert(targetBB);
                             } else {
                                 u.insert((BB*)-1);
                             }
@@ -77,9 +77,6 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
              */
             if (isTarget(i)) {
                 if (!usedOnlyInDeopt[i].empty() && !usedOnlyInDeopt[i].count((BB*)-1)) {
-                    std::cout << "entre";
-                    i->print(std::cout);
-                    std::cout << "\n";
                     for (auto targetBB : usedOnlyInDeopt[i]){
                         auto newInstr = i->clone();
                         targetBB->insert(targetBB->begin(), newInstr);

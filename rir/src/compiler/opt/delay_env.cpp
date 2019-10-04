@@ -9,6 +9,7 @@ namespace rir {
 namespace pir {
 
 void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
+    CFG cfg(function);
     Visitor::run(function->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
         MkEnv* envInstr;
@@ -29,7 +30,7 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
             if (!envInstr)
                 break;
             
-            if (bb->size() == 1) {
+            if (bb->size() == 1 && !cfg.isMergeBlock(bb->next())) {
                 bb->moveToBegin(it, bb->next());
                 return;
             }

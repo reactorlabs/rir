@@ -55,7 +55,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     static std::unordered_set<Tag> allowed{
         Tag::Force, Tag::FrameState, Tag::PushContext, Tag::LdVar, Tag::StVar};
 
-    Visitor::run(function->entry, [&](Instruction* i) {
+    VisitorNoDeoptBranch::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
                 if (!m->stub && !bannedEnvs.count(m)) {
@@ -71,13 +71,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         return;
                     }
                     if (!allowed.count(i->tag)){
-                        /*std::cout << "Baneo: ";
-                        m->print(std::cout);
-                        std::cout << " por: ";
-                        i->print(std::cout);
-                        std::cout << "\n";*/
                         bannedEnvs.insert(m);
-                        //function->print(std::cout, false);
                     }
                 }
             }
@@ -85,6 +79,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     });
 
     std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
+    std::unordered_map<MkEnv*, SmallSet<BB*>> moveToDeopt;
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv()) {
             if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i))
@@ -93,17 +88,16 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 if (mk->stub || bannedEnvs.count(mk))
                     return;
                 // We can only stub an environment if all uses have a checkpoint
-                // available after every use.
-                if (auto cp = checkpoint.next(i))
-                    checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
-                else {
-                    std::cout << "Baneo: ";
-                    mk->print(std::cout);
-                    std::cout << " por: ";
-                    i->print(std::cout);
-                    std::cout << "\n";
-                    bannedEnvs.insert(mk);
-                    //function->print(std::cout, false);
+                // available after every use or the reamining uses are in deopt branches and
+                // then we can safely copy the mkEnv there.
+                if (i->bb()->isDeopt()) {
+                    moveToDeopt[mk].insert(i->bb());
+                } else {
+                    if (auto cp = checkpoint.next(i))
+                        checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
+                    else {
+                        bannedEnvs.insert(mk);
+                    }
                 }
             }
         }
@@ -132,20 +126,22 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             if (checks.count(i)) {
                 // Speculatively elide instructions that only require them
                 // in case they access promises reflectively
-                i->print(std::cout);
-                std::cout << "\n";
                 if (!bannedEnvs.count(i->env())) {
-                    std::cout << "No baneado\n";
                     auto env = checks[i].second;
-                    if (!env->stub) {
-                        env->stub = true;
+                    if (!moveToDeopt[env].count(checks[i].first->bb()->falseBranch())) {
+                        if (!env->stub) {
+                            for (auto targetBBs : moveToDeopt[env]) {
+                                auto newEnvInstr = env->clone();
+                                targetBBs->insert(targetBBs->begin(), newEnvInstr);
+                                env->replaceUsesIn(newEnvInstr, targetBBs);
+                            }
+                            env->stub = true;
+                        }    
                         auto cp = checks[i].first;
                         auto condition = new IsEnvStub(env);
                         BBTransform::insertAssume(condition, cp, true);
                         assert(cp->bb()->trueBranch() != bb);
                     }
-                } else {
-                    std::cout << "baneado\n";
                 }
             } else if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which
