@@ -443,6 +443,7 @@ class LowerFunctionLLVM {
     bool tryCompile();
 
   private:
+    bool vectorTypeSupport(Value* v);
     llvm::Value* vectorPositionPtr(llvm::Value* vector, llvm::Value* position,
                                    PirType type);
 };
@@ -933,6 +934,13 @@ llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v, bool enableAsserts) {
 #endif
     auto pos = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
     return builder.CreateGEP(pos, c(1));
+}
+
+bool LowerFunctionLLVM::vectorTypeSupport(Value* vector) {
+    auto type = vector->type;
+    return type.isA(PirType(RType::integer).notObject()) ||
+           type.isA(PirType(RType::logical).notObject()) ||
+           type.isA(PirType(RType::real).notObject());
 }
 
 llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
@@ -3314,8 +3322,7 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Extract2_1D: {
                 auto extract = Extract2_1D::Cast(i);
                 // TODO: Extend a fastPath for generic vectors.
-                bool fastcase = extract->vec()->type.isA(
-                                    PirType::intRealLgl().notObject()) &&
+                bool fastcase = vectorTypeSupport(extract->vec()) &&
                                 extract->idx()->type.isA(
                                     PirType::intRealLgl().notObject().scalar());
 
@@ -3367,8 +3374,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto extract = Extract2_2D::Cast(i);
 
                 bool fastcase =
-                    extract->vec()->type.isA(
-                        PirType::intRealLgl().notObject()) &&
+                    vectorTypeSupport(extract->vec()) &&
                     extract->idx1()->type.isA(
                         PirType::intRealLgl().notObject().scalar()) &&
                     extract->idx2()->type.isA(
