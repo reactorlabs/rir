@@ -763,10 +763,10 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
     }
 
     if (representation == Representation::Real) {
-        auto indexUnderRange = builder.CreateFCmpOLT(nativeIndex, c(1.0));
+        auto indexUnderRange = builder.CreateFCmpULT(nativeIndex, c(1.0));
         auto indexOverRange =
-            builder.CreateFCmpOGE(nativeIndex, c((double)ULONG_MAX));
-        auto indexNa = builder.CreateFCmpONE(nativeIndex, nativeIndex);
+            builder.CreateFCmpUGE(nativeIndex, c((double)ULONG_MAX));
+        auto indexNa = builder.CreateFCmpUNE(nativeIndex, nativeIndex);
         auto fail = builder.CreateOr(indexUnderRange,
                                      builder.CreateOr(indexOverRange, indexNa));
 
@@ -1325,7 +1325,7 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, BasicBlock* isNa,
         notNa = BasicBlock::Create(C, "", fun);
     llvm::Instruction* br;
     if (v->getType() == t::Double) {
-        auto isNotNa = builder.CreateFCmpOEQ(v, v);
+        auto isNotNa = builder.CreateFCmpUEQ(v, v);
         br = builder.CreateCondBr(isNotNa, notNa, isNa);
     } else {
         assert(v->getType() == t::Int);
@@ -2241,7 +2241,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         } else if (irep == Representation::Real &&
                                    orep == Representation::Integer) {
                             setVal(i, builder.CreateSelect(
-                                          builder.CreateFCmpONE(a, a),
+                                          builder.CreateFCmpUNE(a, a),
                                           c(NA_INTEGER),
                                           builder.CreateFPToSI(a, t::Int)));
                         } else if (irep == Representation::Real &&
@@ -2281,7 +2281,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                        constant(R_FalseValue, orep)));
                         } else if (irep == Representation::Real) {
                             setVal(i, builder.CreateSelect(
-                                          builder.CreateFCmpONE(a, a),
+                                          builder.CreateFCmpUNE(a, a),
                                           constant(R_TrueValue, orep),
                                           constant(R_FalseValue, orep)));
                         } else {
@@ -2719,7 +2719,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpNE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpONE(a, b);
+                                 return builder.CreateFCmpUNE(a, b);
                              },
                              BinopKind::NE);
                 break;
@@ -2792,7 +2792,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpEQ(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOEQ(a, b);
+                                 return builder.CreateFCmpUEQ(a, b);
                              },
                              BinopKind::EQ);
                 break;
@@ -2803,7 +2803,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpSLE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOLE(a, b);
+                                 return builder.CreateFCmpULE(a, b);
                              },
                              BinopKind::LTE);
                 break;
@@ -2813,7 +2813,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpSLT(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOLT(a, b);
+                                 return builder.CreateFCmpULT(a, b);
                              },
                              BinopKind::LT);
                 break;
@@ -2823,7 +2823,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpSGE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOGE(a, b);
+                                 return builder.CreateFCmpUGE(a, b);
                              },
                              BinopKind::GTE);
                 break;
@@ -2833,7 +2833,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                  return builder.CreateICmpSGT(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOGT(a, b);
+                                 return builder.CreateFCmpUGT(a, b);
                              },
                              BinopKind::GT);
                 break;
@@ -2848,9 +2848,9 @@ bool LowerFunctionLLVM::tryCompile() {
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
                                  a = builder.CreateZExt(
-                                     builder.CreateFCmpONE(a, c(0.0)), t::Int);
+                                     builder.CreateFCmpUNE(a, c(0.0)), t::Int);
                                  b = builder.CreateZExt(
-                                     builder.CreateFCmpONE(b, c(0.0)), t::Int);
+                                     builder.CreateFCmpUNE(b, c(0.0)), t::Int);
                                  return builder.CreateAnd(a, b);
                              },
                              BinopKind::LAND);
@@ -2862,9 +2862,9 @@ bool LowerFunctionLLVM::tryCompile() {
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
                                  a = builder.CreateZExt(
-                                     builder.CreateFCmpONE(a, c(0.0)), t::Int);
+                                     builder.CreateFCmpUNE(a, c(0.0)), t::Int);
                                  b = builder.CreateZExt(
-                                     builder.CreateFCmpONE(b, c(0.0)), t::Int);
+                                     builder.CreateFCmpUNE(b, c(0.0)), t::Int);
                                  return builder.CreateOr(a, b);
                              },
                              BinopKind::LOR);
@@ -2902,7 +2902,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto notZero = BasicBlock::Create(C, "", fun);
                         auto cnt = BasicBlock::Create(C, "", fun);
                         llvm::Value* res = builder.CreateAlloca(t::Double);
-                        builder.CreateCondBr(builder.CreateFCmpOEQ(b, c(0.0)),
+                        builder.CreateCondBr(builder.CreateFCmpUEQ(b, c(0.0)),
                                              isZero, notZero);
 
                         builder.SetInsertPoint(isZero);
@@ -2933,7 +2933,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto notZero = BasicBlock::Create(C, "", fun);
                         auto cnt = BasicBlock::Create(C, "", fun);
                         llvm::Value* res = builder.CreateAlloca(t::Double);
-                        builder.CreateCondBr(builder.CreateFCmpOEQ(b, c(0.0)),
+                        builder.CreateCondBr(builder.CreateFCmpUEQ(b, c(0.0)),
                                              isZero, notZero);
 
                         builder.SetInsertPoint(isZero);
@@ -2947,9 +2947,9 @@ bool LowerFunctionLLVM::tryCompile() {
 
                         auto absq = builder.CreateIntrinsic(Intrinsic::fabs,
                                                             {t::Double}, {q});
-                        auto finite = builder.CreateFCmpONE(
+                        auto finite = builder.CreateFCmpUNE(
                             absq, c((double)0x7FF0000000000000));
-                        auto gt = builder.CreateFCmpOGT(
+                        auto gt = builder.CreateFCmpUGT(
                             absq, c(1 / R_AccuracyInfo.eps));
 
                         auto warn = BasicBlock::Create(C, "", fun);
@@ -3245,7 +3245,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 if (r == Representation::Real) {
                     auto narg = load(arg, r);
-                    auto isNotNa = builder.CreateFCmpOEQ(narg, narg);
+                    auto isNotNa = builder.CreateFCmpUEQ(narg, narg);
                     narg = builder.CreateFPToSI(narg, t::Int);
                     setVal(i, narg);
                     auto br = builder.CreateCondBr(isNotNa, done, isNa);
