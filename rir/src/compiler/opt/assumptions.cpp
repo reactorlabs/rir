@@ -161,18 +161,21 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                         auto arg = Instruction::Cast(argv);
                         if (auto tested =
                                 Instruction::Cast(arg->arg(0).val())) {
-                            if (exceptTypecheck.used(tested)) {
+
+                            PirType expected;
+                            if (ot) {
+                                expected = tested->type.notObject();
+                            } else {
+                                assert(tt);
+                                expected = tt->typeTest;
+                            }
+
+                            if (!tested->type.isA(expected) &&
+                                exceptTypecheck.used(tested)) {
                                 // The tested value is used outside the
                                 // typecheck. Let's cast it to the checked
                                 // value and propagate this, so all uses can
                                 // benefit from the typecheck.
-                                PirType expected;
-                                if (ot) {
-                                    expected = tested->type.notObject();
-                                } else {
-                                    assert(tt);
-                                    expected = tt->typeTest;
-                                }
                                 ip++;
                                 auto cast =
                                     new CastType(tested, CastType::Downcast,
