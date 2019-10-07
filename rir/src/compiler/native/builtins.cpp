@@ -1088,9 +1088,52 @@ NativeBuiltin NativeBuiltins::subassign11 = {
 };
 
 SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
-    if (MAYBE_SHARED(vec))
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
         vec = Rf_duplicate(vec);
-    PROTECT(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec)) {
+        R_xlen_t pos = -1;
+        if (IS_SIMPLE_SCALAR(idx, INTSXP)) {
+            if (*INTEGER(idx) != NA_INTEGER)
+                pos = *INTEGER(idx);
+        } else if (IS_SIMPLE_SCALAR(idx, REALSXP)) {
+            if (*REAL(idx) == *REAL(idx))
+                pos = *REAL(idx);
+        }
+        if (pos != (R_xlen_t)-1) {
+            if (IS_SIMPLE_SCALAR(val, INTSXP) && TYPEOF(vec) == INTSXP) {
+                if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                    if (XLENGTH(vec) == pos)
+                        SETLENGTH(vec, pos + 1);
+                    INTEGER(vec)[pos] = *INTEGER(val);
+                    UNPROTECT(prot);
+                    return vec;
+                }
+            }
+            if (IS_SIMPLE_SCALAR(val, REALSXP) && TYPEOF(vec) == REALSXP) {
+                if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                    if (XLENGTH(vec) == pos)
+                        SETLENGTH(vec, pos + 1);
+                    REAL(vec)[pos] = *REAL(val);
+                    UNPROTECT(prot);
+                    return vec;
+                }
+            }
+            if (TYPEOF(vec) == VECSXP) {
+                if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                    if (XLENGTH(vec) == pos)
+                        SETLENGTH(vec, pos + 1);
+                    SET_VECTOR_ELT(vec, pos, val);
+                    UNPROTECT(prot);
+                    return vec;
+                }
+            }
+        }
+    }
 
     SEXP args = CONS_NR(vec, CONS_NR(idx, CONS_NR(val, R_NilValue)));
     SET_TAG(CDDR(args), symbol::value);
@@ -1108,13 +1151,65 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
         SET_NAMED(res, 0);
     }
     Rf_endcontext(&assignContext);
-    UNPROTECT(2);
+    UNPROTECT(prot + 1);
     return res;
 }
 
 NativeBuiltin NativeBuiltins::subassign21 = {
     "subassign2_1D",
     (void*)subassign21Impl,
+};
+
+SEXP subassign21iImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
+        vec = Rf_duplicate(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec)) {
+        auto pos = idx - 1;
+
+        if (TYPEOF(vec) == INTSXP || TYPEOF(vec) == LGLSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                INTEGER(vec)[pos] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == REALSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                REAL(vec)[pos] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == VECSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                SET_VECTOR_ELT(vec, pos, ScalarInteger(val));
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+    }
+
+    auto v = PROTECT(ScalarInteger(val));
+    auto i = PROTECT(ScalarInteger(idx));
+    auto res = subassign21Impl(vec, i, v, env, srcIdx);
+    UNPROTECT(prot + 2);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::subassign21i = {
+    "subassign2_1D_int",
+    (void*)subassign21iImpl,
 };
 
 SEXP subassign12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP value,
