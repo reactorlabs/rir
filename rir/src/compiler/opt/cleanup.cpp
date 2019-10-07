@@ -69,6 +69,13 @@ class TheCleanup {
                         chkcls->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
+                } else if (auto b = CallBuiltin::Cast(i)) {
+                    if (!i->hasEnv()) {
+                        std::vector<Value*> args;
+                        b->eachCallArg([&](Value* v) { args.push_back(v); });
+                        i->replaceUsesAndSwapWith(
+                            new CallSafeBuiltin(b->blt, args, b->srcIdx), ip);
+                    }
                 } else if (auto missing = ChkMissing::Cast(i)) {
                     Value* arg = missing->arg<0>().val();
                     if (!arg->type.maybeMissing()) {
