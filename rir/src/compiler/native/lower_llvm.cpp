@@ -759,8 +759,13 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
     llvm::Value* nativeIndex = load(index);
 
     if (representation == Representation::Sexp) {
-        nativeIndex = accessVector(nativeIndex, c(0), index->type);
-        representation = representationOf(index->type);
+        if (representationOf(index->type) == Representation::Integer) {
+            nativeIndex = unboxIntLgl(nativeIndex);
+            representation = Representation::Integer;
+        } else {
+            nativeIndex = unboxRealIntLgl(nativeIndex);
+            representation = Representation::Real;
+        }
     }
 
     if (representation == Representation::Real) {
