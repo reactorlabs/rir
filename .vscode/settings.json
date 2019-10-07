@@ -3,5 +3,25 @@
   "C_Cpp.formatting": "Disabled",
   "files.insertFinalNewline": false,
   "files.trimFinalNewlines": false,
-  "files.trimTrailingWhitespace": false
+  "files.trimTrailingWhitespace": false,
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true,
+    "external/gnur": true,
+    "external/custom-r/include": true,
+    "**/*.d": true,
+    "**/*.ts": true,
+    "**/*.o": true
+  },
+  "files.associations": {
+    "*.ml": "ocaml",
+    "*.mli": "ocaml",
+    "iosfwd": "cpp",
+    "__locale": "cpp",
+    "ios": "cpp",
+    "__functional_03": "cpp"
+  }
 }
