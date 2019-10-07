@@ -3748,11 +3748,24 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.SetInsertPoint(fallback);
                 }
 
-                auto res0 =
-                    call(NativeBuiltins::subassign21,
-                         {loadSxp(subAssign->vector()),
-                          loadSxp(subAssign->idx()), loadSxp(subAssign->val()),
-                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                llvm::Value* res0 = nullptr;
+                if (representationOf(subAssign->idx()) ==
+                        Representation::Integer &&
+                    representationOf(subAssign->val()) ==
+                        Representation::Integer) {
+                    res0 =
+                        call(NativeBuiltins::subassign21i,
+                             {loadSxp(subAssign->vector()),
+                              load(subAssign->idx()), load(subAssign->val()),
+                              loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                } else {
+                    res0 = call(
+                        NativeBuiltins::subassign21,
+                        {loadSxp(subAssign->vector()),
+                         loadSxp(subAssign->idx()), loadSxp(subAssign->val()),
+                         loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                }
+
                 if (fastcase) {
                     builder.CreateStore(convert(res0, i->type), res);
                     builder.CreateBr(done);

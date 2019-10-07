@@ -118,6 +118,7 @@ struct NativeBuiltins {
     static NativeBuiltin extract22;
     static NativeBuiltin subassign11;
     static NativeBuiltin subassign21;
+    static NativeBuiltin subassign21i;
     static NativeBuiltin subassign12;
     static NativeBuiltin subassign22;
 

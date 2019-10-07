@@ -250,6 +250,8 @@ int initializeTypes(LLVMContext& context) {
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     NativeBuiltins::subassign21.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::subassign21i.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::Int}, false);
     NativeBuiltins::subassign12.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     NativeBuiltins::subassign22.llvmSignature = llvm::FunctionType::get(
