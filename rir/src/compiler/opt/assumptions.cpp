@@ -80,6 +80,8 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
 
     std::unordered_map<Instruction*, std::pair<Instruction*, Checkpoint*>>
         hoistAssume;
+
+    bool huge = function->size() > 1000;
     Visitor::runPostChange(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -152,7 +154,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                 //
                 // here, the someUse(a) does not use the available assumption,
                 // that a is of type t.
-                if (!changed) {
+                if (!changed && !bb->isDeopt() && !huge) {
                     auto argv = assume->arg(0).val();
                     auto ot = IsObject::Cast(argv);
                     auto tt = IsType::Cast(argv);
@@ -183,7 +185,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                                 cast->effects.set(Effect::DependsOnAssume);
                                 ip = bb->insert(ip, cast);
                                 tested->replaceDominatedUses(
-                                    *ip, {Tag::IsObject, Tag::IsType});
+                                    *ip, DeadInstructions::typecheckInstrs);
                                 next = ip + 1;
                             }
                         }

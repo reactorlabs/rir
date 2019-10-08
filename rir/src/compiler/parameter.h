@@ -14,6 +14,8 @@ struct Parameter {
     static unsigned RIR_WARMUP;
     static unsigned DEOPT_ABANDON;
 
+    static size_t PROMISE_INLINER_MAX_SIZE;
+
     static size_t INLINER_MAX_SIZE;
     static size_t INLINER_MAX_INLINEE_SIZE;
     static size_t INLINER_INITIAL_FUEL;

@@ -242,7 +242,7 @@ static void checkReplace(Instruction* origin, Value* replace) {
 }
 
 void Instruction::replaceDominatedUses(Instruction* replace,
-                                       std::unordered_set<Tag> skip) {
+                                       const std::initializer_list<Tag>& skip) {
     checkReplace(this, replace);
 
     auto start = false;
@@ -263,7 +263,8 @@ void Instruction::replaceDominatedUses(Instruction* replace,
                 continue;
             }
 
-            if (skip.empty() || !skip.count(i->tag)) {
+            if (skip.size() == 0 ||
+                std::find(skip.begin(), skip.end(), i->tag) == skip.end()) {
                 bool changed = false;
                 i->eachArg([&](InstrArg& arg) {
                     if (arg.val() == this) {

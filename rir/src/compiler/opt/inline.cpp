@@ -139,11 +139,17 @@ class TheInliner {
                         // stays unchanged. Below it's increased and above it
                         // is decreased, but not more than 4x
                         double adjust = 1.25 * c->taken;
-                        if (adjust > 4)
-                            adjust = 4;
+                        if (adjust > 3)
+                            adjust = 3;
                         if (adjust < 0.25)
                             adjust = 0.25;
                         weight = (double)weight / adjust;
+                        // Inline only small methods if we are getting close to
+                        // the limit.
+                        auto limit = (double)inlinee->size() /
+                                     (double)Parameter::INLINER_MAX_SIZE;
+                        limit = (limit * 4) + 1;
+                        weight *= limit;
                     }
                 }
 
