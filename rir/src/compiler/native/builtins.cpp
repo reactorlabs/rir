@@ -923,6 +923,83 @@ NativeBuiltin NativeBuiltins::extract21 = {
     (void*)&extract21Impl,
 };
 
+SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
+
+    if (!isObject(vector) && index != NA_INTEGER && XLENGTH(vector) >= index) {
+        if (TYPEOF(vector) == INTSXP) {
+            return ScalarInteger(INTEGER(vector)[index - 1]);
+        }
+        if (TYPEOF(vector) == REALSXP) {
+            return ScalarReal(REAL(vector)[index - 1]);
+        }
+        if (TYPEOF(vector) == LGLSXP) {
+            return ScalarLogical(INTEGER(vector)[index - 1]);
+        }
+        if (TYPEOF(vector) == VECSXP) {
+            return VECTOR_ELT(vector, index - 1);
+        }
+    }
+
+    SEXP args = CONS_NR(vector, CONS_NR(ScalarInteger(index), R_NilValue));
+    PROTECT(args);
+    SEXP res = nullptr;
+    if (isObject(vector)) {
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
+                            globalContext());
+        if (!res)
+            res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+    } else {
+        res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
+    }
+    UNPROTECT(1);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::extract21i = {
+    "extract2_1Di",
+    (void*)&extract21iImpl,
+};
+
+SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
+
+    auto pos = (R_xlen_t)(index - 1);
+    if (!isObject(vector) && index == index && XLENGTH(vector) > pos) {
+        if (TYPEOF(vector) == INTSXP) {
+            return ScalarInteger(INTEGER(vector)[pos]);
+        }
+        if (TYPEOF(vector) == REALSXP) {
+            return ScalarReal(REAL(vector)[pos]);
+        }
+        if (TYPEOF(vector) == LGLSXP) {
+            return ScalarLogical(INTEGER(vector)[pos]);
+        }
+        if (TYPEOF(vector) == VECSXP) {
+            return VECTOR_ELT(vector, pos);
+        }
+    }
+
+    SEXP args = CONS_NR(vector, CONS_NR(ScalarReal(index), R_NilValue));
+    PROTECT(args);
+    SEXP res = nullptr;
+    if (isObject(vector)) {
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
+                            globalContext());
+        if (!res)
+            res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+    } else {
+        res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
+    }
+    UNPROTECT(1);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::extract21r = {
+    "extract2_1Dr",
+    (void*)&extract21rImpl,
+};
+
 SEXP extract12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
                    Immediate srcIdx) {
     SEXP args = CONS_NR(vector, CONS_NR(index1, CONS_NR(index2, R_NilValue)));
@@ -967,6 +1044,102 @@ SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
 NativeBuiltin NativeBuiltins::extract22 = {
     "extract2_2D",
     (void*)&extract22Impl,
+};
+
+SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
+                     Immediate srcIdx) {
+
+    if (!isObject(vector) && isMatrix(vector) && index1 != NA_INTEGER &&
+        index2 != NA_INTEGER) {
+        auto p1 = (R_xlen_t)(index1 - 1);
+        auto p2 = (R_xlen_t)(index2 - 1);
+        if (p1 < Rf_ncols(vector) && p2 < Rf_nrows(vector)) {
+            auto pos = Rf_ncols(vector) * p1 + p2;
+
+            if (TYPEOF(vector) == INTSXP) {
+                return ScalarInteger(INTEGER(vector)[pos]);
+            }
+            if (TYPEOF(vector) == REALSXP) {
+                return ScalarReal(REAL(vector)[pos]);
+            }
+            if (TYPEOF(vector) == LGLSXP) {
+                return ScalarLogical(INTEGER(vector)[pos]);
+            }
+            if (TYPEOF(vector) == VECSXP) {
+                return VECTOR_ELT(vector, pos);
+            }
+        }
+    }
+
+    SEXP args =
+        CONS_NR(vector, CONS_NR(ScalarInteger(index1),
+                                CONS_NR(ScalarInteger(index2), R_NilValue)));
+    PROTECT(args);
+    SEXP res = nullptr;
+    if (isObject(vector)) {
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
+                            globalContext());
+        if (!res)
+            res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+    } else {
+        res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
+    }
+    UNPROTECT(1);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::extract22ii = {
+    "extract2_2Dii",
+    (void*)&extract22iiImpl,
+};
+
+SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
+                     Immediate srcIdx) {
+
+    if (!isObject(vector) && isMatrix(vector) && index1 == index1 &&
+        index2 == index2) {
+        auto p1 = (R_xlen_t)(index1 - 1);
+        auto p2 = (R_xlen_t)(index2 - 1);
+        if (p1 < Rf_ncols(vector) && p2 < Rf_nrows(vector)) {
+            auto pos = Rf_ncols(vector) * p1 + p2;
+
+            if (TYPEOF(vector) == INTSXP) {
+                return ScalarInteger(INTEGER(vector)[pos]);
+            }
+            if (TYPEOF(vector) == REALSXP) {
+                return ScalarReal(REAL(vector)[pos]);
+            }
+            if (TYPEOF(vector) == LGLSXP) {
+                return ScalarLogical(INTEGER(vector)[pos]);
+            }
+            if (TYPEOF(vector) == VECSXP) {
+                return VECTOR_ELT(vector, pos);
+            }
+        }
+    }
+
+    SEXP args =
+        CONS_NR(vector, CONS_NR(ScalarReal(index1),
+                                CONS_NR(ScalarReal(index2), R_NilValue)));
+    PROTECT(args);
+    SEXP res = nullptr;
+    if (isObject(vector)) {
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
+                            globalContext());
+        if (!res)
+            res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+    } else {
+        res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
+    }
+    UNPROTECT(1);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::extract22rr = {
+    "extract2_2Drr",
+    (void*)&extract22rrImpl,
 };
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
@@ -1160,7 +1333,8 @@ NativeBuiltin NativeBuiltins::subassign21 = {
     (void*)subassign21Impl,
 };
 
-SEXP subassign21iImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
+SEXP subassign21rrImpl(SEXP vec, double idx, double val, SEXP env,
+                       Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_duplicate(vec);
@@ -1168,7 +1342,129 @@ SEXP subassign21iImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
         prot++;
     }
 
-    if (!isObject(vec)) {
+    if (!isObject(vec) && idx == idx) {
+        auto pos = (R_xlen_t)(idx - 1);
+
+        if (TYPEOF(vec) == REALSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                REAL(vec)[pos] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == VECSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                SET_VECTOR_ELT(vec, pos, ScalarReal(val));
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+    }
+
+    auto v = PROTECT(ScalarReal(val));
+    auto i = PROTECT(ScalarReal(idx));
+    auto res = subassign21Impl(vec, i, v, env, srcIdx);
+    UNPROTECT(prot + 2);
+    return res;
+}
+SEXP subassign21irImpl(SEXP vec, int idx, double val, SEXP env,
+                       Immediate srcIdx) {
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
+        vec = Rf_duplicate(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec) && idx != NA_INTEGER) {
+        auto pos = (idx - 1);
+
+        if (TYPEOF(vec) == REALSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                REAL(vec)[pos] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == VECSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                SET_VECTOR_ELT(vec, pos, ScalarReal(val));
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+    }
+
+    auto v = PROTECT(ScalarReal(val));
+    auto i = PROTECT(ScalarInteger(idx));
+    auto res = subassign21Impl(vec, i, v, env, srcIdx);
+    UNPROTECT(prot + 2);
+    return res;
+}
+SEXP subassign21riImpl(SEXP vec, double idx, int val, SEXP env,
+                       Immediate srcIdx) {
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
+        vec = Rf_duplicate(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec) && idx == idx) {
+        auto pos = (R_xlen_t)(idx - 1);
+
+        if (TYPEOF(vec) == INTSXP || TYPEOF(vec) == LGLSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                INTEGER(vec)[pos] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == REALSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                REAL(vec)[pos] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == VECSXP) {
+            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) == pos)
+                    SETLENGTH(vec, pos + 1);
+                SET_VECTOR_ELT(vec, pos, ScalarInteger(val));
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+    }
+
+    auto v = PROTECT(ScalarInteger(val));
+    auto i = PROTECT(ScalarReal(idx));
+    auto res = subassign21Impl(vec, i, v, env, srcIdx);
+    UNPROTECT(prot + 2);
+    return res;
+}
+SEXP subassign21iiImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
+        vec = Rf_duplicate(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec) && idx != NA_INTEGER) {
         auto pos = idx - 1;
 
         if (TYPEOF(vec) == INTSXP || TYPEOF(vec) == LGLSXP) {
@@ -1207,9 +1503,21 @@ SEXP subassign21iImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
     return res;
 }
 
-NativeBuiltin NativeBuiltins::subassign21i = {
-    "subassign2_1D_int",
-    (void*)subassign21iImpl,
+NativeBuiltin NativeBuiltins::subassign21ii = {
+    "subassign2_1D_ii",
+    (void*)subassign21iiImpl,
+};
+NativeBuiltin NativeBuiltins::subassign21rr = {
+    "subassign2_1D_rr",
+    (void*)subassign21rrImpl,
+};
+NativeBuiltin NativeBuiltins::subassign21ri = {
+    "subassign2_1D_ri",
+    (void*)subassign21riImpl,
+};
+NativeBuiltin NativeBuiltins::subassign21ir = {
+    "subassign2_1D_ir",
+    (void*)subassign21irImpl,
 };
 
 SEXP subassign12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP value,
@@ -1245,9 +1553,54 @@ NativeBuiltin NativeBuiltins::subassign12 = {
 
 SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
                      Immediate srcIdx) {
-    if (MAYBE_SHARED(vec))
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
         vec = Rf_duplicate(vec);
-    PROTECT(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec) && isMatrix(vec)) {
+        R_xlen_t pos1 = -1;
+        R_xlen_t pos2 = -1;
+        if (IS_SIMPLE_SCALAR(idx1, INTSXP)) {
+            if (*INTEGER(idx1) != NA_INTEGER)
+                pos1 = *INTEGER(idx1);
+        } else if (IS_SIMPLE_SCALAR(idx1, REALSXP)) {
+            if (*REAL(idx1) == *REAL(idx1))
+                pos1 = *REAL(idx1);
+        }
+        if (IS_SIMPLE_SCALAR(idx2, INTSXP)) {
+            if (*INTEGER(idx2) != NA_INTEGER)
+                pos2 = *INTEGER(idx2);
+        } else if (IS_SIMPLE_SCALAR(idx2, REALSXP)) {
+            if (*REAL(idx2) == *REAL(idx2))
+                pos2 = *REAL(idx2);
+        }
+        if (pos1 != (R_xlen_t)-1 && pos2 != (R_xlen_t)-1) {
+            if (IS_SIMPLE_SCALAR(val, INTSXP) && TYPEOF(vec) == INTSXP) {
+                if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                    INTEGER(vec)[Rf_ncols(vec) * pos1 + pos2] = *INTEGER(val);
+                    UNPROTECT(prot);
+                    return vec;
+                }
+            }
+            if (IS_SIMPLE_SCALAR(val, REALSXP) && TYPEOF(vec) == REALSXP) {
+                if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                    REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = *REAL(val);
+                    UNPROTECT(prot);
+                    return vec;
+                }
+            }
+            if (TYPEOF(vec) == VECSXP) {
+                if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                    SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2, val);
+                    UNPROTECT(prot);
+                    return vec;
+                }
+            }
+        }
+    }
 
     SEXP args =
         CONS_NR(vec, CONS_NR(idx1, CONS_NR(idx2, CONS_NR(val, R_NilValue))));
@@ -1266,13 +1619,257 @@ SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
         SET_NAMED(res, 0);
     }
     Rf_endcontext(&assignContext);
-    UNPROTECT(2);
+    UNPROTECT(prot + 1);
+    return res;
+}
+
+SEXP subassign22rrrImpl(SEXP vec, double idx1, double idx2, double val,
+                        SEXP env, Immediate srcIdx) {
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
+        vec = Rf_duplicate(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec) && isMatrix(vec) && idx1 == idx1 && idx2 == idx2) {
+        R_xlen_t pos1 = idx1 - 1;
+        R_xlen_t pos2 = idx2 - 1;
+        if (TYPEOF(vec) == REALSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == VECSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2,
+                               ScalarReal(val));
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+    }
+
+    auto i1 = PROTECT(ScalarReal(idx1));
+    auto i2 = PROTECT(ScalarReal(idx2));
+    auto v = PROTECT(ScalarReal(val));
+    prot += 3;
+    SEXP args = CONS_NR(vec, CONS_NR(i1, CONS_NR(i2, CONS_NR(v, R_NilValue))));
+    SET_TAG(CDDDR(args), symbol::value);
+    PROTECT(args);
+    SEXP res = nullptr;
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    RCNTXT assignContext;
+    Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
+                    symbol::AssignDoubleBracket);
+    if (isObject(vec))
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
+                            globalContext());
+    if (!res) {
+        res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
+        SET_NAMED(res, 0);
+    }
+    Rf_endcontext(&assignContext);
+    UNPROTECT(prot + 1);
+    return res;
+}
+
+SEXP subassign22iirImpl(SEXP vec, int idx1, int idx2, double val, SEXP env,
+                        Immediate srcIdx) {
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
+        vec = Rf_duplicate(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec) && isMatrix(vec) && idx1 != NA_INTEGER &&
+        idx2 != NA_INTEGER) {
+        R_xlen_t pos1 = idx1 - 1;
+        R_xlen_t pos2 = idx2 - 1;
+        if (TYPEOF(vec) == REALSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == VECSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2,
+                               ScalarReal(val));
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+    }
+
+    auto i1 = PROTECT(ScalarInteger(idx1));
+    auto i2 = PROTECT(ScalarInteger(idx2));
+    auto v = PROTECT(ScalarReal(val));
+    prot += 3;
+    SEXP args = CONS_NR(vec, CONS_NR(i1, CONS_NR(i2, CONS_NR(v, R_NilValue))));
+    SET_TAG(CDDDR(args), symbol::value);
+    PROTECT(args);
+    SEXP res = nullptr;
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    RCNTXT assignContext;
+    Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
+                    symbol::AssignDoubleBracket);
+    if (isObject(vec))
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
+                            globalContext());
+    if (!res) {
+        res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
+        SET_NAMED(res, 0);
+    }
+    Rf_endcontext(&assignContext);
+    UNPROTECT(prot + 1);
+    return res;
+}
+
+SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
+                        Immediate srcIdx) {
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
+        vec = Rf_duplicate(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec) && isMatrix(vec) && idx1 != NA_INTEGER &&
+        idx2 != NA_INTEGER) {
+        R_xlen_t pos1 = idx1 - 1;
+        R_xlen_t pos2 = idx2 - 1;
+        if (TYPEOF(vec) == INTSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                INTEGER(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == REALSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == VECSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2,
+                               ScalarInteger(val));
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+    }
+
+    auto i1 = PROTECT(ScalarInteger(idx1));
+    auto i2 = PROTECT(ScalarInteger(idx2));
+    auto v = PROTECT(ScalarInteger(val));
+    prot += 3;
+    SEXP args = CONS_NR(vec, CONS_NR(i1, CONS_NR(i2, CONS_NR(v, R_NilValue))));
+    SET_TAG(CDDDR(args), symbol::value);
+    PROTECT(args);
+    SEXP res = nullptr;
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    RCNTXT assignContext;
+    Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
+                    symbol::AssignDoubleBracket);
+    if (isObject(vec))
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
+                            globalContext());
+    if (!res) {
+        res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
+        SET_NAMED(res, 0);
+    }
+    Rf_endcontext(&assignContext);
+    UNPROTECT(prot + 1);
+    return res;
+}
+
+SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
+                        Immediate srcIdx) {
+    int prot = 0;
+    if (MAYBE_SHARED(vec)) {
+        vec = Rf_duplicate(vec);
+        PROTECT(vec);
+        prot++;
+    }
+
+    if (!isObject(vec) && isMatrix(vec) && idx1 == idx1 && idx2 == idx2) {
+        R_xlen_t pos1 = idx1 - 1;
+        R_xlen_t pos2 = idx2 - 1;
+        if (TYPEOF(vec) == INTSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                INTEGER(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == REALSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+        if (TYPEOF(vec) == VECSXP) {
+            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
+                SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2,
+                               ScalarInteger(val));
+                UNPROTECT(prot);
+                return vec;
+            }
+        }
+    }
+
+    auto i1 = PROTECT(ScalarReal(idx1));
+    auto i2 = PROTECT(ScalarReal(idx2));
+    auto v = PROTECT(ScalarInteger(val));
+    prot += 3;
+    SEXP args = CONS_NR(vec, CONS_NR(i1, CONS_NR(i2, CONS_NR(v, R_NilValue))));
+    SET_TAG(CDDDR(args), symbol::value);
+    PROTECT(args);
+    SEXP res = nullptr;
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    RCNTXT assignContext;
+    Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
+                    symbol::AssignDoubleBracket);
+    if (isObject(vec))
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
+                            globalContext());
+    if (!res) {
+        res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
+        SET_NAMED(res, 0);
+    }
+    Rf_endcontext(&assignContext);
+    UNPROTECT(prot + 1);
     return res;
 }
 
 NativeBuiltin NativeBuiltins::subassign22 = {
     "subassign2_2D",
     (void*)subassign22Impl,
+};
+NativeBuiltin NativeBuiltins::subassign22iii = {
+    "subassign2_2Diii",
+    (void*)subassign22iiiImpl,
+};
+NativeBuiltin NativeBuiltins::subassign22rrr = {
+    "subassign2_2Drrr",
+    (void*)subassign22rrrImpl,
+};
+NativeBuiltin NativeBuiltins::subassign22rri = {
+    "subassign2_2Drr1",
+    (void*)subassign22rriImpl,
+};
+NativeBuiltin NativeBuiltins::subassign22iir = {
+    "subassign2_2Diir",
+    (void*)subassign22iirImpl,
 };
 
 int forSeqSizeImpl(SEXP seq) {

@@ -241,21 +241,45 @@ int initializeTypes(LLVMContext& context) {
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     NativeBuiltins::extract21.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::extract21i.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Int, t::SEXP, t::Int}, false);
+    NativeBuiltins::extract21r.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Double, t::SEXP, t::Int}, false);
     NativeBuiltins::extract12.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     NativeBuiltins::extract22.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::extract22ii.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::Int}, false);
+    NativeBuiltins::extract22rr.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Double, t::Double, t::SEXP, t::Int}, false);
 
     NativeBuiltins::subassign11.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     NativeBuiltins::subassign21.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign21i.llvmSignature = llvm::FunctionType::get(
+    NativeBuiltins::subassign21ii.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::Int}, false);
+    NativeBuiltins::subassign21rr.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Double, t::Double, t::SEXP, t::Int}, false);
+    NativeBuiltins::subassign21ir.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Int, t::Double, t::SEXP, t::Int}, false);
+    NativeBuiltins::subassign21ri.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Double, t::Int, t::SEXP, t::Int}, false);
     NativeBuiltins::subassign12.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     NativeBuiltins::subassign22.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::subassign22iii.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Int, t::Int, t::Int, t::SEXP, t::Int}, false);
+    NativeBuiltins::subassign22rrr.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Double, t::Double, t::Double, t::SEXP, t::Int},
+        false);
+    NativeBuiltins::subassign22iir.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Int, t::Int, t::Double, t::SEXP, t::Int}, false);
+    NativeBuiltins::subassign22rri.llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Double, t::Double, t::Int, t::SEXP, t::Int},
+        false);
 
     NativeBuiltins::nativeCallTrampoline.llvmSignature =
         llvm::FunctionType::get(
