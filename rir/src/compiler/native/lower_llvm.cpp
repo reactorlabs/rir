@@ -3506,10 +3506,27 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.SetInsertPoint(fallback);
                 }
 
-                auto res0 =
-                    call(NativeBuiltins::extract21,
-                         {loadSxp(extract->vec()), loadSxp(extract->idx()),
-                          loadSxp(extract->env()), c(extract->srcIdx)});
+                auto irep = representationOf(extract->idx());
+                llvm::Value* res0;
+
+                if (irep != t::SEXP) {
+                    NativeBuiltin getter;
+                    if (irep == t::Int) {
+                        getter = NativeBuiltins::extract21i;
+                    } else {
+                        assert(irep == t::Double);
+                        getter = NativeBuiltins::extract21r;
+                    }
+                    res0 = call(getter,
+                                {loadSxp(extract->vec()), load(extract->idx()),
+                                 loadSxp(extract->env()), c(extract->srcIdx)});
+                } else {
+                    res0 =
+                        call(NativeBuiltins::extract21,
+                             {loadSxp(extract->vec()), loadSxp(extract->idx()),
+                              loadSxp(extract->env()), c(extract->srcIdx)});
+                }
+
                 if (fastcase) {
                     builder.CreateStore(convert(res0, i->type), res);
                     builder.CreateBr(done);
@@ -3571,11 +3588,31 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.SetInsertPoint(fallback);
                 }
 
-                auto res0 =
-                    call(NativeBuiltins::extract22,
-                         {loadSxp(extract->vec()), loadSxp(extract->idx1()),
-                          loadSxp(extract->idx2()), loadSxp(extract->env()),
-                          c(extract->srcIdx)});
+                auto irep = representationOf(extract->idx1());
+                llvm::Value* res0;
+
+                if (irep != t::SEXP &&
+                    representationOf(extract->idx2()) == irep) {
+                    NativeBuiltin getter;
+                    if (irep == t::Int) {
+                        getter = NativeBuiltins::extract22ii;
+                    } else {
+                        assert(irep == t::Double);
+                        getter = NativeBuiltins::extract22rr;
+                    }
+
+                    res0 = call(getter,
+                                {load(extract->vec()), load(extract->idx1()),
+                                 loadSxp(extract->idx2()),
+                                 loadSxp(extract->env()), c(extract->srcIdx)});
+                } else {
+
+                    res0 =
+                        call(NativeBuiltins::extract22,
+                             {loadSxp(extract->vec()), loadSxp(extract->idx1()),
+                              loadSxp(extract->idx2()), loadSxp(extract->env()),
+                              c(extract->srcIdx)});
+                }
 
                 if (fastcase) {
                     builder.CreateStore(convert(res0, i->type), res);
@@ -3668,11 +3705,35 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto idx1 = loadSxp(subAssign->idx1());
                 auto idx2 = loadSxp(subAssign->idx2());
 
-                auto assign =
-                    call(NativeBuiltins::subassign22,
-                         {loadSxp(subAssign->lhs()), idx1, idx2,
-                          loadSxp(subAssign->rhs()), loadSxp(subAssign->env()),
-                          c(subAssign->srcIdx)});
+                llvm::Value* assign = nullptr;
+                auto irep = representationOf(subAssign->idx1());
+                auto vrep = representationOf(subAssign->rhs());
+                if (representationOf(subAssign->idx2()) == irep &&
+                    irep != t::SEXP && vrep != t::SEXP) {
+                    NativeBuiltin setter;
+                    if (irep == t::Int && vrep == t::Int)
+                        setter = NativeBuiltins::subassign22iii;
+                    else if (irep == t::Double && vrep == t::Int)
+                        setter = NativeBuiltins::subassign22rri;
+                    else if (irep == t::Int && vrep == t::Double)
+                        setter = NativeBuiltins::subassign22iir;
+                    else {
+                        assert(irep == t::Double && vrep == t::Double);
+                        setter = NativeBuiltins::subassign22rrr;
+                    }
+
+                    assign = call(
+                        setter,
+                        {loadSxp(subAssign->lhs()), load(subAssign->idx1()),
+                         load(subAssign->idx2()), load(subAssign->rhs()),
+                         loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                } else {
+                    assign =
+                        call(NativeBuiltins::subassign22,
+                             {loadSxp(subAssign->lhs()), idx1, idx2,
+                              loadSxp(subAssign->rhs()),
+                              loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                }
 
                 if (fastcase) {
                     builder.CreateStore(assign, res);
@@ -3754,12 +3815,23 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 llvm::Value* res0 = nullptr;
-                if (representationOf(subAssign->idx()) ==
-                        Representation::Integer &&
-                    representationOf(subAssign->val()) ==
-                        Representation::Integer) {
+                auto irep = representationOf(subAssign->idx());
+                auto vrep = representationOf(subAssign->val());
+                if (irep != t::SEXP && vrep != t::SEXP) {
+                    NativeBuiltin setter;
+                    if (irep == t::Int && vrep == t::Int)
+                        setter = NativeBuiltins::subassign21ii;
+                    else if (irep == t::Double && vrep == t::Int)
+                        setter = NativeBuiltins::subassign21ri;
+                    else if (irep == t::Int && vrep == t::Double)
+                        setter = NativeBuiltins::subassign21ir;
+                    else {
+                        assert(irep == t::Double && vrep == t::Double);
+                        setter = NativeBuiltins::subassign21rr;
+                    }
+
                     res0 =
-                        call(NativeBuiltins::subassign21i,
+                        call(setter,
                              {loadSxp(subAssign->vector()),
                               load(subAssign->idx()), load(subAssign->val()),
                               loadSxp(subAssign->env()), c(subAssign->srcIdx)});
