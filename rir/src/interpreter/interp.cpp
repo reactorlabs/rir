@@ -1885,6 +1885,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             // Do we need to preserve parent and the arg vals?
             SEXP parent = ostack_pop(ctx);
+
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
             auto names = (Immediate*)pc;
@@ -2267,6 +2268,26 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(stvar_super_stubbed_) {
+            unsigned pos = readImmediate();
+            advanceImmediate();
+            SEXP val = ostack_top(ctx);
+
+            auto lazyEnv = LazyEnvironment::check(env);
+            auto lazyParent = LazyEnvironment::check(lazyEnv->getParent());
+            assert(lazyParent);
+            assert(!lazyParent->materialized());
+            if (lazyParent->getArg(pos) != val) {
+                INCREMENT_NAMED(val);
+            }
+            if (lazyParent->getArg(pos) != val ||
+                !lazyParent->notMissing[pos]) {
+                lazyParent->setArg(pos, val, true);
+            }
+            ostack_pop(ctx);
+            NEXT();
+        }
+
         INSTRUCTION(stvar_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
@@ -2341,7 +2362,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
-            rirSetVarWrapper(sym, val, ENCLOS(env));
+            auto le = LazyEnvironment::check(env);
+            SEXP superEnv;
+            if (le)
+                superEnv = le->getParent();
+            else
+                superEnv = ENCLOS(env);
+            rirSetVarWrapper(sym, val, superEnv);
             NEXT();
         }
 

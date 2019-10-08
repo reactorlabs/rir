@@ -716,7 +716,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::StVarSuper: {
                 auto stvar = StVarSuper::Cast(instr);
-                cb.add(BC::stvarSuper(stvar->varName));
+                auto mkenv = MkEnv::Cast(stvar->env());
+                auto parent = MkEnv::Cast(mkenv->lexicalEnv());
+                if (mkenv && mkenv->stub && parent && parent->stub) {
+                    BC::stvarSuperStubbed(parent->indexOf(stvar->varName));
+                } else {
+                    cb.add(BC::stvarSuper(stvar->varName));
+                }
                 break;
             }
 

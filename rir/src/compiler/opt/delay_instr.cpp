@@ -6,9 +6,18 @@
 namespace rir {
 namespace pir {
 
+/*
+ * The main idea of this optimization is to try to move some operations, that
+ * are usually only used by deopt branches, and maybe expensive such as
+ * mkArg, or capture environments such as framestate, to all those branches
+ * and thus cleanup the fastpath.
+ */
+
 void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const {
 
+    std::unordered_map<Instruction*, SmallSet<Instruction*>> deoptUses;
+    std::unordered_map<Instruction*, SmallSet<Instruction*>> fastpathUses;
     std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
 
     auto isTarget = [](Instruction* j) {
@@ -17,6 +26,45 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
     };
 
     CFG cfg(function);
+
+    Visitor::run(function->entry, [&](Instruction* i) {
+        i->eachArg([&](Value* v) {
+            if (auto j = Instruction::Cast(v)) {
+                if (isTarget(j)) {
+                    if (i->bb()->isDeopt()) {
+                        usedOnlyInDeopt[j].insert(i->bb());
+                        deoptUses[j].insert(i);
+                    } else {
+                        fastpathUses[j].insert(i);
+                    }
+                }
+            }
+        });
+    });
+
+    for (auto entry : cfg.exits()) {
+        VisitorNoDeoptBranch::runBackward(entry, cfg, [&](Instruction* i) {
+            if (i->bb()->isDeopt())
+                return;
+            i->eachArg([&](Value* v) {
+                if (auto j = Instruction::Cast(v)) {
+                    if (isTarget(j)) {
+                        auto& u = usedOnlyInDeopt[j];
+                        if (!fastpathUses.count(i)) {
+                            for (auto instruction : deoptUses[i]) {
+                                u.insert(instruction->bb());
+                            }
+                        } else {
+                            // We could maybe go recursively here to move more
+                            // instructions together in one pass
+                            u.insert((BB*)-1);
+                        }
+                    }
+                }
+            });
+        });
+    }
+
     for (auto entry : cfg.exits()) {
         Visitor::runBackward(entry, cfg, [&](Instruction* i) {
             i->eachArg([&](Value* v) {
@@ -39,55 +87,54 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
         });
     }
 
+    std::unordered_map<Instruction*, SmallSet<std::pair<BB*, Instruction*>>>
+        replacements;
     for (auto entry : cfg.exits()) {
-        Visitor::runBackward(entry, cfg, [&](BB* bb) {
-        if (bb->isDeopt())
-            return;
+        VisitorNoDeoptBranch::runBackward(entry, cfg, [&](BB* bb) {
+            if (bb->isDeopt())
+                return;
+            auto ip = bb->rbegin();
+            while (ip != bb->rend()) {
+                auto i = *ip;
+                auto next = ip + 1;
 
-        auto ip = bb->rbegin();
-        while (ip != bb->rend()) {
-            auto i = *ip;
-            auto next = ip + 1;
-
-            /*
-             * The Idea with the following line is to convert code produced by
-             * speculative call target resolution. We want to convert the
-             * following code:
-             *
-             *          f = ldfun("f")
-             *          c = checkpoint()  -> BB1 | BB2
-             *      BB2:
-             *          deopt(stack=[f])
-             *      BB1:
-             *          assume (f==someFunction, c)
-             *
-             * into this:
-             *
-             *          c = checkpoint()  -> BB1 | BB2
-             *      BB2:
-             *          f1 = ldfun("f")
-             *          deopt(stack=[f1])
-             *      BB1:
-             *          f2 = ldvar("f")
-             *          assume (f2==someFunction, c)
-             *
-             * The later is better because f2 (in the main branch) does not have
-             * sideeffects and the sideeffecting ldfun is moved to the deopt
-             * branch.
-             */
-            if (isTarget(i)) {
-                if (!usedOnlyInDeopt[i].empty() && !usedOnlyInDeopt[i].count((BB*)-1)) {
-                    for (auto targetBB : usedOnlyInDeopt[i]){
-                        auto newInstr = i->clone();
-                        targetBB->insert(targetBB->begin(), newInstr);
-                        i->replaceUsesIn(newInstr, targetBB);
+                if (isTarget(i)) {
+                    if (!usedOnlyInDeopt[i].empty() &&
+                        !usedOnlyInDeopt[i].count((BB*)-1)) {
+                        for (auto targetBB : usedOnlyInDeopt[i]) {
+                            auto newInstr = i->clone();
+                            auto tagetPosition = targetBB->begin();
+                            tagetPosition =
+                                targetBB->insert(tagetPosition, newInstr);
+                            newInstr->eachArg([&](InstrArg& arg) {
+                                if (auto instruction =
+                                        Instruction::Cast(arg.val())) {
+                                    if (replacements.count(instruction)) {
+                                        for (auto replacementAtBB :
+                                             replacements[instruction]) {
+                                            if (replacementAtBB.first ==
+                                                targetBB) {
+                                                arg.val() =
+                                                    replacementAtBB.second;
+                                                targetBB->swapWithNext(
+                                                    tagetPosition);
+                                                tagetPosition++;
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                            i->replaceUsesIn(newInstr, targetBB);
+                            replacements[i].insert({targetBB, newInstr});
+                        }
+                        bb->remove(bb->atPosition(i));
+                        ip++;
                     }
-                    bb->remove(bb->atPosition(i));
                 }
+                ip = next;
             }
-            ip = next;
-        }
-    });}
+        });
+    }
 }
 } // namespace pir
 } // namespace rir

@@ -79,6 +79,11 @@ BC BC::stvarStubbed(unsigned pos) {
     i.i = pos;
     return BC(Opcode::stvar_stubbed_, i);
 }
+BC BC::stvarSuperStubbed(unsigned pos) {
+    ImmediateArguments i;
+    i.i = pos;
+    return BC(Opcode::stvar_super_stubbed_, i);
+}
 BC BC::ldvarNoForceStubbed(unsigned pos) {
     ImmediateArguments i;
     i.i = pos;

@@ -385,6 +385,7 @@ BC_NOARGS(V, _)
     inline static BC mkEagerPromise(FunIdx prom);
     inline static BC starg(SEXP sym);
     inline static BC stvarStubbed(unsigned stubbed);
+    inline static BC stvarSuperStubbed(unsigned stubbed);
     inline static BC stargStubbed(unsigned stubbed);
     inline static BC stvar(SEXP sym);
     inline static BC stargCached(SEXP sym, uint32_t cacheSlot);
@@ -712,6 +713,7 @@ BC_NOARGS(V, _)
         case Opcode::alloc_:
         case Opcode::ldvar_noforce_stubbed_:
         case Opcode::stvar_stubbed_:
+        case Opcode::stvar_super_stubbed_:
         case Opcode::starg_stubbed_:
             memcpy(&immediate.i, pc, sizeof(uint32_t));
             break;

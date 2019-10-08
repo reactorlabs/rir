@@ -128,6 +128,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::put_:
     case Opcode::alloc_:
     case Opcode::stvar_stubbed_:
+    case Opcode::stvar_super_stubbed_:
     case Opcode::starg_stubbed_:
     case Opcode::ldvar_noforce_stubbed_:
         cs.insert(immediate.i);
@@ -293,6 +294,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::movloc_:
         case Opcode::ldvar_noforce_stubbed_:
         case Opcode::stvar_stubbed_:
+        case Opcode::stvar_super_stubbed_:
         case Opcode::starg_stubbed_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
@@ -435,6 +437,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::movloc_:
         case Opcode::ldvar_noforce_stubbed_:
         case Opcode::stvar_stubbed_:
+        case Opcode::stvar_super_stubbed_:
         case Opcode::starg_stubbed_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
@@ -621,6 +624,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::pull_:
     case Opcode::put_:
     case Opcode::stvar_stubbed_:
+    case Opcode::stvar_super_stubbed_:
     case Opcode::starg_stubbed_:
     case Opcode::ldvar_noforce_stubbed_:
         out << immediate.i;
