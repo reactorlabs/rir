@@ -1,5 +1,6 @@
 #include "../analysis/generic_static_analysis.h"
 #include "../analysis/query.h"
+#include "../parameter.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../transform/replace.h"
@@ -371,6 +372,7 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
     SmallSet<Force*> needsUpdate;
     SmallMap<Force*, Force*> dominatedBy;
 
+    bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
     {
         ForceDominanceAnalysis analysis(code, code, log);
         analysis();
@@ -393,12 +395,15 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                         f->strict = true;
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
                             if (!mk->isEager()) {
-                                auto query = analysis.after(i);
-                                auto inl = query.isSafeToInline(mk);
-                                if (inl != ForcedBy::NotSafeToInline) {
-                                    toInline.insert(f);
-                                    if (inl == ForcedBy::SafeToInlineWithUpdate)
-                                        needsUpdate.insert(f);
+                                if (!isHuge || mk->prom()->size() < 10) {
+                                    auto query = analysis.after(i);
+                                    auto inl = query.isSafeToInline(mk);
+                                    if (inl != ForcedBy::NotSafeToInline) {
+                                        toInline.insert(f);
+                                        if (inl ==
+                                            ForcedBy::SafeToInlineWithUpdate)
+                                            needsUpdate.insert(f);
+                                    }
                                 }
                             }
                         }
@@ -528,5 +533,10 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
         m.first->replaceDominatedUses(m.second);
     }
 }
+
+size_t Parameter::PROMISE_INLINER_MAX_SIZE =
+    getenv("PIR_PROMISE_INLINER_MAX_SIZE")
+        ? atoi(getenv("PIR_PROMISE_INLINER_MAX_SIZE"))
+        : 3000;
 } // namespace pir
 } // namespace rir

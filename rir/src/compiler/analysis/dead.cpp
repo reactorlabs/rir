@@ -1,9 +1,12 @@
 #include "dead.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/visitor.h"
+#include <algorithm>
 
 namespace rir {
 namespace pir {
+
+constexpr std::initializer_list<Tag> DeadInstructions::typecheckInstrs;
 
 DeadInstructions::DeadInstructions(Code* code, DeadInstructionsMode mode) {
     Visitor::run(code->entry, [&](Instruction* i) {
@@ -11,8 +14,9 @@ DeadInstructions::DeadInstructions(Code* code, DeadInstructionsMode mode) {
             if (auto j = Instruction::Cast(v)) {
                 switch (mode) {
                 case IgnoreTypeTests:
-                    if ((i->tag == Tag::CastType || i->tag == Tag::IsType ||
-                         i->tag == Tag::IsObject) &&
+                    if (std::find(typecheckInstrs.begin(),
+                                  typecheckInstrs.end(),
+                                  i->tag) == typecheckInstrs.end() &&
                         v == i->arg(0).val())
                         return;
                     break;

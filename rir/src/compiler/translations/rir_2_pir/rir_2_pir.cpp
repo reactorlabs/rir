@@ -634,8 +634,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             insertGenericCall();
         }
         if (taken != (size_t)-1 && srcCode->funInvocationCount)
-            if (auto c = CallInstruction::CastCall(top()))
-                c->taken = (double)taken / (double)srcCode->funInvocationCount;
+            if (auto c = CallInstruction::CastCall(top())) {
+                // invocation count is already incremented before calling jit
+                c->taken =
+                    (double)taken / (double)(srcCode->funInvocationCount - 1);
+            }
         break;
     }
 
