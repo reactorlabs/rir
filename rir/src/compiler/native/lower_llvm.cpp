@@ -2060,6 +2060,21 @@ bool LowerFunctionLLVM::tryCompile() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
 
+                auto callTheBuiltin = [&]() {
+                    return withCallFrame(args, [&]() -> llvm::Value* {
+                        return call(NativeBuiltins::callBuiltin,
+                                    {
+                                        paramCode(),
+                                        c(b->srcIdx),
+                                        constant(b->blt, t::SEXP),
+                                        // Some "safe" builtins still look up
+                                        // functions in the base env
+                                        constant(R_BaseEnv, t::SEXP),
+                                        c(b->nCallArgs()),
+                                    });
+                    });
+                };
+
                 // TODO: this should probably go somewhere else... This is
                 // an inlined version of bitwise builtins
                 if (representationOf(b) == Representation::Integer) {
@@ -2259,7 +2274,19 @@ bool LowerFunctionLLVM::tryCompile() {
                                           builder.CreateFPToSI(a, t::Int)));
                         } else if (irep == Representation::Real &&
                                    orep == Representation::Real) {
-                            setVal(i, a);
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpUNE(a, a), a,
+                                          builder.CreateIntrinsic(
+                                              Intrinsic::floor, {a->getType()},
+                                              {a})));
+                        } else if (irep == t::SEXP) {
+                            auto isSimpleInt = builder.CreateAnd(
+                                builder.CreateICmpEQ(
+                                    attr(a), constant(R_NilValue, t::SEXP)),
+                                builder.CreateICmpEQ(sexptype(a), c(INTSXP)));
+                            setVal(i, builder.CreateSelect(isSimpleInt,
+                                                           convert(a, i->type),
+                                                           callTheBuiltin()));
                         } else {
                             done = false;
                         }
@@ -2285,6 +2312,22 @@ bool LowerFunctionLLVM::tryCompile() {
                     case 391: // "is.call"
                         doTypetest(LANGSXP);
                         break;
+                    case 393: { // "is.function"
+                        if (irep == Representation::Sexp) {
+                            auto t = sexptype(a);
+                            auto is = builder.CreateOr(
+                                builder.CreateICmpEQ(t, c(CLOSXP)),
+                                builder.CreateOr(
+                                    builder.CreateICmpEQ(t, c(BUILTINSXP)),
+                                    builder.CreateICmpEQ(t, c(SPECIALSXP))));
+                            setVal(i, builder.CreateSelect(
+                                          is, constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_FalseValue, orep));
+                        }
+                        break;
+                    }
                     case 395: // "is.na"
                         if (irep == Representation::Integer) {
                             setVal(i,
@@ -2349,18 +2392,34 @@ bool LowerFunctionLLVM::tryCompile() {
                         break;
                 }
 
-                setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                           return call(NativeBuiltins::callBuiltin,
-                                       {
-                                           paramCode(),
-                                           c(b->srcIdx),
-                                           constant(b->blt, t::SEXP),
-                                           // Some "safe" builtins still look up
-                                           // functions in the base env
-                                           constant(R_BaseEnv, t::SEXP),
-                                           c(b->nCallArgs()),
-                                       });
-                       }));
+                if (b->builtinId == 90) { // "c"
+                    bool allInt = true;
+                    bool allReal = true;
+                    b->eachCallArg([&](Value* v) {
+                        if (representationOf(v) != Representation::Real)
+                            allReal = false;
+                        if (representationOf(v) != Representation::Integer)
+                            allInt = false;
+                    });
+                    if (allInt || allReal) {
+                        auto res = call(NativeBuiltins::makeVector,
+                                        {allInt ? c(INTSXP) : c(REALSXP),
+                                         c(b->nCallArgs(), 64)});
+                        auto pos = 0;
+                        auto resT =
+                            PirType(allInt ? RType::integer : RType::real)
+                                .notObject();
+
+                        b->eachCallArg([&](Value* v) {
+                            assignVector(res, c(pos), load(v), resT);
+                            pos++;
+                        });
+                        setVal(i, res);
+                        break;
+                    }
+                }
+
+                setVal(i, callTheBuiltin());
                 break;
             }
 

@@ -66,6 +66,12 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         break;
                     }
 
+                    if ("as.integer" == name) {
+                        inferred = c->arg(0).type() &
+                                   PirType(RType::integer).notObject();
+                        break;
+                    }
+
                     if ("typeof" == name) {
                         inferred = PirType(RType::str).scalar();
                         break;
