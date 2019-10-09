@@ -250,6 +250,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 static int nargsBlt = findBuiltin("nargs");
                 static int lengthBlt = findBuiltin("length");
                 static int asintBlt = findBuiltin("as.integer");
+                static int ascharacterBlt = findBuiltin("as.character");
                 static int isatomicBlt = findBuiltin("is.atomic");
                 static int isfunctionBlt = findBuiltin("is.function");
                 static int isobjectBlt = findBuiltin("is.object");
@@ -278,6 +279,22 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     if (t.isA(PirType::simpleScalar())) {
                         i->replaceUsesAndSwapWith(new LdConst(1), ip);
                     }
+                } else if (builtinId == ascharacterBlt && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(PirType(RType::str)
+                                  .notPromiseWrapped()
+                                  .notObject())) {
+                        i->replaceUsesWith(i->arg(0).val());
+                        next = bb->remove(ip);
+                    } else if (auto con = isConst(i->arg(0).val())) {
+                        auto t = TYPEOF(con->c());
+                        if (t == REALSXP || t == INTSXP || t == LGLSXP) {
+                            auto res = Rf_eval(
+                                Rf_lang2(Rf_install("as.character"), con->c()),
+                                R_BaseEnv);
+                            i->replaceUsesAndSwapWith(new LdConst(res), ip);
+                        }
+                    }
                 } else if (builtinId == asintBlt && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(PirType(RType::integer)
@@ -294,6 +311,9 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                 i->replaceUsesAndSwapWith(
                                     new LdConst(NA_INTEGER), ip);
                             }
+                        } else if (IS_SIMPLE_SCALAR(con->c(), INTSXP)) {
+                            i->replaceUsesAndSwapWith(new LdConst(con->c()),
+                                                      ip);
                         }
                     }
                 } else if (builtinId == isfunctionBlt && nargs == 1) {
