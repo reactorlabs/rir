@@ -2396,12 +2396,16 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
+                    case 301:   // "min"
                     case 302: { // "max"
+                        bool isMin = b->builtinId == 301;
                         if (arep == Representation::Integer &&
                             brep == Representation::Integer &&
                             orep != Representation::Real) {
                             auto res = builder.CreateSelect(
-                                builder.CreateICmpSLT(aval, bval), bval, aval);
+                                isMin ? builder.CreateICmpSLT(bval, aval)
+                                      : builder.CreateICmpSLT(aval, bval),
+                                bval, aval);
                             if (orep == Representation::Integer) {
                                 setVal(i, res);
                             } else {
@@ -2413,7 +2417,9 @@ bool LowerFunctionLLVM::tryCompile() {
                                    brep == Representation::Real &&
                                    orep != Representation::Integer) {
                             auto res = builder.CreateSelect(
-                                builder.CreateFCmpUGT(aval, bval), aval, bval);
+                                isMin ? builder.CreateFCmpUGT(bval, aval)
+                                      : builder.CreateFCmpUGT(aval, bval),
+                                aval, bval);
                             if (orep == Representation::Real) {
                                 setVal(i, res);
                             } else {
