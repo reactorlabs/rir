@@ -8,6 +8,7 @@
 #include "R/r.h"
 #include "pass_definitions.h"
 
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -78,7 +79,8 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
     AvailableAssumptions assumptions(function, log);
     std::unordered_map<Checkpoint*, Checkpoint*> replaced;
 
-    std::unordered_map<Instruction*, std::pair<Instruction*, Checkpoint*>>
+    std::unordered_map<Instruction*,
+                       std::tuple<Instruction*, Checkpoint*, Assume*>>
         hoistAssume;
 
     bool huge = function->size() > 1000;
@@ -135,7 +137,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                             while (replaced.count(cp0))
                                 cp0 = replaced.at(cp0);
                             if (assume->checkpoint() != cp0) {
-                                hoistAssume[guard] = {guard, cp0};
+                                hoistAssume[guard] = {guard, cp0, assume};
                                 next = bb->remove(ip);
                                 changed = true;
                             }
@@ -203,7 +205,12 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
             if (h != hoistAssume.end()) {
                 auto g = h->second;
                 ip++;
-                ip = bb->insert(ip, new Assume(g.first, g.second));
+                auto assume = new Assume(std::get<0>(g), std::get<1>(g));
+                assume->feedbackOrigin.insert(
+                    assume->feedbackOrigin.end(),
+                    std::get<2>(g)->feedbackOrigin.begin(),
+                    std::get<2>(g)->feedbackOrigin.end());
+                ip = bb->insert(ip, assume);
             }
             ip++;
         }

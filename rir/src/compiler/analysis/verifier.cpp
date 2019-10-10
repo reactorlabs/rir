@@ -175,6 +175,17 @@ class TheVerifier {
             }
         }
 
+        if (auto assume = Assume::Cast(i)) {
+            if (IsType::Cast(assume->arg(0).val())) {
+                if (assume->feedbackOrigin.empty()) {
+                    std::cerr << "Error: instruction '";
+                    i->print(std::cerr);
+                    std::cerr << "' typecheck without origin information\n";
+                    ok = false;
+                }
+            }
+        }
+
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
             if (p->owner->promise(p->id) != p) {
