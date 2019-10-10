@@ -3,6 +3,7 @@
 #include "R/Funtab.h"
 #include "interp.h"
 #include <algorithm>
+#include <stdlib.h>
 
 namespace rir {
 
@@ -346,6 +347,39 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         default:
             return nullptr;
         }
+    }
+
+    case 310: { // "as.character"
+        if (nargs != 1)
+            return nullptr;
+        if (TYPEOF(args[0]) == STRSXP)
+            return args[0];
+        if (IS_SIMPLE_SCALAR(args[0], INTSXP)) {
+            auto i = INTEGER(args[0])[0];
+            if (i >= 0 && i < 1000) {
+                static std::array<SEXP, 1000> stringCache{};
+                if (!stringCache[i]) {
+                    char buf[6];
+                    sprintf(buf, "%d", i);
+                    auto r = mkChar(buf);
+                    auto res = allocVector(STRSXP, 1);
+                    SET_STRING_ELT(res, 0, r);
+                    R_PreserveObject(res);
+                    ENSURE_NAMEDMAX(res);
+                    stringCache[i] = res;
+                }
+                return stringCache[i];
+            }
+            if (i > -10000 && i < 100000) {
+                char buf[6];
+                sprintf(buf, "%d", i);
+                auto r = mkChar(buf);
+                auto res = allocVector(STRSXP, 1);
+                SET_STRING_ELT(res, 0, r);
+                return res;
+            }
+        }
+        break;
     }
 
     case 311: { // "as.integer"

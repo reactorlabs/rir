@@ -91,7 +91,12 @@ void DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
                                 if (!env)
                                     env = Env::elided();
 
-                                ip = bb->insert(ip, new Force(a, env));
+                                auto cast = new CastType(
+                                    a, CastType::Upcast, RType::prom,
+                                    PirType::any().notMissing());
+                                ip = bb->insert(ip, cast);
+                                ip++;
+                                ip = bb->insert(ip, new Force(cast, env));
                                 a = *ip;
                                 ip++;
                                 next = ip + 1;

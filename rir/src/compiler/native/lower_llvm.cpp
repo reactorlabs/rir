@@ -960,6 +960,8 @@ llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
         nativeType = t::IntPtr;
     } else if (type.isA(PirType(RType::real).notObject())) {
         nativeType = t::DoublePtr;
+    } else if (type.isA(PirType(RType::vec).notObject())) {
+        nativeType = t::SEXP_ptr;
     } else {
         nativeType = t::SEXP_ptr;
         assert(false);
@@ -2353,6 +2355,12 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 if (b->nargs() == 2) {
                     bool success = false;
+                    auto arep = representationOf(b->arg(0).val());
+                    auto brep = representationOf(b->arg(1).val());
+                    auto orep = representationOf(b);
+                    auto aval = load(b->arg(0).val());
+                    auto bval = load(b->arg(1).val());
+
                     switch (b->builtinId) {
                     case 109: { // "vector"
                         auto l = b->arg(1).val();
@@ -2386,6 +2394,41 @@ bool LowerFunctionLLVM::tryCompile() {
                                 }
                             }
                         }
+                        break;
+                    }
+                    case 301:   // "min"
+                    case 302: { // "max"
+                        bool isMin = b->builtinId == 301;
+                        if (arep == Representation::Integer &&
+                            brep == Representation::Integer &&
+                            orep != Representation::Real) {
+                            auto res = builder.CreateSelect(
+                                isMin ? builder.CreateICmpSLT(bval, aval)
+                                      : builder.CreateICmpSLT(aval, bval),
+                                bval, aval);
+                            if (orep == Representation::Integer) {
+                                setVal(i, res);
+                            } else {
+                                assert(orep == Representation::Sexp);
+                                setVal(i, boxInt(res, false));
+                            }
+                            success = true;
+                        } else if (arep == Representation::Real &&
+                                   brep == Representation::Real &&
+                                   orep != Representation::Integer) {
+                            auto res = builder.CreateSelect(
+                                isMin ? builder.CreateFCmpUGT(bval, aval)
+                                      : builder.CreateFCmpUGT(aval, bval),
+                                aval, bval);
+                            if (orep == Representation::Real) {
+                                setVal(i, res);
+                            } else {
+                                assert(orep == Representation::Sexp);
+                                setVal(i, boxReal(res, false));
+                            }
+                            success = true;
+                        }
+                        break;
                     }
                     }
                     if (success)
@@ -2417,6 +2460,20 @@ bool LowerFunctionLLVM::tryCompile() {
                         setVal(i, res);
                         break;
                     }
+                }
+
+                if (b->builtinId == 412) { // "list"
+                    auto res = call(NativeBuiltins::makeVector,
+                                    {c(VECSXP), c(b->nCallArgs(), 64)});
+                    auto pos = 0;
+                    auto resT = PirType(RType::vec).notObject();
+
+                    b->eachCallArg([&](Value* v) {
+                        assignVector(res, c(pos), loadSxp(v), resT);
+                        pos++;
+                    });
+                    setVal(i, res);
+                    break;
                 }
 
                 setVal(i, callTheBuiltin());
