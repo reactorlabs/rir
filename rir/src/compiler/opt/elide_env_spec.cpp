@@ -89,17 +89,15 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             if (auto mk = MkEnv::Cast(i->env())) {
                 if (mk->stub || bannedEnvs.count(mk))
                     return;
+                if (i->bb()->isDeopt() && MkArg::Cast(i))
+                    return;
                 // We can only stub an environment if all uses have a checkpoint
                 // available after every use or the reamining uses are in deopt branches and
                 // then we can safely copy the mkEnv there.
-                if (i->bb()->isDeopt()) {
-                    moveToDeopt[mk].insert(i->bb());
-                } else {
-                    if (auto cp = checkpoint.next(i))
-                        checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
-                    else {
-                        bannedEnvs.insert(mk);
-                    }
+                if (auto cp = checkpoint.next(i))
+                    checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
+                else {
+                    bannedEnvs.insert(mk);
                 }
             }
         }
@@ -130,20 +128,13 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 // in case they access promises reflectively
                 if (!bannedEnvs.count(i->env())) {
                     auto env = checks[i].second;
-                    if (!moveToDeopt[env].count(checks[i].first->bb()->falseBranch())) {
-                        if (!env->stub) {
-                            for (auto targetBBs : moveToDeopt[env]) {
-                                auto newEnvInstr = env->clone();
-                                targetBBs->insert(targetBBs->begin(), newEnvInstr);
-                                env->replaceUsesIn(newEnvInstr, targetBBs);
-                            }
-                            env->stub = true;
-                        }    
-                        auto cp = checks[i].first;
-                        auto condition = new IsEnvStub(env);
-                        BBTransform::insertAssume(condition, cp, true);
-                        assert(cp->bb()->trueBranch() != bb);
+                    if (!env->stub) {
+                        env->stub = true;
                     }
+                    auto cp = checks[i].first;
+                    auto condition = new IsEnvStub(env);
+                    BBTransform::insertAssume(condition, cp, true);
+                    assert(cp->bb()->trueBranch() != bb);
                 }
             } else if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which

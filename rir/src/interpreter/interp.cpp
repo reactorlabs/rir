@@ -472,8 +472,9 @@ static RIR_INLINE SEXP legacyCallWithArgslist(CallContext& call, SEXP argslist,
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         // call it
-        SEXP result =
-            f(call.ast, call.callee, argslist, materializeCallerEnv(call, ctx));
+        auto builtinEnv =
+            LazyEnvironment::check(call.callerEnv) ? R_BaseEnv : call.callerEnv;
+        SEXP result = f(call.ast, call.callee, argslist, builtinEnv);
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         return result;
@@ -2631,7 +2632,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(mk_eager_promise_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
+            auto lazy = LazyEnvironment::check(env);
+            auto closureEnv =
+                (lazy && lazy->materialized()) ? lazy->materialized() : env;
+            SLOWASSERT(!LazyEnvironment::check(closureEnv));
+            SEXP prom =
+                Rf_mkPROMISE(c->getPromise(id)->container(), closureEnv);
             SEXP val = ostack_pop(ctx);
             assert(TYPEOF(val) != PROMSXP);
             ENSURE_NAMEDMAX(val);
@@ -2643,7 +2649,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(mk_promise_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
+            auto lazy = LazyEnvironment::check(env);
+            auto closureEnv =
+                (lazy && lazy->materialized()) ? lazy->materialized() : env;
+            SLOWASSERT(!LazyEnvironment::check(closureEnv));
+            SEXP prom =
+                Rf_mkPROMISE(c->getPromise(id)->container(), closureEnv);
             ostack_push(ctx, prom);
             NEXT();
         }
