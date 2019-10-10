@@ -140,15 +140,17 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         Instruction::TypeFeedback seen;
                         if (argi)
                             seen = argi->typeFeedback;
-                        if (seen.type.isVoid()) {
-                            if (auto j = Instruction::Cast(arg->followCasts()))
+                        if (auto j = Instruction::Cast(arg->followCasts()))
+                            if (seen.type.isVoid() ||
+                                (j->typeFeedback.type.isVoid() &&
+                                 !seen.type.isA(j->typeFeedback.type)))
                                 seen = j->typeFeedback;
-                        }
-                        if (seen.type.isVoid()) {
-                            if (auto j = Instruction::Cast(
-                                    arg->followCastsAndForce()))
+                        if (auto j =
+                                Instruction::Cast(arg->followCastsAndForce()))
+                            if (seen.type.isVoid() ||
+                                (!j->typeFeedback.type.isVoid() &&
+                                 !seen.type.isA(j->typeFeedback.type)))
                                 seen = j->typeFeedback;
-                        }
                         if (seen.type.isVoid())
                             seen.type = arg->type.notObject();
 
