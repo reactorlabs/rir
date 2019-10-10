@@ -311,7 +311,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return nullptr;
     }
 
-    case 301: { // "min"
+    case 301:   // "min"
+    case 302: { // "max"
         if (nargs != 2)
             return nullptr;
 
@@ -323,30 +324,38 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
 
         auto combination = (TYPEOF(args[0]) << 8) + TYPEOF(args[1]);
 
+#define CMP(a, b) ((call.callee->u.primsxp.offset == 301) ? a < b : b < a)
+
         switch (combination) {
         case (INTSXP << 8) + INTSXP:
             if (*INTEGER(a) == NA_INTEGER || *INTEGER(b) == NA_INTEGER)
                 return nullptr;
-            return *INTEGER(a) < *INTEGER(b) ? a : b;
+            return CMP(*INTEGER(a), *INTEGER(b)) ? a : b;
 
         case (INTSXP << 8) + REALSXP:
-            if (*INTEGER(a) == NA_INTEGER || ISNAN(*REAL(b)))
-                return nullptr;
-            return *INTEGER(a) < *REAL(b) ? a : b;
+            if (ISNAN(*REAL(b)))
+                return b;
+            if (*INTEGER(a) == NA_INTEGER)
+                return ScalarReal(NA_REAL);
+            return CMP(*INTEGER(a), *REAL(b)) ? ScalarReal(*INTEGER(a)) : b;
 
         case (REALSXP << 8) + INTSXP:
-            if (*INTEGER(b) == NA_INTEGER || ISNAN(*REAL(a)))
-                return nullptr;
-            return *REAL(a) < *INTEGER(b) ? a : b;
+            if (ISNAN(*REAL(a)))
+                return a;
+            if (*INTEGER(b) == NA_INTEGER)
+                return ScalarReal(NA_REAL);
+            return CMP(*REAL(a), *INTEGER(b)) ? a : ScalarReal(*INTEGER(b));
 
         case (REALSXP << 8) + REALSXP:
             if (ISNAN(*REAL(a)) || ISNAN(*REAL(b)))
-                return nullptr;
-            return *REAL(a) < *REAL(b) ? a : b;
+                return a;
+            return CMP(*REAL(a), *REAL(b)) ? a : b;
 
         default:
             return nullptr;
         }
+
+#undef CMP
     }
 
     case 310: { // "as.character"
