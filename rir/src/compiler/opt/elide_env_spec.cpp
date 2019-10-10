@@ -142,7 +142,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                             seen = argi->typeFeedback;
                         if (auto j = Instruction::Cast(arg->followCasts()))
                             if (seen.type.isVoid() ||
-                                (j->typeFeedback.type.isVoid() &&
+                                (!j->typeFeedback.type.isVoid() &&
                                  !seen.type.isA(j->typeFeedback.type)))
                                 seen = j->typeFeedback;
                         if (auto j =
