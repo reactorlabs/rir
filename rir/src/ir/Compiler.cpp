@@ -338,9 +338,9 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
 //       away and move to an optimization phase.
 bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                         bool voidContext) {
-    // `true` if an argument isn't missing, labeled, or `...`.
+    // `true` if an argument isn't labeled, or `...`.
     auto isRegularArg = [](RListIter& arg) {
-        return *arg != R_DotsSymbol && *arg != R_MissingArg && !arg.hasTag();
+        return *arg != R_DotsSymbol && !arg.hasTag();
     };
 
     RList args(args_);
