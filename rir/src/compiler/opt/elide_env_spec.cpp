@@ -83,7 +83,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i))
                 return;
             if (auto mk = MkEnv::Cast(i->env())) {
-                if (bannedEnvs.count(mk))
+                if (mk->stub || bannedEnvs.count(mk) ||
+                    (i->bb()->isDeopt() && MkArg::Cast(i)))
                     return;
                 // We can only stub an environment if all uses have a checkpoint
                 // available after every use.

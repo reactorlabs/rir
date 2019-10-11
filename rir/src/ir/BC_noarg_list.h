@@ -12,6 +12,7 @@
     V(NESTED, parentEnv, parent_env)                                           \
     V(NESTED, getEnv, get_env)                                                 \
     V(NESTED, setEnv, set_env)                                                 \
+    V(NESTED, materializeEnv, materialize_env)                                 \
     V(NESTED, ret, ret)                                                        \
     V(NESTED, pop, pop)                                                        \
     V(NESTED, force, force)                                                    \

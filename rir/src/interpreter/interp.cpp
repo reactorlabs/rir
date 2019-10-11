@@ -1924,6 +1924,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(materialize_env_) {
+            auto lazyEnv = LazyEnvironment::check(env);
+            assert(lazyEnv);
+            if (!lazyEnv->materialized())
+                env = materialize(env);
+            NEXT();
+        }
+
         INSTRUCTION(ldfun_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
