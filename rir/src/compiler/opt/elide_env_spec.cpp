@@ -58,19 +58,21 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     Visitor::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
-                // Prevent us from leaking stub envs
-                if (!i->hasEnv() || i->env() != m)
-                    bannedEnvs.insert(m);
-                if (CallInstruction::CastCall(i)) {
-                    // Call builtin materializes env right away, so no point in
-                    // stubbing, unless we have a fastcase.
-                    if (auto bt = CallBuiltin::Cast(i))
-                        if (!supportsFastBuiltinCall(bt->blt))
-                            bannedEnvs.insert(m);
-                    return;
+                if (!m->stub && !bannedEnvs.count(m)) {
+                    // Prevent us from leaking stub envs
+                    if (!i->hasEnv() || i->env() != m)
+                        bannedEnvs.insert(m);
+                    if (CallInstruction::CastCall(i)) {
+                        // Call builtin materializes env right away, so no point
+                        // in stubbing, unless we have a fastcase.
+                        if (auto bt = CallBuiltin::Cast(i))
+                            if (!supportsFastBuiltinCall(bt->blt))
+                                bannedEnvs.insert(m);
+                        return;
+                    }
+                    if (!allowed.count(i->tag))
+                        bannedEnvs.insert(m);
                 }
-                if (!allowed.count(i->tag))
-                    bannedEnvs.insert(m);
             }
         });
     });
@@ -119,11 +121,11 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     auto env = checks[i].second;
                     if (!env->stub) {
                         env->stub = true;
-                        auto cp = checks[i].first;
-                        auto condition = new IsEnvStub(env);
-                        BBTransform::insertAssume(condition, cp, true);
-                        assert(cp->bb()->trueBranch() != bb);
                     }
+                    auto cp = checks[i].first;
+                    auto condition = new IsEnvStub(env);
+                    BBTransform::insertAssume(condition, cp, true);
+                    assert(cp->bb()->trueBranch() != bb);
                 }
             } else if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which
