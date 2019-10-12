@@ -711,6 +711,19 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::extract1_3_: {
+        forceIfPromised(3);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
+        Value* idx3 = pop();
+        Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
+        push(insert(new Extract1_3D(vec, idx1, idx2, idx3, env, srcIdx)));
+        break;
+    }
+
     case Opcode::subassign1_1_: {
         forceIfPromised(1);
         if (!inPromise()) {
@@ -758,6 +771,21 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* vec = pop();
         Value* val = pop();
         push(insert(new Subassign2_2D(val, vec, idx1, idx2, env, srcIdx)));
+        break;
+    }
+
+    case Opcode::subassign1_3_: {
+        forceIfPromised(3);
+        if (!inPromise()) {
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
+        Value* idx3 = pop();
+        Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
+        Value* val = pop();
+        push(
+            insert(new Subassign1_3D(val, vec, idx1, idx2, idx3, env, srcIdx)));
         break;
     }
 
