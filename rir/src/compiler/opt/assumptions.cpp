@@ -187,7 +187,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                                 cast->effects.set(Effect::DependsOnAssume);
                                 ip = bb->insert(ip, cast);
                                 tested->replaceDominatedUses(
-                                    *ip, DeadInstructions::typecheckInstrs);
+                                    *ip, TypecheckInstrsList);
                                 next = ip + 1;
                             }
                         }

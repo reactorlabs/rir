@@ -8,13 +8,12 @@
 namespace rir {
 namespace pir {
 
+constexpr static std::initializer_list<Tag> TypecheckInstrsList = {
+    Tag::IsObject, Tag::IsType, Tag::CastType, Tag::FrameState};
 class DeadInstructions {
     std::unordered_set<Instruction*> used_;
 
   public:
-    constexpr static std::initializer_list<Tag> typecheckInstrs = {
-        Tag::IsObject, Tag::IsType, Tag::CastType, Tag::FrameState};
-
     enum DeadInstructionsMode {
         CountAll,
         IgnoreUpdatePromise,
