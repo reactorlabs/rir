@@ -120,6 +120,8 @@ struct NativeBuiltins {
     static NativeBuiltin extract22;
     static NativeBuiltin extract22ii;
     static NativeBuiltin extract22rr;
+    static NativeBuiltin extract13;
+
     static NativeBuiltin subassign11;
     static NativeBuiltin subassign21;
     static NativeBuiltin subassign21ii;
@@ -132,6 +134,7 @@ struct NativeBuiltins {
     static NativeBuiltin subassign22rri;
     static NativeBuiltin subassign22iir;
     static NativeBuiltin subassign22;
+    static NativeBuiltin subassign13;
 
     static NativeBuiltin asIntFloor;
     static NativeBuiltin asIntCeil;

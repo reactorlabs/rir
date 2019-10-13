@@ -3633,14 +3633,16 @@ bool LowerFunctionLLVM::tryCompile() {
                         assert(irep == t::Double);
                         getter = NativeBuiltins::extract21r;
                     }
+                    auto vector = loadSxp(extract->vec());
                     res0 = call(getter,
-                                {loadSxp(extract->vec()), load(extract->idx()),
+                                {vector, load(extract->idx()),
                                  loadSxp(extract->env()), c(extract->srcIdx)});
                 } else {
-                    res0 =
-                        call(NativeBuiltins::extract21,
-                             {loadSxp(extract->vec()), loadSxp(extract->idx()),
-                              loadSxp(extract->env()), c(extract->srcIdx)});
+                    auto vector = loadSxp(extract->vec());
+                    auto idx = loadSxp(extract->idx());
+                    res0 = call(NativeBuiltins::extract21,
+                                {vector, idx, loadSxp(extract->env()),
+                                 c(extract->srcIdx)});
                 }
 
                 if (fastcase) {
@@ -3652,6 +3654,27 @@ bool LowerFunctionLLVM::tryCompile() {
                 } else {
                     setVal(i, res0);
                 }
+                break;
+            }
+
+            case Tag::Extract1_3D: {
+                auto extract = Extract1_3D::Cast(i);
+                auto vector = loadSxp(extract->vec());
+                auto idx1 = loadSxp(extract->idx1());
+                auto idx2 = loadSxp(extract->idx2());
+                auto idx3 = loadSxp(extract->idx3());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, t::SEXP);
+                if (extract->hasEnv())
+                    env = loadSxp(extract->env());
+
+                auto res =
+                    call(NativeBuiltins::extract13,
+                         {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
+                setVal(i, res);
+
                 break;
             }
 
@@ -3717,17 +3740,19 @@ bool LowerFunctionLLVM::tryCompile() {
                         getter = NativeBuiltins::extract22rr;
                     }
 
+                    auto vector = loadSxp(extract->vec());
                     res0 = call(getter,
-                                {load(extract->vec()), load(extract->idx1()),
+                                {vector, load(extract->idx1()),
                                  loadSxp(extract->idx2()),
                                  loadSxp(extract->env()), c(extract->srcIdx)});
                 } else {
 
-                    res0 =
-                        call(NativeBuiltins::extract22,
-                             {loadSxp(extract->vec()), loadSxp(extract->idx1()),
-                              loadSxp(extract->idx2()), loadSxp(extract->env()),
-                              c(extract->srcIdx)});
+                    auto vector = loadSxp(extract->vec());
+                    auto idx1 = loadSxp(extract->idx1());
+                    auto idx2 = loadSxp(extract->idx2());
+                    res0 = call(NativeBuiltins::extract22,
+                                {vector, idx1, idx2, loadSxp(extract->env()),
+                                 c(extract->srcIdx)});
                 }
 
                 if (fastcase) {
@@ -3740,6 +3765,24 @@ bool LowerFunctionLLVM::tryCompile() {
                     setVal(i, res0);
                 }
 
+                break;
+            }
+
+            case Tag::Subassign1_3D: {
+                auto subAssign = Subassign1_3D::Cast(i);
+                auto vector = loadSxp(subAssign->lhs());
+                auto val = loadSxp(subAssign->rhs());
+                auto idx1 = loadSxp(subAssign->idx1());
+                auto idx2 = loadSxp(subAssign->idx2());
+                auto idx3 = loadSxp(subAssign->idx3());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto res =
+                    call(NativeBuiltins::subassign13,
+                         {vector, idx1, idx2, idx3, val,
+                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                setVal(i, res);
                 break;
             }
 

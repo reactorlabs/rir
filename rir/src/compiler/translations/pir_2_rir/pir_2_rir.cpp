@@ -928,10 +928,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Extract2_1D, extract2_1);
                 SIMPLE_WITH_SRCIDX(Extract1_2D, extract1_2);
                 SIMPLE_WITH_SRCIDX(Extract2_2D, extract2_2);
+                SIMPLE_WITH_SRCIDX(Extract1_3D, extract1_3);
                 SIMPLE_WITH_SRCIDX(Subassign1_1D, subassign1_1);
                 SIMPLE_WITH_SRCIDX(Subassign2_1D, subassign2_1);
                 SIMPLE_WITH_SRCIDX(Subassign1_2D, subassign1_2);
                 SIMPLE_WITH_SRCIDX(Subassign2_2D, subassign2_2);
+                SIMPLE_WITH_SRCIDX(Subassign1_3D, subassign1_3);
 #undef SIMPLE_WITH_SRCIDX
 
             case Tag::Call: {

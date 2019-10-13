@@ -408,6 +408,11 @@ DEF_INSTR(extract1_1_, 0, 2, 1, 1)
 DEF_INSTR(extract1_2_, 0, 3, 1, 1)
 
 /**
+ * extract1_3_:: do a[b,c,d], where a, b and c are on the stack and a is no obj
+ */
+DEF_INSTR(extract1_3_, 0, 4, 1, 1)
+
+/**
  * subassign1_1_ :: a[b] <- c
  *
  * this instruction creates the rhs part of a <- `[<-(a,b,c)` and still needs
@@ -428,6 +433,11 @@ DEF_INSTR(subassign1_1_, 0, 3, 1, 1)
  * as GNUR's subassign, and it's not equivalent to `[<-(a,b,c, d)` itself
  */
 DEF_INSTR(subassign1_2_, 0, 4, 1, 1)
+
+/**
+ * subassign1_3_ :: a[b,c,d] <- e
+ */
+DEF_INSTR(subassign1_3_, 0, 5, 1, 1)
 
 /**
  * extract2_1_:: do a[[b]], where a and b are on the stack and a is no obj

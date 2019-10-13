@@ -339,7 +339,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
 bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                         bool voidContext) {
     // `true` if an argument isn't labeled, or `...`.
-    auto isRegularArg = [](RListIter& arg) {
+    auto isRegularArg = [](RListIter arg) {
         return *arg != R_DotsSymbol && !arg.hasTag();
     };
 
@@ -572,18 +572,20 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
 
         RList g(lhsParts[0]);
-        if (g.length() != 3 && g.length() != 4) {
+        int dims = g.length() - 2;
+        if (dims < 1 || dims > 3) {
             return false;
         }
 
-        bool is2d = g.length() == 4;
         SEXP fun2 = *g.begin();
         RListIter idx = g.begin() + 2;
-        RListIter idx2 = is2d ? (g.begin() + 3) : idx;
         if ((fun2 != symbol::Bracket && fun2 != symbol::DoubleBracket) ||
-            !isRegularArg(idx) || (is2d && !isRegularArg(idx2))) {
+            !isRegularArg(idx) || (dims > 1 && !isRegularArg(idx + 1)) ||
+            (dims > 2 && !isRegularArg(idx + 2))) {
             return false;
         }
+        if (dims == 3 && fun2 == symbol::DoubleBracket)
+            return false;
 
         emitGuardForNamePrimitive(cs, fun);
 
@@ -622,11 +624,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // And index
         compileExpr(ctx, *idx);
-        if (is2d) {
-            compileExpr(ctx, *idx2);
-        }
+        if (dims > 1)
+            compileExpr(ctx, *(idx + 1));
+        if (dims > 2)
+            compileExpr(ctx, *(idx + 2));
 
-        if (is2d) {
+        if (dims == 3) {
+            assert(fun2 == symbol::Bracket);
+            cs << BC::subassign1_3();
+        } else if (dims == 2) {
             if (fun2 == symbol::DoubleBracket) {
                 cs << BC::subassign2_2();
             } else {
@@ -762,23 +768,30 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     }
 
     if (fun == symbol::DoubleBracket || fun == symbol::Bracket) {
-        if (args.length() != 2 && args.length() != 3) {
+        int dims = args.length() - 1;
+        if (dims < 1 || dims > 3) {
             return false;
         }
 
-        bool is2d = args.length() == 3;
         SEXP lhs = *args.begin();
         RListIter idx = args.begin() + 1;
-        RListIter idx2 = args.begin() + 2;
 
-        if (!isRegularArg(idx) || (is2d && !isRegularArg(idx2)))
+        if (!isRegularArg(idx) || (dims > 1 && !isRegularArg(idx + 1)) ||
+            (dims > 2 && !isRegularArg(idx + 2)))
+            return false;
+        if (dims == 3 && fun == symbol::DoubleBracket)
             return false;
 
         emitGuardForNamePrimitive(cs, fun);
         compileExpr(ctx, lhs);
 
         compileExpr(ctx, *idx);
-        if (is2d) {
+        if (dims == 3) {
+            compileExpr(ctx, *(idx + 1));
+            compileExpr(ctx, *(idx + 2));
+            assert(fun != symbol::DoubleBracket);
+            cs << BC::extract1_3();
+        } else if (dims == 2) {
             compileExpr(ctx, *(idx + 1));
             if (fun == symbol::DoubleBracket)
                 cs << BC::extract2_2();
