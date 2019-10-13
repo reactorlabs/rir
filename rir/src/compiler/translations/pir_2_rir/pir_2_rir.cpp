@@ -442,6 +442,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             return bb;
         };
 
+        // Only needed for deopt branches
         bool seenMkArg = false;
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {

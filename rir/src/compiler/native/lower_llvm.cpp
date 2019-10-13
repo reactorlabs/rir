@@ -1968,6 +1968,9 @@ bool LowerFunctionLLVM::tryCompile() {
 
         builder.SetInsertPoint(getBlock(bb));
         inPushContext = blockInPushContext.at(bb);
+        
+        // Only needed for deopt branches
+        bool seenMkArg = false;
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto i = *it;
@@ -3461,6 +3464,7 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::MkArg: {
+                seenMkArg = true;
                 auto p = MkArg::Cast(i);
                 setVal(i, call(NativeBuiltins::createPromise,
                                {paramCode(), c(promMap.at(p->prom())),
@@ -3494,7 +3498,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto varName = maybeLd ? maybeLd->varName : R_DotsSymbol;
 
                 auto env = MkEnv::Cast(i->env());
-                if (env && env->stub) {
+                if (env && env->stub &&
+                    (!maybeLd->bb()->isDeopt() || !seenMkArg)) {
                     setVal(i, envStubGet(loadSxp(env), env->indexOf(varName),
                                          env->nLocals()));
                     break;
@@ -3975,7 +3980,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto st = StVar::Cast(i);
                 auto environment = MkEnv::Cast(st->env());
 
-                if (environment && environment->stub) {
+                if (environment && environment->stub &&
+                    (!st->bb()->isDeopt() || !seenMkArg)) {
                     auto val = loadSxp(st->val());
                     incrementNamed(val);
                     envStubSet(loadSxp(environment),
