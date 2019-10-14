@@ -226,6 +226,11 @@ class JitLLVMImplementation {
 
         PM->add(createMemCpyOptPass());
 
+        PM->add(createPromoteMemoryToRegisterPass());
+        PM->add(createConstantPropagationPass());
+        PM->add(createDeadInstEliminationPass());
+        PM->add(createTailCallEliminationPass());
+
         // Running `memcpyopt` between this and `sroa` seems to give `sroa` a
         // hard time merging the `alloca` for the unboxed data and the `alloca`
         // created by the `alloc_opt` pass.
