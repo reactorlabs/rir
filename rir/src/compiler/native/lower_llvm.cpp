@@ -3297,10 +3297,10 @@ bool LowerFunctionLLVM::tryCompile() {
                 assert(representationOf(i) == Representation::Integer);
                 auto is = Is::Cast(i);
                 auto arg = i->arg(0).val();
+                llvm::Value* res;
                 if (representationOf(arg) == Representation::Sexp) {
                     auto argNative = loadSxp(arg);
                     auto expectedTypeNative = c(is->sexpTag);
-                    llvm::Value* res = nullptr;
                     auto typeNative = sexptype(argNative);
                     switch (is->sexpTag) {
                     case NILSXP:
@@ -3330,17 +3330,29 @@ bool LowerFunctionLLVM::tryCompile() {
 
                     default:
                         assert(false);
+                        res = builder.getFalse();
                         success = false;
                         break;
                     }
-
-                    setVal(i, builder.CreateZExt(res, t::Int));
-
                 } else {
-                    // How do we implement the fast path? Because in native
-                    // representations we may have lost the real representation
-                    success = false;
+                    assert(i->type.isA(RType::integer) ||
+                           i->type.isA(RType::logical) ||
+                           i->type.isA(RType::real));
+                    assert(representationOf(i) == Representation::Integer ||
+                           representationOf(i) == Representation::Real);
+
+                    bool matchInt =
+                        (is->sexpTag == INTSXP) && i->type.isA(RType::integer);
+                    bool matchLgl =
+                        (is->sexpTag == LGLSXP) && i->type.isA(RType::logical);
+                    bool matchReal =
+                        (is->sexpTag == REALSXP) && i->type.isA(RType::real);
+
+                    res = (matchInt || matchLgl || matchReal)
+                              ? builder.getTrue()
+                              : builder.getFalse();
                 }
+                setVal(i, builder.CreateZExt(res, t::Int));
                 break;
             }
 
