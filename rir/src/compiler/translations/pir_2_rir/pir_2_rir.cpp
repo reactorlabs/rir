@@ -768,10 +768,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto p = mk->prom();
                 unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
                 promMap[p] = id;
-                if (auto env = MkEnv::Cast(mk->env())) {
-                    if (mk->bb()->isDeopt() && env->stub)
-                        cb.add(BC::materializeEnv());
-                }
                 if (mk->isEager()) {
                     cb.add(BC::mkEagerPromise(id));
                 } else {
@@ -1062,6 +1058,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(
                             BC::clearBindingCache(range.first, range.second));
                 });
+                break;
+            }
+
+            case Tag::MaterializeEnv: {
+                cb.add(BC::materializeEnv());
                 break;
             }
 
