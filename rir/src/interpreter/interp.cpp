@@ -472,8 +472,9 @@ static RIR_INLINE SEXP legacyCallWithArgslist(CallContext& call, SEXP argslist,
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         // call it
-        SEXP result =
-            f(call.ast, call.callee, argslist, materializeCallerEnv(call, ctx));
+        auto builtinEnv =
+            LazyEnvironment::check(call.callerEnv) ? R_BaseEnv : call.callerEnv;
+        SEXP result = f(call.ast, call.callee, argslist, builtinEnv);
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         return result;
