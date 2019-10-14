@@ -3576,14 +3576,18 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto hit2 = BasicBlock::Create(C, "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit2);
                         builder.SetInsertPoint(hit2);
-                    }
 
-                    if (representationOf(extract->vec()) == t::SEXP) {
-                        auto hit2 = BasicBlock::Create(C, "", fun);
+                        auto hit3 = BasicBlock::Create(C, "", fun);
                         auto hasAttrib = builder.CreateICmpNE(
                             attr(vector), constant(R_NilValue, t::SEXP));
-                        builder.CreateCondBr(hasAttrib, fallback, hit2);
-                        builder.SetInsertPoint(hit2);
+                        builder.CreateCondBr(hasAttrib, fallback, hit3);
+                        builder.SetInsertPoint(hit3);
+
+                        auto isEmpty = builder.CreateICmpNE(
+                            vectorLength(vector), c(0, 64));
+                        auto hit4 = BasicBlock::Create(C, "", fun);
+                        builder.CreateCondBr(isEmpty, fallback, hit4);
+                        builder.SetInsertPoint(hit4);
                     }
 
                     llvm::Value* index =
