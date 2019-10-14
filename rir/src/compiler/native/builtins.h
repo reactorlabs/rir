@@ -74,6 +74,7 @@ struct NativeBuiltins {
 
     static NativeBuiltin createEnvironment;
     static NativeBuiltin createStubEnvironment;
+    static NativeBuiltin materializeEnvironment;
     static NativeBuiltin createPromise;
     static NativeBuiltin createClosure;
 

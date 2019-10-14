@@ -79,14 +79,17 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     });
 
     std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
+    std::unordered_map<MkEnv*, SmallSet<MkArg*>> needsMaterialization;
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv()) {
             if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i) ||
                 StVarSuper::Cast(i))
                 return;
             if (auto mk = MkEnv::Cast(i->env())) {
-                if (bannedEnvs.count(mk))
+                if (mk->stub || bannedEnvs.count(mk))
                     return;
+                if (i->bb()->isDeopt() && MkArg::Cast(i))
+                    needsMaterialization[mk].insert(MkArg::Cast(i));
                 // We can only stub an environment if all uses have a checkpoint
                 // available after every use.
                 if (auto cp = checkpoint.next(i))
@@ -110,6 +113,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 return true;
         return false;
     };
+
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -123,6 +127,12 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     auto env = checks[i].second;
                     if (!env->stub) {
                         env->stub = true;
+                        for (auto mkArg : needsMaterialization[env]) {
+                            Instruction* materialize = new MaterializeEnv(env);
+                            mkArg->bb()->insert(mkArg->bb()->begin(),
+                                                materialize);
+                            env->replaceUsesIn(materialize, mkArg->bb());
+                        }
                     }
                     auto cp = checks[i].first;
                     auto condition = new IsEnvStub(env);

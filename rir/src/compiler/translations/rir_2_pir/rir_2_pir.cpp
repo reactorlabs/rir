@@ -948,6 +948,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:
+    case Opcode::materialize_env_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_noforce_cached_:
     case Opcode::ldvar_noforce_super_:

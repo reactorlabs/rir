@@ -111,6 +111,19 @@ NativeBuiltin NativeBuiltins::createStubEnvironment = {
     (void*)&createStubEnvironmentImpl,
 };
 
+SEXP materializeEnvironmentImpl(SEXP environment) {
+    auto lazyEnv = LazyEnvironment::check(environment);
+    assert(lazyEnv);
+    if (!lazyEnv->materialized())
+        return materialize(environment);
+    return environment;
+}
+
+NativeBuiltin NativeBuiltins::materializeEnvironment = {
+    "materializeStubEnvironment",
+    (void*)&materializeEnvironmentImpl,
+};
+
 SEXP ldvarImpl(SEXP a, SEXP b) {
     auto res = Rf_findVar(a, b);
     // std::cout << CHAR(PRINTNAME(a)) << "=";

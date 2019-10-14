@@ -1969,7 +1969,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
         builder.SetInsertPoint(getBlock(bb));
         inPushContext = blockInPushContext.at(bb);
-
+        
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto i = *it;
             if (!success)
@@ -2784,6 +2784,13 @@ bool LowerFunctionLLVM::tryCompile() {
                         builder.CreateStore(
                             convertToPointer(nullptr, t::SEXP),
                             builder.CreateGEP(bindingsCacheBase, c(b.second)));
+                break;
+            }
+
+            case Tag::MaterializeEnv: {
+                auto materialize = MaterializeEnv::Cast(i);
+                setVal(i, call(NativeBuiltins::materializeEnvironment,
+                               {loadSxp(materialize->env())}));
                 break;
             }
 

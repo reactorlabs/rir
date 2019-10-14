@@ -442,6 +442,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             return bb;
         };
 
+        // Only needed for deopt branches
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
 
@@ -1062,6 +1063,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(
                             BC::clearBindingCache(range.first, range.second));
                 });
+                break;
+            }
+
+            case Tag::MaterializeEnv: {
+                cb.add(BC::materializeEnv());
                 break;
             }
 

@@ -69,6 +69,7 @@
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
     V(MkEnv)                                                                   \
+    V(MaterializeEnv)                                                          \
     V(PushContext)                                                             \
     V(PopContext)                                                              \
     V(LdFunctionEnv)                                                           \
