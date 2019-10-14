@@ -2342,7 +2342,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
-            rirSetVarWrapper(sym, val, ENCLOS(env));
+            auto le = LazyEnvironment::check(env);
+            SEXP superEnv;
+            if (le)
+                superEnv = le->getParent();
+            else
+                superEnv = ENCLOS(env);
+            rirSetVarWrapper(sym, val, superEnv);
             NEXT();
         }
 

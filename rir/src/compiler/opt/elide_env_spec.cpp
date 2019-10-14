@@ -52,8 +52,9 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
     // If we only see these (and call instructions) then we stub an environment,
     // since it can only be accessed reflectively.
-    static std::unordered_set<Tag> allowed{
-        Tag::Force, Tag::FrameState, Tag::PushContext, Tag::LdVar, Tag::StVar};
+    static std::unordered_set<Tag> allowed{Tag::Force,       Tag::FrameState,
+                                           Tag::PushContext, Tag::LdVar,
+                                           Tag::StVar,       Tag::StVarSuper};
 
     Visitor::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
@@ -80,7 +81,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv()) {
-            if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i))
+            if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i) ||
+                StVarSuper::Cast(i))
                 return;
             if (auto mk = MkEnv::Cast(i->env())) {
                 if (bannedEnvs.count(mk))

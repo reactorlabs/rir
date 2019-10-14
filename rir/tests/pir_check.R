@@ -107,6 +107,10 @@ stopifnot(pir.check(function(depth) {
   else
     0
 }, NoEnvSpec, warmup=function(f){cat(".\n"); f(0)}))
+seed <- 1   
+stopifnot(pir.check(function(a) {
+  seed <<- a
+}, NoEnvSpec))
 
 xxx <- 12
 stopifnot(pir.check(function() {

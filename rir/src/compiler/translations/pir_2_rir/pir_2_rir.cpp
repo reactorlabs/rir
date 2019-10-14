@@ -716,6 +716,15 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::StVarSuper: {
                 auto stvar = StVarSuper::Cast(instr);
+                // In case this assert fails it means we start supporting nested
+                // stub environments. In that case we should translate the store
+                // super to a special rir instruction that does the store in the
+                // stubbed parent.
+                assert(!(MkEnv::Cast(stvar->env()) &&
+                         MkEnv::Cast(stvar->env())->stub &&
+                         MkEnv::Cast(MkEnv::Cast(stvar->env())->lexicalEnv()) &&
+                         MkEnv::Cast(MkEnv::Cast(stvar->env())->lexicalEnv())
+                             ->stub));
                 cb.add(BC::stvarSuper(stvar->varName));
                 break;
             }
