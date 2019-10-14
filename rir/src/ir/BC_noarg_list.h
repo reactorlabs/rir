@@ -22,6 +22,7 @@
     V(NESTED, subassign2_1, subassign2_1)                                      \
     V(NESTED, subassign1_2, subassign1_2)                                      \
     V(NESTED, subassign2_2, subassign2_2)                                      \
+    V(NESTED, subassign1_3, subassign1_3)                                      \
     V(NESTED, length, length)                                                  \
     V(NESTED, names, names)                                                    \
     V(NESTED, setNames, set_names)                                             \
@@ -63,6 +64,7 @@
     V(NESTED, visible, visible)                                                \
     V(NESTED, extract1_1, extract1_1)                                          \
     V(NESTED, extract1_2, extract1_2)                                          \
+    V(NESTED, extract1_3, extract1_3)                                          \
     V(NESTED, extract2_1, extract2_1)                                          \
     V(NESTED, extract2_2, extract2_2)                                          \
     V(NESTED, swap, swap)                                                      \

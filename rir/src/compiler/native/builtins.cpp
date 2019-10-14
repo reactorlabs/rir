@@ -515,6 +515,7 @@ NativeBuiltin NativeBuiltins::newLgl = {
 
 static SEXPREC createFakeSEXP(SEXPTYPE t) {
     SEXPREC res;
+    memset(&res, 0, sizeof(SEXPREC));
     res.attrib = R_NilValue;
     res.gengc_next_node = R_NilValue;
     res.gengc_prev_node = R_NilValue;
@@ -532,6 +533,33 @@ static SEXPREC createFakeCONS(SEXP cdr) {
     res.u.listsxp.cdrval = cdr;
     return res;
 }
+
+#define FAKE_ARGS2(res, a1, a2)                                                \
+    auto __a2__cell__ = createFakeCONS(R_NilValue);                            \
+    auto __a1__cell__ = createFakeCONS(&__a2__cell__);                         \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    __a2__cell__.u.listsxp.carval = a2;                                        \
+    res = &__a1__cell__
+
+#define FAKE_ARGS3(res, a1, a2, a3)                                            \
+    auto __a3__cell__ = createFakeCONS(R_NilValue);                            \
+    auto __a2__cell__ = createFakeCONS(&__a3__cell__);                         \
+    auto __a1__cell__ = createFakeCONS(&__a2__cell__);                         \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    __a2__cell__.u.listsxp.carval = a2;                                        \
+    __a3__cell__.u.listsxp.carval = a3;                                        \
+    res = &__a1__cell__
+
+#define FAKE_ARGS4(res, a1, a2, a3, a4)                                        \
+    auto __a4__cell__ = createFakeCONS(R_NilValue);                            \
+    auto __a3__cell__ = createFakeCONS(&__a4__cell__);                         \
+    auto __a2__cell__ = createFakeCONS(&__a3__cell__);                         \
+    auto __a1__cell__ = createFakeCONS(&__a2__cell__);                         \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    __a2__cell__.u.listsxp.carval = a2;                                        \
+    __a3__cell__.u.listsxp.carval = a3;                                        \
+    __a4__cell__.u.listsxp.carval = a4;                                        \
+    res = &__a1__cell__
 
 static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
                         UnopKind op) {
@@ -1034,6 +1062,30 @@ SEXP extract12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
 NativeBuiltin NativeBuiltins::extract12 = {
     "extract1_2D",
     (void*)&extract12Impl,
+};
+
+SEXP extract13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3, SEXP env,
+                   Immediate srcIdx) {
+    SEXP res = nullptr;
+    SEXP args = CONS_NR(
+        vector, CONS_NR(index1, CONS_NR(index2, CONS_NR(index3, R_NilValue))));
+    PROTECT(args);
+    if (isObject(vector)) {
+        SEXP call = src_pool_at(globalContext(), srcIdx);
+        res = dispatchApply(call, vector, args, symbol::Bracket, env,
+                            globalContext());
+        if (!res)
+            res = do_subset_dflt(call, symbol::Bracket, args, env);
+    } else {
+        res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+    }
+    UNPROTECT(1);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::extract13 = {
+    "extract1_3D",
+    (void*)&extract13Impl,
 };
 
 SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
@@ -1562,6 +1614,39 @@ SEXP subassign12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP value,
 NativeBuiltin NativeBuiltins::subassign12 = {
     "subassign1_22",
     (void*)subassign12Impl,
+};
+
+SEXP subassign13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3,
+                     SEXP value, SEXP env, Immediate srcIdx) {
+    if (MAYBE_SHARED(vector))
+        vector = Rf_duplicate(vector);
+    PROTECT(vector);
+    SEXP args = CONS_NR(
+        vector,
+        CONS_NR(index1,
+                CONS_NR(index2, CONS_NR(index3, CONS_NR(value, R_NilValue)))));
+    SET_TAG(CDDDR(args), symbol::value);
+    PROTECT(args);
+    SEXP res = nullptr;
+    SEXP call = src_pool_at(globalContext(), srcIdx);
+    RCNTXT assignContext;
+    Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
+                    symbol::AssignBracket);
+    if (isObject(vector))
+        res = dispatchApply(call, vector, args, symbol::AssignBracket, env,
+                            globalContext());
+    if (!res) {
+        res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
+        SET_NAMED(res, 0);
+    }
+    Rf_endcontext(&assignContext);
+    UNPROTECT(2);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::subassign13 = {
+    "subassign1_3D",
+    (void*)subassign13Impl,
 };
 
 SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,

@@ -945,7 +945,8 @@ llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v, bool enableAsserts) {
 
 bool LowerFunctionLLVM::vectorTypeSupport(Value* vector) {
     auto type = vector->type;
-    return type.isA(PirType(RType::integer).notObject()) ||
+    return type.isA(PirType(RType::vec).notObject()) ||
+           type.isA(PirType(RType::integer).notObject()) ||
            type.isA(PirType(RType::logical).notObject()) ||
            type.isA(PirType(RType::real).notObject());
 }
@@ -1067,7 +1068,7 @@ llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
         return unboxIntLgl(val);
     if (from == t::SEXP && to == t::Double)
         return unboxRealIntLgl(val);
-    if (from == t::SEXP && to != t::SEXP)
+    if (from != t::SEXP && to == t::SEXP)
         return box(val, toType, protect);
 
     std::cout << "\nFailed to convert a " << val->getType() << " to " << toType
@@ -3563,15 +3564,66 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto vector = loadSxp(extract->vec());
                 auto idx = loadSxp(extract->idx());
 
-                // We should implement the fast cases (known and primitive
-                // types) speculatively here
+                bool fastcase = !extract->vec()->type.maybe(RType::vec) &&
+                                vectorTypeSupport(extract->vec()) &&
+                                extract->idx()->type.isA(
+                                    PirType::intRealLgl().notObject().scalar());
+
+                BasicBlock* done;
+                llvm::Value* res;
+
+                if (fastcase) {
+                    auto fallback = BasicBlock::Create(C, "", fun);
+                    done = BasicBlock::Create(C, "", fun);
+
+                    llvm::Value* vector = load(extract->vec());
+                    res = builder.CreateAlloca(representationOf(i));
+
+                    if (representationOf(extract->vec()) == t::SEXP) {
+                        auto hit2 = BasicBlock::Create(C, "", fun);
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                        builder.SetInsertPoint(hit2);
+
+                        auto hit3 = BasicBlock::Create(C, "", fun);
+                        auto hasAttrib = builder.CreateICmpNE(
+                            attr(vector), constant(R_NilValue, t::SEXP));
+                        builder.CreateCondBr(hasAttrib, fallback, hit3);
+                        builder.SetInsertPoint(hit3);
+
+                        auto isEmpty = builder.CreateICmpNE(
+                            vectorLength(vector), c(0, 64));
+                        auto hit4 = BasicBlock::Create(C, "", fun);
+                        builder.CreateCondBr(isEmpty, fallback, hit4);
+                        builder.SetInsertPoint(hit4);
+                    }
+
+                    llvm::Value* index =
+                        computeAndCheckIndex(extract->idx(), vector, fallback);
+                    auto res0 =
+                        extract->vec()->type.isScalar()
+                            ? vector
+                            : accessVector(vector, index, extract->vec()->type);
+                    builder.CreateStore(convert(res0, i->type), res);
+                    builder.CreateBr(done);
+
+                    builder.SetInsertPoint(fallback);
+                }
+
                 auto env = constant(R_NilValue, t::SEXP);
                 if (extract->hasEnv())
                     env = loadSxp(extract->env());
+                auto res0 = call(NativeBuiltins::extract11,
+                                 {vector, idx, env, c(extract->srcIdx)});
 
-                auto res = call(NativeBuiltins::extract11,
-                                {vector, idx, env, c(extract->srcIdx)});
-                setVal(i, res);
+                if (fastcase) {
+                    builder.CreateStore(convert(res0, i->type), res);
+                    builder.CreateBr(done);
+
+                    builder.SetInsertPoint(done);
+                    setVal(i, builder.CreateLoad(res));
+                } else {
+                    setVal(i, res0);
+                }
                 break;
             }
 
@@ -3640,14 +3692,16 @@ bool LowerFunctionLLVM::tryCompile() {
                         assert(irep == t::Double);
                         getter = NativeBuiltins::extract21r;
                     }
+                    auto vector = loadSxp(extract->vec());
                     res0 = call(getter,
-                                {loadSxp(extract->vec()), load(extract->idx()),
+                                {vector, load(extract->idx()),
                                  loadSxp(extract->env()), c(extract->srcIdx)});
                 } else {
-                    res0 =
-                        call(NativeBuiltins::extract21,
-                             {loadSxp(extract->vec()), loadSxp(extract->idx()),
-                              loadSxp(extract->env()), c(extract->srcIdx)});
+                    auto vector = loadSxp(extract->vec());
+                    auto idx = loadSxp(extract->idx());
+                    res0 = call(NativeBuiltins::extract21,
+                                {vector, idx, loadSxp(extract->env()),
+                                 c(extract->srcIdx)});
                 }
 
                 if (fastcase) {
@@ -3659,6 +3713,27 @@ bool LowerFunctionLLVM::tryCompile() {
                 } else {
                     setVal(i, res0);
                 }
+                break;
+            }
+
+            case Tag::Extract1_3D: {
+                auto extract = Extract1_3D::Cast(i);
+                auto vector = loadSxp(extract->vec());
+                auto idx1 = loadSxp(extract->idx1());
+                auto idx2 = loadSxp(extract->idx2());
+                auto idx3 = loadSxp(extract->idx3());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto env = constant(R_NilValue, t::SEXP);
+                if (extract->hasEnv())
+                    env = loadSxp(extract->env());
+
+                auto res =
+                    call(NativeBuiltins::extract13,
+                         {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
+                setVal(i, res);
+
                 break;
             }
 
@@ -3724,17 +3799,19 @@ bool LowerFunctionLLVM::tryCompile() {
                         getter = NativeBuiltins::extract22rr;
                     }
 
+                    auto vector = loadSxp(extract->vec());
                     res0 = call(getter,
-                                {load(extract->vec()), load(extract->idx1()),
+                                {vector, load(extract->idx1()),
                                  loadSxp(extract->idx2()),
                                  loadSxp(extract->env()), c(extract->srcIdx)});
                 } else {
 
-                    res0 =
-                        call(NativeBuiltins::extract22,
-                             {loadSxp(extract->vec()), loadSxp(extract->idx1()),
-                              loadSxp(extract->idx2()), loadSxp(extract->env()),
-                              c(extract->srcIdx)});
+                    auto vector = loadSxp(extract->vec());
+                    auto idx1 = loadSxp(extract->idx1());
+                    auto idx2 = loadSxp(extract->idx2());
+                    res0 = call(NativeBuiltins::extract22,
+                                {vector, idx1, idx2, loadSxp(extract->env()),
+                                 c(extract->srcIdx)});
                 }
 
                 if (fastcase) {
@@ -3747,6 +3824,24 @@ bool LowerFunctionLLVM::tryCompile() {
                     setVal(i, res0);
                 }
 
+                break;
+            }
+
+            case Tag::Subassign1_3D: {
+                auto subAssign = Subassign1_3D::Cast(i);
+                auto vector = loadSxp(subAssign->lhs());
+                auto val = loadSxp(subAssign->rhs());
+                auto idx1 = loadSxp(subAssign->idx1());
+                auto idx2 = loadSxp(subAssign->idx2());
+                auto idx3 = loadSxp(subAssign->idx3());
+
+                // We should implement the fast cases (known and primitive
+                // types) speculatively here
+                auto res =
+                    call(NativeBuiltins::subassign13,
+                         {vector, idx1, idx2, idx3, val,
+                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                setVal(i, res);
                 break;
             }
 

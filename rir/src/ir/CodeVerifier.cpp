@@ -97,6 +97,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::extract1_2_:
     case Opcode::extract2_1_:
     case Opcode::extract2_2_:
+    case Opcode::extract1_3_:
     case Opcode::add_:
     case Opcode::mul_:
     case Opcode::div_:
@@ -118,6 +119,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::subassign2_1_:
     case Opcode::subassign1_2_:
     case Opcode::subassign2_2_:
+    case Opcode::subassign1_3_:
         return Sources::Required;
 
     case Opcode::inc_:

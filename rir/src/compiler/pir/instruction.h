@@ -1201,6 +1201,30 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     }
 };
 
+class FLIE(Subassign1_3D, 6, Effects::Any()) {
+  public:
+    Subassign1_3D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* idx3,
+                  Value* env, unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::valOrLazy(),
+              {{PirType::val(), PirType::val(), PirType::val(), PirType::val(),
+                PirType::val()}},
+              {{val, mtx, idx1, idx2, idx3}}, env, srcIdx) {}
+    Value* rhs() const { return arg(0).val(); }
+    Value* lhs() const { return arg(1).val(); }
+    Value* idx1() const { return arg(2).val(); }
+    Value* idx2() const { return arg(3).val(); }
+    Value* idx3() const { return arg(4).val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        return ifNonObjectArgs(getType,
+                               type & (getType(rhs()) | getType(lhs())), type);
+    }
+    Effects inferEffects(const GetType& getType) const override final {
+        return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
+    }
+};
+
 class FLIE(Extract1_1D, 3, Effects::Any()) {
   public:
     Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
@@ -1292,6 +1316,36 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
                                type & getType(vec()).extractType(
                                           getType(idx1()) | getType(idx2())),
                                type);
+    }
+    Effects inferEffects(const GetType& getType) const override final {
+        return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
+    }
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
+    }
+};
+
+class FLIE(Extract1_3D, 5, Effects::Any()) {
+  public:
+    Extract1_3D(Value* vec, Value* idx1, Value* idx2, Value* idx3, Value* env,
+                unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+                                         {{PirType::val(), PirType::val(),
+                                           PirType::val(), PirType::val()}},
+                                         {{vec, idx1, idx2, idx3}}, env,
+                                         srcIdx) {}
+    Value* vec() const { return arg(0).val(); }
+    Value* idx1() const { return arg(1).val(); }
+    Value* idx2() const { return arg(2).val(); }
+    Value* idx3() const { return arg(3).val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        return ifNonObjectArgs(
+            getType,
+            type & getType(vec()).subsetType(getType(idx1()) | getType(idx2())),
+            type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);

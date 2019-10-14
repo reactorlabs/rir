@@ -3381,6 +3381,32 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(extract1_3_) {
+            SEXP val = ostack_at(ctx, 3);
+            SEXP idx = ostack_at(ctx, 2);
+            SEXP idx2 = ostack_at(ctx, 1);
+            SEXP idx3 = ostack_at(ctx, 0);
+
+            SEXP args = CONS_NR(
+                val, CONS_NR(idx, CONS_NR(idx2, CONS_NR(idx3, R_NilValue))));
+            ostack_push(ctx, args);
+
+            if (isObject(val)) {
+                SEXP call = getSrcForCall(c, pc - 1, ctx);
+                res = dispatchApply(call, val, args, symbol::Bracket, env, ctx);
+                if (!res)
+                    res =
+                        do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+            } else {
+                res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+            }
+
+            ostack_popn(ctx, 5);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(extract2_1_) {
             SEXP val = ostack_at(ctx, 1);
             SEXP idx = ostack_at(ctx, 0);
@@ -3573,6 +3599,52 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             Rf_endcontext(&assignContext);
             ostack_popn(ctx, 4);
+            UNPROTECT(1);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(subassign1_3_) {
+            SEXP idx3 = ostack_at(ctx, 0);
+            SEXP idx2 = ostack_at(ctx, 1);
+            SEXP idx1 = ostack_at(ctx, 2);
+            SEXP mtx = ostack_at(ctx, 3);
+            SEXP val = ostack_at(ctx, 4);
+
+            // Destructively modifies TOS, even if the refcount is 1. This is
+            // intended, to avoid copying. Care need to be taken if `vec` is
+            // used multiple times as a temporary.
+            if (MAYBE_SHARED(mtx)) {
+                mtx = Rf_duplicate(mtx);
+                ostack_set(ctx, 2, mtx);
+            }
+
+            SEXP args = CONS_NR(
+                mtx, CONS_NR(idx1,
+                             CONS_NR(idx2,
+                                     CONS_NR(idx3, CONS_NR(val, R_NilValue)))));
+            SET_TAG(CDDDR(args), symbol::value);
+            PROTECT(args);
+
+            res = nullptr;
+            SEXP call = getSrcForCall(c, pc - 1, ctx);
+            RCNTXT assignContext;
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
+                            args, symbol::AssignBracket);
+            if (isObject(mtx)) {
+                res = dispatchApply(call, mtx, args, symbol::AssignBracket, env,
+                                    ctx);
+            }
+
+            if (!res) {
+                res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
+                // We duplicated the matrix above, and there is a stvar
+                // following
+                SET_NAMED(res, 0);
+            }
+            Rf_endcontext(&assignContext);
+            ostack_popn(ctx, 5);
             UNPROTECT(1);
 
             ostack_push(ctx, res);

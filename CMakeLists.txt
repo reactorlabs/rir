@@ -14,7 +14,7 @@ set(R_COMMAND ${R_HOME}/bin/R)
 include(${LLVM_DIR}/lib/cmake/llvm/LLVMConfig.cmake OPTIONAL)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 set(LLVM_COMPONENTS_USED core orcjit native vectorize)
-include_directories(${LLVM_INCLUDE_DIRS})
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 add_definitions(-g3)
@@ -23,7 +23,7 @@ set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT -DMEASURE")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT -DMEASURE")
-set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} -Wall -DLLVM_DISABLE_ABI_BREAKING_CHECKS_ENFORCING=1 -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough -Wno-init-list-lifetime -Wno-unknown-warning-option")
+set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} -Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 set(CMAKE_C_FLAGS_RELEASENOASSERT "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_C_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
@@ -43,7 +43,8 @@ MARK_AS_ADVANCED(
     CMAKE_C_FLAGS_FULLVERIFIER
 )
 
-set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/tools/compiler_wrapper.sh")
+# Currently not needed
+# set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/tools/compiler_wrapper.sh")
 
 # Update the documentation string of CMAKE_BUILD_TYPE for GUIs
 SET( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING
