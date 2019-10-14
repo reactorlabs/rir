@@ -945,7 +945,8 @@ llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v, bool enableAsserts) {
 
 bool LowerFunctionLLVM::vectorTypeSupport(Value* vector) {
     auto type = vector->type;
-    return type.isA(PirType(RType::integer).notObject()) ||
+    return type.isA(PirType(RType::vec).notObject()) ||
+           type.isA(PirType(RType::integer).notObject()) ||
            type.isA(PirType(RType::logical).notObject()) ||
            type.isA(PirType(RType::real).notObject());
 }
@@ -1067,7 +1068,7 @@ llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
         return unboxIntLgl(val);
     if (from == t::SEXP && to == t::Double)
         return unboxRealIntLgl(val);
-    if (from == t::SEXP && to != t::SEXP)
+    if (from != t::SEXP && to == t::SEXP)
         return box(val, toType, protect);
 
     std::cout << "\nFailed to convert a " << val->getType() << " to " << toType
@@ -3556,15 +3557,66 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto vector = loadSxp(extract->vec());
                 auto idx = loadSxp(extract->idx());
 
-                // We should implement the fast cases (known and primitive
-                // types) speculatively here
+                bool fastcase = !extract->vec()->type.maybe(RType::vec) &&
+                                vectorTypeSupport(extract->vec()) &&
+                                extract->idx()->type.isA(
+                                    PirType::intRealLgl().notObject().scalar());
+
+                BasicBlock* done;
+                llvm::Value* res;
+
+                if (fastcase) {
+                    auto fallback = BasicBlock::Create(C, "", fun);
+                    done = BasicBlock::Create(C, "", fun);
+
+                    llvm::Value* vector = load(extract->vec());
+                    res = builder.CreateAlloca(representationOf(i));
+
+                    if (representationOf(extract->vec()) == t::SEXP) {
+                        auto hit2 = BasicBlock::Create(C, "", fun);
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                        builder.SetInsertPoint(hit2);
+
+                        auto hit3 = BasicBlock::Create(C, "", fun);
+                        auto hasAttrib = builder.CreateICmpNE(
+                            attr(vector), constant(R_NilValue, t::SEXP));
+                        builder.CreateCondBr(hasAttrib, fallback, hit3);
+                        builder.SetInsertPoint(hit3);
+
+                        auto isEmpty = builder.CreateICmpNE(
+                            vectorLength(vector), c(0, 64));
+                        auto hit4 = BasicBlock::Create(C, "", fun);
+                        builder.CreateCondBr(isEmpty, fallback, hit4);
+                        builder.SetInsertPoint(hit4);
+                    }
+
+                    llvm::Value* index =
+                        computeAndCheckIndex(extract->idx(), vector, fallback);
+                    auto res0 =
+                        extract->vec()->type.isScalar()
+                            ? vector
+                            : accessVector(vector, index, extract->vec()->type);
+                    builder.CreateStore(convert(res0, i->type), res);
+                    builder.CreateBr(done);
+
+                    builder.SetInsertPoint(fallback);
+                }
+
                 auto env = constant(R_NilValue, t::SEXP);
                 if (extract->hasEnv())
                     env = loadSxp(extract->env());
+                auto res0 = call(NativeBuiltins::extract11,
+                                 {vector, idx, env, c(extract->srcIdx)});
 
-                auto res = call(NativeBuiltins::extract11,
-                                {vector, idx, env, c(extract->srcIdx)});
-                setVal(i, res);
+                if (fastcase) {
+                    builder.CreateStore(convert(res0, i->type), res);
+                    builder.CreateBr(done);
+
+                    builder.SetInsertPoint(done);
+                    setVal(i, builder.CreateLoad(res));
+                } else {
+                    setVal(i, res0);
+                }
                 break;
             }
 
