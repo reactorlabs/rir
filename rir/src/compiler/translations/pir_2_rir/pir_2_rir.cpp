@@ -443,8 +443,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         };
 
         // Only needed for deopt branches
-        bool seenMkArg = false;
-
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
 
@@ -680,8 +678,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto key =
                     CachePosition::NameAndEnv(ldvar->varName, ldvar->env());
                 auto mkenv = MkEnv::Cast(ldvar->env());
-                if (mkenv && mkenv->stub &&
-                    (!ldvar->bb()->isDeopt() || !seenMkArg)) {
+                if (mkenv && mkenv->stub) {
                     cb.add(BC::ldvarNoForceStubbed(
                         mkenv->indexOf(ldvar->varName)));
                 } else if (needsLdVarForUpdate.count(instr)) {
@@ -737,8 +734,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto mkenv = MkEnv::Cast(stvar->env());
                 assert(!MkEnv::Cast(stvar->arg(0).val()));
                 if (stvar->isStArg) {
-                    if (mkenv && mkenv->stub &&
-                        (!stvar->bb()->isDeopt() || !seenMkArg)) {
+                    if (mkenv && mkenv->stub) {
                         cb.add(
                             BC::stargStubbed(mkenv->indexOf(stvar->varName)));
                     } else if (cache.isCached(key)) {
@@ -748,8 +744,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::starg(stvar->varName));
                     }
                 } else {
-                    if (mkenv && mkenv->stub &&
-                        (!stvar->bb()->isDeopt() || !seenMkArg)) {
+                    if (mkenv && mkenv->stub) {
                         cb.add(
                             BC::stvarStubbed(mkenv->indexOf(stvar->varName)));
                     } else if (cache.isCached(key)) {
@@ -763,7 +758,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             case Tag::MkArg: {
-                seenMkArg = true;
                 auto mk = MkArg::Cast(instr);
                 auto p = mk->prom();
                 unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
