@@ -2789,8 +2789,9 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::MaterializeEnv: {
                 auto materialize = MaterializeEnv::Cast(i);
+                auto argument = materialize->arg(0).val();
                 setVal(i, call(NativeBuiltins::materializeEnvironment,
-                               {loadSxp(materialize->env())}));
+                               {loadSxp(argument)}));
                 break;
             }
 

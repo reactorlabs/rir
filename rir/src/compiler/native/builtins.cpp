@@ -120,7 +120,7 @@ SEXP materializeEnvironmentImpl(SEXP environment) {
 }
 
 NativeBuiltin NativeBuiltins::materializeEnvironment = {
-    "materializeStubEnvironment",
+    "materializeEnvironment",
     (void*)&materializeEnvironmentImpl,
 };
 
