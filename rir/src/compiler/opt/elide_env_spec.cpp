@@ -19,87 +19,6 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
     AvailableCheckpoints checkpoint(function, log);
 
-    auto nonObjectArgs = [&](Instruction* i) {
-        auto answer = true;
-        i->eachArg([&](Value* arg) {
-            if (!answer)
-                return;
-
-            if (i->env() == arg)
-                return;
-            if (!arg->followCastsAndForce()->type.maybeObj())
-                return;
-            if (arg->type.maybePromiseWrapped()) {
-                answer = false;
-                return;
-            }
-
-            auto fb = PirType::bottom();
-            if (auto j = Instruction::Cast(arg))
-                fb = j->typeFeedback.type;
-            if (fb.isVoid()) {
-                if (auto j = Instruction::Cast(arg->followCastsAndForce()))
-                    fb = j->typeFeedback.type;
-            }
-
-            if (fb.isVoid() || fb.maybeObj())
-                answer = false;
-        });
-        return answer;
-    };
-
-    SmallSet<Value*> bannedEnvs;
-
-    // If we only see these (and call instructions) then we stub an environment,
-    // since it can only be accessed reflectively.
-    static std::unordered_set<Tag> allowed{Tag::Force,       Tag::FrameState,
-                                           Tag::PushContext, Tag::LdVar,
-                                           Tag::StVar,       Tag::StVarSuper};
-
-    Visitor::run(function->entry, [&](Instruction* i) {
-        i->eachArg([&](Value* val) {
-            if (auto m = MkEnv::Cast(val)) {
-                if (!m->stub && !bannedEnvs.count(m)) {
-                    // Prevent us from leaking stub envs
-                    if (!i->hasEnv() || i->env() != m)
-                        bannedEnvs.insert(m);
-                    if (CallInstruction::CastCall(i)) {
-                        // Call builtin materializes env right away, so no point
-                        // in stubbing, unless we have a fastcase.
-                        if (auto bt = CallBuiltin::Cast(i))
-                            if (!supportsFastBuiltinCall(bt->blt))
-                                bannedEnvs.insert(m);
-                        return;
-                    }
-                    if (!allowed.count(i->tag))
-                        bannedEnvs.insert(m);
-                }
-            }
-        });
-    });
-
-    std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
-    std::unordered_map<MkEnv*, SmallSet<MkArg*>> needsMaterialization;
-    Visitor::run(function->entry, [&](Instruction* i) {
-        if (i->hasEnv()) {
-            if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i) ||
-                StVarSuper::Cast(i))
-                return;
-            if (auto mk = MkEnv::Cast(i->env())) {
-                if (mk->stub || bannedEnvs.count(mk))
-                    return;
-                if (i->bb()->isDeopt() && MkArg::Cast(i))
-                    needsMaterialization[mk].insert(MkArg::Cast(i));
-                // We can only stub an environment if all uses have a checkpoint
-                // available after every use.
-                if (auto cp = checkpoint.next(i))
-                    checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
-                else
-                    bannedEnvs.insert(mk);
-            }
-        }
-    });
-
     auto envOnlyForObj = [&](Instruction* i) {
         if (i->envOnlyForObj())
             return true;
@@ -114,36 +33,18 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         return false;
     };
 
+    // Speculatively elide environments on instructions that only require them
+    // in case any of the arguments is an object
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
             auto next = ip + 1;
-
-            if (checks.count(i)) {
-                // Speculatively elide instructions that only require them
-                // in case they access promises reflectively
-                if (!bannedEnvs.count(i->env())) {
-                    auto env = checks[i].second;
-                    if (!env->stub) {
-                        env->stub = true;
-                        for (auto mkArg : needsMaterialization[env]) {
-                            Instruction* materialize = new MaterializeEnv(env);
-                            mkArg->bb()->insert(mkArg->bb()->begin(),
-                                                materialize);
-                            env->replaceUsesIn(materialize, mkArg->bb());
-                        }
-                    }
-                    auto cp = checks[i].first;
-                    auto condition = new IsEnvStub(env);
-                    BBTransform::insertAssume(condition, cp, true);
-                    assert(cp->bb()->trueBranch() != bb);
-                }
-            } else if (i->hasEnv()) {
+            if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which
                 // all operators are primitive values
                 auto cp = checkpoint.at(i);
-                if (cp && envOnlyForObj(i) && nonObjectArgs(i)) {
+                if (cp && envOnlyForObj(i) && i->nonObjectArgs()) {
                     bool successful = true;
                     i->eachArg([&](Value* arg) {
                         if (arg == i->env() || !arg->type.maybeObj()) {
@@ -202,6 +103,104 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         i->updateTypeAndEffects();
                     }
                     next = ip + 1;
+                }
+            }
+
+            ip = next;
+        }
+    });
+
+    SmallSet<Value*> bannedEnvs;
+
+    // If we only see these (and call instructions) then we stub an environment,
+    // since it can only be accessed reflectively.
+    static std::unordered_set<Tag> allowed{
+        Tag::Force, Tag::FrameState, Tag::PushContext, Tag::LdVar,
+        Tag::StVar, Tag::StVarSuper, Tag::MkArg};
+
+    Visitor::run(function->entry, [&](Instruction* i) {
+        i->eachArg([&](Value* val) {
+            if (auto m = MkEnv::Cast(val)) {
+                if (!m->stub && !bannedEnvs.count(m)) {
+                    // Prevent us from leaking stub envs
+                    if (!i->hasEnv() || i->env() != m)
+                        bannedEnvs.insert(m);
+                    if (CallInstruction::CastCall(i)) {
+                        // Call builtin materializes env right away, so no point
+                        // in stubbing, unless we have a fastcase.
+                        if (auto bt = CallBuiltin::Cast(i))
+                            if (!supportsFastBuiltinCall(bt->blt))
+                                bannedEnvs.insert(m);
+                        return;
+                    }
+                    // It is safe to elide environments used by mkArg only from
+                    // deopt branches
+                    if (MkArg::Cast(i) && !MkArg::Cast(i)->bb()->isDeopt())
+                        bannedEnvs.insert(m);
+
+                    if (!allowed.count(i->tag))
+                        bannedEnvs.insert(m);
+                }
+            }
+        });
+    });
+
+    std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
+    std::unordered_map<MkEnv*, SmallSet<MkArg*>> needsMaterialization;
+    Visitor::run(function->entry, [&](Instruction* i) {
+        if (i->hasEnv()) {
+            if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i) ||
+                StVarSuper::Cast(i))
+                return;
+            if (auto mk = MkEnv::Cast(i->env())) {
+                if (mk->stub || bannedEnvs.count(mk))
+                    return;
+                if (auto mkArg = MkArg::Cast(i)) {
+                    needsMaterialization[mk].insert(mkArg);
+                } else {
+                    // We can only stub an environment if all uses have a
+                    // checkpoint available after every use.
+                    if (auto cp = checkpoint.next(i))
+                        checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
+                    else
+                        bannedEnvs.insert(mk);
+                }
+            }
+        }
+    });
+
+    std::unordered_map<BB*, SmallSet<MkEnv*>> materialized;
+    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
+        auto ip = bb->begin();
+        while (ip != bb->end()) {
+            Instruction* i = *ip;
+            auto next = ip + 1;
+
+            if (checks.count(i)) {
+                // Speculatively elide instructions that only require them
+                // in case of a potential reflectively access
+                if (!bannedEnvs.count(i->env())) {
+                    auto env = checks[i].second;
+                    if (!env->stub) {
+                        env->stub = true;
+                        // After eliding an env we must ensure to add a
+                        // materialization before every usage in deopt branches
+                        for (auto mkArg : needsMaterialization[env]) {
+                            if (!materialized.count(mkArg->bb()) ||
+                                !materialized[mkArg->bb()].includes(env)) {
+                                Instruction* materialize =
+                                    new MaterializeEnv(env);
+                                env->replaceUsesIn(materialize, mkArg->bb());
+                                mkArg->bb()->insert(mkArg->bb()->begin(),
+                                                    materialize);
+                                materialized[mkArg->bb()].insert(env);
+                            }
+                        }
+                    }
+                    auto cp = checks[i].first;
+                    auto condition = new IsEnvStub(env);
+                    BBTransform::insertAssume(condition, cp, true);
+                    assert(cp->bb()->trueBranch() != bb);
                 }
             }
 

@@ -111,7 +111,12 @@ seed <- 1
 stopifnot(pir.check(function(a) {
   seed <<- a
 }, NoEnvSpec))
-
+seed <- 1
+stopifnot(pir.check(function() {
+  a <- (seed * 1309) + 13849
+  seed <<- bitwAnd(a, 65535)
+  seed
+}, NoEnvSpec, warmup=function(f){f()}))
 xxx <- 12
 stopifnot(pir.check(function() {
   1 + xxx

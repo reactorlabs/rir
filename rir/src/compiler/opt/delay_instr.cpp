@@ -9,72 +9,87 @@ namespace pir {
 void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const {
 
-    std::unordered_map<Instruction*, BB*> usedOnlyInDeopt;
+    std::unordered_map<Instruction*, SmallSet<Instruction*>> dataDependencies;
 
     auto isTarget = [](Instruction* j) {
         return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
                FrameState::Cast(j) || CastType::Cast(j);
     };
 
-    Visitor::run(function->entry, [&](Instruction* i) {
-        i->eachArg([&](Value* v) {
-            if (auto j = Instruction::Cast(v)) {
-                if (isTarget(j)) {
-                    auto& u = usedOnlyInDeopt[j];
-                    if (i->bb()->isDeopt() || usedOnlyInDeopt[i]) {
-                        if (!u)
-                            u = i->bb();
-                        else
-                            u = (BB*)-1;
-                    } else {
-                        u = (BB*)-1;
-                    }
-                }
+    Visitor::run(function->entry, [&](Instruction* instruction) {
+        instruction->eachArg([&](Value* v) {
+            if (auto usage = Instruction::Cast(v)) {
+                if (isTarget(usage) && !usage->bb()->isDeopt())
+                    dataDependencies[usage].insert(instruction);
             }
         });
     });
 
-    Visitor::run(function->entry, [&](BB* bb) {
-        auto ip = bb->begin();
-        while (ip != bb->end()) {
-            auto i = *ip;
-            auto next = ip + 1;
-
-            /*
-             * The Idea with the following line is to convert code produced by
-             * speculative call target resolution. We want to convert the
-             * following code:
-             *
-             *          f = ldfun("f")
-             *          c = checkpoint()  -> BB1 | BB2
-             *      BB2:
-             *          deopt(stack=[f])
-             *      BB1:
-             *          assume (f==someFunction, c)
-             *
-             * into this:
-             *
-             *          c = checkpoint()  -> BB1 | BB2
-             *      BB2:
-             *          f1 = ldfun("f")
-             *          deopt(stack=[f1])
-             *      BB1:
-             *          f2 = ldvar("f")
-             *          assume (f2==someFunction, c)
-             *
-             * The later is better because f2 (in the main branch) does not have
-             * sideeffects and the sideeffecting ldfun is moved to the deopt
-             * branch.
-             */
-            if (isTarget(i)) {
-                if (usedOnlyInDeopt.count(i)) {
-                    auto u = usedOnlyInDeopt.at(i);
-                    if (u && u != (BB*)-1 && u != i->bb()) {
-                        next = bb->moveToBegin(ip, u);
-                    }
+    std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (auto instructionUses : dataDependencies) {
+            auto candidate = instructionUses.first;
+            if (usedOnlyInDeopt.count(candidate))
+                continue;
+            auto uses = instructionUses.second;
+            auto addToDeopt = true;
+            if (uses.empty()) {
+                addToDeopt = candidate->bb()->isDeopt();
+            } else {
+                for (auto use : uses) {
+                    if (!use->bb()->isDeopt() && !usedOnlyInDeopt.count(use))
+                        addToDeopt = false;
                 }
             }
+            if (addToDeopt) {
+                auto& deoptUses = usedOnlyInDeopt[candidate];
+                for (auto use : uses) {
+                    if (use->bb()->isDeopt()) {
+                        deoptUses.insert(use->bb());
+                    } else {
+                        for (auto deoptUse : usedOnlyInDeopt[use])
+                            deoptUses.insert(deoptUse);
+                    }
+                }
+                changed = true;
+            }
+        }
+    }
 
+    std::unordered_map<Instruction*, SmallSet<std::pair<BB*, Instruction*>>>
+        replacements;
+
+    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
+        auto ip = bb->rbegin();
+        while (ip != bb->rend()) {
+            auto instruction = *ip;
+            auto next = ip + 1;
+            if (usedOnlyInDeopt.count(instruction)) {
+                for (auto targetBB : usedOnlyInDeopt[instruction]) {
+                    auto newInstr = instruction->clone();
+                    auto tagetPosition = targetBB->begin();
+                    tagetPosition = targetBB->insert(tagetPosition, newInstr);
+                    newInstr->eachArg([&](InstrArg& arg) {
+                        if (auto instruction = Instruction::Cast(arg.val())) {
+                            if (replacements.count(instruction)) {
+                                for (auto replacementAtBB :
+                                     replacements[instruction]) {
+                                    if (replacementAtBB.first == targetBB) {
+                                        arg.val() = replacementAtBB.second;
+                                        targetBB->swapWithNext(tagetPosition);
+                                        tagetPosition++;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    instruction->replaceUsesIn(newInstr, targetBB);
+                    replacements[instruction].insert({targetBB, newInstr});
+                }
+                usedOnlyInDeopt.erase(instruction);
+            }
             ip = next;
         }
     });

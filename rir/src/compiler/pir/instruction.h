@@ -308,6 +308,8 @@ class Instruction : public Value {
     }
     virtual void popArg() { assert(false && "Must be varlen instruction"); }
 
+    bool nonObjectArgs();
+
   protected:
     constexpr static Effects errorWarnVisible =
         Effects(Effect::Error) | Effect::Warn | Effect::Visibility |
@@ -2146,10 +2148,10 @@ class VLIE(MkEnv, Effects::None()) {
     }
 };
 
-class FLIE(MaterializeEnv, 1, Effects::None()) {
+class FLI(MaterializeEnv, 1, Effects::None()) {
   public:
     explicit MaterializeEnv(MkEnv* e)
-        : FixedLenInstructionWithEnvSlot(RType::env, e) {}
+        : FixedLenInstruction(RType::env, {{RType::env}}, {{e}}) {}
 };
 
 class FLI(IsObject, 1, Effects::None()) {
