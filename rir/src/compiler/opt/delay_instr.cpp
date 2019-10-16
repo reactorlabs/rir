@@ -61,34 +61,36 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
     std::unordered_map<Instruction*, SmallSet<std::pair<BB*, Instruction*>>>
         replacements;
 
+    std::unordered_map<BB*, std::vector<rir::pir::Instruction*>::iterator>
+        insertPositions;
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
-        auto ip = bb->rbegin();
-        while (ip != bb->rend()) {
+        auto ip = bb->begin();
+        while (ip != bb->end()) {
             auto instruction = *ip;
             auto next = ip + 1;
             if (usedOnlyInDeopt.count(instruction)) {
                 for (auto targetBB : usedOnlyInDeopt[instruction]) {
                     auto newInstr = instruction->clone();
-                    auto tagetPosition = targetBB->begin();
-                    tagetPosition = targetBB->insert(tagetPosition, newInstr);
                     newInstr->eachArg([&](InstrArg& arg) {
                         if (auto instruction = Instruction::Cast(arg.val())) {
                             if (replacements.count(instruction)) {
                                 for (auto replacementAtBB :
                                      replacements[instruction]) {
-                                    if (replacementAtBB.first == targetBB) {
+                                    if (replacementAtBB.first == targetBB)
                                         arg.val() = replacementAtBB.second;
-                                        targetBB->swapWithNext(tagetPosition);
-                                        tagetPosition++;
-                                    }
                                 }
                             }
                         }
                     });
+                    if (!insertPositions.count(targetBB))
+                        insertPositions[targetBB] = targetBB->begin();
+                    std::vector<rir::pir::Instruction*>::iterator&
+                        insertPosition = insertPositions[targetBB];
+                    insertPosition =
+                        targetBB->insert(insertPosition, newInstr) + 1;
                     instruction->replaceUsesIn(newInstr, targetBB);
                     replacements[instruction].insert({targetBB, newInstr});
                 }
-                usedOnlyInDeopt.erase(instruction);
             }
             ip = next;
         }

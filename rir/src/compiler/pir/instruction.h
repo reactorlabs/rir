@@ -2148,10 +2148,10 @@ class VLIE(MkEnv, Effects::None()) {
     }
 };
 
-class FLI(MaterializeEnv, 1, Effects::None()) {
+class FLIE(MaterializeEnv, 1, Effects::None()) {
   public:
     explicit MaterializeEnv(MkEnv* e)
-        : FixedLenInstruction(RType::env, {{RType::env}}, {{e}}) {}
+        : FixedLenInstructionWithEnvSlot(RType::env, e) {}
 };
 
 class FLI(IsObject, 1, Effects::None()) {
