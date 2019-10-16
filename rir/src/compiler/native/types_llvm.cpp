@@ -171,6 +171,9 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::createStubEnvironment.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::IntPtr, t::Int},
                                 false);
+    NativeBuiltins::materializeEnvironment.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
+
     NativeBuiltins::createPromise.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP}, false);
     NativeBuiltins::createClosure.llvmSignature = llvm::FunctionType::get(

@@ -189,6 +189,35 @@ void Instruction::printGraph(std::ostream& out, bool tty) const {
 
 bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
 
+bool Instruction::nonObjectArgs() {
+    auto answer = true;
+    this->eachArg([&](Value* arg) {
+        if (!answer)
+            return;
+
+        if (this->hasEnv() && this->env() == arg)
+            return;
+        if (!arg->followCastsAndForce()->type.maybeObj())
+            return;
+        if (arg->type.maybePromiseWrapped()) {
+            answer = false;
+            return;
+        }
+
+        auto fb = PirType::bottom();
+        if (auto j = Instruction::Cast(arg))
+            fb = j->typeFeedback.type;
+        if (fb.isVoid()) {
+            if (auto j = Instruction::Cast(arg->followCastsAndForce()))
+                fb = j->typeFeedback.type;
+        }
+
+        if (fb.isVoid() || fb.maybeObj())
+            answer = false;
+    });
+    return answer;
+};
+
 void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
     auto bbIter = input.begin();
     auto argIter = args_.begin();

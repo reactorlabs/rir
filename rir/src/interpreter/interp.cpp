@@ -1930,6 +1930,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             assert(lazyEnv);
             if (!lazyEnv->materialized())
                 env = materialize(env);
+            ostack_push(ctx, env);
             NEXT();
         }
 

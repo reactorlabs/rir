@@ -308,6 +308,8 @@ class Instruction : public Value {
     }
     virtual void popArg() { assert(false && "Must be varlen instruction"); }
 
+    bool nonObjectArgs();
+
   protected:
     constexpr static Effects errorWarnVisible =
         Effects(Effect::Error) | Effect::Warn | Effect::Visibility |
