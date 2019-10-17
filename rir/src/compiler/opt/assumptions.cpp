@@ -90,26 +90,6 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
             auto instr = *ip;
 
-            // Remove Unneccessary checkpoints. If we arrive at a checkpoint and
-            // the previous checkpoint is still available, and there is also a
-            // next checkpoint available we might as well remove this one.
-            if (auto cp = Checkpoint::Cast(instr)) {
-                if (!cp->nextBB()->isEmpty() &&
-                    checkpoint.next(*cp->nextBB()->begin()))
-                    if (auto cp0 = checkpoint.at(instr)) {
-                        while (replaced.count(cp0))
-                            cp0 = replaced.at(cp0);
-                        replaced[cp] = cp0;
-
-                        assert(bb->last() == instr);
-                        cp->replaceUsesWith(cp0);
-                        bb->remove(ip);
-                        delete bb->next1;
-                        bb->next1 = nullptr;
-                        return;
-                    }
-            }
-
             if (auto assume = Assume::Cast(instr)) {
                 bool changed = false;
                 if (assumptions.at(instr).includes(assume)) {
@@ -195,6 +175,27 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                 }
             }
             ip = next;
+        }
+
+        if (bb->isEmpty())
+            return;
+
+        // Remove Unneccessary checkpoints. If we arrive at a checkpoint and
+        // the previous checkpoint is still available, and there is also a
+        // next checkpoint available we might as well remove this one.
+        if (auto cp = Checkpoint::Cast(bb->last())) {
+            if (checkpoint.next(cp))
+                if (auto cp0 = checkpoint.at(cp)) {
+                    while (replaced.count(cp0))
+                        cp0 = replaced.at(cp0);
+                    replaced[cp] = cp0;
+
+                    cp->replaceUsesWith(cp0);
+                    bb->remove(bb->end() - 1);
+                    delete bb->next1;
+                    bb->next1 = nullptr;
+                    return;
+                }
         }
     });
 
