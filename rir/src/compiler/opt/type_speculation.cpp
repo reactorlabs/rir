@@ -91,25 +91,32 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
         if (!speculate.count(cp))
             return;
 
-        bb = bb->trueBranch();
-
         for (auto sp : speculate[cp]) {
-            auto i = sp.first;
-
-            auto ip = bb->begin();
-            if (i->bb() == bb)
-                ip = bb->atPosition(i) + 1;
-
+            auto speculationTarget = sp.first;
             TypeTest::Info& info = sp.second;
+            // The instruction requiring speculation could be before or after
+            // the cp, so we need to find the place that is after both to insert
+            // the typetest and the assume
+            BB* targetBB;
+            BB::Instrs::iterator insertPosition;
+            targetBB = bb->trueBranch();
+            if (speculationTarget->bb()->beforeInCfg(targetBB)) {
+                insertPosition = targetBB->begin();
+            } else {
+                if (targetBB->beforeInCfg(speculationTarget->bb()))
+                    targetBB = speculationTarget->bb();
+                insertPosition = targetBB->atPosition(speculationTarget) + 1;
+            }
 
-            BBTransform::insertAssume(info.test, cp, bb, ip, info.expectation,
-                                      info.srcCode, info.origin);
+            BBTransform::insertAssume(info.test, cp, targetBB, insertPosition,
+                                      info.expectation, info.srcCode,
+                                      info.origin);
 
-            auto cast = new CastType(i, CastType::Downcast, PirType::any(),
-                                     info.result);
+            auto cast = new CastType(speculationTarget, CastType::Downcast,
+                                     PirType::any(), info.result);
             cast->effects.set(Effect::DependsOnAssume);
-            bb->insert(ip, cast);
-            i->replaceDominatedUses(cast);
+            targetBB->insert(insertPosition, cast);
+            speculationTarget->replaceDominatedUses(cast);
         }
     });
 }

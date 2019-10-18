@@ -98,12 +98,10 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                 } else {
                     // We are trying to group multiple assumes into the same
                     // checkpoint by finding for each assume the topmost
-                    // compatible
-                    // checkpoint.
+                    // compatible checkpoint.
                     // TODO: we could also try to move up the assume itself,
-                    // since
-                    // if we move both at the same time, we could even jump over
-                    // effectful instructions.
+                    // since if we move both at the same time, we could even
+                    // jump over effectful instructions.
                     if (auto cp0 = checkpoint.at(instr)) {
                         while (replaced.count(cp0))
                             cp0 = replaced.at(cp0);
@@ -185,12 +183,12 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         // next checkpoint available we might as well remove this one.
         if (auto cp = Checkpoint::Cast(bb->last())) {
             if (checkpoint.next(cp))
-                if (auto cp0 = checkpoint.at(cp)) {
-                    while (replaced.count(cp0))
-                        cp0 = replaced.at(cp0);
-                    replaced[cp] = cp0;
+                if (auto previousCP = checkpoint.at(cp)) {
+                    while (replaced.count(previousCP))
+                        previousCP = replaced.at(previousCP);
+                    replaced[cp] = previousCP;
 
-                    cp->replaceUsesWith(cp0);
+                    cp->replaceUsesWith(previousCP);
                     bb->remove(bb->end() - 1);
                     delete bb->next1;
                     bb->next1 = nullptr;

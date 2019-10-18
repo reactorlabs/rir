@@ -182,7 +182,11 @@ bool BB::before(Instruction* a, Instruction* b) const {
     }
     assert(false);
     return false;
-};
+}
+
+// TODO: More robust version. Should be based on real cfg. But on some analysis
+// it is expensive to compute it only for this behavior.
+bool BB::beforeInCfg(BB* otherBB) const { return this->id < otherBB->id; }
 
 } // namespace pir
 } // namespace rir
