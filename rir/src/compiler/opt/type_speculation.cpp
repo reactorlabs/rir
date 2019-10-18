@@ -17,8 +17,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
     AvailableCheckpoints checkpoint(function, log);
 
-    std::unordered_map<Checkpoint*,
-                       std::unordered_map<Instruction*, TypeTest::Info>>
+    std::unordered_map<
+        BB*, std::unordered_map<Instruction*,
+                                std::pair<Checkpoint*, TypeTest::Info>>>
         speculate;
 
     Visitor::run(function->entry, [&](Instruction* i) {
@@ -28,6 +29,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
         Instruction* speculateOn = nullptr;
         Checkpoint* guardPos = nullptr;
         Instruction::TypeFeedback feedback;
+        BB* typecheckPos = nullptr;
 
         if (auto force = Force::Cast(i)) {
             if (auto arg = Instruction::Cast(force->input()->followCasts())) {
@@ -48,6 +50,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
                 if (speculateOn) {
                     feedback = i->typeFeedback;
+                    typecheckPos = i->bb();
 
                     // If this force was observed to receive evaluated
                     // promises, better speculate on the input already.
@@ -64,6 +67,8 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     case Force::ArgumentKind::promise:
                     case Force::ArgumentKind::unknown:
                         guardPos = checkpoint.next(i);
+                        if (guardPos)
+                            typecheckPos = guardPos->nextBB();
                         break;
                     }
                 }
@@ -73,50 +78,38 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
         if (!speculateOn || !guardPos)
             return;
 
-        TypeTest::Create(speculateOn, feedback,
-                         [&](TypeTest::Info info) {
-                             speculate[guardPos][speculateOn] = info;
-                             // Prevent redundant speculation
-                             speculateOn->typeFeedback.type = PirType::bottom();
-                         },
-                         []() {});
+        TypeTest::Create(
+            speculateOn, feedback,
+            [&](TypeTest::Info info) {
+                speculate[typecheckPos][speculateOn] = {guardPos, info};
+                // Prevent redundant speculation
+                speculateOn->typeFeedback.type = PirType::bottom();
+            },
+            []() {});
     });
 
     Visitor::run(function->entry, [&](BB* bb) {
-        if (bb->isEmpty())
-            return;
-        auto cp = Checkpoint::Cast(bb->last());
-        if (!cp)
-            return;
-        if (!speculate.count(cp))
+        if (!speculate.count(bb))
             return;
 
-        for (auto sp : speculate[cp]) {
-            auto speculationTarget = sp.first;
-            TypeTest::Info& info = sp.second;
-            // The instruction requiring speculation could be before or after
-            // the cp, so we need to find the place that is after both to insert
-            // the typetest and the assume
-            BB* targetBB;
-            BB::Instrs::iterator insertPosition;
-            targetBB = bb->trueBranch();
-            if (speculationTarget->bb()->beforeInCfg(targetBB)) {
-                insertPosition = targetBB->begin();
-            } else {
-                if (targetBB->beforeInCfg(speculationTarget->bb()))
-                    targetBB = speculationTarget->bb();
-                insertPosition = targetBB->atPosition(speculationTarget) + 1;
-            }
+        for (auto sp : speculate[bb]) {
+            auto i = sp.first;
 
-            BBTransform::insertAssume(info.test, cp, targetBB, insertPosition,
-                                      info.expectation, info.srcCode,
-                                      info.origin);
+            auto ip = bb->begin();
+            if (i->bb() == bb)
+                ip = bb->atPosition(i) + 1;
 
-            auto cast = new CastType(speculationTarget, CastType::Downcast,
-                                     PirType::any(), info.result);
+            auto cp = sp.second.first;
+            TypeTest::Info& info = sp.second.second;
+
+            BBTransform::insertAssume(info.test, cp, bb, ip, info.expectation,
+                                      info.srcCode, info.origin);
+
+            auto cast = new CastType(i, CastType::Downcast, PirType::any(),
+                                     info.result);
             cast->effects.set(Effect::DependsOnAssume);
-            targetBB->insert(insertPosition, cast);
-            speculationTarget->replaceDominatedUses(cast);
+            bb->insert(ip, cast);
+            i->replaceDominatedUses(cast);
         }
     });
 }
