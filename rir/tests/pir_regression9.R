@@ -35,3 +35,16 @@ f <- function() {
 }
 for(i in 1:10)
   f()
+
+
+g <- function(a) a
+f <- function(b) g(b)
+bad = function() {e = sys.frame(-1); ls(envir=e)}
+f(bad())
+f(bad())
+f(bad())
+f(bad())
+f(bad())
+# Here we slightly depart from gnur semantics.
+# See Instruction::mayObserveContext exception for Force
+# stopifnot(f(bad()) == "a")
