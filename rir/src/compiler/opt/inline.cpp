@@ -117,7 +117,8 @@ class TheInliner {
                                 return false;
                             }
                         }
-                        if (CallInstruction::CastCall(i)) {
+                        if (allowInline == SafeToInline::Yes &&
+                            i->mayObserveContext()) {
                             allowInline = SafeToInline::NeedsContext;
                         }
                         if (auto mk = MkArg::Cast(i)) {

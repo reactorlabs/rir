@@ -62,6 +62,27 @@ void Instruction::printRef(std::ostream& out) const {
         out << "%" << id();
 };
 
+bool Instruction::mayObserveContext(MkEnv* e) const {
+    if (!hasEnv())
+        return false;
+    if (!effects.contains(Effect::Reflection))
+        return false;
+    // This diverges slightly from gnur. We consider that promises cannot
+    // observe contexts of the evaluating context. In gnur it so happens
+    // that they can, but it is unclear if that is intended.
+    // See pir_regression9.r tests for a counterexample.
+    if (tag == Tag::Force)
+        return false;
+    if (e == nullptr)
+        return true;
+    while (e) {
+        if (e == env())
+            return true;
+        e = MkEnv::Cast(e->lexicalEnv());
+    }
+    return false;
+};
+
 void printPaddedInstructionName(std::ostream& out, const std::string& name) {
     out << std::left << std::setw(maxInstructionNameLength + 1) << name << " ";
 }

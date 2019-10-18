@@ -47,19 +47,29 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
             state.clear();
             state.set(p);
             return AbstractResult::Updated;
-        } else if (CallInstruction::CastCall(i) && !CallSafeBuiltin::Cast(i)) {
-            // Contexts are needed for non-local returns and reflection. On
-            // deoptimization we can synthesize them, thus none needed for
-            // checkpoints.
-            state.needed = true;
-            return AbstractResult::Updated;
-        } else if (PopContext::Cast(i)) {
+        }
+
+        if (!state.needed) {
+            for (auto e : state.affected) {
+                if (i->mayObserveContext(e)) {
+                    // Contexts are needed for non-local returns and reflection.
+                    // On deoptimization we can synthesize them, thus none
+                    // needed for checkpoints.
+                    state.needed = true;
+                    return AbstractResult::Updated;
+                }
+            }
+        }
+
+        if (PopContext::Cast(i)) {
             if (state.get()) {
                 assert(state.get() == PopContext::Cast(i)->push());
                 state.clear();
                 return AbstractResult::Updated;
             }
-        } else if (auto mk = MkEnv::Cast(i)) {
+        }
+
+        if (auto mk = MkEnv::Cast(i)) {
             if (state.get()) {
                 state.affected.insert(mk);
                 return AbstractResult::Updated;

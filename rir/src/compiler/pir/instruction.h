@@ -137,6 +137,7 @@ enum class VisibilityFlag : uint8_t {
     Unknown,
 };
 
+class MkEnv;
 class Instruction : public Value {
   public:
     struct InstructionUID : public std::pair<unsigned, unsigned> {
@@ -199,6 +200,8 @@ class Instruction : public Value {
         e.reset(Effect::TriggerDeopt);
         return !e.empty();
     }
+
+    bool mayObserveContext(MkEnv* c = nullptr) const;
 
     // TODO: Add verify, then replace with effects.includes(Effect::LeakArg)
     bool leaksArg(Value* val) const {
@@ -1017,8 +1020,10 @@ class FLIE(Force, 2, Effects::Any()) {
         : FixedLenInstructionWithEnvSlot(in->type.forced(), {{PirType::any()}},
                                          {{in}}, env) {
         if (auto mk = MkArg::Cast(in)) {
-            if (mk->noReflection)
+            if (mk->noReflection) {
                 elideEnv();
+                effects.reset(Effect::Reflection);
+            }
         }
     }
     Value* input() const { return arg(0).val(); }
