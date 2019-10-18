@@ -3814,8 +3814,8 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto vector = loadSxp(extract->vec());
                     res0 = call(getter,
                                 {vector, load(extract->idx1()),
-                                 loadSxp(extract->idx2()),
-                                 loadSxp(extract->env()), c(extract->srcIdx)});
+                                 load(extract->idx2()), loadSxp(extract->env()),
+                                 c(extract->srcIdx)});
                 } else {
 
                     auto vector = loadSxp(extract->vec());
