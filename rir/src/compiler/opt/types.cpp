@@ -62,7 +62,10 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     }
 
                     if ("abs" == name) {
-                        inferred = c->arg(0).type() & PirType::num();
+                        if (!c->arg(0).type().maybeObj())
+                            inferred = c->arg(0).type() & PirType::num();
+                        else
+                            inferred = i->inferType(getType);
                         break;
                     }
 
