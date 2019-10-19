@@ -1046,7 +1046,13 @@ class FLIE(Force, 2, Effects::Any()) {
         return getType(input()).forced();
     }
     Effects inferEffects(const GetType& getType) const override final {
-        return getType(input()).maybeLazy() ? effects : Effect::DependsOnAssume;
+        auto e =
+            getType(input()).maybeLazy() ? effects : Effect::DependsOnAssume;
+        if (auto mk = MkArg::Cast(input()->followCastsAndForce())) {
+            if (mk->noReflection)
+                e.reset(Effect::Reflection);
+        }
+        return e;
     }
     int minReferenceCount() const override { return 0; }
 
@@ -1978,6 +1984,9 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
         assert(pos < nCallArgs());
         return arg(pos + 1);
     }
+
+    PirType inferType(const GetType& getType) const override final;
+    Effects inferEffects(const GetType& getType) const override final;
 
     FrameState* frameState() const { return FrameState::Cast(arg(0).val()); }
     void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };

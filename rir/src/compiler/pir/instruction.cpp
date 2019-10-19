@@ -1,6 +1,7 @@
 #include "instruction.h"
 #include "pir_impl.h"
 
+#include "../analysis/query.h"
 #include "../util/ConvertAssumptions.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
@@ -818,6 +819,30 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
         frameState()->printRef(out);
         out << ", ";
     }
+}
+
+PirType StaticCall::inferType(const GetType& getType) const {
+    auto t = PirType::bottom();
+    if (auto v = tryDispatch()) {
+        Visitor::run(v->entry, [&](BB* bb) {
+            if (bb->isExit()) {
+                if (auto r = Return::Cast(bb->last())) {
+                    t = t | r->arg(0).val()->type;
+                } else {
+                    t = t | PirType::any();
+                }
+            }
+        });
+        return type & t;
+    }
+    return type;
+}
+
+Effects StaticCall::inferEffects(const GetType& getType) const {
+    if (auto v = tryDispatch())
+        if (v->properties.includes(ClosureVersion::Property::NoReflection))
+            return effects & ~Effects(Effect::Reflection);
+    return effects;
 }
 
 ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
