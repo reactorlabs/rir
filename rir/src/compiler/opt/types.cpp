@@ -98,7 +98,10 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "is.atomic",   "is.recursive", "is.call",
                         "is.language", "is.function",  "is.single"};
                     if (tests.count(name)) {
-                        inferred = PirType(RType::logical).scalar();
+                        if (!c->arg(0).type().maybeObj())
+                            inferred = PirType(RType::logical).scalar();
+                        else
+                            inferred = i->inferType(getType);
                         break;
                     }
 
