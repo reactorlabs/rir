@@ -182,7 +182,7 @@ bool BB::before(Instruction* a, Instruction* b) const {
     }
     assert(false);
     return false;
-};
+}
 
 } // namespace pir
 } // namespace rir

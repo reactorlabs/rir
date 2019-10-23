@@ -62,7 +62,10 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     }
 
                     if ("abs" == name) {
-                        inferred = c->arg(0).type() & PirType::num();
+                        if (!c->arg(0).type().maybeObj())
+                            inferred = c->arg(0).type() & PirType::num();
+                        else
+                            inferred = i->inferType(getType);
                         break;
                     }
 
@@ -79,9 +82,13 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     static const std::unordered_set<std::string> vecTests = {
                         "is.na", "is.nan", "is.finite", "is.infinite"};
                     if (vecTests.count(name)) {
-                        inferred = PirType(RType::logical);
-                        if (getType(c->arg(0).val()).isScalar())
-                            inferred.setScalar();
+                        if (!c->arg(0).type().maybeObj()) {
+                            inferred = PirType(RType::logical);
+                            if (getType(c->arg(0).val()).isScalar())
+                                inferred.setScalar();
+                        } else {
+                            inferred = i->inferType(getType);
+                        }
                         break;
                     }
 
@@ -95,7 +102,10 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "is.atomic",   "is.recursive", "is.call",
                         "is.language", "is.function",  "is.single"};
                     if (tests.count(name)) {
-                        inferred = PirType(RType::logical).scalar();
+                        if (!c->arg(0).type().maybeObj())
+                            inferred = PirType(RType::logical).scalar();
+                        else
+                            inferred = i->inferType(getType);
                         break;
                     }
 

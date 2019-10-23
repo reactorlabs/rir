@@ -37,7 +37,7 @@ class FwdAvailableCheckpoints
         return AvailableCheckpointsApply::apply(state, i);
     }
 
-    Checkpoint* at(Instruction* i) {
+    Checkpoint* reaching(Instruction* i) {
         return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).get();
     }
 };
@@ -54,7 +54,11 @@ class RwdAvailableCheckpoints
         return AvailableCheckpointsApply::apply(state, i);
     }
 
-    Checkpoint* at(Instruction* i) {
+    Checkpoint* reachingThrough(Instruction* i) {
+        return BackwardStaticAnalysis::at<PositioningStyle::AfterInstruction>(i)
+            .get();
+    }
+    Checkpoint* reaching(Instruction* i) {
         return BackwardStaticAnalysis::at<PositioningStyle::BeforeInstruction>(
                    i)
             .get();
@@ -70,8 +74,17 @@ class AvailableCheckpoints {
     AvailableCheckpoints(ClosureVersion* cls, LogStream& log)
         : cfg(cls), fwd(cls, log), rwd(cls, cfg, log) {}
 
-    Checkpoint* at(Instruction* i) { return fwd.at(i); }
-    Checkpoint* next(Instruction* i) { return rwd.at(i); }
+    Checkpoint* at(Instruction* i) { return fwd.reaching(i); }
+    Checkpoint* next(Instruction* i) {
+        // Search for the next cp only in main path, not the deopt branch
+        if (auto cp = Checkpoint::Cast(i)) {
+            auto n = cp->nextBB();
+            while (n->isEmpty())
+                n = n->next();
+            return rwd.reachingThrough(*n->begin());
+        }
+        return rwd.reaching(i);
+    }
 };
 
 } // namespace pir

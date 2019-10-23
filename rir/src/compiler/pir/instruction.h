@@ -198,6 +198,8 @@ class Instruction : public Value {
     bool isDeoptBarrier() const {
         auto e = getStrongEffects();
         e.reset(Effect::TriggerDeopt);
+        // Error exits function, so we will never roll back before that effect
+        e.reset(Effect::Error);
         return !e.empty();
     }
 
