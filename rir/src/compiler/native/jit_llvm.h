@@ -8,6 +8,7 @@
 namespace rir {
 namespace pir {
 
+class ClosureVersion;
 class JitLLVM {
   public:
     static std::string mangle(const std::string&);
@@ -15,8 +16,9 @@ class JitLLVM {
     static void createModule();
     static llvm::Module& module();
     static void* tryCompile(llvm::Function*);
-    static llvm::Function* declare(const std::string& name,
+    static llvm::Function* declare(ClosureVersion* v, const std::string& name,
                                    llvm::FunctionType* signature);
+    static llvm::Function* get(ClosureVersion* v);
     static llvm::Value* getFunctionDeclaration(const std::string& Name,
                                                llvm::FunctionType* signature,
                                                llvm::IRBuilder<>& builder);
