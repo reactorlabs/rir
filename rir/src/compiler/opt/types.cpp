@@ -82,9 +82,13 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     static const std::unordered_set<std::string> vecTests = {
                         "is.na", "is.nan", "is.finite", "is.infinite"};
                     if (vecTests.count(name)) {
-                        inferred = PirType(RType::logical);
-                        if (getType(c->arg(0).val()).isScalar())
-                            inferred.setScalar();
+                        if (!c->arg(0).type().maybeObj()) {
+                            inferred = PirType(RType::logical);
+                            if (getType(c->arg(0).val()).isScalar())
+                                inferred.setScalar();
+                        } else {
+                            inferred = i->inferType(getType);
+                        }
                         break;
                     }
 
