@@ -78,7 +78,6 @@ class BB {
     void swapWithNext(Instrs::iterator);
 
     bool before(Instruction*, Instruction*) const;
-    bool beforeInCfg(BB*) const;
 
     void print(std::ostream&, bool tty);
     void printGraph(std::ostream&, bool omitDeoptBranches);
