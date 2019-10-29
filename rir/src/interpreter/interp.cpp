@@ -371,6 +371,15 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         assert(*pos == Opcode::record_type_);
         ObservedValues* feedback = (ObservedValues*)(pos + 1);
         feedback->record(val);
+        if (TYPEOF(val) == PROMSXP) {
+            if (PRVALUE(val) == R_UnboundValue &&
+                feedback->stateBeforeLastForce < ObservedValues::promise)
+                feedback->stateBeforeLastForce = ObservedValues::promise;
+            else if (feedback->stateBeforeLastForce <
+                     ObservedValues::evaluatedPromise)
+                feedback->stateBeforeLastForce =
+                    ObservedValues::evaluatedPromise;
+        }
         break;
     }
     case DeoptReason::Calltarget: {
