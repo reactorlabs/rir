@@ -58,6 +58,8 @@
 #include <llvm/IR/LegacyPassManagers.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 
+#include <unordered_map>
+
 namespace {
 
 using namespace llvm;
@@ -110,16 +112,29 @@ class JitLLVMImplementation {
         llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
     }
 
+    std::unordered_map<rir::pir::ClosureVersion*, llvm::Function*> funs;
     void createModule() {
         module = new llvm::Module("", C);
         module->setDataLayout(TM->createDataLayout());
         moduleKey = -1;
+        funs.clear();
     }
 
-    llvm::Function* declareFunction(const std::string& name,
+    llvm::Function* declareFunction(rir::pir::ClosureVersion* v,
+                                    const std::string& name,
                                     llvm::FunctionType* signature) {
-        return Function::Create(signature, Function::ExternalLinkage, name,
-                                JitLLVMImplementation::instance().module);
+        assert(!funs.count(v));
+        auto f = Function::Create(signature, Function::ExternalLinkage, name,
+                                  JitLLVMImplementation::instance().module);
+        funs[v] = f;
+        return f;
+    }
+
+    llvm::Function* getFunction(rir::pir::ClosureVersion* v) {
+        auto r = funs.find(v);
+        if (r != funs.end())
+            return r->second;
+        return nullptr;
     }
 
     void* tryCompile(llvm::Function* fun) {
@@ -323,9 +338,14 @@ void* JitLLVM::tryCompile(llvm::Function* fun) {
     return JitLLVMImplementation::instance().tryCompile(fun);
 }
 
-llvm::Function* JitLLVM::declare(const std::string& name,
+llvm::Function* JitLLVM::get(ClosureVersion* v) {
+    return JitLLVMImplementation::instance().getFunction(v);
+}
+
+llvm::Function* JitLLVM::declare(ClosureVersion* v, const std::string& name,
                                  llvm::FunctionType* signature) {
-    return JitLLVMImplementation::instance().declareFunction(name, signature);
+    return JitLLVMImplementation::instance().declareFunction(v, name,
+                                                             signature);
 }
 
 llvm::Value* JitLLVM::getFunctionDeclaration(const std::string& name,

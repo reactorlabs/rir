@@ -118,20 +118,11 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                 continue;
             }
 
-            auto doesNotReorderEffects = [&](BB* x) {
+            auto allowReorder = [&](BB* x) {
                 std::function<bool(BB*)> compute = [&](BB* x) {
                     if (!x || x == target)
                         return true;
-                    // done, check cur bb for effects
-                    if (x == bb) {
-                        for (auto& j : *bb) {
-                            if (i == j)
-                                return true;
-                            if (j->hasStrongEffects())
-                                return false;
-                        }
-                        assert(false);
-                    }
+
                     if (!x->isEmpty()) {
                         // We can only hoist effects over branches if both
                         // branch targets will trigger the effect
@@ -143,10 +134,19 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                     }
 
                     for (auto& j : *bb)
-                        if (onlyDependsOnAssume) {
+                        if (x == bb && i == j) {
+                            return true;
+                        } else if (onlyDependsOnAssume) {
                             if (Assume::Cast(j))
                                 return false;
-                        } else if (j->hasStrongEffects()) {
+                        } else if (i->isTypecheck()) {
+                            if (Force::Cast(j) &&
+                                i->arg(0).val()->type.maybePromiseWrapped() &&
+                                j->effects.includes(Effect::Force) &&
+                                j->arg(0).val()->followCastsAndForce() ==
+                                    i->arg(0).val()->followCastsAndForce())
+                                return false;
+                        } else if (hasEffects && j->hasStrongEffects()) {
                             return false;
                         }
 
@@ -178,8 +178,8 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
             };
 
             bool success = true;
-            if (hasEffects)
-                success = doesNotReorderEffects(target);
+            if (hasEffects || i->isTypecheck())
+                success = allowReorder(target);
             else if (i->cost() > 0)
                 success = noUnneccessaryComputation(target, 1);
 

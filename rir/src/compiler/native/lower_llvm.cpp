@@ -152,7 +152,7 @@ class LowerFunctionLLVM {
           MDB(C), cfg(code), liveness(code->nextBBId, cfg), numLocals(0),
           numTemps(0) {
 
-        fun = JitLLVM::declare(name, t::nativeFunction);
+        fun = JitLLVM::declare(cls, name, t::nativeFunction);
         // prevent Wunused
         this->cls->size();
         this->promMap.size();
@@ -2580,7 +2580,28 @@ bool LowerFunctionLLVM::tryCompile() {
                             nativeTarget = entry;
                         }
                     }
-                    if (nativeTarget && nativeTarget->body()->nativeCode) {
+                    if (nativeTarget) {
+                        llvm::Value* trg = JitLLVM::get(target);
+                        auto nativeCode = nativeTarget->body()->nativeCode;
+                        if (!trg && nativeCode) {
+                            trg = builder.CreateIntToPtr(c((void*)nativeCode),
+                                                         t::nativeFunctionPtr);
+                        }
+                        if (trg &&
+                            target->properties.includes(
+                                ClosureVersion::Property::NoReflection)) {
+                            auto code = builder.CreateIntToPtr(
+                                c(nativeTarget->body()), t::voidPtr);
+                            llvm::Value* arglist = nodestackPtr();
+                            auto rr = withCallFrame(args, [&]() {
+                                return builder.CreateCall(
+                                    trg, {code, arglist, loadSxp(i->env()),
+                                          constant(callee, t::SEXP)});
+                            });
+                            setVal(i, rr);
+                            break;
+                        }
+
                         Assumptions asmpt = calli->inferAvailableAssumptions();
                         assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));

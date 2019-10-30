@@ -230,6 +230,7 @@ class Instruction : public Value {
     virtual bool exits() const = 0;
     virtual bool branches() const = 0;
     virtual bool branchOrExit() const = 0;
+    virtual bool isTypecheck() const = 0;
     virtual VisibilityFlag visibilityFlag() const = 0;
 
     virtual size_t nargs() const = 0;
@@ -510,6 +511,7 @@ class InstructionImplementation : public Instruction {
     bool hasEnv() const override final {
         return mayHaveEnv() && env() != Env::elided();
     }
+    bool isTypecheck() const override { return false; }
     bool exits() const override final { return CF == Controlflow::Exit; }
     bool branches() const override final { return CF == Controlflow::Branch; }
     bool branchOrExit() const override final { return branches() || exits(); }
@@ -1412,6 +1414,7 @@ class FLI(IsType, 1, Effects::None()) {
 
     void printArgs(std::ostream& out, bool tty) const override;
 
+    bool isTypecheck() const override final { return true; }
     size_t gvnBase() const override {
         return hash_combine(tagHash(), typeTest);
     }
@@ -2175,6 +2178,7 @@ class FLI(IsObject, 1, Effects::None()) {
     explicit IsObject(Value* v)
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}) {}
 
+    bool isTypecheck() const override final { return true; }
     size_t gvnBase() const override { return tagHash(); }
 };
 
