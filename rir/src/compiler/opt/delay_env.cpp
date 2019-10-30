@@ -11,10 +11,9 @@ namespace pir {
 void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
     Visitor::run(function->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
-        MkEnv* envInstr;
 
         while (true) {
-            envInstr = nullptr;
+            MkEnv* envInstr = nullptr;
 
             auto it = bb->end();
             while (it != bb->begin()) {
