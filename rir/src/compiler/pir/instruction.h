@@ -119,7 +119,7 @@ enum class Effect : uint8_t {
     MutatesArgument,
 
     FIRST = Visibility,
-    LAST = DependsOnAssume,
+    LAST = MutatesArgument,
 };
 typedef EnumSet<Effect> Effects;
 
