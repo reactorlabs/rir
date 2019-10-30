@@ -48,7 +48,8 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                 for (auto use : uses) {
                     if (use->type.isVoid() &&
                         passObservableEffects(use->getObservableEffects())
-                            .empty()) {
+                            .empty() &&
+                        !use->branchOrExit()) {
                         floatingEffectlessUses[candidate].insert(use);
                     } else if (!use->bb()->isDeopt() &&
                                !usedOnlyInDeopt.count(use)) {
