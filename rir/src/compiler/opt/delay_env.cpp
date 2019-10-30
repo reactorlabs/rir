@@ -34,8 +34,7 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
 
                 auto next = *(it + 1);
 
-                if (Branch::Cast(next) || Return::Cast(next) ||
-                    Deopt::Cast(next) || Checkpoint::Cast(next))
+                if (next->branchOrExit())
                     break;
 
                 auto consumeStVar = [&](StVar* st) {
