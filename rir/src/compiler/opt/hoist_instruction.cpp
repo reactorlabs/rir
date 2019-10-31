@@ -123,7 +123,7 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                     if (!x || x == target)
                         return true;
 
-                    if (!x->isEmpty()) {
+                    if (!x->isEmpty() && x != bb) {
                         // We can only hoist effects over branches if both
                         // branch targets will trigger the effect
                         if (x->last()->branches()) {
