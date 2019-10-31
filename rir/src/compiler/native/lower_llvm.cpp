@@ -2063,19 +2063,40 @@ bool LowerFunctionLLVM::tryCompile() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
 
-                auto callTheBuiltin = [&]() {
-                    return withCallFrame(args, [&]() -> llvm::Value* {
-                        return call(NativeBuiltins::callBuiltin,
-                                    {
-                                        paramCode(),
-                                        c(b->srcIdx),
-                                        constant(b->blt, t::SEXP),
-                                        // Some "safe" builtins still look up
-                                        // functions in the base env
-                                        constant(R_BaseEnv, t::SEXP),
-                                        c(b->nCallArgs()),
-                                    });
-                    });
+                auto callTheBuiltin = [&]() -> llvm::Value* {
+                    auto blt = FunctionType::get(
+                        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP}, false);
+                    auto bltPtr = PointerType::get(blt, 0);
+                    auto f = convertToPointer((void*)b->builtin, bltPtr);
+
+                    auto arglist = constant(R_NilValue, t::SEXP);
+                    protectTemp(arglist);
+                    for (auto v = args.rbegin(); v != args.rend(); v++) {
+                        auto a = loadSxp(*v);
+#ifdef ENABLE_SLOWASSERT
+                        insn_assert(
+                            builder.CreateICmpNE(sexptype(a), c(PROMSXP)),
+                            "passing promise to builtin");
+#endif
+                        arglist = call(NativeBuiltins::consNr, {a, arglist});
+                    }
+
+                    auto ast = constant(cp_pool_at(globalContext(), b->srcIdx),
+                                        t::SEXP);
+                    // TODO: ensure that we cover all the fast builtin cases
+                    int flag = getFlag(b->blt);
+                    if (flag < 2)
+                        setVisible(flag != 1);
+                    auto res =
+                        builder.CreateCall(f, {
+                                                  ast,
+                                                  constant(b->blt, t::SEXP),
+                                                  arglist,
+                                                  constant(R_BaseEnv, t::SEXP),
+                                              });
+                    if (flag < 2)
+                        setVisible(flag != 1);
+                    return res;
                 };
 
                 // TODO: this should probably go somewhere else... This is
