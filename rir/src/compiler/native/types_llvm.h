@@ -81,6 +81,8 @@ extern llvm::FunctionType* void_argssexpint;
 
 extern llvm::FunctionType* nativeFunction;
 extern llvm::Type* nativeFunctionPtr;
+extern llvm::FunctionType* builtinFunction;
+extern llvm::Type* builtinFunctionPtr;
 
 } // namespace t
 } // namespace pir

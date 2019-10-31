@@ -13,6 +13,7 @@
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/LazyEnvironment.h"
+#include "interpreter/builtins.h"
 #include "interpreter/instance.h"
 #include "runtime/DispatchTable.h"
 #include "utils/Pool.h"
@@ -2063,11 +2064,27 @@ bool LowerFunctionLLVM::tryCompile() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
 
+                auto callTheBuiltinFallback = [&]() {
+                    return withCallFrame(args, [&]() -> llvm::Value* {
+                        return call(NativeBuiltins::callBuiltin,
+                                    {
+                                        paramCode(),
+                                        c(b->srcIdx),
+                                        constant(b->blt, t::SEXP),
+                                        // Some "safe" builtins still look up
+                                        // functions in the base env
+                                        constant(R_BaseEnv, t::SEXP),
+                                        c(b->nCallArgs()),
+                                    });
+                    });
+                };
+
                 auto callTheBuiltin = [&]() -> llvm::Value* {
-                    auto blt = FunctionType::get(
-                        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP}, false);
-                    auto bltPtr = PointerType::get(blt, 0);
-                    auto f = convertToPointer((void*)b->builtin, bltPtr);
+                    if (supportsFastBuiltinCall(b->blt))
+                        return callTheBuiltinFallback();
+
+                    auto f = convertToPointer((void*)b->builtin,
+                                              t::builtinFunctionPtr);
 
                     auto arglist = constant(R_NilValue, t::SEXP);
                     protectTemp(arglist);
@@ -2286,6 +2303,22 @@ bool LowerFunctionLLVM::tryCompile() {
                             setVal(i, constant(ScalarInteger(1), orep));
                         }
                         break;
+                    case 157: { // "abs"
+                        if (irep == Representation::Integer) {
+                            assert(orep == irep);
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateICmpSGE(a, c(0)), a,
+                                          builder.CreateNeg(a)));
+                        } else if (irep == Representation::Real) {
+                            assert(orep == irep);
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpOGE(a, c(0)), a,
+                                          builder.CreateFNeg(a)));
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    }
                     case 311: // "as.integer"
                         if (irep == Representation::Integer &&
                             orep == Representation::Integer) {
