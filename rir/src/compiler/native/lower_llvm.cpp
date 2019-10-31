@@ -386,8 +386,12 @@ class LowerFunctionLLVM {
     void nacheck(llvm::Value* v, BasicBlock* isNa, BasicBlock* notNa = nullptr);
     void checkMissing(llvm::Value* v);
     void checkUnbound(llvm::Value* v);
+
     llvm::Value* call(const NativeBuiltin& builtin,
                       const std::vector<llvm::Value*>& args);
+    llvm::Value* callRBuiltin(SEXP builtin, const std::vector<Value*>& args,
+                              int srcIdx, CCODE, llvm::Value* env);
+
     llvm::Value* box(llvm::Value* v, PirType t, bool protect = true);
     llvm::Value* boxInt(llvm::Value* v, bool protect = true);
     llvm::Value* boxReal(llvm::Value* v, bool protect = true);
@@ -605,6 +609,53 @@ void LowerFunctionLLVM::decStack(int i) {
     auto ptrptr = convertToPointer(&R_BCNodeStackTop,
                                    PointerType::get(t::stackCellPtr, 0));
     builder.CreateStore(up, ptrptr);
+}
+
+llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
+                                             const std::vector<Value*>& args,
+                                             int srcIdx, CCODE builtinFun,
+                                             llvm::Value* env) {
+    if (supportsFastBuiltinCall(builtin)) {
+        return withCallFrame(args, [&]() -> llvm::Value* {
+            return call(NativeBuiltins::callBuiltin,
+                        {
+                            paramCode(),
+                            c(srcIdx),
+                            constant(builtin, t::SEXP),
+                            env,
+                            c(args.size()),
+                        });
+        });
+    }
+
+    auto f = convertToPointer((void*)builtinFun, t::builtinFunctionPtr);
+
+    auto arglist = constant(R_NilValue, t::SEXP);
+    for (auto v = args.rbegin(); v != args.rend(); v++) {
+        auto a = loadSxp(*v);
+#ifdef ENABLE_SLOWASSERT
+        insn_assert(builder.CreateICmpNE(sexptype(a), c(PROMSXP)),
+                    "passing promise to builtin");
+#endif
+        arglist = call(NativeBuiltins::consNr, {a, arglist});
+    }
+    if (args.size() > 0)
+        protectTemp(arglist);
+
+    auto ast = constant(cp_pool_at(globalContext(), srcIdx), t::SEXP);
+    // TODO: ensure that we cover all the fast builtin cases
+    int flag = getFlag(builtin);
+    if (flag < 2)
+        setVisible(flag != 1);
+    auto res = builder.CreateCall(f, {
+                                         ast,
+                                         constant(builtin, t::SEXP),
+                                         arglist,
+                                         env,
+                                     });
+    if (flag < 2)
+        setVisible(flag != 1);
+    return res;
 }
 
 llvm::Value*
@@ -2064,56 +2115,11 @@ bool LowerFunctionLLVM::tryCompile() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
 
-                auto callTheBuiltinFallback = [&]() {
-                    return withCallFrame(args, [&]() -> llvm::Value* {
-                        return call(NativeBuiltins::callBuiltin,
-                                    {
-                                        paramCode(),
-                                        c(b->srcIdx),
-                                        constant(b->blt, t::SEXP),
-                                        // Some "safe" builtins still look up
-                                        // functions in the base env
-                                        constant(R_BaseEnv, t::SEXP),
-                                        c(b->nCallArgs()),
-                                    });
-                    });
-                };
-
                 auto callTheBuiltin = [&]() -> llvm::Value* {
-                    if (supportsFastBuiltinCall(b->blt))
-                        return callTheBuiltinFallback();
-
-                    auto f = convertToPointer((void*)b->builtin,
-                                              t::builtinFunctionPtr);
-
-                    auto arglist = constant(R_NilValue, t::SEXP);
-                    protectTemp(arglist);
-                    for (auto v = args.rbegin(); v != args.rend(); v++) {
-                        auto a = loadSxp(*v);
-#ifdef ENABLE_SLOWASSERT
-                        insn_assert(
-                            builder.CreateICmpNE(sexptype(a), c(PROMSXP)),
-                            "passing promise to builtin");
-#endif
-                        arglist = call(NativeBuiltins::consNr, {a, arglist});
-                    }
-
-                    auto ast = constant(cp_pool_at(globalContext(), b->srcIdx),
-                                        t::SEXP);
-                    // TODO: ensure that we cover all the fast builtin cases
-                    int flag = getFlag(b->blt);
-                    if (flag < 2)
-                        setVisible(flag != 1);
-                    auto res =
-                        builder.CreateCall(f, {
-                                                  ast,
-                                                  constant(b->blt, t::SEXP),
-                                                  arglist,
-                                                  constant(R_BaseEnv, t::SEXP),
-                                              });
-                    if (flag < 2)
-                        setVisible(flag != 1);
-                    return res;
+                    // Some "safe" builtins still look up functions in the base
+                    // env
+                    return callRBuiltin(b->blt, args, i->srcIdx, b->builtin,
+                                        constant(R_BaseEnv, t::SEXP));
                 };
 
                 // TODO: this should probably go somewhere else... This is
@@ -2544,20 +2550,10 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
-                setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                           return call(NativeBuiltins::callBuiltin,
-                                       {
-                                           paramCode(),
-                                           c(b->srcIdx),
-                                           constant(b->blt, t::SEXP),
-                                           // Some "safe" builtins still look up
-                                           // functions in the base env
-                                           b->hasEnv()
-                                               ? loadSxp(b->env())
-                                               : constant(R_BaseEnv, t::SEXP),
-                                           c(b->nCallArgs()),
-                                       });
-                       }));
+                setVal(i, callRBuiltin(b->blt, args, i->srcIdx, b->builtin,
+                                       b->hasEnv()
+                                           ? loadSxp(b->env())
+                                           : constant(R_BaseEnv, t::SEXP)));
                 break;
             }
 
