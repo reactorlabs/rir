@@ -12,53 +12,21 @@
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/Mangler.h"
-#include "llvm/IR/Verifier.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Scalar/GVN.h"
-#include "llvm/Transforms/Vectorize.h"
-
-// analysis passes
-#include <llvm/Analysis/BasicAliasAnalysis.h>
-#include <llvm/Analysis/Passes.h>
-#include <llvm/Analysis/ScopedNoAliasAA.h>
-#include <llvm/Analysis/TargetLibraryInfo.h>
-#include <llvm/Analysis/TargetTransformInfo.h>
-#include <llvm/Analysis/TypeBasedAliasAnalysis.h>
-#include <llvm/IR/Verifier.h>
-
-#include <llvm/Transforms/IPO.h>
-#include <llvm/Transforms/IPO/AlwaysInliner.h>
-#include <llvm/Transforms/Instrumentation.h>
-#include <llvm/Transforms/Scalar.h>
-#include <llvm/Transforms/Scalar/GVN.h>
-#include <llvm/Transforms/Utils.h>
-#include <llvm/Transforms/Utils/BasicBlockUtils.h>
-#include <llvm/Transforms/Vectorize.h>
-
-#include <llvm/Support/SmallVectorMemoryBuffer.h>
-#include <llvm/Transforms/InstCombine/InstCombine.h>
-
-#include <llvm/Bitcode/BitcodeWriter.h>
-#include <llvm/Bitcode/BitcodeWriterPass.h>
-
-#include "llvm/Object/ArchiveWriter.h"
-#include <llvm/IR/IRPrintingPasses.h>
-#include <llvm/IR/LegacyPassManagers.h>
-#include <llvm/Transforms/Utils/Cloning.h>
 
 #include <unordered_map>
+
+#include <llvm/Analysis/TargetLibraryInfo.h>
+#include <llvm/Analysis/TargetTransformInfo.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 namespace {
 
@@ -225,97 +193,49 @@ class JitLLVMImplementation {
 
     std::unique_ptr<llvm::Module>
     optimizeModule(std::unique_ptr<llvm::Module> M) {
-        // Create a function pass manager.
-        auto PM = llvm::make_unique<legacy::FunctionPassManager>(M.get());
 
-        PM->add(createPromoteMemoryToRegisterPass());
+        M->setTargetTriple(TM->getTargetTriple().str());
+        M->setDataLayout(TM->createDataLayout());
 
-        PM->add(createScopedNoAliasAAWrapperPass());
-        PM->add(createTypeBasedAAWrapperPass());
-        PM->add(createBasicAAWrapperPass());
+        llvm::legacy::PassManager passes;
+        passes.add(
+            new llvm::TargetLibraryInfoWrapperPass(TM->getTargetTriple()));
+        passes.add(llvm::createTargetTransformInfoWrapperPass(
+            TM->getTargetIRAnalysis()));
 
-        // list of passes from vmkit
-        PM->add(createCFGSimplificationPass()); // Clean up disgusting code
-        PM->add(createDeadCodeEliminationPass());
-        PM->add(createSROAPass()); // Kill useless allocas
+        llvm::legacy::FunctionPassManager fnPasses(M.get());
+        fnPasses.add(llvm::createTargetTransformInfoWrapperPass(
+            TM->getTargetIRAnalysis()));
 
-        PM->add(createMemCpyOptPass());
+        {
+            llvm::PassManagerBuilder builder;
+            builder.OptLevel = 2;
+            builder.SizeLevel = 0;
+            builder.Inliner = llvm::createFunctionInliningPass(3, 0, false);
+            builder.LoopVectorize = true;
+            builder.SLPVectorize = true;
+            TM->adjustPassManager(builder);
 
-        PM->add(createPromoteMemoryToRegisterPass());
-        PM->add(createConstantPropagationPass());
-        PM->add(createDeadInstEliminationPass());
-        PM->add(createTailCallEliminationPass());
-
-        // Running `memcpyopt` between this and `sroa` seems to give `sroa` a
-        // hard time merging the `alloca` for the unboxed data and the `alloca`
-        // created by the `alloc_opt` pass.
-        PM->add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
-        // Now that SROA has cleaned up for front-end mess, a lot of control
-        // flow should be more evident - try to clean it up.
-        PM->add(createCFGSimplificationPass());    // Merge & remove BBs
-        PM->add(createSROAPass());                 // Break up aggregate allocas
-        PM->add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
-        PM->add(createJumpThreadingPass());        // Thread jumps.
-        PM->add(createInstructionCombiningPass()); // Combine silly seq's
-
-        PM->add(createCFGSimplificationPass()); // Merge & remove BBs
-        PM->add(createReassociatePass());       // Reassociate expressions
-
-        PM->add(createEarlyCSEPass()); //// ****
-
-        // Load forwarding above can expose allocations that aren't actually
-        // used remove those before optimizing loops.
-        PM->add(createLoopIdiomPass());  //// ****
-        PM->add(createLoopRotatePass()); // Rotate loops.
-        // LoopRotate strips metadata from terminator, so run LowerSIMD
-        // afterwards
-        PM->add(createLICMPass());         // Hoist loop invariants
-        PM->add(createLoopUnswitchPass()); // Unswitch loops.
-        // Subsequent passes not stripping metadata from terminator
-        PM->add(createInstructionCombiningPass());
-        PM->add(createIndVarSimplifyPass());     // Canonicalize indvars
-        PM->add(createLoopDeletionPass());       // Delete dead loops
-        PM->add(createSimpleLoopUnrollPass());   // Unroll small loops
-        PM->add(createLoopStrengthReducePass()); // (jwb added)
-
-        // Re-run SROA after loop-unrolling (useful for small loops that
-        // operate, over the structure of an aggregate)
-        PM->add(createSROAPass()); // Break up aggregate allocas
-        PM->add(
-            createInstructionCombiningPass()); // Clean up after the unroller
-        PM->add(createGVNPass());              // Remove redundancies
-        PM->add(createMemCpyOptPass());        // Remove memcpy / form memset
-        PM->add(createSCCPPass());             // Constant prop with SCCP
-
-        // Run instcombine after redundancy elimination to exploit opportunities
-        // opened up by them.
-        PM->add(createSinkingPass()); ////////////// ****
-        PM->add(createInstructionCombiningPass());
-        PM->add(createJumpThreadingPass());        // Thread jumps
-        PM->add(createDeadStoreEliminationPass()); // Delete dead stores
-
-        // see if all of the constant folding has exposed more loops
-        // to simplification and deletion
-        // this helps significantly with cleaning up iteration
-        PM->add(createCFGSimplificationPass()); // Merge & remove BBs
-        PM->add(createLoopIdiomPass());
-        PM->add(createLoopDeletionPass());  // Delete dead loops
-        PM->add(createJumpThreadingPass()); // Thread jumps
-        PM->add(createSLPVectorizerPass());
-        PM->add(createAggressiveDCEPass()); // Delete dead instructions
-        PM->add(createInstructionCombiningPass());
-        PM->add(createLoopVectorizePass());
-        PM->add(createInstructionCombiningPass());
-
-        PM->doInitialization();
-
-        // Run the optimizations over all functions in the module being added to
-        // the JIT.
-        for (auto& F : *M) {
-            PM->run(F);
-            verifyFunction(F);
+            builder.populateFunctionPassManager(fnPasses);
+            builder.populateModulePassManager(passes);
         }
 
+        {
+            llvm::PassManagerBuilder builder;
+            builder.VerifyInput = true;
+            builder.Inliner = llvm::createFunctionInliningPass(3, 0, false);
+            builder.populateLTOPassManager(passes);
+            passes.add(createHotColdSplittingPass());
+        }
+
+        fnPasses.doInitialization();
+        for (llvm::Function& func : *M) {
+            fnPasses.run(func);
+        }
+        fnPasses.doFinalization();
+
+        passes.add(llvm::createVerifierPass());
+        passes.run(*M);
         return M;
     }
 };

@@ -2711,10 +2711,14 @@ bool LowerFunctionLLVM::tryCompile() {
                 cond = builder.CreateICmpNE(cond, c(0));
                 auto br = builder.CreateCondBr(cond, getBlock(bb->trueBranch()),
                                                getBlock(bb->falseBranch()));
-                if (bb->trueBranch()->isDeopt()) {
+                if (bb->trueBranch()->isDeopt() ||
+                    (bb->trueBranch()->isJmp() &&
+                     bb->trueBranch()->next()->isDeopt())) {
                     MDNode* WeightNode = MDB.createBranchWeights(0, 1);
                     br->setMetadata(LLVMContext::MD_prof, WeightNode);
-                } else if (bb->falseBranch()->isDeopt()) {
+                } else if (bb->falseBranch()->isDeopt() ||
+                           (bb->falseBranch()->isJmp() &&
+                            bb->falseBranch()->next()->isDeopt())) {
                     MDNode* WeightNode = MDB.createBranchWeights(1, 0);
                     br->setMetadata(LLVMContext::MD_prof, WeightNode);
                 }
