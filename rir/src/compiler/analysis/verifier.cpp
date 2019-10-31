@@ -175,6 +175,28 @@ class TheVerifier {
             }
         }
 
+        if (auto call = CallSafeBuiltin::Cast(i)) {
+            call->eachCallArg([&](Value* v) {
+                if (v->type.maybePromiseWrapped()) {
+                    std::cerr << "Error: instruction '";
+                    i->print(std::cerr);
+                    std::cerr << "' has prom wrapped arg\n";
+                    ok = false;
+                }
+            });
+        }
+
+        if (auto call = CallBuiltin::Cast(i)) {
+            call->eachCallArg([&](Value* v) {
+                if (v->type.maybePromiseWrapped()) {
+                    std::cerr << "Error: instruction '";
+                    i->print(std::cerr);
+                    std::cerr << "' has prom wrapped arg\n";
+                    ok = false;
+                }
+            });
+        }
+
         if (auto assume = Assume::Cast(i)) {
             if (IsType::Cast(assume->arg(0).val())) {
                 if (assume->feedbackOrigin.empty()) {
