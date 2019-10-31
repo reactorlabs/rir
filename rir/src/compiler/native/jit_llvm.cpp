@@ -225,6 +225,10 @@ class JitLLVMImplementation {
 
     std::unique_ptr<llvm::Module>
     optimizeModule(std::unique_ptr<llvm::Module> M) {
+
+        M->setTargetTriple(TM->getTargetTriple().str());
+        M->setDataLayout(TM->createDataLayout());
+
         // Create a function pass manager.
         auto PM = llvm::make_unique<legacy::FunctionPassManager>(M.get());
 
@@ -254,9 +258,6 @@ class JitLLVMImplementation {
         // flow should be more evident - try to clean it up.
         PM->add(createCFGSimplificationPass());    // Merge & remove BBs
         PM->add(createSROAPass());                 // Break up aggregate allocas
-        PM->add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
-        PM->add(createJumpThreadingPass());        // Thread jumps.
-        PM->add(createInstructionCombiningPass()); // Combine silly seq's
 
         PM->add(createCFGSimplificationPass()); // Merge & remove BBs
         PM->add(createReassociatePass());       // Reassociate expressions
@@ -314,6 +315,28 @@ class JitLLVMImplementation {
         for (auto& F : *M) {
             PM->run(F);
             verifyFunction(F);
+        }
+
+        {
+            llvm::legacy::PassManager PMM;
+            PMM.add(
+                new llvm::TargetLibraryInfoWrapperPass(TM->getTargetTriple()));
+            PMM.add(llvm::createTargetTransformInfoWrapperPass(
+                TM->getTargetIRAnalysis()));
+
+            PMM.add(createHotColdSplittingPass());
+            PMM.add(createCanonicalizeAliasesPass());
+            PMM.add(createNameAnonGlobalPass());
+            PMM.add(createCFGSimplificationPass()); // if-convert
+            PMM.add(createGlobalDCEPass());
+            PMM.add(createGlobalSplitPass());
+            PMM.add(createGlobalOptimizerPass());
+            PMM.add(createPromoteMemoryToRegisterPass());
+            PMM.add(createConstantMergePass());
+            PMM.add(createNewGVNPass());
+            PMM.add(createDeadStoreEliminationPass());
+            PMM.add(createInstructionCombiningPass(false));
+            PMM.run(*M);
         }
 
         return M;
