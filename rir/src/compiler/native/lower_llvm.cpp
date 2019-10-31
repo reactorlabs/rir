@@ -13,6 +13,7 @@
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/LazyEnvironment.h"
+#include "interpreter/builtins.h"
 #include "interpreter/instance.h"
 #include "runtime/DispatchTable.h"
 #include "utils/Pool.h"
@@ -2063,7 +2064,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
 
-                auto callTheBuiltin = [&]() {
+                auto callTheBuiltinFallback = [&]() {
                     return withCallFrame(args, [&]() -> llvm::Value* {
                         return call(NativeBuiltins::callBuiltin,
                                     {
@@ -2076,6 +2077,43 @@ bool LowerFunctionLLVM::tryCompile() {
                                         c(b->nCallArgs()),
                                     });
                     });
+                };
+
+                auto callTheBuiltin = [&]() -> llvm::Value* {
+                    if (supportsFastBuiltinCall(b->blt))
+                        return callTheBuiltinFallback();
+
+                    auto f = convertToPointer((void*)b->builtin,
+                                              t::builtinFunctionPtr);
+
+                    auto arglist = constant(R_NilValue, t::SEXP);
+                    protectTemp(arglist);
+                    for (auto v = args.rbegin(); v != args.rend(); v++) {
+                        auto a = loadSxp(*v);
+#ifdef ENABLE_SLOWASSERT
+                        insn_assert(
+                            builder.CreateICmpNE(sexptype(a), c(PROMSXP)),
+                            "passing promise to builtin");
+#endif
+                        arglist = call(NativeBuiltins::consNr, {a, arglist});
+                    }
+
+                    auto ast = constant(cp_pool_at(globalContext(), b->srcIdx),
+                                        t::SEXP);
+                    // TODO: ensure that we cover all the fast builtin cases
+                    int flag = getFlag(b->blt);
+                    if (flag < 2)
+                        setVisible(flag != 1);
+                    auto res =
+                        builder.CreateCall(f, {
+                                                  ast,
+                                                  constant(b->blt, t::SEXP),
+                                                  arglist,
+                                                  constant(R_BaseEnv, t::SEXP),
+                                              });
+                    if (flag < 2)
+                        setVisible(flag != 1);
+                    return res;
                 };
 
                 // TODO: this should probably go somewhere else... This is
@@ -2265,6 +2303,22 @@ bool LowerFunctionLLVM::tryCompile() {
                             setVal(i, constant(ScalarInteger(1), orep));
                         }
                         break;
+                    case 157: { // "abs"
+                        if (irep == Representation::Integer) {
+                            assert(orep == irep);
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateICmpSGE(a, c(0)), a,
+                                          builder.CreateNeg(a)));
+                        } else if (irep == Representation::Real) {
+                            assert(orep == irep);
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpOGE(a, c(0)), a,
+                                          builder.CreateFNeg(a)));
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    }
                     case 311: // "as.integer"
                         if (irep == Representation::Integer &&
                             orep == Representation::Integer) {

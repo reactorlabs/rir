@@ -116,6 +116,8 @@ int initializeTypes(LLVMContext& context) {
     DECLARE(nativeFunction, t::SEXP, t::voidPtr, t::stackCellPtr, t::SEXP,
             t::SEXP);
     t::nativeFunctionPtr = PointerType::get(t::nativeFunction, 0);
+    DECLARE(builtinFunction, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
+    t::builtinFunctionPtr = PointerType::get(t::builtinFunction, 0);
     DECLARE(void_void, t_void);
     DECLARE(void_voidPtr, t_void, t::voidPtr);
     DECLARE(void_sexp, t_void, t::SEXP);
@@ -377,6 +379,8 @@ FunctionType* void_argssexpint;
 
 FunctionType* nativeFunction;
 Type* nativeFunctionPtr;
+FunctionType* builtinFunction;
+Type* builtinFunctionPtr;
 
 StructType* stackCell;
 PointerType* stackCellPtr;
