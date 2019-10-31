@@ -115,6 +115,11 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         break;
                     }
 
+                    if ("strsplit" == name) {
+                        inferred = RType::vec;
+                        break;
+                    }
+
                     inferred = i->inferType(getType);
                     break;
                 }
