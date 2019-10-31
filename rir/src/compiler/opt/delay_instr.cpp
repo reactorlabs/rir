@@ -25,14 +25,11 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
         });
     });
 
-    auto passObservableEffects = [&](Effects e) -> Effects {
-        e.reset(Effect::MutatesArgument);
-        return e;
-    };
-
     std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
-    std::unordered_map<Instruction*, SmallSet<Instruction*>>
-        floatingEffectlessUses;
+    std::unordered_map<Instruction*, SmallSet<Instruction*>> updatePromises;
+    std::unordered_map<Instruction*, SmallSet<BB*>> udatePromiseTargets;
+    DominanceGraph dom(function);
+    CFG cfg(function);
     bool changed = true;
     while (changed) {
         changed = false;
@@ -46,11 +43,8 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                 addToDeopt = candidate->bb()->isDeopt();
             } else {
                 for (auto use : uses) {
-                    if (use->type.isVoid() &&
-                        passObservableEffects(use->getObservableEffects())
-                            .empty() &&
-                        !use->branchOrExit()) {
-                        floatingEffectlessUses[candidate].insert(use);
+                    if (UpdatePromise::Cast(use)) {
+                        updatePromises[candidate].insert(use);
                     } else if (!use->bb()->isDeopt() &&
                                !usedOnlyInDeopt.count(use)) {
                         addToDeopt = false;
@@ -67,7 +61,24 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                             deoptUses.insert(deoptUse);
                     }
                 }
-                changed = true;
+                // We can only move mkArgs that have an updatePromise if we can
+                // prove wether every target deopt unambigously always requires
+                // or not the update promise
+                bool safeUpdatePromises = true;
+                for (auto updatePromise : updatePromises[candidate]) {
+                    auto& updateTargets = udatePromiseTargets[updatePromise];
+                    for (auto deoptTarget : deoptUses) {
+                        if (dom.dominates(updatePromise->bb(), deoptTarget))
+                            updateTargets.insert(deoptTarget);
+                        else if (cfg.isPredecessor(updatePromise->bb(),
+                                                   deoptTarget))
+                            safeUpdatePromises = false;
+                    }
+                }
+                if (safeUpdatePromises)
+                    changed = true;
+                else
+                    usedOnlyInDeopt.erase(candidate);
             }
         }
     }
@@ -91,9 +102,8 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
         replacements;
     std::unordered_map<BB*, std::vector<rir::pir::Instruction*>::iterator>
         insertPositions;
-    std::unordered_set<BB*> visited;
+
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
-        visited.insert(bb);
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto instruction = *ip;
@@ -112,20 +122,10 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                         targetBB->insert(insertPosition, newInstr) + 1;
                     instruction->replaceUsesIn(newInstr, targetBB);
                     replacements[instruction].insert({targetBB, newInstr});
-                    for (auto floatingDependency :
-                         floatingEffectlessUses[instruction]) {
-                        auto valid = true;
-                        floatingDependency->eachArg([&](InstrArg& arg) {
-                            if (auto instruction =
-                                    Instruction::Cast(arg.val())) {
-                                if (!visited.count(instruction->bb())) {
-                                    valid = false;
-                                    return;
-                                }
-                            }
-                        });
-                        if (valid) {
-                            auto newInstr = floatingDependency->clone();
+                    for (auto updatePromise : updatePromises[instruction]) {
+                        if (udatePromiseTargets[updatePromise].count(
+                                targetBB)) {
+                            auto newInstr = updatePromise->clone();
                             newInstr->eachArg([&](InstrArg& arg) {
                                 replaceArgs(arg, replacements, targetBB);
                             });
