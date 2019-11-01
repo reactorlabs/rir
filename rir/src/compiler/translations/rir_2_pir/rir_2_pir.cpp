@@ -222,6 +222,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_cached_:
     case Opcode::ldvar_for_update_:
     case Opcode::ldvar_for_update_cache_:
+        if (bc.immediateConst() == symbol::c)
+            compiler.seenC = true;
         v = insert(new LdVar(bc.immediateConst(), env));
         // Checkpoint might be useful if we end up inlining this force
         if (!inPromise())
@@ -231,21 +233,29 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::starg_:
     case Opcode::starg_cached_:
+        if (bc.immediateConst() == symbol::c)
+            compiler.seenC = true;
         v = pop();
         insert(new StArg(bc.immediateConst(), v, env));
         break;
 
     case Opcode::stvar_:
     case Opcode::stvar_cached_:
+        if (bc.immediateConst() == symbol::c)
+            compiler.seenC = true;
         v = pop();
         insert(new StVar(bc.immediateConst(), v, env));
         break;
 
     case Opcode::ldvar_super_:
+        if (bc.immediateConst() == symbol::c)
+            compiler.seenC = true;
         push(insert(new LdVarSuper(bc.immediateConst(), env)));
         break;
 
     case Opcode::stvar_super_:
+        if (bc.immediateConst() == symbol::c)
+            compiler.seenC = true;
         v = pop();
         insert(new StVarSuper(bc.immediateConst(), v, env));
         break;
@@ -478,8 +488,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // delayed into the deopt branch. Note that ldvar is conservative.
             // If we find a non-function binding with the same name, we will
             // deopt unneccessarily. In the case of `c` this is guaranteed to
-            // cause problems, since many variables are called "c". Therefore we
-            // keep the ldfun in this case.
+            // cause problems, since many variables are called "c". Therefore if
+            // we have seen any variable c we keep the ldfun in this case.
             // TODO: Implement this with a dependency on the binding cell
             // instead of an eager check.
             auto cp = std::get<Checkpoint*>(callTargetFeedback.at(callee));
@@ -494,7 +504,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             pos++;
 
             Value* given = callee;
-            if (ldfun && ldfun->varName != symbol::c) {
+            if (ldfun && (ldfun->varName != symbol::c || !compiler.seenC)) {
                 auto ldvar = new LdVar(ldfun->varName, ldfun->env());
                 pos = bb->insert(pos, ldvar);
                 pos++;
@@ -984,6 +994,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 } // namespace pir
 
 bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
+    if (auto mk = MkEnv::Cast(insert.env)) {
+        mk->eachLocalVar([&](SEXP name, Value*, bool) {
+            if (name == symbol::c)
+                compiler.seenC = true;
+        });
+    }
     if (auto res = tryTranslate(srcCode, insert)) {
         finalize(res, insert);
         return true;
