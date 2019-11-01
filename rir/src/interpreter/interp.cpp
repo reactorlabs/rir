@@ -1937,8 +1937,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(materialize_env_) {
             auto lazyEnv = LazyEnvironment::check(env);
             assert(lazyEnv);
-            if (!lazyEnv->materialized())
+            if (!lazyEnv->materialized()) {
+                auto cntx = findFunctionContextFor(env);
                 env = materialize(env);
+                if (cntx)
+                    cntx->cloenv = env;
+            }
             ostack_push(ctx, env);
             NEXT();
         }
