@@ -55,12 +55,12 @@ stopifnot(
 
 stopifnot(
   pir.check(function() {
-      balls = vector("list", length = 3)
+      balls = c(1,2,3,4)
       for (i in 1:3){
-          balls[[i]] = c(1, 2) 
+          balls[[i]] = 0 
       }
       balls[[2]]
-  }, OneLdFun, warmup=function(f) f()))  
+  }, OneLdVar, warmup=function(f) f()))  
 
 stopifnot(pir.check(function(x, y) print("Test"), IsPirCompilable))
 stopifnot(pir.check(function(x = 4) {

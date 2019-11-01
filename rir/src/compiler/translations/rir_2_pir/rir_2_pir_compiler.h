@@ -39,6 +39,8 @@ class Rir2PirCompiler : public RirCompiler {
                          Maybe fail);
     void optimizeModule();
 
+    bool seenC = false;
+
   private:
     StreamLogger& logger;
     void compileClosure(Closure* closure, const OptimizationContext& ctx,
