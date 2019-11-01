@@ -11,16 +11,13 @@ namespace pir {
 struct AvailableCheckpointsApply {
     static AbstractResult apply(AbstractUnique<Checkpoint>& state,
                                 Instruction* i) {
-        if (state.get()) {
-            if (i->isDeoptBarrier()) {
-                state.clear();
-                return AbstractResult::Updated;
-            }
-        } else {
-            if (auto cp = Checkpoint::Cast(i)) {
-                state.set(cp);
-                return AbstractResult::Updated;
-            }
+        if (state.get() && i->isDeoptBarrier()) {
+            state.clear();
+            return AbstractResult::Updated;
+        }
+        if (auto cp = Checkpoint::Cast(i)) {
+            state.set(cp);
+            return AbstractResult::Updated;
         }
         return AbstractResult::None;
     }
