@@ -22,6 +22,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                                 std::pair<Checkpoint*, TypeTest::Info>>>
         speculate;
 
+    auto dom = DominanceGraph(function);
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->typeFeedback.type.isVoid() || i->type.isA(i->typeFeedback.type))
             return;
@@ -36,18 +37,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                 // Blacklist of where it is not worthwhile
                 if (!LdConst::Cast(arg) &&
                     // leave this to the promise inliner
-                    !MkArg::Cast(arg) && !Force::Cast(arg) &&
-                    // leave this to scope resolution
-                    !LdVar::Cast(arg) && !LdVarSuper::Cast(arg)) {
+                    !MkArg::Cast(arg) && !Force::Cast(arg)) {
                     speculateOn = i;
                 }
-                if (auto ld = LdVar::Cast(arg))
-                    if (!Env::isPirEnv(ld->env()))
-                        speculateOn = i;
-                if (auto ld = LdVarSuper::Cast(arg))
-                    if (!Env::isPirEnv(ld->env()))
-                        speculateOn = i;
-
                 if (speculateOn) {
                     feedback = i->typeFeedback;
                     typecheckPos = i->bb();
@@ -66,7 +58,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                         break;
                     case Force::ArgumentKind::promise:
                     case Force::ArgumentKind::unknown:
-                        guardPos = checkpoint.next(i);
+                        guardPos = checkpoint.next(i, speculateOn, dom);
                         if (guardPos)
                             typecheckPos = guardPos->nextBB();
                         break;

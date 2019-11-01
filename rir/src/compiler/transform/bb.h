@@ -28,11 +28,11 @@ class BBTransform {
                            bool condition, BB* deoptBlock,
                            const std::string& debugMesage,
                            bool triggerAnyway = false);
-    static void insertAssume(Value* condition, Checkpoint* cp, BB* bb,
+    static void insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
                              BB::Instrs::iterator& position,
                              bool assumePositive, rir::Code* srcCode = nullptr,
                              Opcode* origin = nullptr);
-    static void insertAssume(Value* condition, Checkpoint* cp,
+    static void insertAssume(Instruction* condition, Checkpoint* cp,
                              bool assumePositive, rir::Code* srcCode = nullptr,
                              Opcode* origin = nullptr);
 

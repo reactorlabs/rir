@@ -241,11 +241,11 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     return split;
 }
 
-void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
+void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
                                BB::Instrs::iterator& position,
                                bool assumePositive, rir::Code* srcCode,
                                Opcode* origin) {
-    position = bb->insert(position, (Instruction*)condition);
+    position = bb->insert(position, condition);
     auto assume = new Assume(condition, cp);
     if (srcCode) {
         assert(origin);
@@ -257,7 +257,7 @@ void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
     position++;
 };
 
-void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
+void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp,
                                bool assumePositive, rir::Code* srcCode,
                                Opcode* origin) {
     auto contBB = cp->bb()->trueBranch();
