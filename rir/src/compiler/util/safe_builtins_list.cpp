@@ -62,6 +62,9 @@ bool SafeBuiltinsList::always(int builtin) {
         findBuiltin("stdout"),
         findBuiltin("stderr"),
         findBuiltin("("),
+        findBuiltin("Sys.time"),
+
+        findBuiltin("strsplit"),
     };
 
     for (auto i : safeBuiltins)
@@ -284,6 +287,8 @@ bool SafeBuiltinsList::nonObject(int builtin) {
 
         findBuiltin("cat"),
         findBuiltin("paste"),
+        findBuiltin("nchar"),
+        findBuiltin("match"),
     };
 
     for (auto i : safeBuiltins)

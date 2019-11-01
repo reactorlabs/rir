@@ -71,9 +71,13 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 if (mk->isEager()) {
                     args.push_back(mk->eagerArg());
                 } else {
-                    ip = bb->insert(ip, new Force(mk, call->env()));
-                    args.push_back(*ip);
-                    ip++;
+                    auto asArg = new CastType(mk, CastType::Upcast, RType::prom,
+                                              PirType::valOrLazy());
+                    auto forced = new Force(asArg, call->env());
+                    ip = bb->insert(ip, forced);
+                    ip = bb->insert(ip, asArg);
+                    args.push_back(forced);
+                    ip += 2;
                 }
             } else if (a->type.maybePromiseWrapped()) {
                 ip = bb->insert(ip, new Force(a, call->env()));
@@ -249,9 +253,14 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                         if (mk->isEager()) {
                             arg.val() = mk->eagerArg();
                         } else {
-                            auto forced = new Force(mk, call->env());
+                            auto asArg =
+                                new CastType(mk, CastType::Upcast, RType::prom,
+                                             PirType::valOrLazy());
+                            auto forced = new Force(asArg, call->env());
                             arg.val() = forced;
                             ip = bb->insert(ip, forced);
+                            ip = bb->insert(ip, asArg);
+                            ip++;
                         }
                     }
                 });
