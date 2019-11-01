@@ -16,8 +16,10 @@ struct AvailableCheckpointsApply {
             return AbstractResult::Updated;
         }
         if (auto cp = Checkpoint::Cast(i)) {
-            state.set(cp);
-            return AbstractResult::Updated;
+            if (cp != state.get()) {
+                state.set(cp);
+                return AbstractResult::Updated;
+            }
         }
         return AbstractResult::None;
     }
