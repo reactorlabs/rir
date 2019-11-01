@@ -9,21 +9,11 @@ namespace pir {
 void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const {
 
-    std::unordered_map<Instruction*, SmallSet<Instruction*>> dataDependencies;
-
     auto isTarget = [](Instruction* j) {
         return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
                FrameState::Cast(j) || CastType::Cast(j) || MkEnv::Cast(j);
     };
-
-    Visitor::run(function->entry, [&](Instruction* instruction) {
-        instruction->eachArg([&](Value* v) {
-            if (auto usage = Instruction::Cast(v)) {
-                if (isTarget(usage) && !usage->bb()->isDeopt())
-                    dataDependencies[usage].insert(instruction);
-            }
-        });
-    });
+    UsesTree dataDependencies(function);
 
     std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
     std::unordered_map<Instruction*, SmallSet<Instruction*>> updatePromises;
@@ -35,13 +25,11 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
         changed = false;
         for (auto instructionUses : dataDependencies) {
             auto candidate = instructionUses.first;
-            if (usedOnlyInDeopt.count(candidate))
-                continue;
-            auto uses = instructionUses.second;
-            auto addToDeopt = true;
-            if (uses.empty()) {
-                addToDeopt = candidate->bb()->isDeopt();
-            } else {
+            if (!candidate->bb()->isDeopt() && isTarget(candidate)) {
+                if (usedOnlyInDeopt.count(candidate))
+                    continue;
+                auto uses = instructionUses.second;
+                auto addToDeopt = true;
                 for (auto use : uses) {
                     if (UpdatePromise::Cast(use)) {
                         updatePromises[candidate].insert(use);
@@ -50,35 +38,36 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                         addToDeopt = false;
                     }
                 }
-            }
-            if (addToDeopt) {
-                auto& deoptUses = usedOnlyInDeopt[candidate];
-                for (auto use : uses) {
-                    if (use->bb()->isDeopt()) {
-                        deoptUses.insert(use->bb());
-                    } else {
-                        for (auto deoptUse : usedOnlyInDeopt[use])
-                            deoptUses.insert(deoptUse);
+                if (addToDeopt) {
+                    auto& deoptUses = usedOnlyInDeopt[candidate];
+                    for (auto use : uses) {
+                        if (use->bb()->isDeopt()) {
+                            deoptUses.insert(use->bb());
+                        } else {
+                            for (auto deoptUse : usedOnlyInDeopt[use])
+                                deoptUses.insert(deoptUse);
+                        }
                     }
-                }
-                // We can only move mkArgs that have an updatePromise if we can
-                // prove wether every target deopt unambigously always requires
-                // or not the update promise
-                bool safeUpdatePromises = true;
-                for (auto updatePromise : updatePromises[candidate]) {
-                    auto& updateTargets = udatePromiseTargets[updatePromise];
-                    for (auto deoptTarget : deoptUses) {
-                        if (dom.dominates(updatePromise->bb(), deoptTarget))
-                            updateTargets.insert(deoptTarget);
-                        else if (cfg.isPredecessor(updatePromise->bb(),
-                                                   deoptTarget))
-                            safeUpdatePromises = false;
+                    // We can only move mkArgs that have an updatePromise if we
+                    // can prove wether every target deopt unambigously always
+                    // requires or not the update promise
+                    bool safeUpdatePromises = true;
+                    for (auto updatePromise : updatePromises[candidate]) {
+                        auto& updateTargets =
+                            udatePromiseTargets[updatePromise];
+                        for (auto deoptTarget : deoptUses) {
+                            if (dom.dominates(updatePromise->bb(), deoptTarget))
+                                updateTargets.insert(deoptTarget);
+                            else if (cfg.isPredecessor(updatePromise->bb(),
+                                                       deoptTarget))
+                                safeUpdatePromises = false;
+                        }
                     }
+                    if (safeUpdatePromises)
+                        changed = true;
+                    else
+                        usedOnlyInDeopt.erase(candidate);
                 }
-                if (safeUpdatePromises)
-                    changed = true;
-                else
-                    usedOnlyInDeopt.erase(candidate);
             }
         }
     }

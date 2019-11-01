@@ -11,7 +11,7 @@ namespace pir {
 constexpr static std::initializer_list<Tag> TypecheckInstrsList = {
     Tag::IsObject, Tag::IsType, Tag::CastType, Tag::FrameState};
 class DeadInstructions {
-    std::unordered_set<Instruction*> used_;
+    std::unordered_set<Instruction*> unused_;
 
   public:
     enum DeadInstructionsMode {
@@ -21,10 +21,10 @@ class DeadInstructions {
     };
 
     DeadInstructions(Code*, DeadInstructionsMode mode = CountAll);
-    bool used(Value* v);
-    bool used(Instruction* v);
-    bool unused(Value* v);
-    bool unused(Instruction* v);
+    bool isAlive(Value* v);
+    bool isAlive(Instruction* v);
+    bool isDead(Value* v);
+    bool isDead(Instruction* v);
 };
 
 } // namespace pir

@@ -153,7 +153,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                             }
 
                             if (!tested->type.isA(expected) &&
-                                exceptTypecheck.used(tested)) {
+                                exceptTypecheck.isDead(tested)) {
                                 // The tested value is used outside the
                                 // typecheck. Let's cast it to the checked
                                 // value and propagate this, so all uses can

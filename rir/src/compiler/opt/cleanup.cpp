@@ -32,7 +32,7 @@ class TheCleanup {
                 Instruction* i = *ip;
                 auto next = ip + 1;
                 bool removed = false;
-                bool isDead = dead.unused(i);
+                bool isDead = dead.isDead(i);
                 // unused ldfun is a left over from a guard where ldfun was
                 // converted into ldvar.
                 if ((!i->hasObservableEffects() || LdFun::Cast(i)) && isDead) {
@@ -98,7 +98,7 @@ class TheCleanup {
                             usedBB[curBB].insert(phi);
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
-                    if (dead.unused(arg)) {
+                    if (dead.isDead(arg)) {
                         removed = true;
                         next = bb->remove(ip);
                     } else {
@@ -106,7 +106,7 @@ class TheCleanup {
                         todo.push_back(arg->prom());
                     }
                 } else if (auto upd = UpdatePromise::Cast(i)) {
-                    if (dead.unused(upd->arg(0).val())) {
+                    if (dead.isDead(upd->arg(0).val())) {
                         removed = true;
                         next = bb->remove(ip);
                     }

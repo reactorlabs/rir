@@ -333,7 +333,7 @@ void BBTransform::removeDeadInstrs(Code* fun) {
         while (ip != bb->end()) {
             Instruction* i = *ip;
             auto next = ip + 1;
-            if (!i->hasObservableEffects() && dead.unused(i)) {
+            if (!i->hasObservableEffects() && dead.isDead(i)) {
                 next = bb->remove(ip);
             } else {
                 i->eachArg([&](Value* v) {

@@ -104,8 +104,19 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     }
                     next = ip + 1;
                 }
+                // We do this in cleanup. Repeating it here increase the chances
+                // to apply the following elide environment pass because it
+                // reduces the number of forces attached to an environment
+                else if (auto force = Force::Cast(i)) {
+                    Value* arg = force->input();
+                    // Missing args produce error.
+                    if (!arg->type.maybePromiseWrapped() &&
+                        !arg->type.maybeMissing()) {
+                        force->replaceUsesWith(arg);
+                        next = bb->remove(ip);
+                    }
+                }
             }
-
             ip = next;
         }
     });

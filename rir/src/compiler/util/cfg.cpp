@@ -228,5 +228,22 @@ DominanceFrontier::DominanceFrontier(Code* code, const CFG& cfg,
         }
     });
 }
+
+UsesTree::UsesTree(Code* start) {
+    Visitor::run(start->entry, [&](Instruction* instruction) {
+        instruction->eachArg([&](Value* v) {
+            if (auto usage = Instruction::Cast(v)) {
+                uses[usage].insert(instruction);
+            }
+        });
+    });
+}
+
+const UsesTree::DependenciesList& UsesTree::at(Instruction* i) const {
+    if (uses.count(i))
+        return uses.at(i);
+    else
+        return empty;
+}
 }
 }
