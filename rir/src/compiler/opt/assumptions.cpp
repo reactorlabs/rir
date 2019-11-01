@@ -77,6 +77,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                                      DeadInstructions::IgnoreTypeTests);
     AvailableCheckpoints checkpoint(function, log);
     AvailableAssumptions assumptions(function, log);
+    DominanceGraph dom(function);
     std::unordered_map<Checkpoint*, Checkpoint*> replaced;
 
     std::unordered_map<Instruction*,
@@ -182,7 +183,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         // the previous checkpoint is still available, and there is also a
         // next checkpoint available we might as well remove this one.
         if (auto cp = Checkpoint::Cast(bb->last())) {
-            if (checkpoint.next(cp))
+            if (checkpoint.next(cp, cp, dom))
                 if (auto previousCP = checkpoint.at(cp)) {
                     while (replaced.count(previousCP))
                         previousCP = replaced.at(previousCP);
