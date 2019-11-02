@@ -20,7 +20,8 @@ class DeadInstructions {
         IgnoreTypeTests,
     };
 
-    DeadInstructions(Code*, DeadInstructionsMode mode = CountAll);
+    DeadInstructions(Code*, uint8_t maxBurstSize,
+                     DeadInstructionsMode mode = CountAll);
     bool isAlive(Value* v);
     bool isAlive(Instruction* v);
     bool isDead(Value* v);

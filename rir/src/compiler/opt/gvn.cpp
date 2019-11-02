@@ -251,7 +251,7 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
 
     // Remove dead instructions here, instead of deferring to the cleanup pass.
     // Sometimes a dead instruction will trip the verifier.
-    BBTransform::removeDeadInstrs(cls);
+    BBTransform::removeDeadInstrs(cls, 1);
 }
 
 } // namespace pir

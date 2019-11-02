@@ -24,7 +24,8 @@ class TheCleanup {
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
         std::deque<Promise*> todo;
 
-        DeadInstructions dead(function, DeadInstructions::IgnoreUpdatePromise);
+        DeadInstructions dead(function, 3,
+                              DeadInstructions::IgnoreUpdatePromise);
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();

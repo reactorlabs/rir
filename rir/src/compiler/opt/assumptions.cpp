@@ -73,7 +73,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         });
     }
 
-    DeadInstructions exceptTypecheck(function,
+    DeadInstructions exceptTypecheck(function, 1,
                                      DeadInstructions::IgnoreTypeTests);
     AvailableCheckpoints checkpoint(function, log);
     AvailableAssumptions assumptions(function, log);

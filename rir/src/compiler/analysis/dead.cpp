@@ -6,7 +6,8 @@
 namespace rir {
 namespace pir {
 
-DeadInstructions::DeadInstructions(Code* code, DeadInstructionsMode mode) {
+DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
+                                   DeadInstructionsMode mode) {
     UsesTree dataDependencies(code);
     std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
     bool changed = true;
@@ -14,7 +15,8 @@ DeadInstructions::DeadInstructions(Code* code, DeadInstructionsMode mode) {
         if (dataDependencies.at(i).empty())
             unused_.insert(i);
     });
-    while (changed) {
+    auto i = 1;
+    while (changed && i <= maxBurstSize) {
         changed = false;
         for (auto instructionUses : dataDependencies) {
             auto candidate = instructionUses.first;
@@ -46,12 +48,8 @@ DeadInstructions::DeadInstructions(Code* code, DeadInstructionsMode mode) {
                 unused_.insert(candidate);
             }
         }
+        i++;
     }
-    for (auto instruction : unused_) {
-        instruction->print(std::cout);
-        std::cout << "\n";
-    }
-    std::cout << "Termine\n";
 }
 
 bool DeadInstructions::isAlive(Instruction* i) { return !isDead(i); }

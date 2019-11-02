@@ -616,7 +616,7 @@ void ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
     // However, if there is no LdVar to replace, that means the phi is dead;
     // none of the successor instructions needs that value. The problem is when
     // dead phis are malformed.
-    BBTransform::removeDeadInstrs(function);
+    BBTransform::removeDeadInstrs(function, 1);
 }
 
 } // namespace pir

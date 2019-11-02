@@ -321,12 +321,12 @@ void BBTransform::renumber(Code* fun) {
         });
 }
 
-void BBTransform::removeDeadInstrs(Code* fun) {
+void BBTransform::removeDeadInstrs(Code* fun, uint8_t maxBurstSize) {
     // Map of phis to other instructions that use them
     // key -> {val_1, ..., val_n} means val_1 ... val_n have key as an input
     std::unordered_map<Phi*, std::unordered_set<Instruction*>> phiUses;
 
-    DeadInstructions dead(fun);
+    DeadInstructions dead(fun, maxBurstSize);
 
     Visitor::run(fun->entry, [&](BB* bb) {
         auto ip = bb->begin();
