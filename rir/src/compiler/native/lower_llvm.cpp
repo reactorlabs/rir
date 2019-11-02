@@ -3357,6 +3357,10 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto lt = builder.CreateICmpEQ(l, c(1, 64));
                         res = builder.CreateAnd(res, lt);
                     }
+                    if (arg->type.maybeObj()) {
+                        res =
+                            builder.CreateAnd(res, builder.CreateNot(isObj(a)));
+                    }
                     setVal(i, builder.CreateZExt(res, t::Int));
                 } else {
                     setVal(i, c(1));
