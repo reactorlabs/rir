@@ -25,7 +25,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             return true;
         // Subassign is not mark as envOnlyForObject because the environment is
         // also needed to track error messages.
-        if (Subassign1_1D::Cast(i) || Subassign2_1D::Cast(i)) {
+        if (Subassign1_1D::Cast(i) || Subassign2_1D::Cast(i) ||
+            Subassign1_2D::Cast(i) || Subassign2_2D::Cast(i)) {
             return true;
         }
         if (auto blt = CallBuiltin::Cast(i))
