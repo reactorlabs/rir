@@ -1,6 +1,7 @@
 #ifndef PIR_DEAD_H
 #define PIR_DEAD_H
 
+#include "../pir/instruction.h"
 #include "compiler/pir/pir.h"
 #include "compiler/pir/tag.h"
 #include <unordered_set>
@@ -20,7 +21,7 @@ class DeadInstructions {
         IgnoreTypeTests,
     };
 
-    DeadInstructions(Code*, uint8_t maxBurstSize,
+    DeadInstructions(Code*, uint8_t maxBurstSize, Effects ignoreEffects,
                      DeadInstructionsMode mode = CountAll);
     bool isAlive(Value* v);
     bool isAlive(Instruction* v);

@@ -24,7 +24,7 @@ class TheCleanup {
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
         std::deque<Promise*> todo;
 
-        DeadInstructions dead(function, 3,
+        DeadInstructions dead(function, 3, Effects(Effect::Visibility),
                               DeadInstructions::IgnoreUpdatePromise);
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -36,13 +36,9 @@ class TheCleanup {
                 bool isDead = dead.isDead(i);
                 // unused ldfun is a left over from a guard where ldfun was
                 // converted into ldvar.
-                if ((!i->hasObservableEffects() || LdFun::Cast(i)) && isDead) {
-                    removed = true;
-                    next = bb->remove(ip);
-                } else if (isDead &&
-                           i->getObservableEffects() == Effect::Visibility &&
-                           i->visibilityFlag() != VisibilityFlag::Unknown &&
-                           !Visible::Cast(i) && !Invisible::Cast(i)) {
+                if (isDead && i->getObservableEffects() == Effect::Visibility &&
+                    i->visibilityFlag() != VisibilityFlag::Unknown &&
+                    !Visible::Cast(i) && !Invisible::Cast(i)) {
                     removed = true;
                     switch (i->visibilityFlag()) {
                     case VisibilityFlag::On:
@@ -54,6 +50,9 @@ class TheCleanup {
                     default:
                         assert(false);
                     }
+                } else if (isDead) {
+                    removed = true;
+                    next = bb->remove(ip);
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
                     // Missing args produce error.

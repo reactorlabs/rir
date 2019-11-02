@@ -7,12 +7,17 @@ namespace rir {
 namespace pir {
 
 DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
+                                   Effects ignoreEffects,
                                    DeadInstructionsMode mode) {
     UsesTree dataDependencies(code);
     std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
     bool changed = true;
     Visitor::run(code->entry, [&](Instruction* i) {
-        if (dataDependencies.at(i).empty())
+        // unused ldfun must be a left over from a guard where ldfun was
+        // converted into ldvar.
+        if (dataDependencies.at(i).empty() &&
+            (LdFun::Cast(i) || (i->getObservableEffects() <= ignoreEffects &&
+                                !i->branchOrExit())))
             unused_.insert(i);
     });
     auto i = 1;
@@ -21,7 +26,9 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
         for (auto instructionUses : dataDependencies) {
             auto candidate = instructionUses.first;
             auto addToDead = true;
-            if (unused_.count(candidate))
+            if (unused_.count(candidate) ||
+                (candidate->getObservableEffects() > ignoreEffects) ||
+                candidate->branchOrExit())
                 continue;
             auto uses = instructionUses.second;
             for (auto use : uses) {
@@ -33,10 +40,12 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
                         isAlive(use))
                         addToDead = false;
                     break;
-                case IgnoreUpdatePromise:
-                    if (!UpdatePromise::Cast(use) && isAlive(use))
+                case IgnoreUpdatePromise: {
+                    auto up = UpdatePromise::Cast(use);
+                    if (!(up && up->arg(0).val() == use) && isAlive(use))
                         addToDead = false;
                     break;
+                }
                 case CountAll:
                     if (isAlive(use))
                         addToDead = false;
@@ -54,11 +63,7 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
 
 bool DeadInstructions::isAlive(Instruction* i) { return !isDead(i); }
 
-bool DeadInstructions::isDead(Instruction* i) {
-    if (i->branchOrExit())
-        return false;
-    return (i->type != PirType::voyd()) && unused_.count(i);
-}
+bool DeadInstructions::isDead(Instruction* i) { return unused_.count(i); }
 
 bool DeadInstructions::isDead(Value* v) {
     if (auto i = Instruction::Cast(v))

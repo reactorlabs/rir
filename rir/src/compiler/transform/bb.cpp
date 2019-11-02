@@ -326,7 +326,7 @@ void BBTransform::removeDeadInstrs(Code* fun, uint8_t maxBurstSize) {
     // key -> {val_1, ..., val_n} means val_1 ... val_n have key as an input
     std::unordered_map<Phi*, std::unordered_set<Instruction*>> phiUses;
 
-    DeadInstructions dead(fun, maxBurstSize);
+    DeadInstructions dead(fun, maxBurstSize, Effects());
 
     Visitor::run(fun->entry, [&](BB* bb) {
         auto ip = bb->begin();
