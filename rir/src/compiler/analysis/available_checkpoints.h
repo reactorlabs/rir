@@ -75,6 +75,14 @@ class AvailableCheckpoints {
         : cfg(cls), fwd(cls, log), rwd(cls, cfg, log) {}
 
     Checkpoint* at(Instruction* i) { return fwd.reaching(i); }
+    Checkpoint* next(Instruction* i, Instruction* dependency,
+                     const DominanceGraph& dom) {
+        Checkpoint* res = next(i);
+        if (res && (dependency->bb() == res->bb() ||
+                    dom.dominates(dependency->bb(), res->bb())))
+            return res;
+        return nullptr;
+    }
     Checkpoint* next(Instruction* i) {
         // Search for the next cp only in main path, not the deopt branch
         if (auto cp = Checkpoint::Cast(i)) {
