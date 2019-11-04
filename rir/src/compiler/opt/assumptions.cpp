@@ -154,6 +154,8 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                             }
 
                             if (!tested->type.isA(expected) &&
+                                expected.maybePromiseWrapped() ==
+                                    tested->type.maybePromiseWrapped() &&
                                 exceptTypecheck.used(tested)) {
                                 // The tested value is used outside the
                                 // typecheck. Let's cast it to the checked

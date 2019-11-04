@@ -20,9 +20,11 @@ using namespace rir::pir;
 
 class TheVerifier {
   public:
+    const std::string& msg;
     ClosureVersion* f;
 
-    explicit TheVerifier(ClosureVersion* f, bool slow) : f(f), slow(slow) {}
+    explicit TheVerifier(ClosureVersion* f, const std::string& msg, bool slow)
+        : msg(msg), f(f), slow(slow) {}
 
     bool ok = true;
     bool slow = false;
@@ -35,7 +37,7 @@ class TheVerifier {
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
             f->print(std::cerr, false);
-            Rf_error("");
+            Rf_error(msg.c_str());
         }
 
         f->eachPromise([&](Promise* p) {
@@ -347,8 +349,8 @@ class TheVerifier {
 namespace rir {
 namespace pir {
 
-void Verify::apply(ClosureVersion* f, bool slow) {
-    TheVerifier v(f, slow);
+void Verify::apply(ClosureVersion* f, const std::string& msg, bool slow) {
+    TheVerifier v(f, msg, slow);
     v();
 }
 } // namespace pir
