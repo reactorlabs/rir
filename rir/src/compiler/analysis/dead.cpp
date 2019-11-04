@@ -42,7 +42,7 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
                     break;
                 case IgnoreUpdatePromise: {
                     auto up = UpdatePromise::Cast(use);
-                    if (!(up && up->arg(0).val() == use) && isAlive(use))
+                    if (!(up && up->arg(0).val() == candidate) && isAlive(use))
                         addToDead = false;
                     break;
                 }
