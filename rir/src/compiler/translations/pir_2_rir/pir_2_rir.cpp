@@ -281,10 +281,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     lower(code);
     toCSSA(code);
 #ifdef FULLVERIFIER
-    Verify::apply(cls, true);
+    Verify::apply(cls, "Error after lowering", true);
 #else
 #ifdef ENABLE_SLOWASSERT
-    Verify::apply(cls);
+    Verify::apply(cls, "Error after lowering");
 #endif
 #endif
     log.CSSA(code);

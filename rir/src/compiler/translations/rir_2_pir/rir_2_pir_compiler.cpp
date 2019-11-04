@@ -187,10 +187,10 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     if (rir2pir.tryCompile(builder)) {
         log.compilationEarlyPir(version);
 #ifdef FULLVERIFIER
-        Verify::apply(version, true);
+        Verify::apply(version, "Error after initial translation", true);
 #else
 #ifndef NDEBUG
-        Verify::apply(version);
+        Verify::apply(version, "Error after initial translation");
 #endif
 #endif
         log.flush();
@@ -233,10 +233,11 @@ void Rir2PirCompiler::optimizeModule() {
                 log.pirOptimizations(v, translation.get());
 
 #ifdef FULLVERIFIER
-                Verify::apply(v, true);
+                Verify::apply(v, "Error after pass " + translation->getName(),
+                              true);
 #else
 #ifdef ENABLE_SLOWASSERT
-                Verify::apply(v);
+                Verify::apply(v, "Error after pass " + translation->getName());
 #endif
 #endif
             });
@@ -249,10 +250,10 @@ void Rir2PirCompiler::optimizeModule() {
         c->eachVersion([&](ClosureVersion* v) {
             logger.get(v).pirOptimizationsFinished(v);
 #ifdef ENABLE_SLOWASSERT
-            Verify::apply(v, true);
+            Verify::apply(v, "Error after optimizations", true);
 #else
 #ifndef NDEBUG
-            Verify::apply(v);
+            Verify::apply(v, "Error after optimizations");
 #endif
 #endif
         });
