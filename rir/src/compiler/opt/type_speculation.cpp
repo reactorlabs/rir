@@ -22,6 +22,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                                 std::pair<Checkpoint*, TypeTest::Info>>>
         speculate;
 
+    auto dom = DominanceGraph(function);
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->typeFeedback.type.isVoid() || i->type.isA(i->typeFeedback.type))
             return;
@@ -57,16 +58,16 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     switch (force->observed) {
                     case Force::ArgumentKind::value:
                         speculateOn = arg;
-                        guardPos = checkpoint.at(i);
+                        guardPos = checkpoint.at(arg);
                         break;
                     case Force::ArgumentKind::evaluatedPromise:
                         speculateOn = arg;
-                        guardPos = checkpoint.at(i);
+                        guardPos = checkpoint.at(arg);
                         feedback.type = feedback.type.orPromiseWrapped();
                         break;
                     case Force::ArgumentKind::promise:
                     case Force::ArgumentKind::unknown:
-                        guardPos = checkpoint.next(i);
+                        guardPos = checkpoint.next(i, speculateOn, dom);
                         if (guardPos)
                             typecheckPos = guardPos->nextBB();
                         break;

@@ -18,15 +18,11 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                          LogStream& log) const {
 
     AvailableCheckpoints checkpoint(function, log);
+    DominanceGraph dom(function);
 
     auto envOnlyForObj = [&](Instruction* i) {
         if (i->envOnlyForObj())
             return true;
-        // Subassign is not mark as envOnlyForObject because the environment is
-        // also needed to track error messages.
-        if (Subassign1_1D::Cast(i) || Subassign2_1D::Cast(i)) {
-            return true;
-        }
         if (auto blt = CallBuiltin::Cast(i))
             if (SafeBuiltinsList::nonObject(blt->blt))
                 return true;
@@ -171,7 +167,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 } else {
                     // We can only stub an environment if all uses have a
                     // checkpoint available after every use.
-                    if (auto cp = checkpoint.next(i))
+                    if (auto cp = checkpoint.next(i, mk, dom))
                         checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
                     else
                         bannedEnvs.insert(mk);

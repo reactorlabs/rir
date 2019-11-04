@@ -223,6 +223,17 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             }
 
+            if (auto isTest = IsType::Cast(i)) {
+                if (isTest->arg<0>().val()->type.isA(isTest->typeTest)) {
+                    i->replaceUsesWith(True::instance());
+                    next = bb->remove(ip);
+                } else if (!isTest->arg<0>().val()->type.maybe(
+                               isTest->typeTest)) {
+                    i->replaceUsesWith(False::instance());
+                    next = bb->remove(ip);
+                }
+            }
+
             if (auto isTest = IsEnvStub::Cast(i)) {
                 if (auto environment = MkEnv::Cast(isTest->env())) {
                     static std::unordered_set<Tag> tags{Tag::Force};

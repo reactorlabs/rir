@@ -64,6 +64,7 @@ class StaticAnalysis {
 
     struct BBSnapshot {
         bool seen = false;
+        size_t incomming = 0;
         AbstractState entry;
         std::unordered_map<Instruction*, AbstractState> extra;
     };
@@ -407,17 +408,23 @@ class StaticAnalysis {
             return;
 
         auto id = branch->id;
-        if (!snapshots[id].seen) {
-            snapshots[id].entry = state;
-            snapshots[id].seen = true;
+        auto& thisState = snapshots.at(id);
+        if (!thisState.seen) {
+            thisState.entry = state;
+            thisState.seen = true;
+            thisState.incomming = in->id;
             done = false;
             changed[id] = true;
+        } else if (in->id == thisState.incomming) {
+            thisState.entry = state;
+            changed[id] = changed[in->id];
         } else {
+            thisState.incomming = -1;
             AbstractState old;
             if (DEBUG_LEVEL >= AnalysisDebugLevel::Taint) {
-                old = snapshots[id].entry;
+                old = thisState.entry;
             }
-            AbstractResult mres = snapshots[id].entry.merge(state);
+            AbstractResult mres = thisState.entry.merge(state);
             if (mres > AbstractResult::None) {
                 if (DEBUG_LEVEL >= AnalysisDebugLevel::Merge ||
                     (mres == AbstractResult::Tainted &&
@@ -433,7 +440,7 @@ class StaticAnalysis {
                     log << "===- Old state is:\n";
                     log(old);
                     log << "===- Merged state is:\n";
-                    log(snapshots[id].entry);
+                    log(thisState.entry);
                 }
                 done = false;
                 changed[id] = true;
@@ -456,6 +463,7 @@ class BackwardStaticAnalysis {
 
     struct BBSnapshot {
         bool seen = false;
+        size_t incomming = 0;
         AbstractState entry;
         std::unordered_map<Instruction*, AbstractState> extra;
     };
@@ -768,17 +776,23 @@ class BackwardStaticAnalysis {
             return;
 
         auto id = branch->id;
-        if (!snapshots[id].seen) {
-            snapshots[id].entry = state;
-            snapshots[id].seen = true;
+        auto& thisState = snapshots.at(id);
+        if (!thisState.seen) {
+            thisState.entry = state;
+            thisState.seen = true;
+            thisState.incomming = in->id;
             done = false;
             changed[id] = true;
+        } else if (in->id == thisState.incomming) {
+            thisState.entry = state;
+            changed[id] = changed[in->id];
         } else {
             AbstractState old;
+            thisState.incomming = -1;
             if (DEBUG_LEVEL >= AnalysisDebugLevel::Taint) {
-                old = snapshots[id].entry;
+                old = thisState.entry;
             }
-            AbstractResult mres = snapshots[id].entry.merge(state);
+            AbstractResult mres = thisState.entry.merge(state);
             if (mres > AbstractResult::None) {
                 if (DEBUG_LEVEL >= AnalysisDebugLevel::Merge ||
                     (mres == AbstractResult::Tainted &&
@@ -794,7 +808,7 @@ class BackwardStaticAnalysis {
                     log << "===- Old state is:\n";
                     log(old);
                     log << "===- Merged state is:\n";
-                    log(snapshots[id].entry);
+                    log(thisState.entry);
                 }
                 done = false;
                 changed[id] = true;
