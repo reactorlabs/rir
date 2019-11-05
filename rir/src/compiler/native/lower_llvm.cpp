@@ -4336,22 +4336,39 @@ bool LowerFunctionLLVM::tryCompile() {
             if (!success)
                 return;
 
+            Instruction* origin = i;
+            llvm::Value* sexpResult = nullptr;
+
             if (phis.count(i)) {
                 auto phi = phis.at(i);
                 auto r = representationOf(phi);
-                auto inp =
-                    PirCopy::Cast(i) ? load(i->arg(0).val(), r) : load(i, r);
-                variables.at(phi).update(builder, inp);
+                auto inp = PirCopy::Cast(i) ? i->arg(0).val() : i;
+                auto inpv = load(inp, r);
+
+                // If we box this phi input we need to make sure that we are not
+                // missing an ensure named, because the original value would
+                // have gotten an ensureNamed if it weren't unboxed.
+                if (representationOf(inp) != t::SEXP && r == t::SEXP) {
+                    if (auto ii = Instruction::Cast(inp->followCasts())) {
+                        sexpResult = inpv;
+                        origin = ii;
+                    }
+                }
+                variables.at(phi).update(builder, inpv);
             }
 
-            if (variables.count(i) && variables.at(i).initialized &&
-                representationOf(i) == t::SEXP) {
-                if (i->minReferenceCount() < 2 && needsSetShared.count(i))
-                    ensureShared(loadSxp(i));
-                else if (i->minReferenceCount() < 1 &&
+            if (sexpResult ||
+                (representationOf(origin) == t::SEXP &&
+                 variables.count(origin) && variables.at(origin).initialized)) {
+                if (!sexpResult)
+                    sexpResult = load(origin);
+                if (origin->minReferenceCount() < 2 &&
+                    needsSetShared.count(origin))
+                    ensureShared(sexpResult);
+                else if (origin->minReferenceCount() < 1 &&
                          (refcountAnalysisOverflow ||
-                          needsEnsureNamed.count(i)))
-                    ensureNamed(loadSxp(i));
+                          needsEnsureNamed.count(origin)))
+                    ensureNamed(sexpResult);
             }
 
             numTemps = 0;
