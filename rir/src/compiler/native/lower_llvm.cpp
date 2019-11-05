@@ -387,8 +387,8 @@ class LowerFunctionLLVM {
     void checkMissing(llvm::Value* v);
     void checkUnbound(llvm::Value* v);
 
-    llvm::Value* call(const NativeBuiltin& builtin,
-                      const std::vector<llvm::Value*>& args);
+    llvm::CallInst* call(const NativeBuiltin& builtin,
+                         const std::vector<llvm::Value*>& args);
     llvm::Value* callRBuiltin(SEXP builtin, const std::vector<Value*>& args,
                               int srcIdx, CCODE, llvm::Value* env);
 
@@ -1436,8 +1436,8 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 }
 
-llvm::Value* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
-                                     const std::vector<llvm::Value*>& args) {
+llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
+                                        const std::vector<llvm::Value*>& args) {
 #ifdef ENABLE_SLOWASSERT
     // abuse BB lable as comment
     auto callBB = BasicBlock::Create(C, builtin.name, fun);
@@ -2292,7 +2292,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     switch (b->builtinId) {
                     case 88: // "length"
                         if (irep == t::SEXP) {
-                            auto r = call(NativeBuiltins::length, {a});
+                            llvm::Value* r = call(NativeBuiltins::length, {a});
                             if (orep == t::SEXP) {
                                 r = builder.CreateSelect(
                                     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
@@ -2796,12 +2796,15 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 std::vector<Value*> args;
                 i->eachArg([&](Value* v) { args.push_back(v); });
+                llvm::CallInst* res;
                 withCallFrame(args, [&]() {
-                    return call(NativeBuiltins::deopt,
-                                {paramCode(), paramClosure(),
-                                 convertToPointer(m), paramArgs()});
+                    res = call(NativeBuiltins::deopt,
+                               {paramCode(), paramClosure(),
+                                convertToPointer(m), paramArgs()});
+                    return res;
                 });
-                builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
+                res->setTailCall(true);
+                builder.CreateUnreachable();
                 break;
             }
 

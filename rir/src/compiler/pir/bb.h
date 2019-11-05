@@ -114,6 +114,10 @@ class BB {
         assert(!next0 && !next1);
         next0 = bb;
     }
+    const BB* next() const {
+        assert(next0 && !next1);
+        return next0;
+    }
     BB* next() {
         assert(next0 && !next1);
         return next0;
