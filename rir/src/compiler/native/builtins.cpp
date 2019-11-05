@@ -43,6 +43,7 @@ static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
     SET_MISSING(res, 2);
+    INCREMENT_NAMED(val);
     return res;
 }
 
@@ -177,6 +178,8 @@ void stargImpl(SEXP sym, SEXP val, SEXP env) {
             if (cur != val) {
                 INCREMENT_NAMED(val);
                 SETCAR(loc.cell, val);
+            } else {
+                ENSURE_NAMED(val);
             }
             return;
         }
@@ -977,7 +980,9 @@ SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
             return ScalarLogical(INTEGER(vector)[index - 1]);
         }
         if (TYPEOF(vector) == VECSXP) {
-            return VECTOR_ELT(vector, index - 1);
+            auto res = VECTOR_ELT(vector, index - 1);
+            ENSURE_NAMED(res);
+            return res;
         }
     }
 
@@ -1016,7 +1021,9 @@ SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
             return ScalarLogical(INTEGER(vector)[pos]);
         }
         if (TYPEOF(vector) == VECSXP) {
-            return VECTOR_ELT(vector, pos);
+            auto res = VECTOR_ELT(vector, pos);
+            ENSURE_NAMED(res);
+            return res;
         }
     }
 
@@ -1131,7 +1138,9 @@ SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
                 return ScalarLogical(INTEGER(vector)[pos]);
             }
             if (TYPEOF(vector) == VECSXP) {
-                return VECTOR_ELT(vector, pos);
+                auto res = VECTOR_ELT(vector, pos);
+                ENSURE_NAMED(res);
+                return res;
             }
         }
     }
@@ -1179,7 +1188,9 @@ SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
                 return ScalarLogical(INTEGER(vector)[pos]);
             }
             if (TYPEOF(vector) == VECSXP) {
-                return VECTOR_ELT(vector, pos);
+                auto res = VECTOR_ELT(vector, pos);
+                ENSURE_NAMED(res);
+                return res;
             }
         }
     }

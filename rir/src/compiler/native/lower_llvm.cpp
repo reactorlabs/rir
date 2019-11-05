@@ -2021,7 +2021,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
         builder.SetInsertPoint(getBlock(bb));
         inPushContext = blockInPushContext.at(bb);
-        
+
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto i = *it;
             if (!success)

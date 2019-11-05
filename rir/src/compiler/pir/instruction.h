@@ -2291,6 +2291,11 @@ class VLI(Phi, Effects::None()) {
         for (size_t i = 0; i < nargs(); ++i)
             it(input[i], arg(i).val());
     }
+    typedef std::function<void(BB* bb, InstrArg&)> MutablePhiArgumentIterator;
+    void eachArg(const MutablePhiArgumentIterator& it) {
+        for (size_t i = 0; i < nargs(); ++i)
+            it(input[i], arg(i));
+    }
 
     size_t gvnBase() const override { return tagHash(); }
 };

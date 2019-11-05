@@ -8,7 +8,8 @@ namespace pir {
 
 class Verify {
   public:
-    static void apply(ClosureVersion*, bool slow = false);
+    static void apply(ClosureVersion*, const std::string& msg,
+                      bool slow = false);
 };
 } // namespace pir
 } // namespace rir

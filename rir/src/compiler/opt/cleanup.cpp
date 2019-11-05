@@ -176,6 +176,36 @@ class TheCleanup {
             if (function->promise(i) && used_p.find(i) == used_p.end())
                 function->erasePromise(i);
 
+        // Consider:
+        //
+        //  loop:
+        //    p1 = phi(...)
+        //    p = phi(a, c)
+        //    c = cast(p1)
+        //    goto loop
+        //
+        //  If cleanup removes the cast, then p1 will be input to p in the same
+        //  block. So we need an additional pass to fix those cases and merge
+        //  the appropriate branch of p1 into p.
+        Visitor::run(function->entry, [&](BB* bb) {
+            for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
+                if (auto p = Phi::Cast(*ip)) {
+                    p->eachArg([&](BB* in, InstrArg& arg) {
+                        if (auto p2 = Phi::Cast(arg.val())) {
+                            if (p->bb() != p2->bb())
+                                return;
+                            if (bb->atPosition(p2) > ip)
+                                return;
+                            p2->eachArg([&](BB* in2, Value* arg2) {
+                                if (in == in2)
+                                    arg.val() = arg2;
+                            });
+                        }
+                    });
+                }
+            }
+        });
+
         auto fixupPhiInput = [&](BB* old, BB* n) {
             for (auto phi : usedBB[old]) {
                 for (size_t i = 0; i < phi->nargs(); ++i)
@@ -273,6 +303,7 @@ class TheCleanup {
 
         BBTransform::renumber(function);
         function->eachPromise(BBTransform::renumber);
+
     }
 };
 } // namespace
