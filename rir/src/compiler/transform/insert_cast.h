@@ -1,6 +1,7 @@
 #ifndef COMPILER_PIR_INSERT_CAST_H
 #define COMPILER_PIR_INSERT_CAST_H
 
+#include "../analysis/available_checkpoints.h"
 #include "../pir/pir.h"
 
 namespace rir {
@@ -14,14 +15,14 @@ namespace pir {
  *
  */
 class InsertCast {
-    BB* start;
+    Code* code;
     Value* env;
-    void apply(BB* b);
+    void apply(BB* b, AvailableCheckpoints& cp);
 
   public:
     static pir::Instruction* cast(pir::Value* v, PirType t, Value* env);
 
-    InsertCast(BB* s, Value* e) : start(s), env(e) {}
+    InsertCast(Code* s, Value* e) : code(s), env(e) {}
     void operator()();
 };
 }

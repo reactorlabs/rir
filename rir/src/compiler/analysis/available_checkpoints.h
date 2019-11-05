@@ -29,8 +29,8 @@ struct AvailableCheckpointsApply {
 class FwdAvailableCheckpoints
     : public StaticAnalysis<AbstractUnique<Checkpoint>> {
   public:
-    FwdAvailableCheckpoints(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("FwdAvailableCheckpoints", cls, cls, log) {}
+    FwdAvailableCheckpoints(ClosureVersion* cls, Code* code, LogStream& log)
+        : StaticAnalysis("FwdAvailableCheckpoints", cls, code, log) {}
 
     AbstractResult apply(AbstractUnique<Checkpoint>& state,
                          Instruction* i) const override {
@@ -45,8 +45,9 @@ class FwdAvailableCheckpoints
 class RwdAvailableCheckpoints
     : public BackwardStaticAnalysis<AbstractUnique<Checkpoint>> {
   public:
-    RwdAvailableCheckpoints(ClosureVersion* cls, const CFG& cfg, LogStream& log)
-        : BackwardStaticAnalysis("RwdAvailableCheckpoints", cls, cls, cfg,
+    RwdAvailableCheckpoints(ClosureVersion* cls, Code* code, const CFG& cfg,
+                            LogStream& log)
+        : BackwardStaticAnalysis("RwdAvailableCheckpoints", cls, code, cfg,
                                  log) {}
 
     AbstractResult apply(AbstractUnique<Checkpoint>& state,
@@ -71,8 +72,8 @@ class AvailableCheckpoints {
     RwdAvailableCheckpoints rwd;
 
   public:
-    AvailableCheckpoints(ClosureVersion* cls, LogStream& log)
-        : cfg(cls), fwd(cls, log), rwd(cls, cfg, log) {}
+    AvailableCheckpoints(ClosureVersion* cls, Code* code, LogStream& log)
+        : cfg(code), fwd(cls, code, log), rwd(cls, code, cfg, log) {}
 
     Checkpoint* at(Instruction* i) { return fwd.reaching(i); }
     Checkpoint* next(Instruction* i, Instruction* dependency,
