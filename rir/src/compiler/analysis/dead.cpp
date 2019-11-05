@@ -6,48 +6,74 @@
 namespace rir {
 namespace pir {
 
-DeadInstructions::DeadInstructions(Code* code, DeadInstructionsMode mode) {
+DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
+                                   Effects ignoreEffects,
+                                   DeadInstructionsMode mode) {
+    UsesTree dataDependencies(code);
+    std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
+    bool changed = true;
     Visitor::run(code->entry, [&](Instruction* i) {
-        i->eachArg([&](Value* v) {
-            if (auto j = Instruction::Cast(v)) {
+        // unused ldfun must be a left over from a guard where ldfun was
+        // converted into ldvar.
+        if (dataDependencies.at(i).empty() &&
+            (LdFun::Cast(i) || (i->getObservableEffects() <= ignoreEffects &&
+                                !i->branchOrExit())))
+            unused_.insert(i);
+    });
+    auto i = 1;
+    while (changed && i <= maxBurstSize) {
+        changed = false;
+        for (auto instructionUses : dataDependencies) {
+            auto candidate = instructionUses.first;
+            auto addToDead = true;
+            if (unused_.count(candidate) ||
+                (candidate->getObservableEffects() > ignoreEffects) ||
+                candidate->branchOrExit())
+                continue;
+            auto uses = instructionUses.second;
+            for (auto use : uses) {
                 switch (mode) {
                 case IgnoreTypeTests:
                     if (std::find(TypecheckInstrsList.begin(),
                                   TypecheckInstrsList.end(),
-                                  i->tag) == TypecheckInstrsList.end() &&
-                        v == i->arg(0).val())
-                        return;
+                                  use->tag) == TypecheckInstrsList.end() &&
+                        isAlive(use))
+                        addToDead = false;
                     break;
-                case IgnoreUpdatePromise:
-                    if (i->tag == Tag::UpdatePromise && v == i->arg(0).val())
-                        return;
-                    break;
-                case CountAll:
+                case IgnoreUpdatePromise: {
+                    auto up = UpdatePromise::Cast(use);
+                    if (!(up && up->arg(0).val() == candidate) && isAlive(use))
+                        addToDead = false;
                     break;
                 }
-                used_.insert(j);
+                case CountAll:
+                    if (isAlive(use))
+                        addToDead = false;
+                    break;
+                }
             }
-        });
-    });
+            if (addToDead) {
+                changed = true;
+                unused_.insert(candidate);
+            }
+        }
+        i++;
+    }
 }
 
-bool DeadInstructions::used(Instruction* i) {
-    if (i->branchOrExit())
-        return true;
-    return (i->type != PirType::voyd()) && used_.count(i);
-}
+bool DeadInstructions::isAlive(Instruction* i) { return !isDead(i); }
 
-bool DeadInstructions::unused(Instruction* i) { return !used(i); }
+bool DeadInstructions::isDead(Instruction* i) { return unused_.count(i); }
 
-bool DeadInstructions::unused(Value* v) {
+bool DeadInstructions::isDead(Value* v) {
     if (auto i = Instruction::Cast(v))
-        return unused(i);
+        return isDead(i);
     return false;
 }
 
-bool DeadInstructions::used(Value* v) {
+bool DeadInstructions::isAlive(Value* v) {
     if (auto i = Instruction::Cast(v))
-        return used(i);
+        return isAlive(i);
     return true;
 }
 

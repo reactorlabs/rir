@@ -3,6 +3,7 @@
 
 #include "../pir/pir.h"
 #include "utils/Set.h"
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -69,7 +70,24 @@ class DominanceFrontier {
     DominanceFrontier(Code* code, const CFG&, const DominanceGraph&);
     const BBList& at(BB* bb) const;
 };
+
+class UsesTree {
+  public:
+    typedef SmallSet<Instruction*> DependenciesList;
+    explicit UsesTree(Code*);
+    const DependenciesList& at(Instruction* i) const;
+    const std::unordered_map<Instruction*, DependenciesList>::iterator begin() {
+        return uses.begin();
+    }
+    const std::unordered_map<Instruction*, DependenciesList>::iterator end() {
+        return uses.end();
+    }
+
+  private:
+    std::unordered_map<Instruction*, DependenciesList> uses;
+    DependenciesList empty;
+};
+
 } // namespace pir
 } // namespace rir
-
 #endif

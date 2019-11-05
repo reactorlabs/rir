@@ -73,7 +73,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         });
     }
 
-    DeadInstructions exceptTypecheck(function,
+    DeadInstructions exceptTypecheck(function, 1, Effects(),
                                      DeadInstructions::IgnoreTypeTests);
     AvailableCheckpoints checkpoint(function, log);
     AvailableAssumptions assumptions(function, log);
@@ -156,7 +156,8 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                             if (!tested->type.isA(expected) &&
                                 expected.maybePromiseWrapped() ==
                                     tested->type.maybePromiseWrapped() &&
-                                exceptTypecheck.used(tested)) {
+                                exceptTypecheck.isDead(tested)) {
+
                                 // The tested value is used outside the
                                 // typecheck. Let's cast it to the checked
                                 // value and propagate this, so all uses can

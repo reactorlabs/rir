@@ -45,7 +45,7 @@ class BBTransform {
     // Remove dead instructions (instead of waiting until the cleanup pass).
     // Note that a phi is dead if it is not used by any instruction, or it is
     // used only by dead phis.
-    static void removeDeadInstrs(Code* fun);
+    static void removeDeadInstrs(Code* fun, uint8_t maxBurstSize);
 };
 
 } // namespace pir
