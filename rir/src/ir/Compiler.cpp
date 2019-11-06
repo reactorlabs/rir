@@ -198,7 +198,7 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     // loop peel is a copy of the condition and body, with no backwards jumps
     if (Compiler::loopPeelingEnabled && peelLoop) {
         compileCond();
-        cs << BC::brfalse(breakBranch);
+        cs << BC::recordTest() << BC::brfalse(breakBranch);
         compileBody();
     }
 
@@ -275,7 +275,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             // if (i' > n')
             cs << BC::dup2() << BC::gt();
             cs.addSrc(R_NilValue);
-            cs << BC::brfalse(fwdBranch);
+            cs << BC::recordTest() << BC::brfalse(fwdBranch);
             // {
             // n' <- ceil(n') - 1
             cs << BC::ceil() << BC::dec() << BC::ensureNamed() << BC::swap();
@@ -906,12 +906,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             cs << BC::setShared();
         cs << BC::forSeqSize() << BC::push((int)0);
 
-        auto compileIndexOps = [&]() {
+        auto compileIndexOps = [&](bool record) {
             // Increment the index and compare to the seq upper bound
             cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
             // We know this is an int and won't do dispatch.
             // TODO: add a integer version of lt_
             cs.addSrc(R_NilValue);
+
+            if (record)
+                cs << BC::recordTest();
 
             // If outside bound, branch, otherwise index into the vector
             cs << BC::brtrue(breakBranch) << BC::pull(2) << BC::pull(1)
@@ -933,12 +936,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // loop peel is a copy of the body (including indexing ops), with no
         // backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
-            compileIndexOps();
+            compileIndexOps(true);
             compileExpr(ctx, body, true);
         }
 
         cs << nextBranch;
-        compileIndexOps();
+        compileIndexOps(false);
 
         // Compile the loop body
         compileExpr(ctx, body, true);

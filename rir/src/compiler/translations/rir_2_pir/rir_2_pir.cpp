@@ -330,6 +330,26 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::record_test_: {
+        auto feedback = bc.immediate.testFeedback;
+        if (feedback.seen == ObservedTest::OnlyTrue ||
+            feedback.seen == ObservedTest::OnlyFalse) {
+            if (auto i = Instruction::Cast(at(0))) {
+                auto v = feedback.seen == ObservedTest::OnlyTrue
+                             ? (Value*)True::instance()
+                             : (Value*)False::instance();
+                if (!i->typeFeedback.value) {
+                    i->typeFeedback.value = v;
+                    i->typeFeedback.srcCode = srcCode;
+                    i->typeFeedback.origin = pos;
+                } else if (i->typeFeedback.value != v) {
+                    i->typeFeedback.value = nullptr;
+                }
+            }
+        }
+        break;
+    }
+
     case Opcode::record_type_: {
         if (bc.immediate.typeFeedback.numTypes) {
             auto feedback = bc.immediate.typeFeedback;
@@ -1075,11 +1095,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 continue;
             }
 
+            Instruction* condition = nullptr;
+
             // Conditional jump
             switch (bc.bc) {
             case Opcode::brtrue_:
             case Opcode::brfalse_: {
                 Value* v = cur.stack.pop();
+                condition = Instruction::Cast(v);
                 insert(new Branch(v));
                 break;
             }
@@ -1111,6 +1134,34 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 break;
             default:
                 assert(false);
+            }
+
+            if (condition) {
+                BB* deopt = nullptr;
+                if (condition->typeFeedback.value == True::instance())
+                    deopt = insert.getCurrentBB()->falseBranch();
+                else if (condition->typeFeedback.value == False::instance())
+                    deopt = insert.getCurrentBB()->trueBranch();
+
+                if (deopt) {
+                    insert.enterBB(deopt);
+
+                    auto sp = insert.registerFrameState(
+                        srcCode, (deopt == fall) ? nextPos : trg, cur.stack);
+                    auto offset = (uintptr_t)condition->typeFeedback.origin -
+                                  (uintptr_t)srcCode;
+                    DeoptReason reason = {DeoptReason::Valuecheck, srcCode,
+                                          (uint32_t)offset};
+                    Value* actual = condition;
+                    if (auto c = AsTest::Cast(condition))
+                        actual = c->arg(0).val();
+                    insert(new RecordDeoptReason(reason, actual));
+                    insert(new Deopt(sp));
+
+                    insert.enterBB(deopt == fall ? branch : fall);
+                    finger = (deopt == fall) ? trg : nextPos;
+                    continue;
+                }
             }
 
             pushWorklist(branch, trg);

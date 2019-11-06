@@ -367,6 +367,12 @@ void checkUserInterrupt() {
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
     switch (reason.reason) {
+    case DeoptReason::Valuecheck: {
+        assert(*pos == Opcode::record_test_);
+        ObservedTest* feedback = (ObservedTest*)(pos + 1);
+        feedback->seen = ObservedTest::Both;
+        break;
+    }
     case DeoptReason::Typecheck: {
         assert(*pos == Opcode::record_type_);
         ObservedValues* feedback = (ObservedValues*)(pos + 1);
@@ -2404,6 +2410,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             DeoptReason* res = (DeoptReason*)pc;
             pc += sizeof(DeoptReason);
             recordDeoptReason(val, *res);
+            NEXT();
+        }
+
+        INSTRUCTION(record_test_) {
+            ObservedTest* feedback = (ObservedTest*)pc;
+            SEXP t = ostack_top(ctx);
+            feedback->record(t);
+            pc += sizeof(ObservedTest);
             NEXT();
         }
 

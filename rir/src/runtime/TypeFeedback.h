@@ -63,6 +63,35 @@ struct ObservedType {
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
+struct ObservedTest {
+    enum { None, OnlyTrue, OnlyFalse, Both };
+    uint32_t seen : 2;
+    uint32_t unused : 30;
+
+    ObservedTest() : seen(0), unused(0) {}
+
+    RIR_INLINE void record(SEXP e) {
+        if (e == R_TrueValue) {
+            if (seen == None)
+                seen = OnlyTrue;
+            else if (seen != OnlyTrue)
+                seen = Both;
+            return;
+        }
+        if (e == R_FalseValue) {
+            if (seen == None)
+                seen = OnlyFalse;
+            else if (seen != OnlyFalse)
+                seen = Both;
+            return;
+        }
+        if (seen != Both)
+            seen = Both;
+    }
+};
+static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
+              "Size needs to fit inside a record_ bc immediate args");
+
 struct ObservedValues {
 
     enum StateBeforeLastForce {
@@ -126,6 +155,7 @@ enum class Opcode : uint8_t;
 struct DeoptReason {
     enum Reason : uint32_t {
         Typecheck,
+        Valuecheck,
         Calltarget,
     };
     Reason reason;

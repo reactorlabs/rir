@@ -168,6 +168,7 @@ class BC {
         LocalsCopy loc_cpy;
         ObservedCallees callFeedback;
         ObservedValues typeFeedback;
+        ObservedTest testFeedback;
         PoolAndCachePositionRange poolAndCache;
         CachePositionRange cacheIdx;
         DeoptReason deoptReason;
@@ -359,6 +360,7 @@ BC_NOARGS(V, _)
     inline static BC recordCall();
     inline static BC recordBinop();
     inline static BC recordType();
+    inline static BC recordTest();
     inline static BC recordDeopt(const DeoptReason& reason);
     inline static BC popn(unsigned n);
     inline static BC push(SEXP constant);
@@ -727,6 +729,10 @@ BC_NOARGS(V, _)
             break;
         case Opcode::record_call_:
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
+            break;
+        case Opcode::record_test_:
+            memcpy(reinterpret_cast<void*>(&immediate.testFeedback), pc,
+                   sizeof(ObservedValues));
             break;
         case Opcode::record_type_:
             memcpy(reinterpret_cast<void*>(&immediate.typeFeedback), pc,

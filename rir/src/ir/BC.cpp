@@ -34,6 +34,10 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.callFeedback);
         return;
 
+    case Opcode::record_test_:
+        cs.insert(immediate.testFeedback);
+        break;
+
     case Opcode::record_type_:
         cs.insert(immediate.typeFeedback);
         break;
@@ -269,6 +273,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::record_deopt_:
         case Opcode::record_call_:
         case Opcode::record_type_:
+        case Opcode::record_test_:
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
         case Opcode::push_code_:
@@ -411,6 +416,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::record_deopt_:
         case Opcode::record_call_:
         case Opcode::record_type_:
+        case Opcode::record_test_:
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
         case Opcode::push_code_:
@@ -488,7 +494,8 @@ void BC::printOpcode(std::ostream& out) const { out << name(bc) << "  "; }
 
 void BC::print(std::ostream& out) const {
     out << "   ";
-    if (bc != Opcode::record_call_ && bc != Opcode::record_type_)
+    if (bc != Opcode::record_call_ && bc != Opcode::record_type_ &&
+        bc != Opcode::record_test_)
         printOpcode(out);
 
     auto printTypeFeedback = [&](const ObservedValues& prof) {
@@ -702,6 +709,26 @@ void BC::print(std::ostream& out) const {
             out << callFeedbackExtra().targets[i] << "("
                 << type2char(TYPEOF(callFeedbackExtra().targets[i])) << ") ";
         out << "]";
+        break;
+    }
+
+    case Opcode::record_test_: {
+        out << "[ ";
+        switch (immediate.testFeedback.seen) {
+        case ObservedTest::None:
+            out << "_";
+            break;
+        case ObservedTest::OnlyTrue:
+            out << "T";
+            break;
+        case ObservedTest::OnlyFalse:
+            out << "F";
+            break;
+        case ObservedTest::Both:
+            out << "?";
+            break;
+        }
+        out << " ]";
         break;
     }
 
