@@ -304,6 +304,21 @@ class TheVerifier {
             }
         }
 
+        static std::unordered_set<Tag> allowStub{
+            Tag::LdVar,     Tag::Force,          Tag::PushContext,
+            Tag::StVar,     Tag::StVarSuper,     Tag::FrameState,
+            Tag::IsEnvStub, Tag::MaterializeEnv, Tag::CallBuiltin,
+            Tag::Call};
+        if (i->hasEnv() && !allowStub.count(i->tag)) {
+            auto env = MkEnv::Cast(i->env());
+            if (env && env->stub) {
+                std::cerr << "Error at instruction '";
+                i->print(std::cerr);
+                std::cerr << " that uses a stub environment\n";
+                ok = false;
+            }
+        }
+
         i->eachArg([&](const InstrArg& a) -> void {
             auto v = a.val();
             auto t = a.type();

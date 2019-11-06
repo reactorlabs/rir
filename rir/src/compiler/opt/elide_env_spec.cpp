@@ -122,27 +122,18 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     // If we only see these (and call instructions) then we stub an environment,
     // since it can only be accessed reflectively.
     static std::unordered_set<Tag> allowed{
-        Tag::Force, Tag::FrameState, Tag::PushContext, Tag::LdVar,
-        Tag::StVar, Tag::StVarSuper};
-    Visitor::run(function->entry, [&](Instruction* i) {
+        Tag::Force,      Tag::PushContext, Tag::LdVar,     Tag::StVar,
+        Tag::StVarSuper, Tag::Call,        Tag::FrameState};
+    VisitorNoDeoptBranch::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
                 if (!m->stub && !bannedEnvs.count(m)) {
-                    // Prevent us from leaking stub envs
-                    if (!i->hasEnv() || i->env() != m)
+                    auto bt = CallBuiltin::Cast(i);
+                    if (!allowed.count(i->tag) || !i->hasEnv() ||
+                        i->env() != m ||
+                        (bt && !supportsFastBuiltinCall(bt->blt))) {
                         bannedEnvs.insert(m);
-                    if (CallInstruction::CastCall(i)) {
-                        // Call builtin materializes env right away, so no point
-                        // in stubbing, unless we have a fastcase.
-                        if (auto bt = CallBuiltin::Cast(i))
-                            if (!supportsFastBuiltinCall(bt->blt))
-                                bannedEnvs.insert(m);
                         return;
-                    }
-                    // It is safe to elide environments used in deopt branches
-                    // if we materialize them just before usage
-                    if (!i->bb()->isDeopt() && !allowed.count(i->tag)){
-                        bannedEnvs.insert(m);
                     }
                 }
             }
@@ -154,7 +145,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv()) {
             if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i) ||
-                StVarSuper::Cast(i))
+                StVarSuper::Cast(i) || PushContext::Cast(i))
                 return;
             if (auto mk = MkEnv::Cast(i->env())) {
                 if (mk->stub || bannedEnvs.count(mk))
@@ -190,14 +181,15 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         // After eliding an env we must ensure to add a
                         // materialization before every usage in deopt branches
                         for (auto mkArg : needsMaterialization[env]) {
-                            if (!materialized.count(mkArg->bb()) ||
-                                !materialized[mkArg->bb()].includes(env)) {
+                            auto targetBB = mkArg->bb();
+                            if (!materialized.count(targetBB) ||
+                                !materialized[targetBB].includes(env)) {
                                 Instruction* materialize =
                                     new MaterializeEnv(env);
-                                env->replaceUsesIn(materialize, mkArg->bb());
-                                mkArg->bb()->insert(mkArg->bb()->begin(),
-                                                    materialize);
-                                materialized[mkArg->bb()].insert(env);
+                                env->replaceUsesIn(materialize, targetBB);
+                                targetBB->insert(targetBB->begin(),
+                                                 materialize);
+                                materialized[targetBB].insert(env);
                             }
                         }
                     }

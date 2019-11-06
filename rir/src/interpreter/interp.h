@@ -41,11 +41,6 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
         if (cptr->callflag & CTXT_FUNCTION) {
             if (cptr->cloenv == e)
                 return cptr;
-            auto lazy = LazyEnvironment::check(cptr->cloenv);
-            if (lazy && lazy->materialized() == e) {
-                cptr->cloenv = lazy->materialized();
-                return cptr;
-            }
         }
         cptr = cptr->nextcontext;
     }
