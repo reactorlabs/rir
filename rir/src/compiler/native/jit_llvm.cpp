@@ -3,8 +3,12 @@
 #include "types_llvm.h"
 
 #include <llvm/ADT/STLExtras.h>
+#include <llvm/Analysis/BasicAliasAnalysis.h>
+#include <llvm/Analysis/Passes.h>
+#include <llvm/Analysis/ScopedNoAliasAA.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
+#include <llvm/Analysis/TypeBasedAliasAnalysis.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/JITSymbol.h>
 #include <llvm/ExecutionEngine/Orc/CompileUtils.h>
@@ -28,6 +32,7 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils.h>
+#include <llvm/Transforms/Vectorize.h>
 
 #include <llvm/Transforms/IPO.h>
 #include <unordered_map>
@@ -198,42 +203,102 @@ class JitLLVMImplementation {
     }
 
     std::unique_ptr<llvm::Module>
-    optimizeModule(std::unique_ptr<llvm::Module> M) {
+    optimizeModule(std::unique_ptr<llvm::Module> M);
+};
 
-        M->setTargetTriple(TM->getTargetTriple().str());
-        M->setDataLayout(TM->createDataLayout());
+static void pirPassSchedule(const PassManagerBuilder&,
+                            legacy::PassManagerBase& PM) {
+    // Cleanup code
+    PM.add(createCFGSimplificationPass());
+    PM.add(createDeadCodeEliminationPass());
+    PM.add(createSROAPass());
+    PM.add(createMemCpyOptPass());
+    PM.add(createPromoteMemoryToRegisterPass());
 
-        llvm::legacy::PassManager MPM;
-        auto PM = llvm::make_unique<legacy::FunctionPassManager>(M.get());
+    // Some scalar opts
+    PM.add(createScopedNoAliasAAWrapperPass());
+    PM.add(createTypeBasedAAWrapperPass());
+    PM.add(createBasicAAWrapperPass());
 
-        {
-            llvm::PassManagerBuilder builder;
-            builder.OptLevel = 1;
-            builder.SizeLevel = 0;
-            builder.Inliner = llvm::createFunctionInliningPass(1, 0, false);
-            TM->adjustPassManager(builder);
+    PM.add(createConstantPropagationPass());
+    PM.add(createDeadInstEliminationPass());
 
-            // Start with some custom passes tailored to our backend
-            PM->add(createCFGSimplificationPass());
-            PM->add(createTailCallEliminationPass());
-            PM->add(createSROAPass());
-            PM->add(createPromoteMemoryToRegisterPass());
-            PM->add(createReassociatePass());
-            PM->add(createEarlyCSEPass());
-            PM->add(createPromoteMemoryToRegisterPass());
-            PM->add(createGVNPass());
-            PM->add(createAggressiveDCEPass());
-            PM->add(createCFGSimplificationPass());
-            PM->add(createPromoteMemoryToRegisterPass());
+    PM.add(createInstructionCombiningPass());
+    PM.add(createCFGSimplificationPass());
+    PM.add(createSROAPass());
+    PM.add(createCFGSimplificationPass());
+    PM.add(createReassociatePass());
 
-            builder.populateFunctionPassManager(*PM);
-            builder.populateModulePassManager(MPM);
-            builder.populateLTOPassManager(MPM);
-        }
+    PM.add(createEarlyCSEPass());
 
-        PM->doInitialization();
-        for (auto& F : *M) {
-            PM->run(F);
+    PM.add(createCFGSimplificationPass());
+    PM.add(createReassociatePass());
+    PM.add(createEarlyCSEPass());
+
+    // Go after loops
+    PM.add(createPromoteMemoryToRegisterPass());
+
+    PM.add(createLoopIdiomPass());
+    PM.add(createLoopRotatePass());
+    PM.add(createLICMPass());
+    PM.add(createLoopUnswitchPass());
+    PM.add(createInstructionCombiningPass());
+    PM.add(createIndVarSimplifyPass());
+    PM.add(createLoopDeletionPass());
+    PM.add(createSimpleLoopUnrollPass());
+    PM.add(createLoopStrengthReducePass());
+
+    PM.add(createSROAPass());
+    PM.add(createInstructionCombiningPass());
+    PM.add(createGVNPass());
+    PM.add(createMemCpyOptPass());
+    PM.add(createSCCPPass());
+
+    PM.add(createSinkingPass());
+    PM.add(createInstructionCombiningPass());
+    PM.add(createJumpThreadingPass());
+    PM.add(createDeadStoreEliminationPass());
+
+    // Cleanup
+    PM.add(createCFGSimplificationPass());
+    PM.add(createLoopIdiomPass());
+    PM.add(createLoopDeletionPass());
+    PM.add(createJumpThreadingPass());
+    PM.add(createAggressiveDCEPass());
+    PM.add(createInstructionCombiningPass());
+
+    PM.add(createTailCallEliminationPass());
+}
+
+std::unique_ptr<llvm::Module>
+JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
+
+    M->setTargetTriple(TM->getTargetTriple().str());
+    M->setDataLayout(TM->createDataLayout());
+
+    llvm::legacy::PassManager MPM;
+    auto PM = llvm::make_unique<legacy::FunctionPassManager>(M.get());
+
+    {
+        llvm::PassManagerBuilder builder;
+
+        builder.OptLevel = 1;
+        builder.SizeLevel = 0;
+        builder.Inliner = llvm::createFunctionInliningPass(1, 0, false);
+        TM->adjustPassManager(builder);
+
+        // Start with some custom passes tailored to our backend
+        builder.addExtension(PassManagerBuilder::EP_EarlyAsPossible,
+                             pirPassSchedule);
+
+        builder.populateFunctionPassManager(*PM);
+        builder.populateModulePassManager(MPM);
+        builder.populateLTOPassManager(MPM);
+    }
+
+    PM->doInitialization();
+    for (auto& F : *M) {
+        PM->run(F);
 #ifdef ENABLE_SLOWASSERT
             verifyFunction(F);
 #endif
@@ -244,7 +309,7 @@ class JitLLVMImplementation {
 
         return M;
     }
-};
+
 } // namespace
 
 namespace rir {
