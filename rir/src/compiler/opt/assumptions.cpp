@@ -75,7 +75,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
 
     DeadInstructions exceptTypecheck(function, 1, Effects(),
                                      DeadInstructions::IgnoreTypeTests);
-    AvailableCheckpoints checkpoint(function, log);
+    AvailableCheckpoints checkpoint(function, function, log);
     AvailableAssumptions assumptions(function, log);
     DominanceGraph dom(function);
     std::unordered_map<Checkpoint*, Checkpoint*> replaced;

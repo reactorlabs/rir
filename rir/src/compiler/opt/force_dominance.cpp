@@ -252,7 +252,7 @@ struct ForcedBy {
 
     PromiseInlineable isSafeToInline(MkArg* a) const {
         // To inline promises with a deopt instruction we need to be able to
-        // synthesize promises and promise call framse.
+        // synthesize promises and promise call frames.
         auto prom = a->prom();
         if (hasDeopt.count(prom)) {
             if (hasDeopt.at(prom))

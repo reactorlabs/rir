@@ -15,7 +15,7 @@ namespace pir {
 void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                             LogStream& log) const {
 
-    AvailableCheckpoints checkpoint(function, log);
+    AvailableCheckpoints checkpoint(function, function, log);
 
     std::unordered_map<
         BB*, std::unordered_map<Instruction*,
