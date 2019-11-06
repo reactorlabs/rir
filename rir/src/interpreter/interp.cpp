@@ -3465,10 +3465,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = val;                                                         \
-        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx)) {                  \
-            TYPEOF(idx) = vectype;                                             \
-            res = idx;                                                         \
-            vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \
             res = Rf_allocVector(vectype, 1);                                  \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
