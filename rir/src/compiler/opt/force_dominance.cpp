@@ -339,7 +339,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else if (auto e = MkEnv::Cast(i)) {
             if (!e->stub)
                 apply(e);
-        } else if (CastType::Cast(i)) {
+        } else if (CastType::Cast(i) || Deopt::Cast(i)) { /* do nothing */ 
         } else {
             apply(i);
 
