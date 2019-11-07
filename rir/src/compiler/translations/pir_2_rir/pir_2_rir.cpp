@@ -361,10 +361,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         if (analysis.result().overflow)
             refcountAnalysisOverflow = true;
         else
-            for (auto& u : analysis.result().uses) {
-                if (u.second == AUses::Multiple)
-                    needsEnsureNamed.insert(u.first);
-            }
+            analysis.result().needsEnsureNamed(needsEnsureNamed);
 
         // This part is a bit of a hack... If we have the pattern:
         //   subassign

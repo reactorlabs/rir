@@ -2,48 +2,27 @@
 #define PIR_REFERENCE_COUNT_H
 
 #include "../pir/pir_impl.h"
+#include "dead.h"
 #include "generic_static_analysis.h"
 
 namespace rir {
 namespace pir {
 
 struct AUses {
-
-    /*
-     * Lattice:
-     *
-     *                    Multiple
-     *                       |
-     *                      Once
-     *                       |
-     *                 AlreadyIncremented
-     *                       |
-     *                      None
-     *
-     * Definitions:
-     *   reuse            :=   override if refcount is == 0
-     */
-
+    // Linear lattice:
     enum Kind {
-        // 1) Static refcount is safe
-        None,
-        AlreadyIncremented, // Refcount is known to be 1 (ie. used by stvar)
-        Once,               // At least one use, which reuses input
-
-        // 2) Need an ensureNamed
-        Multiple, // At least two uses, at least one (but the last) is reusing
+        Named,        // Named count is >= 1
+        Fresh,        // Named count is >= 0
+        Tainted,      // Maybe destructively used
+        UseAfterTaint // Use after maybe destructively use
     };
 
     static Kind merge(Kind a, Kind b) {
-        if (a == b)
-            return a;
-
         return a > b ? a : b;
     }
 
     bool overflow = false;
     // The merge function needs an ordered map
-    std::map<Instruction*, Kind> uses;
     AbstractResult mergeExit(const AUses& other) { return merge(other); }
     AbstractResult merge(const AUses& other) {
         AbstractResult res;
@@ -93,25 +72,43 @@ struct AUses {
             use.first->print(out);
             out << " = ";
             switch (use.second) {
-            case Kind::None:
-                out << "0";
+            case Kind::Fresh:
+                out << "+";
                 break;
-            case Kind::Once:
+            case Kind::Named:
                 out << "1";
                 break;
-            case Kind::AlreadyIncremented:
-                out << "+1";
+            case Kind::Tainted:
+                out << "!";
                 break;
-            case Kind::Multiple:
-                out << "m";
+            case Kind::UseAfterTaint:
+                out << "+!";
                 break;
             }
             out << "\n";
         }
     }
+    bool needsEnsureNamed(Instruction* i) const {
+        auto u = uses.find(i);
+        if (u == uses.end())
+            return false;
+        return u->second == UseAfterTaint;
+    }
+    void needsEnsureNamed(std::unordered_set<Instruction*>& collect) const {
+        for (auto& i : uses)
+            if (needsEnsureNamed(i.first))
+                collect.insert(i.first);
+    }
+
+  private:
+    friend class StaticReferenceCount;
+    std::map<Instruction*, Kind> uses;
 };
 
 class StaticReferenceCount : public StaticAnalysis<AUses> {
+  private:
+    std::unordered_map<Instruction*, SmallSet<Instruction*>> alias;
+
   public:
     StaticReferenceCount(ClosureVersion* cls, LogStream& log)
         : StaticAnalysis("StaticReferenceCountAnalysis", cls, cls, log) {
@@ -150,8 +147,6 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
     }
 
   protected:
-    std::unordered_map<Instruction*, SmallSet<Instruction*>> alias;
-
     AbstractResult apply(AUses& state, Instruction* i) const override {
         AbstractResult res;
 
@@ -163,38 +158,32 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             if (!vi)
                 return;
 
+            // self input is ignored
+            if (vi == i)
+                return;
+
             auto use = state.uses.find(vi);
             if (use == state.uses.end()) {
-                if (!constantUse) {
-                    // duplicate case AUses::None from below. This avoids
-                    // creating an entry if not needed
-                    state.uses[vi] =
-                        increments ? AUses::AlreadyIncremented : AUses::Once;
-                    res.update();
-                }
-                return;
+                if (constantUse)
+                    return;
+                use = state.uses.emplace(vi, AUses::Fresh).first;
             }
 
             switch (use->second) {
-            case AUses::None:
+            case AUses::Fresh:
                 // multiple non-reusing uses are ok, as long as the are not
                 // preceeded by a reusing use (in which case we are at Once)
                 if (!constantUse) {
-                    use->second =
-                        increments ? AUses::AlreadyIncremented : AUses::Once;
+                    use->second = increments ? AUses::Named : AUses::Tainted;
                     res.update();
                 }
                 break;
-            case AUses::Once:
-                // self input = overrides itself...
-                if (vi == i)
-                    use->second = AUses::None;
-                else
-                    use->second = AUses::Multiple;
+            case AUses::Tainted:
+                use->second = AUses::UseAfterTaint;
                 res.update();
                 break;
-            case AUses::AlreadyIncremented:
-            case AUses::Multiple:
+            case AUses::Named:
+            case AUses::UseAfterTaint:
                 break;
             }
         };
@@ -210,11 +199,12 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
                     if (j->minReferenceCount() >= 1)
                         return;
 
-                    if (alias.count(j))
-                        for (auto a : alias.at(j))
+                    auto as = alias.find(j);
+                    if (as != alias.end()) {
+                        for (auto a : as->second)
                             count(a, constantUse, increments);
-                    else
-                        count(j, constantUse, increments);
+                    }
+                    count(j, constantUse, increments);
                 }
             };
 
@@ -283,6 +273,24 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             i->eachArg([&](Value* v) { apply(v, false, false); });
             break;
         };
+
+        auto cur = state.uses.find(i);
+        if (cur != state.uses.end() && cur->second < AUses::UseAfterTaint) {
+            if (cur->second >= AUses::Fresh) {
+                cur->second = AUses::Fresh;
+                res.update();
+            }
+            // Variables from the environment must be named
+            if (cur->second == AUses::Fresh) {
+                switch (i->tag) {
+                case Tag::LdVar:
+                case Tag::LdVarSuper:
+                    cur->second = AUses::Named;
+                    break;
+                default: {}
+                }
+            }
+        }
 
         // The abstract state is expensive to merge. To lift this limit, we'd
         // need to find a better strategy, or a less expensive analysis...
