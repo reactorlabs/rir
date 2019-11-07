@@ -24,6 +24,7 @@ BC_NOARGS(V, _)
 #undef V
 BC BC::recordCall() { return BC(Opcode::record_call_); }
 BC BC::recordType() { return BC(Opcode::record_type_); }
+BC BC::recordTest() { return BC(Opcode::record_test_); }
 BC BC::recordDeopt(const DeoptReason& reason) {
     ImmediateArguments i;
     i.deoptReason = reason;

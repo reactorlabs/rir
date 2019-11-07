@@ -164,6 +164,7 @@ class Instruction : public Value {
 
     struct TypeFeedback {
         PirType type = PirType::optimistic();
+        Value* value = nullptr;
         rir::Code* srcCode = nullptr;
         Opcode* origin = nullptr;
     };

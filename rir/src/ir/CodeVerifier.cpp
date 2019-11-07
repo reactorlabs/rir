@@ -197,6 +197,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::lgl_or_:
     case Opcode::record_call_:
     case Opcode::record_type_:
+    case Opcode::record_test_:
     case Opcode::deopt_:
     case Opcode::record_deopt_:
     case Opcode::pop_context_:
