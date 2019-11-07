@@ -38,8 +38,9 @@ inline RCNTXT* getFunctionContext(size_t pos = 0,
 inline RCNTXT* findFunctionContextFor(SEXP e) {
     auto cptr = R_GlobalContext;
     while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION && cptr->cloenv == e) {
-            return cptr;
+        if (cptr->callflag & CTXT_FUNCTION) {
+            if (cptr->cloenv == e)
+                return cptr;
         }
         cptr = cptr->nextcontext;
     }

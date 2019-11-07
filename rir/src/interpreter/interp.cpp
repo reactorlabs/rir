@@ -266,12 +266,19 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
 SEXP materialize(SEXP rirDataWrapper) {
     if (auto promargs = ArgsLazyDataContent::check(rirDataWrapper)) {
         return promargs->createArgsLists();
-    } else if (LazyEnvironment::check(rirDataWrapper)) {
-        // Since the old env stub might be in the `env` variable of the
-        // interpreter, we need to keep it live.
-        // TODO: find a more reasonable solution...
+    } else if (auto lazyEnv = LazyEnvironment::check(rirDataWrapper)) {
         R_PreserveObject(rirDataWrapper);
-        return createEnvironment(globalContext(), rirDataWrapper);
+        auto newEnv = createEnvironment(globalContext(), rirDataWrapper);
+        lazyEnv->clear();
+        RCNTXT* cur = R_GlobalContext;
+        while (cur) {
+            if (cur->cloenv == rirDataWrapper)
+                cur->cloenv = newEnv;
+            if (cur->sysparent == rirDataWrapper)
+                cur->sysparent = newEnv;
+            cur = cur->nextcontext;
+        }
+        return newEnv;
     }
     assert(false);
     return nullptr;
