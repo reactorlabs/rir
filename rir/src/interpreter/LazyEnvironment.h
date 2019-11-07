@@ -48,7 +48,7 @@ struct LazyEnvironment
     SEXP getParent() { return getEntry(1); }
 
     void clear() {
-        setEntry(0, nullptr);
+        setEntry(1, nullptr);
         for (size_t i = 0; i < nargs; i++) {
             setArg(i, nullptr, false);
         }
