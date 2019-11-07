@@ -1258,7 +1258,7 @@ void Pir2Rir::lower(Code* code) {
                         std::stringstream dump;
                         if (auto i = Instruction::Cast(expect->condition())) {
                             dump << "\n";
-                            i->printRecursive(dump, 2);
+                            i->printRecursive(dump, 4);
                             dump << "\n";
                         } else {
                             expect->condition()->printRef(dump);
