@@ -396,3 +396,24 @@ nbodyPrologue <- function(args) {
 stopifnot(
   pir.check(function(arg) {nbodyPrologue(arg)}, NoExternalCalls, NoPromise, NoEnvSpec, warmup=function(f) {f(10);f(10)})
 )
+
+## Start by proving properties on simplified versions of bounce
+seed <- NaN
+nextRandom <- function() {
+  a <- (seed * 1309) + 13849
+  seed <<- bitwAnd(a, 65535)
+  seed
+}
+simplifiedBounceInit <- function () {
+    ballCount = 2
+    balls     = vector("list", length = ballCount)
+    for (i in 1:ballCount) {
+        random1 = nextRandom()
+        balls[[i]] = c(random1 %% 500)
+    }
+   return(balls[[1]])
+}
+
+stopifnot(
+  pir.check(simplifiedBounceInit, NoEnvSpec, NoPromise, warmup=function(f) {f()})
+)
