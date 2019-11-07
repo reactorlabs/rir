@@ -48,3 +48,15 @@ f(bad())
 # Here we slightly depart from gnur semantics.
 # See Instruction::mayObserveContext exception for Force
 # stopifnot(f(bad()) == "a")
+
+f0 <- function() {
+  for (i in 1:10)
+    last <- i;
+  last
+}
+stopifnot(f0() == 10)
+stopifnot(f0() == 10)
+stopifnot(f0() == 10)
+stopifnot(f0() == 10)
+stopifnot(f0() == 10)
+stopifnot(f0() == 10)
