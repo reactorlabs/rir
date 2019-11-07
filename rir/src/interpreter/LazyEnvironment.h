@@ -47,6 +47,13 @@ struct LazyEnvironment
 
     SEXP getParent() { return getEntry(1); }
 
+    void clear() {
+        setEntry(0, nullptr);
+        for (size_t i = 0; i < nargs; i++) {
+            setArg(i, nullptr, false);
+        }
+    }
+
     static LazyEnvironment* BasicNew(SEXP parent, size_t nargs,
                                      Immediate* names) {
         SEXP wrapper = Rf_allocVector(
