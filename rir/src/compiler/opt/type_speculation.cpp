@@ -15,7 +15,7 @@ namespace pir {
 void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                             LogStream& log) const {
 
-    AvailableCheckpoints checkpoint(function, log);
+    AvailableCheckpoints checkpoint(function, function, log);
 
     std::unordered_map<
         BB*, std::unordered_map<Instruction*,
@@ -37,18 +37,9 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                 // Blacklist of where it is not worthwhile
                 if (!LdConst::Cast(arg) &&
                     // leave this to the promise inliner
-                    !MkArg::Cast(arg) && !Force::Cast(arg) &&
-                    // leave this to scope resolution
-                    !LdVar::Cast(arg) && !LdVarSuper::Cast(arg)) {
+                    !MkArg::Cast(arg) && !Force::Cast(arg)) {
                     speculateOn = i;
                 }
-                if (auto ld = LdVar::Cast(arg))
-                    if (!Env::isPirEnv(ld->env()))
-                        speculateOn = i;
-                if (auto ld = LdVarSuper::Cast(arg))
-                    if (!Env::isPirEnv(ld->env()))
-                        speculateOn = i;
-
                 if (speculateOn) {
                     feedback = i->typeFeedback;
                     typecheckPos = i->bb();
@@ -67,6 +58,12 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                         break;
                     case Force::ArgumentKind::promise:
                     case Force::ArgumentKind::unknown:
+                        if (auto ld = LdVar::Cast(arg)) {
+                            if (!Env::isStaticEnv(ld->env())) {
+                                speculateOn = nullptr;
+                                break;
+                            }
+                        }
                         guardPos = checkpoint.next(i, speculateOn, dom);
                         if (guardPos)
                             typecheckPos = guardPos->nextBB();

@@ -165,7 +165,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
 
             auto use = state.uses.find(vi);
             if (use == state.uses.end()) {
-                if (!constantUse && vi != i) {
+                if (!constantUse) {
                     // duplicate case AUses::None from below. This avoids
                     // creating an entry if not needed
                     state.uses[vi] =
@@ -179,7 +179,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             case AUses::None:
                 // multiple non-reusing uses are ok, as long as the are not
                 // preceeded by a reusing use (in which case we are at Once)
-                if (!constantUse && vi != i) {
+                if (!constantUse) {
                     use->second =
                         increments ? AUses::AlreadyIncremented : AUses::Once;
                     res.update();
@@ -219,8 +219,7 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
             };
 
         switch (i->tag) {
-        // (1) Instructions which never reuse SEXPS
-        //
+        // Instructions which never reuse SEXPS
         case Tag::RecordDeoptReason:
         case Tag::Return:
         case Tag::Length:
@@ -232,45 +231,58 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         case Tag::ChkMissing:
         case Tag::Deopt:
         case Tag::AsTest:
+        case Tag::AsLogical:
         case Tag::Identical:
         case Tag::Is:
         case Tag::LOr:
         case Tag::LAnd:
-        case Tag::MkArg:
         case Tag::MkCls:
         case Tag::MkFunCls:
             i->eachArg([&](Value* v) { apply(v, true, false); });
             break;
 
-        // (2) Instructions which update the named count
-        //
+        // Instructions which if not overwritten don't reuse SEXPS
+        case Tag::Eq:
+        case Tag::Neq:
+        case Tag::Lt:
+        case Tag::Lte:
+        case Tag::Gt:
+        case Tag::Gte:
+        case Tag::Extract1_1D:
+        case Tag::Extract1_2D:
+        case Tag::Extract1_3D:
+        case Tag::Extract2_1D:
+        case Tag::Extract2_2D:
+        case Tag::Subassign1_1D:
+        case Tag::Subassign1_2D:
+        case Tag::Subassign1_3D:
+        case Tag::Subassign2_1D:
+        case Tag::Subassign2_2D:
+            i->eachArg([&](Value* v) {
+                apply(v, !i->effects.includes(Effect::ExecuteCode), false);
+            });
+            break;
+
+        // Instructions which update the named count
         case Tag::StVar:
         case Tag::StVarSuper:
         case Tag::MkEnv:
+        case Tag::MkArg:
+        case Tag::UpdatePromise:
+        case Tag::ForSeqSize:
             i->eachArg([&](Value* v) {
-                if (v == i->env())
+                if (i->hasEnv() && v == i->env())
                     return;
                 apply(v, true, true);
             });
             break;
 
-        // (3) Default: instructions which might update in-place, if named
+        // Default: instructions which might update in-place, if named
         // count is 0
-        //
         default:
             i->eachArg([&](Value* v) { apply(v, false, false); });
             break;
         };
-
-        if (i->minReferenceCount() < 1) {
-            // This value was used only once in a loop, we can thus
-            // reset the count on redefinition.
-            auto u = state.uses.find(i);
-            if (u != state.uses.end() && u->second <= AUses::Once) {
-                u->second = AUses::None;
-                res.update();
-            }
-        }
 
         // The abstract state is expensive to merge. To lift this limit, we'd
         // need to find a better strategy, or a less expensive analysis...

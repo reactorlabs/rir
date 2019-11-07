@@ -19,7 +19,7 @@ namespace pir {
 void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                        LogStream& log) const {
     auto code = closure->entry;
-    AvailableCheckpoints checkpoint(closure, log);
+    AvailableCheckpoints checkpoint(closure, closure, log);
 
     auto replaceLdFunBuiltinWithDeopt = [&](BB* bb, BB::Instrs::iterator ip,
                                             Checkpoint* cp, SEXP builtin,

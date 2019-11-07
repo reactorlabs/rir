@@ -17,7 +17,7 @@ namespace pir {
 void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                          LogStream& log) const {
 
-    AvailableCheckpoints checkpoint(function, log);
+    AvailableCheckpoints checkpoint(function, function, log);
     DominanceGraph dom(function);
 
     auto envOnlyForObj = [&](Instruction* i) {

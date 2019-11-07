@@ -1331,7 +1331,7 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
     // to find the context to return to.
     insert(new Return(ret));
 
-    InsertCast c(insert.code->entry, insert.env);
+    InsertCast c(insert.code, insert.env);
     c();
 
     finalized = true;

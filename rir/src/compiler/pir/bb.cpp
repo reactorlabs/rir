@@ -83,7 +83,11 @@ void BB::printBBGraph(std::ostream& out, bool omitDeoptBranches) {
 }
 
 bool BB::isDeopt() const {
-    return !isEmpty() && (Deopt::Cast(last()) || ScheduledDeopt::Cast(last()));
+    auto bb = this;
+    if (isJmp())
+        bb = next();
+    return !bb->isEmpty() &&
+           (Deopt::Cast(bb->last()) || ScheduledDeopt::Cast(bb->last()));
 }
 
 BB::~BB() {

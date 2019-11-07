@@ -387,8 +387,8 @@ class LowerFunctionLLVM {
     void checkMissing(llvm::Value* v);
     void checkUnbound(llvm::Value* v);
 
-    llvm::Value* call(const NativeBuiltin& builtin,
-                      const std::vector<llvm::Value*>& args);
+    llvm::CallInst* call(const NativeBuiltin& builtin,
+                         const std::vector<llvm::Value*>& args);
     llvm::Value* callRBuiltin(SEXP builtin, const std::vector<Value*>& args,
                               int srcIdx, CCODE, llvm::Value* env);
 
@@ -1436,8 +1436,8 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 }
 
-llvm::Value* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
-                                     const std::vector<llvm::Value*>& args) {
+llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
+                                        const std::vector<llvm::Value*>& args) {
 #ifdef ENABLE_SLOWASSERT
     // abuse BB lable as comment
     auto callBB = BasicBlock::Create(C, builtin.name, fun);
@@ -2292,7 +2292,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     switch (b->builtinId) {
                     case 88: // "length"
                         if (irep == t::SEXP) {
-                            auto r = call(NativeBuiltins::length, {a});
+                            llvm::Value* r = call(NativeBuiltins::length, {a});
                             if (orep == t::SEXP) {
                                 r = builder.CreateSelect(
                                     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
@@ -2796,12 +2796,15 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 std::vector<Value*> args;
                 i->eachArg([&](Value* v) { args.push_back(v); });
+                llvm::CallInst* res;
                 withCallFrame(args, [&]() {
-                    return call(NativeBuiltins::deopt,
-                                {paramCode(), paramClosure(),
-                                 convertToPointer(m), paramArgs()});
+                    res = call(NativeBuiltins::deopt,
+                               {paramCode(), paramClosure(),
+                                convertToPointer(m), paramArgs()});
+                    return res;
                 });
-                builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
+                res->setTailCall(true);
+                builder.CreateUnreachable();
                 break;
             }
 
@@ -4336,22 +4339,39 @@ bool LowerFunctionLLVM::tryCompile() {
             if (!success)
                 return;
 
+            Instruction* origin = i;
+            llvm::Value* sexpResult = nullptr;
+
             if (phis.count(i)) {
                 auto phi = phis.at(i);
                 auto r = representationOf(phi);
-                auto inp =
-                    PirCopy::Cast(i) ? load(i->arg(0).val(), r) : load(i, r);
-                variables.at(phi).update(builder, inp);
+                auto inp = PirCopy::Cast(i) ? i->arg(0).val() : i;
+                auto inpv = load(inp, r);
+
+                // If we box this phi input we need to make sure that we are not
+                // missing an ensure named, because the original value would
+                // have gotten an ensureNamed if it weren't unboxed.
+                if (representationOf(inp) != t::SEXP && r == t::SEXP) {
+                    if (auto ii = Instruction::Cast(inp->followCasts())) {
+                        sexpResult = inpv;
+                        origin = ii;
+                    }
+                }
+                variables.at(phi).update(builder, inpv);
             }
 
-            if (variables.count(i) && variables.at(i).initialized &&
-                representationOf(i) == t::SEXP) {
-                if (i->minReferenceCount() < 2 && needsSetShared.count(i))
-                    ensureShared(loadSxp(i));
-                else if (i->minReferenceCount() < 1 &&
+            if (sexpResult ||
+                (representationOf(origin) == t::SEXP &&
+                 variables.count(origin) && variables.at(origin).initialized)) {
+                if (!sexpResult)
+                    sexpResult = load(origin);
+                if (origin->minReferenceCount() < 2 &&
+                    needsSetShared.count(origin))
+                    ensureShared(sexpResult);
+                else if (origin->minReferenceCount() < 1 &&
                          (refcountAnalysisOverflow ||
-                          needsEnsureNamed.count(i)))
-                    ensureNamed(loadSxp(i));
+                          needsEnsureNamed.count(origin)))
+                    ensureNamed(sexpResult);
             }
 
             numTemps = 0;

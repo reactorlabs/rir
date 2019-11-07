@@ -24,10 +24,12 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t, Value* env) {
 }
 
 void InsertCast::operator()() {
-    Visitor::run(start, [&](BB* bb) { apply(bb); });
+    AvailableCheckpoints checkpoint(
+        nullptr, code, StreamLogger(DebugOptions(0)).begin(nullptr));
+    Visitor::run(code->entry, [&](BB* bb) { apply(bb, checkpoint); });
 }
 
-void InsertCast::apply(BB* bb) {
+void InsertCast::apply(BB* bb, AvailableCheckpoints& cp) {
     auto ip = bb->begin();
     while (ip != bb->end()) {
         Instruction* instr = *ip;
@@ -42,9 +44,17 @@ void InsertCast::apply(BB* bb) {
                     bb->print(std::cerr, true);
                     assert(false);
                 }
-                c->bb_ = bb;
+                auto argument = Instruction::Cast(arg.val());
+                if (argument && !instr->bb()->isDeopt() && Force::Cast(c) &&
+                    !cp.next(instr) && cp.next(argument)) {
+                    auto iterator = argument->bb()->insert(
+                        argument->bb()->atPosition(argument) + 1, c);
+                    if (argument->bb() == bb)
+                        ip = iterator;
+                } else {
+                    ip = bb->insert(ip, c) + 1;
+                }
                 arg.val() = c;
-                ip = bb->insert(ip, c) + 1;
             }
         });
         ip++;
