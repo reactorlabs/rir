@@ -38,35 +38,36 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                 if (!LdConst::Cast(arg) &&
                     // leave this to the promise inliner
                     !MkArg::Cast(arg) && !Force::Cast(arg)) {
-                    speculateOn = i;
-                }
-                if (speculateOn) {
-                    feedback = i->typeFeedback;
-                    typecheckPos = i->bb();
 
+                    bool localLoad =
+                        LdVar::Cast(arg) && !Env::isStaticEnv(i->env());
+
+                    feedback = i->typeFeedback;
                     // If this force was observed to receive evaluated
                     // promises, better speculate on the input already.
                     switch (force->observed) {
                     case Force::ArgumentKind::value:
                         speculateOn = arg;
                         guardPos = checkpoint.at(arg);
+                        typecheckPos = arg->bb();
                         break;
                     case Force::ArgumentKind::evaluatedPromise:
-                        speculateOn = arg;
-                        guardPos = checkpoint.at(arg);
-                        feedback.type = feedback.type.orPromiseWrapped();
+                        if (!localLoad) {
+                            speculateOn = arg;
+                            guardPos = checkpoint.at(i);
+                            typecheckPos = i->bb();
+                            feedback.type = feedback.type.orPromiseWrapped();
+                        }
                         break;
                     case Force::ArgumentKind::promise:
-                    case Force::ArgumentKind::unknown:
-                        if (auto ld = LdVar::Cast(arg)) {
-                            if (!Env::isStaticEnv(ld->env())) {
-                                speculateOn = nullptr;
-                                break;
-                            }
+                        if (!localLoad) {
+                            speculateOn = i;
+                            guardPos = checkpoint.next(i, i, dom);
+                            if (guardPos)
+                                typecheckPos = guardPos->nextBB();
                         }
-                        guardPos = checkpoint.next(i, speculateOn, dom);
-                        if (guardPos)
-                            typecheckPos = guardPos->nextBB();
+                        break;
+                    case Force::ArgumentKind::unknown:
                         break;
                     }
                 }

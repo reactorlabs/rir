@@ -756,7 +756,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     if (!isDeoptimizing() && !fun->unoptimizable &&
         fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
         ((fun->invocationCount() %
-          ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP)) == 0)) {
+          (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
