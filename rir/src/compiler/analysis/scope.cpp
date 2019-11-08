@@ -254,38 +254,49 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 lookup(arg->followCastsAndForce(), doLookup);
         }
 
-        if (!handled && LdArg::Cast(arg) &&
-            closure->assumptions().includes(Assumption::NoReflectiveArgument)) {
-            // Forcing an argument can only affect local envs by reflection.
-            // Otherwise only leaked envs can be affected
-            effect.max(state.envs.taintLeaked());
-            updateReturnValue(AbstractPirValue::tainted());
-            handled = true;
-        }
+        // Forcing an argument can only affect local envs by reflection.
+        // Hence, only leaked envs can be affected
+        auto ld = LdArg::Cast(arg->cFollowCastsAndForce());
+        auto env = MkEnv::Cast(force->env());
+        if (!handled) {
+            if (ld) {
+                if (closure->assumptions().includes(
+                        Assumption::NoReflectiveArgument)) {
+                    effect.max(state.envs.taintLeaked());
+                    updateReturnValue(AbstractPirValue::tainted());
+                    handled = true;
+                } else {
+                    if (depth < MAX_DEPTH && force->strict) {
+                        if (ld->id < args.size())
+                            arg = args[ld->id];
 
-        if (!handled && depth < MAX_DEPTH && force->strict) {
-            if (auto ld = LdArg::Cast(arg)) {
-                if (ld->id < args.size())
-                    arg = args[ld->id];
-            }
+                        // We are certain that we do force something here. Let's
+                        // peek through the argument and see if we find a
+                        // promise. If so, we will analyze it.
+                        if (auto mkarg =
+                                MkArg::Cast(arg->followCastsAndForce())) {
+                            auto stateCopy = state;
+                            stateCopy.mayUseReflection = false;
+                            ScopeAnalysis prom(closure, mkarg->prom(),
+                                               mkarg->env(), stateCopy,
+                                               globalState, depth + 1, log);
+                            prom();
 
-            // We are certain that we do force something here. Let's peek
-            // through the argument and see if we find a promise. If so, we
-            // will analyze it.
-            if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
-                auto stateCopy = state;
-                stateCopy.mayUseReflection = false;
-                ScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(),
-                                   stateCopy, globalState, depth + 1, log);
-                prom();
+                            auto res = prom.result();
 
-                auto res = prom.result();
-
-                state.mergeCall(code, res);
-                updateReturnValue(res.returnValue);
+                            state.mergeCall(code, res);
+                            updateReturnValue(res.returnValue);
+                            handled = true;
+                            effect.update();
+                            effect.keepSnapshot = true;
+                        }
+                    }
+                }
+            } else if (env && env->stub) {
+                // Forcing using a stub should deopt if local vars are modified.
+                effect.max(state.envs.taintLeaked());
+                updateReturnValue(AbstractPirValue::tainted());
                 handled = true;
-                effect.update();
-                effect.keepSnapshot = true;
             }
         }
         if (!handled) {
