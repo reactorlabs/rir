@@ -54,8 +54,8 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     case Force::ArgumentKind::evaluatedPromise:
                         if (!localLoad) {
                             speculateOn = arg;
-                            guardPos = checkpoint.at(i);
-                            typecheckPos = i->bb();
+                            guardPos = checkpoint.at(arg);
+                            typecheckPos = arg->bb();
                             feedback.type = feedback.type.orPromiseWrapped();
                         }
                         break;
