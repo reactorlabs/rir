@@ -44,6 +44,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     bool successful = true;
                     i->eachArg([&](Value* arg) {
                         if (arg == i->env() || !arg->type.maybeObj()) {
+                            successful = false;
                             return;
                         }
                         auto argi = Instruction::Cast(arg);

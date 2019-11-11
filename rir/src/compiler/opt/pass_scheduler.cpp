@@ -57,6 +57,12 @@ PassScheduler::PassScheduler() {
         add<LoadElision>();
     };
 
+    auto addDefaultspecPhaseOpt = [&]() {
+        add<TypeSpeculation>();
+        add<ElideEnv>();
+        add<ElideEnvSpec>();
+    };
+
     add<PhaseMarker>("Initial");
 
     addDefaultPrePhaseOpt();
@@ -72,10 +78,9 @@ PassScheduler::PassScheduler() {
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
     addDefaultPrePhaseOpt();
-    add<ElideEnvSpec>();
+    addDefaultspecPhaseOpt();
     addDefaultOpt();
-    add<TypeSpeculation>();
-    add<ElideEnvSpec>();
+    addDefaultspecPhaseOpt();
     addDefaultOpt();
     addDefaultPostPhaseOpt();
 
