@@ -82,8 +82,7 @@ class TheInliner {
                     staticEnv = inlineeCls->closureEnv();
                     if (inlineeCls->closureEnv() == Env::notClosed() &&
                         inlinee != version) {
-                        if (Query::noEnv(inlinee)) {
-                            staticEnv = Env::elided();
+                        if (Query::noParentEnv(inlinee)) {
                         } else if (auto mk =
                                        MkFunCls::Cast(call->runtimeClosure())) {
                             staticEnv = mk->lexicalEnv();

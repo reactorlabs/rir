@@ -17,6 +17,13 @@ bool Query::noEnv(Code* c) {
                           [](Instruction* i) { return !MkEnv::Cast(i); });
 }
 
+bool Query::noParentEnv(Code* c) {
+    return Visitor::check(c->entry,
+                          [](Instruction* i) {
+          return !i->hasEnv() || i->env() != Env::notClosed();
+    });
+}
+
 bool Query::noEnvSpec(Code* c) {
     return Visitor::check(c->entry, [](Instruction* i) {
         if (MkEnv::Cast(i) && !MkEnv::Cast(i)->stub) {
