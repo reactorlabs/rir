@@ -361,16 +361,36 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                                   ip);
                     }
                 } else if (builtinId == bodyBlt && nargs == 1) {
-                    if (auto mk = MkFunCls::Cast(i->arg(0).val())) {
+                    auto in = i->arg(0).val()->followCastsAndForce();
+                    if (auto mk = MkFunCls::Cast(in)) {
                         i->replaceUsesAndSwapWith(
                             new LdConst(mk->originalBody->container()), ip);
-                    } else if (auto mk = MkCls::Cast(i->arg(0).val())) {
+                    } else if (auto mk = MkCls::Cast(in)) {
                         i->replaceUsesWith(mk->code());
+                    } else if (auto mk = MkArg::Cast(in)) {
+                        // This can happen after inlining, since we use
+                        // "bodyCode" in guards without forcing the promise.
+                        if (auto cast = CastType::Cast(i->arg(0).val())) {
+                            if (cast != in &&
+                                cast->kind == CastType::Downcast &&
+                                cast->type.isA(RType::closure)) {
+                                if (auto cast2 =
+                                        CastType::Cast(cast->arg(0).val())) {
+                                    if (cast2 != in &&
+                                        cast2->kind == CastType::Upcast) {
+                                        cast->replaceUsesAndSwapWith(
+                                            new Force(cast2, mk->env()),
+                                            cast->bb()->atPosition(cast));
+                                    }
+                                }
+                            }
+                        }
                     }
                 } else if (builtinId == envBlt && nargs == 1) {
-                    if (auto mk = MkFunCls::Cast(i->arg(0).val())) {
+                    auto in = i->arg(0).val()->followCastsAndForce();
+                    if (auto mk = MkFunCls::Cast(in)) {
                         i->replaceUsesWith(mk->lexicalEnv());
-                    } else if (auto mk = MkCls::Cast(i->arg(0).val())) {
+                    } else if (auto mk = MkCls::Cast(in)) {
                         i->replaceUsesWith(mk->lexicalEnv());
                     }
                 }

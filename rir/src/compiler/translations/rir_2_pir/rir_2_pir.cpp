@@ -575,10 +575,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     b->u.primsxp.offset = idx;
                     R_PreserveObject(b);
                 }
-                auto body = new CallSafeBuiltin(b, {guardedCallee}, 0);
+
+                // The "bodyCode" builtin will return R_NilValue for promises.
+                // It is therefore safe (ie. conservative with respect to the
+                // guard) to avoid forcing the result by casting it to a value.
+                auto casted = new CastType(guardedCallee, CastType::Downcast,
+                                           PirType::any(), RType::closure);
+                pos = bb->insert(pos, casted);
+                pos++;
+
+                auto body = new CallSafeBuiltin(b, {casted}, 0);
                 body->effects.reset();
                 pos = bb->insert(pos, body);
                 pos++;
+
                 guarded = body;
             }
 
@@ -589,7 +599,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             assumption = new Assume(t, cp);
             assumption->feedbackOrigin.push_back(
                 {srcCode, std::get<Opcode*>(callTargetFeedback.at(callee))});
-            bb->insert(pos, assumption);
+            pos = bb->insert(pos, assumption);
+            pos++;
+
+            // The guard also ensures that this closure is not a promise thus we
+            // can force for free.
+            if (guardedCallee->type.maybePromiseWrapped()) {
+                auto forced = new Force(guardedCallee, Env::elided());
+                forced->effects.reset();
+                forced->effects.set(Effect::DependsOnAssume);
+                pos = bb->insert(pos, forced);
+                pos++;
+
+                guardedCallee = forced;
+            }
         }
 
         if (monomorphicBuiltin) {
