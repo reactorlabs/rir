@@ -30,6 +30,7 @@ struct ALoad {
     PirType type;
     Value* env;
     SEXP name;
+
     bool operator==(const ALoad& other) const {
         return origin == other.origin && env == other.env && name == other.name;
     }
@@ -67,8 +68,15 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
             state.available.insert(ld);
             res.update();
         } else if (i->changesEnv()) {
-            state.available.clear();
-            res.taint();
+            if (auto store = StVar::Cast(i)) {
+                for (auto& load : state.available) {
+                    if (load.name == store->varName)
+                        state.available.erase(state.available.find(load));
+                }
+            } else {
+                state.available.clear();
+                res.taint();
+            }
         }
         return res;
     }
