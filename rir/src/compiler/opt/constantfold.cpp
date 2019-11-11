@@ -7,6 +7,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "pass_definitions.h"
+#include "runtime/DispatchTable.h"
 
 #include <unordered_set>
 
@@ -266,6 +267,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 static int isfunctionBlt = findBuiltin("is.function");
                 static int isobjectBlt = findBuiltin("is.object");
                 static int isCharacterBlt = findBuiltin("is.character");
+                static int bodyBlt = findBuiltin("bodyCode");
+                static int envBlt = findBuiltin("environment");
                 assert(function->assumptions().includes(
                     Assumption::NotTooManyArguments));
                 // PIR functions are always compiled for a particular number
@@ -356,6 +359,19 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     if (!t.maybeObj()) {
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
+                    }
+                } else if (builtinId == bodyBlt && nargs == 1) {
+                    if (auto mk = MkFunCls::Cast(i->arg(0).val())) {
+                        i->replaceUsesAndSwapWith(
+                            new LdConst(mk->originalBody->container()), ip);
+                    } else if (auto mk = MkCls::Cast(i->arg(0).val())) {
+                        i->replaceUsesWith(mk->code());
+                    }
+                } else if (builtinId == envBlt && nargs == 1) {
+                    if (auto mk = MkFunCls::Cast(i->arg(0).val())) {
+                        i->replaceUsesWith(mk->lexicalEnv());
+                    } else if (auto mk = MkCls::Cast(i->arg(0).val())) {
+                        i->replaceUsesWith(mk->lexicalEnv());
                     }
                 }
             }

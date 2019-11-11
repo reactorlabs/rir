@@ -988,6 +988,7 @@ class FLIE(MkCls, 4, Effects::None()) {
               RType::closure, {{PirType::list(), RType::code, PirType::any()}},
               {{fml, code, src}}, lexicalEnv) {}
 
+    Value* code() const { return arg(1).val(); }
     Value* lexicalEnv() const { return env(); }
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
@@ -1969,26 +1970,26 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* tryGetCls() const override final { return cls(); }
 
     StaticCall(Value * callerEnv, Closure * cls, Assumptions givenAssumptions,
-               const std::vector<Value*>& args, FrameState* fs,
-               unsigned srcIdx);
+               const std::vector<Value*>& args, FrameState* fs, unsigned srcIdx,
+               Value* runtimeClosure = Tombstone::closure());
 
-    size_t nCallArgs() const override { return nargs() - 2; };
+    size_t nCallArgs() const override { return nargs() - 3; };
     void eachCallArg(const Instruction::ArgumentValueIterator& it)
         const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 1).val());
+            it(arg(i + 2).val());
     }
     void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 1));
+            it(arg(i + 2));
     }
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
-        return arg(pos + 1);
+        return arg(pos + 2);
     }
     InstrArg& callArg(size_t pos) override final {
         assert(pos < nCallArgs());
-        return arg(pos + 1);
+        return arg(pos + 2);
     }
 
     PirType inferType(const GetType& getType) const override final;
@@ -1996,6 +1997,8 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
 
     FrameState* frameState() const { return FrameState::Cast(arg(0).val()); }
     void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
+
+    Value* runtimeClosure() const { return arg(1).val(); }
 
     void printArgs(std::ostream & out, bool tty) const override;
     Value* callerEnv() { return env(); }

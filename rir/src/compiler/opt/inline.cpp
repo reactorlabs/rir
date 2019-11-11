@@ -1,3 +1,4 @@
+#include "../analysis/query.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
@@ -78,12 +79,39 @@ class TheInliner {
                         continue;
                     // if we don't know the closure of the inlinee, we can't
                     // inline.
+                    staticEnv = inlineeCls->closureEnv();
                     if (inlineeCls->closureEnv() == Env::notClosed() &&
-                        inlinee != version)
-                        continue;
+                        inlinee != version) {
+                        if (Query::noEnv(inlinee)) {
+                            staticEnv = Env::elided();
+                        } else if (auto mk =
+                                       MkFunCls::Cast(call->runtimeClosure())) {
+                            staticEnv = mk->lexicalEnv();
+                        } else if (auto mk =
+                                       MkCls::Cast(call->runtimeClosure())) {
+                            staticEnv = mk->lexicalEnv();
+                        } else if (call->runtimeClosure() !=
+                                   Tombstone::closure()) {
+                            static SEXP b = nullptr;
+                            if (!b) {
+                                auto idx = findBuiltin("environment");
+                                b = Rf_allocSExp(BUILTINSXP);
+                                b->u.primsxp.offset = idx;
+                                R_PreserveObject(b);
+                            }
+                            auto e = new CallSafeBuiltin(
+                                b, {call->runtimeClosure()}, 0);
+                            e->type = RType::env;
+                            e->effects.reset();
+                            it = bb->insert(it, e);
+                            it++;
+                            staticEnv = e;
+                        } else {
+                            continue;
+                        }
+                    }
                     call->eachCallArg(
                         [&](Value* v) { assert(!ExpandDots::Cast(v)); });
-                    staticEnv = inlineeCls->closureEnv();
                     callerFrameState = call->frameState();
                 } else {
                     continue;
@@ -336,10 +364,16 @@ class TheInliner {
                         if (auto call = Call::Cast(theCall)) {
                             op = call->cls();
                         } else if (auto call = StaticCall::Cast(theCall)) {
-                            auto ld = new LdConst(call->cls()->rirClosure());
-                            copy->insert(copy->begin(), ld);
-                            op = ld;
-                            insertPos++;
+                            if (call->runtimeClosure() !=
+                                Tombstone::closure()) {
+                                op = call->runtimeClosure();
+                            } else {
+                                auto ld =
+                                    new LdConst(call->cls()->rirClosure());
+                                copy->insert(copy->begin(), ld);
+                                op = ld;
+                                insertPos++;
+                            }
                         }
                         assert(op);
                         auto ast = new LdConst(rir::Pool::get(theCall->srcIdx));

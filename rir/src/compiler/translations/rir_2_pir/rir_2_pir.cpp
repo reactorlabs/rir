@@ -448,6 +448,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         size_t taken = -1;
         SEXP monomorphic = nullptr;
+        SEXP monomorphicPolyenv = nullptr;
         auto callee = at(nargs);
         // See if the call feedback suggests a monomorphic target
         // TODO: Deopts in promises are not supported by the promise inliner. So
@@ -456,8 +457,27 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (feedbackIt != callTargetFeedback.end()) {
             auto& feedback = std::get<ObservedCallees>(feedbackIt->second);
             taken = feedback.taken;
-            if (taken > 1 && feedback.numTargets == 1)
-                monomorphic = feedback.getTarget(srcCode, 0);
+            if (taken > 1) {
+                if (feedback.numTargets == 1) {
+                    monomorphic = feedback.getTarget(srcCode, 0);
+                } else if (feedback.numTargets > 1) {
+                    bool success = true;
+                    SEXP e = nullptr;
+                    for (size_t i = 0; i < feedback.numTargets; ++i) {
+                        SEXP b = feedback.getTarget(srcCode, i);
+                        if (TYPEOF(b) == CLOSXP) {
+                            if (!e)
+                                e = b;
+                            else if (BODY(e) != BODY(b))
+                                success = false;
+                        } else {
+                            success = false;
+                        }
+                    }
+                    if (success)
+                        monomorphicPolyenv = e;
+                }
+            }
         }
 
         bool monomorphicClosure =
@@ -468,13 +488,24 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                   // with names
                                   bc.bc == Opcode::call_;
 
+        bool monomorphicInnerFunction =
+            monomorphicPolyenv && isValidClosureSEXP(monomorphicPolyenv);
+
+        if (monomorphicInnerFunction)
+            monomorphic = monomorphicPolyenv;
+
         if (monomorphicBuiltin) {
             int arity = getBuiltinArity(monomorphic);
             if (arity != -1 && arity != nargs)
                 monomorphicBuiltin = false;
         }
-        if (monomorphicClosure) {
-            auto bl = DispatchTable::unpack(BODY(monomorphic))->baseline();
+
+        Function* target = nullptr;
+        if (monomorphicClosure || monomorphicInnerFunction) {
+            target = DispatchTable::unpack(BODY(monomorphic))->baseline();
+        }
+
+        if (target) {
             // TODO: this is a complete hack, but right now we don't have a
             // better solution. What happens if we statically reorder
             // arguments (and create dotdotdot lists) is that we loose the
@@ -485,7 +516,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // such that we can restore it in createLegaxyArgsList in the
             // interpreter. At the moment however this will just result in
             // an assert.
-            if (Query::needsPromargs(bl))
+            if (Query::needsPromargs(target))
                 monomorphicClosure = false;
         }
 
@@ -495,13 +526,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 ldfun->hint =
                     monomorphic ? monomorphic : symbol::ambiguousCallTarget;
             }
-            monomorphicBuiltin = monomorphicClosure = false;
+            monomorphicBuiltin = monomorphicClosure = monomorphicInnerFunction =
+                false;
             monomorphic = nullptr;
         }
 
         Assume* assumption = nullptr;
+        Value* guardedCallee = callee;
         // Insert a guard if we want to speculate
-        if (monomorphicBuiltin || monomorphicClosure) {
+        if (monomorphicBuiltin || monomorphicClosure ||
+            monomorphicInnerFunction) {
             // We use ldvar instead of ldfun for the guard. The reason is that
             // ldfun can force promises, which is a pain for our optimizer to
             // deal with. If we use a ldvar here, the actual ldfun will be
@@ -519,19 +553,36 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto bb = cp->nextBB();
             auto pos = bb->begin();
 
-            auto expected = new LdConst(monomorphic);
+            auto expected = monomorphicInnerFunction
+                                ? new LdConst(BODY(monomorphic))
+                                : new LdConst(monomorphic);
             pos = bb->insert(pos, expected);
             pos++;
 
-            Value* given = callee;
             if (ldfun && (ldfun->varName != symbol::c || !compiler.seenC)) {
                 auto ldvar = new LdVar(ldfun->varName, ldfun->env());
                 pos = bb->insert(pos, ldvar);
                 pos++;
-                given = ldvar;
+                guardedCallee = ldvar;
             }
 
-            auto t = new Identical(given, expected);
+            Value* guarded = guardedCallee;
+            if (monomorphicInnerFunction) {
+                static SEXP b = nullptr;
+                if (!b) {
+                    auto idx = findBuiltin("bodyCode");
+                    b = Rf_allocSExp(BUILTINSXP);
+                    b->u.primsxp.offset = idx;
+                    R_PreserveObject(b);
+                }
+                auto body = new CallSafeBuiltin(b, {guardedCallee}, 0);
+                body->effects.reset();
+                pos = bb->insert(pos, body);
+                pos++;
+                guarded = body;
+            }
+
+            auto t = new Identical(guarded, expected);
             pos = bb->insert(pos, t);
             pos++;
 
@@ -570,7 +621,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // Static argument name matching
         // Currently we only match callsites with the correct number of
         // arguments passed. Thus, we set those given assumptions below.
-        if (monomorphicClosure) {
+        if (monomorphicClosure || monomorphicInnerFunction) {
             auto formals = RList(FORMALS(monomorphic));
             size_t needed = 0;
             bool hasDotsFormals = false;
@@ -622,7 +673,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         };
 
-        if (monomorphicClosure) {
+        if (monomorphicClosure || monomorphicInnerFunction) {
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
@@ -647,16 +698,24 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 }
             }
 
-            compiler.compileClosure(
-                monomorphic, name, given,
-                [&](ClosureVersion* f) {
-                    popn(toPop);
-                    auto fs =
-                        insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(insert.env, f->owner(), given,
-                                               matchedArgs, fs, ast)));
-                },
-                insertGenericCall);
+            auto apply = [&](ClosureVersion* f) {
+                popn(toPop);
+                auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+                push(insert(new StaticCall(
+                    insert.env, f->owner(), given, matchedArgs, fs, ast,
+                    monomorphicClosure ? Tombstone::closure()
+                                       : guardedCallee)));
+            };
+
+            if (monomorphicClosure) {
+                compiler.compileClosure(monomorphic, name, given, apply,
+                                        insertGenericCall);
+            } else {
+                compiler.compileFunction(
+                    target, name, FORMALS(monomorphic),
+                    Rf_getAttrib(monomorphic, symbol::srcref), given, apply,
+                    insertGenericCall);
+            }
         } else if (monomorphicBuiltin) {
             popn(toPop);
             push(insert(BuiltinCallFactory::New(env, monomorphic, args, ast)));

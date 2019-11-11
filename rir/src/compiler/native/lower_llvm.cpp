@@ -2411,6 +2411,27 @@ bool LowerFunctionLLVM::tryCompile() {
                             done = false;
                         }
                         break;
+                    case 497: { // "bodyCode"
+                        assert(irep == Representation::Sexp && orep == irep);
+                        llvm::Value* res = nullptr;
+                        if (i->arg(0).val()->type.isA(RType::closure)) {
+                            res = cdr(a);
+                        } else {
+                            res = builder.CreateSelect(
+                                builder.CreateICmpEQ(c(CLOSXP), sexptype(a)),
+                                cdr(a), constant(R_NilValue, t::SEXP));
+                        }
+                        setVal(i, res);
+                        break;
+                    }
+                    case 498: // "environment"
+                        if (!i->arg(0).val()->type.isA(RType::closure)) {
+                            success = false;
+                            break;
+                        }
+                        assert(irep == Representation::Sexp && orep == irep);
+                        setVal(i, tag(a));
+                        break;
                     default:
                         done = false;
                     };
@@ -2620,6 +2641,19 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto bestTarget = calli->tryOptimisticDispatch();
                 std::vector<Value*> args;
                 calli->eachCallArg([&](Value* v) { args.push_back(v); });
+                Assumptions asmpt = calli->inferAvailableAssumptions();
+
+                if (!target->owner()->hasOriginClosure()) {
+                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                               return call(NativeBuiltins::call,
+                                           {paramCode(), c(calli->srcIdx),
+                                            loadSxp(calli->runtimeClosure()),
+                                            loadSxp(calli->env()),
+                                            c(calli->nCallArgs()),
+                                            c(asmpt.toI())});
+                           }));
+                    break;
+                }
 
                 if (target == bestTarget) {
                     auto callee = target->owner()->rirClosure();
@@ -2656,7 +2690,6 @@ bool LowerFunctionLLVM::tryCompile() {
                             break;
                         }
 
-                        Assumptions asmpt = calli->inferAvailableAssumptions();
                         assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));
                         auto res = withCallFrame(args, [&]() {
@@ -2676,7 +2709,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                 }
 
-                Assumptions asmpt = calli->inferAvailableAssumptions();
                 assert(asmpt.includes(Assumption::StaticallyArgmatched));
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(
