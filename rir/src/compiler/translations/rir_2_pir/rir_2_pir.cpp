@@ -670,6 +670,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
             if (!correctOrder || needed < matchedArgs.size()) {
                 monomorphicClosure = false;
+                monomorphicInnerFunction = false;
                 assert(assumption);
                 // Kill unnecessary speculation
                 assumption->arg<0>().val() = True::instance();
