@@ -413,7 +413,7 @@ simplifiedBounceInit <- function () {
         random2 = nextRandom()
         random3 <- nextRandom()
         random4 <- nextRandom()
-        balls[[i]] = c(random1 %% 500, random2 %% 500, (random3 %% 300) - 150, , (random4 %% 300) - 150)
+        balls[[i]] = c(random1 %% 500, random2 %% 500, (random3 %% 300) - 150, (random3 %% 300) - 150)
     }
    return(balls[[1]])
 }
