@@ -125,6 +125,29 @@ NativeBuiltin NativeBuiltins::materializeEnvironment = {
     (void*)&materializeEnvironmentImpl,
 };
 
+SEXP ldvarForUpdateImpl(SEXP sym, SEXP env) {
+    R_varloc_t loc = R_findVarLocInFrame(env, sym);
+    bool isLocal = !R_VARLOC_IS_NULL(loc);
+    SEXP res = nullptr;
+    if (isLocal && CAR(loc.cell) != R_UnboundValue) {
+        res = CAR(loc.cell);
+    } else {
+        res = Rf_findVar(sym, env);
+    }
+    if (res != R_NilValue) {
+        if (isLocal)
+            ENSURE_NAMED(res);
+        else if (NAMED(res) < 2)
+            SET_NAMED(res, 2);
+    }
+    return res;
+};
+
+NativeBuiltin NativeBuiltins::ldvarForUpdate = {
+    "ldvarForUpdate",
+    (void*)&ldvarForUpdateImpl,
+};
+
 SEXP ldvarImpl(SEXP a, SEXP b) {
     auto res = Rf_findVar(a, b);
     // std::cout << CHAR(PRINTNAME(a)) << "=";

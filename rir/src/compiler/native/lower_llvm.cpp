@@ -114,6 +114,7 @@ class LowerFunctionLLVM {
     const std::unordered_map<Promise*, unsigned>& promMap;
     const std::unordered_set<Instruction*>& needsEnsureNamed;
     const std::unordered_set<Instruction*>& needsSetShared;
+    const std::unordered_set<Instruction*>& needsLdVarForUpdate;
     bool refcountAnalysisOverflow;
     IRBuilder<> builder;
     MDBuilder MDB;
@@ -142,13 +143,16 @@ class LowerFunctionLLVM {
   public:
     llvm::Function* fun;
 
-    LowerFunctionLLVM(const std::string& name, ClosureVersion* cls, Code* code,
-                      const std::unordered_map<Promise*, unsigned>& promMap,
-                      const std::unordered_set<Instruction*>& needsEnsureNamed,
-                      const std::unordered_set<Instruction*>& needsSetShared,
-                      bool refcountAnalysisOverflow)
+    LowerFunctionLLVM(
+        const std::string& name, ClosureVersion* cls, Code* code,
+        const std::unordered_map<Promise*, unsigned>& promMap,
+        const std::unordered_set<Instruction*>& needsEnsureNamed,
+        const std::unordered_set<Instruction*>& needsSetShared,
+        const std::unordered_set<Instruction*>& needsLdVarForUpdate,
+        bool refcountAnalysisOverflow)
         : cls(cls), code(code), promMap(promMap),
           needsEnsureNamed(needsEnsureNamed), needsSetShared(needsSetShared),
+          needsLdVarForUpdate(needsLdVarForUpdate),
           refcountAnalysisOverflow(refcountAnalysisOverflow), builder(C),
           MDB(C), cfg(code), liveness(code->nextBBId, cfg), numLocals(0),
           numTemps(0) {
@@ -3631,12 +3635,17 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto res0 = call(NativeBuiltins::ldvarCacheMiss,
                                      {constant(varName, t::SEXP),
                                       loadSxp(i->env()), cachePtr});
+                    if (needsLdVarForUpdate.count(i))
+                        ensureShared(res0);
                     builder.CreateStore(res0, res);
                     builder.CreateBr(done);
                     builder.SetInsertPoint(done);
                     res = builder.CreateLoad(res);
                 } else {
-                    res = call(NativeBuiltins::ldvar,
+                    auto setter = needsLdVarForUpdate.count(i)
+                                      ? NativeBuiltins::ldvarForUpdate
+                                      : NativeBuiltins::ldvar;
+                    res = call(setter,
                                {constant(varName, t::SEXP), loadSxp(i->env())});
                 }
                 res->setName(CHAR(PRINTNAME(varName)));
@@ -4412,12 +4421,14 @@ void* LowerLLVM::tryCompile(
     const std::unordered_map<Promise*, unsigned>& m,
     const std::unordered_set<Instruction*>& needsEnsureNamed,
     const std::unordered_set<Instruction*>& needsSetShared,
+    const std::unordered_set<Instruction*>& needsLdVarForUpdate,
     bool refcountAnalysisOverflow) {
 
     JitLLVM::createModule();
     auto mangledName = JitLLVM::mangle(cls->name());
     LowerFunctionLLVM funCompiler(mangledName, cls, code, m, needsEnsureNamed,
-                                  needsSetShared, refcountAnalysisOverflow);
+                                  needsSetShared, needsLdVarForUpdate,
+                                  refcountAnalysisOverflow);
     if (!funCompiler.tryCompile())
         return nullptr;
 

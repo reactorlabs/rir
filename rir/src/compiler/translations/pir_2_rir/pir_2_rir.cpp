@@ -1197,9 +1197,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     auto res = ctx.finalizeCode(localsCnt, cache.size());
     if (PIR_NATIVE_BACKEND) {
         LowerLLVM native;
-        if (auto n =
-                native.tryCompile(cls, code, promMap, needsEnsureNamed,
-                                  needsSetShared, refcountAnalysisOverflow)) {
+        if (auto n = native.tryCompile(cls, code, promMap, needsEnsureNamed,
+                                       needsSetShared, needsLdVarForUpdate,
+                                       refcountAnalysisOverflow)) {
             res->nativeCode = (NativeCode)n;
         }
     }
