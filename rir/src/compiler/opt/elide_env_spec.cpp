@@ -43,10 +43,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 if (cp && envOnlyForObj(i) && i->nonObjectArgs()) {
                     bool successful = true;
                     i->eachArg([&](Value* arg) {
-                        if (arg == i->env() || !arg->type.maybeObj()) {
-                            successful = false;
+                        if (arg == i->env() || !arg->type.maybeObj())
                             return;
-                        }
                         auto argi = Instruction::Cast(arg);
                         assert(!arg->type.maybePromiseWrapped());
                         Instruction::TypeFeedback seen;
