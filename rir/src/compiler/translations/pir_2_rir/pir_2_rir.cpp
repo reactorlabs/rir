@@ -942,38 +942,45 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
                 call->eachArg([](Value* v) { assert(!ExpandDots::Cast(v)); });
-                SEXP originalClosure = call->cls()->rirClosure();
-                auto dt = DispatchTable::unpack(BODY(originalClosure));
-                if (auto trg = call->tryOptimisticDispatch()) {
-                    // Avoid recursivly compiling the same closure
-                    auto fun = compiler.alreadyCompiled(trg);
-                    SEXP funCont = nullptr;
+                if (call->cls()->hasOriginClosure()) {
+                    SEXP originalClosure = call->cls()->rirClosure();
+                    auto dt = DispatchTable::unpack(BODY(originalClosure));
+                    if (auto trg = call->tryOptimisticDispatch()) {
+                        // Avoid recursivly compiling the same closure
+                        auto fun = compiler.alreadyCompiled(trg);
+                        SEXP funCont = nullptr;
 
-                    if (fun) {
-                        funCont = fun->container();
-                    } else if (!compiler.isCompiling(trg)) {
-                        fun = compiler.compile(trg, dryRun);
-                        funCont = fun->container();
-                        Protect p(funCont);
-                        assert(originalClosure &&
-                               "Cannot compile synthetic closure");
-                        dt->insert(fun);
+                        if (fun) {
+                            funCont = fun->container();
+                        } else if (!compiler.isCompiling(trg)) {
+                            fun = compiler.compile(trg, dryRun);
+                            funCont = fun->container();
+                            Protect p(funCont);
+                            assert(originalClosure &&
+                                   "Cannot compile synthetic closure");
+                            dt->insert(fun);
+                        }
+                        auto bc = BC::staticCall(
+                            call->nCallArgs(), Pool::get(call->srcIdx),
+                            originalClosure, funCont,
+                            call->inferAvailableAssumptions());
+                        auto hint =
+                            bc.immediate.staticCallFixedArgs.versionHint;
+                        cb.add(std::move(bc));
+                        if (!funCont)
+                            compiler.needsPatching(trg, hint);
+                    } else {
+                        // Something went wrong with dispatching, let's put the
+                        // baseline there
+                        cb.add(BC::staticCall(
+                            call->nCallArgs(), Pool::get(call->srcIdx),
+                            originalClosure, dt->baseline()->container(),
+                            call->inferAvailableAssumptions()));
                     }
-                    auto bc = BC::staticCall(call->nCallArgs(),
-                                             Pool::get(call->srcIdx),
-                                             originalClosure, funCont,
-                                             call->inferAvailableAssumptions());
-                    auto hint = bc.immediate.staticCallFixedArgs.versionHint;
-                    cb.add(std::move(bc));
-                    if (!funCont)
-                        compiler.needsPatching(trg, hint);
                 } else {
-                    // Something went wrong with dispatching, let's put the
-                    // baseline there
-                    cb.add(BC::staticCall(
-                        call->nCallArgs(), Pool::get(call->srcIdx),
-                        originalClosure, dt->baseline()->container(),
-                        call->inferAvailableAssumptions()));
+                    assert(call->runtimeClosure());
+                    cb.add(BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
+                                    call->inferAvailableAssumptions()));
                 }
                 break;
             }

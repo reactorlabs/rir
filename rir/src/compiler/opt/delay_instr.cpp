@@ -10,6 +10,8 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const {
 
     auto isTarget = [](Instruction* j) {
+        if (CallSafeBuiltin::Cast(j))
+            return !j->hasObservableEffects();
         return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
                FrameState::Cast(j) || CastType::Cast(j) || MkEnv::Cast(j);
     };

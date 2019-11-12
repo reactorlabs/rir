@@ -280,6 +280,7 @@ NativeBuiltin NativeBuiltins::externalsxpSetEntry = {
 };
 
 void defvarImpl(SEXP var, SEXP value, SEXP env) {
+    assert(TYPEOF(env) == ENVSXP);
     rirSetVarWrapper(var, value, ENCLOS(env));
 };
 

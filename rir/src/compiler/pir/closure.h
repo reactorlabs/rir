@@ -47,6 +47,7 @@ class Closure {
         assert(origin_ && "Inner function does not have a source rir closure");
         return origin_;
     }
+    bool hasOriginClosure() const { return origin_; }
 
     rir::Function* rirFunction() const { return function; }
     SEXP srcRef() { return srcRef_; }

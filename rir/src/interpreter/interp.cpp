@@ -2627,7 +2627,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SET_FORMALS(res, formals);
             SET_BODY(res, body);
             SET_CLOENV(res, env);
-            Rf_setAttrib(res, Rf_install("srcref"), srcref);
+            Rf_setAttrib(res, symbol::srcref, srcref);
             ostack_popn(ctx, 3);
             ostack_push(ctx, res);
             NEXT();

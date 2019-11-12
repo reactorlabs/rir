@@ -7,6 +7,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "pass_definitions.h"
+#include "runtime/DispatchTable.h"
 
 #include <unordered_set>
 
@@ -266,6 +267,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 static int isfunctionBlt = findBuiltin("is.function");
                 static int isobjectBlt = findBuiltin("is.object");
                 static int isCharacterBlt = findBuiltin("is.character");
+                static int bodyBlt = findBuiltin("bodyCode");
+                static int envBlt = findBuiltin("environment");
                 assert(function->assumptions().includes(
                     Assumption::NotTooManyArguments));
                 // PIR functions are always compiled for a particular number
@@ -356,6 +359,39 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     if (!t.maybeObj()) {
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
+                    }
+                } else if (builtinId == bodyBlt && nargs == 1) {
+                    auto in = i->arg(0).val()->followCastsAndForce();
+                    if (auto mk = MkFunCls::Cast(in)) {
+                        i->replaceUsesAndSwapWith(
+                            new LdConst(mk->originalBody->container()), ip);
+                    } else if (auto mk = MkCls::Cast(in)) {
+                        i->replaceUsesWith(mk->code());
+                    } else if (auto mk = MkArg::Cast(in)) {
+                        // This can happen after inlining, since we use
+                        // "bodyCode" in guards without forcing the promise.
+                        if (auto cast = CastType::Cast(i->arg(0).val())) {
+                            if (cast != in &&
+                                cast->kind == CastType::Downcast &&
+                                cast->type.isA(RType::closure)) {
+                                if (auto cast2 =
+                                        CastType::Cast(cast->arg(0).val())) {
+                                    if (cast2 != in &&
+                                        cast2->kind == CastType::Upcast) {
+                                        cast->replaceUsesAndSwapWith(
+                                            new Force(cast2, mk->env()),
+                                            cast->bb()->atPosition(cast));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (builtinId == envBlt && nargs == 1) {
+                    auto in = i->arg(0).val()->followCastsAndForce();
+                    if (auto mk = MkFunCls::Cast(in)) {
+                        i->replaceUsesWith(mk->lexicalEnv());
+                    } else if (auto mk = MkCls::Cast(in)) {
+                        i->replaceUsesWith(mk->lexicalEnv());
                     }
                 }
             }

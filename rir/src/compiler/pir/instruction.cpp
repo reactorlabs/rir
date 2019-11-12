@@ -819,6 +819,12 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
         frameState()->printRef(out);
         out << ", ";
     }
+
+    if (runtimeClosure() != Tombstone::closure()) {
+        out << "from ";
+        runtimeClosure()->printRef(out);
+        out << " ";
+    }
 }
 
 PirType StaticCall::inferType(const GetType& getType) const {
@@ -881,12 +887,13 @@ ClosureVersion* StaticCall::tryOptimisticDispatch() const {
 StaticCall::StaticCall(Value* callerEnv, Closure* cls,
                        Assumptions givenAssumptions,
                        const std::vector<Value*>& args, FrameState* fs,
-                       unsigned srcIdx)
+                       unsigned srcIdx, Value* runtimeClosure)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
       cls_(cls), givenAssumptions(givenAssumptions) {
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
+    pushArg(runtimeClosure, RType::closure);
     for (unsigned i = 0; i < args.size(); ++i) {
         assert(!ExpandDots::Cast(args[i]) &&
                "Static Call cannot accept dynamic number of arguments");
@@ -894,7 +901,8 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls,
             pushArg(args[i],
                     PirType() | RType::prom | RType::missing | RType::dots);
         } else {
-            pushArg(args[i], PirType() | RType::prom | RType::missing);
+            pushArg(args[i],
+                    PirType() | RType::prom | RType::missing | PirType::val());
         }
     }
     assert(tryDispatch());
