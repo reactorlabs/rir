@@ -129,11 +129,12 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
         env = aliases.at(env);
     while (env != AbstractREnvironment::UnknownParent) {
         assert(env);
-        // We only analyze PIR environments, not concrete R environments.
+        // We only analyze PIR environments and the global environment, not
+        // concrete R environments.
         // TODO: If we can assume that the enclosing environments are stable,
         // then we could just do the lookup here.
         auto envIt = envs.find(env);
-        if (Env::Cast(env) || envIt == envs.end()) {
+        if ((Env::Cast(env) && env != Env::global()) || envIt == envs.end()) {
             return AbstractLoad(env, AbstractPirValue::tainted());
         }
         // In the case of existing R envs we only have a partial view (ie. we
@@ -149,6 +150,9 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
                                     AbstractPirValue::tainted());
             if (!res.isUnboundValue())
                 return AbstractLoad(env, res);
+        }
+        if (env == Env::global()) {
+            return AbstractLoad(env, AbstractPirValue::tainted());
         }
         auto parent = envIt->second.parentEnv();
         assert(parent);
