@@ -904,8 +904,6 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
             auto j = v.first;
             if (liveness.live(i, j)) {
                 if (representationOf(j) == t::SEXP) {
-                    auto v = var.get(builder);
-                    ensureShared(v);
                     savedLocals.push_back({j, Variable::MutableRVariable(
                                                   j, data.savedSexpPos.at(j),
                                                   builder, basepointer)});
