@@ -3844,8 +3844,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                             idx2_ = *INTEGER(idx2) - 1;
                     }
 
-                    if (idx1_ >= 0 && idx1_ < Rf_ncols(mtx) && idx2_ >= 0 &&
-                        idx2_ < Rf_nrows(mtx)) {
+                    if (idx1_ >= 0 && idx1_ < Rf_nrows(mtx) && idx2_ >= 0 &&
+                        idx2_ < Rf_ncols(mtx)) {
                         int idx_ = idx1_ + (idx2_ * Rf_nrows(mtx));
                         SEXPTYPE mtxT = TYPEOF(mtx);
                         switch (mtxT) {

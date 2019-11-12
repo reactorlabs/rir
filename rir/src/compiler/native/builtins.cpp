@@ -16,6 +16,22 @@
 namespace rir {
 namespace pir {
 
+struct MatrixDimension {
+    R_xlen_t row;
+    R_xlen_t col;
+};
+
+static R_INLINE MatrixDimension getMatrixDim(SEXP mat) {
+    SEXP attr = ATTRIB(mat);
+    /* look for the common case of 'dim' as the only attribute first */
+    SEXP dim =
+        TAG(attr) == R_DimSymbol ? CAR(attr) : getAttrib(mat, R_DimSymbol);
+    if (TYPEOF(dim) == INTSXP && LENGTH(dim) == 2)
+        return {INTEGER(dim)[0], INTEGER(dim)[1]};
+    assert(false);
+    return {0, 0};
+}
+
 static SEXP forcePromiseImpl(SEXP prom) {
     SLOWASSERT(TYPEOF(prom) == PROMSXP);
     auto res = forcePromise(prom);
@@ -969,7 +985,8 @@ NativeBuiltin NativeBuiltins::extract21 = {
 
 SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
 
-    if (!isObject(vector) && index != NA_INTEGER && XLENGTH(vector) >= index) {
+    if (!isObject(vector) && index != NA_INTEGER && index >= 1 &&
+        XLENGTH(vector) >= index) {
         if (TYPEOF(vector) == INTSXP) {
             return ScalarInteger(INTEGER(vector)[index - 1]);
         }
@@ -1010,7 +1027,8 @@ NativeBuiltin NativeBuiltins::extract21i = {
 SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
 
     auto pos = (R_xlen_t)(index - 1);
-    if (!isObject(vector) && index == index && XLENGTH(vector) > pos) {
+    if (!isObject(vector) && index == index && index >= 1 &&
+        XLENGTH(vector) > pos) {
         if (TYPEOF(vector) == INTSXP) {
             return ScalarInteger(INTEGER(vector)[pos]);
         }
@@ -1122,11 +1140,13 @@ SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
                      Immediate srcIdx) {
 
     if (!isObject(vector) && isMatrix(vector) && index1 != NA_INTEGER &&
-        index2 != NA_INTEGER) {
+        index2 != NA_INTEGER && index1 >= 1 && index2 >= 1) {
         auto p1 = (R_xlen_t)(index1 - 1);
         auto p2 = (R_xlen_t)(index2 - 1);
-        if (p1 < Rf_ncols(vector) && p2 < Rf_nrows(vector)) {
-            auto pos = Rf_ncols(vector) * p1 + p2;
+
+        auto n = getMatrixDim(vector);
+        if (p1 < n.row && p2 < n.col) {
+            auto pos = n.row * p2 + p1;
 
             if (TYPEOF(vector) == INTSXP) {
                 return ScalarInteger(INTEGER(vector)[pos]);
@@ -1172,11 +1192,13 @@ SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
                      Immediate srcIdx) {
 
     if (!isObject(vector) && isMatrix(vector) && index1 == index1 &&
-        index2 == index2) {
+        index2 == index2 && index1 >= 1 && index2 >= 1) {
         auto p1 = (R_xlen_t)(index1 - 1);
         auto p2 = (R_xlen_t)(index2 - 1);
-        if (p1 < Rf_ncols(vector) && p2 < Rf_nrows(vector)) {
-            auto pos = Rf_ncols(vector) * p1 + p2;
+
+        auto n = getMatrixDim(vector);
+        if (p1 < n.row && p2 < n.col) {
+            auto pos = n.row * p2 + p1;
 
             if (TYPEOF(vector) == INTSXP) {
                 return ScalarInteger(INTEGER(vector)[pos]);
@@ -1347,11 +1369,11 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
     if (!isObject(vec)) {
         R_xlen_t pos = -1;
         if (IS_SIMPLE_SCALAR(idx, INTSXP)) {
-            if (*INTEGER(idx) != NA_INTEGER)
-                pos = *INTEGER(idx);
+            if (*INTEGER(idx) >= 1 && *INTEGER(idx) != NA_INTEGER)
+                pos = *INTEGER(idx) - 1;
         } else if (IS_SIMPLE_SCALAR(idx, REALSXP)) {
-            if (*REAL(idx) == *REAL(idx))
-                pos = *REAL(idx);
+            if (*REAL(idx) >= 1 && *REAL(idx) == *REAL(idx))
+                pos = *REAL(idx) - 1;
         }
         if (pos != (R_xlen_t)-1) {
             if (IS_SIMPLE_SCALAR(val, INTSXP) && TYPEOF(vec) == INTSXP) {
@@ -1456,7 +1478,7 @@ SEXP subassign21irImpl(SEXP vec, int idx, double val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && idx != NA_INTEGER) {
+    if (!isObject(vec) && idx != NA_INTEGER && idx >= 1) {
         auto pos = (idx - 1);
 
         if (TYPEOF(vec) == REALSXP) {
@@ -1673,37 +1695,38 @@ SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
         R_xlen_t pos1 = -1;
         R_xlen_t pos2 = -1;
         if (IS_SIMPLE_SCALAR(idx1, INTSXP)) {
-            if (*INTEGER(idx1) != NA_INTEGER)
-                pos1 = *INTEGER(idx1);
+            if (*INTEGER(idx1) >= 1 && *INTEGER(idx1) != NA_INTEGER)
+                pos1 = *INTEGER(idx1) - 1;
         } else if (IS_SIMPLE_SCALAR(idx1, REALSXP)) {
-            if (*REAL(idx1) == *REAL(idx1))
-                pos1 = *REAL(idx1);
+            if (*REAL(idx1) >= 1 && *REAL(idx1) == *REAL(idx1))
+                pos1 = *REAL(idx1) - 1;
         }
         if (IS_SIMPLE_SCALAR(idx2, INTSXP)) {
-            if (*INTEGER(idx2) != NA_INTEGER)
-                pos2 = *INTEGER(idx2);
+            if (*INTEGER(idx2) >= 1 && *INTEGER(idx2) != NA_INTEGER)
+                pos2 = *INTEGER(idx2) - 1;
         } else if (IS_SIMPLE_SCALAR(idx2, REALSXP)) {
-            if (*REAL(idx2) == *REAL(idx2))
-                pos2 = *REAL(idx2);
+            if (*REAL(idx2) >= 1 && *REAL(idx2) == *REAL(idx2))
+                pos2 = *REAL(idx2) - 1;
         }
         if (pos1 != (R_xlen_t)-1 && pos2 != (R_xlen_t)-1) {
+            auto n = getMatrixDim(vec);
             if (IS_SIMPLE_SCALAR(val, INTSXP) && TYPEOF(vec) == INTSXP) {
-                if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                    INTEGER(vec)[Rf_ncols(vec) * pos1 + pos2] = *INTEGER(val);
+                if (pos1 < n.row && pos2 < n.col) {
+                    INTEGER(vec)[n.row * pos2 + pos1] = *INTEGER(val);
                     UNPROTECT(prot);
                     return vec;
                 }
             }
             if (IS_SIMPLE_SCALAR(val, REALSXP) && TYPEOF(vec) == REALSXP) {
-                if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                    REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = *REAL(val);
+                if (pos1 < n.row && pos2 < n.col) {
+                    REAL(vec)[n.row * pos2 + pos1] = *REAL(val);
                     UNPROTECT(prot);
                     return vec;
                 }
             }
             if (TYPEOF(vec) == VECSXP) {
-                if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                    SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2, val);
+                if (pos1 < n.row && pos2 < n.col) {
+                    SET_VECTOR_ELT(vec, n.row * pos2 + pos1, val);
                     UNPROTECT(prot);
                     return vec;
                 }
@@ -1741,20 +1764,21 @@ SEXP subassign22rrrImpl(SEXP vec, double idx1, double idx2, double val,
         prot++;
     }
 
-    if (!isObject(vec) && isMatrix(vec) && idx1 == idx1 && idx2 == idx2) {
+    if (!isObject(vec) && isMatrix(vec) && idx1 == idx1 && idx2 == idx2 &&
+        idx1 >= 1 && idx2 >= 1) {
         R_xlen_t pos1 = idx1 - 1;
         R_xlen_t pos2 = idx2 - 1;
+        auto n = getMatrixDim(vec);
         if (TYPEOF(vec) == REALSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+            if (pos1 < n.row && pos2 < n.col) {
+                REAL(vec)[n.row * pos2 + pos1] = val;
                 UNPROTECT(prot);
                 return vec;
             }
         }
         if (TYPEOF(vec) == VECSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2,
-                               ScalarReal(val));
+            if (pos1 < n.row && pos2 < n.col) {
+                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, ScalarReal(val));
                 UNPROTECT(prot);
                 return vec;
             }
@@ -1795,20 +1819,20 @@ SEXP subassign22iirImpl(SEXP vec, int idx1, int idx2, double val, SEXP env,
     }
 
     if (!isObject(vec) && isMatrix(vec) && idx1 != NA_INTEGER &&
-        idx2 != NA_INTEGER) {
+        idx2 != NA_INTEGER && idx1 >= 1 && idx2 >= 1) {
         R_xlen_t pos1 = idx1 - 1;
         R_xlen_t pos2 = idx2 - 1;
+        auto n = getMatrixDim(vec);
         if (TYPEOF(vec) == REALSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+            if (pos1 < n.row && pos2 < n.col) {
+                REAL(vec)[n.row * pos2 + pos1] = val;
                 UNPROTECT(prot);
                 return vec;
             }
         }
         if (TYPEOF(vec) == VECSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2,
-                               ScalarReal(val));
+            if (pos1 < n.row && pos2 < n.col) {
+                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, ScalarReal(val));
                 UNPROTECT(prot);
                 return vec;
             }
@@ -1849,27 +1873,27 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
     }
 
     if (!isObject(vec) && isMatrix(vec) && idx1 != NA_INTEGER &&
-        idx2 != NA_INTEGER) {
+        idx2 != NA_INTEGER && idx1 >= 1 && idx2 >= 1) {
         R_xlen_t pos1 = idx1 - 1;
         R_xlen_t pos2 = idx2 - 1;
+        auto n = getMatrixDim(vec);
         if (TYPEOF(vec) == INTSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                INTEGER(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+            if (pos1 < n.row && pos2 < n.col) {
+                INTEGER(vec)[n.row * pos2 + pos1] = val;
                 UNPROTECT(prot);
                 return vec;
             }
         }
         if (TYPEOF(vec) == REALSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+            if (pos1 < n.row && pos2 < n.col) {
+                REAL(vec)[n.row * pos2 + pos1] = val;
                 UNPROTECT(prot);
                 return vec;
             }
         }
         if (TYPEOF(vec) == VECSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2,
-                               ScalarInteger(val));
+            if (pos1 < n.row && pos2 < n.col) {
+                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, ScalarInteger(val));
                 UNPROTECT(prot);
                 return vec;
             }
@@ -1909,27 +1933,29 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && isMatrix(vec) && idx1 == idx1 && idx2 == idx2) {
+    if (!isObject(vec) && isMatrix(vec) && idx1 == idx1 && idx2 == idx2 &&
+        idx1 >= 1 && idx2 >= 1) {
         R_xlen_t pos1 = idx1 - 1;
         R_xlen_t pos2 = idx2 - 1;
+        auto n = getMatrixDim(vec);
+
         if (TYPEOF(vec) == INTSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                INTEGER(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+            if (pos1 < n.row && pos2 < n.col) {
+                INTEGER(vec)[n.row * pos2 + pos1] = val;
                 UNPROTECT(prot);
                 return vec;
             }
         }
         if (TYPEOF(vec) == REALSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                REAL(vec)[Rf_ncols(vec) * pos1 + pos2] = val;
+            if (pos1 < n.row && pos2 < n.col) {
+                REAL(vec)[n.row * pos2 + pos1] = val;
                 UNPROTECT(prot);
                 return vec;
             }
         }
         if (TYPEOF(vec) == VECSXP) {
-            if (pos1 < Rf_ncols(vec) && pos2 < Rf_nrows(vec)) {
-                SET_VECTOR_ELT(vec, Rf_ncols(vec) * pos1 + pos2,
-                               ScalarInteger(val));
+            if (pos1 < n.row && pos2 < n.col) {
+                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, ScalarInteger(val));
                 UNPROTECT(prot);
                 return vec;
             }
@@ -2050,13 +2076,13 @@ NativeBuiltin NativeBuiltins::asIntCeil = {
     (void*)asIntCeilImpl,
 };
 
-int ncolsImpl(SEXP v) { return Rf_ncols(v); }
+int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }
 NativeBuiltin NativeBuiltins::matrixNcols = {
     "ncols",
     (void*)ncolsImpl,
 };
 
-int nrowsImpl(SEXP v) { return Rf_ncols(v); }
+int nrowsImpl(SEXP v) { return getMatrixDim(v).row; }
 NativeBuiltin NativeBuiltins::matrixNrows = {
     "nrows",
     (void*)nrowsImpl,
