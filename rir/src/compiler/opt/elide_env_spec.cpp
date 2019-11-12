@@ -124,7 +124,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     // since it can only be accessed reflectively.
     static std::unordered_set<Tag> allowed{
         Tag::Force,      Tag::PushContext, Tag::LdVar,      Tag::StVar,
-        Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin};
+        Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin, Tag::StaticCall};
     VisitorNoDeoptBranch::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
