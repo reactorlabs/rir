@@ -3864,15 +3864,15 @@ bool LowerFunctionLLVM::tryCompile() {
 
                     auto ncol = builder.CreateZExt(
                         call(NativeBuiltins::matrixNcols, {vector}), t::i64);
-                    llvm::Value* index1 = computeAndCheckIndex(
-                        extract->idx1(), vector, fallback, ncol);
                     auto nrow = builder.CreateZExt(
                         call(NativeBuiltins::matrixNrows, {vector}), t::i64);
+                    llvm::Value* index1 = computeAndCheckIndex(
+                        extract->idx1(), vector, fallback, nrow);
                     llvm::Value* index2 = computeAndCheckIndex(
-                        extract->idx2(), vector, fallback, nrow);
+                        extract->idx2(), vector, fallback, ncol);
 
-                    llvm::Value* index = builder.CreateMul(ncol, index1);
-                    index = builder.CreateAdd(index, index2);
+                    llvm::Value* index = builder.CreateMul(nrow, index2);
+                    index = builder.CreateAdd(index, index1);
 
                     auto res0 =
                         extract->vec()->type.isScalar()
@@ -3997,17 +3997,17 @@ bool LowerFunctionLLVM::tryCompile() {
 
                     auto ncol = builder.CreateZExt(
                         call(NativeBuiltins::matrixNcols, {vector}), t::i64);
-                    llvm::Value* index1 = computeAndCheckIndex(
-                        subAssign->idx1(), vector, fallback, ncol);
                     auto nrow = builder.CreateZExt(
                         call(NativeBuiltins::matrixNrows, {vector}), t::i64);
+                    llvm::Value* index1 = computeAndCheckIndex(
+                        subAssign->idx1(), vector, fallback, nrow);
                     llvm::Value* index2 = computeAndCheckIndex(
-                        subAssign->idx2(), vector, fallback, nrow);
+                        subAssign->idx2(), vector, fallback, ncol);
 
                     auto val = load(subAssign->rhs());
                     if (representationOf(i) == Representation::Sexp) {
-                        llvm::Value* index = builder.CreateMul(ncol, index1);
-                        index = builder.CreateAdd(index, index2);
+                        llvm::Value* index = builder.CreateMul(nrow, index2);
+                        index = builder.CreateAdd(index, index1);
                         assignVector(vector, index, val, vecType);
                         builder.CreateStore(convert(vector, i->type), res);
                     } else {
