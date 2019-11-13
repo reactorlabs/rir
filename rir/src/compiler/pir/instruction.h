@@ -727,23 +727,30 @@ extern std::ostream& operator<<(std::ostream& out,
 #define FLI(type, nargs, io)                                                   \
     type:                                                                      \
   public                                                                       \
-    FixedLenInstruction<Tag::type, type, nargs, Effects(io), HasEnvSlot::No>
+    FixedLenInstruction<Tag::type, type, nargs,                                \
+                        static_cast<Effects::StoreType>(Effects(io)),          \
+                        HasEnvSlot::No>
 
 #define FLIE(type, nargs, io)                                                  \
     type:                                                                      \
   public                                                                       \
-    FixedLenInstructionWithEnvSlot<Tag::type, type, nargs, Effects(io),        \
-                                   HasEnvSlot::Yes>
+    FixedLenInstructionWithEnvSlot<                                            \
+        Tag::type, type, nargs, static_cast<Effects::StoreType>(Effects(io)),  \
+        HasEnvSlot::Yes>
 
 #define VLI(type, io)                                                          \
     type:                                                                      \
   public                                                                       \
-    VarLenInstruction<Tag::type, type, Effects(io), HasEnvSlot::No>
+    VarLenInstruction<Tag::type, type,                                         \
+                      static_cast<Effects::StoreType>(Effects(io)),            \
+                      HasEnvSlot::No>
 
 #define VLIE(type, io)                                                         \
     type:                                                                      \
   public                                                                       \
-    VarLenInstructionWithEnvSlot<Tag::type, type, Effects(io), HasEnvSlot::Yes>
+    VarLenInstructionWithEnvSlot<Tag::type, type,                              \
+                                 static_cast<Effects::StoreType>(Effects(io)), \
+                                 HasEnvSlot::Yes>
 
 class FLI(LdConst, 0, Effects::None()) {
   public:
@@ -921,7 +928,7 @@ class StArg : public StVar {
 };
 
 class Branch
-    : public FixedLenInstruction<Tag::Branch, Branch, 1, Effects::None(),
+    : public FixedLenInstruction<Tag::Branch, Branch, 1, Effects::NoneI(),
                                  HasEnvSlot::No, Controlflow::Branch> {
   public:
     explicit Branch(Value* test)
@@ -933,7 +940,7 @@ class Branch
 };
 
 class Return
-    : public FixedLenInstruction<Tag::Return, Return, 1, Effects::None(),
+    : public FixedLenInstruction<Tag::Return, Return, 1, Effects::NoneI(),
                                  HasEnvSlot::No, Controlflow::Exit> {
   public:
     explicit Return(Value* ret)
@@ -1510,10 +1517,10 @@ SIMPLE_INSTRUCTIONS(V, _)
 
 template <typename BASE, Tag TAG>
 class Binop
-    : public FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::Any(),
+    : public FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::AnyI(),
                                             HasEnvSlot::Yes> {
   public:
-    typedef FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::Any(),
+    typedef FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::AnyI(),
                                            HasEnvSlot::Yes>
         Super;
 
@@ -1638,10 +1645,11 @@ BINOP_NOENV(LOr, PirType::simpleScalarLogical());
 #undef BINOP_NOENV
 
 template <typename BASE, Tag TAG>
-class Unop : public FixedLenInstructionWithEnvSlot<TAG, BASE, 2, Effects::Any(),
-                                                   HasEnvSlot::Yes> {
+class Unop
+    : public FixedLenInstructionWithEnvSlot<TAG, BASE, 2, Effects::AnyI(),
+                                            HasEnvSlot::Yes> {
   public:
-    typedef FixedLenInstructionWithEnvSlot<TAG, BASE, 2, Effects::Any(),
+    typedef FixedLenInstructionWithEnvSlot<TAG, BASE, 2, Effects::AnyI(),
                                            HasEnvSlot::Yes>
         Super;
     Unop(Value* val, Value* env, unsigned srcIdx)
@@ -2312,7 +2320,7 @@ class VLI(Phi, Effects::None()) {
  *  to ensure the optimizer consider deopt and non-deopt cases.
  */
 class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
-                                              Effects::None(), HasEnvSlot::No,
+                                              Effects::NoneI(), HasEnvSlot::No,
                                               Controlflow::Branch> {
   public:
     Checkpoint() : FixedLenInstruction(NativeType::checkpoint) {}
@@ -2329,7 +2337,7 @@ class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
  * code at the point the framestate stores
  */
 
-class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effects::Any(),
+class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effects::AnyI(),
                                          HasEnvSlot::No, Controlflow::Exit> {
   public:
     explicit Deopt(FrameState* frameState)
@@ -2365,7 +2373,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
 
 class ScheduledDeopt
     : public VarLenInstruction<Tag::ScheduledDeopt, ScheduledDeopt,
-                               Effects::None(), HasEnvSlot::No,
+                               Effects::NoneI(), HasEnvSlot::No,
                                Controlflow::Exit> {
   public:
     std::vector<FrameInfo> frames;
