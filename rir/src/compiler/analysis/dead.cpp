@@ -16,8 +16,9 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
         // unused ldfun must be a left over from a guard where ldfun was
         // converted into ldvar.
         if (dataDependencies.at(i).empty() &&
-            (LdFun::Cast(i) || (i->getObservableEffects() <= ignoreEffects &&
-                                !i->branchOrExit())))
+            (LdFun::Cast(i) ||
+             ((i->getObservableEffects() / ignoreEffects).empty() &&
+              !i->branchOrExit())))
             unused_.insert(i);
     });
     auto i = 1;
@@ -27,8 +28,8 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
             auto candidate = instructionUses.first;
             auto addToDead = true;
             if (unused_.count(candidate) ||
-                (candidate->getObservableEffects() > ignoreEffects) ||
-                candidate->branchOrExit())
+                (!(candidate->getObservableEffects() / ignoreEffects).empty() ||
+                 candidate->branchOrExit()))
                 continue;
             auto uses = instructionUses.second;
             for (auto use : uses) {
