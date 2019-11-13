@@ -1032,5 +1032,33 @@ void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
 BB* Checkpoint::nextBB() { return bb()->trueBranch(); }
 
+PirType Colon::inferType(const GetType& getType) const {
+    auto convertsToInt = [](Value* a) {
+        if (a->type.isA(RType::integer))
+            return true;
+        if (a->type.isA(RType::real)) {
+            if (auto ld = LdConst::Cast(a)) {
+                if (IS_SIMPLE_SCALAR(ld->c(), REALSXP)) {
+                    auto v = *REAL(ld->c());
+                    if ((double)(int)v == v) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    };
+
+    auto t = inferedTypeForArtithmeticInstruction(getType);
+
+    if (convertsToInt(lhs()) && convertsToInt(rhs())) {
+        t = RType::integer;
+    }
+
+    if (t.maybe(PirType::num()))
+        t = t | RType::integer;
+    return t.orNotScalar();
+}
+
 } // namespace pir
 } // namespace rir

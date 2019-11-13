@@ -1488,12 +1488,7 @@ class FLIE(Colon, 3, Effects::Any()) {
     Value* lhs() const { return arg<0>().val(); }
     Value* rhs() const { return arg<1>().val(); }
 
-    PirType inferType(const GetType& getType) const override {
-        auto t = inferedTypeForArtithmeticInstruction(getType);
-        if (t.maybe(PirType::num()))
-            t = t | RType::integer;
-        return t.orNotScalar();
-    }
+    PirType inferType(const GetType& getType) const override;
 
     Effects inferEffects(const GetType& getType) const override {
         return inferedEffectsForArtithmeticInstruction(getType);
