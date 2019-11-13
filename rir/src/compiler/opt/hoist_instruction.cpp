@@ -189,6 +189,68 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
             ip = next;
         }
     });
+
+    // Search for branches where both legs force the same promise, ie.
+    //
+    //        branch -> A, B
+    //     A:
+    //        force(x)
+    //        ...
+    //     B:
+    //        force(x)
+    //        ...
+    //
+    // If we find such a case then we lift the force above the branch. Here we
+    // exploit the fact that our graph is in edge-split form. We know that
+    // branches are the only predecessor of their next blocks. Thus we can only
+    // hoist from immediate successors. Otherwise we would need a cfg.
+
+    const static int SEARCH = 5;
+    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
+        if (bb->isBranch()) {
+            auto bb1 = bb->trueBranch();
+            auto bb2 = bb->falseBranch();
+
+            if (bb1->isEmpty() || bb2->isEmpty())
+                return;
+
+            auto it1 = bb1->begin();
+            auto it2 = bb2->begin();
+
+            while (it1 != bb1->end() && it1 - bb1->begin() < SEARCH) {
+                if (auto f1 = Force::Cast(*it1)) {
+                    bool replaced = false;
+                    while (it2 != bb2->end() && it2 - bb2->begin() < SEARCH) {
+                        if (auto f2 = Force::Cast(*it2)) {
+                            if (f1->input() == f2->input()) {
+                                auto it = bb->end() - 1;
+                                auto f = new Force(f1->arg(0).val(),
+                                                   f1->hasEnv() && f2->hasEnv()
+                                                       ? f1->env()
+                                                       : Env::elided());
+                                bb->insert(it, f);
+                                f1->replaceUsesWith(f);
+                                f2->replaceUsesWith(f);
+                                it2 = bb2->remove(it2);
+                            }
+                        }
+                        if ((*it2)->hasObservableEffects())
+                            break;
+                        if (it2 == bb2->end())
+                            break;
+                        it2++;
+                    }
+                    if (replaced)
+                        it1 = bb1->remove(it1);
+                }
+                if ((*it1)->hasObservableEffects())
+                    break;
+                if (it1 == bb2->end())
+                    break;
+                it1++;
+            }
+        }
+    });
 }
 } // namespace pir
 } // namespace rir
