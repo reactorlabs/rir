@@ -17,6 +17,7 @@ namespace pir {
 void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                          LogStream& log) const {
 
+    constexpr bool debug = false;
     AvailableCheckpoints checkpoint(function, function, log);
     DominanceGraph dom(function);
 
@@ -122,8 +123,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     // If we only see these (and call instructions) then we stub an environment,
     // since it can only be accessed reflectively.
     static std::unordered_set<Tag> allowed{
-        Tag::Force,      Tag::PushContext, Tag::LdVar,     Tag::StVar,
-        Tag::StVarSuper, Tag::Call,        Tag::FrameState};
+        Tag::Force,      Tag::PushContext, Tag::LdVar,      Tag::StVar,
+        Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin, Tag::StaticCall};
     VisitorNoDeoptBranch::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
@@ -132,6 +133,12 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     if (!allowed.count(i->tag) || !i->hasEnv() ||
                         i->env() != m ||
                         (bt && !supportsFastBuiltinCall(bt->blt))) {
+                        if (debug) {
+                            std::cout << "Environment:";
+                            m->print(std::cout);
+                            std::cout << " baneado por:";
+                            i->print(std::cout);
+                        }
                         bannedEnvs.insert(m);
                         return;
                     }
@@ -157,8 +164,16 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     // checkpoint available after every use.
                     if (auto cp = checkpoint.next(i, mk, dom))
                         checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
-                    else
+                    else {
+                        if (debug) {
+                            std::cout << "Environment:";
+                            mk->print(std::cout);
+                            std::cout << " baneado por:";
+                            i->print(std::cout);
+                            std::cout << " because of lack of cp\n";
+                        }
                         bannedEnvs.insert(mk);
+                    }
                 }
             }
         }
