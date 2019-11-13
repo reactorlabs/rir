@@ -95,9 +95,9 @@ class EnumSet {
         return EnumSet(~set_ & Any());
     }
 
-    RIR_INLINE bool operator<(const EnumSet& s) const { return set_ < s.set_; }
-
-    RIR_INLINE bool operator>(const EnumSet& s) const { return set_ > s.set_; }
+    constexpr EnumSet operator/(const EnumSet& other) const {
+        return *this & ~other;
+    }
 
     RIR_INLINE bool operator!=(const EnumSet& s) const {
         return set_ != s.set_;
