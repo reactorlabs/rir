@@ -404,12 +404,16 @@ nextRandom <- function() {
   seed <<- bitwAnd(a, 65535)
   seed
 }
+
 simplifiedBounceInit <- function () {
     ballCount = 2
     balls     = vector("list", length = ballCount)
     for (i in 1:ballCount) {
         random1 = nextRandom()
-        balls[[i]] = c(random1 %% 500)
+        random2 = nextRandom()
+        random3 <- nextRandom()
+        random4 <- nextRandom()
+        balls[[i]] = c(random1 %% 500, random2 %% 500, (random3 %% 300) - 150, (random3 %% 300) - 150)
     }
    return(balls[[1]])
 }
