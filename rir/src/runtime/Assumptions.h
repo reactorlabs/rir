@@ -132,7 +132,7 @@ struct Assumptions {
             return missing < other.missing;
         if (flags.count() != other.flags.count())
             return flags.count() < other.flags.count();
-        return flags < other.flags;
+        return flags.to_i() < other.flags.to_i();
     }
 
     RIR_INLINE bool operator!=(const Assumptions& other) const {

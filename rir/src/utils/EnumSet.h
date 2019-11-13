@@ -32,6 +32,9 @@ class EnumSet {
 
     static constexpr EnumSet None() { return EnumSet(); }
 
+    static constexpr Store NoneI() { return static_cast<Store>(None()); }
+    static constexpr Store AnyI() { return static_cast<Store>(Any()); }
+
     static constexpr EnumSet Any() {
         return ((1 << ((Store)(Element::LAST) + 1)) - 1) &
                ~((1 << (Store)Element::FIRST) - 1);
@@ -60,7 +63,7 @@ class EnumSet {
 
     RIR_INLINE bool contains(const Element& e) const {
         assert(boundscheck(e));
-        return set_ & EnumSet(e);
+        return !(*this & EnumSet(e)).empty();
     }
 
     RIR_INLINE void set(const Element& e) {
@@ -92,7 +95,7 @@ class EnumSet {
     }
 
     constexpr RIR_INLINE EnumSet operator~() const {
-        return EnumSet(~set_ & Any());
+        return EnumSet(~set_ & static_cast<Store>(Any()));
     }
 
     constexpr EnumSet operator/(const EnumSet& other) const {
@@ -119,9 +122,9 @@ class EnumSet {
         return *this | EnumSet(t);
     }
 
-    RIR_INLINE Store to_i() const { return set_; }
+    constexpr Store to_i() const { return set_; }
 
-    constexpr operator Store() const { return set_; }
+    explicit constexpr operator Store() const { return set_; }
 
     RIR_INLINE bool empty() const { return set_ == 0; }
 

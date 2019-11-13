@@ -150,14 +150,18 @@ struct PirType {
     }
 
     constexpr PirType() : flags_(topRTypeFlags()), t_(RTypeSet()) {}
+
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
     // cppcheck-suppress noExplicitConstructor
-    constexpr PirType(const NativeType& t) : t_(t) {}
-    // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
     constexpr PirType(const RTypeSet& t, const FlagSet& f) : flags_(f), t_(t) {}
-    explicit constexpr PirType(const NativeTypeSet& t) : t_(t) {}
+
+    // cppcheck-suppress noExplicitConstructor
+    constexpr PirType(const NativeType& t) : t_(t) {}
+    // cppcheck-suppress noExplicitConstructor
+    constexpr PirType(const NativeTypeSet& t) : t_(t) {}
+
     explicit PirType(SEXP);
     constexpr PirType(const PirType& other)
         : flags_(other.flags_), t_(other.t_) {}
@@ -292,9 +296,9 @@ struct PirType {
 
         PirType r;
         if (isRType())
-            r = t_.r | o.t_.r;
+            r.t_ = t_.r | o.t_.r;
         else
-            r = RTypeSet(t_.n | o.t_.n);
+            r.t_ = t_.n | o.t_.n;
 
         r.flags_ = flags_ | o.flags_;
         return r;
@@ -305,9 +309,9 @@ struct PirType {
 
         PirType r;
         if (isRType())
-            r = t_.r & o.t_.r;
+            r.t_ = t_.r & o.t_.r;
         else
-            r = RTypeSet(t_.n & o.t_.n);
+            r.t_ = t_.n & o.t_.n;
 
         r.flags_ = flags_ & o.flags_;
         return r;
