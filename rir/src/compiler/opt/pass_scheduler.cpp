@@ -90,8 +90,9 @@ PassScheduler::PassScheduler() {
     // After this phase it is no longer possible to add assumptions at any point
     addDefaultPrePhaseOpt();
     add<CleanupCheckpoints>();
-    for (size_t i = 0; i < 2; ++i)
+    for (size_t i = 0; i < 2; ++i) {
         addDefaultOpt();
+    }
     addDefaultPostPhaseOpt();
 
     // ==== Phase 3.1) Remove Framestates we did not use

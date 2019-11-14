@@ -216,7 +216,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     env->stub = true;
                     for (auto n : additionalEntries[env]) {
                         env->varName.push_back(n);
-                        env->pushArg(UnboundValue::instance());
+                        env->pushArg(UnboundValue::instance(), PirType::any());
                     }
                     // After eliding an env we must ensure to add a
                     // materialization before every usage in deopt branches
