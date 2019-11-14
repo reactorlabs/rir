@@ -109,6 +109,7 @@ PassScheduler::PassScheduler() {
     addDefaultPrePhaseOpt();
     for (size_t i = 0; i < 3; ++i) {
         addDefaultOpt();
+        add<ElideEnvSpec>();
         add<CleanupCheckpoints>();
     }
     addDefaultPostPhaseOpt();
