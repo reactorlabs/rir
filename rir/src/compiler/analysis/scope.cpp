@@ -158,6 +158,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         });
         handled = true;
         effect.update();
+    } else if (auto me = MaterializeEnv::Cast(i)) {
+        state.envs.aliases[me] = me->arg(0).val();
     } else if (auto le = LdFunctionEnv::Cast(i)) {
         // LdFunctionEnv happen inside promises and refer back to the caller
         // environment, ie. the instruction that created the promise.
