@@ -199,7 +199,8 @@ SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
     auto names = wrapper->names;
     for (size_t i = 0; i < wrapper->nargs; ++i) {
         SEXP val = wrapper->getArg(i);
-        INCREMENT_NAMED(val);
+        if (val == R_UnboundValue)
+            continue;
         SEXP name = cp_pool_at(ctx, names[i]);
         bool isMissing = val == R_MissingArg;
         if (TYPEOF(name) == LISTSXP) {
@@ -2075,6 +2076,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             assert(!le->materialized());
 
             auto res = le->getArg(pos);
+            if (res == R_UnboundValue) {
+                auto sym = Pool::get(le->names[pos]);
+                res = Rf_findVar(sym, le->getParent());
+            }
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found",
@@ -2295,6 +2300,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             assert(!le->materialized());
             if (le->getArg(pos) != val) {
                 INCREMENT_NAMED(val);
+            } else {
+                ENSURE_NAMED(val);
             }
             if (le->getArg(pos) != val || !le->notMissing[pos]) {
                 le->setArg(pos, val, true);

@@ -123,8 +123,9 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     // If we only see these (and call instructions) then we stub an environment,
     // since it can only be accessed reflectively.
     static std::unordered_set<Tag> allowed{
-        Tag::Force,      Tag::PushContext, Tag::LdVar,      Tag::StVar,
-        Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin, Tag::StaticCall};
+        Tag::Force,      Tag::PushContext, Tag::LdVar,
+        Tag::StVar,      Tag::StVarSuper,  Tag::Call,
+        Tag::FrameState, Tag::CallBuiltin, Tag::StaticCall};
     VisitorNoDeoptBranch::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
@@ -136,8 +137,9 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         if (debug) {
                             std::cout << "Environment:";
                             m->print(std::cout);
-                            std::cout << " baneado por:";
+                            std::cout << " blocked by ";
                             i->print(std::cout);
+                            std::cout << "\n";
                         }
                         bannedEnvs.insert(m);
                         return;
@@ -149,8 +151,18 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
     std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
     std::unordered_map<MkEnv*, SmallSet<Instruction*>> needsMaterialization;
+    std::unordered_map<MkEnv*, SmallSet<SEXP>> additionalEntries;
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv()) {
+            if (auto st = StVar::Cast(i)) {
+                if (!bannedEnvs.count(i->env())) {
+                    if (auto mk = MkEnv::Cast(i->env())) {
+                        if (!mk->stub && !mk->contains(st->varName)) {
+                            additionalEntries[mk].insert(st->varName);
+                        }
+                    }
+                }
+            }
             if (FrameState::Cast(i) || StVar::Cast(i) || LdVar::Cast(i) ||
                 StVarSuper::Cast(i) || PushContext::Cast(i))
                 return;
@@ -168,9 +180,9 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         if (debug) {
                             std::cout << "Environment:";
                             mk->print(std::cout);
-                            std::cout << " baneado por:";
+                            std::cout << " blocked by missing checkpoint at ";
                             i->print(std::cout);
-                            std::cout << " because of lack of cp\n";
+                            std::cout << "\n";
                         }
                         bannedEnvs.insert(mk);
                     }
@@ -186,32 +198,38 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             Instruction* i = *ip;
             auto next = ip + 1;
 
-            if (checks.count(i)) {
-                // Speculatively elide instructions that only require them
-                // in case of a potential reflectively access
-                if (!bannedEnvs.count(i->env())) {
-                    auto env = checks[i].second;
-                    if (!env->stub) {
-                        env->stub = true;
-                        // After eliding an env we must ensure to add a
-                        // materialization before every usage in deopt branches
-                        for (auto mkArg : needsMaterialization[env]) {
-                            auto targetBB = mkArg->bb();
-                            if (!materialized.count(targetBB) ||
-                                !materialized[targetBB].includes(env)) {
-                                Instruction* materialize =
-                                    new MaterializeEnv(env);
-                                env->replaceUsesIn(materialize, targetBB);
-                                targetBB->insert(targetBB->begin(),
-                                                 materialize);
-                                materialized[targetBB].insert(env);
-                            }
+            if (checks.count(i) && !bannedEnvs.count(i->env())) {
+                auto env = checks[i].second;
+                auto cp = checks[i].first;
+                auto condition = new IsEnvStub(env);
+                BBTransform::insertAssume(condition, cp, true);
+                assert(cp->bb()->trueBranch() != bb);
+            }
+
+            if (auto env = MkEnv::Cast(i)) {
+                if (!env->stub && !bannedEnvs.count(i)) {
+                    if (debug) {
+                        std::cout << "stubbing ";
+                        env->print(std::cout);
+                        std::cout << "\n";
+                    }
+                    env->stub = true;
+                    for (auto n : additionalEntries[env]) {
+                        env->varName.push_back(n);
+                        env->pushArg(UnboundValue::instance());
+                    }
+                    // After eliding an env we must ensure to add a
+                    // materialization before every usage in deopt branches
+                    for (auto mkArg : needsMaterialization[env]) {
+                        auto targetBB = mkArg->bb();
+                        if (!materialized.count(targetBB) ||
+                            !materialized[targetBB].includes(env)) {
+                            Instruction* materialize = new MaterializeEnv(env);
+                            env->replaceUsesIn(materialize, targetBB);
+                            targetBB->insert(targetBB->begin(), materialize);
+                            materialized[targetBB].insert(env);
                         }
                     }
-                    auto cp = checks[i].first;
-                    auto condition = new IsEnvStub(env);
-                    BBTransform::insertAssume(condition, cp, true);
-                    assert(cp->bb()->trueBranch() != bb);
                 }
             }
 

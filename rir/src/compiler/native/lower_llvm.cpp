@@ -3627,8 +3627,21 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 auto env = MkEnv::Cast(i->env());
                 if (env && env->stub) {
-                    setVal(i, envStubGet(loadSxp(env), env->indexOf(varName),
-                                         env->nLocals()));
+                    auto e = loadSxp(env);
+                    auto res =
+                        envStubGet(e, env->indexOf(varName), env->nLocals());
+                    if (env->argNamed(varName).val() ==
+                        UnboundValue::instance()) {
+                        res = builder.CreateSelect(
+                            builder.CreateICmpEQ(
+                                res, constant(R_UnboundValue, t::SEXP)),
+                            // if unsassigned in the stub, fall through
+                            call(NativeBuiltins::ldvar,
+                                 {constant(varName, t::SEXP),
+                                  envStubGet(e, -1, env->nLocals())}),
+                            res);
+                    }
+                    setVal(i, res);
                     break;
                 }
 

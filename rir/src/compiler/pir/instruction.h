@@ -2172,6 +2172,8 @@ class VLIE(MkEnv, Effects::None()) {
         assert(false);
         return -1;
     }
+
+    const InstrArg& argNamed(SEXP name) const { return arg(indexOf(name)); }
 };
 
 class FLIE(MaterializeEnv, 1, Effects::None()) {
