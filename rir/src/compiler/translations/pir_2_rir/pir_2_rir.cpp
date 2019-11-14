@@ -1243,13 +1243,9 @@ void Pir2Rir::lower(Code* code) {
                         break;
                 }
             } else if (auto st = StVar::Cast(*it)) {
-                while (true) {
-                    auto mk = MkEnv::Cast(st->env());
-                    if (mk && mk->stub && !mk->contains(st->varName))
-                        st->env(mk->lexicalEnv());
-                    else
-                        break;
-                }
+                auto mk = MkEnv::Cast(st->env());
+                if (mk && mk->stub)
+                    assert(mk->contains(st->varName));
             } else if (auto deopt = Deopt::Cast(*it)) {
                 // Lower Deopt instructions + their FrameStates to a
                 // ScheduledDeopt.

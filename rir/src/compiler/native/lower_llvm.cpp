@@ -111,6 +111,7 @@ class LowerFunctionLLVM {
 
     ClosureVersion* cls;
     Code* code;
+    Instruction* currentInstr = nullptr;
     const std::unordered_map<Promise*, unsigned>& promMap;
     const std::unordered_set<Instruction*>& needsEnsureNamed;
     const std::unordered_set<Instruction*>& needsSetShared;
@@ -306,6 +307,7 @@ class LowerFunctionLLVM {
     llvm::Value* envStubGet(llvm::Value* x, int i, size_t size);
     void envStubSet(llvm::Value* x, int i, llvm::Value* y, size_t size,
                     bool setNotMissing);
+    void envStubSetNotMissing(llvm::Value* x, int i);
 
     void setVisible(int i);
 
@@ -370,6 +372,7 @@ class LowerFunctionLLVM {
     llvm::Value* sexptype(llvm::Value* v);
     llvm::Value* attr(llvm::Value* v);
     llvm::Value* vectorLength(llvm::Value* v);
+    llvm::Value* isScalar(llvm::Value* v);
     llvm::Value* tag(llvm::Value* v);
     llvm::Value* car(llvm::Value* v);
     llvm::Value* cdr(llvm::Value* v);
@@ -702,6 +705,23 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
 
         return load(arg, type, needed);
     }
+
+    if (auto cp = PirCopy::Cast(val)) {
+        if (!variables.count(cp))
+            return load(cp->arg(0).val(), type, needed);
+    }
+
+    //    if (representationOf(val->type) == t::Int && needed == t::SEXP) {
+    //        if (auto i = Instruction::Cast(val)) {
+    //            if (currentInstr && !currentInstr->bb()->isDeopt() &&
+    //                !LdConst::Cast(i)) {
+    //                i->print(std::cout);
+    //                std::cout << " for ";
+    //                currentInstr->print(std::cout);
+    //                std::cout << "\n";
+    //            }
+    //        }
+    //    }
 
     auto vali = Instruction::Cast(val);
     if (vali && variables.count(vali))
@@ -1266,6 +1286,13 @@ llvm::Value* LowerFunctionLLVM::cdr(llvm::Value* v) {
 llvm::Value* LowerFunctionLLVM::attr(llvm::Value* v) {
     auto pos = builder.CreateGEP(v, {c(0), c(1)});
     return builder.CreateLoad(pos);
+}
+
+llvm::Value* LowerFunctionLLVM::isScalar(llvm::Value* v) {
+    auto va = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
+    auto lp = builder.CreateGEP(va, {c(0), c(4), c(0)});
+    auto l = builder.CreateLoad(lp);
+    return builder.CreateICmpEQ(l, c(1, 64));
 }
 
 llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
@@ -1836,6 +1863,15 @@ llvm::Value* LowerFunctionLLVM::envStubGet(llvm::Value* x, int i, size_t size) {
     return builder.CreateLoad(pos);
 }
 
+void LowerFunctionLLVM::envStubSetNotMissing(llvm::Value* x, int i) {
+    auto le = builder.CreateBitCast(dataPtr(x, false),
+                                    PointerType::get(t::LazyEnvironment, 0));
+    auto missingBits =
+        builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::i8ptr);
+    auto pos = builder.CreateGEP(missingBits, c(i));
+    builder.CreateStore(c(1, 8), pos);
+}
+
 void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y,
                                    size_t size, bool setNotMissing) {
     // We could use externalsxpSetEntry, but this is faster
@@ -2029,6 +2065,7 @@ bool LowerFunctionLLVM::tryCompile() {
             if (!success)
                 return;
 
+            currentInstr = i;
             switch (i->tag) {
             case Tag::ExpandDots:
                 // handled in calls
@@ -3387,12 +3424,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                     if (t->typeTest.isScalar()) {
                         assert(a->getType() == t::SEXP);
-                        auto va =
-                            builder.CreateBitCast(a, t::VECTOR_SEXPREC_ptr);
-                        auto lp = builder.CreateGEP(va, {c(0), c(4), c(0)});
-                        auto l = builder.CreateLoad(lp);
-                        auto lt = builder.CreateICmpEQ(l, c(1, 64));
-                        res = builder.CreateAnd(res, lt);
+                        res = builder.CreateAnd(res, isScalar(a));
                     }
                     if (arg->type.maybeObj()) {
                         res =
@@ -3627,8 +3659,21 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 auto env = MkEnv::Cast(i->env());
                 if (env && env->stub) {
-                    setVal(i, envStubGet(loadSxp(env), env->indexOf(varName),
-                                         env->nLocals()));
+                    auto e = loadSxp(env);
+                    llvm::Value* res =
+                        envStubGet(e, env->indexOf(varName), env->nLocals());
+                    if (env->argNamed(varName).val() ==
+                        UnboundValue::instance()) {
+                        res = builder.CreateSelect(
+                            builder.CreateICmpEQ(
+                                res, constant(R_UnboundValue, t::SEXP)),
+                            // if unsassigned in the stub, fall through
+                            call(NativeBuiltins::ldvar,
+                                 {constant(varName, t::SEXP),
+                                  envStubGet(e, -1, env->nLocals())}),
+                            res);
+                    }
+                    setVal(i, res);
                     break;
                 }
 
@@ -4207,11 +4252,64 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto environment = MkEnv::Cast(st->env());
 
                 if (environment && environment->stub) {
+                    auto idx = environment->indexOf(st->varName);
+                    auto e = loadSxp(environment);
+                    BasicBlock* done = BasicBlock::Create(C, "", fun);
+                    ;
+                    auto cur = envStubGet(e, idx, environment->nLocals());
+
+                    if (representationOf(st->val()) != t::SEXP) {
+                        auto fastcase = BasicBlock::Create(C, "", fun);
+                        auto fallback = BasicBlock::Create(C, "", fun);
+
+                        auto expected = representationOf(st->val()) == t::Int
+                                            ? INTSXP
+                                            : REALSXP;
+                        auto reuse = builder.CreateAnd(
+                            builder.CreateNot(isObj(cur)),
+                            builder.CreateAnd(
+                                builder.CreateNot(shared(cur)),
+                                builder.CreateAnd(
+                                    builder.CreateICmpEQ(sexptype(cur),
+                                                         c(expected)),
+                                    isScalar(cur))));
+                        builder.CreateCondBr(reuse, fastcase, fallback);
+
+                        builder.SetInsertPoint(fastcase);
+                        auto store =
+                            vectorPositionPtr(cur, c(0), st->val()->type);
+                        builder.CreateStore(load(st->val()), store);
+                        builder.CreateBr(done);
+
+                        builder.SetInsertPoint(fallback);
+                    }
+
                     auto val = loadSxp(st->val());
-                    incrementNamed(val);
-                    envStubSet(loadSxp(environment),
-                               environment->indexOf(st->varName), val,
-                               environment->nLocals(), !st->isStArg);
+                    if (representationOf(st->val()) == t::SEXP) {
+                        auto same = BasicBlock::Create(C, "", fun);
+                        auto different = BasicBlock::Create(C, "", fun);
+                        builder.CreateCondBr(builder.CreateICmpEQ(val, cur),
+                                             same, different);
+
+                        builder.SetInsertPoint(same);
+                        ensureNamed(val);
+                        if (!st->isStArg)
+                            envStubSetNotMissing(e, idx);
+                        builder.CreateBr(done);
+
+                        builder.SetInsertPoint(different);
+                        incrementNamed(val);
+                        envStubSet(e, idx, val, environment->nLocals(),
+                                   !st->isStArg);
+                        builder.CreateBr(done);
+                    } else {
+                        ensureNamed(val);
+                        envStubSet(e, idx, val, environment->nLocals(),
+                                   !st->isStArg);
+                    }
+
+                    builder.CreateBr(done);
+                    builder.SetInsertPoint(done);
                     break;
                 }
 
