@@ -73,8 +73,11 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         });
     }
 
-    DeadInstructions exceptTypecheck(function, 1, Effects(),
-                                     DeadInstructions::IgnoreTypeTests);
+    bool huge = function->size() > 1000;
+    auto exceptTypecheck = std::unique_ptr<DeadInstructions>(
+        huge ? nullptr
+             : new DeadInstructions(function, 1, Effects(),
+                                    DeadInstructions::IgnoreTypeTests));
     AvailableCheckpoints checkpoint(function, function, log);
     AvailableAssumptions assumptions(function, log);
     DominanceGraph dom(function);
@@ -84,7 +87,6 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                        std::tuple<Instruction*, Checkpoint*, Assume*>>
         hoistAssume;
 
-    bool huge = function->size() > 1000;
     Visitor::runPostChange(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -156,7 +158,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                             if (!tested->type.isA(expected) &&
                                 expected.maybePromiseWrapped() ==
                                     tested->type.maybePromiseWrapped() &&
-                                exceptTypecheck.isDead(tested)) {
+                                exceptTypecheck->isDead(tested)) {
 
                                 // The tested value is used outside the
                                 // typecheck. Let's cast it to the checked
