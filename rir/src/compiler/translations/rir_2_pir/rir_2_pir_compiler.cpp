@@ -269,7 +269,7 @@ void Rir2PirCompiler::optimizeModule() {
 }
 
 size_t Parameter::MAX_INPUT_SIZE =
-    getenv("PIR_MAX_INPUT_SIZE") ? atoi(getenv("PIR_MAX_INPUT_SIZE")) : 3500;
+    getenv("PIR_MAX_INPUT_SIZE") ? atoi(getenv("PIR_MAX_INPUT_SIZE")) : 6000;
 
 } // namespace pir
 } // namespace rir
