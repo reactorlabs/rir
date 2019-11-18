@@ -187,6 +187,11 @@ class TheScopeResolution {
 
             std::unordered_map<BB*, Phi*> thePhis;
             for (auto& phi : pl.placement) {
+                for (auto& p : phi.second) {
+                    if (p.aValue)
+                        p.aValue = getReplacedValue(p.aValue);
+                };
+
                 if (auto p = findExistingPhi(phi.first, phi.second))
                     thePhis[phi.first] = p;
                 else
@@ -204,7 +209,7 @@ class TheScopeResolution {
                 assert(computed.second.size() > 1);
                 for (auto& p : computed.second) {
                     if (p.aValue)
-                        phi->addInput(p.inputBlock, getReplacedValue(p.aValue));
+                        phi->addInput(p.inputBlock, p.aValue);
                     else
                         phi->addInput(p.inputBlock, thePhis.at(p.otherPhi));
                 };
