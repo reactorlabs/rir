@@ -472,14 +472,12 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         const auto& branch = e.first;
         const auto& condition = e.second;
         branch->remove(branch->end() - 1);
-        if (condition) {
-            branch->next1 = nullptr;
-        } else {
-            branch->next0 = branch->next1;
-            branch->next1 = nullptr;
-        }
+        branch->convertBranchToJmp(condition);
     }
 
+    // Needs to happen in two steps in case dead bb point to dead bb
+    for (const auto& bb : toDelete)
+        bb->deleteSuccessors();
     for (const auto& bb : toDelete)
         delete bb;
 }

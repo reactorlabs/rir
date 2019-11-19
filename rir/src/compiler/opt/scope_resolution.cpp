@@ -2,7 +2,6 @@
 #include "../analysis/scope.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
-#include "../util/cfg.h"
 #include "../util/phi_placement.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
@@ -88,13 +87,11 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
 class TheScopeResolution {
   public:
     ClosureVersion* function;
-    CFG cfg;
     DominanceGraph dom;
     DominanceFrontier dfront;
     LogStream& log;
     explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
-        : function(function), cfg(function), dom(function),
-          dfront(function, cfg, dom), log(log) {}
+        : function(function), dom(function), dfront(function, dom), log(log) {}
 
     void operator()() {
         ScopeAnalysis analysis(function, log);
@@ -161,7 +158,7 @@ class TheScopeResolution {
             if (fail)
                 return nullptr;
 
-            auto pl = PhiPlacement(function, bb, inputs, cfg, dom, dfront);
+            auto pl = PhiPlacement(function, bb, inputs, dom, dfront);
             if (!pl.success)
                 return nullptr;
 

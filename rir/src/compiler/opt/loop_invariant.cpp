@@ -138,11 +138,10 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
 void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
                           LogStream& log) const {
     LoopDetection loops(function);
-    CFG cfg(function);
 
     for (auto& loop : loops) {
         std::unordered_map<Instruction*, BB*> loads;
-        BB* targetBB = loop.preheader(cfg);
+        BB* targetBB = loop.preheader();
         auto safeToHoist = false;
         if (targetBB && isSafeToHoistLoads(loop)) {
             safeToHoist = true;

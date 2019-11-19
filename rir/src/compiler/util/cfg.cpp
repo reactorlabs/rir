@@ -15,7 +15,7 @@ CFG::CFG(Code* start)
         auto apply = [&](BB* next) {
             if (!next)
                 return;
-            if (!isImmediatePredecessor(bb, next)) {
+            if (!bb->predecessors().count(next)) {
                 predecessors_[next->id].push_back(bb);
                 transitivePredecessors[next->id].push_back(bb);
             }
@@ -27,7 +27,7 @@ CFG::CFG(Code* start)
     });
 
     std::function<void(BB*, BB*)> complete = [&](BB* bb, BB* pre1) {
-        for (auto pre2 : immediatePredecessors(pre1)) {
+        for (auto pre2 : pre1->predecessors()) {
             if (!isPredecessor(pre2, bb)) {
                 transitivePredecessors[bb->id].push_back(pre2);
                 complete(bb, pre2);
@@ -36,15 +36,9 @@ CFG::CFG(Code* start)
     };
 
     Visitor::run(start->entry, [&](BB* bb) {
-        for (auto pre1 : immediatePredecessors(bb))
+        for (auto pre1 : bb->predecessors())
             complete(bb, pre1);
     });
-}
-
-bool CFG::isMergeBlock(BB* a) const { return predecessors_[a->id].size() > 1; }
-
-bool CFG::hasSinglePred(BB* a) const {
-    return predecessors_[a->id].size() == 1;
 }
 
 bool CFG::isPredecessor(BB* a, BB* b) const {
@@ -52,17 +46,6 @@ bool CFG::isPredecessor(BB* a, BB* b) const {
     return std::any_of(
         preds.begin(), preds.end(),
         std::bind(std::equal_to<BB*>(), std::placeholders::_1, a));
-}
-
-bool CFG::isImmediatePredecessor(BB* a, BB* b) const {
-    auto& preds = predecessors_[b->id];
-    return std::any_of(
-        preds.begin(), preds.end(),
-        std::bind(std::equal_to<BB*>(), std::placeholders::_1, a));
-}
-
-const CFG::BBList& CFG::immediatePredecessors(BB* a) const {
-    return predecessors_[a->id];
 }
 
 bool DominanceGraph::DomTree::merge(const DomTree& other) {
@@ -215,11 +198,10 @@ const DominanceFrontier::BBList& DominanceFrontier::at(BB* bb) const {
     return frontier[bb->id];
 }
 
-DominanceFrontier::DominanceFrontier(Code* code, const CFG& cfg,
-                                     const DominanceGraph& dom) {
+DominanceFrontier::DominanceFrontier(Code* code, const DominanceGraph& dom) {
     frontier.resize(code->nextBBId);
     Visitor::run(code->entry, [&](BB* n) {
-        for (const auto& p : cfg.immediatePredecessors(n)) {
+        for (const auto& p : n->predecessors()) {
             auto r = p;
             while (r != dom.immediateDominator(n)) {
                 frontier[r->id].insert(n);

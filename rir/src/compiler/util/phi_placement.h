@@ -27,7 +27,7 @@ class PhiPlacement {
     Phis placement;
 
     PhiPlacement(ClosureVersion* cls, BB* target,
-                 const std::unordered_map<BB*, Value*>& inputs, const CFG& cfg,
+                 const std::unordered_map<BB*, Value*>& inputs,
                  const DominanceGraph& dom, const DominanceFrontier&);
 };
 

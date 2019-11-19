@@ -70,9 +70,9 @@ class LoopDetection {
          * TODO: finds a preheader when there is one.
          * We should create a preheader when there is non.
          */
-        BB* preheader(const CFG& cfg) {
+        BB* preheader() {
             BBList outOfLoopPredecessor;
-            for (const auto& pred : cfg.immediatePredecessors(header())) {
+            for (const auto& pred : header()->predecessors()) {
                 if (!body_.count(pred))
                     outOfLoopPredecessor.push_back(pred);
             }

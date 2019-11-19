@@ -1,6 +1,7 @@
 #include "liveness.h"
 #include "../pir/bb.h"
 #include "../pir/instruction.h"
+#include "../util/visitor.h"
 
 #include <map>
 #include <set>
@@ -8,15 +9,17 @@
 namespace rir {
 namespace pir {
 
-LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
+LivenessIntervals::LivenessIntervals(Code* code, unsigned bbsSize) {
     // temp list of live out sets for every BB
     // ordered set so we can use std::includes
     std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
     // this is a backwards analysis, starting from CFG exits
     std::unordered_set<BB*> todo;
-    for (const auto& e : cfg.exits())
-        todo.insert(e);
+    Visitor::run(code->entry, [&](BB* bb) {
+        if (bb->isExit())
+            todo.insert(bb);
+    });
 
     while (!todo.empty()) {
         BB* bb = *todo.begin();
@@ -131,7 +134,7 @@ LivenessIntervals::LivenessIntervals(unsigned bbsSize, CFG const& cfg) {
                 }
             }
         };
-        for (const auto& pre : cfg.immediatePredecessors(bb)) {
+        for (const auto& pre : bb->predecessors()) {
             if (!liveAtEnd.count(pre)) {
                 liveAtEnd[pre] = accumulated;
                 mergePhiInp(pre);

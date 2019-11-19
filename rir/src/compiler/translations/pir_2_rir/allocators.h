@@ -26,7 +26,6 @@ namespace pir {
 
 class SSAAllocator {
   public:
-    CFG cfg;
     DominanceGraph dom;
     Code* code;
     size_t bbsSize;
@@ -41,8 +40,8 @@ class SSAAllocator {
     std::unordered_map<Value*, SlotNumber> allocation;
 
     explicit SSAAllocator(Code* code, ClosureVersion* cls, LogStream& log)
-        : cfg(code), dom(code), code(code), bbsSize(code->nextBBId),
-          livenessIntervals(bbsSize, cfg),
+        : dom(code), code(code), bbsSize(code->nextBBId),
+          livenessIntervals(code, bbsSize),
           sa(cls, code, log, livenessIntervals) {
 #ifdef DEBUG_LIVENESS
         std::cerr << "^^^^^^^^^^ "

@@ -1,5 +1,6 @@
 #include "dead.h"
 #include "compiler/pir/pir_impl.h"
+#include "compiler/util/cfg.h"
 #include "compiler/util/visitor.h"
 #include <algorithm>
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../pir/pir.h"
-#include "../util/cfg.h"
 
 #include <unordered_map>
 #include <vector>
@@ -57,7 +56,7 @@ class LivenessIntervals {
     std::unordered_map<Value*, std::vector<BBLiveness>> intervals;
 
   public:
-    LivenessIntervals(unsigned bbsSize, CFG const& cfg);
+    LivenessIntervals(Code* code, unsigned bbsSize);
 
     // Returns true if `what` is live *immediately after* `where`.
     // This function cannot tell you if a value is live *before* the first

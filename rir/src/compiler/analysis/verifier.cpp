@@ -30,9 +30,18 @@ class TheVerifier {
     bool slow = false;
     std::unordered_map<Code*, DominanceGraph> doms;
     std::unordered_map<Code*, CFG> cfgs;
+    std::unordered_set<BB*> seenPreds;
 
     void operator()() {
         Visitor::run(f->entry, [&](BB* bb) { return verify(bb, false); });
+        Visitor::run(f->entry, [&](BB* bb) { seenPreds.erase(bb); });
+        if (!seenPreds.empty()) {
+            std::cerr << "The following preds are not reachable from entry: ";
+            for (auto p : seenPreds)
+                std::cerr << p->id << " ";
+            std::cerr << "\n";
+            ok = false;
+        }
 
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
@@ -48,6 +57,15 @@ class TheVerifier {
                     ok = false;
                 }
                 verify(p);
+                Visitor::run(p->entry, [&](BB* bb) { seenPreds.erase(bb); });
+                if (!seenPreds.empty()) {
+                    std::cerr
+                        << "The following preds are not reachable from entry: ";
+                    for (auto p : seenPreds)
+                        std::cerr << p->id << " ";
+                    std::cerr << "\n";
+                    ok = false;
+                }
             }
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
@@ -74,6 +92,22 @@ class TheVerifier {
     }
 
     void verify(BB* bb, bool inPromise) {
+        for (auto suc : bb->succsessors()) {
+            if (!suc->predecessors().count(bb)) {
+                std::cout << "BB" << bb->id << " points to BB" << suc->id
+                          << " but that one is not pointing back\n";
+                ok = false;
+            }
+        }
+        for (auto p : bb->predecessors()) {
+            seenPreds.insert(p);
+            if (!p->succsessors().any([&](BB* suc) { return suc == bb; })) {
+                std::cout << "BB" << bb->id << " points back to BB" << p->id
+                          << " but that one does not have us as a succsessor\n";
+                ok = false;
+            }
+        }
+
         for (auto i : *bb) {
             if (FrameState::Cast(i) && inPromise) {
                 std::cerr << "Framestate in promise!\n";
@@ -103,8 +137,8 @@ class TheVerifier {
             In the above example, we can't push an instruction from C to A
             and B, without worrying about D.
         */
-        if (slow && cfg(bb->owner).isMergeBlock(bb)) {
-            for (auto in : cfg(bb->owner).immediatePredecessors(bb)) {
+        if (bb->isMerge()) {
+            for (auto in : bb->predecessors()) {
                 if (in->isBranch()) {
                     unsigned other = (in->trueBranch()->id == bb->id)
                                          ? in->falseBranch()->id
@@ -266,9 +300,8 @@ class TheVerifier {
                     }
                 }
             });
-            if (slow) {
                 std::unordered_set<BB*> inp;
-                for (auto in : cfg(bb->owner).immediatePredecessors(bb))
+                for (auto in : bb->predecessors())
                     inp.insert(in);
                 phi->eachArg([&](BB* bb, Value*) {
                     auto pos = inp.find(bb);
@@ -292,7 +325,6 @@ class TheVerifier {
                     std::cerr << "\n";
                     ok = false;
                 }
-            }
         }
 
         if (auto fs = FrameState::Cast(i)) {

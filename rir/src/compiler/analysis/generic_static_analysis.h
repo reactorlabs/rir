@@ -497,7 +497,6 @@ class BackwardStaticAnalysis {
     AbstractState exitpoint;
 
     bool done = false;
-    CFG const& cfg;
     LogStream& log;
 
     ClosureVersion* closure;
@@ -506,22 +505,25 @@ class BackwardStaticAnalysis {
 
   public:
     BackwardStaticAnalysis(const std::string& name, ClosureVersion* cls,
-                           Code* code, CFG const& cfg, LogStream& log)
-        : name(name), cfg(cfg), log(log), closure(cls), code(code) {
+                           Code* code, LogStream& log)
+        : name(name), log(log), closure(cls), code(code) {
         snapshots.resize(code->nextBBId);
-        for (auto e : cfg.exits()) {
-            entrypoints.push_back(e);
-        }
+        Visitor::run(code->entry, [&](BB* bb) {
+            if (bb->isExit())
+                entrypoints.push_back(bb);
+        });
     }
     BackwardStaticAnalysis(const std::string& name, ClosureVersion* cls,
                            Code* code, const AbstractState& initialState,
-                           CFG const& cfg, LogStream& log)
-        : name(name), cfg(cfg), log(log), closure(cls), code(code) {
+                           LogStream& log)
+        : name(name), log(log), closure(cls), code(code) {
         snapshots.resize(code->nextBBId);
-        for (auto e : cfg.exits()) {
-            entrypoints.push_back(e);
-            snapshots[e->id].entry = initialState;
-        }
+        Visitor::run(code->entry, [&](BB* bb) {
+            if (bb->isExit()) {
+                entrypoints.push_back(bb);
+                snapshots[bb->id].entry = initialState;
+            }
+        });
     }
 
     const AbstractState& result() const {
@@ -654,7 +656,7 @@ class BackwardStaticAnalysis {
         std::vector<bool> seen(snapshots.size(), false);
 
         for (auto e : entrypoints) {
-            Visitor::runBackward(e, cfg, [&](BB* bb) {
+            Visitor::runBackward(e, [&](BB* bb) {
                 if (seen[bb->id])
                     return;
                 seen[bb->id] = true;
@@ -691,7 +693,7 @@ class BackwardStaticAnalysis {
         do {
             done = true;
             for (auto e : entrypoints) {
-                Visitor::runBackward(e, cfg, [&](BB* bb) {
+                Visitor::runBackward(e, [&](BB* bb) {
                     size_t id = bb->id;
 
                     if (!changed[id])
@@ -741,7 +743,7 @@ class BackwardStaticAnalysis {
                         return;
                     }
 
-                    for (auto p : cfg.immediatePredecessors(bb))
+                    for (auto p : bb->predecessors())
                         mergeBranch(bb, p, state, changed);
 
                     changed[id] = false;

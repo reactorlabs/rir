@@ -28,16 +28,14 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
 
     // Fixup CFG: next pointers of copied BB's need to be filled in.
     Visitor::run(src, [&](BB* bb) {
-        bbs[bb->id]->next0 = bbs[bb->id]->next1 = nullptr;
-        if (bb->next0)
-            bbs[bb->id]->next0 = bbs[bb->next0->id];
-        if (bb->next1)
-            bbs[bb->id]->next1 = bbs[bb->next1->id];
+        bbs[bb->id]->setSuccessors(
+            bb->succsessors().map([&](BB* suc) { return bbs[suc->id]; }));
     });
 
     std::unordered_map<Promise*, Promise*> promMap;
     // Relocate argument pointers using old -> new map
     BB* newEntry = bbs[src->id];
+
     Visitor::run(newEntry, [&](Instruction* i) {
         auto phi = Phi::Cast(i);
         if (phi) {
@@ -70,13 +68,9 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
 BB* BBTransform::splitEdge(size_t next_id, BB* from, BB* to, Code* target) {
     BB* split = new BB(target, next_id);
 
-    split->next0 = to;
-    split->next1 = nullptr;
+    split->setNext(to);
 
-    if (from->next0 == to)
-        from->next0 = split;
-    else
-        from->next1 = split;
+    from->replaceSuccessor(to, split);
 
     Visitor::run(split, [&](Instruction* i) {
         if (auto phi = Phi::Cast(i)) {
@@ -92,13 +86,10 @@ BB* BBTransform::splitEdge(size_t next_id, BB* from, BB* to, Code* target) {
 BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
                        Code* target) {
     BB* split = new BB(target, next_id);
-    split->next0 = src->next0;
-    split->next1 = src->next1;
-    while (it != src->end()) {
+    while (it != src->end())
         it = src->moveToEnd(it, split);
-    }
-    src->next0 = split;
-    src->next1 = nullptr;
+    split->setSuccessors(src->succsessors());
+    src->setSuccessors({split, nullptr});
     Visitor::run(split, [&](Instruction* i) {
         if (auto phi = Phi::Cast(i)) {
             for (size_t j = 0; j < phi->nargs(); ++j)
@@ -111,13 +102,12 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
 
 void BBTransform::splitCriticalEdges(Code* fun) {
     std::vector<std::pair<BB*, BB*>> edges;
-    CFG cfg(fun);
 
     // pred->bb is a critical edge if pred has multiple successors and bb
     // has multiple predecessors
     Visitor::run(fun->entry, [&](BB* bb) {
-        if (cfg.isMergeBlock(bb)) {
-            for (const auto& pred : cfg.immediatePredecessors(bb)) {
+        if (bb->isMerge()) {
+            for (const auto& pred : bb->predecessors()) {
                 if (pred->isBranch()) {
                     // Don't split edges while iterating over the CFG!
                     edges.emplace_back(std::make_pair(pred, bb));
@@ -135,10 +125,9 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
     Value* found = nullptr;
     Return* ret;
     Visitor::run(inlinee, [&](BB* bb) {
-        if (bb->next0 != nullptr)
+        if (!bb->isExit())
             return;
 
-        assert(bb->next1 == nullptr);
         if (bb->isDeopt())
             return;
 
@@ -151,7 +140,7 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
 
         found = ret->arg<0>().val();
         assert(ret->bb() == bb);
-        bb->next0 = splice;
+        bb->setNext(splice);
         bb->remove(bb->end() - 1);
     });
     assert(found);
@@ -228,13 +217,10 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     }
 
     src->replace(position, new Branch(test));
-    if (condition) {
-        src->next1 = deoptBlock;
-        src->next0 = split;
-    } else {
-        src->next0 = deoptBlock;
-        src->next1 = split;
-    }
+    if (condition)
+        src->setSuccessors({split, deoptBlock});
+    else
+        src->setSuccessors({deoptBlock, split});
 
     splitEdge(code->nextBBId++, src, deoptBlock, code);
 
@@ -269,10 +255,9 @@ void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp,
 void BBTransform::mergeRedundantBBs(Code* closure) {
     // Aggregate all BBs that have 1 successor and that successor
     // only has 1 predecessor
-    CFG cfg(closure);
     std::unordered_set<BB*> merge;
     Visitor::run(closure->entry, [&](BB* bb) {
-        if (bb->isJmp() && cfg.hasSinglePred(bb->next()))
+        if (bb->isJmp() && bb->next()->predecessors().size() == 1)
             merge.insert(bb);
     });
 
@@ -304,9 +289,8 @@ void BBTransform::mergeRedundantBBs(Code* closure) {
         while (instr != next->end()) {
             instr = next->moveToEnd(instr, bb);
         }
-        bb->next0 = next->next0;
-        bb->next1 = next->next1;
-        next->next0 = next->next1 = nullptr;
+        bb->setSuccessors(next->succsessors());
+        next->deleteSuccessors();
         delete next;
     }
 }

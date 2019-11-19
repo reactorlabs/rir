@@ -20,10 +20,6 @@ class CFG {
   public:
     explicit CFG(Code*);
     bool isPredecessor(BB* a, BB* b) const;
-    bool isImmediatePredecessor(BB* a, BB* b) const;
-    bool hasSinglePred(BB* a) const;
-    bool isMergeBlock(BB* a) const;
-    const BBList& immediatePredecessors(BB* a) const;
     const BBList& exits() const { return exits_; }
 };
 
@@ -67,7 +63,7 @@ class DominanceFrontier {
     std::vector<BBList> frontier;
 
   public:
-    DominanceFrontier(Code* code, const CFG&, const DominanceGraph&);
+    DominanceFrontier(Code* code, const DominanceGraph&);
     const BBList& at(BB* bb) const;
 };
 

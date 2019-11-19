@@ -1145,6 +1145,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
         return cur.entryPC;
     };
     auto pushWorklist = [&](BB* bb, Opcode* pos) {
+        assert(pos != end);
         worklist.push_back(State(cur, false, bb, pos));
     };
 
@@ -1196,17 +1197,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 assert(false);
             }
 
-            auto edgeSplit = [&](Opcode* trg, BB* branch) {
-                if (mergepoints.count(trg)) {
-                    BB* next = insert.createBB();
-                    branch->setNext(next);
-                    branch = next;
-                }
-                return branch;
-            };
-
-            BB* branch = edgeSplit(trg, insert.createBB());
-            BB* fall = edgeSplit(nextPos, insert.createBB());
+            BB* branch = insert.createBB();
+            BB* fall = insert.createBB();
 
             switch (bc.bc) {
             case Opcode::brtrue_:

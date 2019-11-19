@@ -23,7 +23,17 @@ void BB::remove(Instruction* i) {
 }
 
 void BB::print(std::ostream& out, bool tty) {
-    out << "BB" << id << "\n";
+    out << "BB" << id;
+    if (!predecessors().empty()) {
+        out << "   <- [";
+        for (auto p = predecessors().begin(); p != predecessors().end(); p++) {
+            out << (*p)->id;
+            if (p != predecessors().end() - 1)
+                out << ", ";
+        }
+        out << "]";
+    }
+    out << "\n";
     for (auto i : instrs) {
         out << "  ";
         i->print(out, tty);
@@ -89,6 +99,8 @@ bool BB::isDeopt() const {
     return !bb->isEmpty() &&
            (Deopt::Cast(bb->last()) || ScheduledDeopt::Cast(bb->last()));
 }
+
+bool BB::isCheckpoint() const { return !isEmpty() && Checkpoint::Cast(last()); }
 
 BB::~BB() {
     gc();

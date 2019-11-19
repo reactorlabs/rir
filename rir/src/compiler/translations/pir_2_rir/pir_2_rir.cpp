@@ -1292,8 +1292,7 @@ void Pir2Rir::lower(Code* code) {
                 next = bb->remove(it);
             } else if (Checkpoint::Cast(*it)) {
                 next = bb->remove(it);
-                // Branching removed. Preserve invariant
-                bb->next1 = nullptr;
+                bb->convertBranchToJmp(true);
             }
             it = next;
         }

@@ -5,14 +5,13 @@ namespace rir {
 namespace pir {
 
 LoopDetection::LoopDetection(Code* code, bool determineNesting) {
-    CFG cfg(code);
     DominanceGraph dom(code);
     // map of header nodes to tail nodes
     std::unordered_map<BB*, BBList> tailNodes;
 
     // find back edges, i.e. edges tail->header where header dominates tail
     Visitor::run(code->entry, [&](BB* maybeHeader) {
-        for (const auto& maybeTail : cfg.immediatePredecessors(maybeHeader)) {
+        for (const auto& maybeTail : maybeHeader->predecessors()) {
             if (dom.dominates(maybeHeader, maybeTail)) {
                 if (tailNodes.count(maybeHeader)) {
                     tailNodes[maybeHeader].push_back(maybeTail);
@@ -48,7 +47,7 @@ LoopDetection::LoopDetection(Code* code, bool determineNesting) {
             todo.pop_back();
             if (!body.count(cur)) {
                 body.insert(cur);
-                for (const auto& p : cfg.immediatePredecessors(cur)) {
+                for (const auto& p : cur->predecessors()) {
                     todo.push_back(p);
                 }
             }

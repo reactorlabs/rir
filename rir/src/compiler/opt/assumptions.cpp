@@ -56,17 +56,15 @@ struct AvailableAssumptions
 void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                                 LogStream& log) const {
     {
-        CFG cfg(function);
         Visitor::run(function->entry, [&](BB* bb) {
             if (bb->isBranch()) {
                 if (auto cp = Checkpoint::Cast(bb->last())) {
-                    if (cfg.isMergeBlock(cp->nextBB())) {
+                    if (cp->nextBB()->isMerge()) {
                         // Ensure that bb at the beginning of a loop has a bb
                         // to hoist assumes out of the loop.
                         auto preheader = new BB(function, function->nextBBId++);
+                        bb->replaceSuccessor(cp->nextBB(), preheader);
                         preheader->setNext(cp->nextBB());
-                        assert(cp->nextBB() == bb->next0);
-                        bb->next0 = preheader;
                     }
                 }
             }
@@ -195,9 +193,10 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                     replaced[cp] = previousCP;
 
                     cp->replaceUsesWith(previousCP);
+                    auto toDel = bb->deoptBranch();
                     bb->remove(bb->end() - 1);
-                    delete bb->next1;
-                    bb->next1 = nullptr;
+                    bb->convertBranchToJmp(true);
+                    delete toDel;
                     return;
                 }
         }
