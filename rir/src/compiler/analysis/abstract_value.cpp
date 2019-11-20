@@ -32,10 +32,18 @@ void AbstractREnvironmentHierarchy::print(std::ostream& out, bool tty) const {
 }
 
 void AbstractREnvironment::print(std::ostream& out, bool tty) const {
-    if (leaked)
-        out << "* leaked\n";
+    if (leaked())
+        out << "- leaked\n";
     if (tainted)
-        out << "* tainted\n";
+        out << "- tainted\n";
+    if (!reachableEnvs.empty()) {
+        out << "- reachable: ";
+        for (auto r : reachableEnvs) {
+            r->printRef(std::cout);
+            std::cout << " ";
+        }
+        out << "\n";
+    }
 
     for (const auto& entry : entries) {
         auto& name = entry.first;
