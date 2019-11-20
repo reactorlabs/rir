@@ -180,14 +180,16 @@ struct AbstractPirValue {
  * For inter-procedural analysis we can additionally keep track of closures.
  */
 struct AbstractREnvironment {
+    explicit AbstractREnvironment(const AbstractREnvironment& other) = default;
+
     static Value* UnknownParent;
     static Value* UninitializedParent;
 
     SmallMap<SEXP, AbstractPirValue> entries;
+    SmallSet<Value*> reachableEnvs;
 
     AbstractREnvironment() {}
 
-    bool leaked = false;
     bool tainted = false;
 
     void taint() {
@@ -214,11 +216,14 @@ struct AbstractREnvironment {
         return merge(other);
     }
 
+    void leak() { leaked_ = true; }
+    bool leaked() const { return leaked_; }
+
     AbstractResult merge(const AbstractREnvironment& other) {
         AbstractResult res;
 
-        if (!leaked && other.leaked) {
-            leaked = true;
+        if (!leaked_ && other.leaked_) {
+            leaked_ = true;
             res.lostPrecision();
         }
         if (!tainted && other.tainted) {
@@ -247,6 +252,12 @@ struct AbstractREnvironment {
                     AbstractPirValue(UnboundValue::instance(), nullptr, 0)));
             }
         };
+        for (auto& e : other.reachableEnvs) {
+            if (!reachableEnvs.count(e)) {
+                reachableEnvs.insert(e);
+                res.update();
+            }
+        }
 
         if (parentEnv_ == UninitializedParent &&
             other.parentEnv_ != UninitializedParent) {
@@ -274,6 +285,7 @@ struct AbstractREnvironment {
     }
 
   private:
+    bool leaked_ = false;
     Value* parentEnv_ = UninitializedParent;
 };
 
@@ -310,6 +322,9 @@ class AbstractREnvironmentHierarchy {
     SmallMap<Value*, AbstractREnvironment> envs;
 
   public:
+    explicit AbstractREnvironmentHierarchy(
+        const AbstractREnvironmentHierarchy& other) = default;
+
     AbstractREnvironmentHierarchy() {}
 
     SmallMap<Value*, Value*> aliases;
@@ -355,6 +370,18 @@ class AbstractREnvironmentHierarchy {
             return envs[env];
     }
 
+    void addDependency(Value* from, Value* to);
+
+    void leak(Value* env) {
+        auto& ae = at(env);
+        if (ae.leaked())
+            return;
+
+        ae.leak();
+        for (auto& r : ae.reachableEnvs)
+            leak(r);
+    }
+
     void print(std::ostream& out, bool tty = false) const;
 
     AbstractLoad get(Value* env, SEXP e) const;
@@ -365,8 +392,8 @@ class AbstractREnvironmentHierarchy {
 
     AbstractResult taintLeaked() {
         AbstractResult res;
-        for (auto e : envs) {
-            if (e.second.leaked) {
+        for (auto& e : envs) {
+            if (e.second.leaked()) {
                 e.second.taint();
                 res.taint();
             }

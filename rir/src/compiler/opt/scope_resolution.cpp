@@ -524,7 +524,8 @@ class TheScopeResolution {
                     // found something more concrete).
                     if (i->hasEnv() &&
                         aLoad.env != AbstractREnvironment::UnknownParent) {
-                        i->env(aLoad.env);
+                        if (!MaterializeEnv::Cast(i->env()))
+                            i->env(aLoad.env);
 
                         // Assume bindings in base namespace stay unchanged
                         if (!bb->isDeopt()) {

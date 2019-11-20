@@ -32,10 +32,18 @@ void AbstractREnvironmentHierarchy::print(std::ostream& out, bool tty) const {
 }
 
 void AbstractREnvironment::print(std::ostream& out, bool tty) const {
-    if (leaked)
-        out << "* leaked\n";
+    if (leaked())
+        out << "- leaked\n";
     if (tainted)
-        out << "* tainted\n";
+        out << "- tainted\n";
+    if (!reachableEnvs.empty()) {
+        out << "- reachable: ";
+        for (auto r : reachableEnvs) {
+            r->printRef(std::cout);
+            std::cout << " ";
+        }
+        out << "\n";
+    }
 
     for (const auto& entry : entries) {
         auto& name = entry.first;
@@ -104,7 +112,6 @@ AbstractREnvironmentHierarchy::potentialParents(Value* env) const {
         env = aliases.at(env);
     while (envs.count(env)) {
         res.insert(env);
-        auto aenv = envs.at(env);
         auto parent = envs.at(env).parentEnv();
         assert(parent);
         if (parent == AbstractREnvironment::UnknownParent &&
@@ -215,6 +222,19 @@ AbstractLoad AbstractREnvironmentHierarchy::superGet(Value* env, SEXP e) const {
     if (parent == AbstractREnvironment::UnknownParent && Env::parentEnv(env))
         parent = Env::parentEnv(env);
     return get(parent, e);
+}
+
+void AbstractREnvironmentHierarchy::addDependency(Value* from, Value* to) {
+    if (from == to)
+        return;
+    if (to == AbstractREnvironment::UnknownParent || Env::isStaticEnv(to)) {
+        leak(from);
+        return;
+    }
+    auto& a = at(from);
+    if (a.leaked())
+        leak(to);
+    a.reachableEnvs.insert(to);
 }
 
 Value* AbstractREnvironment::UnknownParent = (Value*)-1;

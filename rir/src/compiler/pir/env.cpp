@@ -44,7 +44,8 @@ bool Env::isPirEnv(Value* v) {
 }
 
 bool Env::isAnyEnv(Value* v) {
-    return Env::Cast(v) || MkEnv::Cast(v) || LdFunctionEnv::Cast(v);
+    return Env::Cast(v) || MkEnv::Cast(v) || LdFunctionEnv::Cast(v) ||
+           MaterializeEnv::Cast(v);
 }
 
 Value* Env::parentEnv(Value* e) {

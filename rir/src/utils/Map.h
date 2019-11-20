@@ -66,6 +66,16 @@ class SmallMap {
         return end() - 1;
     }
 
+    V& at(const K& k) {
+        if (big)
+            return container[index.at(k)].second;
+
+        for (auto& e : container)
+            if (e.first == k)
+                return e.second;
+        assert(false);
+    }
+
     const V& at(const K& k) const {
         if (big)
             return container[index.at(k)].second;

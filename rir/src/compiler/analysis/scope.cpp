@@ -139,10 +139,15 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             },
             [&]() { state.returnValue.merge(ValOrig(res, i, depth)); });
         effect.update();
-    } else if (Deopt::Cast(i)) {
+    } else if (auto d = Deopt::Cast(i)) {
         // who knows what the deopt target will return...
         state.returnValue.taint();
         state.mayUseReflection = true;
+        auto fs = d->frameState();
+        while (fs) {
+            state.envs.leak(fs->env());
+            fs = fs->next();
+        }
         effect.taint();
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
@@ -180,7 +185,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             // If our analysis give us an environment approximation for the
             // ldfun, then we can at least contain the tainted environments.
             auto& env = state.envs.at(ld.env);
-            env.leaked = true;
+            state.envs.leak(ld.env);
             env.taint();
             effect.taint();
             handled = true;
@@ -395,6 +400,40 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         }
     }
 
+    if (!CallSafeBuiltin::Cast(i) && !ChkClosure::Cast(i) &&
+        !CastType::Cast(i) && !Force::Cast(i)) {
+        i->eachArg([&](Value* a) {
+            // The env arg has special treatment below since it can only be
+            // leaked by instructions marked leaksEnv.
+            if (i->hasEnv() && i->env() == a)
+                return;
+            a = a->followCasts();
+            Value* leak = nullptr;
+            if (auto mk = MkArg::Cast(a)) {
+                leak = mk->env();
+            } else if (auto mk = MkCls::Cast(a)) {
+                leak = mk->lexicalEnv();
+            } else if (auto mk = MkFunCls::Cast(a)) {
+                leak = mk->lexicalEnv();
+            } else if (!Env::isAnyEnv(i) && Env::isAnyEnv(a)) {
+                leak = a;
+            }
+            if (leak && leak != Env::elided()) {
+                if (auto mk = MkEnv::Cast(i)) {
+                    state.envs.addDependency(mk, leak);
+                } else if (auto st = StVar::Cast(i)) {
+                    state.envs.addDependency(st->env(), leak);
+                } else if (auto st = StVarSuper::Cast(i)) {
+                    auto ld = state.envs.superGet(st->env(), st->varName);
+                    state.envs.addDependency(ld.env, leak);
+                } else {
+                    state.envs.leak(leak);
+                }
+                effect.update();
+            }
+        });
+    }
+
     if (!handled) {
         if (i->hasEnv()) {
             bool envIsNeeded = i->hasEnv();
@@ -424,7 +463,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             }
 
             if (envIsNeeded && i->leaksEnv()) {
-                state.envs.at(i->env()).leaked = true;
+                state.envs.leak(i->env());
                 effect.update();
             }
 
@@ -449,7 +488,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
 void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
                                       Value* env,
                                       const MaybeMaterialized& action) {
-    auto envState = state.envs.at(env);
+    const auto& envState = state.envs.at(env);
     std::unordered_map<SEXP, std::pair<AbstractPirValue, bool>> theEnv;
     for (const auto& entry : envState.entries) {
         auto& name = entry.first;

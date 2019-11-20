@@ -65,7 +65,7 @@ class ScopeAnalysisState {
     }
 
     bool envNotEscaped(Value* v) const {
-        return envs.known(v) && !envs.at(v).leaked;
+        return envs.known(v) && !envs.at(v).leaked();
     }
 
     bool noReflection() const { return !mayUseReflection; };
