@@ -297,6 +297,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     alloc.verify();
 
     auto isJumpThrough = [&](BB* bb) {
+        if (!bb->isJmp())
+            return false;
         return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
                                  alloc.sa.toDrop(bb->last()).empty());
     };
@@ -1063,6 +1065,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             // BB exitting instructions
             case Tag::Branch: {
+                assert(bb->isBranch());
                 auto trueBranch = jumpThroughEmpty(bb->trueBranch());
                 auto falseBranch = jumpThroughEmpty(bb->falseBranch());
                 if (trueBranch->id == order.front()) {
@@ -1173,9 +1176,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
         }
 
-        // This BB has exactly one successor, trueBranch().
+        // This BB has exactly one successor
         assert(bb->isJmp());
-        auto next = jumpThroughEmpty(bb->trueBranch());
+        auto next = jumpThroughEmpty(bb->next());
         cb.add(BC::br(bbLabels[next]));
     });
 

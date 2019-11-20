@@ -352,23 +352,20 @@ class SSAAllocator {
                 }
             }
 
-            if (bb->trueBranch() &&
-                !branchTaken.count(Jmp(bb, bb->trueBranch()))) {
-                branchTaken.insert(Jmp(bb, bb->trueBranch()));
-                if (!bb->falseBranch()) {
-                    verifyBB(bb, bb->trueBranch(), reg, stack);
-                } else {
+            auto succs = bb->succsessors();
+            for (auto suc : succs) {
+                if (branchTaken.count({bb, suc}))
+                    continue;
+                branchTaken.insert({bb, suc});
+                if (succs.size() > 1 && *succs.begin() == suc) {
                     // Need to copy here, since we are gonna explore
-                    // falseBranch() next
+                    // other branch next
                     RegisterFile regC = reg;
                     Stack stackC = stack;
-                    verifyBB(bb, bb->trueBranch(), regC, stackC);
+                    verifyBB(bb, suc, regC, stackC);
+                    continue;
                 }
-            }
-            if (bb->falseBranch() &&
-                !branchTaken.count(Jmp(bb, bb->falseBranch()))) {
-                branchTaken.insert(Jmp(bb, bb->falseBranch()));
-                verifyBB(bb, bb->falseBranch(), reg, stack);
+                verifyBB(bb, suc, reg, stack);
             }
         };
 

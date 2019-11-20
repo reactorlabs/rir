@@ -471,6 +471,9 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
     for (const auto& e : branchRemoval) {
         const auto& branch = e.first;
         const auto& condition = e.second;
+        for (auto i : *branch->getBranch(!condition))
+            if (auto phi = Phi::Cast(i))
+                phi->removeInputs({branch});
         branch->remove(branch->end() - 1);
         branch->convertBranchToJmp(condition);
     }

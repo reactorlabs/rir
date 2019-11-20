@@ -117,8 +117,19 @@ class BB {
         setFalseBranch(falseBranch);
     }
 
-    BB* trueBranch() { return next0; }
-    BB* falseBranch() { return next1; }
+    BB* trueBranch() {
+        assert(next0 && next1);
+        return next0;
+    }
+    BB* falseBranch() {
+        assert(next0 && next1);
+        return next1;
+    }
+    BB* getBranch(bool condition) {
+        if (condition)
+            return trueBranch();
+        return falseBranch();
+    }
 
     BB* mainBranch() {
         SLOWASSERT(isCheckpoint());
@@ -127,19 +138,6 @@ class BB {
     BB* deoptBranch() {
         SLOWASSERT(isCheckpoint());
         return falseBranch();
-    }
-
-    void overrideTrueBranch(BB* bb) {
-        assert(next0 && next1);
-        next0->prev.erase(this);
-        next0 = nullptr;
-        setTrueBranch(bb);
-    }
-    void overrideFalseBranch(BB* bb) {
-        assert(next0 && next1);
-        next1->prev.erase(this);
-        next1 = nullptr;
-        setFalseBranch(this);
     }
 
     void convertBranchToJmp(bool condition) {
@@ -161,7 +159,9 @@ class BB {
         friend class BB;
 
       public:
-        Successors(BB* a, BB* b) : next{a, b} {}
+        Successors(BB* a, BB* b) : next({{a, b}}) { assert(!b || a); }
+        // cppcheck-suppress noExplicitConstructor
+        Successors(BB* a) : next({{a, nullptr}}) { assert(a); }
         bool all(const std::function<bool(BB*)>& apply) const {
             bool ok = true;
             for (int i = 0; i < 2 && ok; ++i)
@@ -180,16 +180,11 @@ class BB {
         const Successors map(const std::function<BB*(BB*)>& m) const {
             auto res = *this;
             for (int i = 0; i < 2; ++i)
-                if (res[i])
-                    res.next[i] = m(res[i]);
+                if (res.next[i])
+                    res.next[i] = m(res.next[i]);
             return res;
         };
 
-        BB* operator[](size_t i) const {
-            assert(i == 0 || i == 1);
-            // cppcheck-suppress CastIntegerToAddressAtReturn
-            return next[i];
-        }
         BBs::const_iterator begin() const { return next.cbegin(); }
         BBs::const_iterator end() const {
             if (!next[0]) {
@@ -200,13 +195,15 @@ class BB {
                 return next.cend() - 1;
             return next.cend();
         }
+
+        size_t size() const { return end() - begin(); }
     };
     const Successors nonDeoptSuccsessors() {
         auto res = succsessors();
         if (isCheckpoint())
             res.next[1] = nullptr;
         for (auto i = 0; i < 2; ++i)
-            if (res[i] && res[i]->isDeopt())
+            if (res.next[i] && res.next[i]->isDeopt())
                 res.next[i] = nullptr;
         // this invariant is needed for the iterator to properly work
         if (res.next[1] && !res.next[0])
@@ -214,7 +211,13 @@ class BB {
         return res;
     }
     const Successors succsessors() { return {next0, next1}; }
+
     void setSuccessors(const Successors& succ) {
+        assert(!next0 && !next1);
+        overrideSuccessors(succ);
+    }
+
+    void overrideSuccessors(const Successors& succ) {
         if (next0)
             next0->prev.erase(this);
         next0 = succ.next[0];
@@ -226,6 +229,19 @@ class BB {
         if (next1)
             next1->prev.insert(this);
     }
+    void replaceSuccessor(BB* old, BB* suc) {
+        if (next0 && next0 == old) {
+            next0->prev.erase(this);
+            next0 = suc;
+        } else if (next1 && next1 == old) {
+            next1->prev.erase(this);
+            next1 = suc;
+        } else {
+            assert(false && "cannot replace, is not a successor");
+        }
+        suc->prev.insert(this);
+    }
+
     void deleteSuccessors() {
         if (next0)
             next0->prev.erase(this);
@@ -252,27 +268,6 @@ class BB {
         next0->prev.erase(this);
         next0 = nullptr;
         setNext(bb);
-    }
-    void replaceSuccessor(BB* old, BB* suc) {
-        if (next0 && next0 == old) {
-            next0->prev.erase(this);
-            next0 = suc;
-        } else if (next1 && next1 == old) {
-            next1->prev.erase(this);
-            next1 = suc;
-        } else {
-            assert(false && "cannot replace, is not a successor");
-        }
-        suc->prev.insert(this);
-    }
-
-    BB* nextOrTrueBranch() { return next0; }
-    void overrideNextOrTrueBranch(BB* bb) {
-        assert(next0);
-        next0->prev.erase(this);
-        next0 = nullptr;
-        next0 = bb;
-        next0->prev.insert(this);
     }
 
     size_t uid() { return (size_t)this; }

@@ -100,7 +100,7 @@ bool BB::isDeopt() const {
            (Deopt::Cast(bb->last()) || ScheduledDeopt::Cast(bb->last()));
 }
 
-bool BB::isCheckpoint() const { return !isEmpty() && Checkpoint::Cast(last()); }
+bool BB::isCheckpoint() const { return isBranch() && Checkpoint::Cast(last()); }
 
 BB::~BB() {
     gc();

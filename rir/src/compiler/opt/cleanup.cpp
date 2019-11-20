@@ -235,7 +235,7 @@ class TheCleanup {
                 BB* d = bb->next();
                 while (!d->isEmpty())
                     d->moveToEnd(d->begin(), bb);
-                bb->setSuccessors(d->succsessors());
+                bb->overrideSuccessors(d->succsessors());
                 d->deleteSuccessors();
                 fixupPhiInput(d, bb);
                 toDel[d] = nullptr;
@@ -250,7 +250,7 @@ class TheCleanup {
                 while (!d->isEmpty()) {
                     d->moveToEnd(d->begin(), bb);
                 }
-                bb->setSuccessors(d->succsessors());
+                bb->overrideSuccessors(d->succsessors());
                 d->deleteSuccessors();
                 fixupPhiInput(d, bb);
                 toDel[d] = nullptr;
@@ -270,9 +270,10 @@ class TheCleanup {
                     toDel[bb->falseBranch()] = bb->falseBranch()->next();
                     bb->convertBranchToJmp(true);
                     bb->remove(bb->end() - 1);
-                }
-                if (bb->trueBranch()->isDeopt() &&
-                    bb->falseBranch()->isDeopt()) {
+                } else if (bb->trueBranch()->isDeopt() &&
+                           bb->falseBranch()->isDeopt()) {
+                    for (auto phi : usedBB[bb->trueBranch()])
+                        phi->removeInputs({bb->trueBranch()});
                     toDel[bb->trueBranch()] = nullptr;
                     bb->convertBranchToJmp(false);
                     bb->remove(bb->end() - 1);
@@ -287,7 +288,7 @@ class TheCleanup {
             while (!d->isEmpty()) {
                 d->moveToEnd(d->begin(), bb);
             }
-            bb->setSuccessors(d->succsessors());
+            bb->overrideSuccessors(d->succsessors());
             d->deleteSuccessors();
             fixupPhiInput(d, bb);
             toDel[d] = nullptr;

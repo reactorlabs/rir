@@ -163,23 +163,23 @@ class TheVerifier {
         } else {
             Instruction* last = bb->last();
             if (last->branches()) {
-                if (!bb->falseBranch() || !bb->trueBranch()) {
+                if (bb->succsessors().size() == 1) {
                     std::cerr << "split bb" << bb->id
                               << " must end in branch\n";
                     ok = false;
                 }
             } else if (last->exits()) {
-                if (bb->trueBranch() || bb->falseBranch()) {
+                if (bb->succsessors().size() > 0) {
                     std::cerr << "exit bb" << bb->id << " must end in return\n";
                     ok = false;
                 }
             } else {
-                if (bb->falseBranch()) {
+                if (bb->succsessors().size() > 1) {
                     std::cerr << "bb" << bb->id
                               << " has false branch but no branch instr\n";
                     ok = false;
                 }
-                if (!bb->trueBranch()) {
+                if (bb->succsessors().size() == 0) {
                     std::cerr << "bb" << bb->id << " has no successor\n";
                     ok = false;
                 }

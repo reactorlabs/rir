@@ -107,11 +107,11 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                 else if (target->isBranch())
                     // both branches dominate bb, then we should move target
                     // forward until they join again
-                    while (target->nextOrTrueBranch() != bb &&
-                           dom.dominates(target->nextOrTrueBranch(), bb) &&
+                    while (*target->succsessors().begin() != bb &&
+                           dom.dominates(*target->succsessors().begin(), bb) &&
                            (!target->isBranch() ||
                             dom.dominates(target->falseBranch(), bb)))
-                        target = target->nextOrTrueBranch();
+                        target = *target->succsessors().begin();
             }
 
             if (!target) {

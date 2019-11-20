@@ -20,9 +20,10 @@ CFG::CFG(Code* start)
                 transitivePredecessors[next->id].push_back(bb);
             }
         };
-        apply(bb->trueBranch());
-        apply(bb->falseBranch());
-        if (!bb->trueBranch() && !bb->falseBranch())
+        auto succs = bb->succsessors();
+        for (auto suc : succs)
+            apply(suc);
+        if (succs.size() == 0)
             exits_.push_back(bb);
     });
 
@@ -79,9 +80,6 @@ DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
         todo.pop();
 
         auto apply = [&](BB* bb) {
-            if (!bb)
-                return;
-
             auto& d = dominating[bb->id];
             if (!d.seen) {
                 d = curState;
@@ -92,8 +90,8 @@ DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
             if (d.merge(curState))
                 todo.push(bb);
         };
-        apply(cur->trueBranch());
-        apply(cur->falseBranch());
+        for (auto suc : cur->succsessors())
+            apply(suc);
     }
 }
 
@@ -125,10 +123,6 @@ DominanceGraph::BBSet DominanceGraph::dominatedSet(Code* start,
         }
 
         auto apply = [&](BB* bb) {
-            if (!bb) {
-                return;
-            }
-
             // Have we already processed this child BB?
             if (!seen.count(bb)) {
                 seen.insert(bb);
@@ -153,8 +147,8 @@ DominanceGraph::BBSet DominanceGraph::dominatedSet(Code* start,
                 }
             }
         };
-        apply(cur->trueBranch());
-        apply(cur->falseBranch());
+        for (auto suc : cur->succsessors())
+            apply(suc);
     }
 
     return result;

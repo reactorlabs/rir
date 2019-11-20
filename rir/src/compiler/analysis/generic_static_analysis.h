@@ -372,8 +372,8 @@ class StaticAnalysis {
                     return;
                 }
 
-                mergeBranch(bb, bb->trueBranch(), state, changed);
-                mergeBranch(bb, bb->falseBranch(), state, changed);
+                for (auto suc : bb->succsessors())
+                    mergeBranch(bb, suc, state, changed);
 
                 changed[id] = false;
             });
@@ -404,9 +404,6 @@ class StaticAnalysis {
 
     void mergeBranch(BB* in, BB* branch, const AbstractState& state,
                      std::vector<bool>& changed) {
-        if (!branch)
-            return;
-
         auto id = branch->id;
         auto& thisState = snapshots.at(id);
         if (!thisState.seen) {
@@ -774,9 +771,6 @@ class BackwardStaticAnalysis {
 
     void mergeBranch(BB* in, BB* branch, const AbstractState& state,
                      std::vector<bool>& changed) {
-        if (!branch)
-            return;
-
         auto id = branch->id;
         auto& thisState = snapshots.at(id);
         if (!thisState.seen) {

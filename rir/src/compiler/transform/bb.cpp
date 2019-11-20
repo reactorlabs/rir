@@ -89,7 +89,7 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
     while (it != src->end())
         it = src->moveToEnd(it, split);
     split->setSuccessors(src->succsessors());
-    src->setSuccessors({split, nullptr});
+    src->overrideSuccessors({split});
     Visitor::run(split, [&](Instruction* i) {
         if (auto phi = Phi::Cast(i)) {
             for (size_t j = 0; j < phi->nargs(); ++j)
@@ -218,9 +218,9 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
     src->replace(position, new Branch(test));
     if (condition)
-        src->setSuccessors({split, deoptBlock});
+        src->overrideSuccessors({split, deoptBlock});
     else
-        src->setSuccessors({deoptBlock, split});
+        src->overrideSuccessors({deoptBlock, split});
 
     splitEdge(code->nextBBId++, src, deoptBlock, code);
 
@@ -289,7 +289,7 @@ void BBTransform::mergeRedundantBBs(Code* closure) {
         while (instr != next->end()) {
             instr = next->moveToEnd(instr, bb);
         }
-        bb->setSuccessors(next->succsessors());
+        bb->overrideSuccessors(next->succsessors());
         next->deleteSuccessors();
         delete next;
     }
