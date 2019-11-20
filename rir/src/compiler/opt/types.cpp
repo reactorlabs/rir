@@ -49,8 +49,8 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "bitwiseAnd", "bitwiseNot",    "bitwiseOr"};
                     if (bitwise.count(name)) {
                         inferred = PirType(RType::integer);
-                        if (getType(c->arg(0).val()).isScalar() &&
-                            getType(c->arg(1).val()).isScalar())
+                        if (getType(c->callArg(0).val()).isScalar() &&
+                            getType(c->callArg(1).val()).isScalar())
                             inferred.setScalar();
                         break;
                     }
@@ -72,8 +72,13 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     }
 
                     if ("as.integer" == name) {
-                        inferred =
-                            c->callArg(0).val()->type & PirType(RType::integer);
+                        if (!c->callArg(0).val()->type.maybeObj()) {
+                            inferred = PirType(RType::integer);
+                            if (getType(c->callArg(0).val()).isScalar())
+                                inferred.setScalar();
+                        } else {
+                            inferred = i->inferType(getType);
+                        }
                         break;
                     }
 
@@ -87,7 +92,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     if (vecTests.count(name)) {
                         if (!c->callArg(0).val()->type.maybeObj()) {
                             inferred = PirType(RType::logical);
-                            if (getType(c->arg(0).val()).isScalar())
+                            if (getType(c->callArg(0).val()).isScalar())
                                 inferred.setScalar();
                         } else {
                             inferred = i->inferType(getType);
