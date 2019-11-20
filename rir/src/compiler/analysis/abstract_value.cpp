@@ -104,7 +104,6 @@ AbstractREnvironmentHierarchy::potentialParents(Value* env) const {
         env = aliases.at(env);
     while (envs.count(env)) {
         res.insert(env);
-        auto aenv = envs.at(env);
         auto parent = envs.at(env).parentEnv();
         assert(parent);
         if (parent == AbstractREnvironment::UnknownParent &&

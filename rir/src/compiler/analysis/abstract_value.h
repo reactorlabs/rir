@@ -180,6 +180,8 @@ struct AbstractPirValue {
  * For inter-procedural analysis we can additionally keep track of closures.
  */
 struct AbstractREnvironment {
+    explicit AbstractREnvironment(const AbstractREnvironment& other) = default;
+
     static Value* UnknownParent;
     static Value* UninitializedParent;
 
@@ -310,6 +312,9 @@ class AbstractREnvironmentHierarchy {
     SmallMap<Value*, AbstractREnvironment> envs;
 
   public:
+    explicit AbstractREnvironmentHierarchy(
+        const AbstractREnvironmentHierarchy& other) = default;
+
     AbstractREnvironmentHierarchy() {}
 
     SmallMap<Value*, Value*> aliases;
@@ -365,7 +370,7 @@ class AbstractREnvironmentHierarchy {
 
     AbstractResult taintLeaked() {
         AbstractResult res;
-        for (auto e : envs) {
+        for (auto& e : envs) {
             if (e.second.leaked) {
                 e.second.taint();
                 res.taint();

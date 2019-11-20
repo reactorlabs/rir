@@ -395,6 +395,24 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         }
     }
 
+    i->eachArg([&](Value* a) {
+        a = a->followCastsAndForce();
+        Value* leak = nullptr;
+        if (auto mk = MkArg::Cast(a)) {
+            leak = mk->env();
+        } else if (auto mk = MkCls::Cast(a)) {
+            leak = mk->lexicalEnv();
+        } else if (auto mk = MkFunCls::Cast(a)) {
+            leak = mk->lexicalEnv();
+        } else if (!Env::isAnyEnv(i) && Env::isAnyEnv(a)) {
+            leak = a;
+        }
+        if (leak) {
+            state.envs.at(leak).leaked = true;
+            effect.update();
+        }
+    });
+
     if (!handled) {
         if (i->hasEnv()) {
             bool envIsNeeded = i->hasEnv();
@@ -449,7 +467,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
 void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
                                       Value* env,
                                       const MaybeMaterialized& action) {
-    auto envState = state.envs.at(env);
+    const auto& envState = state.envs.at(env);
     std::unordered_map<SEXP, std::pair<AbstractPirValue, bool>> theEnv;
     for (const auto& entry : envState.entries) {
         auto& name = entry.first;
