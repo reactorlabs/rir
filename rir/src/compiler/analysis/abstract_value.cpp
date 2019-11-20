@@ -224,6 +224,19 @@ AbstractLoad AbstractREnvironmentHierarchy::superGet(Value* env, SEXP e) const {
     return get(parent, e);
 }
 
+void AbstractREnvironmentHierarchy::addDependency(Value* from, Value* to) {
+    if (from == to)
+        return;
+    if (to == AbstractREnvironment::UnknownParent || Env::isStaticEnv(to)) {
+        leak(from);
+        return;
+    }
+    auto& a = at(from);
+    if (a.leaked())
+        leak(to);
+    a.reachableEnvs.insert(to);
+}
+
 Value* AbstractREnvironment::UnknownParent = (Value*)-1;
 Value* AbstractREnvironment::UninitializedParent = (Value*)-2;
 }

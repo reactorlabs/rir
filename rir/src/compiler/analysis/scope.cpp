@@ -424,10 +424,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 } else if (auto st = StVar::Cast(i)) {
                     state.envs.addDependency(st->env(), leak);
                 } else if (auto st = StVarSuper::Cast(i)) {
-                    const auto& parents =
-                        state.envs.potentialParents(st->env());
-                    for (auto e : parents)
-                        state.envs.addDependency(e, leak);
+                    auto ld = state.envs.superGet(st->env(), st->varName);
+                    state.envs.addDependency(ld.env, leak);
                 } else {
                     state.envs.leak(leak);
                 }

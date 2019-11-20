@@ -370,14 +370,7 @@ class AbstractREnvironmentHierarchy {
             return envs[env];
     }
 
-    void addDependency(Value* from, Value* to) {
-        if (from == to)
-            return;
-        auto& a = at(from);
-        if (a.leaked())
-            leak(to);
-        a.reachableEnvs.insert(to);
-    }
+    void addDependency(Value* from, Value* to);
 
     void leak(Value* env) {
         auto& ae = at(env);
