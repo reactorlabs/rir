@@ -18,8 +18,13 @@ class LastEnv : public StaticAnalysis<AbstractUnique<Value>> {
 
     AbstractResult apply(AbstractUnique<Value>& state,
                          Instruction* i) const override {
-        if (i->hasEnv() && !explicitEnvValue(i) && i->env() != state.get()) {
-            state.set(i->env());
+        Value* env = nullptr;
+        if (i->mayHaveEnv())
+            env = i->env();
+        if (CallSafeBuiltin::Cast(i))
+            env = Env::elided();
+        if (env && !explicitEnvValue(i) && env != state.get()) {
+            state.set(env);
             return AbstractResult::Updated;
         }
         // pop_context_ does not restore env
@@ -30,9 +35,10 @@ class LastEnv : public StaticAnalysis<AbstractUnique<Value>> {
         return AbstractResult::None;
     };
 
-    bool envStillValid(Instruction* i) {
-        return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i)
-                   .get() == i->env();
+    bool envStillValid(Instruction* i) { return currentEnv(i) == i->env(); }
+
+    Value* currentEnv(Instruction* i) {
+        return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).get();
     }
 };
 
