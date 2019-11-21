@@ -1334,6 +1334,7 @@ void Pir2Rir::toCSSA(Code* code) {
                     BB* pred = phi->inputAt(i);
                     // If pred is branch insert a new split block
                     if (!pred->isJmp()) {
+                        assert(pred->isBranch());
                         BB* split = nullptr;
                         if (pred->trueBranch() == phi->bb())
                             split = pred->trueBranch();
