@@ -2357,7 +2357,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         } else if (irep == Representation::Real) {
                             assert(orep == irep);
                             setVal(i, builder.CreateSelect(
-                                          builder.CreateFCmpOGE(a, c(0)), a,
+                                          builder.CreateFCmpOGE(a, c(0.0)), a,
                                           builder.CreateFNeg(a)));
                         } else {
                             done = false;

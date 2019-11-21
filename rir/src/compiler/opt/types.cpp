@@ -49,8 +49,8 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "bitwiseAnd", "bitwiseNot",    "bitwiseOr"};
                     if (bitwise.count(name)) {
                         inferred = PirType(RType::integer);
-                        if (getType(c->arg(0).val()).isScalar() &&
-                            getType(c->arg(1).val()).isScalar())
+                        if (getType(c->callArg(0).val()).isScalar() &&
+                            getType(c->callArg(1).val()).isScalar())
                             inferred.setScalar();
                         break;
                     }
@@ -62,15 +62,23 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     }
 
                     if ("abs" == name) {
-                        if (!c->arg(0).type().maybeObj())
-                            inferred = c->arg(0).type() & PirType::num();
-                        else
+                        if (!c->callArg(0).val()->type.maybeObj()) {
+                            inferred =
+                                c->callArg(0).val()->type & PirType::num();
+                        } else {
                             inferred = i->inferType(getType);
+                        }
                         break;
                     }
 
                     if ("as.integer" == name) {
-                        inferred = c->arg(0).type() & PirType(RType::integer);
+                        if (!c->callArg(0).val()->type.maybeObj()) {
+                            inferred = PirType(RType::integer);
+                            if (getType(c->callArg(0).val()).isScalar())
+                                inferred.setScalar();
+                        } else {
+                            inferred = i->inferType(getType);
+                        }
                         break;
                     }
 
@@ -82,9 +90,9 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     static const std::unordered_set<std::string> vecTests = {
                         "is.na", "is.nan", "is.finite", "is.infinite"};
                     if (vecTests.count(name)) {
-                        if (!c->arg(0).type().maybeObj()) {
+                        if (!c->callArg(0).val()->type.maybeObj()) {
                             inferred = PirType(RType::logical);
-                            if (getType(c->arg(0).val()).isScalar())
+                            if (getType(c->callArg(0).val()).isScalar())
                                 inferred.setScalar();
                         } else {
                             inferred = i->inferType(getType);
@@ -102,7 +110,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "is.atomic",   "is.recursive", "is.call",
                         "is.language", "is.function",  "is.single"};
                     if (tests.count(name)) {
-                        if (!c->arg(0).type().maybeObj())
+                        if (!c->callArg(0).val()->type.maybeObj())
                             inferred = PirType(RType::logical).scalar();
                         else
                             inferred = i->inferType(getType);
