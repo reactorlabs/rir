@@ -274,6 +274,9 @@ class TheCleanup {
                            bb->falseBranch()->isDeopt()) {
                     for (auto phi : usedBB[bb->trueBranch()])
                         phi->removeInputs({bb->trueBranch()});
+                    for (auto phi : usedBB[bb])
+                        if (phi->bb() == bb->trueBranch())
+                            phi->removeInputs({bb});
                     toDel[bb->trueBranch()] = nullptr;
                     bb->convertBranchToJmp(false);
                     bb->remove(bb->end() - 1);
