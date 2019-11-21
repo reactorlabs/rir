@@ -271,13 +271,17 @@ class TheCleanup {
                     bb->convertBranchToJmp(true);
                     bb->remove(bb->end() - 1);
                 } else if (bb->trueBranch()->isDeopt() &&
-                           bb->falseBranch()->isDeopt()) {
-                    for (auto phi : usedBB[bb->trueBranch()])
-                        phi->removeInputs({bb->trueBranch()});
-                    for (auto phi : usedBB[bb])
-                        if (phi->bb() == bb->trueBranch())
-                            phi->removeInputs({bb});
-                    toDel[bb->trueBranch()] = nullptr;
+                           bb->falseBranch()->isDeopt() &&
+                           !toDel.count(bb->trueBranch())) {
+                    auto del = bb->trueBranch();
+                    // We have no merges in deopt branches afaik.
+                    if (usedBB.count(bb))
+                        for (auto phi : usedBB[bb])
+                            assert(phi->bb() != del);
+                    if (usedBB.count(del))
+                        for (auto phi : usedBB[del])
+                            phi->removeInputs({del});
+                    toDel[del] = nullptr;
                     bb->convertBranchToJmp(false);
                     bb->remove(bb->end() - 1);
                 }
