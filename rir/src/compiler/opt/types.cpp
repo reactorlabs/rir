@@ -62,9 +62,9 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     }
 
                     if ("abs" == name) {
-                        if (!c->callArg(0).val()->type.maybeObj()) {
+                        if (!getType(c->callArg(0).val()).maybeObj()) {
                             inferred =
-                                c->callArg(0).val()->type & PirType::num();
+                                getType(c->callArg(0).val()) & PirType::num();
                         } else {
                             inferred = i->inferType(getType);
                         }
@@ -72,7 +72,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     }
 
                     if ("as.integer" == name) {
-                        if (!c->callArg(0).val()->type.maybeObj()) {
+                        if (!getType(c->callArg(0).val()).maybeObj()) {
                             inferred = PirType(RType::integer);
                             if (getType(c->callArg(0).val()).isScalar())
                                 inferred.setScalar();
@@ -90,7 +90,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     static const std::unordered_set<std::string> vecTests = {
                         "is.na", "is.nan", "is.finite", "is.infinite"};
                     if (vecTests.count(name)) {
-                        if (!c->callArg(0).val()->type.maybeObj()) {
+                        if (!getType(c->callArg(0).val()).maybeObj()) {
                             inferred = PirType(RType::logical);
                             if (getType(c->callArg(0).val()).isScalar())
                                 inferred.setScalar();
@@ -110,7 +110,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "is.atomic",   "is.recursive", "is.call",
                         "is.language", "is.function",  "is.single"};
                     if (tests.count(name)) {
-                        if (!c->callArg(0).val()->type.maybeObj())
+                        if (!getType(c->callArg(0).val()).maybeObj())
                             inferred = PirType(RType::logical).scalar();
                         else
                             inferred = i->inferType(getType);
