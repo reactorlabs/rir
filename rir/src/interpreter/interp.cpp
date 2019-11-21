@@ -1725,8 +1725,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     auto changeEnv = [&](SEXP e) {
         assert((TYPEOF(e) == ENVSXP || LazyEnvironment::check(e)) &&
                "Expected an environment");
-        assert(!LazyEnvironment::check(e) ||
-               !LazyEnvironment::check(e)->materialized());
+        if (auto le = LazyEnvironment::check(e)) {
+            if (le->materialized())
+                e = le->materialized();
+        }
+
         if (e != env)
             env = e;
     };

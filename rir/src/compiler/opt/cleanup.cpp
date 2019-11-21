@@ -95,8 +95,10 @@ class TheCleanup {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
                     } else {
-                        for (auto curBB : phi->inputs())
+                        for (auto curBB : phi->inputs()) {
+                            assert(!curBB->isDeopt());
                             usedBB[curBB].insert(phi);
+                        }
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
                     if (dead.isDead(arg)) {
@@ -208,11 +210,14 @@ class TheCleanup {
         });
 
         auto fixupPhiInput = [&](BB* old, BB* n) {
+            if (!usedBB.count(old))
+                return;
             for (auto phi : usedBB[old]) {
                 for (size_t i = 0; i < phi->nargs(); ++i)
                     if (phi->inputAt(i) == old)
                         phi->updateInputAt(i, n);
             }
+            assert(!n->isDeopt());
             usedBB[n].insert(usedBB[old].begin(), usedBB[old].end());
             usedBB.erase(usedBB.find(old));
         };
@@ -224,12 +229,13 @@ class TheCleanup {
                 bool block = false;
                 // Prevent this removal from merging a phi input block with the
                 // block the phi resides in
-                for (auto phi : usedBB[bb]) {
-                    phi->eachArg([&](BB* in, Value*) {
-                        if (in == bb && bb->next() == phi->bb())
-                            block = true;
-                    });
-                }
+                if (usedBB.count(bb))
+                    for (auto phi : usedBB[bb]) {
+                        phi->eachArg([&](BB* in, Value*) {
+                            if (in == bb && bb->next() == phi->bb())
+                                block = true;
+                        });
+                    }
                 if (block)
                     return;
                 BB* d = bb->next();
@@ -267,22 +273,8 @@ class TheCleanup {
                     usedBB.find(bb->trueBranch()) == usedBB.end() &&
                     usedBB.find(bb->falseBranch()) == usedBB.end()) {
                     toDel[bb->trueBranch()] = bb->trueBranch()->next();
-                    toDel[bb->falseBranch()] = bb->falseBranch()->next();
+                    toDel[bb->falseBranch()] = nullptr;
                     bb->convertBranchToJmp(true);
-                    bb->remove(bb->end() - 1);
-                } else if (bb->trueBranch()->isDeopt() &&
-                           bb->falseBranch()->isDeopt() &&
-                           !toDel.count(bb->trueBranch())) {
-                    auto del = bb->trueBranch();
-                    // We have no merges in deopt branches afaik.
-                    if (usedBB.count(bb))
-                        for (auto phi : usedBB[bb])
-                            assert(phi->bb() != del);
-                    if (usedBB.count(del))
-                        for (auto phi : usedBB[del])
-                            phi->removeInputs({del});
-                    toDel[del] = nullptr;
-                    bb->convertBranchToJmp(false);
                     bb->remove(bb->end() - 1);
                 }
             }

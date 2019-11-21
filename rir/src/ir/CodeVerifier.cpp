@@ -62,7 +62,8 @@ class State {
         if (bc.bc == Opcode::push_context_) {
             uint32_t popCtxt = *reinterpret_cast<Immediate*>(oldPc + 1);
             auto popCtxtPos = pc + popCtxt;
-            assert(*popCtxtPos == Opcode::pop_context_);
+            assert(*popCtxtPos == Opcode::pop_context_ ||
+                   *popCtxtPos == Opcode::int3_);
             assert(!pushContextStackHeight.count(popCtxtPos));
             pushContextStackHeight[popCtxtPos] = ostack;
         }

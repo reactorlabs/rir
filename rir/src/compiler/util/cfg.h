@@ -72,10 +72,12 @@ class UsesTree {
     typedef SmallSet<Instruction*> DependenciesList;
     explicit UsesTree(Code*);
     const DependenciesList& at(Instruction* i) const;
-    const std::unordered_map<Instruction*, DependenciesList>::iterator begin() {
+    const std::unordered_map<Instruction*, DependenciesList>::const_iterator
+    begin() const {
         return uses.begin();
     }
-    const std::unordered_map<Instruction*, DependenciesList>::iterator end() {
+    const std::unordered_map<Instruction*, DependenciesList>::const_iterator
+    end() const {
         return uses.end();
     }
 
