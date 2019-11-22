@@ -277,6 +277,39 @@ class TheCleanup {
                     toDel[bb->falseBranch()] = nullptr;
                     bb->convertBranchToJmp(true);
                     bb->remove(bb->end() - 1);
+                } else if (bb->trueBranch()->isDeopt() &&
+                           bb->falseBranch()->isDeopt()) {
+                    // If both branches are deopts, try to get rid of one. only
+                    // possible if the one we keep has no effects before deopt.
+                    assert(bb->trueBranch() != bb->falseBranch());
+                    BB* del = bb->trueBranch();
+                    auto check = [&]() {
+                        auto keep = bb->trueBranch() == del ? bb->falseBranch()
+                                                            : bb->trueBranch();
+                        Visitor::run(keep, [&](Instruction* i) {
+                            if (Deopt::Cast(i))
+                                return;
+                            if (Assume::Cast(i) || i->hasStrongEffects())
+                                del = nullptr;
+                        });
+                    };
+                    check();
+                    if (!del) {
+                        del = bb->falseBranch();
+                        check();
+                    }
+                    if (del) {
+                        // We have no merges in deopt branches afaik.
+                        if (usedBB.count(bb))
+                            for (auto phi : usedBB[bb])
+                                assert(phi->bb() != del);
+                        assert(!usedBB.count(del));
+                        assert(!toDel.count(del));
+                        bb->convertBranchToJmp(del == bb->falseBranch());
+                        assert(del->predecessors().size() == 0);
+                        bb->remove(bb->end() - 1);
+                        toDel[del] = nullptr;
+                    }
                 }
             }
         });
