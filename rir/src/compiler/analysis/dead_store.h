@@ -96,6 +96,8 @@ class DeadStoreAnalysis {
                     assert(promEnv);
                     env = promEnv;
                 }
+                if (auto m = MaterializeEnv::Cast(env))
+                    env = m->arg(0).val();
                 if (auto mk = MkEnv::Cast(env)) {
                     // stubs cannot leak, or we deopt
                     if (mk->stub)
@@ -208,7 +210,10 @@ class DeadStoreAnalysis {
         Value* resolveEnv(Value* env) const {
             if (LdFunctionEnv::Cast(env)) {
                 assert(promEnv);
-                return promEnv;
+                env = promEnv;
+            }
+            if (auto m = MaterializeEnv::Cast(env)) {
+                return m->arg(0).val();
             }
             return env;
         }
