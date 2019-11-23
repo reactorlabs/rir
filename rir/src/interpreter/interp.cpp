@@ -268,8 +268,8 @@ SEXP materialize(SEXP rirDataWrapper) {
     if (auto promargs = ArgsLazyDataContent::check(rirDataWrapper)) {
         return promargs->createArgsLists();
     } else if (auto lazyEnv = LazyEnvironment::check(rirDataWrapper)) {
-        R_PreserveObject(rirDataWrapper);
         auto newEnv = createEnvironment(globalContext(), rirDataWrapper);
+        Rf_setAttrib(newEnv, symbol::delayedEnv, rirDataWrapper);
         lazyEnv->clear();
         RCNTXT* cur = R_GlobalContext;
         while (cur) {
