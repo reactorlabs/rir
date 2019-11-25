@@ -61,6 +61,7 @@ class SmallSet {
     }
 
     iterator erase(iterator e) { return container.erase(e); }
+    void erase(T e) { erase(find(e)); }
     const_iterator erase(const_iterator e) { return container.erase(e); }
 
     iterator begin() { return container.begin(); }

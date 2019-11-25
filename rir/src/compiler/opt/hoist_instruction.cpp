@@ -104,13 +104,14 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                 });
                 if (!success || !target)
                     target = nullptr;
-                else
+                else if (target->isBranch())
                     // both branches dominate bb, then we should move target
                     // forward until they join again
-                    while (target->next0 && target->next0 != bb &&
-                           dom.dominates(target->next0, bb) &&
-                           (!target->next1 || dom.dominates(target->next1, bb)))
-                        target = target->next0;
+                    while (*target->succsessors().begin() != bb &&
+                           dom.dominates(*target->succsessors().begin(), bb) &&
+                           (!target->isBranch() ||
+                            dom.dominates(target->falseBranch(), bb)))
+                        target = *target->succsessors().begin();
             }
 
             if (!target) {
@@ -150,9 +151,9 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                             return false;
                         }
 
-                    return compute(x->next0) && compute(x->next1);
+                    return x->succsessors().all(compute);
                 };
-                return compute(x->next0) && compute(x->next1);
+                return x->succsessors().all(compute);
             };
 
             auto noUnneccessaryComputation = [&](BB* x, unsigned exceptions) {
@@ -172,9 +173,9 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                             }
                         }
                     }
-                    return compute(x->next0) && compute(x->next1);
+                    return x->succsessors().all(compute);
                 };
-                return compute(x->next0) && compute(x->next1);
+                return x->succsessors().all(compute);
             };
 
             bool success = true;

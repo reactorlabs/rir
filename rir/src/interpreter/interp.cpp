@@ -191,41 +191,13 @@ static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
-SEXP createEnvironment(InterpreterInstance* ctx, SEXP wrapper_) {
-    auto wrapper = LazyEnvironment::unpack(wrapper_);
-    assert(!wrapper->materialized());
-
-    SEXP arglist = R_NilValue;
-    auto names = wrapper->names;
-    for (size_t i = 0; i < wrapper->nargs; ++i) {
-        SEXP val = wrapper->getArg(i);
-        if (val == R_UnboundValue)
-            continue;
-        SEXP name = cp_pool_at(ctx, names[i]);
-        bool isMissing = val == R_MissingArg;
-        if (TYPEOF(name) == LISTSXP) {
-            isMissing = true;
-            name = CAR(name);
-        }
-        isMissing = isMissing && !wrapper->notMissing[i];
-        arglist = CONS_NR(val, arglist);
-        SET_TAG(arglist, name);
-        SET_MISSING(arglist, isMissing ? 2 : 0);
-    }
-
-    SEXP environment =
-        Rf_NewEnvironment(R_NilValue, arglist, wrapper->getParent());
-    wrapper->materialized(environment);
-    return environment;
-}
-
 static SEXP materializeCallerEnv(CallContext& callCtx,
                                  InterpreterInstance* ctx) {
     if (auto le = LazyEnvironment::check(callCtx.callerEnv)) {
         if (le->materialized())
             callCtx.callerEnv = le->materialized();
         else
-            callCtx.callerEnv = createEnvironment(ctx, callCtx.callerEnv);
+            callCtx.callerEnv = materialize(callCtx.callerEnv);
     }
     SLOWASSERT(callCtx.callerEnv == symbol::delayedEnv ||
                TYPEOF(callCtx.callerEnv) == ENVSXP ||
@@ -265,11 +237,39 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
 }
 
 SEXP materialize(SEXP rirDataWrapper) {
+    auto createEnvironment = [](InterpreterInstance* ctx, SEXP wrapper_) {
+        auto wrapper = LazyEnvironment::unpack(wrapper_);
+        assert(!wrapper->materialized());
+
+        SEXP arglist = R_NilValue;
+        auto names = wrapper->names;
+        for (size_t i = 0; i < wrapper->nargs; ++i) {
+            SEXP val = wrapper->getArg(i);
+            if (val == R_UnboundValue)
+                continue;
+            SEXP name = cp_pool_at(ctx, names[i]);
+            bool isMissing = val == R_MissingArg;
+            if (TYPEOF(name) == LISTSXP) {
+                isMissing = true;
+                name = CAR(name);
+            }
+            isMissing = isMissing && !wrapper->notMissing[i];
+            arglist = CONS_NR(val, arglist);
+            SET_TAG(arglist, name);
+            SET_MISSING(arglist, isMissing ? 2 : 0);
+        }
+
+        SEXP environment =
+            Rf_NewEnvironment(R_NilValue, arglist, wrapper->getParent());
+        wrapper->materialized(environment);
+        return environment;
+    };
+
     if (auto promargs = ArgsLazyDataContent::check(rirDataWrapper)) {
         return promargs->createArgsLists();
     } else if (auto lazyEnv = LazyEnvironment::check(rirDataWrapper)) {
-        R_PreserveObject(rirDataWrapper);
         auto newEnv = createEnvironment(globalContext(), rirDataWrapper);
+        Rf_setAttrib(newEnv, symbol::delayedEnv, rirDataWrapper);
         lazyEnv->clear();
         RCNTXT* cur = R_GlobalContext;
         while (cur) {
@@ -495,9 +495,8 @@ static RIR_INLINE SEXP legacyCallWithArgslist(CallContext& call, SEXP argslist,
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         // call it
-        auto builtinEnv =
-            LazyEnvironment::check(call.callerEnv) ? R_BaseEnv : call.callerEnv;
-        SEXP result = f(call.ast, call.callee, argslist, builtinEnv);
+        SEXP result =
+            f(call.ast, call.callee, argslist, materializeCallerEnv(call, ctx));
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         return result;
@@ -1517,7 +1516,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 
     if (auto le = LazyEnvironment::check(deoptEnv)) {
         assert(!le->materialized());
-        deoptEnv = createEnvironment(globalContext(), deoptEnv);
+        deoptEnv = materialize(deoptEnv);
         cntxt->cloenv = deoptEnv;
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
@@ -1726,8 +1725,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     auto changeEnv = [&](SEXP e) {
         assert((TYPEOF(e) == ENVSXP || LazyEnvironment::check(e)) &&
                "Expected an environment");
-        assert(!LazyEnvironment::check(e) ||
-               !LazyEnvironment::check(e)->materialized());
+        if (auto le = LazyEnvironment::check(e)) {
+            if (le->materialized())
+                e = le->materialized();
+        }
+
         if (e != env)
             env = e;
     };
@@ -1951,12 +1953,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(materialize_env_) {
             auto lazyEnv = LazyEnvironment::check(env);
             assert(lazyEnv);
-            if (!lazyEnv->materialized()) {
-                auto cntx = findFunctionContextFor(env);
+            if (!lazyEnv->materialized())
                 env = materialize(env);
-                if (cntx)
-                    cntx->cloenv = env;
-            }
             ostack_push(ctx, env);
             NEXT();
         }

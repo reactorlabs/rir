@@ -119,7 +119,6 @@ class LowerFunctionLLVM {
     bool refcountAnalysisOverflow;
     IRBuilder<> builder;
     MDBuilder MDB;
-    CFG cfg;
     LivenessIntervals liveness;
     size_t numLocals;
     size_t numTemps;
@@ -155,8 +154,7 @@ class LowerFunctionLLVM {
           needsEnsureNamed(needsEnsureNamed), needsSetShared(needsSetShared),
           needsLdVarForUpdate(needsLdVarForUpdate),
           refcountAnalysisOverflow(refcountAnalysisOverflow), builder(C),
-          MDB(C), cfg(code), liveness(code->nextBBId, cfg), numLocals(0),
-          numTemps(0) {
+          MDB(C), liveness(code, code->nextBBId), numLocals(0), numTemps(0) {
 
         fun = JitLLVM::declare(cls, name, t::nativeFunction);
         // prevent Wunused
@@ -4517,10 +4515,8 @@ bool LowerFunctionLLVM::tryCompile() {
         if (bb->isJmp())
             builder.CreateBr(getBlock(bb->next()));
 
-        if (bb->next0)
-            blockInPushContext[bb->next0] = inPushContext;
-        if (bb->next1)
-            blockInPushContext[bb->next1] = inPushContext;
+        for (auto suc : bb->succsessors())
+            blockInPushContext[suc] = inPushContext;
     });
 
     // Delayed insertion of the branch, so we can still easily add instructions

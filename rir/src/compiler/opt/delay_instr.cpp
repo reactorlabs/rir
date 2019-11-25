@@ -15,17 +15,17 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
         return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
                FrameState::Cast(j) || CastType::Cast(j) || MkEnv::Cast(j);
     };
-    UsesTree dataDependencies(function);
+    const UsesTree dataDependencies(function);
 
     std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
     std::unordered_map<Instruction*, SmallSet<Instruction*>> updatePromises;
     std::unordered_map<Instruction*, SmallSet<BB*>> udatePromiseTargets;
-    DominanceGraph dom(function);
-    CFG cfg(function);
+    const DominanceGraph dom(function);
+    const CFG cfg(function);
     bool changed = true;
     while (changed) {
         changed = false;
-        for (auto instructionUses : dataDependencies) {
+        for (const auto& instructionUses : dataDependencies) {
             auto candidate = instructionUses.first;
             if (!candidate->bb()->isDeopt() && isTarget(candidate)) {
                 if (usedOnlyInDeopt.count(candidate))
@@ -54,7 +54,8 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                     // can prove wether every target deopt unambigously always
                     // requires or not the update promise
                     bool safeUpdatePromises = true;
-                    for (auto updatePromise : updatePromises[candidate]) {
+                    for (const auto& updatePromise :
+                         updatePromises[candidate]) {
                         auto& updateTargets =
                             udatePromiseTargets[updatePromise];
                         for (auto deoptTarget : deoptUses) {
@@ -120,6 +121,7 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                             newInstr->eachArg([&](InstrArg& arg) {
                                 replaceArgs(arg, replacements, targetBB);
                             });
+                            assert(bb != targetBB);
                             insertPosition =
                                 targetBB->insert(insertPosition, newInstr) + 1;
                         }

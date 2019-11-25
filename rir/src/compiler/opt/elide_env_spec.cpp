@@ -207,7 +207,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             }
 
             if (auto env = MkEnv::Cast(i)) {
-                if (!env->stub && !bannedEnvs.count(i)) {
+                if (!env->stub && !bannedEnvs.count(i) && !bb->isDeopt()) {
                     if (debug) {
                         std::cout << "stubbing ";
                         env->print(std::cout);

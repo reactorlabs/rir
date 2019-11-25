@@ -95,8 +95,10 @@ class TheCleanup {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
                     } else {
-                        for (auto curBB : phi->inputs())
+                        for (auto curBB : phi->inputs()) {
+                            assert(!curBB->isDeopt());
                             usedBB[curBB].insert(phi);
+                        }
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
                     if (dead.isDead(arg)) {
@@ -208,38 +210,39 @@ class TheCleanup {
         });
 
         auto fixupPhiInput = [&](BB* old, BB* n) {
+            if (!usedBB.count(old))
+                return;
             for (auto phi : usedBB[old]) {
                 for (size_t i = 0; i < phi->nargs(); ++i)
                     if (phi->inputAt(i) == old)
                         phi->updateInputAt(i, n);
             }
+            assert(!n->isDeopt());
             usedBB[n].insert(usedBB[old].begin(), usedBB[old].end());
             usedBB.erase(usedBB.find(old));
         };
 
-        CFG cfg(function);
         std::unordered_map<BB*, BB*> toDel;
         Visitor::run(function->entry, [&](BB* bb) {
             // If bb is a jump to non-merge block, we merge it with the next
-            if (bb->isJmp() && cfg.hasSinglePred(bb->next0)) {
+            if (bb->isJmp() && bb->next()->hasSinglePred()) {
                 bool block = false;
                 // Prevent this removal from merging a phi input block with the
                 // block the phi resides in
-                for (auto phi : usedBB[bb]) {
-                    phi->eachArg([&](BB* in, Value*) {
-                        if (in == bb && bb->next0 == phi->bb())
-                            block = true;
-                    });
-                }
+                if (usedBB.count(bb))
+                    for (auto phi : usedBB[bb]) {
+                        phi->eachArg([&](BB* in, Value*) {
+                            if (in == bb && bb->next() == phi->bb())
+                                block = true;
+                        });
+                    }
                 if (block)
                     return;
-                BB* d = bb->next0;
+                BB* d = bb->next();
                 while (!d->isEmpty())
                     d->moveToEnd(d->begin(), bb);
-                bb->next0 = d->next0;
-                bb->next1 = d->next1;
-                d->next0 = nullptr;
-                d->next1 = nullptr;
+                bb->overrideSuccessors(d->succsessors());
+                d->deleteSuccessors();
                 fixupPhiInput(d, bb);
                 toDel[d] = nullptr;
             }
@@ -247,16 +250,14 @@ class TheCleanup {
 
         // Merge blocks
         Visitor::runPostChange(function->entry, [&](BB* bb) {
-            if (bb->isJmp() && cfg.hasSinglePred(bb) &&
-                cfg.hasSinglePred(bb->next0)) {
-                BB* d = bb->next0;
+            if (bb->isJmp() && bb->hasSinglePred() &&
+                bb->next()->hasSinglePred()) {
+                BB* d = bb->next();
                 while (!d->isEmpty()) {
                     d->moveToEnd(d->begin(), bb);
                 }
-                bb->next0 = d->next0;
-                bb->next1 = d->next1;
-                d->next0 = nullptr;
-                d->next1 = nullptr;
+                bb->overrideSuccessors(d->succsessors());
+                d->deleteSuccessors();
                 fixupPhiInput(d, bb);
                 toDel[d] = nullptr;
             }
@@ -264,41 +265,40 @@ class TheCleanup {
 
         Visitor::runPostChange(function->entry, [&](BB* bb) {
             // Remove empty branches
-            if (bb->next0 && bb->next1) {
-                if (bb->next0->isEmpty() && bb->next1->isEmpty() &&
-                    bb->next0->next0 == bb->next1->next0 &&
-                    usedBB.find(bb->next0) == usedBB.end() &&
-                    usedBB.find(bb->next1) == usedBB.end()) {
-                    toDel[bb->next0] = bb->next0->next0;
-                    toDel[bb->next1] = bb->next0->next0;
-                    bb->next1 = nullptr;
+            if (bb->isBranch()) {
+                if (bb->trueBranch()->isEmpty() &&
+                    bb->falseBranch()->isEmpty() && bb->trueBranch()->isJmp() &&
+                    bb->falseBranch()->isJmp() &&
+                    bb->trueBranch()->next() == bb->falseBranch()->next() &&
+                    usedBB.find(bb->trueBranch()) == usedBB.end() &&
+                    usedBB.find(bb->falseBranch()) == usedBB.end()) {
+                    toDel[bb->trueBranch()] = bb->trueBranch()->next();
+                    toDel[bb->falseBranch()] = nullptr;
+                    bb->convertBranchToJmp(true);
                     bb->remove(bb->end() - 1);
                 }
             }
         });
 
         if (function->entry->isJmp() &&
-            cfg.hasSinglePred(function->entry->next0)) {
+            function->entry->next()->hasSinglePred()) {
             BB* bb = function->entry;
-            BB* d = bb->next0;
+            BB* d = bb->next();
             while (!d->isEmpty()) {
                 d->moveToEnd(d->begin(), bb);
             }
-            bb->next0 = d->next0;
-            bb->next1 = d->next1;
-            d->next0 = nullptr;
-            d->next1 = nullptr;
+            bb->overrideSuccessors(d->succsessors());
+            d->deleteSuccessors();
             fixupPhiInput(d, bb);
             toDel[d] = nullptr;
         }
         Visitor::run(function->entry, [&](BB* bb) {
-            while (toDel.count(bb->next0))
-                bb->next0 = toDel[bb->next0];
-            assert(!toDel.count(bb->next1));
+            while (bb->isJmp() && toDel.count(bb->next()))
+                bb->overrideNext(toDel[bb->next()]);
         });
         for (auto e : toDel) {
             BB* bb = e.first;
-            bb->next0 = nullptr;
+            bb->deleteSuccessors();
             delete bb;
         }
 

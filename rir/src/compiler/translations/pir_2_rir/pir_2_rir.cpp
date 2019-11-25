@@ -297,6 +297,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     alloc.verify();
 
     auto isJumpThrough = [&](BB* bb) {
+        if (!bb->isJmp())
+            return false;
         return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
                                  alloc.sa.toDrop(bb->last()).empty());
     };
@@ -578,6 +580,18 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         }
                         argNumber++;
                     });
+                    // This is needed to prevent builtin calls from
+                    // materializing env stubs
+                    if (CallSafeBuiltin::Cast(instr) ||
+                        (CallInstruction::CastCall(instr) &&
+                         instr->env() == Env::elided())) {
+                        auto cur = lastEnv.currentEnv(instr);
+                        if (!cur ||
+                            (MkEnv::Cast(cur) && MkEnv::Cast(cur)->stub)) {
+                            cb.add(BC::push(R_BaseNamespace));
+                            cb.add(BC::setEnv());
+                        }
+                    }
                 }
             }
 
@@ -1063,6 +1077,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             // BB exitting instructions
             case Tag::Branch: {
+                assert(bb->isBranch());
                 auto trueBranch = jumpThroughEmpty(bb->trueBranch());
                 auto falseBranch = jumpThroughEmpty(bb->falseBranch());
                 if (trueBranch->id == order.front()) {
@@ -1173,9 +1188,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
         }
 
-        // This BB has exactly one successor, trueBranch().
+        // This BB has exactly one successor
         assert(bb->isJmp());
-        auto next = jumpThroughEmpty(bb->trueBranch());
+        auto next = jumpThroughEmpty(bb->next());
         cb.add(BC::br(bbLabels[next]));
     });
 
@@ -1292,8 +1307,7 @@ void Pir2Rir::lower(Code* code) {
                 next = bb->remove(it);
             } else if (Checkpoint::Cast(*it)) {
                 next = bb->remove(it);
-                // Branching removed. Preserve invariant
-                bb->next1 = nullptr;
+                bb->convertBranchToJmp(true);
             }
             it = next;
         }
@@ -1320,6 +1334,7 @@ void Pir2Rir::toCSSA(Code* code) {
                     BB* pred = phi->inputAt(i);
                     // If pred is branch insert a new split block
                     if (!pred->isJmp()) {
+                        assert(pred->isBranch());
                         BB* split = nullptr;
                         if (pred->trueBranch() == phi->bb())
                             split = pred->trueBranch();

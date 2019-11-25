@@ -23,7 +23,17 @@ void BB::remove(Instruction* i) {
 }
 
 void BB::print(std::ostream& out, bool tty) {
-    out << "BB" << id << "\n";
+    out << "BB" << id;
+    if (!predecessors().empty()) {
+        out << "   <- [";
+        for (auto p = predecessors().begin(); p != predecessors().end(); p++) {
+            out << (*p)->id;
+            if (p != predecessors().end() - 1)
+                out << ", ";
+        }
+        out << "]";
+    }
+    out << "\n";
     for (auto i : instrs) {
         out << "  ";
         i->print(out, tty);
@@ -83,12 +93,10 @@ void BB::printBBGraph(std::ostream& out, bool omitDeoptBranches) {
 }
 
 bool BB::isDeopt() const {
-    auto bb = this;
-    if (isJmp())
-        bb = next();
-    return !bb->isEmpty() &&
-           (Deopt::Cast(bb->last()) || ScheduledDeopt::Cast(bb->last()));
+    return !isEmpty() && (Deopt::Cast(last()) || ScheduledDeopt::Cast(last()));
 }
+
+bool BB::isCheckpoint() const { return isBranch() && Checkpoint::Cast(last()); }
 
 BB::~BB() {
     gc();

@@ -11,6 +11,7 @@
 #include "R_ext/Parse.h"
 #include "api.h"
 #include "compiler/parameter.h"
+#include "compiler/util/cfg.h"
 #include <string>
 #include <vector>
 
@@ -402,11 +403,10 @@ bool testCfg() {
          */
         MockBB::reset();
         MockBB A, B, C, D, E;
-        A.next0 = &B;
-        A.next1 = &C;
-        C.next0 = &D;
-        D.next0 = &E;
-        B.next0 = &E;
+        A.setBranch(&B, &C);
+        C.setNext(&D);
+        D.setNext(&E);
+        B.setNext(&E);
 
         CFG cfg(&MockBB::code);
 
@@ -443,12 +443,10 @@ bool testCfg() {
 
         MockBB::reset();
         MockBB A, B, C, D, E;
-        A.next0 = &B;
-        B.next0 = &D;
-        A.next1 = &C;
-        C.next0 = &E;
-        C.next1 = &D;
-        E.next0 = &C;
+        A.setBranch(&B, &C);
+        B.setNext(&D);
+        C.setBranch(&E, &D);
+        E.setNext(&C);
 
         CFG cfg(&MockBB::code);
         assert(cfg.isPredecessor(&A, &E));
@@ -470,7 +468,7 @@ bool testCfg() {
         assert(!dom.dominates(&E, &C));
         assert(!dom.dominates(&E, &D));
 
-        DominanceFrontier f(&MockBB::code, cfg, dom);
+        DominanceFrontier f(&MockBB::code, dom);
         assert(f.at(&A).empty());
         assert(f.at(&B) == DominanceFrontier::BBList({&D}));
         assert(f.at(&C) == DominanceFrontier::BBList({&C, &D}));
@@ -490,12 +488,10 @@ bool testCfg() {
 
         MockBB::reset();
         MockBB A, B, C, D;
-        A.next0 = &B;
-        A.next1 = &C;
-        B.next0 = &A;
-        B.next1 = &D;
-        C.next0 = &B;
-        D.next0 = &A;
+        A.setBranch(&B, &C);
+        B.setBranch(&A, &D);
+        C.setNext(&B);
+        D.setNext(&A);
 
         CFG cfg(&MockBB::code);
         assert(cfg.isPredecessor(&A, &B));
@@ -518,7 +514,7 @@ bool testCfg() {
 
         assert(dom.dominators(&B) == DominanceGraph::BBList({&A}));
 
-        DominanceFrontier f(&MockBB::code, cfg, dom);
+        DominanceFrontier f(&MockBB::code, dom);
         assert(f.at(&A).empty());
         assert(f.at(&B).empty());
         assert(f.at(&C) == DominanceFrontier::BBList({&B}));
@@ -535,10 +531,9 @@ bool testCfg() {
          */
         MockBB::reset();
         MockBB A, B, C, D;
-        A.next0 = &B;
-        A.next1 = &C;
-        B.next0 = &D;
-        C.next0 = &D;
+        A.setBranch(&B, &C);
+        B.setNext(&D);
+        C.setNext(&D);
 
         std::deque<BB*> expected = {&A, &B, &C, &D};
         BreadthFirstVisitor::run(&A, [&](BB* bb) {
@@ -557,10 +552,9 @@ bool testCfg() {
          */
         MockBB::reset();
         MockBB A, B, C, D;
-        A.next0 = &B;
-        A.next1 = &C;
-        B.next0 = &D;
-        C.next0 = &D;
+        A.setBranch(&B, &C);
+        B.setNext(&D);
+        C.setNext(&D);
 
         DominanceGraph dom(&MockBB::code);
         std::deque<BB*> expected = {&A, &B, &C, &D};
@@ -588,11 +582,10 @@ bool testCfg() {
          */
         MockBB::reset();
         MockBB A, B, C, D, E;
-        A.next0 = &B;
-        A.next1 = &E;
-        B.next0 = &C;
-        C.next0 = &D;
-        E.next0 = &D;
+        A.setBranch(&B, &E);
+        B.setNext(&C);
+        C.setNext(&D);
+        E.setNext(&D);
 
         DominanceGraph dom(&MockBB::code);
         std::deque<BB*> expected = {&A, &B, &C, &E, &D};
@@ -620,12 +613,11 @@ bool testCfg() {
          */
         MockBB::reset();
         MockBB A, B, C, D, E, F;
-        A.next0 = &B;
-        A.next1 = &D;
-        B.next0 = &C;
-        C.next0 = &F;
-        D.next0 = &E;
-        E.next0 = &F;
+        A.setBranch(&B, &D);
+        B.setNext(&C);
+        C.setNext(&F);
+        D.setNext(&E);
+        E.setNext(&F);
 
         DominanceGraph dom(&MockBB::code);
         std::deque<BB*> expected = {&A, &B, &C, &D, &E, &F};

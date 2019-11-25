@@ -45,10 +45,8 @@ class FwdAvailableCheckpoints
 class RwdAvailableCheckpoints
     : public BackwardStaticAnalysis<AbstractUnique<Checkpoint>> {
   public:
-    RwdAvailableCheckpoints(ClosureVersion* cls, Code* code, const CFG& cfg,
-                            LogStream& log)
-        : BackwardStaticAnalysis("RwdAvailableCheckpoints", cls, code, cfg,
-                                 log) {}
+    RwdAvailableCheckpoints(ClosureVersion* cls, Code* code, LogStream& log)
+        : BackwardStaticAnalysis("RwdAvailableCheckpoints", cls, code, log) {}
 
     AbstractResult apply(AbstractUnique<Checkpoint>& state,
                          Instruction* i) const override {
@@ -67,13 +65,12 @@ class RwdAvailableCheckpoints
 };
 
 class AvailableCheckpoints {
-    CFG cfg;
     FwdAvailableCheckpoints fwd;
     RwdAvailableCheckpoints rwd;
 
   public:
     AvailableCheckpoints(ClosureVersion* cls, Code* code, LogStream& log)
-        : cfg(code), fwd(cls, code, log), rwd(cls, code, cfg, log) {}
+        : fwd(cls, code, log), rwd(cls, code, log) {}
 
     Checkpoint* at(Instruction* i) { return fwd.reaching(i); }
     Checkpoint* next(Instruction* i, Instruction* dependency,

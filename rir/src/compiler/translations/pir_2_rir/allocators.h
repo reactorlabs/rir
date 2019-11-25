@@ -26,7 +26,6 @@ namespace pir {
 
 class SSAAllocator {
   public:
-    CFG cfg;
     DominanceGraph dom;
     Code* code;
     size_t bbsSize;
@@ -41,8 +40,8 @@ class SSAAllocator {
     std::unordered_map<Value*, SlotNumber> allocation;
 
     explicit SSAAllocator(Code* code, ClosureVersion* cls, LogStream& log)
-        : cfg(code), dom(code), code(code), bbsSize(code->nextBBId),
-          livenessIntervals(bbsSize, cfg),
+        : dom(code), code(code), bbsSize(code->nextBBId),
+          livenessIntervals(code, bbsSize),
           sa(cls, code, log, livenessIntervals) {
 #ifdef DEBUG_LIVENESS
         std::cerr << "^^^^^^^^^^ "
@@ -353,23 +352,20 @@ class SSAAllocator {
                 }
             }
 
-            if (bb->trueBranch() &&
-                !branchTaken.count(Jmp(bb, bb->trueBranch()))) {
-                branchTaken.insert(Jmp(bb, bb->trueBranch()));
-                if (!bb->falseBranch()) {
-                    verifyBB(bb, bb->trueBranch(), reg, stack);
-                } else {
+            auto succs = bb->succsessors();
+            for (auto suc : succs) {
+                if (branchTaken.count({bb, suc}))
+                    continue;
+                branchTaken.insert({bb, suc});
+                if (succs.size() > 1 && *succs.begin() == suc) {
                     // Need to copy here, since we are gonna explore
-                    // falseBranch() next
+                    // other branch next
                     RegisterFile regC = reg;
                     Stack stackC = stack;
-                    verifyBB(bb, bb->trueBranch(), regC, stackC);
+                    verifyBB(bb, suc, regC, stackC);
+                    continue;
                 }
-            }
-            if (bb->falseBranch() &&
-                !branchTaken.count(Jmp(bb, bb->falseBranch()))) {
-                branchTaken.insert(Jmp(bb, bb->falseBranch()));
-                verifyBB(bb, bb->falseBranch(), reg, stack);
+                verifyBB(bb, suc, reg, stack);
             }
         };
 

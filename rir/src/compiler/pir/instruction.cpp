@@ -3,6 +3,7 @@
 
 #include "../analysis/query.h"
 #include "../util/ConvertAssumptions.h"
+#include "../util/cfg.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"

@@ -1,5 +1,6 @@
 #include "dead.h"
 #include "compiler/pir/pir_impl.h"
+#include "compiler/util/cfg.h"
 #include "compiler/util/visitor.h"
 #include <algorithm>
 
@@ -9,7 +10,7 @@ namespace pir {
 DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
                                    Effects ignoreEffects,
                                    DeadInstructionsMode mode) {
-    UsesTree dataDependencies(code);
+    const UsesTree dataDependencies(code);
     std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
     bool changed = true;
     Visitor::run(code->entry, [&](Instruction* i) {
@@ -24,7 +25,7 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
     auto i = 1;
     while (changed && i <= maxBurstSize) {
         changed = false;
-        for (auto instructionUses : dataDependencies) {
+        for (const auto instructionUses : dataDependencies) {
             auto candidate = instructionUses.first;
             auto addToDead = true;
             if (unused_.count(candidate) ||

@@ -5,7 +5,6 @@
 #include "../pir/code.h"
 #include "../pir/instruction.h"
 #include "../pir/pir.h"
-#include "../util/cfg.h"
 
 #include <deque>
 #include <functional>
@@ -150,16 +149,15 @@ class VisitorImplementation {
         });
     }
 
-    static void runBackward(BB* bb, CFG const& cfg, const InstrAction& action) {
-        runBackward(bb, cfg, [action](BB* bb) {
+    static void runBackward(BB* bb, const InstrAction& action) {
+        runBackward(bb, [action](BB* bb) {
             for (auto i : VisitorHelpers::reverse(*bb))
                 action(i);
         });
     }
 
-    static bool checkBackward(BB* bb, CFG const& cfg,
-                              const InstrActionPredicate& action) {
-        return checkBackward(bb, cfg, [action](BB* bb) {
+    static bool checkBackward(BB* bb, const InstrActionPredicate& action) {
+        return checkBackward(bb, [action](BB* bb) {
             bool holds = true;
             for (auto i : VisitorHelpers::reverse(*bb)) {
                 if (!action(i)) {
@@ -171,17 +169,15 @@ class VisitorImplementation {
         });
     }
 
-    static void runBackward(BB* bb, CFG const& cfg,
-                            const InstrBBAction& action) {
-        runBackward(bb, cfg, [action](BB* bb) {
+    static void runBackward(BB* bb, const InstrBBAction& action) {
+        runBackward(bb, [action](BB* bb) {
             for (auto i : VisitorHelpers::reverse(*bb))
                 action(i, bb);
         });
     }
 
-    static bool checkBackward(BB* bb, CFG const& cfg,
-                              const InstrBBActionPredicate& action) {
-        return checkBackward(bb, cfg, [action](BB* bb) {
+    static bool checkBackward(BB* bb, const InstrBBActionPredicate& action) {
+        return checkBackward(bb, [action](BB* bb) {
             bool holds = true;
             for (auto i : VisitorHelpers::reverse(*bb)) {
                 if (!action(i, bb)) {
@@ -213,13 +209,12 @@ class VisitorImplementation {
         return forwardGenericRun<false, BBActionPredicate>(bb, nullptr, action);
     }
 
-    static void runBackward(BB* bb, CFG const& cfg, const BBAction& action) {
-        backwardGenericRun<false, BBAction>(bb, nullptr, cfg, action);
+    static void runBackward(BB* bb, const BBAction& action) {
+        backwardGenericRun<false, BBAction>(bb, nullptr, action);
     }
 
-    static bool checkBackward(BB* bb, CFG const& cfg,
-                              const BBActionPredicate& action) {
-        return backwardGenericRun<false, BBActionPredicate>(bb, nullptr, cfg,
+    static bool checkBackward(BB* bb, const BBActionPredicate& action) {
+        return backwardGenericRun<false, BBActionPredicate>(bb, nullptr,
                                                             action);
     }
 
@@ -230,19 +225,10 @@ class VisitorImplementation {
     template <bool PROCESS_NEW_NODES, typename ActionKind>
     static bool forwardGenericRun(BB* bb, BB* stop, const ActionKind& action) {
         struct Scheduler {
-            RIR_INLINE std::array<BB*, 2> operator()(BB* cur) const {
-                if (!VISIT_DEOPT_BRANCH) {
-                    if (!cur->isEmpty() && Checkpoint::Cast(cur->last()))
-                        return {{cur->next0}};
-                    // Exclude unconditional deopt BB's
-                    if (cur->next0 && !cur->next0->isEmpty() &&
-                        Deopt::Cast(cur->next0->last()))
-                        return {{cur->next1}};
-                    if (cur->next1 && !cur->next1->isEmpty() &&
-                        Deopt::Cast(cur->next1->last()))
-                        return {{cur->next0}};
-                }
-                return {{cur->next0, cur->next1}};
+            BB::Successors operator()(BB* cur) const {
+                if (!VISIT_DEOPT_BRANCH)
+                    return cur->nonDeoptSuccsessors();
+                return cur->succsessors();
             }
         };
         const Scheduler scheduler;
@@ -250,15 +236,13 @@ class VisitorImplementation {
     }
 
     template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool backwardGenericRun(BB* bb, BB* stop, CFG const& cfg,
-                                   const ActionKind& action) {
+    static bool backwardGenericRun(BB* bb, BB* stop, const ActionKind& action) {
         struct Scheduler {
-            const CFG& cfg;
-            RIR_INLINE const std::vector<BB*> operator()(BB* cur) const {
-                return cfg.immediatePredecessors(cur);
+            const SmallSet<BB*> operator()(BB* cur) const {
+                return cur->predecessors();
             }
         };
-        const Scheduler scheduler = {cfg};
+        const Scheduler scheduler;
         return genericRun<PROCESS_NEW_NODES>(bb, stop, scheduler, action);
     }
 

@@ -12,8 +12,7 @@ void DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* function,
         return;
 
     {
-        CFG cfg(function);
-        DeadStoreAnalysis analysis(function, cfg, log);
+        DeadStoreAnalysis analysis(function, log);
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();

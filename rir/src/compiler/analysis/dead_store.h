@@ -96,6 +96,8 @@ class DeadStoreAnalysis {
                     assert(promEnv);
                     env = promEnv;
                 }
+                if (auto m = MaterializeEnv::Cast(env))
+                    env = m->arg(0).val();
                 if (auto mk = MkEnv::Cast(env)) {
                     // stubs cannot leak, or we deopt
                     if (mk->stub)
@@ -181,10 +183,9 @@ class DeadStoreAnalysis {
         const EnvLeakAnalysis& leaked;
 
       public:
-        ObservedStoreAnalysis(ClosureVersion* cls, Code* code, const CFG& cfg,
-                              Value* promEnv, const EnvLeakAnalysis& leaked,
-                              LogStream& log)
-            : BackwardStaticAnalysis("observedEnv", cls, code, cfg, log),
+        ObservedStoreAnalysis(ClosureVersion* cls, Code* code, Value* promEnv,
+                              const EnvLeakAnalysis& leaked, LogStream& log)
+            : BackwardStaticAnalysis("observedEnv", cls, code, log),
               SubAnalysis(), promEnv(promEnv), leaked(leaked) {}
 
       private:
@@ -209,7 +210,10 @@ class DeadStoreAnalysis {
         Value* resolveEnv(Value* env) const {
             if (LdFunctionEnv::Cast(env)) {
                 assert(promEnv);
-                return promEnv;
+                env = promEnv;
+            }
+            if (auto m = MaterializeEnv::Cast(env)) {
+                return m->arg(0).val();
             }
             return env;
         }
@@ -271,11 +275,9 @@ class DeadStoreAnalysis {
 
         AbstractResult handleRecurse(ObservedStores& state, Instruction* i,
                                      Promise* prom, Value* env) const override {
-            CFG cfg(prom);
             EnvLeakAnalysis subLeak(closure, prom, leaked.leakedAt(i), env,
                                     log);
-            ObservedStoreAnalysis analysis(closure, prom, cfg, env, subLeak,
-                                           log);
+            ObservedStoreAnalysis analysis(closure, prom, env, subLeak, log);
             analysis();
             return state.merge(analysis.result());
         }
@@ -298,9 +300,9 @@ class DeadStoreAnalysis {
     static bool isLocal(Value* env) { return MkEnv::Cast(env); }
 
   public:
-    DeadStoreAnalysis(ClosureVersion* cls, const CFG& cfg, LogStream& log)
-        : leak(cls, cls, nullptr, log),
-          observed(cls, cls, cfg, nullptr, leak, log) {}
+    DeadStoreAnalysis(ClosureVersion* cls, LogStream& log)
+        : leak(cls, cls, nullptr, log), observed(cls, cls, nullptr, leak, log) {
+    }
 
     bool isDead(StVar* st) const {
         if (!isLocal(st->env()))

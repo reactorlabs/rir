@@ -23,11 +23,11 @@ void CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
                 return;
             if (auto cp = Checkpoint::Cast(bb->last())) {
                 if (!used.count(cp)) {
-                    bb->remove(bb->end() - 1);
-                    toDelete.insert(bb->next1);
-                    assert(bb->next1->isExit() &&
+                    toDelete.insert(bb->deoptBranch());
+                    assert(bb->deoptBranch()->isExit() &&
                            "deopt blocks should be just one BB");
-                    bb->next1 = nullptr;
+                    bb->remove(bb->end() - 1);
+                    bb->convertBranchToJmp(true);
                 }
             }
         });

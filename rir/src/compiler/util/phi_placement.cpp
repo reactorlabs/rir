@@ -10,7 +10,7 @@ namespace pir {
 
 PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
                            const std::unordered_map<BB*, Value*>& writes,
-                           const CFG& cfg, const DominanceGraph& dom,
+                           const DominanceGraph& dom,
                            const DominanceFrontier& dfrontier) {
     SmallSet<BB*> phis;
     SmallSet<BB*> defs;
@@ -64,8 +64,8 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
                     pendingInput[next] = input;
             };
 
-            apply(cur->next0);
-            apply(cur->next1);
+            for (auto suc : cur->succsessors())
+                apply(suc);
         });
 
         if (phis.includes(target))
@@ -123,7 +123,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
 
     // Fail if not all phis are well formed
     for (auto& i : placement) {
-        if (i.second.size() != cfg.immediatePredecessors(i.first).size()) {
+        if (i.second.size() != i.first->predecessors().size()) {
             placement.clear();
             return;
         }
