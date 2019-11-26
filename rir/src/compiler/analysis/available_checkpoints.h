@@ -43,10 +43,10 @@ class FwdAvailableCheckpoints
 };
 
 class RwdAvailableCheckpoints
-    : public BackwardStaticAnalysis<AbstractUnique<Checkpoint>> {
+    : public StaticAnalysis<AbstractUnique<Checkpoint>, DummyState, false> {
   public:
     RwdAvailableCheckpoints(ClosureVersion* cls, Code* code, LogStream& log)
-        : BackwardStaticAnalysis("RwdAvailableCheckpoints", cls, code, log) {}
+        : StaticAnalysis("RwdAvailableCheckpoints", cls, code, log) {}
 
     AbstractResult apply(AbstractUnique<Checkpoint>& state,
                          Instruction* i) const override {
@@ -54,13 +54,10 @@ class RwdAvailableCheckpoints
     }
 
     Checkpoint* reachingThrough(Instruction* i) {
-        return BackwardStaticAnalysis::at<PositioningStyle::AfterInstruction>(i)
-            .get();
+        return StaticAnalysis::at<PositioningStyle::AfterInstruction>(i).get();
     }
     Checkpoint* reaching(Instruction* i) {
-        return BackwardStaticAnalysis::at<PositioningStyle::BeforeInstruction>(
-                   i)
-            .get();
+        return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).get();
     }
 };
 

@@ -129,6 +129,13 @@ class VisitorImplementation {
         });
     }
 
+    static void runInDirection(bool forward, BB* bb, const BBAction& action) {
+        if (forward)
+            run(bb, action);
+        else
+            runBackward(bb, action);
+    }
+
     static void run(BB* bb, const InstrBBAction& action) {
         run(bb, [action](BB* bb) {
             for (auto i : *bb)
