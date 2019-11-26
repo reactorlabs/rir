@@ -54,6 +54,7 @@ struct DummyState {
 
 template <class AbstractState,                    // Flow sensitive
           class GlobalAbstractState = DummyState, // Flow insensitive
+          bool Forward = true,
           AnalysisDebugLevel DEBUG_LEVEL = AnalysisDebugLevel::None>
 class StaticAnalysis {
   public:
@@ -106,21 +107,24 @@ class StaticAnalysis {
 
     ClosureVersion* closure;
     Code* code;
-    BB* entry;
+    std::vector<BB*> entrypoints;
 
   public:
     StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
                    LogStream& log)
-        : name(name), log(log), closure(cls), code(code), entry(code->entry) {
+        : name(name), log(log), closure(cls), code(code) {
         snapshots.resize(code->nextBBId);
+        seedEntries();
     }
     StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
                    const AbstractState& initialState,
                    GlobalAbstractState* globalState, LogStream& log)
         : name(name), globalState(globalState), log(log), closure(cls),
-          code(code), entry(code->entry) {
+          code(code) {
         snapshots.resize(code->nextBBId);
-        snapshots[entry->id].entry = initialState;
+        seedEntries();
+        for (auto& e : entrypoints)
+            snapshots[e->id].entry = initialState;
     }
 
     const AbstractState& result() const {
@@ -236,13 +240,21 @@ class StaticAnalysis {
             return state;
         }
 
+        if (Forward)
+            return findSnapshot<POS>(bb->begin(), bb->end(), bb, i);
+
+        return findSnapshot<POS>(bb->rbegin(), bb->rend(), bb, i);
+    }
+
+    template <PositioningStyle POS, typename Iter>
+    AbstractState findSnapshot(Iter begin, Iter end, BB* bb,
+                               Instruction* i) const {
+        size_t tried = 0;
         const BBSnapshot& bbSnapshots = snapshots[bb->id];
 
-        // Find the last snapshot before the instruction we want to know about
-        size_t tried = 0;
-        auto snapshotPos = bb->begin();
-        for (auto pos = bb->begin(), end = bb->end();
-             pos != end && tried < bbSnapshots.extra.size(); ++pos) {
+        auto snapshotPos = begin;
+        for (auto pos = begin, e = end;
+             pos != e && tried < bbSnapshots.extra.size(); ++pos) {
             if (POS == BeforeInstruction && i == *pos)
                 break;
             if (bbSnapshots.extra.count(*pos)) {
@@ -254,17 +266,16 @@ class StaticAnalysis {
         }
 
         // Apply until we arrive at the position
-        auto state = snapshotPos == bb->begin()
-                         ? bbSnapshots.entry
-                         : bbSnapshots.extra.at(*snapshotPos);
-        for (auto pos = snapshotPos, end = bb->end(); pos != end; ++pos) {
+        auto state = snapshotPos == begin ? bbSnapshots.entry
+                                          : bbSnapshots.extra.at(*snapshotPos);
+        for (auto pos = snapshotPos, e = end; pos != e; ++pos) {
             if (POS == BeforeInstruction && i == *pos) {
                 addToCache(i, state);
                 return state;
             }
             apply(state, *pos);
             if (POS == AfterInstruction && i == *pos) {
-                if (pos + 1 != bb->end())
+                if (pos + 1 != end)
                     addToCache(*(pos + 1), state);
                 return state;
             }
@@ -279,8 +290,10 @@ class StaticAnalysis {
     template <PositioningStyle POS>
     void foreach (Collect collect) const {
         assert(done);
+        assert(Forward && "Only exists in forward mode");
+        assert(entrypoints.size() == 1);
 
-        Visitor::run(entry, [&](BB* bb) {
+        Visitor::run(entrypoints[0], [&](BB* bb) {
             const BBSnapshot& bbSnapshots = snapshots[bb->id];
             AbstractState state = bbSnapshots.entry;
             for (auto i : *bb) {
@@ -303,383 +316,6 @@ class StaticAnalysis {
         bool reachedExit = false;
 
         std::vector<bool> changed(snapshots.size(), false);
-        changed[entry->id] = true;
-
-        logHeader();
-
-        typedef std::pair<BB*, Instruction*> Position;
-        std::vector<Position> recursiveTodo;
-        do {
-            done = true;
-            if (globalState)
-                globalState->resetChanged();
-
-            Visitor::run(entry, [&](BB* bb) {
-                size_t id = bb->id;
-
-                if (!changed[id])
-                    return;
-
-                AbstractState state = snapshots[id].entry;
-                logInitialState(state, bb);
-
-                for (auto i : *bb) {
-                    AbstractResult res;
-                    if (DEBUG_LEVEL == AnalysisDebugLevel::Taint) {
-                        AbstractState old = state;
-                        res = compute(state, i);
-                        logTaintChange(old, state, res, i);
-                    } else {
-                        res = compute(state, i);
-                        logChange(state, res, i);
-                    }
-
-                    auto& snapshot = snapshots[bb->id];
-                    if (res.needRecursion) {
-                        auto& extra = snapshot.extra;
-                        const auto& entry = extra.find(i);
-                        if (entry != extra.end()) {
-                            entry->second.merge(state);
-                            state = entry->second;
-                        } else {
-                            extra.emplace(i, state);
-                        }
-                        recursiveTodo.push_back(Position(bb, i));
-                    }
-
-                    if (res.keepSnapshot || snapshot.extra.count(i)) {
-                        snapshot.extra[i] = state;
-                    }
-                }
-
-                if (bb->isExit()) {
-                    logExit(state);
-
-                    auto exitStateIt = exitpoints.find(bb);
-                    if (exitStateIt == exitpoints.end())
-                        exitpoints.emplace(bb, state);
-                    else
-                        exitStateIt->second = state;
-
-                    if (reachedExit) {
-                        exitpoint.mergeExit(state);
-                    } else {
-                        exitpoint = state;
-                        reachedExit = true;
-                    }
-
-                    changed[id] = false;
-                    return;
-                }
-
-                for (auto suc : bb->succsessors())
-                    mergeBranch(bb, suc, state, changed);
-
-                changed[id] = false;
-            });
-            if (!recursiveTodo.empty()) {
-                for (auto& rec : recursiveTodo) {
-                    auto bb = rec.first->id;
-                    auto& extra = snapshots[bb].extra;
-                    const auto& entry = extra.find(rec.second);
-                    if (entry != extra.end()) {
-                        auto mres = entry->second.mergeExit(exitpoint);
-                        if (mres > AbstractResult::None) {
-                            logChange(entry->second, mres, rec.second);
-                            changed[bb] = true;
-                            done = false;
-                        }
-                    } else {
-                        extra.emplace(rec.second, exitpoint);
-                        changed[bb] = true;
-                        done = false;
-                    }
-                }
-                recursiveTodo.clear();
-            }
-            if (globalState && globalState->changed())
-                done = false;
-        } while (!done);
-    }
-
-    void mergeBranch(BB* in, BB* branch, const AbstractState& state,
-                     std::vector<bool>& changed) {
-        auto id = branch->id;
-        auto& thisState = snapshots.at(id);
-        if (!thisState.seen) {
-            thisState.entry = state;
-            thisState.seen = true;
-            thisState.incomming = in->id;
-            done = false;
-            changed[id] = true;
-        } else if (in->id == thisState.incomming) {
-            thisState.entry = state;
-            changed[id] = changed[in->id];
-        } else {
-            thisState.incomming = -1;
-            AbstractState old;
-            if (DEBUG_LEVEL >= AnalysisDebugLevel::Taint) {
-                old = thisState.entry;
-            }
-            AbstractResult mres = thisState.entry.merge(state);
-            if (mres > AbstractResult::None) {
-                if (DEBUG_LEVEL >= AnalysisDebugLevel::Merge ||
-                    (mres == AbstractResult::Tainted &&
-                     DEBUG_LEVEL == AnalysisDebugLevel::Taint)) {
-                    log << "===== Merging BB" << in->id << " into BB" << id
-                        << (mres == AbstractResult::Tainted ? " tainted" : "")
-                        << (mres == AbstractResult::LostPrecision
-                                ? " lost precision"
-                                : "")
-                        << " updated state:\n";
-                    log << "===- In state is:\n";
-                    log(state);
-                    log << "===- Old state is:\n";
-                    log(old);
-                    log << "===- Merged state is:\n";
-                    log(thisState.entry);
-                }
-                done = false;
-                changed[id] = true;
-            } else if (DEBUG_LEVEL >= AnalysisDebugLevel::Merge) {
-                log << "===== Merging into trueBranch BB" << id
-                    << " reached fixpoint\n";
-            }
-        }
-    }
-};
-
-template <class AbstractState,
-          AnalysisDebugLevel DEBUG_LEVEL = AnalysisDebugLevel::None>
-class BackwardStaticAnalysis {
-  public:
-    enum PositioningStyle { BeforeInstruction, AfterInstruction };
-
-  private:
-    const std::string name;
-
-    struct BBSnapshot {
-        bool seen = false;
-        size_t incomming = 0;
-        AbstractState entry;
-        std::unordered_map<Instruction*, AbstractState> extra;
-    };
-    typedef std::vector<BBSnapshot> AnalysisSnapshots;
-    AnalysisSnapshots snapshots;
-
-    virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
-
-    constexpr static size_t MAX_CACHE_SIZE = 128 / sizeof(AbstractState);
-
-    std::unordered_map<Instruction*, AbstractState> cache;
-    std::deque<Instruction*> cacheQueue;
-    void addToCache(Instruction* i, const AbstractState& state) const {
-        if (cache.count(i)) {
-            const_cast<BackwardStaticAnalysis*>(this)->cache.erase(
-                cache.find(i));
-            const_cast<BackwardStaticAnalysis*>(this)->cache.emplace(i, state);
-            return;
-        }
-        if (cacheQueue.size() > MAX_CACHE_SIZE) {
-            auto oldest = cacheQueue.front();
-            const_cast<BackwardStaticAnalysis*>(this)->cacheQueue.pop_front();
-            const_cast<BackwardStaticAnalysis*>(this)->cache.erase(
-                cache.find(oldest));
-        }
-        const_cast<BackwardStaticAnalysis*>(this)->cache.emplace(i, state);
-        const_cast<BackwardStaticAnalysis*>(this)->cacheQueue.push_back(i);
-    }
-
-  protected:
-    AbstractState exitpoint;
-
-    bool done = false;
-    LogStream& log;
-
-    ClosureVersion* closure;
-    Code* code;
-    std::vector<BB*> entrypoints;
-
-  public:
-    BackwardStaticAnalysis(const std::string& name, ClosureVersion* cls,
-                           Code* code, LogStream& log)
-        : name(name), log(log), closure(cls), code(code) {
-        snapshots.resize(code->nextBBId);
-        Visitor::run(code->entry, [&](BB* bb) {
-            if (bb->isExit())
-                entrypoints.push_back(bb);
-        });
-    }
-    BackwardStaticAnalysis(const std::string& name, ClosureVersion* cls,
-                           Code* code, const AbstractState& initialState,
-                           LogStream& log)
-        : name(name), log(log), closure(cls), code(code) {
-        snapshots.resize(code->nextBBId);
-        Visitor::run(code->entry, [&](BB* bb) {
-            if (bb->isExit()) {
-                entrypoints.push_back(bb);
-                snapshots[bb->id].entry = initialState;
-            }
-        });
-    }
-
-    const AbstractState& result() const {
-        assert(done);
-        return exitpoint;
-    }
-
-    void logHeader() const {
-        if (DEBUG_LEVEL > AnalysisDebugLevel::None) {
-            log << "=========== Starting " << name << " Analysis on "
-                << closure->name() << " ";
-            if (code == closure)
-                log << "body";
-            else
-                log << "Prom(" << static_cast<Promise*>(code)->id << ")";
-            log << "\n";
-        }
-    }
-
-    void logInitialState(const AbstractState& state, const BB* bb) const {
-        if (DEBUG_LEVEL >= AnalysisDebugLevel::BB) {
-            log << "======= Entering BB" << bb->id << ", initial state\n";
-            log(state);
-        }
-    }
-
-    void logChange(const AbstractState& post, const AbstractResult& res,
-                   const Instruction* i) {
-        if (DEBUG_LEVEL >= AnalysisDebugLevel::Instruction &&
-            res >= AbstractResult::None) {
-            log << "===== After applying instruction ";
-            if (res == AbstractResult::Tainted) {
-                log << " (State got tainted)";
-            } else {
-                log(i);
-            }
-            log << " we have\n";
-            log(post);
-        }
-    }
-
-    void logTaintChange(const AbstractState& pre, const AbstractState& post,
-                        const AbstractResult& res, const Instruction* i) {
-        assert(DEBUG_LEVEL == AnalysisDebugLevel::Taint);
-        if (res >= AbstractResult::Tainted) {
-            if (res == AbstractResult::Tainted) {
-                log << "===== Before applying instruction ";
-                log(i);
-                log << " we have\n";
-                log(pre);
-            }
-            log << "===== After applying instruction ";
-            log(i);
-            if (res == AbstractResult::Tainted) {
-                log << " (State got tainted)";
-            } else {
-                log(i);
-            }
-            log << " we have\n";
-            log(post);
-        }
-    }
-
-    void logExit(const AbstractState& state) {
-        if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
-            log << "===== Exit state is\n";
-            log(state);
-        }
-    }
-
-    template <PositioningStyle POS>
-    AbstractState at(Instruction* i) const {
-        if (!done)
-            const_cast<BackwardStaticAnalysis*>(this)->operator()();
-        assert(done);
-
-        BB* bb = i->bb();
-
-        if (cache.count(i)) {
-            auto state = cache.at(i);
-            if (PositioningStyle::AfterInstruction == POS)
-                apply(state, i);
-            return state;
-        }
-
-        const BBSnapshot& bbSnapshots = snapshots[bb->id];
-
-        // Find the last snapshot before the instruction we want to know about
-        size_t tried = 0;
-        auto snapshotPos = bb->rbegin();
-        for (auto pos = bb->rbegin(), end = bb->rend();
-             pos != end && tried < bbSnapshots.extra.size(); ++pos) {
-            if (POS == BeforeInstruction && i == *pos)
-                break;
-            if (bbSnapshots.extra.count(*pos)) {
-                snapshotPos = pos;
-                tried++;
-            }
-            if (POS == AfterInstruction && i == *pos)
-                break;
-        }
-
-        // Apply until we arrive at the position
-        auto state = snapshotPos == bb->rbegin()
-                         ? bbSnapshots.entry
-                         : bbSnapshots.extra.at(*snapshotPos);
-        for (auto pos = snapshotPos, end = bb->rend(); pos != end; ++pos) {
-            if (POS == BeforeInstruction && i == *pos) {
-                addToCache(i, state);
-                return state;
-            }
-            apply(state, *pos);
-            if (POS == AfterInstruction && i == *pos) {
-                if (pos + 1 != bb->rend())
-                    addToCache(*(pos + 1), state);
-                return state;
-            }
-        }
-
-        assert(false);
-        return AbstractState();
-    }
-
-    typedef std::function<void(const AbstractState&, Instruction*)> Collect;
-
-    template <PositioningStyle POS>
-    void foreach (Collect collect) const {
-        assert(done);
-
-        std::vector<bool> seen(snapshots.size(), false);
-
-        for (auto e : entrypoints) {
-            Visitor::runBackward(e, [&](BB* bb) {
-                if (seen[bb->id])
-                    return;
-                seen[bb->id] = true;
-                const BBSnapshot& bbSnapshots = snapshots[bb->id];
-                AbstractState state = bbSnapshots.entry;
-                for (auto i : VisitorHelpers::reverse(*bb)) {
-                    if (POS == BeforeInstruction)
-                        collect(state, i);
-
-                    const auto& entry = bbSnapshots.extra.find(i);
-                    if (entry != bbSnapshots.extra.end())
-                        state = entry->second;
-                    else
-                        apply(state, i);
-
-                    if (POS == AfterInstruction)
-                        collect(state, i);
-                }
-            });
-        }
-    }
-
-    void operator()() {
-        bool reachedExit = false;
-
-        std::vector<bool> changed(snapshots.size(), false);
         for (auto e : entrypoints)
             changed[e->id] = true;
 
@@ -690,7 +326,10 @@ class BackwardStaticAnalysis {
         do {
             done = true;
             for (auto e : entrypoints) {
-                Visitor::runBackward(e, [&](BB* bb) {
+                if (globalState)
+                    globalState->resetChanged();
+
+                Visitor::runInDirection(Forward, e, [&](BB* bb) {
                     size_t id = bb->id;
 
                     if (!changed[id])
@@ -699,19 +338,20 @@ class BackwardStaticAnalysis {
                     AbstractState state = snapshots[id].entry;
                     logInitialState(state, bb);
 
-                    for (auto i : VisitorHelpers::reverse(*bb)) {
+                    auto apply = [&](Instruction* i) {
                         AbstractResult res;
                         if (DEBUG_LEVEL == AnalysisDebugLevel::Taint) {
                             AbstractState old = state;
-                            res = apply(state, i);
+                            res = compute(state, i);
                             logTaintChange(old, state, res, i);
                         } else {
-                            res = apply(state, i);
+                            res = compute(state, i);
                             logChange(state, res, i);
                         }
 
+                        auto& snapshot = snapshots[bb->id];
                         if (res.needRecursion) {
-                            auto& extra = snapshots[bb->id].extra;
+                            auto& extra = snapshot.extra;
                             const auto& entry = extra.find(i);
                             if (entry != extra.end()) {
                                 entry->second.merge(state);
@@ -722,26 +362,44 @@ class BackwardStaticAnalysis {
                             recursiveTodo.push_back(Position(bb, i));
                         }
 
-                        if (res.keepSnapshot ||
-                            snapshots[bb->id].extra.count(i)) {
-                            snapshots[bb->id].extra[i] = state;
+                        if (res.keepSnapshot || snapshot.extra.count(i)) {
+                            snapshot.extra[i] = state;
                         }
-                    }
+                    };
 
-                    if (bb == code->entry) {
+                    if (Forward)
+                        for (auto i : *bb)
+                            apply(i);
+                    else
+                        for (auto i : VisitorHelpers::reverse(*bb))
+                            apply(i);
+
+                    if (Forward ? bb->isExit() : bb == code->entry) {
                         logExit(state);
+
+                        auto exitStateIt = exitpoints.find(bb);
+                        if (exitStateIt == exitpoints.end())
+                            exitpoints.emplace(bb, state);
+                        else
+                            exitStateIt->second = state;
+
                         if (reachedExit) {
                             exitpoint.mergeExit(state);
                         } else {
                             exitpoint = state;
                             reachedExit = true;
                         }
+
                         changed[id] = false;
                         return;
                     }
 
-                    for (auto p : bb->predecessors())
-                        mergeBranch(bb, p, state, changed);
+                    if (Forward)
+                        for (auto suc : bb->succsessors())
+                            mergeBranch(bb, suc, state, changed);
+                    else
+                        for (auto suc : bb->predecessors())
+                            mergeBranch(bb, suc, state, changed);
 
                     changed[id] = false;
                 });
@@ -765,6 +423,8 @@ class BackwardStaticAnalysis {
                     }
                     recursiveTodo.clear();
                 }
+                if (globalState && globalState->changed())
+                    done = false;
             }
         } while (!done);
     }
@@ -783,8 +443,8 @@ class BackwardStaticAnalysis {
             thisState.entry = state;
             changed[id] = changed[in->id];
         } else {
-            AbstractState old;
             thisState.incomming = -1;
+            AbstractState old;
             if (DEBUG_LEVEL >= AnalysisDebugLevel::Taint) {
                 old = thisState.entry;
             }
@@ -813,6 +473,20 @@ class BackwardStaticAnalysis {
                     << " reached fixpoint\n";
             }
         }
+    }
+
+  private:
+    void seedEntries() {
+        if (Forward) {
+            entrypoints.push_back(code->entry);
+            return;
+        }
+
+        Visitor::run(code->entry, [&](BB* bb) {
+            if (bb->isExit()) {
+                entrypoints.push_back(bb);
+            }
+        });
     }
 };
 

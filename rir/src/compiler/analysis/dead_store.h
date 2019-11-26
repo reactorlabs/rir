@@ -177,16 +177,17 @@ class DeadStoreAnalysis {
         }
     };
 
-    class ObservedStoreAnalysis : public BackwardStaticAnalysis<ObservedStores>,
-                                  private SubAnalysis<ObservedStores> {
+    class ObservedStoreAnalysis
+        : public StaticAnalysis<ObservedStores, DummyState, false>,
+          private SubAnalysis<ObservedStores> {
         Value* promEnv = nullptr;
         const EnvLeakAnalysis& leaked;
 
       public:
         ObservedStoreAnalysis(ClosureVersion* cls, Code* code, Value* promEnv,
                               const EnvLeakAnalysis& leaked, LogStream& log)
-            : BackwardStaticAnalysis("observedEnv", cls, code, log),
-              SubAnalysis(), promEnv(promEnv), leaked(leaked) {}
+            : StaticAnalysis("observedEnv", cls, code, log), SubAnalysis(),
+              promEnv(promEnv), leaked(leaked) {}
 
       private:
         static std::unordered_set<Value*> withPotentialParents(Value* env) {
