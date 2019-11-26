@@ -580,10 +580,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         }
                         argNumber++;
                     });
+
                     // This is needed to prevent builtin calls from
                     // materializing env stubs
                     if (CallSafeBuiltin::Cast(instr) ||
-                        (CallInstruction::CastCall(instr) &&
+                        (instr->mayHaveEnv() &&
                          instr->env() == Env::elided())) {
                         auto cur = lastEnv.currentEnv(instr);
                         if (!cur ||

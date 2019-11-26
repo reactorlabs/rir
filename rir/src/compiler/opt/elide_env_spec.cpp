@@ -119,20 +119,32 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     });
 
     SmallSet<Value*> bannedEnvs;
+    SmallSet<Value*> materializableStubs;
 
     // If we only see these (and call instructions) then we stub an environment,
     // since it can only be accessed reflectively.
-    static std::unordered_set<Tag> allowed{
+    static constexpr auto allowed = {
         Tag::Force,      Tag::PushContext, Tag::LdVar,
         Tag::StVar,      Tag::StVarSuper,  Tag::Call,
         Tag::FrameState, Tag::CallBuiltin, Tag::StaticCall};
+    // Those do not materialize the stub in any case
+    static constexpr auto dontMaterialize = {Tag::PushContext, Tag::LdVar,
+                                             Tag::StVar,       Tag::StVarSuper,
+                                             Tag::FrameState,  Tag::IsEnvStub};
     VisitorNoDeoptBranch::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
+                if (m->stub && !materializableStubs.count(m)) {
+                    if (std::find(dontMaterialize.begin(),
+                                  dontMaterialize.end(),
+                                  i->tag) == dontMaterialize.end())
+                        materializableStubs.insert(m);
+                }
                 if (!m->stub && !bannedEnvs.count(m)) {
                     auto bt = CallBuiltin::Cast(i);
-                    if (!allowed.count(i->tag) || !i->hasEnv() ||
-                        i->env() != m ||
+                    if (std::find(allowed.begin(), allowed.end(), i->tag) ==
+                            allowed.end() ||
+                        !i->hasEnv() || i->env() != m ||
                         (bt && !supportsFastBuiltinCall(bt->blt))) {
                         if (debug) {
                             std::cout << "Environment:";
@@ -214,6 +226,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         std::cout << "\n";
                     }
                     env->stub = true;
+                    materializableStubs.insert(env);
                     for (auto n : additionalEntries[env]) {
                         env->varName.push_back(n);
                         env->pushArg(UnboundValue::instance(), PirType::any());
@@ -234,6 +247,24 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             }
 
             ip = next;
+        }
+    });
+
+    // Those absolutely depend on *not* getting the materialized version
+    constexpr static auto needStubbed = {Tag::LdVar, Tag::StVar};
+    Visitor::run(function->entry, [&](Instruction* i) {
+        if (std::find(needStubbed.begin(), needStubbed.end(), i->tag) !=
+                needStubbed.end() &&
+            i->hasEnv() && !IsEnvStub::Cast(i) &&
+            !i->effects.contains(Effect::DependsOnAssume) &&
+            MkEnv::Cast(i->env()) && MkEnv::Cast(i->env())->stub) {
+            i->effects.set(Effect::DependsOnAssume);
+        }
+        if (auto is = IsEnvStub::Cast(i)) {
+            if (!materializableStubs.count(i->env())) {
+                is->replaceUsesWith(True::instance());
+                is->effects.reset();
+            }
         }
     });
 }

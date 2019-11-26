@@ -147,7 +147,8 @@ class TheCleanup {
                     }
                 } else if (auto test = IsEnvStub::Cast(i)) {
                     if (test->env() == Env::elided()) {
-                        i->replaceUsesWith(False::instance());
+                        // Assuming only env stubs are elided, see case above
+                        i->replaceUsesWith(True::instance());
                         removed = true;
                         next = bb->remove(ip);
                     }

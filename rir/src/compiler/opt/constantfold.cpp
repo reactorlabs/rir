@@ -235,16 +235,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             }
 
-            if (auto isTest = IsEnvStub::Cast(i)) {
-                if (auto environment = MkEnv::Cast(isTest->env())) {
-                    static std::unordered_set<Tag> tags{Tag::Force};
-                    if (environment->usesDoNotInclude(bb, tags)) {
-                        i->replaceUsesWith(True::instance());
-                        next = bb->remove(ip);
-                    }
-                }
-            }
-
             if (auto assume = Assume::Cast(i)) {
                 if (assume->arg<0>().val() == True::instance() &&
                     assume->assumeTrue)

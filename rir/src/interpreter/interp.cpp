@@ -1952,8 +1952,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(materialize_env_) {
             auto lazyEnv = LazyEnvironment::check(env);
-            assert(lazyEnv);
-            if (!lazyEnv->materialized())
+            if (lazyEnv && !lazyEnv->materialized())
                 env = materialize(env);
             ostack_push(ctx, env);
             NEXT();
@@ -2383,6 +2382,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
             auto le = LazyEnvironment::check(env);
+            assert(!le || !le->materialized());
             SEXP superEnv;
             if (le)
                 superEnv = le->getParent();
