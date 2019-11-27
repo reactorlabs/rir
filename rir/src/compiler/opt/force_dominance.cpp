@@ -307,18 +307,14 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         auto apply = [&](Instruction* i) {
             i->eachArg([&](Value* v) {
                 v = v->followCasts();
-                if (auto arg = MkArg::Cast(v))
-                    if (state.escape(arg))
-                        res.update();
-                if (auto arg = LdArg::Cast(v))
-                    if (state.escape(arg))
+                auto instruction = Instruction::Cast(v);
+                if (MkArg::Cast(v) || LdArg::Cast(v) ||
+                    (instruction && instruction->type.maybeLazy()))
+                    if (state.escape(instruction))
                         res.update();
             });
         };
         if (auto f = Force::Cast(i)) {
-            if (MkArg* arg = MkArg::Cast(f->arg<0>().val()->followCasts()))
-                if (state.forcedAt(arg, f))
-                    res.update();
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
                 if (arg->type.maybeLazy()) {
                     if (state.forcedAt(arg, f))
@@ -329,18 +325,27 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                         res.update();
                     }
                 }
+            } else {
+                auto instruction =
+                    Instruction::Cast(f->arg<0>().val()->followCasts());
+                if (MkArg::Cast(f->arg<0>().val()->followCasts()) ||
+                    (instruction && instruction->type.maybeLazy())) {
+                    if (state.forcedAt(instruction, f))
+                        res.update();
+                }
             }
         } else if (auto mk = MkArg::Cast(i)) {
             if (state.declare(mk))
-                res.update();
-        } else if (auto ld = LdArg::Cast(i)) {
-            if (state.declare(ld))
                 res.update();
         } else if (auto e = MkEnv::Cast(i)) {
             if (!e->stub)
                 apply(e);
         } else if (CastType::Cast(i) || Deopt::Cast(i)) { /* do nothing */ 
         } else {
+            if (i->type.maybeLazy()) {
+                if (state.declare(i))
+                    res.update();
+            }
             apply(i);
 
             if (i->effects.contains(Effect::Force)) {
