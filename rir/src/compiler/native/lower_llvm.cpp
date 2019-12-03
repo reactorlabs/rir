@@ -3740,7 +3740,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                 vectorTypeSupport(extract->vec()) &&
                                 extract->idx()->type.isA(
                                     PirType::intRealLgl().notObject().scalar());
-
                 BasicBlock* done;
                 llvm::Value* res;
 

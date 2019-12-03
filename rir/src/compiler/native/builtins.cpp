@@ -963,10 +963,96 @@ NativeBuiltin NativeBuiltins::printValue = {
     (void*)printValueImpl,
 };
 
+static bool fastVeceltOk(SEXP vec) {
+    return (ATTRIB(vec) == R_NilValue || (TAG(ATTRIB(vec)) == R_DimSymbol &&
+                                          CDR(ATTRIB(vec)) == R_NilValue));
+}
+
+static bool tryFastVecelt(SEXP vec, R_xlen_t i, bool subset2,
+                          const std::function<void(int)>& intres,
+                          const std::function<void(double)>& realres,
+                          const std::function<void(int)>& lglres,
+                          const std::function<void(SEXP)>& sexpres) {
+    switch (TYPEOF(vec)) {
+    case REALSXP:
+        if (XLENGTH(vec) <= i)
+            break;
+        realres(REAL_ELT(vec, i));
+        return true;
+    case INTSXP:
+        if (XLENGTH(vec) <= i)
+            break;
+        intres(INTEGER_ELT(vec, i));
+        return true;
+    case LGLSXP:
+        if (XLENGTH(vec) <= i)
+            break;
+        lglres(LOGICAL_ELT(vec, i));
+        return true;
+    case CPLXSXP:
+        if (XLENGTH(vec) <= i)
+            break;
+        sexpres(ScalarComplex(COMPLEX_ELT(vec, i)));
+        return true;
+    case RAWSXP:
+        if (XLENGTH(vec) <= i)
+            break;
+        sexpres(ScalarRaw(RAW(vec)[i]));
+        return true;
+    case VECSXP:
+        if (XLENGTH(vec) <= i)
+            break;
+        SEXP elt = VECTOR_ELT(vec, i);
+        RAISE_NAMED(elt, NAMED(vec));
+        if (subset2) {
+            sexpres(elt);
+        } else {
+            SEXP t = allocVector(VECSXP, 1);
+            SET_VECTOR_ELT(t, 0, elt);
+            sexpres(t);
+        }
+        return true;
+    }
+    return false;
+}
+
+static SEXP tryFastVeceltInt(SEXP vector, R_xlen_t i, bool subset2) {
+    SEXP res = nullptr;
+    if (subset2 || fastVeceltOk(vector)) {
+        tryFastVecelt(
+            vector, i, subset2, [&](int r) { res = ScalarInteger(r); },
+            [&](double r) { res = ScalarReal(r); },
+            [&](int r) { res = ScalarLogical(r); }, [&](SEXP r) { res = r; });
+    }
+    return res;
+}
+
+static SEXP tryFastVeceltSexp(SEXP vector, SEXP index, bool subset2) {
+    if (!fastVeceltOk(vector))
+        return nullptr;
+
+    if (IS_SIMPLE_SCALAR(index, INTSXP)) {
+        auto i = *INTEGER(index);
+        if (i > 0 && i != NA_INTEGER)
+            return tryFastVeceltInt(vector, i - 1, subset2);
+    } else if (IS_SIMPLE_SCALAR(index, REALSXP)) {
+        auto ri = *REAL(index);
+        if (ri == ri && ri >= 1.0) {
+            return tryFastVeceltInt(vector, *REAL(index) - 1, subset2);
+        }
+    }
+
+    return nullptr;
+}
+
 SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
+    SEXP res = tryFastVeceltSexp(vector, index, false);
+    if (res)
+        return res;
+
     SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
     PROTECT(args);
-    SEXP res = nullptr;
+
     if (isObject(vector)) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
@@ -986,9 +1072,12 @@ NativeBuiltin NativeBuiltins::extract11 = {
 };
 
 SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
+    SEXP res = tryFastVeceltSexp(vector, index, true);
+    if (res)
+        return res;
+
     SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
     PROTECT(args);
-    SEXP res = nullptr;
     if (isObject(vector)) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
@@ -1008,28 +1097,14 @@ NativeBuiltin NativeBuiltins::extract21 = {
 };
 
 SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
-
-    if (!isObject(vector) && index != NA_INTEGER && index >= 1 &&
-        XLENGTH(vector) >= index) {
-        if (TYPEOF(vector) == INTSXP) {
-            return ScalarInteger(INTEGER(vector)[index - 1]);
-        }
-        if (TYPEOF(vector) == REALSXP) {
-            return ScalarReal(REAL(vector)[index - 1]);
-        }
-        if (TYPEOF(vector) == LGLSXP) {
-            return ScalarLogical(INTEGER(vector)[index - 1]);
-        }
-        if (TYPEOF(vector) == VECSXP) {
-            auto res = VECTOR_ELT(vector, index - 1);
-            ENSURE_NAMED(res);
-            return res;
-        }
-    }
+    SEXP res = nullptr;
+    if (index > 0)
+        res = tryFastVeceltInt(vector, index - 1, true);
+    if (res)
+        return res;
 
     SEXP args = CONS_NR(vector, CONS_NR(ScalarInteger(index), R_NilValue));
     PROTECT(args);
-    SEXP res = nullptr;
     if (isObject(vector)) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
@@ -1049,29 +1124,14 @@ NativeBuiltin NativeBuiltins::extract21i = {
 };
 
 SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
-
-    auto pos = (R_xlen_t)(index - 1);
-    if (!isObject(vector) && index == index && index >= 1 &&
-        XLENGTH(vector) > pos) {
-        if (TYPEOF(vector) == INTSXP) {
-            return ScalarInteger(INTEGER(vector)[pos]);
-        }
-        if (TYPEOF(vector) == REALSXP) {
-            return ScalarReal(REAL(vector)[pos]);
-        }
-        if (TYPEOF(vector) == LGLSXP) {
-            return ScalarLogical(INTEGER(vector)[pos]);
-        }
-        if (TYPEOF(vector) == VECSXP) {
-            auto res = VECTOR_ELT(vector, pos);
-            ENSURE_NAMED(res);
-            return res;
-        }
-    }
+    SEXP res = nullptr;
+    if (index < R_XLEN_T_MAX && index > 1.0)
+        res = tryFastVeceltInt(vector, index - 1.0, true);
+    if (res)
+        return res;
 
     SEXP args = CONS_NR(vector, CONS_NR(ScalarReal(index), R_NilValue));
     PROTECT(args);
-    SEXP res = nullptr;
     if (isObject(vector)) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
@@ -1171,21 +1231,9 @@ SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
         auto n = getMatrixDim(vector);
         if (p1 < n.row && p2 < n.col) {
             auto pos = n.row * p2 + p1;
-
-            if (TYPEOF(vector) == INTSXP) {
-                return ScalarInteger(INTEGER(vector)[pos]);
-            }
-            if (TYPEOF(vector) == REALSXP) {
-                return ScalarReal(REAL(vector)[pos]);
-            }
-            if (TYPEOF(vector) == LGLSXP) {
-                return ScalarLogical(INTEGER(vector)[pos]);
-            }
-            if (TYPEOF(vector) == VECSXP) {
-                auto res = VECTOR_ELT(vector, pos);
-                ENSURE_NAMED(res);
+            SEXP res = tryFastVeceltInt(vector, pos, true);
+            if (res)
                 return res;
-            }
         }
     }
 
@@ -1223,21 +1271,9 @@ SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
         auto n = getMatrixDim(vector);
         if (p1 < n.row && p2 < n.col) {
             auto pos = n.row * p2 + p1;
-
-            if (TYPEOF(vector) == INTSXP) {
-                return ScalarInteger(INTEGER(vector)[pos]);
-            }
-            if (TYPEOF(vector) == REALSXP) {
-                return ScalarReal(REAL(vector)[pos]);
-            }
-            if (TYPEOF(vector) == LGLSXP) {
-                return ScalarLogical(INTEGER(vector)[pos]);
-            }
-            if (TYPEOF(vector) == VECSXP) {
-                auto res = VECTOR_ELT(vector, pos);
-                ENSURE_NAMED(res);
+            SEXP res = tryFastVeceltInt(vector, pos, true);
+            if (res)
                 return res;
-            }
         }
     }
 
