@@ -127,6 +127,8 @@ class StaticAnalysis {
             snapshots[e->id].entry = initialState;
     }
 
+    const GlobalAbstractState& getGlobalState() { return *globalState; }
+
     const AbstractState& result() const {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
