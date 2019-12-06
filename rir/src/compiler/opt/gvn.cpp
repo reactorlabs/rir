@@ -29,18 +29,24 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
             success = true;
             std::function<size_t(Phi*)> doComputePhiNr =
                 [&](Phi* phi) -> size_t {
-                if (!success || seen.includes(phi->bb()))
+                assert(!seen.includes(phi->bb()));
+
+                if (!success)
                     return 0;
                 seen.insert(phi->bb());
 
                 std::set<size_t> inputs;
                 phi->eachArg([&](BB* bb, Value* a) {
-                    if (number.count(a))
+                    if (a == phi) {
+                        inputs.insert(bb->id);
+                    } else if (number.count(a)) {
                         inputs.insert(hash_combine(number.at(a), bb));
-                    else if (auto phi = Phi::Cast(a))
-                        inputs.insert(hash_combine(doComputePhiNr(phi), bb));
-                    else
+                    } else if (auto phi = Phi::Cast(a)) {
+                        if (!seen.count(phi->bb()))
+                            inputs.insert(hash_combine(doComputePhiNr(phi), bb));
+                    } else {
                         success = false;
+                    }
                 });
 
                 auto h = phi->gvnBase();
@@ -175,7 +181,9 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
         auto computePhiClass = [&](Phi* phi, PhiClass& res) -> bool {
             bool success = true;
             phi->eachArg([&](BB* bb, Value* a) {
-                if (number.count(a))
+                if (a == phi)
+                    res.insert({0, bb->id});
+                else if (number.count(a))
                     res.insert({number.at(a), bb->id});
                 else
                     success = true;
