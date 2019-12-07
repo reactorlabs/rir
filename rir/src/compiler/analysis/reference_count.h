@@ -4,63 +4,82 @@
 #include "../pir/pir_impl.h"
 #include "dead.h"
 #include "generic_static_analysis.h"
+#include "utils/Map.h"
 
 namespace rir {
 namespace pir {
 
-struct AUses {
-    // Linear lattice:
-    enum Kind {
-        Named,        // Named count is >= 1
-        Fresh,        // Named count is >= 0
-        Tainted,      // Maybe destructively used
-        UseAfterTaint // Use after maybe destructively use
-    };
+struct NeedsRefcountAdjustment {
+    enum Kind { EnsureNamed, SetShared };
 
-    static Kind merge(Kind a, Kind b) {
-        return a > b ? a : b;
+    // Not needed since we do not use the state in the analysis
+    bool changed() { return false; }
+    void resetChanged() {}
+
+    SmallMap<Instruction*, Kind> atCreation;
+    SmallMap<Instruction*, SmallMap<Instruction*, Kind>> beforeUse;
+
+    void print(std::ostream& out, bool) const {
+        out << "Adjust at creation: ";
+        for (auto r : atCreation) {
+            r.first->printRef(out);
+            out << " " << r.second << ",  ";
+        }
+        out << "\n";
+
+        out << "Adjust before use: ";
+        for (auto i : beforeUse) {
+            i.first->printRef(out);
+            out << ": ";
+            for (auto r : i.second) {
+                r.first->printRef(out);
+                out << " " << r.second << ",  ";
+            }
+            out << "\n";
+        }
+        out << "\n";
     }
+};
 
-    bool overflow = false;
+struct AbstractValueTaint {
     // The merge function needs an ordered map
-    AbstractResult mergeExit(const AUses& other) { return merge(other); }
-    AbstractResult merge(const AUses& other) {
+    AbstractResult mergeExit(const AbstractValueTaint& other) {
+        return merge(other);
+    }
+    AbstractResult merge(const AbstractValueTaint& other) {
         AbstractResult res;
 
-        if (overflow)
-            return res;
+        auto myPos = tainted.begin();
+        auto theirPos = other.tainted.begin();
+        auto theirEnd = other.tainted.end();
 
-        if (other.overflow) {
-            uses.clear();
-            overflow = true;
-            res.taint();
-            return res;
-        }
-
-        auto myPos = uses.begin();
-        auto theirPos = other.uses.begin();
-
-        while (theirPos != other.uses.end()) {
-            if (myPos == uses.end() || myPos->first > theirPos->first) {
-                // we are missing this entry
-                auto updated = uses.insert(*theirPos);
-                myPos = updated.first;
+        while (theirPos != theirEnd) {
+            if (myPos == tainted.end() || myPos->first > theirPos->first) {
+                // missing entry
+                auto upd = tainted.insert(*theirPos);
+                myPos = upd.first;
                 res.update();
                 myPos++;
                 theirPos++;
             } else if (myPos->first == theirPos->first) {
-                if (myPos->second != theirPos->second) {
-                    auto m = merge(myPos->second, theirPos->second);
-                    if (m != myPos->second) {
-                        myPos->second = m;
-                        res.update();
-                    }
+                // merge
+                auto& t1 = myPos->second;
+                auto& t2 = theirPos->second;
+
+                if (t1.kind < t2.kind) {
+                    t1.kind = t2.kind;
+                    res.update();
                 }
+                if (t1.origin && t1.origin != t2.origin) {
+                    t1.origin = nullptr;
+                    res.update();
+                }
+
                 myPos++;
                 theirPos++;
             } else {
+                // we have an entry more
                 assert(myPos->first < theirPos->first);
-                // other branch does not have this entry
                 myPos++;
             }
         }
@@ -68,148 +87,175 @@ struct AUses {
     }
 
     void print(std::ostream& out, bool) const {
-        for (const auto& use : uses) {
-            use.first->print(out);
-            out << " = ";
-            switch (use.second) {
-            case Kind::Fresh:
-                out << "+";
+        out << "Taints: ";
+        for (auto r : tainted) {
+            auto& taint = r.second;
+            if (taint.kind == Taint::None)
+                continue;
+            out << taint.kind << " ";
+            r.first->printRef(out);
+            if (taint.origin) {
+                out << " by ";
+                taint.origin->printRef(out);
+            }
+            out << ",  ";
+        }
+        out << "\n";
+    }
+
+    struct Taint {
+        enum Kind {
+            None,
+            Reuse,
+            Override,
+        };
+        friend std::ostream& operator<<(std::ostream& out, Kind k) {
+            switch (k) {
+            case None:
+                out << "-";
                 break;
-            case Kind::Named:
-                out << "1";
+            case Reuse:
+                out << "reused";
                 break;
-            case Kind::Tainted:
-                out << "!";
-                break;
-            case Kind::UseAfterTaint:
-                out << "+!";
+            case Override:
+                out << "override";
                 break;
             }
-            out << "\n";
+            return out;
         }
+        Kind kind = Kind::None;
+        Instruction* origin = nullptr;
+    };
+
+    Taint* isTainted(Instruction* i) {
+        auto t = tainted.find(i);
+        if (t == tainted.end())
+            return nullptr;
+        auto& taint = t->second;
+        if (taint.kind == Taint::None)
+            return nullptr;
+        return &taint;
     }
-    bool needsEnsureNamed(Instruction* i) const {
-        auto u = uses.find(i);
-        if (u == uses.end())
+
+    Taint* taint(Instruction* i) {
+        assert(!tainted.count(i) ||
+               tainted.at(i).kind == AbstractValueTaint::Taint::None);
+        return &tainted[i];
+    }
+
+    void taint(Instruction* i, Taint::Kind k, Instruction* origin) {
+        auto t = taint(i);
+        t->kind = k;
+        t->origin = origin;
+    }
+
+    bool clear(Instruction* i) {
+        auto t = tainted.find(i);
+        if (t == tainted.end())
             return false;
-        return u->second == UseAfterTaint;
-    }
-    void needsEnsureNamed(std::unordered_set<Instruction*>& collect) const {
-        for (auto& i : uses)
-            if (needsEnsureNamed(i.first))
-                collect.insert(i.first);
+        if (t->second.kind == Taint::Kind::None) {
+            assert(!t->second.origin);
+            return false;
+        }
+        t->second.kind = Taint::Kind::None;
+        t->second.origin = nullptr;
+        return true;
     }
 
   private:
-    friend class StaticReferenceCount;
-    std::map<Instruction*, Kind> uses;
+    std::map<Instruction*, Taint> tainted;
 };
 
-class StaticReferenceCount : public StaticAnalysis<AUses> {
+class StaticReferenceCount
+    : public StaticAnalysis<AbstractValueTaint, NeedsRefcountAdjustment, true,
+                            AnalysisDebugLevel::None> {
   private:
-    std::unordered_map<Instruction*, SmallSet<Instruction*>> alias;
+    DominanceGraph dom;
 
   public:
     StaticReferenceCount(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("StaticReferenceCountAnalysis", cls, cls, log) {
-        bool changed = true;
-        while (changed) {
-            changed = false;
-
-            Visitor::run(code->entry, [&](Instruction* i) {
-                // Recursively enumerate all actual values a phi might contain
-                if (Phi::Cast(i)) {
-                    i->eachArg([&](Value* v) {
-                        v = v->followCasts();
-                        while (auto cp = PirCopy::Cast(v->followCasts()))
-                            v = cp->arg<0>().val();
-                        v = v->followCasts();
-                        if (auto a = Instruction::Cast(v)) {
-                            if (Phi::Cast(a)) {
-                                for (auto otherAlias : alias[a]) {
-                                    if (!alias[i].includes(otherAlias)) {
-                                        changed = true;
-                                        alias[i].insert(otherAlias);
-                                    }
-                                }
-                            } else {
-                                if (a->minReferenceCount() < 1 &&
-                                    !alias[i].includes(a)) {
-                                    changed = true;
-                                    alias[i].insert(a);
-                                }
-                            }
-                        }
-                    });
-                }
-            });
-        }
+        : StaticAnalysis("StaticReferenceCountAnalysis", cls, cls, log),
+          dom(cls) {
+        globalState = new NeedsRefcountAdjustment;
     }
 
+    ~StaticReferenceCount() { delete globalState; }
+
   protected:
-    AbstractResult apply(AUses& state, Instruction* i) const override {
+    AbstractResult apply(AbstractValueTaint& state,
+                         Instruction* i) const override {
         AbstractResult res;
 
-        if (state.overflow || Phi::Cast(i) || PirCopy::Cast(i))
-            return res;
-
-        auto count = [&](Value* v, bool constantUse, bool increments) {
-            auto vi = Instruction::Cast(v);
-            if (!vi)
-                return;
-
-            // self input is ignored
-            if (vi == i)
-                return;
-
-            auto use = state.uses.find(vi);
-            if (use == state.uses.end()) {
-                if (constantUse)
+        // Check if this instruction uses a tainted value. If so, we need to
+        // record the fact that there is a adjustment needed.
+        // We collect the result in the global state.
+        i->eachArg([&](Value* v) {
+            if (auto j = Instruction::Cast(v->followCasts())) {
+                assert(!PirCopy::Cast(j));
+                if (i == j || j->minReferenceCount() > 1)
                     return;
-                use = state.uses.emplace(vi, AUses::Fresh).first;
-            }
+                if (auto taint = state.isTainted(j)) {
+                    NeedsRefcountAdjustment::Kind k =
+                        NeedsRefcountAdjustment::EnsureNamed;
+                    if (taint->kind == AbstractValueTaint::Taint::Override)
+                        k = NeedsRefcountAdjustment::SetShared;
+                    else
+                        assert(taint->kind == AbstractValueTaint::Taint::Reuse);
 
-            switch (use->second) {
-            case AUses::Fresh:
-                // multiple non-reusing uses are ok, as long as the are not
-                // preceeded by a reusing use (in which case we are at Once)
-                if (!constantUse) {
-                    use->second = increments ? AUses::Named : AUses::Tainted;
-                    res.update();
-                }
-                break;
-            case AUses::Tainted:
-                use->second = AUses::UseAfterTaint;
-                res.update();
-                break;
-            case AUses::Named:
-            case AUses::UseAfterTaint:
-                break;
-            }
-        };
-
-        std::function<void(Value*, bool, bool)> apply =
-            [&](Value* v, bool constantUse, bool increments) {
-                v = v->followCasts();
-                while (auto cp = PirCopy::Cast(v->followCasts()))
-                    v = cp->arg<0>().val();
-                v = v->followCasts();
-
-                if (auto j = Instruction::Cast(v)) {
-                    if (j->minReferenceCount() >= 1)
-                        return;
-
-                    auto as = alias.find(j);
-                    if (as != alias.end()) {
-                        for (auto a : as->second)
-                            count(a, constantUse, increments);
+                    if (taint->origin) {
+                        if (globalState->beforeUse[taint->origin][j] < k) {
+                            globalState->beforeUse[taint->origin][j] = k;
+                        }
+                    } else {
+                        auto exists = globalState->atCreation.find(j);
+                        if (exists != globalState->atCreation.end()) {
+                            if (exists->second < k)
+                                exists->second = k;
+                        } else {
+                            globalState->atCreation[j] = k;
+                        }
                     }
-                    count(j, constantUse, increments);
                 }
-            };
+            }
+        });
 
         switch (i->tag) {
-        // Instructions which never reuse SEXPS
+
+        // A phi gets tainted if any of it's inputs are
+        case Tag::Phi: {
+            auto p = Phi::Cast(i);
+            auto phiTaint = state.isTainted(p);
+            if (phiTaint) {
+                phiTaint->kind = AbstractValueTaint::Taint::None;
+                phiTaint->origin = nullptr;
+                res.update();
+            }
+            p->eachArg([&](BB*, Value* v) {
+                if (auto j = Instruction::Cast(v->followCasts())) {
+                    auto inputTaint = state.isTainted(j);
+                    if (!phiTaint && inputTaint) {
+                        phiTaint = state.taint(p);
+                        phiTaint->kind = inputTaint->kind;
+                        res.update();
+                    } else if (phiTaint && inputTaint) {
+                        if (phiTaint->kind < inputTaint->kind) {
+                            phiTaint->kind = inputTaint->kind;
+                            res.update();
+                        }
+                        // Origin of the taint is ambiguous. We'll need to fix
+                        // it here.
+                        if (phiTaint->origin != inputTaint->origin) {
+                            phiTaint->origin = nullptr;
+                            res.update();
+                        }
+                    }
+                }
+            });
+            break;
+        }
+
+        // Instructions which never reuse SEXPS can be ignored
+        case Tag::PirCopy:
         case Tag::RecordDeoptReason:
         case Tag::Return:
         case Tag::Length:
@@ -228,76 +274,72 @@ class StaticReferenceCount : public StaticAnalysis<AUses> {
         case Tag::LAnd:
         case Tag::MkCls:
         case Tag::MkFunCls:
-            i->eachArg([&](Value* v) { apply(v, true, false); });
-            break;
-
-        // Instructions which if not overwritten don't reuse SEXPS
         case Tag::Eq:
         case Tag::Neq:
         case Tag::Lt:
         case Tag::Lte:
         case Tag::Gt:
         case Tag::Gte:
+        case Tag::Not:
         case Tag::Extract1_1D:
         case Tag::Extract1_2D:
         case Tag::Extract1_3D:
-        case Tag::Extract2_1D:
-        case Tag::Extract2_2D:
-        case Tag::Subassign1_1D:
-        case Tag::Subassign1_2D:
-        case Tag::Subassign1_3D:
-        case Tag::Subassign2_1D:
-        case Tag::Subassign2_2D:
-            i->eachArg([&](Value* v) {
-                apply(v, !i->effects.includes(Effect::ExecuteCode), false);
-            });
-            break;
-
-        // Instructions which update the named count
         case Tag::StVar:
         case Tag::StVarSuper:
         case Tag::MkEnv:
         case Tag::MkArg:
         case Tag::UpdatePromise:
         case Tag::ForSeqSize:
-            i->eachArg([&](Value* v) {
-                if (i->hasEnv() && v == i->env())
-                    return;
-                apply(v, true, true);
-            });
+        case Tag::ScheduledDeopt:
+        case Tag::PopContext:
+        case Tag::Extract2_2D:
+            break;
+
+        // Those may override the vector (which is arg 1)
+        case Tag::Subassign1_1D:
+        case Tag::Subassign1_2D:
+        case Tag::Subassign1_3D:
+        case Tag::Subassign2_1D:
+        case Tag::Subassign2_2D:
+            if (auto j = Instruction::Cast(i->arg(1).val()->followCasts())) {
+                if (j->minReferenceCount() < 2) {
+                    auto taint = state.isTainted(j);
+                    if (taint &&
+                        taint->kind < AbstractValueTaint::Taint::Override) {
+                        taint->kind = AbstractValueTaint::Taint::Override;
+                        res.update();
+                    } else if (!taint) {
+                        state.taint(j, AbstractValueTaint::Taint::Override, i);
+                        res.update();
+                    }
+                }
+            }
             break;
 
         // Default: instructions which might update in-place, if named
         // count is 0
+        case Tag::Extract2_1D:
         default:
-            i->eachArg([&](Value* v) { apply(v, false, false); });
+            i->eachArg([&](Value* v) {
+                if (auto j = Instruction::Cast(v->followCasts())) {
+                    if (j->minReferenceCount() < 1) {
+                        auto taint = state.isTainted(j);
+                        assert(!taint ||
+                               taint->kind >= AbstractValueTaint::Taint::Reuse);
+                        if (!taint) {
+                            state.taint(j, AbstractValueTaint::Taint::Reuse, i);
+                            res.update();
+                        }
+                    }
+                }
+            });
             break;
         };
 
-        auto cur = state.uses.find(i);
-        if (cur != state.uses.end() && cur->second < AUses::UseAfterTaint) {
-            if (cur->second >= AUses::Fresh) {
-                cur->second = AUses::Fresh;
+        // Executing an instruction un-taints its result value.
+        if (!Phi::Cast(i)) {
+            if (state.clear(i))
                 res.update();
-            }
-            // Variables from the environment must be named
-            if (cur->second == AUses::Fresh) {
-                switch (i->tag) {
-                case Tag::LdVar:
-                case Tag::LdVarSuper:
-                    cur->second = AUses::Named;
-                    break;
-                default: {}
-                }
-            }
-        }
-
-        // The abstract state is expensive to merge. To lift this limit, we'd
-        // need to find a better strategy, or a less expensive analysis...
-        if (state.uses.size() > 1000) {
-            state.uses.clear();
-            state.overflow = true;
-            res.taint();
         }
 
         return res;

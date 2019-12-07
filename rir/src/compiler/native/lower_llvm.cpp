@@ -1,5 +1,6 @@
 #include "jit_llvm.h"
 
+#include "../analysis/reference_count.h"
 #include "types_llvm.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
@@ -113,10 +114,8 @@ class LowerFunctionLLVM {
     Code* code;
     Instruction* currentInstr = nullptr;
     const std::unordered_map<Promise*, unsigned>& promMap;
-    const std::unordered_set<Instruction*>& needsEnsureNamed;
-    const std::unordered_set<Instruction*>& needsSetShared;
+    const NeedsRefcountAdjustment& refcount;
     const std::unordered_set<Instruction*>& needsLdVarForUpdate;
-    bool refcountAnalysisOverflow;
     IRBuilder<> builder;
     MDBuilder MDB;
     LivenessIntervals liveness;
@@ -146,15 +145,11 @@ class LowerFunctionLLVM {
     LowerFunctionLLVM(
         const std::string& name, ClosureVersion* cls, Code* code,
         const std::unordered_map<Promise*, unsigned>& promMap,
-        const std::unordered_set<Instruction*>& needsEnsureNamed,
-        const std::unordered_set<Instruction*>& needsSetShared,
-        const std::unordered_set<Instruction*>& needsLdVarForUpdate,
-        bool refcountAnalysisOverflow)
-        : cls(cls), code(code), promMap(promMap),
-          needsEnsureNamed(needsEnsureNamed), needsSetShared(needsSetShared),
-          needsLdVarForUpdate(needsLdVarForUpdate),
-          refcountAnalysisOverflow(refcountAnalysisOverflow), builder(C),
-          MDB(C), liveness(code, code->nextBBId), numLocals(0), numTemps(0) {
+        const NeedsRefcountAdjustment& refcount,
+        const std::unordered_set<Instruction*>& needsLdVarForUpdate)
+        : cls(cls), code(code), promMap(promMap), refcount(refcount),
+          needsLdVarForUpdate(needsLdVarForUpdate), builder(C), MDB(C),
+          liveness(code, code->nextBBId), numLocals(0), numTemps(0) {
 
         fun = JitLLVM::declare(cls, name, t::nativeFunction);
         // prevent Wunused
@@ -2062,6 +2057,19 @@ bool LowerFunctionLLVM::tryCompile() {
             auto i = *it;
             if (!success)
                 return;
+
+            auto needsAdjust = refcount.beforeUse.find(i);
+            if (needsAdjust != refcount.beforeUse.end()) {
+                for (auto& adjust : needsAdjust->second) {
+                    if (representationOf(adjust.first) == t::SEXP) {
+                        if (adjust.second == NeedsRefcountAdjustment::SetShared)
+                            ensureShared(load(adjust.first));
+                        else if (adjust.second ==
+                                 NeedsRefcountAdjustment::EnsureNamed)
+                            ensureNamed(load(adjust.first));
+                    }
+                }
+            }
 
             currentInstr = i;
             switch (i->tag) {
@@ -4497,15 +4505,18 @@ bool LowerFunctionLLVM::tryCompile() {
             if (sexpResult ||
                 (representationOf(origin) == t::SEXP &&
                  variables.count(origin) && variables.at(origin).initialized)) {
-                if (!sexpResult)
-                    sexpResult = load(origin);
-                if (origin->minReferenceCount() < 2 &&
-                    needsSetShared.count(origin))
-                    ensureShared(sexpResult);
-                else if (origin->minReferenceCount() < 1 &&
-                         (refcountAnalysisOverflow ||
-                          needsEnsureNamed.count(origin)))
-                    ensureNamed(sexpResult);
+
+                auto adjust = refcount.atCreation.find(origin);
+                if (adjust != refcount.atCreation.end()) {
+                    if (!sexpResult)
+                        sexpResult = load(origin);
+
+                    if (adjust->second == NeedsRefcountAdjustment::SetShared)
+                        ensureShared(sexpResult);
+                    else if (adjust->second ==
+                             NeedsRefcountAdjustment::EnsureNamed)
+                        ensureNamed(sexpResult);
+                }
             }
 
             numTemps = 0;
@@ -4542,16 +4553,13 @@ namespace pir {
 void* LowerLLVM::tryCompile(
     ClosureVersion* cls, Code* code,
     const std::unordered_map<Promise*, unsigned>& m,
-    const std::unordered_set<Instruction*>& needsEnsureNamed,
-    const std::unordered_set<Instruction*>& needsSetShared,
-    const std::unordered_set<Instruction*>& needsLdVarForUpdate,
-    bool refcountAnalysisOverflow) {
+    const NeedsRefcountAdjustment& refcount,
+    const std::unordered_set<Instruction*>& needsLdVarForUpdate) {
 
     JitLLVM::createModule();
     auto mangledName = JitLLVM::mangle(cls->name());
-    LowerFunctionLLVM funCompiler(mangledName, cls, code, m, needsEnsureNamed,
-                                  needsSetShared, needsLdVarForUpdate,
-                                  refcountAnalysisOverflow);
+    LowerFunctionLLVM funCompiler(mangledName, cls, code, m, refcount,
+                                  needsLdVarForUpdate);
     if (!funCompiler.tryCompile())
         return nullptr;
 

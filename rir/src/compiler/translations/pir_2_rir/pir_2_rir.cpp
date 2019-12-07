@@ -320,18 +320,16 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             order.push_back(bb->id);
     });
 
-    std::unordered_set<Instruction*> needsEnsureNamed;
-    std::unordered_set<Instruction*> needsSetShared;
+    NeedsRefcountAdjustment refcount;
+    {
+        StaticReferenceCount refcountAnalysis(cls, log);
+        refcountAnalysis();
+        refcount = refcountAnalysis.getGlobalState();
+    }
     std::unordered_set<Instruction*> needsLdVarForUpdate;
-    bool refcountAnalysisOverflow = false;
     {
         Visitor::run(code->entry, [&](Instruction* i) {
             switch (i->tag) {
-            case Tag::ForSeqSize:
-                if (auto arg = Instruction::Cast(i->arg(0).val()))
-                    if (arg->minReferenceCount() < Value::MAX_REFCOUNT)
-                        needsSetShared.insert(arg);
-                break;
             case Tag::Subassign1_1D:
             case Tag::Subassign2_1D:
             case Tag::Subassign1_2D:
@@ -356,39 +354,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 }
                 break;
             default: {}
-            }
-        });
-
-        StaticReferenceCount analysis(cls, log);
-        if (analysis.result().overflow)
-            refcountAnalysisOverflow = true;
-        else
-            analysis.result().needsEnsureNamed(needsEnsureNamed);
-
-        // This part is a bit of a hack... If we have the pattern:
-        //   subassign
-        //   stvar
-        // then the stvar takes care of the ensure named and we should
-        // absolutely not do it beforehand, because it will cause the stvar to
-        // increment to 2.
-        Visitor::run(code->entry, [&](BB* bb) {
-            for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
-                auto i = *ip;
-                switch (i->tag) {
-                case Tag::Subassign1_1D:
-                case Tag::Subassign2_1D:
-                case Tag::Subassign1_2D:
-                case Tag::Subassign2_2D:
-                    if (!needsEnsureNamed.count(i))
-                        break;
-                    if (ip + 1 != bb->end()) {
-                        auto next = *(ip + 1);
-                        if (StVar::Cast(next) && next->arg(0).val() == i)
-                            needsEnsureNamed.erase(i);
-                    }
-                    break;
-                default: {}
-                }
             }
         });
     }
@@ -484,6 +449,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                     pushedStackValues++;
                 };
 
+                auto adjustRefcount = refcount.beforeUse.find(instr);
                 auto loadArg = [&](Value* what, size_t argNumber) {
                     if (what == UnboundValue::instance()) {
                         cb.add(BC::push(R_UnboundValue));
@@ -507,6 +473,21 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         } else {
                             cb.add(BC::ldloc(alloc[what]),
                                    debugAddVariableName(what));
+                        }
+
+                        if (auto j = Instruction::Cast(what->followCasts())) {
+                            if (adjustRefcount != refcount.beforeUse.end()) {
+                                auto adjust = adjustRefcount->second.find(j);
+                                if (adjust != adjustRefcount->second.end()) {
+                                    if (adjust->second ==
+                                        NeedsRefcountAdjustment::SetShared)
+                                        cb.add(BC::setShared());
+                                    else if (adjust->second ==
+                                             NeedsRefcountAdjustment::
+                                                 EnsureNamed)
+                                        cb.add(BC::ensureNamed());
+                                }
+                            }
                         }
                     }
                     pushedStackValues++;
@@ -1146,12 +1127,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             }
 
-            if (instr->minReferenceCount() < 2 && needsSetShared.count(instr))
-                cb.add(BC::setShared());
-            else if (instr->minReferenceCount() < 1 &&
-                     (refcountAnalysisOverflow ||
-                      needsEnsureNamed.count(instr)))
-                cb.add(BC::ensureNamed());
+            auto adjust = refcount.atCreation.find(instr);
+            if (adjust != refcount.atCreation.end()) {
+                if (adjust->second == NeedsRefcountAdjustment::SetShared)
+                    cb.add(BC::setShared());
+                else if (adjust->second == NeedsRefcountAdjustment::EnsureNamed)
+                    cb.add(BC::ensureNamed());
+            }
 
             // Check the return type
             if (pir::Parameter::RIR_CHECK_PIR_TYPES > 0 &&
@@ -1220,9 +1202,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     auto res = ctx.finalizeCode(localsCnt, cache.size());
     if (PIR_NATIVE_BACKEND) {
         LowerLLVM native;
-        if (auto n = native.tryCompile(cls, code, promMap, needsEnsureNamed,
-                                       needsSetShared, needsLdVarForUpdate,
-                                       refcountAnalysisOverflow)) {
+        if (auto n = native.tryCompile(cls, code, promMap, refcount,
+                                       needsLdVarForUpdate)) {
             res->nativeCode = (NativeCode)n;
         }
     }

@@ -420,6 +420,8 @@ bool Instruction::usesDoNotInclude(BB* target, std::unordered_set<Tag> tags) {
 }
 
 const Value* Instruction::cFollowCasts() const {
+    if (auto cast = PirCopy::Cast(this))
+        return cast->arg<0>().val()->followCasts();
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCasts();
     if (auto chk = ChkClosure::Cast(this))
@@ -430,6 +432,8 @@ const Value* Instruction::cFollowCasts() const {
 }
 
 const Value* Instruction::cFollowCastsAndForce() const {
+    if (auto cast = PirCopy::Cast(this))
+        return cast->arg<0>().val()->followCasts();
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCastsAndForce();
     if (auto force = Force::Cast(this))
