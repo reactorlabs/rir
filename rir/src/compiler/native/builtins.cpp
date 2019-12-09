@@ -968,63 +968,46 @@ static bool fastVeceltOk(SEXP vec) {
                                           CDR(ATTRIB(vec)) == R_NilValue));
 }
 
-static bool tryFastVecelt(SEXP vec, R_xlen_t i, bool subset2,
-                          const std::function<void(int)>& intres,
-                          const std::function<void(double)>& realres,
-                          const std::function<void(int)>& lglres,
-                          const std::function<void(SEXP)>& sexpres) {
-    switch (TYPEOF(vec)) {
-    case REALSXP:
-        if (XLENGTH(vec) <= i)
-            break;
-        realres(REAL_ELT(vec, i));
-        return true;
-    case INTSXP:
-        if (XLENGTH(vec) <= i)
-            break;
-        intres(INTEGER_ELT(vec, i));
-        return true;
-    case LGLSXP:
-        if (XLENGTH(vec) <= i)
-            break;
-        lglres(LOGICAL_ELT(vec, i));
-        return true;
-    case CPLXSXP:
-        if (XLENGTH(vec) <= i)
-            break;
-        sexpres(ScalarComplex(COMPLEX_ELT(vec, i)));
-        return true;
-    case RAWSXP:
-        if (XLENGTH(vec) <= i)
-            break;
-        sexpres(ScalarRaw(RAW(vec)[i]));
-        return true;
-    case VECSXP:
-        if (XLENGTH(vec) <= i)
-            break;
-        SEXP elt = VECTOR_ELT(vec, i);
-        RAISE_NAMED(elt, NAMED(vec));
-        if (subset2) {
-            sexpres(elt);
-        } else {
-            SEXP t = allocVector(VECSXP, 1);
-            SET_VECTOR_ELT(t, 0, elt);
-            sexpres(t);
+static SEXP tryFastVeceltInt(SEXP vec, R_xlen_t i, bool subset2) {
+    if (i == NA_INTEGER)
+        return nullptr;
+    if (subset2 || fastVeceltOk(vec)) {
+        switch (TYPEOF(vec)) {
+        case REALSXP:
+            if (XLENGTH(vec) <= i)
+                break;
+            return ScalarReal(REAL_ELT(vec, i));
+        case INTSXP:
+            if (XLENGTH(vec) <= i)
+                break;
+            return ScalarInteger(INTEGER_ELT(vec, i));
+        case LGLSXP:
+            if (XLENGTH(vec) <= i)
+                break;
+            return ScalarLogical(LOGICAL_ELT(vec, i));
+        case CPLXSXP:
+            if (XLENGTH(vec) <= i)
+                break;
+            return ScalarComplex(COMPLEX_ELT(vec, i));
+        case RAWSXP:
+            if (XLENGTH(vec) <= i)
+                break;
+            return ScalarRaw(RAW(vec)[i]);
+        case VECSXP:
+            if (XLENGTH(vec) <= i)
+                break;
+            SEXP elt = VECTOR_ELT(vec, i);
+            RAISE_NAMED(elt, NAMED(vec));
+            if (subset2) {
+                return elt;
+            } else {
+                SEXP t = allocVector(VECSXP, 1);
+                SET_VECTOR_ELT(t, 0, elt);
+                return t;
+            }
         }
-        return true;
     }
-    return false;
-}
-
-static SEXP tryFastVeceltInt(SEXP vector, R_xlen_t i, bool subset2) {
-    SEXP res = nullptr;
-    if (subset2 || fastVeceltOk(vector)) {
-        tryFastVecelt(
-            vector, i, subset2, [&](int r) { res = ScalarInteger(r); },
-            [&](double r) { res = ScalarReal(r); },
-            [&](int r) { res = ScalarLogical(r); }, [&](SEXP r) { res = r; });
-    }
-    return res;
+    return nullptr;
 }
 
 static SEXP tryFastVeceltSexp(SEXP vector, SEXP index, bool subset2) {
@@ -1125,7 +1108,7 @@ NativeBuiltin NativeBuiltins::extract21i = {
 
 SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
     SEXP res = nullptr;
-    if (index < R_XLEN_T_MAX && index > 1.0)
+    if (index < R_XLEN_T_MAX && index >= 1.0)
         res = tryFastVeceltInt(vector, index - 1.0, true);
     if (res)
         return res;
