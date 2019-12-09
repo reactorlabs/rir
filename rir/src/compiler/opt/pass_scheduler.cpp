@@ -37,6 +37,7 @@ PassScheduler::PassScheduler() {
         add<Inline>();
         add<OptimizeContexts>();
 
+        add<OptimizeVisibility>();
         add<OptimizeAssumptions>();
         add<Cleanup>();
 
@@ -45,12 +46,14 @@ PassScheduler::PassScheduler() {
         add<DelayInstr>();
         add<Cleanup>();
 
+        add<OptimizeVisibility>();
         add<OptimizeAssumptions>();
         add<Cleanup>();
 
         add<TypeInference>();
     };
-    auto addDefaultPrePhaseOpt = [&]() { add<OptimizeVisibility>(); };
+    auto addDefaultPrePhaseOpt = [&]() {
+    };
     auto addDefaultPostPhaseOpt = [&]() {
         add<HoistInstruction>();
         add<LoopInvariant>();
@@ -114,6 +117,7 @@ PassScheduler::PassScheduler() {
         add<CleanupCheckpoints>();
     }
     addDefaultPostPhaseOpt();
+
     add<CleanupCheckpoints>();
     add<PhaseMarker>("Phase 4: finished");
 }
