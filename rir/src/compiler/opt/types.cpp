@@ -61,14 +61,16 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         break;
                     }
 
-                    if ("abs" == name) {
-                        if (!getType(c->callArg(0).val()).maybeObj()) {
-                            inferred =
-                                getType(c->callArg(0).val()) & PirType::num();
-                        } else {
-                            inferred = i->inferType(getType);
+                    if ("abs" == name || "min" == name || "max" == name) {
+                        if (c->nCallArgs()) {
+                            auto m = getType(c->callArg(0).val());
+                            if (c->nCallArgs() > 1)
+                                m = m.mergeWithConversion(getType(c->callArg(1).val()));
+                            if (!m.maybeObj()) {
+                                inferred = m & PirType::num();
+                                break;
+                            }
                         }
-                        break;
                     }
 
                     if ("as.integer" == name) {

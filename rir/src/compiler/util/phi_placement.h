@@ -10,6 +10,7 @@
 namespace rir {
 namespace pir {
 
+class Phi;
 class PhiPlacement {
   public:
     struct PhiInput {
@@ -21,14 +22,15 @@ class PhiPlacement {
                    otherPhi == other.otherPhi && aValue == other.aValue;
         }
     };
-    typedef std::unordered_map<BB*, SmallSet<PhiInput>> Phis;
-    bool success = false;
-    BB* targetPhiPosition = nullptr;
-    Phis placement;
 
-    PhiPlacement(ClosureVersion* cls, BB* target,
+    PhiPlacement(ClosureVersion* cls,
                  const std::unordered_map<BB*, Value*>& inputs,
                  const DominanceGraph& dom, const DominanceFrontier&);
+
+    typedef std::unordered_map<BB*, SmallSet<PhiInput>> Phis;
+
+    Phis placement;
+    std::unordered_map<BB*, BB*> dominatingPhi;
 };
 
 } // namespace pir

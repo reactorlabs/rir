@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
+PhiPlacement::PhiPlacement(ClosureVersion* cls,
                            const std::unordered_map<BB*, Value*>& writes,
                            const DominanceGraph& dom,
                            const DominanceFrontier& dfrontier) {
@@ -38,8 +38,11 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
         std::unordered_map<BB*, PhiInput> pendingInput;
         DominatorTreeVisitor<>(dom).run(cls->entry, [&](BB* cur) {
             PhiInput input = {nullptr, nullptr, nullptr};
-            if (pendingInput.count(cur))
+            if (pendingInput.count(cur)) {
                 input = pendingInput.at(cur);
+                if (!phis.includes(cur))
+                    dominatingPhi[cur] = pendingInput.at(cur).otherPhi;
+            }
 
             if (phis.includes(cur)) {
                 input.aValue = nullptr;
@@ -67,16 +70,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
             for (auto suc : cur->succsessors())
                 apply(suc);
         });
-
-        if (phis.includes(target))
-            targetPhiPosition = target;
-        else if (pendingInput.count(target))
-            targetPhiPosition = pendingInput.at(target).otherPhi;
-
-        if (!targetPhiPosition)
-            return;
     }
-    assert(placement.count(targetPhiPosition));
 
     // Cleanup the resulting phi graph
     bool changed = true;
@@ -94,11 +88,11 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
             }
             if (ci->second.size() == 0) {
                 ci = placement.erase(ci);
-            } else if (ci->second.size() == 1 &&
-                       targetPhiPosition != ci->first) {
+            } else if (ci->second.size() == 1) {
                 // Remove single input phis
                 auto input1 = *ci->second.begin();
                 if (input1.otherPhi != ci->first) {
+                    dominatingPhi[ci->first] = input1.otherPhi;
                     // update all other phis which have us as input
                     for (auto& c : placement) {
                         for (auto& in : c.second) {
@@ -124,13 +118,12 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls, BB* target,
     // Fail if not all phis are well formed
     for (auto& i : placement) {
         if (i.second.size() != i.first->predecessors().size()) {
+            // TODO figure out why this happens
             placement.clear();
-            return;
+            dominatingPhi.clear();
+            break;
         }
     }
-    assert(placement.count(targetPhiPosition));
-
-    success = !placement.empty();
 }
 
 } // namespace pir

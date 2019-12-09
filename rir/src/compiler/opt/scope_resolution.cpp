@@ -101,6 +101,12 @@ class TheScopeResolution {
             function->properties.set(ClosureVersion::Property::NoReflection);
 
         std::unordered_map<Value*, Value*> replacedValue;
+        struct CreatedPhiCache {
+            bool hasUnbound;
+            std::unordered_map<BB*, Phi*> phis;
+            std::unordered_map<BB*, BB*> dominatingPhi;
+        };
+        std::vector<std::pair<AbstractPirValue, CreatedPhiCache>> createdPhis;
         auto getReplacedValue = [&](Value* val) {
             while (replacedValue.count(val))
                 val = replacedValue.at(val);
@@ -134,6 +140,7 @@ class TheScopeResolution {
 
             std::unordered_map<BB*, Value*> inputs;
             bool fail = false;
+            bool hasUnbound = false;
             res.eachSource([&](ValOrig v) {
                 if (fail)
                     return;
@@ -145,6 +152,7 @@ class TheScopeResolution {
                                              ? Instruction::Cast(env)->bb()
                                              : function->entry;
                         inputs[initialBB] = UnboundValue::instance();
+                        hasUnbound = true;
                     } else {
                         fail = true;
                     }
@@ -158,8 +166,13 @@ class TheScopeResolution {
             if (fail)
                 return nullptr;
 
-            auto pl = PhiPlacement(function, bb, inputs, dom, dfront);
-            if (!pl.success)
+            auto pl = PhiPlacement(function, inputs, dom, dfront);
+            BB* targetPhiPosition = nullptr;
+            if (pl.placement.count(bb))
+                targetPhiPosition = bb;
+            else if (pl.dominatingPhi.count(bb))
+                targetPhiPosition = pl.dominatingPhi.at(bb);
+            else
                 return nullptr;
 
             auto findExistingPhi =
@@ -224,7 +237,11 @@ class TheScopeResolution {
             for (auto& phi : thePhis)
                 phi.second->updateTypeAndEffects();
 
-            return thePhis.at(pl.targetPhiPosition);
+            auto target = thePhis.at(targetPhiPosition);
+            createdPhis.push_back(
+                {res, CreatedPhiCache(
+                          {hasUnbound, thePhis, std::move(pl.dominatingPhi)})});
+            return target;
         };
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -359,8 +376,28 @@ class TheScopeResolution {
                                                     getSingleLocalValue(v)) {
                                                 values.push_back(val);
                                             } else {
-                                                auto phi = tryInsertPhis(
-                                                    mk, v, bb, ip, true);
+                                                Value* phi = nullptr;
+                                                for (auto& c : createdPhis) {
+                                                    if (c.first == v) {
+                                                        auto& cache = c.second;
+                                                        if (cache.phis.count(
+                                                                bb))
+                                                            phi = cache.phis.at(
+                                                                bb);
+                                                        else if (
+                                                            cache.dominatingPhi
+                                                                .count(bb))
+                                                            phi = cache.phis.at(
+                                                                cache
+                                                                    .dominatingPhi
+                                                                    .at(bb));
+                                                        break;
+                                                    }
+                                                }
+                                                if (!phi) {
+                                                    phi = tryInsertPhis(
+                                                        mk, v, bb, ip, true);
+                                                }
                                                 if (!phi)
                                                     return;
                                                 values.push_back(phi);
@@ -429,8 +466,29 @@ class TheScopeResolution {
                     // of a load, we will resolve the load and the force) which
                     // ends up being rather painful.
                     if (!res.isUnknown() && isActualLoad) {
-                        if (auto resPhi =
-                                tryInsertPhis(i->env(), res, bb, ip, false)) {
+                        Value* resPhi = nullptr;
+                        bool failed = false;
+
+                        for (auto& c : createdPhis) {
+                            if (c.first == res) {
+                                auto& cache = c.second;
+                                if (cache.hasUnbound) {
+                                    failed = true;
+                                    break;
+                                }
+                                if (cache.phis.count(bb))
+                                    resPhi = cache.phis.at(bb);
+                                else if (cache.dominatingPhi.count(bb))
+                                    resPhi = cache.phis.at(
+                                        cache.dominatingPhi.at(bb));
+                                break;
+                            }
+                        }
+                        if (!resPhi && !failed)
+                            resPhi =
+                                tryInsertPhis(i->env(), res, bb, ip, false);
+
+                        if (resPhi) {
                             Value* val = resPhi;
                             if (val->type.maybeMissing()) {
                                 // LdVar checks for missingness, so we need
