@@ -295,12 +295,17 @@ static void checkReplace(Instruction* origin, Value* replace) {
 
 void Instruction::replaceDominatedUses(Instruction* replace,
                                        const std::initializer_list<Tag>& skip) {
+    // TODO: ensure graph is numbered in dominance order so we don't need this
+    DominanceGraph dom(replace->bb()->owner);
+    replaceDominatedUses(replace, dom, skip);
+}
+
+void Instruction::replaceDominatedUses(Instruction* replace,
+                                       const DominanceGraph& dom,
+                                       const std::initializer_list<Tag>& skip) {
     checkReplace(this, replace);
 
     auto start = false;
-
-    // TODO: ensure graph is numbered in dominance order so we don't need this
-    DominanceGraph dom(replace->bb()->owner);
 
     auto stop = replace->bb() != bb() ? bb() : nullptr;
     Visitor::run(replace->bb(), stop, [&](BB* bb) {
