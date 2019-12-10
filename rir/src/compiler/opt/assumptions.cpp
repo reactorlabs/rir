@@ -16,17 +16,99 @@ namespace rir {
 namespace pir {
 
 struct AAssumption {
-    // cppcheck-suppress noExplicitConstructor
-    AAssumption(Assume* a) : yesNo(a->assumeTrue), assumption(a->condition()) {}
+    AAssumption(Value* i, const PirType& t) : yesNo(true), kind(Typecheck) {
+        c.typecheck = {i, t};
+    }
+    explicit AAssumption(Assume* a) : yesNo(a->assumeTrue) {
+        auto cond = a->condition();
+        if (auto t = IsType::Cast(cond)) {
+            kind = Typecheck;
+            c.typecheck = {t->arg(0).val(), t->typeTest};
+        } else if (auto t = IsObject::Cast(cond)) {
+            kind = Typecheck;
+            auto arg = t->arg(0).val();
+            c.typecheck = {arg, arg->type.notObject()};
+        } else if (auto t = Identical::Cast(cond)) {
+            kind = Equality;
+            c.equality = {t->arg(0).val(), t->arg(1).val()};
+        } else {
+            kind = Other;
+            c.misc = cond;
+        }
+    }
+    AAssumption& operator=(const AAssumption& o) {
+        yesNo = o.yesNo;
+        kind = o.kind;
+        switch (kind) {
+        case Typecheck:
+            c.typecheck = o.c.typecheck;
+            break;
+        case Equality:
+            c.equality = o.c.equality;
+            break;
+        case Other:
+            c.misc = o.c.misc;
+            break;
+        }
+        return *this;
+    }
+
+    AAssumption(const AAssumption& o) { (*this) = o; }
+
     bool yesNo;
-    Value* assumption;
+
+    enum Kind {
+        Typecheck,
+        Equality,
+        Other,
+    };
+    Kind kind;
+
+    union Content {
+        Content() {}
+        std::pair<Value*, PirType> typecheck;
+        std::pair<Value*, Value*> equality;
+        Value* misc;
+    };
+    Content c;
+
     bool operator==(const AAssumption& other) const {
-        return yesNo == other.yesNo && assumption == other.assumption;
+        if (yesNo != other.yesNo)
+            return false;
+        if (kind != other.kind)
+            return false;
+        switch (kind) {
+        case Typecheck:
+            return other.c.typecheck == c.typecheck;
+        case Equality:
+            return other.c.equality == c.equality ||
+                   (other.c.equality.first == c.equality.second &&
+                    other.c.equality.second == c.equality.first);
+        case Other:
+            return c.misc == other.c.misc;
+        }
+        assert(false);
+        return false;
     }
     void print(std::ostream& out, bool) {
         if (!yesNo)
             out << "!";
-        assumption->printRef(out);
+        switch (kind) {
+        case Typecheck:
+            c.typecheck.first->printRef(out);
+            out << ".isA(";
+            c.typecheck.second.print(out);
+            out << ")";
+            break;
+        case Equality:
+            c.equality.first->printRef(out);
+            out << "==";
+            c.equality.second->printRef(out);
+            break;
+        case Other:
+            c.misc->printRef(out);
+            break;
+        }
     }
 };
 
@@ -38,11 +120,14 @@ struct AvailableAssumptions
                          Instruction* i) const {
         AbstractResult res;
         if (auto a = Assume::Cast(i)) {
-            if (!IsEnvStub::Cast(a->arg(0).val()))
-                if (!state.available.includes(a)) {
-                    state.available.insert(a);
+            if (!IsEnvStub::Cast(a->arg(0).val())) {
+                AAssumption am(a);
+                auto contains = state.available.find(am);
+                if (contains == state.available.end()) {
+                    state.available.insert(am);
                     res.update();
                 }
+            }
         }
         return res;
     }
@@ -71,11 +156,6 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         });
     }
 
-    bool huge = function->size() > 1000;
-    auto exceptTypecheck = std::unique_ptr<DeadInstructions>(
-        huge ? nullptr
-             : new DeadInstructions(function, 1, Effects(),
-                                    DeadInstructions::IgnoreTypeTests));
     AvailableCheckpoints checkpoint(function, function, log);
     AvailableAssumptions assumptions(function, log);
     DominanceGraph dom(function);
@@ -91,11 +171,30 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
             auto instr = *ip;
 
+            // This check tries to find type tests, whose result is not
+            // consumed by all uses of the value. E.g. something like:
+            //
+            //     q = isType(a, t)
+            //     b = castType(a, t)
+            //     assume(q)
+            //     someUse(b)
+            //     someUse(a)
+            //
+            // here, the someUse(a) does not use the available assumption,
+            // that a is of type t.
+            if (auto tt = CastType::Cast(instr)) {
+                if (tt->kind == CastType::Downcast) {
+                    auto arg = tt->arg(0).val();
+                    if (auto in = Instruction::Cast(arg))
+                        if (assumptions.at(tt).count(
+                                AAssumption(arg, tt->type)))
+                            in->replaceDominatedUses(tt, dom);
+                }
+            }
+
             if (auto assume = Assume::Cast(instr)) {
-                bool changed = false;
-                if (assumptions.at(instr).includes(assume)) {
+                if (assumptions.at(instr).includes(AAssumption(assume))) {
                     next = bb->remove(ip);
-                    changed = true;
                 } else {
                     // We are trying to group multiple assumes into the same
                     // checkpoint by finding for each assume the topmost
@@ -118,59 +217,6 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                             if (assume->checkpoint() != cp0) {
                                 hoistAssume[guard] = {guard, cp0, assume};
                                 next = bb->remove(ip);
-                                changed = true;
-                            }
-                        }
-                    }
-                }
-
-                // This check tries to find type tests, whose result is not
-                // consumed by all uses of the value. E.g. something like:
-                //
-                //     q = isType(a, t)
-                //     b = castType(a, t)
-                //     assume(q)
-                //     someUse(b)
-                //     someUse(a)
-                //
-                // here, the someUse(a) does not use the available assumption,
-                // that a is of type t.
-                if (!changed && !bb->isDeopt() && !huge) {
-                    auto argv = assume->arg(0).val();
-                    auto ot = IsObject::Cast(argv);
-                    auto tt = IsType::Cast(argv);
-                    if ((assume->assumeTrue && tt) ||
-                        (!assume->assumeTrue && ot)) {
-                        auto arg = Instruction::Cast(argv);
-                        if (auto tested =
-                                Instruction::Cast(arg->arg(0).val())) {
-
-                            PirType expected;
-                            if (ot) {
-                                expected = tested->type.notObject();
-                            } else {
-                                assert(tt);
-                                expected = tt->typeTest;
-                            }
-
-                            if (!tested->type.isA(expected) &&
-                                expected.maybePromiseWrapped() ==
-                                    tested->type.maybePromiseWrapped() &&
-                                exceptTypecheck->isDead(tested)) {
-
-                                // The tested value is used outside the
-                                // typecheck. Let's cast it to the checked
-                                // value and propagate this, so all uses can
-                                // benefit from the typecheck.
-                                ip++;
-                                auto cast =
-                                    new CastType(tested, CastType::Downcast,
-                                                 PirType::any(), expected);
-                                cast->effects.set(Effect::DependsOnAssume);
-                                ip = bb->insert(ip, cast);
-                                tested->replaceDominatedUses(
-                                    *ip, TypecheckInstrsList);
-                                next = ip + 1;
                             }
                         }
                     }

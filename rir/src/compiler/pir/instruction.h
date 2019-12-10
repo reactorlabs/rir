@@ -137,6 +137,7 @@ enum class VisibilityFlag : uint8_t {
     Unknown,
 };
 
+class DominanceGraph;
 class MkEnv;
 class Instruction : public Value {
   public:
@@ -268,6 +269,9 @@ class Instruction : public Value {
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
+    void replaceDominatedUses(Instruction* replacement,
+                              const DominanceGraph& dom,
+                              const std::initializer_list<Tag>& skip = {});
     void replaceDominatedUses(Instruction* replacement,
                               const std::initializer_list<Tag>& skip = {});
     void

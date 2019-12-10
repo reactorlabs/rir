@@ -46,7 +46,9 @@ bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
     return true;
 }
 
-bool instructionOverwritesBinding(Instruction* i, SEXP binding) {
+bool instructionOverwritesBinding(Instruction* i, Value* origin, SEXP binding) {
+    if (i == origin)
+        return true;
     SEXP varName = nullptr;
     if (auto store = StVar::Cast(i))
         varName = store->varName;
@@ -71,10 +73,11 @@ bool instructionOverwritesBinding(Instruction* i, SEXP binding) {
     return false;
 }
 
-bool loopOverwritesBinding(LoopDetection::Loop& loop, SEXP binding) {
+bool loopOverwritesBinding(LoopDetection::Loop& loop, Value* origin,
+                           SEXP binding) {
     for (auto bb : loop) {
         for (auto instruction : *bb) {
-            if (instructionOverwritesBinding(instruction, binding))
+            if (instructionOverwritesBinding(instruction, origin, binding))
                 return true;
         }
     }
@@ -87,10 +90,13 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
     Instruction* found = nullptr;
     auto current = start;
     SEXP binding = nullptr;
+    auto origin = instruction->env();
     if (auto ldFun = LdFun::Cast(instruction)) {
         binding = ldFun->varName;
     } else if (auto ldVar = LdVar::Cast(instruction)) {
         binding = ldVar->varName;
+    } else {
+        assert(false);
     }
 
     while (current != nullptr && found == nullptr) {
@@ -123,7 +129,7 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
 
     if (found != nullptr) {
         for (auto instruction : betweenLoadandLoop) {
-            if (instructionOverwritesBinding(instruction, binding) ||
+            if (instructionOverwritesBinding(instruction, origin, binding) ||
                 taintsEnvironment(instruction))
                 return false;
         }
@@ -159,7 +165,8 @@ void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
                     }
 
                     if (binding) {
-                        if (!loopOverwritesBinding(loop, binding))
+                        Value* origin = i->env();
+                        if (!loopOverwritesBinding(loop, origin, binding))
                             loads.emplace(i, bb);
                         else
                             safeToHoist = false;
