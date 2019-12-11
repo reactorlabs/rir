@@ -72,6 +72,13 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     }
                 }
             }
+        } else if ((!i->type.unboxable() && i->typeFeedback.type.unboxable()) ||
+                   (i->type.maybeObj() && !i->typeFeedback.type.maybeObj())) {
+            speculateOn = i;
+            feedback = i->typeFeedback;
+            guardPos = checkpoint.next(i, i, dom);
+            if (guardPos)
+                typecheckPos = guardPos->nextBB();
         }
 
         if (!speculateOn || !guardPos)
