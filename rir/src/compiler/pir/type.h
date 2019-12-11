@@ -242,6 +242,11 @@ struct PirType {
             .scalar();
     }
 
+    constexpr bool unboxable() {
+        return isA(simpleScalarLogical()) || isA(simpleScalarInt()) ||
+               isA(simpleScalarReal());
+    }
+
     static constexpr PirType promiseWrappedVal() {
         return val().orPromiseWrapped();
     }
