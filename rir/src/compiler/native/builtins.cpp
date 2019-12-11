@@ -556,8 +556,7 @@ NativeBuiltin NativeBuiltins::newLgl = {
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
     } while (false)
 
-static SEXPREC createFakeSEXP(SEXPTYPE t) {
-    SEXPREC res;
+static void createFakeSEXP(SEXPREC& res, SEXPTYPE t) {
     memset(&res, 0, sizeof(SEXPREC));
     res.attrib = R_NilValue;
     res.gengc_next_node = R_NilValue;
@@ -566,38 +565,45 @@ static SEXPREC createFakeSEXP(SEXPTYPE t) {
     res.sxpinfo.mark = 1;
     res.sxpinfo.named = 2;
     res.sxpinfo.type = t;
-    return res;
 }
 
-static SEXPREC createFakeCONS(SEXP cdr) {
-    auto res = createFakeSEXP(LISTSXP);
+static void createFakeCONS(SEXPREC& res, SEXP cdr) {
+    createFakeSEXP(res, LISTSXP);
     res.u.listsxp.carval = R_NilValue;
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
-    return res;
 }
 
 #define FAKE_ARGS2(res, a1, a2)                                                \
-    auto __a2__cell__ = createFakeCONS(R_NilValue);                            \
-    auto __a1__cell__ = createFakeCONS(&__a2__cell__);                         \
+    SEXPREC __a2__cell__;                                                      \
+    createFakeCONS(__a2__cell__, R_NilValue);                                  \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
     __a1__cell__.u.listsxp.carval = a1;                                        \
     __a2__cell__.u.listsxp.carval = a2;                                        \
     res = &__a1__cell__
 
 #define FAKE_ARGS3(res, a1, a2, a3)                                            \
-    auto __a3__cell__ = createFakeCONS(R_NilValue);                            \
-    auto __a2__cell__ = createFakeCONS(&__a3__cell__);                         \
-    auto __a1__cell__ = createFakeCONS(&__a2__cell__);                         \
+    SEXPREC __a3__cell__;                                                      \
+    createFakeCONS(__a3__cell__, R_NilValue);                                  \
+    SEXPREC __a2__cell__;                                                      \
+    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
     __a1__cell__.u.listsxp.carval = a1;                                        \
     __a2__cell__.u.listsxp.carval = a2;                                        \
     __a3__cell__.u.listsxp.carval = a3;                                        \
     res = &__a1__cell__
 
 #define FAKE_ARGS4(res, a1, a2, a3, a4)                                        \
-    auto __a4__cell__ = createFakeCONS(R_NilValue);                            \
-    auto __a3__cell__ = createFakeCONS(&__a4__cell__);                         \
-    auto __a2__cell__ = createFakeCONS(&__a3__cell__);                         \
-    auto __a1__cell__ = createFakeCONS(&__a2__cell__);                         \
+    SEXPREC __a4__cell__;                                                      \
+    createFakeCONS(__a4__cell__, R_NilValue);                                  \
+    SEXPREC __a3__cell__;                                                      \
+    createFakeCONS(__a3__cell__, &__a4__cell__);                               \
+    SEXPREC __a2__cell__;                                                      \
+    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
     __a1__cell__.u.listsxp.carval = a1;                                        \
     __a2__cell__.u.listsxp.carval = a2;                                        \
     __a3__cell__.u.listsxp.carval = a3;                                        \
@@ -630,7 +636,8 @@ NativeBuiltin NativeBuiltins::unopEnv = {
 
 static SEXP unopImpl(SEXP argument, UnopKind op) {
     SEXP res = nullptr;
-    SEXPREC arglistStruct = createFakeCONS(R_NilValue);
+    SEXPREC arglistStruct;
+    createFakeCONS(arglistStruct, R_NilValue);
     arglistStruct.u.listsxp.carval = argument;
     SEXP arglist = &arglistStruct;
     SEXP env = R_NilValue;
@@ -670,7 +677,8 @@ NativeBuiltin NativeBuiltins::notEnv = {
 
 static SEXP notImpl(SEXP argument) {
     SEXP res = nullptr;
-    SEXPREC arglistStruct = createFakeCONS(R_NilValue);
+    SEXPREC arglistStruct;
+    createFakeCONS(arglistStruct, R_NilValue);
     arglistStruct.u.listsxp.carval = argument;
     SEXP arglist = &arglistStruct;
     SEXP env = R_NilValue;
@@ -754,12 +762,9 @@ NativeBuiltin NativeBuiltins::binopEnv = {
 bool debugBinopImpl = false;
 static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     SEXP res = nullptr;
-    SEXPREC arglist2 = createFakeCONS(R_NilValue);
-    SEXPREC arglist1 = createFakeCONS(&arglist2);
 
-    arglist1.u.listsxp.carval = lhs;
-    arglist2.u.listsxp.carval = rhs;
-    SEXP arglist = &arglist1;
+    SEXP arglist;
+    FAKE_ARGS2(arglist, lhs, rhs);
     SEXP env = R_NilValue;
     SEXP call = R_NilValue;
 
