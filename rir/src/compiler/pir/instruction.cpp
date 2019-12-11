@@ -510,6 +510,23 @@ void Branch::printArgs(std::ostream& out, bool tty) const {
         << bb()->falseBranch()->id << " (if false)";
 }
 
+PirType Extract1_1D::inferType(const GetType& getType) const {
+    auto res = ifNonObjectArgs(
+        getType, type & getType(vec()).subsetType(getType(idx())), type);
+    if (res.isA(PirType::num())) {
+        if (auto c = LdConst::Cast(idx())) {
+            if (IS_SIMPLE_SCALAR(c->c(), INTSXP)) {
+                if (INTEGER(c->c())[0] >= 1)
+                    res.setScalar();
+            } else if (IS_SIMPLE_SCALAR(c->c(), REALSXP)) {
+                if (REAL(c->c())[0] >= 1)
+                    res.setScalar();
+            }
+        }
+    }
+    return res;
+}
+
 void CastType::printArgs(std::ostream& out, bool tty) const {
     out << (kind == Upcast ? "up " : "dn ");
     FixedLenInstruction::printArgs(out, tty);
