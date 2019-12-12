@@ -1264,10 +1264,7 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
     Value* vec() const { return arg(0).val(); }
     Value* idx() const { return arg(1).val(); }
 
-    PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(
-            getType, type & getType(vec()).subsetType(getType(idx())), type);
-    }
+    PirType inferType(const GetType& getType) const override final;
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
     }
