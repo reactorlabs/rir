@@ -19,17 +19,17 @@ struct NeedsRefcountAdjustment {
     SmallMap<Instruction*, Kind> atCreation;
     SmallMap<Instruction*, SmallMap<Instruction*, Kind>> beforeUse;
 
-    void print(std::ostream& out, bool) const {
-        out << "Adjust at creation: ";
+    void print(std::ostream& out, bool tty) const {
+        out << "Adjust at creation:\n";
         for (auto r : atCreation) {
-            r.first->printRef(out);
+            r.first->print(out);
             out << " " << r.second << ",  ";
         }
         out << "\n";
 
-        out << "Adjust before use: ";
+        out << "Adjust before use:\n";
         for (auto i : beforeUse) {
-            i.first->printRef(out);
+            i.first->print(out, tty);
             out << ": ";
             for (auto r : i.second) {
                 r.first->printRef(out);
