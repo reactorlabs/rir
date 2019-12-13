@@ -63,8 +63,6 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                                 (!j->typeFeedback.type.isVoid() &&
                                  !seen.type.isA(j->typeFeedback.type)))
                                 seen = j->typeFeedback;
-                        if (seen.type.isVoid())
-                            seen.type = arg->type.notObject();
 
                         TypeTest::Create(
                             arg, seen,

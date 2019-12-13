@@ -963,11 +963,6 @@ NativeBuiltin NativeBuiltins::printValue = {
     (void*)printValueImpl,
 };
 
-static bool fastVeceltOk(SEXP vec) {
-    return (ATTRIB(vec) == R_NilValue || (TAG(ATTRIB(vec)) == R_DimSymbol &&
-                                          CDR(ATTRIB(vec)) == R_NilValue));
-}
-
 static SEXP tryFastVeceltInt(SEXP vec, R_xlen_t i, bool subset2) {
     if (i == NA_INTEGER)
         return nullptr;

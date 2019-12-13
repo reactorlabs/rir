@@ -659,8 +659,12 @@ bool testTypeRules() {
 
     auto a = (PirType() | RType::real | RType::integer)
                  .notPromiseWrapped()
-                 .notObject();
-    auto b = (PirType() | RType::integer).notPromiseWrapped().notObject();
+                 .notObject()
+                 .noAttribs();
+    auto b = (PirType() | RType::integer)
+                 .notPromiseWrapped()
+                 .notObject()
+                 .noAttribs();
     assert(a.mergeWithConversion(b) == a);
     assert(b.mergeWithConversion(a) == a);
     t = PirType::bottom();

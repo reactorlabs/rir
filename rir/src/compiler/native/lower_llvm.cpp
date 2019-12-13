@@ -3406,35 +3406,47 @@ bool LowerFunctionLLVM::tryCompile() {
                 if (representationOf(arg) == Representation::Sexp) {
                     llvm::Value* res = nullptr;
                     auto a = loadSxp(arg);
-                    if (t->typeTest.isA(RType::logical)) {
-                        res = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
-                    } else if (t->typeTest.isA(PirType(RType::logical)
-                                                   .orPromiseWrapped())) {
+                    if (arg->type.maybePromiseWrapped())
                         a = depromise(a);
+
+                    if (t->typeTest.isA(
+                            PirType(RType::logical).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
-                    } else if (t->typeTest.isA(RType::integer)) {
-                        res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
                     } else if (t->typeTest.isA(PirType(RType::integer)
                                                    .orPromiseWrapped())) {
-                        a = depromise(a);
                         res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
-                    } else if (t->typeTest.isA(RType::real)) {
-                        res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
                     } else if (t->typeTest.isA(
                                    PirType(RType::real).orPromiseWrapped())) {
-                        a = depromise(a);
                         res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
                     } else {
-                        t->print(std::cerr, true);
-                        assert(false);
+                        assert(arg->type.notMissing().notLazy().noAttribs().isA(
+                            t->typeTest));
+                        res = builder.getTrue();
                     }
-                    if (t->typeTest.isScalar()) {
+                    if (t->typeTest.isScalar() && !arg->type.isScalar()) {
                         assert(a->getType() == t::SEXP);
                         res = builder.CreateAnd(res, isScalar(a));
                     }
-                    if (arg->type.maybeObj()) {
+                    if (arg->type.notMissing()
+                            .notPromiseWrapped()
+                            .notObject()
+                            .isA(t->typeTest)) {
                         res =
                             builder.CreateAnd(res, builder.CreateNot(isObj(a)));
+                    } else if (arg->type.notMissing()
+                                   .notPromiseWrapped()
+                                   .noAttribs()
+                                   .isA(t->typeTest)) {
+                        auto attrs = attr(a);
+                        auto isNil = builder.CreateICmpEQ(
+                            attrs, constant(R_NilValue, t::SEXP));
+                        auto isMatr1 = builder.CreateICmpEQ(
+                            tag(attrs), constant(R_DimSymbol, t::SEXP));
+                        auto isMatr2 = builder.CreateICmpEQ(
+                            cdr(attrs), constant(R_NilValue, t::SEXP));
+                        auto isMatr = builder.CreateAnd(isMatr1, isMatr2);
+                        res = builder.CreateAnd(
+                            res, builder.CreateOr(isNil, isMatr));
                     }
                     setVal(i, builder.CreateZExt(res, t::Int));
                 } else {
@@ -3503,24 +3515,6 @@ bool LowerFunctionLLVM::tryCompile() {
                               : builder.getFalse();
                 }
                 setVal(i, builder.CreateZExt(res, t::Int));
-                break;
-            }
-
-            case Tag::IsObject: {
-                if (representationOf(i) != Representation::Integer) {
-                    success = false;
-                    break;
-                }
-
-                auto arg = i->arg(0).val();
-                if (representationOf(arg) == Representation::Sexp) {
-                    auto a = loadSxp(arg);
-                    if (arg->type.maybePromiseWrapped())
-                        a = depromise(a);
-                    setVal(i, builder.CreateZExt(isObj(a), t::Int));
-                } else {
-                    setVal(i, c((int)0));
-                }
                 break;
             }
 
@@ -3745,6 +3739,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto idx = loadSxp(extract->idx());
 
                 bool fastcase = !extract->vec()->type.maybe(RType::vec) &&
+                                !extract->vec()->type.maybeHasAttrs() &&
                                 vectorTypeSupport(extract->vec()) &&
                                 extract->idx()->type.isA(
                                     PirType::intRealLgl().notObject().scalar());

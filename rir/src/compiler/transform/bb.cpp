@@ -178,9 +178,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
             Value* src = nullptr;
             auto cond = assume->condition();
             auto r = DeoptReason::Typecheck;
-            if (auto t = IsObject::Cast(cond)) {
-                src = t->arg<0>().val();
-            } else if (auto t = IsType::Cast(cond)) {
+            if (auto t = IsType::Cast(cond)) {
                 src = t->arg<0>().val();
             } else if (auto t = Identical::Cast(cond)) {
                 src = t->arg<0>().val();

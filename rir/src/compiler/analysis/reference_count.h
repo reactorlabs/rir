@@ -262,7 +262,6 @@ class StaticReferenceCount
         case Tag::Colon:
         case Tag::CastType:
         case Tag::IsType:
-        case Tag::IsObject:
         case Tag::IsEnvStub:
         case Tag::ChkMissing:
         case Tag::Deopt:

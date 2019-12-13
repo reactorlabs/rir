@@ -24,13 +24,12 @@ struct AAssumption {
         if (auto t = IsType::Cast(cond)) {
             kind = Typecheck;
             c.typecheck = {t->arg(0).val(), t->typeTest};
-        } else if (auto t = IsObject::Cast(cond)) {
-            kind = Typecheck;
-            auto arg = t->arg(0).val();
-            c.typecheck = {arg, arg->type.notObject()};
         } else if (auto t = Identical::Cast(cond)) {
             kind = Equality;
             c.equality = {t->arg(0).val(), t->arg(1).val()};
+        } else if (auto t = IsEnvStub::Cast(cond)) {
+            kind = IsEnvStub;
+            c.env = t->env();
         } else {
             kind = Other;
             c.misc = cond;
@@ -40,6 +39,9 @@ struct AAssumption {
         yesNo = o.yesNo;
         kind = o.kind;
         switch (kind) {
+        case IsEnvStub:
+            c.env = o.c.env;
+            break;
         case Typecheck:
             c.typecheck = o.c.typecheck;
             break;
@@ -58,6 +60,7 @@ struct AAssumption {
     bool yesNo;
 
     enum Kind {
+        IsEnvStub,
         Typecheck,
         Equality,
         Other,
@@ -68,6 +71,7 @@ struct AAssumption {
         Content() {}
         std::pair<Value*, PirType> typecheck;
         std::pair<Value*, Value*> equality;
+        Value* env;
         Value* misc;
     };
     Content c;
@@ -78,6 +82,8 @@ struct AAssumption {
         if (kind != other.kind)
             return false;
         switch (kind) {
+        case IsEnvStub:
+            return other.c.env == c.env;
         case Typecheck:
             return other.c.typecheck == c.typecheck;
         case Equality:
@@ -104,6 +110,11 @@ struct AAssumption {
             c.equality.first->printRef(out);
             out << "==";
             c.equality.second->printRef(out);
+            break;
+        case IsEnvStub:
+            out << "isEnvStub(";
+            c.misc->printRef(out);
+            out << ")";
             break;
         case Other:
             c.misc->printRef(out);
@@ -185,10 +196,18 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
             if (auto tt = CastType::Cast(instr)) {
                 if (tt->kind == CastType::Downcast) {
                     auto arg = tt->arg(0).val();
-                    if (auto in = Instruction::Cast(arg))
+                    if (auto in = Instruction::Cast(arg)) {
                         if (assumptions.at(tt).count(
-                                AAssumption(arg, tt->type)))
-                            in->replaceDominatedUses(tt, dom);
+                                AAssumption(arg, tt->type))) {
+                            // ensure that it does not look like we are
+                            // replacing an already non-lazy value with a lazy
+                            // one, since the cast was not yet updated.
+                            tt->updateTypeAndEffects();
+                            if (!in->type.isA(tt->type)) {
+                                in->replaceDominatedUses(tt, dom);
+                            }
+                        }
+                    }
                 }
             }
 

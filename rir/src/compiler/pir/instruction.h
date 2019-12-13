@@ -1091,6 +1091,11 @@ class FLI(CastType, 1, Effects::None()) {
         return hash_combine(
             hash_combine(hash_combine(tagHash(), type), arg<0>().type()), kind);
     }
+    PirType inferType(const GetType& getType) const override final {
+        if (kind == Downcast)
+            return getType(arg(0).val()) & type;
+        return type;
+    }
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
@@ -2184,15 +2189,6 @@ class FLIE(MaterializeEnv, 1, Effects::None()) {
   public:
     explicit MaterializeEnv(MkEnv* e)
         : FixedLenInstructionWithEnvSlot(RType::env, e) {}
-};
-
-class FLI(IsObject, 1, Effects::None()) {
-  public:
-    explicit IsObject(Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}) {}
-
-    bool isTypecheck() const override final { return true; }
-    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {

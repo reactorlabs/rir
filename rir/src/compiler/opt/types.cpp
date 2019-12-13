@@ -143,6 +143,8 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     auto e = Extract1_1D::Cast(i);
                     if (!inferred.isScalar() &&
                         getType(e->vec()).isA(PirType::num()) &&
+                        // named arguments produce named result
+                        !getType(e->vec()).maybeHasAttrs() &&
                         getType(e->idx()).isScalar()) {
                         if (range.count(e->idx())) {
                             if (range.at(e->idx()).first > 0) {
