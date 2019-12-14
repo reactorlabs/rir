@@ -114,77 +114,98 @@ class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
             if (!condition)
                 return;
 
-            auto applyCond = [&](std::function<Range(Range, Range)> getLhs,
-                                 std::function<Range(Range, Range)> getRhs) {
-                if (condition->effects.contains(Effect::ExecuteCode))
-                    return;
-                auto lhs = condition->arg(0).val();
-                auto rhs = condition->arg(1).val();
-                if (!holds) {
-                    auto t = lhs;
-                    lhs = rhs;
-                    rhs = t;
-                }
+            auto applyCond =
+                [&](std::function<Range(int, int, int, int)> getLhs,
+                    std::function<Range(int, int, int, int)> getRhs) {
+                    if (condition->effects.contains(Effect::ExecuteCode))
+                        return;
+                    auto lhs = condition->arg(0).val();
+                    auto rhs = condition->arg(1).val();
+                    if (!holds) {
+                        auto t = lhs;
+                        lhs = rhs;
+                        rhs = t;
+                    }
 
-                bool hasA = state.range.count(lhs);
-                bool hasB = state.range.count(rhs);
+                    bool hasA = state.range.count(lhs);
+                    bool hasB = state.range.count(rhs);
 
-                if (!hasA && !hasB)
-                    return;
+                    if (!hasA && !hasB)
+                        return;
 
-                Range& a = state.range[lhs];
-                Range& b = state.range[rhs];
-                if (!hasA)
-                    a = Range(MIN, MAX);
-                if (!hasB)
-                    b = Range(MIN, MAX);
+                    Range& a = state.range[lhs];
+                    Range& b = state.range[rhs];
+                    if (!hasA)
+                        a = Range(MIN, MAX);
+                    if (!hasB)
+                        b = Range(MIN, MAX);
 
-                auto lhsApp = getLhs(a, b);
-                auto rhsApp = getRhs(a, b);
-                auto& lhsCur = state.range[lhs];
-                auto& rhsCur = state.range[rhs];
-                if (lhsApp.first > lhsCur.first) {
-                    res.update();
-                    lhsCur.first = lhsApp.first;
-                }
-                if (lhsApp.second < lhsCur.second) {
-                    res.update();
-                    lhsCur.second = lhsApp.second;
-                }
-                if (rhsApp.first > rhsCur.first) {
-                    res.update();
-                    rhsCur.first = rhsApp.first;
-                }
-                if (rhsApp.second < rhsCur.second) {
-                    res.update();
-                    rhsCur.second = rhsApp.second;
-                }
-            };
+                    auto i1 = a.first;
+                    auto i2 = a.second;
+                    auto i3 = b.first;
+                    auto i4 = b.second;
+                    auto lhsApp = getLhs(i1, i2, i3, i4);
+                    auto rhsApp = getRhs(i1, i2, i3, i4);
+                    auto& lhsCur = state.range[lhs];
+                    auto& rhsCur = state.range[rhs];
+                    if (lhsApp.first > lhsCur.first) {
+                        res.update();
+                        lhsCur.first = lhsApp.first;
+                    }
+                    if (lhsApp.second < lhsCur.second) {
+                        res.update();
+                        lhsCur.second = lhsApp.second;
+                    }
+                    if (rhsApp.first > rhsCur.first) {
+                        res.update();
+                        rhsCur.first = rhsApp.first;
+                    }
+                    if (rhsApp.second < rhsCur.second) {
+                        res.update();
+                        rhsCur.second = rhsApp.second;
+                    }
+                };
 
             switch (condition->tag) {
             case Tag::Lte:
             case Tag::Lt:
+                // [a,b] < [c,d] ==> [min(a,d), min(b,d)] [max(a,c), max(a, d)]
                 applyCond(
-                    [](std::pair<int, int> a, std::pair<int, int> b) {
-                        return Range(min(a.first, b.second),
-                                     min(a.second, b.second));
+                    [&](int a, int b, int c, int d) {
+                        auto bound = d;
+                        // The lower bound a in [a,b] represents all doubles in
+                        // the interval [a, a+1), therefore in most cases we
+                        // cannot be more precise for Lt than for Lte. But if
+                        // the interval is the singleton [n,n], then we know
+                        // that the lower bound is exactly n.
+                        // same bellow for the other cases.
+                        if (condition->tag == Tag::Lt && c == d)
+                            bound--;
+                        return Range(min(a, bound), min(b, bound));
                     },
-                    [](std::pair<int, int> a, std::pair<int, int> b) {
-                        return Range(max(a.first, b.first),
-                                     max(a.first, b.second));
+                    [&](int a, int b, int c, int d) {
+                        auto bound = a;
+                        if (condition->tag == Tag::Lte && a == b)
+                            bound++;
+                        return Range(max(bound, c), max(bound, d));
                     });
                 break;
 
             case Tag::Gte:
             case Tag::Gt:
+                // [a,b] > [c,d] ==> [max(a,c), max(b,c)] [min(b,c), min(b, d)]
                 applyCond(
-                    [](std::pair<int, int> a, std::pair<int, int> b) {
-                        return Range(max(a.first, b.first),
-                                     max(a.second, b.first));
+                    [&](int a, int b, int c, int d) {
+                        auto bound = c;
+                        if (condition->tag == Tag::Gt && c == d)
+                            bound++;
+                        return Range(max(a, bound), max(b, bound));
                     },
-                    [](std::pair<int, int> a, std::pair<int, int> b) {
-                        return Range(min(a.second, b.first),
-                                     max(a.second, b.second));
+                    [&](int a, int b, int c, int d) {
+                        auto bound = b;
+                        if (condition->tag == Tag::Gte && c == d)
+                            bound--;
+                        return Range(min(bound, c), min(bound, d));
                     });
                 break;
             default: {}

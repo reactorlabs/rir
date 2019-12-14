@@ -19,7 +19,6 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                           LogStream& log) const {
 
     RangeAnalysis rangeAnalysis(function, log);
-    auto range = rangeAnalysis.result().range;
 
     std::unordered_map<Instruction*, PirType> types;
     {
@@ -146,6 +145,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         // named arguments produce named result
                         !getType(e->vec()).maybeHasAttrs() &&
                         getType(e->idx()).isScalar()) {
+                        auto range = rangeAnalysis.before(e).range;
                         if (range.count(e->idx())) {
                             if (range.at(e->idx()).first > 0) {
                                 // Negative numbers as indices make the extract

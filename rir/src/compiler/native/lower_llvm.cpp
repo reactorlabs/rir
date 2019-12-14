@@ -1060,18 +1060,21 @@ llvm::Value* LowerFunctionLLVM::unboxIntLgl(llvm::Value* v) {
 llvm::Value* LowerFunctionLLVM::unboxInt(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     checkSexptype(v, {INTSXP});
+    insn_assert(isScalar(v), "expected scalar int");
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
 }
 llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     checkSexptype(v, {LGLSXP});
+    insn_assert(isScalar(v), "expected scalar lgl");
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
 }
 llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     checkSexptype(v, {REALSXP});
+    insn_assert(isScalar(v), "expected scalar real");
     auto pos = builder.CreateBitCast(dataPtr(v), t::DoublePtr);
     auto res = builder.CreateLoad(pos);
     return res;
@@ -3409,6 +3412,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     if (arg->type.maybePromiseWrapped())
                         a = depromise(a);
 
+                    // TODO faster check for isSimpleScalar
                     if (t->typeTest.isA(
                             PirType(RType::logical).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
@@ -3421,22 +3425,15 @@ bool LowerFunctionLLVM::tryCompile() {
                     } else {
                         assert(arg->type.notMissing().notLazy().noAttribs().isA(
                             t->typeTest));
-                        res = builder.getTrue();
+                        res = builder.CreateICmpNE(
+                            a, constant(R_UnboundValue, t::SEXP));
                     }
                     if (t->typeTest.isScalar() && !arg->type.isScalar()) {
                         assert(a->getType() == t::SEXP);
                         res = builder.CreateAnd(res, isScalar(a));
                     }
-                    if (arg->type.notMissing()
-                            .notPromiseWrapped()
-                            .notObject()
-                            .isA(t->typeTest)) {
-                        res =
-                            builder.CreateAnd(res, builder.CreateNot(isObj(a)));
-                    } else if (arg->type.notMissing()
-                                   .notPromiseWrapped()
-                                   .noAttribs()
-                                   .isA(t->typeTest)) {
+                    if (arg->type.maybeHasAttrs() &&
+                        !t->typeTest.maybeHasAttrs()) {
                         auto attrs = attr(a);
                         auto isNil = builder.CreateICmpEQ(
                             attrs, constant(R_NilValue, t::SEXP));
@@ -3447,6 +3444,10 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto isMatr = builder.CreateAnd(isMatr1, isMatr2);
                         res = builder.CreateAnd(
                             res, builder.CreateOr(isNil, isMatr));
+                    }
+                    if (arg->type.maybeObj() && !t->typeTest.maybeObj()) {
+                        res =
+                            builder.CreateAnd(res, builder.CreateNot(isObj(a)));
                     }
                     setVal(i, builder.CreateZExt(res, t::Int));
                 } else {

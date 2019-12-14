@@ -34,7 +34,8 @@ struct ObservedCallees {
 };
 
 inline bool fastVeceltOk(SEXP vec) {
-    return (ATTRIB(vec) == R_NilValue || (TAG(ATTRIB(vec)) == R_DimSymbol &&
+    return !isObject(vec) &&
+           (ATTRIB(vec) == R_NilValue || (TAG(ATTRIB(vec)) == R_DimSymbol &&
                                           CDR(ATTRIB(vec)) == R_NilValue));
 }
 
@@ -47,7 +48,9 @@ struct ObservedType {
     ObservedType() {}
     explicit ObservedType(SEXP s)
         : sexptype((uint8_t)TYPEOF(s)), scalar(IS_SIMPLE_SCALAR(s, TYPEOF(s))),
-          object(isObject(s)), attribs(!fastVeceltOk(s)) {}
+          object(isObject(s)), attribs(object || !fastVeceltOk(s)) {
+        assert(!object || attribs);
+    }
 
     bool operator==(const ObservedType& other) {
         return memcmp(this, &other, sizeof(ObservedType)) == 0;
