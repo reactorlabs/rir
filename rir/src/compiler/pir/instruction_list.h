@@ -54,7 +54,6 @@
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
     V(AsInt)                                                                   \
-    V(IsObject)                                                                \
     V(IsEnvStub)                                                               \
     V(Return)                                                                  \
     V(MkArg)                                                                   \

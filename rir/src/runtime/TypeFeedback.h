@@ -33,6 +33,12 @@ struct ObservedCallees {
     std::array<unsigned, MaxTargets> targets;
 };
 
+inline bool fastVeceltOk(SEXP vec) {
+    return !isObject(vec) &&
+           (ATTRIB(vec) == R_NilValue || (TAG(ATTRIB(vec)) == R_DimSymbol &&
+                                          CDR(ATTRIB(vec)) == R_NilValue));
+}
+
 struct ObservedType {
     uint8_t sexptype : 5;
     uint8_t scalar : 1;
@@ -42,7 +48,9 @@ struct ObservedType {
     ObservedType() {}
     explicit ObservedType(SEXP s)
         : sexptype((uint8_t)TYPEOF(s)), scalar(IS_SIMPLE_SCALAR(s, TYPEOF(s))),
-          object(isObject(s)), attribs(ATTRIB(s) != R_NilValue) {}
+          object(isObject(s)), attribs(object || !fastVeceltOk(s)) {
+        assert(!object || attribs);
+    }
 
     bool operator==(const ObservedType& other) {
         return memcmp(this, &other, sizeof(ObservedType)) == 0;
@@ -146,8 +154,10 @@ enum class TypeChecks : uint32_t {
     RealNonObjectWrapped = 3335,
     RealSimpleScalar = 3336,
     RealSimpleScalarWrapped = 3337,
-    IsObject = 3338,
-    IsObjectWrapped = 3339,
+    NotObject = 3338,
+    NotObjectWrapped = 3339,
+    NoAttribsExceptDim = 3340,
+    NoAttribsExceptDimWrapped = 3341,
 };
 
 enum class Opcode : uint8_t;

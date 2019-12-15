@@ -10,7 +10,7 @@ namespace rir {
 namespace pir {
 
 constexpr static std::initializer_list<Tag> TypecheckInstrsList = {
-    Tag::IsObject, Tag::IsType, Tag::CastType, Tag::FrameState};
+    Tag::IsType, Tag::CastType, Tag::FrameState};
 class DeadInstructions {
     std::unordered_set<Instruction*> unused_;
 

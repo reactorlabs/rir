@@ -217,13 +217,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             }
 
-            if (auto isTest = IsObject::Cast(i)) {
-                if (!isTest->arg<0>().val()->type.maybeObj()) {
-                    i->replaceUsesWith(False::instance());
-                    next = bb->remove(ip);
-                }
-            }
-
             if (auto isTest = IsType::Cast(i)) {
                 if (isTest->arg<0>().val()->type.isA(isTest->typeTest)) {
                     i->replaceUsesWith(True::instance());

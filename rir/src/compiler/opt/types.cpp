@@ -5,6 +5,7 @@
 #include "R/Funtab.h"
 
 #include "../analysis/abstract_value.h"
+#include "../analysis/range.h"
 
 #include "pass_definitions.h"
 
@@ -16,6 +17,8 @@ namespace pir {
 
 void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                           LogStream& log) const {
+
+    RangeAnalysis rangeAnalysis(function, log);
 
     std::unordered_map<Instruction*, PirType> types;
     {
@@ -131,6 +134,26 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                     }
 
                     inferred = i->inferType(getType);
+                    break;
+                }
+
+                case Tag::Extract1_1D: {
+                    inferred = i->inferType(getType);
+                    auto e = Extract1_1D::Cast(i);
+                    if (!inferred.isScalar() &&
+                        getType(e->vec()).isA(PirType::num()) &&
+                        // named arguments produce named result
+                        !getType(e->vec()).maybeHasAttrs() &&
+                        getType(e->idx()).isScalar()) {
+                        auto range = rangeAnalysis.before(e).range;
+                        if (range.count(e->idx())) {
+                            if (range.at(e->idx()).first > 0) {
+                                // Negative numbers as indices make the extract
+                                // return a vector. Only positive are safe.
+                                inferred.setScalar();
+                            }
+                        }
+                    }
                     break;
                 }
 

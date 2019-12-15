@@ -646,48 +646,54 @@ void BC::print(std::ostream& out) const {
     case Opcode::is_:
     case Opcode::istype_:
     case Opcode::alloc_:
-        switch (immediate.i) {
-        case static_cast<Immediate>(TypeChecks::RealNonObject):
+        switch (static_cast<TypeChecks>(immediate.i)) {
+        case TypeChecks::RealNonObject:
             out << "RealNonObject";
             break;
-        case static_cast<Immediate>(TypeChecks::RealSimpleScalar):
+        case TypeChecks::RealSimpleScalar:
             out << "RealSimpleScalar";
             break;
-        case static_cast<Immediate>(TypeChecks::IntegerNonObject):
+        case TypeChecks::IntegerNonObject:
             out << "IntegerNotObject";
             break;
-        case static_cast<Immediate>(TypeChecks::IntegerSimpleScalar):
+        case TypeChecks::IntegerSimpleScalar:
             out << "IntegerSimpleScalar";
             break;
-        case static_cast<Immediate>(TypeChecks::LogicalNonObject):
+        case TypeChecks::LogicalNonObject:
             out << "LogicalNotObject";
             break;
-        case static_cast<Immediate>(TypeChecks::LogicalSimpleScalar):
+        case TypeChecks::LogicalSimpleScalar:
             out << "LogicalSimpleScalar";
             break;
-        case static_cast<Immediate>(TypeChecks::RealNonObjectWrapped):
+        case TypeChecks::RealNonObjectWrapped:
             out << "RealNonObjectWrapped";
             break;
-        case static_cast<Immediate>(TypeChecks::RealSimpleScalarWrapped):
+        case TypeChecks::RealSimpleScalarWrapped:
             out << "RealSimpleScalarWrapped";
             break;
-        case static_cast<Immediate>(TypeChecks::IntegerNonObjectWrapped):
+        case TypeChecks::IntegerNonObjectWrapped:
             out << "IntegerNotObjectWrapped";
             break;
-        case static_cast<Immediate>(TypeChecks::IntegerSimpleScalarWrapped):
+        case TypeChecks::IntegerSimpleScalarWrapped:
             out << "IntegerSimpleScalarWrapped";
             break;
-        case static_cast<Immediate>(TypeChecks::LogicalNonObjectWrapped):
+        case TypeChecks::LogicalNonObjectWrapped:
             out << "LogicalNotObjectWrapped";
             break;
-        case static_cast<Immediate>(TypeChecks::LogicalSimpleScalarWrapped):
+        case TypeChecks::LogicalSimpleScalarWrapped:
             out << "LogicalSimpleScalarWrapped";
             break;
-        case static_cast<Immediate>(TypeChecks::IsObject):
-            out << "IsObject";
+        case TypeChecks::NotObject:
+            out << "NotObject";
             break;
-        case static_cast<Immediate>(TypeChecks::IsObjectWrapped):
-            out << "IsObjectWrapped";
+        case TypeChecks::NotObjectWrapped:
+            out << "NotObjectWrapped";
+            break;
+        case TypeChecks::NoAttribsExceptDim:
+            out << "NoAttribsExceptDim";
+            break;
+        case TypeChecks::NoAttribsExceptDimWrapped:
+            out << "NoAttribsExceptDimWrapped";
             break;
         default:
             out << type2char(immediate.i);

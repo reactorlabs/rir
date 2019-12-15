@@ -64,7 +64,8 @@ class State {
             auto popCtxtPos = pc + popCtxt;
             assert(*popCtxtPos == Opcode::pop_context_ ||
                    *popCtxtPos == Opcode::int3_);
-            assert(!pushContextStackHeight.count(popCtxtPos));
+            assert(!pushContextStackHeight.count(popCtxtPos) ||
+                   pushContextStackHeight.at(popCtxtPos) == ostack);
             pushContextStackHeight[popCtxtPos] = ostack;
         }
 

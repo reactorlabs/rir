@@ -26,6 +26,7 @@ class TypeTest {
         if (possible.isVoid())
             return failed();
 
+        assert(feedback.origin);
         if (possible.isA(PirType(RType::integer).orPromiseWrapped()) ||
             possible.isA(PirType(RType::real).orPromiseWrapped()) ||
             possible.isA(PirType(RType::logical).orPromiseWrapped())) {
@@ -33,8 +34,21 @@ class TypeTest {
                            feedback.srcCode, feedback.origin});
         }
 
-        if (!i->type.maybeLazy() && !possible.maybeObj()) {
-            return action({i->type.notObject(), new IsObject(i), false,
+        if (possible.maybeLazy())
+            return failed();
+
+        if (i->type.maybeHasAttrs() && !possible.maybeHasAttrs()) {
+            auto expect = i->type.notLazy().noAttribs().notMissing();
+            assert(!possible.maybeObj());
+            assert(!possible.maybeHasAttrs());
+            return action({expect, new IsType(expect, i), true,
+                           feedback.srcCode, feedback.origin});
+        }
+
+        if (i->type.maybeObj() && !possible.maybeObj()) {
+            auto expect = i->type.notLazy().notObject().notMissing();
+            assert(!possible.maybeObj());
+            return action({expect, new IsType(expect, i), true,
                            feedback.srcCode, feedback.origin});
         }
 
