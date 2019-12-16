@@ -1723,7 +1723,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     // some intermediate values on the stack
     ostack_ensureSize(ctx, c->stackLength + 5);
 
-    Opcode* pc = initialPC ? initialPC : c->code();
+    Opcode* pc;
+
+    if (initialPC) {
+        pc = initialPC;
+    } else {
+        R_Visible = TRUE;
+        pc = c->code();
+    }
     SEXP res;
 
     auto changeEnv = [&](SEXP e) {
@@ -1759,8 +1766,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         if (feedback->stateBeforeLastForce < state)
             feedback->stateBeforeLastForce = state;
     };
-
-    R_Visible = TRUE;
 
     // main loop
     BEGIN_MACHINE {

@@ -148,32 +148,31 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
-                             Assume* assume, bool condition, BB* deoptBlock,
+                             Assume* assume, bool condition, BB* deoptBlock_,
                              const std::string& debugMessage,
                              bool triggerAnyway) {
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
 
     static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
 
+    BB* deoptBlock = new BB(code, code->nextBBId++);
+    deoptBlock->setNext(deoptBlock_);
+
     if (debugMessage.size() != 0) {
-        BB* debug = new BB(code, code->nextBBId++);
         SEXP msg = Rf_mkString(debugMessage.c_str());
         auto ldprint = new LdConst(print);
         Instruction* ldmsg = new LdConst(msg);
-        debug->append(ldmsg);
-        debug->append(ldprint);
+        deoptBlock->append(ldmsg);
+        deoptBlock->append(ldprint);
         // Hack to silence the verifier.
         ldmsg = new CastType(ldmsg, CastType::Downcast, PirType::any(),
                              RType::prom);
-        debug->append(ldmsg);
-        debug->append(new Call(Env::global(), ldprint, {ldmsg},
-                               Tombstone::framestate(), 0));
-        debug->setNext(deoptBlock);
-        deoptBlock = debug;
+        deoptBlock->append(ldmsg);
+        deoptBlock->append(new Call(Env::global(), ldprint, {ldmsg},
+                                    Tombstone::framestate(), 0));
     }
 
     if (!assume->feedbackOrigin.empty()) {
-        BB* record = new BB(code, code->nextBBId++);
         for (auto& origin : assume->feedbackOrigin) {
             Value* src = nullptr;
             auto cond = assume->condition();
@@ -202,11 +201,9 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 assert((uintptr_t)origin.second > (uintptr_t)origin.first);
                 auto rec = new RecordDeoptReason(
                     {r, origin.first, (uint32_t)offset}, src);
-                record->append(rec);
+                deoptBlock->append(rec);
             }
         }
-        record->setNext(deoptBlock);
-        deoptBlock = record;
     }
 
     Value* test = assume->condition();
@@ -220,7 +217,35 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     else
         src->overrideSuccessors({deoptBlock, split});
 
-    splitEdge(code->nextBBId++, src, deoptBlock, code);
+    // If visibility was tainted between the last checkpoint and the bailout,
+    // we try (best-effort) to recover the correct setting, by scanning for the
+    // last known-good setting.
+    bool wrongViz = false;
+    for (auto i : *src) {
+        if (i->effects.contains(Effect::Visibility))
+            wrongViz = true;
+    }
+    auto rollbackBlock = assume->checkpoint()->bb();
+    while (wrongViz) {
+        for (auto it = rollbackBlock->rbegin(); it != rollbackBlock->rend();
+             ++it) {
+            if (!(*it)->effects.includes(Effect::Visibility))
+                continue;
+
+            auto viz = (*it)->visibilityFlag();
+            if (viz != VisibilityFlag::Unknown) {
+                deoptBlock->append(viz == VisibilityFlag::On
+                                       ? (Instruction*)new Visible
+                                       : (Instruction*)new Invisible);
+                wrongViz = false;
+                break;
+            }
+        }
+        if (!rollbackBlock->hasSinglePred())
+            break;
+
+        rollbackBlock = *rollbackBlock->predecessors().begin();
+    }
 
     return split;
 }
