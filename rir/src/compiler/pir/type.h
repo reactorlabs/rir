@@ -512,7 +512,9 @@ struct PirType {
         }
         if ((!maybeLazy() && o.maybeLazy()) ||
             (!maybePromiseWrapped() && o.maybePromiseWrapped()) ||
-            (!maybeObj() && o.maybeObj()) || (isScalar() && !o.isScalar())) {
+            (!maybeObj() && o.maybeObj()) ||
+            (!maybeHasAttrs() && o.maybeHasAttrs()) ||
+            (isScalar() && !o.isScalar())) {
             return false;
         }
         return t_.r.includes(o.t_.r);

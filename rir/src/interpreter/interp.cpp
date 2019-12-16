@@ -938,8 +938,12 @@ SlowcaseCounter SLOWCASE_COUNTER;
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
     if (!call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
-        if (res)
+        if (res) {
+            int flag = getFlag(call.callee);
+            if (flag < 2)
+                R_Visible = static_cast<Rboolean>(flag != 1);
             return res;
+        }
 #ifdef DEBUG_SLOWCASES
         SLOWCASE_COUNTER.count("builtin", call, ctx);
 #endif

@@ -98,9 +98,10 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     else
         merge(TYPEOF(e));
 
-    if (!Rf_isObject(e)) {
+    if (!Rf_isObject(e))
         flags_.reset(TypeFlags::maybeObject);
-    }
+    if (fastVeceltOk(e))
+        flags_.reset(TypeFlags::maybeAttrib);
 
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)

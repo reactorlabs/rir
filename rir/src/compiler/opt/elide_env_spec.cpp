@@ -64,8 +64,16 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                                  !seen.type.isA(j->typeFeedback.type)))
                                 seen = j->typeFeedback;
 
+                        auto required = arg->type.notObject();
+                        auto suggested = required;
+                        // so far the only instruction where we can do more
+                        // opts if we show that the vector has no attribs
+                        if (auto e = Extract1_1D::Cast(i))
+                            if (arg == e->vec())
+                                suggested = required.noAttribs();
+
                         TypeTest::Create(
-                            arg, seen,
+                            arg, seen, suggested, required,
                             [&](TypeTest::Info info) {
                                 BBTransform::insertAssume(
                                     info.test, cp, bb, ip, info.expectation,
