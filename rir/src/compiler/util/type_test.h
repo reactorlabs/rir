@@ -38,7 +38,7 @@ class TypeTest {
             return failed();
 
         if (i->type.maybeHasAttrs() && !possible.maybeHasAttrs()) {
-            auto expect = i->type.notLazy().noAttribs().notMissing();
+            auto expect = i->type.notLazy().noAttribs();
             assert(!possible.maybeObj());
             assert(!possible.maybeHasAttrs());
             return action({expect, new IsType(expect, i), true,
@@ -46,7 +46,7 @@ class TypeTest {
         }
 
         if (i->type.maybeObj() && !possible.maybeObj()) {
-            auto expect = i->type.notLazy().notObject().notMissing();
+            auto expect = i->type.notLazy().notObject();
             assert(!possible.maybeObj());
             return action({expect, new IsType(expect, i), true,
                            feedback.srcCode, feedback.origin});
