@@ -938,8 +938,12 @@ SlowcaseCounter SLOWCASE_COUNTER;
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
     if (!call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
-        if (res)
+        if (res) {
+            int flag = getFlag(call.callee);
+            if (flag < 2)
+                R_Visible = static_cast<Rboolean>(flag != 1);
             return res;
+        }
 #ifdef DEBUG_SLOWCASES
         SLOWCASE_COUNTER.count("builtin", call, ctx);
 #endif
@@ -1719,7 +1723,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     // some intermediate values on the stack
     ostack_ensureSize(ctx, c->stackLength + 5);
 
-    Opcode* pc = initialPC ? initialPC : c->code();
+    Opcode* pc;
+
+    if (initialPC) {
+        pc = initialPC;
+    } else {
+        R_Visible = TRUE;
+        pc = c->code();
+    }
     SEXP res;
 
     auto changeEnv = [&](SEXP e) {
@@ -1755,8 +1766,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         if (feedback->stateBeforeLastForce < state)
             feedback->stateBeforeLastForce = state;
     };
-
-    R_Visible = TRUE;
 
     // main loop
     BEGIN_MACHINE {

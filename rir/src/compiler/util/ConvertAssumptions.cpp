@@ -13,11 +13,13 @@ void readArgTypeFromAssumptions(const Assumptions& assumptions, PirType& type,
     if (assumptions.isSimpleReal(i)) {
         assert(assumptions.isEager(i) && assumptions.isNotObj(i));
         type.setScalar(RType::real);
+        type.setNoAttribs();
     }
     if (assumptions.isSimpleInt(i)) {
         assert(assumptions.isEager(i) && assumptions.isNotObj(i) &&
                !assumptions.isSimpleReal(i));
         type.setScalar(RType::integer);
+        type.setNoAttribs();
     }
 }
 
@@ -36,15 +38,16 @@ void writeArgTypeToAssumptions(Assumptions& assumptions, Value* arg, int i) {
         if (value == MissingArg::instance()) {
             assumptions.remove(Assumption::NoExplicitlyMissingArgs);
         } else {
-            if (!value->type.maybeObj())
+            if (!value->type.maybeLazy())
+                assumptions.setEager(i);
+            if (!value->type.maybeObj()) {
                 assumptions.setNotObj(i);
-            if (assumptions.isEager(i) && assumptions.isNotObj(i) &&
-                value->type.isScalar()) {
-                assert(value->type.isRType());
-                if (value->type.isRType(RType::real))
-                    assumptions.setSimpleReal(i);
-                if (value->type.isRType(RType::integer))
-                    assumptions.setSimpleInt(i);
+                if (!value->type.maybeHasAttrs() && value->type.isScalar()) {
+                    if (value->type.isRType(RType::real))
+                        assumptions.setSimpleReal(i);
+                    if (value->type.isRType(RType::integer))
+                        assumptions.setSimpleInt(i);
+                }
             }
         }
     }

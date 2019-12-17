@@ -2193,6 +2193,14 @@ bool LowerFunctionLLVM::tryCompile() {
                                         constant(R_BaseEnv, t::SEXP));
                 };
 
+                auto fixVisibility = [&]() {
+                    if (!b->effects.contains(Effect::Visibility))
+                        return;
+                    int flag = getFlag(b->builtinId);
+                    if (flag < 2)
+                        setVisible(flag != 1);
+                };
+
                 // TODO: this should probably go somewhere else... This is
                 // an inlined version of bitwise builtins
                 if (representationOf(b) == Representation::Integer) {
@@ -2336,6 +2344,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
                                 builder.SetInsertPoint(done);
                                 setVal(i, builder.CreateLoad(res));
+                                fixVisibility();
                                 break;
                             }
                         }
@@ -2502,8 +2511,10 @@ bool LowerFunctionLLVM::tryCompile() {
                     default:
                         done = false;
                     };
-                    if (done)
+                    if (done) {
+                        fixVisibility();
                         break;
+                    }
                 }
 
                 if (b->nargs() == 2) {
@@ -2584,8 +2595,10 @@ bool LowerFunctionLLVM::tryCompile() {
                         break;
                     }
                     }
-                    if (success)
+                    if (success) {
+                        fixVisibility();
                         break;
+                    }
                 }
 
                 if (b->builtinId == 90) { // "c"
@@ -2611,6 +2624,7 @@ bool LowerFunctionLLVM::tryCompile() {
                             pos++;
                         });
                         setVal(i, res);
+                        fixVisibility();
                         break;
                     }
                 }
@@ -2626,6 +2640,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         pos++;
                     });
                     setVal(i, res);
+                    fixVisibility();
                     break;
                 }
 

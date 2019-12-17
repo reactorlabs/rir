@@ -1110,7 +1110,7 @@ class FLI(AsLogical, 1, Effect::Error) {
     Effects inferEffects(const GetType& getType) const override final {
         if (getType(val()).isA((PirType() | RType::logical | RType::integer |
                                 RType::real | RType::str | RType::cplx)
-                                   .notObject())) {
+                                   .noAttribs())) {
             return Effects::None();
         }
         return effects;
@@ -1139,7 +1139,7 @@ class FLI(AsInt, 1, Effect::Error) {
     bool ceil;
 
     explicit AsInt(Value* in, bool ceil_)
-        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
                               {{PirType::any()}}, {{in}}),
           ceil(ceil_) {}
 
@@ -1392,8 +1392,8 @@ class FLIE(Extract1_3D, 5, Effects::Any()) {
 class FLI(Inc, 1, Effects::None()) {
   public:
     explicit Inc(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
-                              {{PirType(RType::integer).scalar().notObject()}},
+        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
+                              {{PirType(RType::integer).scalar().noAttribs()}},
                               {{v}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
@@ -1401,8 +1401,8 @@ class FLI(Inc, 1, Effects::None()) {
 class FLI(Dec, 1, Effects::None()) {
   public:
     explicit Dec(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
-                              {{PirType(RType::integer).scalar().notObject()}},
+        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
+                              {{PirType(RType::integer).scalar().noAttribs()}},
                               {{v}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };

@@ -16,42 +16,54 @@ class TypeTest {
         Opcode* origin;
     };
     static void Create(Value* i, const Instruction::TypeFeedback& feedback,
+                       const PirType& suggested, const PirType& required,
                        const std::function<void(Info)>& action,
                        const std::function<void()>& failed) {
-        auto possible = i->type & feedback.type;
+        auto expected = i->type & feedback.type;
 
-        if (i->type.isA(possible))
+        if (i->type.isA(expected))
             return;
 
-        if (possible.isVoid())
-            return failed();
+        if (expected.isVoid() || expected.maybeLazy()) {
+            if (i->type.isA(required))
+                return;
+            else
+                return failed();
+        }
 
         assert(feedback.origin);
-        if (possible.isA(PirType(RType::integer).orPromiseWrapped()) ||
-            possible.isA(PirType(RType::real).orPromiseWrapped()) ||
-            possible.isA(PirType(RType::logical).orPromiseWrapped())) {
-            return action({possible, new IsType(possible, i), true,
+        // First try to refine the type
+        if (expected.orNotScalar().isA(RType::integer) ||
+            expected.orNotScalar().isA(RType::real) ||
+            expected.orNotScalar().isA(RType::logical)) {
+            return action({expected, new IsType(expected, i), true,
                            feedback.srcCode, feedback.origin});
         }
 
-        if (possible.maybeLazy())
-            return failed();
+        // Second try to test for object-ness, or attribute-ness.
+        // Let's only do that if required, to avoid testing a non-object for
+        // non-attribute. ie. convert a val' to a val'', which is technically a
+        // refinement, but hardly ever useful.
+        if (i->type.isA(suggested))
+            return;
 
-        if (i->type.maybeHasAttrs() && !possible.maybeHasAttrs()) {
-            auto expect = i->type.notLazy().noAttribs().notMissing();
-            assert(!possible.maybeObj());
-            assert(!possible.maybeHasAttrs());
-            return action({expect, new IsType(expect, i), true,
+        auto checkFor = i->type.notLazy().noAttribs();
+        if (expected.isA(checkFor)) {
+            assert(!expected.maybeObj());
+            assert(!expected.maybeHasAttrs());
+            return action({checkFor, new IsType(checkFor, i), true,
                            feedback.srcCode, feedback.origin});
         }
 
-        if (i->type.maybeObj() && !possible.maybeObj()) {
-            auto expect = i->type.notLazy().notObject().notMissing();
-            assert(!possible.maybeObj());
-            return action({expect, new IsType(expect, i), true,
+        checkFor = i->type.notLazy().notObject();
+        if (expected.isA(checkFor)) {
+            assert(!expected.maybeObj());
+            return action({checkFor, new IsType(checkFor, i), true,
                            feedback.srcCode, feedback.origin});
         }
 
+        if (i->type.isA(required))
+            return;
         failed();
     }
 };

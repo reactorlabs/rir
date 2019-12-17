@@ -72,8 +72,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     }
                 }
             }
-        } else if ((!i->type.unboxable() && i->typeFeedback.type.unboxable()) ||
-                   (i->type.maybeObj() && !i->typeFeedback.type.maybeObj())) {
+        } else if (!i->type.unboxable() && i->typeFeedback.type.unboxable()) {
             speculateOn = i;
             feedback = i->typeFeedback;
             guardPos = checkpoint.next(i, i, dom);
@@ -85,7 +84,8 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             return;
 
         TypeTest::Create(
-            speculateOn, feedback,
+            speculateOn, feedback, speculateOn->type.notObject(),
+            PirType::any(),
             [&](TypeTest::Info info) {
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
                 // Prevent redundant speculation
