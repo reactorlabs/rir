@@ -205,10 +205,12 @@ struct PirType {
     void merge(const ObservedValues& other);
     void merge(SEXPTYPE t);
 
-    static constexpr PirType intRealLgl() {
-        return PirType(RType::logical) | RType::integer | RType::real;
+    static constexpr PirType intReal() {
+        return PirType(RType::integer) | RType::real;
     }
-    static constexpr PirType num() { return intRealLgl() | RType::cplx; }
+    static constexpr PirType num() {
+        return intReal() | RType::logical | RType::cplx;
+    }
     static constexpr PirType atomOrSimpleVec() {
         return num() | RType::sym | RType::chr | RType::str | RType::code;
     }
