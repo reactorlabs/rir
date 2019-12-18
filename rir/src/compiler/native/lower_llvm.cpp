@@ -2645,6 +2645,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 if (b->builtinId == 412) { // "list"
                     auto res = call(NativeBuiltins::makeVector,
                                     {c(VECSXP), c(b->nCallArgs(), 64)});
+                    protectTemp(res);
                     auto pos = 0;
                     auto resT = PirType(RType::vec).notObject();
 
