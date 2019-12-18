@@ -1162,7 +1162,9 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
 
     PirType inferType(const GetType& getType) const override final {
         return ifNonObjectArgs(
-            getType, type & (getType(val()) | getType(vector())), type);
+            getType,
+            type & (getType(vector()).mergeWithConversion(getType(val()))),
+            type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1183,7 +1185,9 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
 
     PirType inferType(const GetType& getType) const override final {
         return ifNonObjectArgs(
-            getType, type & (getType(val()) | getType(vector())), type);
+            getType,
+            type & (getType(vector()).mergeWithConversion(getType(val()))),
+            type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1205,8 +1209,9 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(rhs()) | getType(lhs())), type);
+        return ifNonObjectArgs(
+            getType,
+            type & (getType(lhs()).mergeWithConversion(getType(rhs()))), type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1228,8 +1233,9 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(rhs()) | getType(lhs())), type);
+        return ifNonObjectArgs(
+            getType,
+            type & (getType(lhs()).mergeWithConversion(getType(rhs()))), type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1252,8 +1258,9 @@ class FLIE(Subassign1_3D, 6, Effects::Any()) {
     Value* idx3() const { return arg(4).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(rhs()) | getType(lhs())), type);
+        return ifNonObjectArgs(
+            getType,
+            type & (getType(lhs()).mergeWithConversion(getType(rhs()))), type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
