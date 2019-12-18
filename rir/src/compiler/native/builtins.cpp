@@ -759,6 +759,20 @@ NativeBuiltin NativeBuiltins::binopEnv = {
     (void*)&binopEnvImpl,
 };
 
+static SEXP seq_int(int n1, int n2) {
+    int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
+    SEXP ans = Rf_allocVector(INTSXP, n);
+    int* data = INTEGER(ans);
+    if (n1 <= n2) {
+        while (n1 <= n2)
+            *data++ = n1++;
+    } else {
+        while (n1 >= n2)
+            *data++ = n1--;
+    }
+    return ans;
+}
+
 bool debugBinopImpl = false;
 static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     SEXP res = nullptr;
@@ -819,7 +833,44 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
         OPERATION_FALLBACK("||");
         break;
     case BinopKind::COLON:
-        OPERATION_FALLBACK(":");
+        if (IS_SIMPLE_SCALAR(lhs, INTSXP)) {
+            int from = *INTEGER(lhs);
+            if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                int to = *INTEGER(rhs);
+                if (from != NA_INTEGER && to != NA_INTEGER) {
+                    res = seq_int(from, to);
+                }
+            } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                double to = *REAL(rhs);
+                if (from != NA_INTEGER && to != NA_REAL && R_FINITE(to) &&
+                    INT_MIN <= to && INT_MAX >= to && to == (int)to) {
+                    res = seq_int(from, (int)to);
+                }
+            }
+        } else if (IS_SIMPLE_SCALAR(lhs, REALSXP)) {
+            double from = *REAL(lhs);
+            if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                int to = *INTEGER(rhs);
+                if (from != NA_REAL && to != NA_INTEGER && R_FINITE(from) &&
+                    INT_MIN <= from && INT_MAX >= from && from == (int)from) {
+                    res = seq_int((int)from, to);
+                }
+            } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                double to = *REAL(rhs);
+                if (from != NA_REAL && to != NA_REAL && R_FINITE(from) &&
+                    R_FINITE(to) && INT_MIN <= from && INT_MAX >= from &&
+                    INT_MIN <= to && INT_MAX >= to && from == (int)from &&
+                    to == (int)to) {
+                    res = seq_int((int)from, (int)to);
+                }
+            }
+        }
+
+        if (res != NULL) {
+            R_Visible = (Rboolean) true;
+        } else {
+            OPERATION_FALLBACK(":");
+        }
         break;
     case BinopKind::MOD:
         OPERATION_FALLBACK("%%");
