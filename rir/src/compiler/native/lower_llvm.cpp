@@ -3361,10 +3361,16 @@ bool LowerFunctionLLVM::tryCompile() {
                 assert(representationOf(i) == t::SEXP);
                 auto a = loadSxp(i->arg(0).val());
                 auto b = loadSxp(i->arg(1).val());
-                auto e = loadSxp(i->env());
-                auto res =
-                    call(NativeBuiltins::binopEnv,
-                         {a, b, e, c(i->srcIdx), c((int)BinopKind::COLON)});
+                llvm::Value* res;
+                if (i->hasEnv()) {
+                    auto e = loadSxp(i->env());
+                    res =
+                        call(NativeBuiltins::binopEnv,
+                             {a, b, e, c(i->srcIdx), c((int)BinopKind::COLON)});
+                } else {
+                    res = call(NativeBuiltins::binop,
+                               {a, b, c((int)BinopKind::COLON)});
+                }
                 setVal(i, res);
                 break;
             }
