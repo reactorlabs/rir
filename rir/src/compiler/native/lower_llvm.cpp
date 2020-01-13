@@ -157,13 +157,13 @@ class LowerFunctionLLVM {
         this->promMap.size();
     }
 
-    static llvm::Value* convertToPointer(void* what, Type* ty = t::voidPtr) {
+    static llvm::Constant* convertToPointer(void* what, Type* ty = t::voidPtr) {
         return llvm::ConstantExpr::getCast(
             llvm::Instruction::IntToPtr,
             llvm::ConstantInt::get(C, llvm::APInt(64, (std::uint64_t)what)),
             ty);
     }
-    static llvm::Value* convertToPointer(SEXP what) {
+    static llvm::Constant* convertToPointer(SEXP what) {
         return llvm::ConstantExpr::getCast(
             llvm::Instruction::IntToPtr,
             llvm::ConstantInt::get(C, llvm::APInt(64, (std::uint64_t)what)),
@@ -2037,7 +2037,7 @@ bool LowerFunctionLLVM::tryCompile() {
         for (auto& b : bindings) {
             bindingsCache[b.first][b.second] = idx++;
         }
-        bindingsCacheBase = builder.CreateAlloca(t::SEXP, 0, c(idx));
+        bindingsCacheBase = topAlloca(t::SEXP, idx);
     }
 
     std::unordered_map<Instruction*, Instruction*> phis;
@@ -2091,8 +2091,8 @@ bool LowerFunctionLLVM::tryCompile() {
             if (auto pop = PopContext::Cast(i)) {
                 auto res = pop->result();
                 auto push = pop->push();
-                auto resStore = builder.CreateAlloca(representationOf(res));
-                auto rcntxt = builder.CreateAlloca(t::RCNTXT);
+                auto resStore = topAlloca(representationOf(res));
+                auto rcntxt = topAlloca(t::RCNTXT);
                 contexts[push] = {rcntxt, resStore,
                                   BasicBlock::Create(C, "", fun)};
 
@@ -2173,15 +2173,14 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::RecordDeoptReason: {
                 auto rec = RecordDeoptReason::Cast(i);
-                auto reason = builder.CreateAlloca(t::DeoptReason);
-                builder.CreateStore(c(rec->reason.reason, 32),
-                                    builder.CreateGEP(reason, {c(0), c(0)}));
-                builder.CreateStore(convertToPointer(rec->reason.srcCode),
-                                    builder.CreateGEP(reason, {c(0), c(1)}));
-                builder.CreateStore(c(rec->reason.originOffset),
-                                    builder.CreateGEP(reason, {c(0), c(2)}));
+                auto reason = llvm::ConstantStruct::get(
+                    t::DeoptReason, {
+                                        c(rec->reason.reason, 32),
+                                        convertToPointer(rec->reason.srcCode),
+                                        c(rec->reason.originOffset),
+                                    });
                 call(NativeBuiltins::recordDeopt,
-                     {loadSxp(rec->arg<0>().val()), reason});
+                     {loadSxp(rec->arg<0>().val()), globalConst(reason)});
                 break;
             }
 
