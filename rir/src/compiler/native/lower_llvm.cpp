@@ -307,6 +307,7 @@ class LowerFunctionLLVM {
 
     llvm::Value* constant(SEXP co, llvm::Type* needed);
     llvm::Value* nodestackPtr();
+    llvm::Value* nodestackPtrAddr = nullptr;
     llvm::Value* stack(int i);
     void stack(const std::vector<llvm::Value*>& args);
     void setLocal(size_t i, llvm::Value* v);
@@ -597,9 +598,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
 }
 
 llvm::Value* LowerFunctionLLVM::nodestackPtr() {
-    auto ptrptr = convertToPointer(&R_BCNodeStackTop,
-                                   PointerType::get(t::stackCellPtr, 0));
-    return builder.CreateLoad(ptrptr);
+    return builder.CreateLoad(nodestackPtrAddr);
 }
 
 llvm::Value* LowerFunctionLLVM::stack(int i) {
@@ -610,15 +609,17 @@ llvm::Value* LowerFunctionLLVM::stack(int i) {
 
 void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
     auto stackptr = nodestackPtr();
-    for (auto arg = args.rbegin(); arg != args.rend(); arg++) {
-        stackptr = builder.CreateGEP(stackptr, c(-1));
-        // set type tag to 0
-        auto tagS = builder.CreateGEP(stackptr, {c(0), c(0)});
-        builder.CreateStore(c(0), tagS);
+    // set type tag to 0
+    builder.CreateMemSet(builder.CreateGEP(stackptr, c(-args.size())), c(0, 8),
+                         args.size() * sizeof(R_bcstack_t), 1);
+    auto pos = -args.size();
+    for (auto arg = args.begin(); arg != args.end(); arg++) {
         // store the value
-        auto valS = builder.CreateGEP(stackptr, {c(0), c(1)});
+        auto valS = builder.CreateGEP(stackptr, {c(pos), c(1)});
         builder.CreateStore(*arg, valS);
+        pos++;
     }
+    assert(pos == 0);
 }
 
 void LowerFunctionLLVM::setLocal(size_t i, llvm::Value* v) {
@@ -640,11 +641,9 @@ void LowerFunctionLLVM::incStack(int i, bool zero) {
     auto cur = nodestackPtr();
     auto offset = sizeof(R_bcstack_t) * i;
     if (zero)
-        builder.CreateMemSet(cur, c(0, 8), offset, 1, true);
+        builder.CreateMemSet(cur, c(0, 8), offset, 1);
     auto up = builder.CreateGEP(cur, c(i));
-    auto ptrptr = convertToPointer(&R_BCNodeStackTop,
-                                   PointerType::get(t::stackCellPtr, 0));
-    builder.CreateStore(up, ptrptr);
+    builder.CreateStore(up, nodestackPtrAddr);
 }
 
 void LowerFunctionLLVM::decStack(int i) {
@@ -652,9 +651,7 @@ void LowerFunctionLLVM::decStack(int i) {
         return;
     auto cur = nodestackPtr();
     auto up = builder.CreateGEP(cur, c(-i));
-    auto ptrptr = convertToPointer(&R_BCNodeStackTop,
-                                   PointerType::get(t::stackCellPtr, 0));
-    builder.CreateStore(up, ptrptr);
+    builder.CreateStore(up, nodestackPtrAddr);
 }
 
 llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
@@ -907,7 +904,7 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
         nativeIndex = builder.CreateZExt(nativeIndex, t::i64);
     }
     // R indexing is 1-based
-    nativeIndex = builder.CreateSub(nativeIndex, c(1ul));
+    nativeIndex = builder.CreateSub(nativeIndex, c(1ul), "", true, true);
 
     auto ty = vector->getType();
     assert(ty == t::SEXP || ty == t::Int || ty == t::Double);
@@ -1081,7 +1078,7 @@ llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
         assert(false);
     }
     auto pos = builder.CreateBitCast(dataPtr(vector), nativeType);
-    return builder.CreateGEP(pos, position);
+    return builder.CreateInBoundsGEP(pos, builder.CreateZExt(position, t::i64));
 }
 
 llvm::Value* LowerFunctionLLVM::accessVector(llvm::Value* vector,
@@ -1469,7 +1466,7 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
     builder.CreateCondBr(isNamedMax, done, incrementBr);
 
     builder.SetInsertPoint(incrementBr);
-    auto newNamed = builder.CreateAdd(named, c(1, 64));
+    auto newNamed = builder.CreateAdd(named, c(1, 64), "", true, true);
     newNamed = builder.CreateShl(newNamed, c(32, 64));
 
     auto newSxpinfo = builder.CreateAnd(sxpinfo, c(namedNegMask));
@@ -2014,7 +2011,8 @@ bool LowerFunctionLLVM::tryCompile() {
     };
     entryBlock = BasicBlock::Create(C, "", fun);
     builder.SetInsertPoint(entryBlock);
-
+    nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop,
+                                        PointerType::get(t::stackCellPtr, 0));
     {
         SmallSet<std::pair<Value*, SEXP>> bindings;
         Visitor::run(code->entry, [&](Instruction* i) {
@@ -2890,7 +2888,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 llvm::Value* res = nullptr;
                 if (representationOf(arg) == Representation::Integer) {
                     res = load(arg, Representation::Integer);
-                    res = builder.CreateAdd(res, c(1));
+                    res = builder.CreateAdd(res, c(1), "", true, true);
                 } else {
                     success = false;
                 }
@@ -2903,7 +2901,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 llvm::Value* res = nullptr;
                 if (representationOf(arg) == Representation::Integer) {
                     res = load(arg, Representation::Integer);
-                    res = builder.CreateSub(res, c(1));
+                    res = builder.CreateSub(res, c(1), "", true, true);
                 } else {
                     success = false;
                 }
@@ -3041,7 +3039,8 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Add:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateAdd(a, b);
+                                 return builder.CreateAdd(a, b, "", false,
+                                                          true);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
                                  return builder.CreateFAdd(a, b);
@@ -3051,7 +3050,8 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Sub:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateSub(a, b);
+                                 return builder.CreateSub(a, b, "", false,
+                                                          true);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
                                  return builder.CreateFSub(a, b);
@@ -3061,7 +3061,8 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Mul:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateMul(a, b);
+                                 return builder.CreateMul(a, b, "", false,
+                                                          true);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
                                  return builder.CreateFMul(a, b);
@@ -3942,8 +3943,9 @@ bool LowerFunctionLLVM::tryCompile() {
                     llvm::Value* index2 = computeAndCheckIndex(
                         extract->idx2(), vector, fallback, ncol);
 
-                    llvm::Value* index = builder.CreateMul(nrow, index2);
-                    index = builder.CreateAdd(index, index1);
+                    llvm::Value* index =
+                        builder.CreateMul(nrow, index2, "", true, true);
+                    index = builder.CreateAdd(index, index1, "", true, true);
 
                     auto res0 =
                         extract->vec()->type.isScalar()
@@ -4098,8 +4100,9 @@ bool LowerFunctionLLVM::tryCompile() {
                     llvm::Value* index2 = computeAndCheckIndex(
                         extract->idx2(), vector, fallback, ncol);
 
-                    llvm::Value* index = builder.CreateMul(nrow, index2);
-                    index = builder.CreateAdd(index, index1);
+                    llvm::Value* index =
+                        builder.CreateMul(nrow, index2, "", true, true);
+                    index = builder.CreateAdd(index, index1, "", true, true);
 
                     auto res0 =
                         extract->vec()->type.isScalar()
@@ -4230,8 +4233,10 @@ bool LowerFunctionLLVM::tryCompile() {
 
                     auto val = load(subAssign->rhs());
                     if (representationOf(i) == Representation::Sexp) {
-                        llvm::Value* index = builder.CreateMul(nrow, index2);
-                        index = builder.CreateAdd(index, index1);
+                        llvm::Value* index =
+                            builder.CreateMul(nrow, index2, "", true, true);
+                        index =
+                            builder.CreateAdd(index, index1, "", true, true);
                         assignVector(vector, index, val, vecType);
                         res.addInput(convert(vector, i->type));
                     } else {
