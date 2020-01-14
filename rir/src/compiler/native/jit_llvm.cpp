@@ -31,6 +31,7 @@
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/InductiveRangeCheckElimination.h>
 #include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/Vectorize.h>
 
@@ -214,6 +215,8 @@ static void pirPassSchedule(const PassManagerBuilder&,
     PM.add(createSROAPass());
     PM.add(createMemCpyOptPass());
     PM.add(createPromoteMemoryToRegisterPass());
+    PM.add(createSROAPass());
+    PM.add(createPromoteMemoryToRegisterPass());
 
     // Some scalar opts
     PM.add(createScopedNoAliasAAWrapperPass());
@@ -222,6 +225,8 @@ static void pirPassSchedule(const PassManagerBuilder&,
 
     PM.add(createConstantPropagationPass());
     PM.add(createDeadInstEliminationPass());
+    PM.add(createLICMPass());
+    PM.add(createLoopUnswitchPass());
 
     PM.add(createInstructionCombiningPass());
     PM.add(createCFGSimplificationPass());
@@ -230,6 +235,8 @@ static void pirPassSchedule(const PassManagerBuilder&,
     PM.add(createReassociatePass());
 
     PM.add(createEarlyCSEPass());
+    PM.add(createLICMPass());
+    PM.add(createLoopUnswitchPass());
 
     PM.add(createCFGSimplificationPass());
     PM.add(createReassociatePass());
@@ -242,6 +249,7 @@ static void pirPassSchedule(const PassManagerBuilder&,
     PM.add(createLoopRotatePass());
     PM.add(createLICMPass());
     PM.add(createLoopUnswitchPass());
+    PM.add(createInductiveRangeCheckEliminationPass());
     PM.add(createInstructionCombiningPass());
     PM.add(createIndVarSimplifyPass());
     PM.add(createLoopDeletionPass());
@@ -282,7 +290,7 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     {
         llvm::PassManagerBuilder builder;
 
-        builder.OptLevel = 1;
+        builder.OptLevel = 0;
         builder.SizeLevel = 0;
         builder.Inliner = llvm::createFunctionInliningPass(1, 0, false);
         TM->adjustPassManager(builder);
