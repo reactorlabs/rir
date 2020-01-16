@@ -139,6 +139,11 @@ class LowerFunctionLLVM {
     std::unordered_map<Value*, std::unordered_map<SEXP, size_t>> bindingsCache;
     llvm::Value* bindingsCacheBase = nullptr;
 
+    MDNode* branchAlwaysTrue;
+    MDNode* branchAlwaysFalse;
+    MDNode* branchMostlyTrue;
+    MDNode* branchMostlyFalse;
+
   public:
     llvm::Function* fun;
 
@@ -149,7 +154,11 @@ class LowerFunctionLLVM {
         const std::unordered_set<Instruction*>& needsLdVarForUpdate)
         : cls(cls), code(code), promMap(promMap), refcount(refcount),
           needsLdVarForUpdate(needsLdVarForUpdate), builder(C), MDB(C),
-          liveness(code, code->nextBBId), numLocals(0), numTemps(0) {
+          liveness(code, code->nextBBId), numLocals(0), numTemps(0),
+          branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
+          branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
+          branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
+          branchMostlyFalse(MDB.createBranchWeights(1, 1000)) {
 
         fun = JitLLVM::declare(cls, name, t::nativeFunction);
         // prevent Wunused
@@ -550,9 +559,7 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg) {
     auto nok = BasicBlock::Create(C, "assertFail", fun);
     auto ok = BasicBlock::Create(C, "assertOk", fun);
 
-    auto br = builder.CreateCondBr(v, ok, nok);
-    MDNode* WeightNode = MDB.createBranchWeights(1, 0);
-    br->setMetadata(LLVMContext::MD_prof, WeightNode);
+    builder.CreateCondBr(v, ok, nok, branchAlwaysTrue);
 
     builder.SetInsertPoint(nok);
     call(NativeBuiltins::assertFail, {convertToPointer((void*)msg)});
@@ -889,7 +896,7 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
         auto fail = builder.CreateOr(indexUnderRange,
                                      builder.CreateOr(indexOverRange, indexNa));
 
-        builder.CreateCondBr(fail, fallback, hit1);
+        builder.CreateCondBr(fail, fallback, hit1, branchMostlyFalse);
         builder.SetInsertPoint(hit1);
 
         nativeIndex = builder.CreateFPToUI(nativeIndex, t::i64);
@@ -899,7 +906,7 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
         auto indexNa = builder.CreateICmpEQ(nativeIndex, c(NA_INTEGER));
         auto fail = builder.CreateOr(indexUnderRange, indexNa);
 
-        builder.CreateCondBr(fail, fallback, hit1);
+        builder.CreateCondBr(fail, fallback, hit1, branchMostlyFalse);
         builder.SetInsertPoint(hit1);
 
         nativeIndex = builder.CreateZExt(nativeIndex, t::i64);
@@ -912,7 +919,7 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
     if (!max)
         max = (ty == t::SEXP) ? vectorLength(vector) : c(1ul);
     auto indexOverRange = builder.CreateICmpUGE(nativeIndex, max);
-    builder.CreateCondBr(indexOverRange, fallback, hit);
+    builder.CreateCondBr(indexOverRange, fallback, hit, branchMostlyFalse);
     builder.SetInsertPoint(hit);
     return nativeIndex;
 }
@@ -1482,17 +1489,14 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, BasicBlock* isNa,
                                 BasicBlock* notNa) {
     if (!notNa)
         notNa = BasicBlock::Create(C, "", fun);
-    llvm::Instruction* br;
     if (v->getType() == t::Double) {
         auto isNotNa = builder.CreateFCmpUEQ(v, v);
-        br = builder.CreateCondBr(isNotNa, notNa, isNa);
+        builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
     } else {
         assert(v->getType() == t::Int);
         auto isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
-        br = builder.CreateCondBr(isNotNa, notNa, isNa);
+        builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
     }
-    MDNode* WeightNode = MDB.createBranchWeights(1, 0);
-    br->setMetadata(LLVMContext::MD_prof, WeightNode);
     builder.SetInsertPoint(notNa);
 }
 
@@ -1501,9 +1505,7 @@ void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
     auto ok = BasicBlock::Create(C, "", fun);
     auto nok = BasicBlock::Create(C, "", fun);
     auto t = builder.CreateICmpEQ(v, constant(R_MissingArg, t::SEXP));
-    auto br = builder.CreateCondBr(t, nok, ok);
-    MDNode* WeightNode = MDB.createBranchWeights(0, 1);
-    br->setMetadata(LLVMContext::MD_prof, WeightNode);
+    builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
     call(NativeBuiltins::error, {});
@@ -1516,9 +1518,7 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     auto ok = BasicBlock::Create(C, "", fun);
     auto nok = BasicBlock::Create(C, "", fun);
     auto t = builder.CreateICmpEQ(v, constant(R_UnboundValue, t::SEXP));
-    auto br = builder.CreateCondBr(t, nok, ok);
-    MDNode* WeightNode = MDB.createBranchWeights(0, 1);
-    br->setMetadata(LLVMContext::MD_prof, WeightNode);
+    builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
     call(NativeBuiltins::error, {});
@@ -1845,7 +1845,7 @@ void LowerFunctionLLVM::writeBarrier(llvm::Value* x, llvm::Value* y,
     auto genBitX = builder.CreateAnd(sxpinfoX, genBitPos);
     auto genBitY = builder.CreateAnd(sxpinfoY, genBitPos);
     auto olderGen = builder.CreateICmpUGT(genBitX, genBitY);
-    builder.CreateCondBr(olderGen, needsBarrier, noBarrier);
+    builder.CreateCondBr(olderGen, needsBarrier, noBarrier, branchMostlyFalse);
 
     builder.SetInsertPoint(noBarrier);
     no();
@@ -2323,20 +2323,14 @@ bool LowerFunctionLLVM::tryCompile() {
                                     auto ok = BasicBlock::Create(C, "", fun);
                                     auto ofl =
                                         builder.CreateICmpSLT(yInt, c(0));
-                                    auto br =
-                                        builder.CreateCondBr(ofl, isNaBr, ok);
-                                    MDNode* WeightNode =
-                                        MDB.createBranchWeights(0, 1);
-                                    br->setMetadata(LLVMContext::MD_prof,
-                                                    WeightNode);
+                                    builder.CreateCondBr(ofl, isNaBr, ok,
+                                                         branchMostlyFalse);
                                     builder.SetInsertPoint(ok);
 
                                     ok = BasicBlock::Create(C, "", fun);
                                     ofl = builder.CreateICmpSGT(yInt, c(31));
-                                    br = builder.CreateCondBr(ofl, isNaBr, ok);
-                                    WeightNode = MDB.createBranchWeights(0, 1);
-                                    br->setMetadata(LLVMContext::MD_prof,
-                                                    WeightNode);
+                                    builder.CreateCondBr(ofl, isNaBr, ok,
+                                                         branchMostlyFalse);
                                     builder.SetInsertPoint(ok);
 
                                     res.addInput(builder.CreateShl(xInt, yInt));
@@ -2349,20 +2343,14 @@ bool LowerFunctionLLVM::tryCompile() {
                                     auto ok = BasicBlock::Create(C, "", fun);
                                     auto ofl =
                                         builder.CreateICmpSLT(yInt, c(0));
-                                    auto br =
-                                        builder.CreateCondBr(ofl, isNaBr, ok);
-                                    MDNode* WeightNode =
-                                        MDB.createBranchWeights(0, 1);
-                                    br->setMetadata(LLVMContext::MD_prof,
-                                                    WeightNode);
+                                    builder.CreateCondBr(ofl, isNaBr, ok,
+                                                         branchMostlyFalse);
                                     builder.SetInsertPoint(ok);
 
                                     ok = BasicBlock::Create(C, "", fun);
                                     ofl = builder.CreateICmpSGT(yInt, c(31));
-                                    br = builder.CreateCondBr(ofl, isNaBr, ok);
-                                    WeightNode = MDB.createBranchWeights(0, 1);
-                                    br->setMetadata(LLVMContext::MD_prof,
-                                                    WeightNode);
+                                    builder.CreateCondBr(ofl, isNaBr, ok,
+                                                         branchMostlyFalse);
                                     builder.SetInsertPoint(ok);
 
                                     res.addInput(
@@ -2927,15 +2915,16 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Branch: {
                 auto cond = load(i->arg(0).val(), Representation::Integer);
                 cond = builder.CreateICmpNE(cond, c(0));
-                auto br = builder.CreateCondBr(cond, getBlock(bb->trueBranch()),
-                                               getBlock(bb->falseBranch()));
-                if (bb->trueBranch()->isDeopt()) {
-                    MDNode* WeightNode = MDB.createBranchWeights(0, 1);
-                    br->setMetadata(LLVMContext::MD_prof, WeightNode);
-                } else if (bb->falseBranch()->isDeopt()) {
-                    MDNode* WeightNode = MDB.createBranchWeights(1, 0);
-                    br->setMetadata(LLVMContext::MD_prof, WeightNode);
-                }
+
+                auto t = bb->trueBranch();
+                auto f = bb->falseBranch();
+                MDNode* weight = nullptr;
+                if (t->isDeopt() || (t->isJmp() && t->next()->isDeopt()))
+                    weight = branchAlwaysFalse;
+                else if (f->isDeopt() || (f->isJmp() && f->next()->isDeopt()))
+                    weight = branchAlwaysTrue;
+                builder.CreateCondBr(cond, getBlock(bb->trueBranch()),
+                                     getBlock(bb->falseBranch()), weight);
                 break;
             }
 
@@ -3257,7 +3246,8 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto notZero = BasicBlock::Create(C, "", fun);
                         auto cnt = BasicBlock::Create(C, "", fun);
                         builder.CreateCondBr(builder.CreateICmpEQ(b, c(0)),
-                                             isZero, notZero);
+                                             isZero, notZero,
+                                             branchMostlyFalse);
 
                         auto res = phiBuilder(t::Int);
 
@@ -3282,7 +3272,8 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto notZero = BasicBlock::Create(C, "", fun);
                         auto cnt = BasicBlock::Create(C, "", fun);
                         builder.CreateCondBr(builder.CreateFCmpUEQ(b, c(0.0)),
-                                             isZero, notZero);
+                                             isZero, notZero,
+                                             branchMostlyFalse);
 
                         auto res = phiBuilder(t::Double);
 
@@ -3315,7 +3306,8 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto cnt = BasicBlock::Create(C, "", fun);
                         auto res = phiBuilder(t::Double);
                         builder.CreateCondBr(builder.CreateFCmpUEQ(b, c(0.0)),
-                                             isZero, notZero);
+                                             isZero, notZero,
+                                             branchMostlyFalse);
 
                         builder.SetInsertPoint(isZero);
                         res.addInput(c(R_NaN));
@@ -3336,7 +3328,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto warn = BasicBlock::Create(C, "", fun);
                         auto noWarn = BasicBlock::Create(C, "", fun);
                         builder.CreateCondBr(builder.CreateAnd(finite, gt),
-                                             warn, noWarn);
+                                             warn, noWarn, branchMostlyFalse);
 
                         builder.SetInsertPoint(warn);
                         auto msg = builder.CreateGlobalString(
@@ -3368,11 +3360,11 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto cnt = BasicBlock::Create(C, "", fun);
                         auto res = phiBuilder(t::Int);
                         builder.CreateCondBr(builder.CreateICmpSGE(a, c(0)),
-                                             fast1, slow);
+                                             fast1, slow, branchMostlyTrue);
 
                         builder.SetInsertPoint(fast1);
                         builder.CreateCondBr(builder.CreateICmpSGT(b, c(0)),
-                                             fast, slow);
+                                             fast, slow, branchMostlyTrue);
 
                         builder.SetInsertPoint(fast);
                         res.addInput(builder.CreateSRem(a, b));
@@ -3434,20 +3426,15 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto r = representationOf(i);
                 auto res = phiBuilder(r);
 
-                auto br = builder.CreateCondBr(
-                    isExternalsxp(arg, LAZY_ENVIRONMENT_MAGIC), isStub,
-                    isNotStub);
-                MDNode* WeightNode = MDB.createBranchWeights(1, 0);
-                br->setMetadata(LLVMContext::MD_prof, WeightNode);
+                builder.CreateCondBr(isExternalsxp(arg, LAZY_ENVIRONMENT_MAGIC),
+                                     isStub, isNotStub, branchAlwaysTrue);
 
                 builder.SetInsertPoint(isStub);
                 auto materialized = envStubGet(arg, -2, env->nLocals());
-                br = builder.CreateCondBr(
+                builder.CreateCondBr(
                     builder.CreateICmpEQ(materialized,
                                          convertToPointer(nullptr, t::SEXP)),
-                    isNotMaterialized, isNotStub);
-                WeightNode = MDB.createBranchWeights(1, 0);
-                br->setMetadata(LLVMContext::MD_prof, WeightNode);
+                    isNotMaterialized, isNotStub, branchAlwaysTrue);
 
                 builder.SetInsertPoint(isNotMaterialized);
                 res.addInput(constant(R_TrueValue, r));
@@ -3641,16 +3628,12 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto isNotNa = builder.CreateFCmpUEQ(narg, narg);
                     narg = builder.CreateFPToSI(narg, t::Int);
                     setVal(i, narg);
-                    auto br = builder.CreateCondBr(isNotNa, done, isNa);
-                    MDNode* WeightNode = MDB.createBranchWeights(1, 0);
-                    br->setMetadata(LLVMContext::MD_prof, WeightNode);
+                    builder.CreateCondBr(isNotNa, done, isNa, branchMostlyTrue);
                 } else {
                     auto narg = load(arg, Representation::Integer);
                     auto isNotNa = builder.CreateICmpNE(narg, c(NA_INTEGER));
                     setVal(i, narg);
-                    auto br = builder.CreateCondBr(isNotNa, done, isNa);
-                    MDNode* WeightNode = MDB.createBranchWeights(1, 0);
-                    br->setMetadata(LLVMContext::MD_prof, WeightNode);
+                    builder.CreateCondBr(isNotNa, done, isNa, branchMostlyTrue);
                 }
 
                 builder.SetInsertPoint(isNa);
@@ -3798,13 +3781,13 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
                             builder.CreatePtrToInt(cache, t::i64), c(1, 64)),
-                        miss, hit1);
+                        miss, hit1, branchMostlyFalse);
                     builder.SetInsertPoint(hit1);
                     auto val = car(cache);
                     builder.CreateCondBr(
                         builder.CreateICmpEQ(val,
                                              constant(R_UnboundValue, t::SEXP)),
-                        miss, hit2);
+                        miss, hit2, branchMostlyFalse);
                     builder.SetInsertPoint(hit2);
                     ensureNamed(val);
                     phi.addInput(val);
@@ -3858,13 +3841,15 @@ bool LowerFunctionLLVM::tryCompile() {
 
                     if (representationOf(extract->vec()) == t::SEXP) {
                         auto hit2 = BasicBlock::Create(C, "", fun);
-                        builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit2,
+                                             branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
 
                         if (extract->vec()->type.maybeHasAttrs()) {
                             auto hit3 = BasicBlock::Create(C, "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
-                                                 hit3, fallback);
+                                                 hit3, fallback,
+                                                 branchMostlyTrue);
                             builder.SetInsertPoint(hit3);
                         }
                     }
@@ -3923,13 +3908,15 @@ bool LowerFunctionLLVM::tryCompile() {
 
                     if (representationOf(extract->vec()) == t::SEXP) {
                         auto hit2 = BasicBlock::Create(C, "", fun);
-                        builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit2,
+                                             branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
 
                         if (extract->vec()->type.maybeHasAttrs()) {
                             auto hit3 = BasicBlock::Create(C, "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
-                                                 hit3, fallback);
+                                                 hit3, fallback,
+                                                 branchMostlyTrue);
                             builder.SetInsertPoint(hit3);
                         }
                     }
@@ -3995,7 +3982,8 @@ bool LowerFunctionLLVM::tryCompile() {
                     llvm::Value* vector = load(extract->vec());
 
                     if (representationOf(extract->vec()) == t::SEXP) {
-                        builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit2,
+                                             branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
                     }
 
@@ -4087,7 +4075,8 @@ bool LowerFunctionLLVM::tryCompile() {
                     llvm::Value* vector = load(extract->vec());
 
                     if (representationOf(extract->vec()) == t::SEXP) {
-                        builder.CreateCondBr(isAltrep(vector), fallback, hit2);
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit2,
+                                             branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
                     }
 
@@ -4218,7 +4207,8 @@ bool LowerFunctionLLVM::tryCompile() {
 
                     llvm::Value* vector = load(subAssign->lhs());
                     if (representationOf(subAssign->lhs()) == t::SEXP) {
-                        builder.CreateCondBr(shared(vector), fallback, hit);
+                        builder.CreateCondBr(shared(vector), fallback, hit,
+                                             branchMostlyFalse);
                         builder.SetInsertPoint(hit);
                     }
 
@@ -4320,18 +4310,21 @@ bool LowerFunctionLLVM::tryCompile() {
                     llvm::Value* vector = load(subAssign->vector());
                     if (representationOf(subAssign->vector()) == t::SEXP) {
                         auto hit1 = BasicBlock::Create(C, "", fun);
-                        builder.CreateCondBr(isAltrep(vector), fallback, hit1);
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit1,
+                                             branchMostlyFalse);
                         builder.SetInsertPoint(hit1);
 
                         if (vecType.maybeHasAttrs()) {
                             auto hit2 = BasicBlock::Create(C, "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
-                                                 hit2, fallback);
+                                                 hit2, fallback,
+                                                 branchMostlyTrue);
                             builder.SetInsertPoint(hit2);
                         }
 
                         auto hit3 = BasicBlock::Create(C, "", fun);
-                        builder.CreateCondBr(shared(vector), fallback, hit3);
+                        builder.CreateCondBr(shared(vector), fallback, hit3,
+                                             branchMostlyFalse);
                         builder.SetInsertPoint(hit3);
                     }
 
@@ -4397,11 +4390,13 @@ bool LowerFunctionLLVM::tryCompile() {
                     llvm::Value* vector = load(subAssign->vector());
                     if (representationOf(subAssign->vector()) == t::SEXP) {
                         auto hit1 = BasicBlock::Create(C, "", fun);
-                        builder.CreateCondBr(isAltrep(vector), fallback, hit1);
+                        builder.CreateCondBr(isAltrep(vector), fallback, hit1,
+                                             branchMostlyFalse);
                         builder.SetInsertPoint(hit1);
 
                         auto hit3 = BasicBlock::Create(C, "", fun);
-                        builder.CreateCondBr(shared(vector), fallback, hit3);
+                        builder.CreateCondBr(shared(vector), fallback, hit3,
+                                             branchMostlyFalse);
                         builder.SetInsertPoint(hit3);
                     }
 
@@ -4486,7 +4481,8 @@ bool LowerFunctionLLVM::tryCompile() {
                                     builder.CreateICmpEQ(sexptype(cur),
                                                          c(expected)),
                                     isScalar(cur))));
-                        builder.CreateCondBr(reuse, fastcase, fallback);
+                        builder.CreateCondBr(reuse, fastcase, fallback,
+                                             branchMostlyTrue);
 
                         builder.SetInsertPoint(fastcase);
                         auto store =
@@ -4548,18 +4544,18 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
                             builder.CreatePtrToInt(cache, t::i64), c(1, 64)),
-                        miss, hit1);
+                        miss, hit1, branchMostlyFalse);
 
                     builder.SetInsertPoint(hit1);
                     auto val = car(cache);
                     builder.CreateCondBr(
                         builder.CreateICmpEQ(val,
                                              constant(R_UnboundValue, t::SEXP)),
-                        miss, hit2);
+                        miss, hit2, branchMostlyFalse);
 
                     builder.SetInsertPoint(hit2);
                     builder.CreateCondBr(builder.CreateICmpEQ(val, newVal),
-                                         identical, hit3);
+                                         identical, hit3, branchMostlyFalse);
 
                     builder.SetInsertPoint(hit3);
                     incrementNamed(newVal);
