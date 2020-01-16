@@ -209,73 +209,32 @@ class JitLLVMImplementation {
 
 static void pirPassSchedule(const PassManagerBuilder&,
                             legacy::PassManagerBase& PM) {
-    // Cleanup code
-    PM.add(createCFGSimplificationPass());
-    PM.add(createDeadCodeEliminationPass());
-    PM.add(createSROAPass());
-    PM.add(createMemCpyOptPass());
-    PM.add(createPromoteMemoryToRegisterPass());
-    PM.add(createSROAPass());
-    PM.add(createPromoteMemoryToRegisterPass());
+    PM.add(createDeadInstEliminationPass());
 
-    // Some scalar opts
-    PM.add(createScopedNoAliasAAWrapperPass());
-    PM.add(createTypeBasedAAWrapperPass());
-    PM.add(createBasicAAWrapperPass());
+    PM.add(createCFGSimplificationPass());
+    PM.add(createSROAPass());
+    PM.add(createPromoteMemoryToRegisterPass());
 
     PM.add(createConstantPropagationPass());
     PM.add(createDeadInstEliminationPass());
-    PM.add(createLICMPass());
-    PM.add(createLoopUnswitchPass());
 
-    PM.add(createInstructionCombiningPass());
-    PM.add(createCFGSimplificationPass());
-    PM.add(createSROAPass());
-    PM.add(createCFGSimplificationPass());
-    PM.add(createReassociatePass());
-
-    PM.add(createEarlyCSEPass());
-    PM.add(createLICMPass());
-    PM.add(createLoopUnswitchPass());
-
-    PM.add(createCFGSimplificationPass());
-    PM.add(createReassociatePass());
-    PM.add(createEarlyCSEPass());
-
-    // Go after loops
-    PM.add(createPromoteMemoryToRegisterPass());
-
-    PM.add(createLoopIdiomPass());
-    PM.add(createLoopRotatePass());
     PM.add(createLICMPass());
     PM.add(createLoopUnswitchPass());
     PM.add(createInductiveRangeCheckEliminationPass());
-    PM.add(createInstructionCombiningPass());
-    PM.add(createIndVarSimplifyPass());
-    PM.add(createLoopDeletionPass());
-    PM.add(createSimpleLoopUnrollPass());
-    PM.add(createLoopStrengthReducePass());
+    PM.add(createCFGSimplificationPass());
 
-    PM.add(createSROAPass());
     PM.add(createInstructionCombiningPass());
     PM.add(createGVNPass());
-    PM.add(createMemCpyOptPass());
     PM.add(createSCCPPass());
-
     PM.add(createSinkingPass());
-    PM.add(createInstructionCombiningPass());
-    PM.add(createJumpThreadingPass());
-    PM.add(createDeadStoreEliminationPass());
 
-    // Cleanup
+    PM.add(createLICMPass());
+    PM.add(createLoopUnswitchPass());
+    PM.add(createInductiveRangeCheckEliminationPass());
     PM.add(createCFGSimplificationPass());
-    PM.add(createLoopIdiomPass());
-    PM.add(createLoopDeletionPass());
-    PM.add(createJumpThreadingPass());
-    PM.add(createAggressiveDCEPass());
-    PM.add(createInstructionCombiningPass());
 
-    PM.add(createTailCallEliminationPass());
+    PM.add(createCFGSimplificationPass());
+    PM.add(createAggressiveDCEPass());
 }
 
 std::unique_ptr<llvm::Module>
@@ -290,7 +249,7 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     {
         llvm::PassManagerBuilder builder;
 
-        builder.OptLevel = 0;
+        builder.OptLevel = 1;
         builder.SizeLevel = 0;
         builder.Inliner = llvm::createFunctionInliningPass(1, 0, false);
         TM->adjustPassManager(builder);

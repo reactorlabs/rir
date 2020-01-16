@@ -290,6 +290,7 @@ class LowerFunctionLLVM {
             assert(inputs.size() > 0);
             if (inputs.size() == 1)
                 return inputs[0].first;
+            assert(builder.GetInsertBlock()->hasNPredecessors(inputs.size()));
             auto phi = builder.CreatePHI(type, inputs.size());
             for (auto& in : inputs)
                 phi->addIncoming(in.first, in.second);
