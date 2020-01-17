@@ -144,6 +144,8 @@ class TheCleanup {
                         env->replaceUsesWith(Env::elided());
                         removed = true;
                         next = bb->remove(ip);
+                    } else if (bb->isDeopt() && env->stub) {
+                        env->stub = false;
                     }
                 } else if (auto test = IsEnvStub::Cast(i)) {
                     if (test->env() == Env::elided()) {

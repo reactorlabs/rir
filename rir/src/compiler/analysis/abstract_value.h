@@ -341,7 +341,12 @@ class AbstractREnvironmentHierarchy {
                           [&](AbstractREnvironment& env) {
                               res.max(env.merge(e.second));
                           },
-                          [&]() { envs.insert(e.first, e.second); });
+                          [&]() {
+                              // Env only known on one branch -> merge with
+                              // empty environment.
+                              auto& n = envs.insert(e.first, e.second)->second;
+                              res.max(n.merge(AbstractREnvironment()));
+                          });
 
         for (auto& entry : other.aliases) {
             if (!aliases.count(entry.first)) {
