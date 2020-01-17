@@ -224,6 +224,18 @@ class DeadStoreAnalysis {
             AbstractResult effect;
             applyRecurse(effect, state, i, promEnv);
 
+            auto observeStaticEnvs = [&]() {
+                for (auto it = state.ignoreStore.begin();
+                     it != state.ignoreStore.end();) {
+                    if (Env::isStaticEnv(it->second)) {
+                        it = state.ignoreStore.erase(it);
+                        effect.update();
+                    } else {
+                        it++;
+                    }
+                }
+            };
+
             auto observeFullEnv = [&](Value* env) {
                 for (auto& e : withPotentialParents(env)) {
                     if (!state.completelyObserved.count(e)) {
@@ -245,7 +257,8 @@ class DeadStoreAnalysis {
             if (auto ld = LdVar::Cast(i)) {
                 for (auto& e : withPotentialParents(resolveEnv(i->env()))) {
                     Variable var({ld->varName, e});
-                    if (!state.partiallyObserved.count(var)) {
+                    if (!Env::isStaticEnv(e) &&
+                        !state.partiallyObserved.count(var)) {
                         state.partiallyObserved.insert(var);
                         effect.update();
                     }
@@ -271,6 +284,10 @@ class DeadStoreAnalysis {
                 observeFullEnv(resolveEnv(i->env()));
             }
 
+            if (i->exits() || i->readsEnv()) {
+                observeStaticEnvs();
+            }
+
             return effect;
         }
 
@@ -291,14 +308,13 @@ class DeadStoreAnalysis {
                 return false;
             if (state.completelyObserved.count(st->env()))
                 return true;
-            return state.partiallyObserved.count(var);
+            return Env::isStaticEnv(st->env()) ||
+                   state.partiallyObserved.count(var);
         }
     };
 
     EnvLeakAnalysis leak;
     ObservedStoreAnalysis observed;
-
-    static bool isLocal(Value* env) { return MkEnv::Cast(env); }
 
   public:
     DeadStoreAnalysis(ClosureVersion* cls, LogStream& log)
@@ -306,8 +322,6 @@ class DeadStoreAnalysis {
     }
 
     bool isDead(StVar* st) const {
-        if (!isLocal(st->env()))
-            return false;
         return !observed.isObserved(st);
     };
 };
