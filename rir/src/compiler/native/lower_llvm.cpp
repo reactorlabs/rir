@@ -2442,6 +2442,21 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
+                    case 160: { // "sqrt"
+                        if (orep == Representation::Real &&
+                            irep == Representation::Integer) {
+                            a = convert(a, i->type);
+                            setVal(i, builder.CreateIntrinsic(
+                                          Intrinsic::sqrt, {t::Double}, {a}));
+                        } else if (orep == irep &&
+                                   irep == Representation::Real) {
+                            setVal(i, builder.CreateIntrinsic(
+                                          Intrinsic::sqrt, {t::Double}, {a}));
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    }
                     case 311: // "as.integer"
                         if (irep == Representation::Integer &&
                             orep == Representation::Integer) {
@@ -2479,6 +2494,9 @@ bool LowerFunctionLLVM::tryCompile() {
                         } else {
                             doTypetest(LGLSXP);
                         }
+                        break;
+                    case 375: // "is.complex"
+                        doTypetest(CPLXSXP);
                         break;
                     case 376: // "is.character"
                         doTypetest(STRSXP);

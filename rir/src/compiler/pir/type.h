@@ -359,6 +359,16 @@ struct PirType {
         return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNotScalar));
     }
 
+    RIR_INLINE constexpr PirType notT(RType t) const {
+        assert(isRType());
+        return PirType(t_.r & ~RTypeSet(t), flags_);
+    }
+
+    RIR_INLINE constexpr PirType orT(RType t) const {
+        assert(isRType());
+        return PirType(t_.r | t, flags_);
+    }
+
     RIR_INLINE constexpr PirType orNotScalar() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::maybeNotScalar);

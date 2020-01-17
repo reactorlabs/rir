@@ -250,6 +250,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 static int isfunctionBlt = findBuiltin("is.function");
                 static int isobjectBlt = findBuiltin("is.object");
                 static int isCharacterBlt = findBuiltin("is.character");
+                static int isComplexBlt = findBuiltin("is.complex");
                 static int bodyBlt = findBuiltin("bodyCode");
                 static int envBlt = findBuiltin("environment");
                 assert(function->assumptions().includes(
@@ -317,6 +318,16 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::closure))
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                    else if (!t.maybe(RType::closure))
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                } else if (builtinId == isComplexBlt && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(RType::cplx))
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                    else if (!t.maybe(RType::cplx))
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
                 } else if (builtinId == isCharacterBlt && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::str)) {
