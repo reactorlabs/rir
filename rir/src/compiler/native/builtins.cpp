@@ -2198,5 +2198,47 @@ NativeBuiltin NativeBuiltins::makeVector = {
     "makeVector",
     (void*)makeVectorImpl,
 };
+
+double prodrImpl(SEXP v) {
+    double res = 1;
+    auto len = XLENGTH(v);
+    if (TYPEOF(v) == REALSXP) {
+        for (R_xlen_t i = 0; i < len; ++i) {
+            res *= REAL(v)[i];
+        }
+    } else if (TYPEOF(v) == INTSXP) {
+        for (R_xlen_t i = 0; i < len; ++i) {
+            res *= INTEGER(v)[i];
+        }
+    } else {
+        assert(false);
+    }
+    return res;
+}
+NativeBuiltin NativeBuiltins::prodr = {
+    "prodr",
+    (void*)prodrImpl,
+};
+
+double sumrImpl(SEXP v) {
+    double res = 0;
+    auto len = XLENGTH(v);
+    if (TYPEOF(v) == REALSXP) {
+        for (R_xlen_t i = 0; i < len; ++i) {
+            res += REAL(v)[i];
+        }
+    } else if (TYPEOF(v) == INTSXP) {
+        for (R_xlen_t i = 0; i < len; ++i) {
+            res += INTEGER(v)[i];
+        }
+    } else {
+        assert(false);
+    }
+    return res;
+}
+NativeBuiltin NativeBuiltins::sumr = {
+    "sumr",
+    (void*)sumrImpl,
+};
 }
 }

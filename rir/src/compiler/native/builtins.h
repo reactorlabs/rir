@@ -150,6 +150,9 @@ struct NativeBuiltins {
 
     static NativeBuiltin matrixNrows;
     static NativeBuiltin matrixNcols;
+
+    static NativeBuiltin sumr;
+    static NativeBuiltin prodr;
 };
 }
 }

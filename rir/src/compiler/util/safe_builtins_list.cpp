@@ -65,6 +65,9 @@ bool SafeBuiltinsList::always(int builtin) {
         findBuiltin("Sys.time"),
 
         findBuiltin("strsplit"),
+
+        findBuiltin("seq_len"),
+        findBuiltin("rep_len"),
     };
 
     for (auto i : safeBuiltins)
@@ -88,6 +91,9 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         findBuiltin("matrix"),
         findBuiltin("array"),
         findBuiltin("new.env"),
+
+        findBuiltin("dim"),
+        findBuiltin("names"),
 
         findBuiltin("c"),
         findBuiltin("["),
@@ -254,6 +260,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         findBuiltin("as.complex"),
         findBuiltin("as.logical"),
         findBuiltin("as.raw"),
+        findBuiltin("as.vector"),
         findBuiltin("is.null"),
         findBuiltin("is.logical"),
         findBuiltin("is.integer"),
@@ -284,11 +291,17 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         findBuiltin("is.infinite"),
 
         findBuiltin("cumsum"),
+        findBuiltin("colSums"),
 
         findBuiltin("cat"),
         findBuiltin("paste"),
         findBuiltin("nchar"),
         findBuiltin("match"),
+
+        findBuiltin("seq.int"),
+        findBuiltin("rep.int"),
+
+        findBuiltin("inherits"),
     };
 
     for (auto i : safeBuiltins)

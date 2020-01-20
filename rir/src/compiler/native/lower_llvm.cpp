@@ -1198,6 +1198,17 @@ llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
     if (from != t::SEXP && to == t::SEXP)
         return box(val, toType, protect);
 
+    if (from == t::Int && to == t::Double) {
+        return builder.CreateSelect(builder.CreateICmpEQ(val, c(NA_INTEGER)),
+                                    c(NA_REAL),
+                                    builder.CreateSIToFP(val, t::Double));
+    }
+    if (from == t::Double && to == t::Int) {
+        return builder.CreateSelect(builder.CreateFCmpUNE(val, val),
+                                    c(NA_INTEGER),
+                                    builder.CreateFPToSI(val, t::Int));
+    }
+
     std::cout << "\nFailed to convert a " << val->getType() << " to " << toType
               << "\n";
     assert(false);
@@ -2452,6 +2463,32 @@ bool LowerFunctionLLVM::tryCompile() {
                                    irep == Representation::Real) {
                             setVal(i, builder.CreateIntrinsic(
                                           Intrinsic::sqrt, {t::Double}, {a}));
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    }
+                    case 300: // "sum"
+                    case 303: // "prod"
+                    {
+                        if (irep == Representation::Integer ||
+                            irep == Representation::Real) {
+                            setVal(i, convert(a, i->type));
+                        } else if (orep == Representation::Real ||
+                                   orep == Representation::Integer) {
+                            assert(irep == Representation::Sexp);
+                            auto itype = b->callArg(0).val()->type;
+                            if (itype.isA(PirType::intReal())) {
+                                auto blt = b->builtinId == 300
+                                               ? NativeBuiltins::sumr
+                                               : NativeBuiltins::prodr;
+                                llvm::Value* res = call(blt, {a});
+                                if (orep == Representation::Integer)
+                                    res = convert(res, i->type);
+                                setVal(i, res);
+                            } else {
+                                done = false;
+                            }
                         } else {
                             done = false;
                         }

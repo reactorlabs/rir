@@ -308,6 +308,11 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::recordDeopt.llvmSignature = llvm::FunctionType::get(
         t::t_void, {t::SEXP, PointerType::get(t::DeoptReason, 0)}, false);
 
+    NativeBuiltins::sumr.llvmSignature =
+        llvm::FunctionType::get(t::Double, {t::SEXP}, false);
+    NativeBuiltins::prodr.llvmSignature =
+        llvm::FunctionType::get(t::Double, {t::SEXP}, false);
+
     return 1;
 }
 
