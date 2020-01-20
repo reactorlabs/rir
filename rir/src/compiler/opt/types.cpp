@@ -68,10 +68,10 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                                     "prod" == name || "sum" == name;
                     if (name == "abs" || doSummary) {
                         if (c->nCallArgs()) {
-                            auto m = getType(c->callArg(0).val());
-                            if (c->nCallArgs() > 1)
+                            auto m = PirType::bottom();
+                            for (size_t i = 0; i < c->nCallArgs(); ++i)
                                 m = m.mergeWithConversion(
-                                    getType(c->callArg(1).val()));
+                                    getType(c->callArg(i).val()));
                             if (!m.maybeObj()) {
                                 inferred = m & PirType::num();
 
@@ -91,10 +91,10 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
 
                     if ("sqrt" == name) {
                         if (c->nCallArgs()) {
-                            auto m = getType(c->callArg(0).val());
-                            if (c->nCallArgs() > 1)
+                            auto m = PirType::bottom();
+                            for (size_t i = 0; i < c->nCallArgs(); ++i)
                                 m = m.mergeWithConversion(
-                                    getType(c->callArg(1).val()));
+                                    getType(c->callArg(i).val()));
                             if (!m.maybeObj()) {
                                 inferred = m & PirType::num();
                                 inferred = inferred.orT(RType::real)
