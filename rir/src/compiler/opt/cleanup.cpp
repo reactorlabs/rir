@@ -144,6 +144,18 @@ class TheCleanup {
                         env->replaceUsesWith(Env::elided());
                         removed = true;
                         next = bb->remove(ip);
+                    } else if (bb->isDeopt() && env->stub) {
+                        env->stub = false;
+                    }
+                } else if (auto m = MaterializeEnv::Cast(i)) {
+                    if (auto mk = MkEnv::Cast(m->env())) {
+                        // We un-stub envs which moved to deopt branches. Thus
+                        // we need to also remove the materialize instr.
+                        if (!mk->stub) {
+                            i->replaceUsesWith(mk);
+                            removed = true;
+                            next = bb->remove(ip);
+                        }
                     }
                 } else if (auto test = IsEnvStub::Cast(i)) {
                     if (test->env() == Env::elided()) {
