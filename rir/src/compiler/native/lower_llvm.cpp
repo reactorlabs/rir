@@ -2389,7 +2389,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 if (b->nargs() == 1) {
-                    auto a = load(b->arg(0).val());
+                    auto a = load(b->callArg(0).val());
                     auto irep = representationOf(b->arg(0).val());
                     auto orep = representationOf(i);
                     bool done = true;

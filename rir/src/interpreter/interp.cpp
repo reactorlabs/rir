@@ -1477,8 +1477,7 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
 void deoptFramesWithContext(InterpreterInstance* ctx,
                             const CallContext* callCtxt,
                             DeoptMetadata* deoptData, SEXP sysparent,
-                            size_t pos, size_t stackHeight,
-                            bool outerHasContext) {
+                            size_t pos, size_t stackHeight) {
     size_t excessStack = stackHeight;
 
     FrameInfo& f = deoptData->frames[pos];
@@ -1502,8 +1501,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     RCNTXT* cntxt;
     auto originalCntxt = findFunctionContextFor(deoptEnv);
     if (originalCntxt) {
-        assert(outerHasContext &&
-               "Frame with context after frame without context");
         cntxt = originalCntxt;
     } else {
         // NOTE: this assert triggers if we can't find the context of the
@@ -1557,7 +1554,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         // 2. Execute the inner frames
         if (!innermostFrame) {
             deoptFramesWithContext(ctx, callCtxt, deoptData, deoptEnv, pos - 1,
-                                   stackHeight, originalCntxt);
+                                   stackHeight);
         }
 
         // 3. Execute our frame
@@ -3980,7 +3977,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 stackHeight += m->frames[i].stackSize + 1;
             c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
-                                   m->numFrames - 1, stackHeight, true);
+                                   m->numFrames - 1, stackHeight);
             assert(false);
         }
 

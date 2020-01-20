@@ -993,7 +993,7 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
                      (Immediate*)nullptr, env, Assumptions(), globalContext());
 
     deoptFramesWithContext(globalContext(), &call, m, R_NilValue,
-                           m->numFrames - 1, stackHeight, true);
+                           m->numFrames - 1, stackHeight);
     assert(false);
 }
 
