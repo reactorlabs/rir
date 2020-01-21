@@ -399,9 +399,9 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         break;
     }
 
-    case 326:   // "stdin"
-    case 327:   // "stdout"
-    case 328: { // "stderr"
+    case 597:   // "stdin"
+    case 598:   // "stdout"
+    case 599: { // "stderr"
         if (nargs != 0)
             return nullptr;
         auto f = getBuiltin(call.callee);
@@ -624,9 +624,9 @@ bool supportsFastBuiltinCall(SEXP blt) {
     case 302: // "max"
     case 310: // "as.character"
     case 311: // "as.integer"
-    case 326: // "stdin"
-    case 327: // "stdout"
-    case 328: // "stderr"
+    case 597: // "stdin"
+    case 598: // "stdout"
+    case 599: // "stderr"
     case 372: // "is.logical"
     case 377: // "is.symbol"
     case 382: // "is.expression"
