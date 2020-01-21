@@ -2426,6 +2426,32 @@ bool LowerFunctionLLVM::tryCompile() {
                             setVal(i, constant(ScalarInteger(1), orep));
                         }
                         break;
+                    case 97: { // "names"
+                        if (!b->callArg(0).val()->type.maybeHasAttrs()) {
+                            setVal(i, constant(R_NilValue, t::SEXP));
+                        } else {
+                            auto res = phiBuilder(t::SEXP);
+                            auto done = BasicBlock::Create(C, "", fun);
+                            auto hasAttr = BasicBlock::Create(C, "", fun);
+                            auto noAttr = BasicBlock::Create(C, "", fun);
+                            builder.CreateCondBr(
+                                builder.CreateICmpEQ(
+                                    attr(a), constant(R_NilValue, t::SEXP)),
+                                noAttr, hasAttr);
+
+                            builder.SetInsertPoint(hasAttr);
+                            res.addInput(callTheBuiltin());
+                            builder.CreateBr(done);
+
+                            builder.SetInsertPoint(noAttr);
+                            res.addInput(constant(R_NilValue, t::SEXP));
+                            builder.CreateBr(done);
+
+                            builder.SetInsertPoint(done);
+                            setVal(i, res());
+                        }
+                        break;
+                    }
                     case 157: { // "abs"
                         if (irep == Representation::Integer) {
                             assert(orep == irep);

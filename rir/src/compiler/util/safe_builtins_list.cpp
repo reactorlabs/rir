@@ -21,6 +21,8 @@ bool SafeBuiltinsList::always(int builtin) {
         findBuiltin("body"),
         findBuiltin("bodyCode"),
 
+        findBuiltin("matrix"),
+
         // do_bitwise
         findBuiltin("bitwiseAnd"),
         findBuiltin("bitwiseNot"),
@@ -85,7 +87,6 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         // overwritten by objects
         findBuiltin("vector"),
         findBuiltin("complex"),
-        findBuiltin("matrix"),
         findBuiltin("array"),
         findBuiltin("new.env"),
 
