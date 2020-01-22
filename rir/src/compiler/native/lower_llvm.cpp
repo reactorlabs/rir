@@ -2438,28 +2438,36 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     case 97: { // "names"
-                        if (!b->callArg(0).val()->type.maybeHasAttrs()) {
-                            setVal(i, constant(R_NilValue, t::SEXP));
+                        auto itype = b->callArg(0).val()->type;
+                        if (itype.isA(PirType::vecs().orObject().orAttribs())) {
+                            if (!itype.maybeHasAttrs() && !itype.maybeObj()) {
+                                setVal(i, constant(R_NilValue, t::SEXP));
+                            } else {
+                                auto res = phiBuilder(t::SEXP);
+                                auto done = BasicBlock::Create(C, "", fun);
+                                auto hasAttr = BasicBlock::Create(C, "", fun);
+                                auto noAttr = BasicBlock::Create(C, "", fun);
+                                auto mightHaveNames = builder.CreateICmpNE(
+                                    attr(a), constant(R_NilValue, t::SEXP));
+                                if (itype.maybeObj())
+                                    mightHaveNames = builder.CreateOr(
+                                        mightHaveNames, isObj(a));
+                                builder.CreateCondBr(mightHaveNames, hasAttr,
+                                                     noAttr);
+
+                                builder.SetInsertPoint(hasAttr);
+                                res.addInput(callTheBuiltin());
+                                builder.CreateBr(done);
+
+                                builder.SetInsertPoint(noAttr);
+                                res.addInput(constant(R_NilValue, t::SEXP));
+                                builder.CreateBr(done);
+
+                                builder.SetInsertPoint(done);
+                                setVal(i, res());
+                            }
                         } else {
-                            auto res = phiBuilder(t::SEXP);
-                            auto done = BasicBlock::Create(C, "", fun);
-                            auto hasAttr = BasicBlock::Create(C, "", fun);
-                            auto noAttr = BasicBlock::Create(C, "", fun);
-                            builder.CreateCondBr(
-                                builder.CreateICmpEQ(
-                                    attr(a), constant(R_NilValue, t::SEXP)),
-                                noAttr, hasAttr);
-
-                            builder.SetInsertPoint(hasAttr);
-                            res.addInput(callTheBuiltin());
-                            builder.CreateBr(done);
-
-                            builder.SetInsertPoint(noAttr);
-                            res.addInput(constant(R_NilValue, t::SEXP));
-                            builder.CreateBr(done);
-
-                            builder.SetInsertPoint(done);
-                            setVal(i, res());
+                            success = false;
                         }
                         break;
                     }
