@@ -72,7 +72,11 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                     }
                 }
             }
-        } else if (!i->type.unboxable() && i->typeFeedback.type.unboxable()) {
+        } else if ((!i->type.unboxable() && i->typeFeedback.type.unboxable()) ||
+                   // Vector where Extract is unboxed if we speculate
+                   (i->type.isA(PirType::num()) &&
+                    !i->type.scalar().unboxable() &&
+                    i->typeFeedback.type.scalar().unboxable())) {
             speculateOn = i;
             feedback = i->typeFeedback;
             guardPos = checkpoint.next(i, i, dom);
