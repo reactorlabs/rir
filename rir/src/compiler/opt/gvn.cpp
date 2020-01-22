@@ -12,7 +12,6 @@ namespace pir {
 
 void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
-    std::unordered_map<size_t, Value*> firstValue;
     std::unordered_map<Value*, size_t> number;
     {
         std::unordered_map<size_t, std::vector<size_t>> classes;
@@ -65,10 +64,8 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
             auto storeNumber = [&](Value* v, size_t n,
                                    std::vector<size_t> klass) {
                 assert(!number.count(v));
-                assert(!firstValue.count(n));
                 number[v] = n;
                 classes[n] = klass;
-                firstValue[n] = v;
                 changed = true;
             };
 
@@ -115,8 +112,6 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 if (success) {
                     changed = true;
                     number[phi] = res;
-                    if (!firstValue.count(res))
-                        firstValue[res] = phi;
                 }
                 return;
             }
@@ -194,29 +189,35 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
         SmallMap<Phi*, PhiClass> phiClassCache;
         for (auto& g : reverseNumber) {
             auto p = g.second.begin();
-            auto first = firstValue.at(g.first);
-            while (replacements.count(first))
-                first = replacements.at(first);
-            auto firstInstr = Instruction::Cast(first);
+
+            Instruction* firstInstr = nullptr;
+            for (auto can : g.second) {
+                if (auto cani = Instruction::Cast(can)) {
+                    if (!firstInstr ||
+                        dom.dominates(cani->bb(), firstInstr->bb()))
+                        firstInstr = cani;
+                }
+            }
+            if (!firstInstr)
+                continue;
 
             while (p != g.second.end()) {
                 auto i = Instruction::Cast(*p);
                 p++;
-                if (i && i != first) {
-                    if (firstInstr) {
-                        if (i->bb() == firstInstr->bb()) {
-                            if (!i->bb()->before(firstInstr, i))
-                                continue;
-                        } else {
-                            if (!dom.dominates(firstInstr->bb(), i->bb()))
-                                continue;
-                        }
+                if (i && i != firstInstr) {
+                    if (!firstInstr->type.isA(i->type))
+                        continue;
+                    if (i->bb() == firstInstr->bb()) {
+                        if (!i->bb()->before(firstInstr, i))
+                            continue;
+                    } else if (!dom.dominates(firstInstr->bb(), i->bb())) {
+                        continue;
                     }
 
                     // Phi GNV numbers might clash and actual classes are
                     // checked lazily.
                     if (auto p1 = Phi::Cast(i)) {
-                        if (auto p2 = Phi::Cast(first)) {
+                        if (auto p2 = Phi::Cast(firstInstr)) {
 
                             auto p1ci = phiClassCache.find(p1);
                             if (p1ci == phiClassCache.end()) {
@@ -248,10 +249,10 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                             continue;
                         }
                     }
-                    i->replaceUsesWith(first);
+                    i->replaceUsesWith(firstInstr);
                     // Make sure this instruction really gets removed
                     i->effects.reset();
-                    replacements[i] = first;
+                    replacements[i] = firstInstr;
                 }
             }
         }
