@@ -4552,6 +4552,14 @@ bool LowerFunctionLLVM::tryCompile() {
                 if (environment && environment->stub) {
                     auto idx = environment->indexOf(st->varName);
                     auto e = loadSxp(environment);
+
+                    if (bb->isDeopt()) {
+                        // Stubenv might be materialized in the deopt branch
+                        call(NativeBuiltins::stvarStubbedAny,
+                             {c(idx, 32), loadSxp(st->val()), e});
+                        break;
+                    }
+
                     BasicBlock* done = BasicBlock::Create(C, "", fun);
                     auto cur = envStubGet(e, idx, environment->nLocals());
 

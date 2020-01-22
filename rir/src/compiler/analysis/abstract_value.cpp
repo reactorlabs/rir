@@ -130,6 +130,33 @@ AbstractREnvironmentHierarchy::potentialParents(Value* env) const {
     return res;
 }
 
+AbstractLoad AbstractREnvironmentHierarchy::getLocal(Value* env, SEXP e) const {
+    assert(env);
+    if (aliases.count(env))
+        env = aliases.at(env);
+
+    auto envIt = envs.find(env);
+    if (envIt == envs.end())
+        return AbstractLoad(env, AbstractPirValue::tainted());
+    auto& aenv = envIt->second;
+
+    if (aenv.absent(e)) {
+        if (Env::isStaticEnv(env))
+            return AbstractLoad(env, AbstractPirValue::tainted());
+        return AbstractLoad(
+            env, AbstractPirValue(UnboundValue::instance(), nullptr, 0));
+    }
+
+    const AbstractPirValue& res = envIt->second.get(e);
+    // UnboundValue has fall-through semantics which cause lookup to
+    // fall through.
+    if (res.maybeUnboundValue())
+        return AbstractLoad(AbstractREnvironment::UnknownParent,
+                            AbstractPirValue::tainted());
+
+    return AbstractLoad(env, res);
+}
+
 AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
     assert(env);
     if (aliases.count(env))

@@ -244,6 +244,28 @@ class TheScopeResolution {
             return target;
         };
 
+        rir::SmallSet<SEXP> maybeDeadStore;
+        {
+            rir::SmallSet<SEXP> store;
+            rir::SmallSet<SEXP> load;
+            auto check = [&](Code* code) {
+                Visitor::run(code->entry, [&](Instruction* i) {
+                    if (auto st = StVar::Cast(i)) {
+                        store.insert(st->varName);
+                    } else if (auto ld = LdVar::Cast(i)) {
+                        load.insert(ld->varName);
+                    }
+                });
+            };
+            check(function);
+            function->eachPromise(check);
+            for (auto& n : store) {
+                if (!load.count(n)) {
+                    maybeDeadStore.insert(n);
+                }
+            }
+        }
+
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
@@ -354,6 +376,7 @@ class TheScopeResolution {
                 if (bb->isDeopt()) {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {
+                            bool replaced = false;
                             if (mk->context == 1 && mk->bb() != bb &&
                                 mk->usesAreOnly(function->entry,
                                                 {Tag::FrameState, Tag::StVar,
@@ -411,8 +434,54 @@ class TheScopeResolution {
                                         ip++;
                                         next = ip + 1;
                                         mk->replaceDominatedUses(deoptEnv);
+                                        replaced = true;
                                     });
                             }
+
+                            if (!replaced)
+                                for (auto name : maybeDeadStore) {
+                                    auto res =
+                                        analysis.loadLocal(before, name, mk);
+                                    auto v = res.result;
+
+                                    if (v.isUnknown() || v.isUnboundValue() ||
+                                        v.type.maybePromiseWrapped()) {
+                                        return;
+                                    }
+                                    Value* value;
+                                    if (auto val = getSingleLocalValue(v)) {
+                                        value = val;
+                                    } else {
+                                        Value* phi = nullptr;
+                                        for (auto& c : createdPhis) {
+                                            if (c.first == v) {
+                                                auto& cache = c.second;
+                                                if (cache.phis.count(bb))
+                                                    phi = cache.phis.at(bb);
+                                                else if (cache.dominatingPhi
+                                                             .count(bb))
+                                                    phi = cache.phis.at(
+                                                        cache.dominatingPhi.at(
+                                                            bb));
+                                                break;
+                                            }
+                                        }
+                                        if (!phi) {
+                                            phi = tryInsertPhis(mk, v, bb, ip,
+                                                                true);
+                                        }
+                                        if (!phi) {
+                                            continue;
+                                        }
+                                        value = phi;
+                                    }
+
+                                    Instruction* fakeStore =
+                                        new StVar(name, value, mk);
+                                    ip = bb->insert(ip, fakeStore);
+                                    ip++;
+                                    next = ip + 1;
+                                }
                         }
                     }
                 }

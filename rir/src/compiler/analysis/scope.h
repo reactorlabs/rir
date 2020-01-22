@@ -180,6 +180,14 @@ class ScopeAnalysis
                    [&](const AbstractLoad& ld) { aLoad = ld; });
         return aLoad;
     }
+    AbstractLoad loadLocal(const ScopeAnalysisState& state, SEXP name,
+                           Value* env) const {
+        auto aLoad = state.envs.getLocal(env, name);
+        if (aLoad.result.isSingleValue())
+            lookup(aLoad.result.singleValue().val,
+                   [&](const AbstractLoad& ld) { aLoad = ld; });
+        return aLoad;
+    }
     AbstractLoad superLoad(const ScopeAnalysisState& state, SEXP name,
                            Value* env) const {
         auto aLoad = state.envs.get(env, name);

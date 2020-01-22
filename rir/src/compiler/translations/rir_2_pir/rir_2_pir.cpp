@@ -1077,6 +1077,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::push_context_:
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
+    case Opcode::stvar_any_:
     case Opcode::starg_stubbed_:
     case Opcode::assert_type_:
     case Opcode::record_deopt_:

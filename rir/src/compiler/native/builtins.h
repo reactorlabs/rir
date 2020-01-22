@@ -59,6 +59,7 @@ struct NativeBuiltins {
     static NativeBuiltin ldvarForUpdate;
     static NativeBuiltin ldvarCacheMiss;
     static NativeBuiltin stvar;
+    static NativeBuiltin stvarStubbedAny;
     static NativeBuiltin defvar;
     static NativeBuiltin starg;
     static NativeBuiltin ldfun;

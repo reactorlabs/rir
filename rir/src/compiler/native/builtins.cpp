@@ -206,6 +206,31 @@ NativeBuiltin NativeBuiltins::stvar = {
     (void*)&stvarImpl,
 };
 
+void stvarStubbedAnyImpl(unsigned pos, SEXP val, SEXP env) {
+    auto le = LazyEnvironment::check(env);
+    assert(le);
+    if (!le->materialized()) {
+        if (le->getArg(pos) != val) {
+            INCREMENT_NAMED(val);
+        } else {
+            ENSURE_NAMED(val);
+        }
+        if (le->getArg(pos) != val || !le->notMissing[pos]) {
+            le->setArg(pos, val, true);
+        }
+    } else {
+        SEXP sym = Pool::get(le->names[pos]);
+        if (TYPEOF(sym) == LISTSXP)
+            sym = CAR(sym);
+        SLOWASSERT(TYPEOF(sym) == SYMSXP);
+        rirDefineVarWrapper(sym, val, le->materialized());
+    }
+};
+NativeBuiltin NativeBuiltins::stvarStubbedAny = {
+    "stvarStubbedAny",
+    (void*)&stvarStubbedAnyImpl,
+};
+
 void stargImpl(SEXP sym, SEXP val, SEXP env) {
     // In case there is a local binding we must honor missingness which
     // defineVar does not

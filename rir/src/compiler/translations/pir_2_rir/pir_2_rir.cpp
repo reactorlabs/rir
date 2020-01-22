@@ -720,8 +720,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                     }
                 } else {
                     if (mkenv && mkenv->stub) {
-                        cb.add(
-                            BC::stvarStubbed(mkenv->indexOf(stvar->varName)));
+                        // Stubenv might be materialized in the deopt branch
+                        if (bb->isDeopt())
+                            cb.add(
+                                BC::stvarAny(mkenv->indexOf(stvar->varName)));
+                        else
+                            cb.add(BC::stvarStubbed(
+                                mkenv->indexOf(stvar->varName)));
                     } else if (cache.isCached(key)) {
                         cb.add(BC::stvarCached(stvar->varName,
                                                cache.indexOf(key)));

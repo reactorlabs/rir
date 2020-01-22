@@ -2293,6 +2293,36 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(stvar_any_) {
+            unsigned pos = readImmediate();
+            advanceImmediate();
+            SEXP val = ostack_top(ctx);
+
+            auto le = LazyEnvironment::check(env);
+            assert(le);
+            if (!le->materialized()) {
+                if (le->getArg(pos) != val) {
+                    INCREMENT_NAMED(val);
+                } else {
+                    ENSURE_NAMED(val);
+                }
+                if (le->getArg(pos) != val || !le->notMissing[pos]) {
+                    le->setArg(pos, val, true);
+                }
+            } else {
+                SEXP sym = Pool::get(le->names[pos]);
+                if (TYPEOF(sym) == LISTSXP)
+                    sym = CAR(sym);
+
+                SLOWASSERT(TYPEOF(sym) == SYMSXP);
+                SEXP val = ostack_top(ctx);
+
+                rirDefineVarWrapper(sym, val, le->materialized());
+            }
+            ostack_pop(ctx);
+            NEXT();
+        }
+
         INSTRUCTION(stvar_stubbed_) {
             unsigned pos = readImmediate();
             advanceImmediate();

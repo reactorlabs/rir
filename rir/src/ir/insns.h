@@ -147,6 +147,7 @@ DEF_INSTR(stvar_, 1, 1, 0, 0)
  * stvar_:: assign tos to the stubbed environment at a fixed offset
  */
 DEF_INSTR(stvar_stubbed_, 1, 1, 0, 0)
+DEF_INSTR(stvar_any_, 1, 1, 0, 0)
 DEF_INSTR(starg_stubbed_, 1, 1, 0, 0)
 
 /**

@@ -209,6 +209,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::clear_binding_cache_:
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
+    case Opcode::stvar_any_:
     case Opcode::starg_stubbed_:
     case Opcode::assert_type_:
     case Opcode::update_promise_:

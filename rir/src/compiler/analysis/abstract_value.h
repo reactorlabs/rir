@@ -389,6 +389,8 @@ class AbstractREnvironmentHierarchy {
 
     void print(std::ostream& out, bool tty = false) const;
 
+    AbstractLoad getLocal(Value* env, SEXP e) const;
+
     AbstractLoad get(Value* env, SEXP e) const;
     AbstractLoad getFun(Value* env, SEXP e) const;
     AbstractLoad superGet(Value* env, SEXP e) const;
