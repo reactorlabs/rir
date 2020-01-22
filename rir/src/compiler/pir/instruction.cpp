@@ -465,10 +465,12 @@ bool Instruction::envOnlyForObj() {
     case Tag::Extract2_1D:
     case Tag::Extract1_2D:
     case Tag::Extract2_2D:
+    case Tag::Extract1_3D:
     case Tag::Subassign1_1D:
     case Tag::Subassign2_1D:
     case Tag::Subassign1_2D:
     case Tag::Subassign2_2D:
+    case Tag::Subassign1_3D:
     case Tag::Not:
     case Tag::LOr:
     case Tag::LAnd:
