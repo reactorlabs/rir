@@ -111,7 +111,7 @@ PassScheduler::PassScheduler() {
 
     // ==== Phase 4) Final round of default opts
     addDefaultPrePhaseOpt();
-    for (size_t i = 0; i < 3; ++i) {
+    for (size_t i = 0; i < 4; ++i) {
         addDefaultOpt();
         add<ElideEnvSpec>();
         add<CleanupCheckpoints>();
