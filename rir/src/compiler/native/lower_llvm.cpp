@@ -3912,7 +3912,6 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Extract1_1D: {
                 auto extract = Extract1_1D::Cast(i);
                 auto vector = loadSxp(extract->vec());
-                auto idx = loadSxp(extract->idx());
 
                 bool fastcase = !extract->vec()->type.maybe(RType::vec) &&
                                 !extract->vec()->type.maybeObj() &&
@@ -3958,6 +3957,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto env = constant(R_NilValue, t::SEXP);
                 if (extract->hasEnv())
                     env = loadSxp(extract->env());
+                auto idx = loadSxp(extract->idx());
                 auto res0 = call(NativeBuiltins::extract11,
                                  {vector, idx, env, c(extract->srcIdx)});
 
