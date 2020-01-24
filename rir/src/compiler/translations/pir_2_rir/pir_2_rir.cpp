@@ -784,34 +784,37 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto in = is->arg(0).val();
                 assert(!t.isVoid() && !t.maybeLazy());
 
-                if (t.isA(RType::logical)) {
+                if (t.noAttribs().isA(RType::logical)) {
                     if (t.isScalar() && !in->type.isScalar())
                         cb.add(BC::isType(TypeChecks::LogicalSimpleScalar));
                     else
                         cb.add(BC::isType(TypeChecks::LogicalNonObject));
-                } else if (t.isA(PirType(RType::logical).orPromiseWrapped())) {
+                } else if (t.noAttribs().isA(
+                               PirType(RType::logical).orPromiseWrapped())) {
                     if (t.isScalar() && !in->type.isScalar())
                         cb.add(
                             BC::isType(TypeChecks::LogicalSimpleScalarWrapped));
                     else
                         cb.add(BC::isType(TypeChecks::LogicalNonObjectWrapped));
-                } else if (t.isA(RType::integer)) {
+                } else if (t.noAttribs().isA(RType::integer)) {
                     if (t.isScalar() && !in->type.isScalar())
                         cb.add(BC::isType(TypeChecks::IntegerSimpleScalar));
                     else
                         cb.add(BC::isType(TypeChecks::IntegerNonObject));
-                } else if (t.isA(PirType(RType::integer).orPromiseWrapped())) {
+                } else if (t.noAttribs().isA(
+                               PirType(RType::integer).orPromiseWrapped())) {
                     if (t.isScalar() && !in->type.isScalar())
                         cb.add(
                             BC::isType(TypeChecks::IntegerSimpleScalarWrapped));
                     else
                         cb.add(BC::isType(TypeChecks::IntegerNonObjectWrapped));
-                } else if (t.isA(RType::real)) {
+                } else if (t.noAttribs().isA(RType::real)) {
                     if (t.isScalar() && !in->type.isScalar())
                         cb.add(BC::isType(TypeChecks::RealSimpleScalar));
                     else
                         cb.add(BC::isType(TypeChecks::RealNonObject));
-                } else if (t.isA(PirType(RType::real).orPromiseWrapped())) {
+                } else if (t.noAttribs().isA(
+                               PirType(RType::real).orPromiseWrapped())) {
                     if (t.isScalar() && !in->type.isScalar())
                         cb.add(BC::isType(TypeChecks::RealSimpleScalarWrapped));
                     else
@@ -831,7 +834,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                                .isA(t)) {
                     cb.add(BC::isType(TypeChecks::NoAttribsExceptDimWrapped));
                 } else {
-                    t.print(std::cout);
+                    t.print(std::cerr);
+                    std::cerr << "\n";
                     assert(false && "IsType used for unsupported type check");
                 }
                 break;

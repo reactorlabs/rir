@@ -33,9 +33,9 @@ class TypeTest {
 
         assert(feedback.origin);
         // First try to refine the type
-        if (expected.orNotScalar().isA(RType::integer) ||
-            expected.orNotScalar().isA(RType::real) ||
-            expected.orNotScalar().isA(RType::logical)) {
+        if (expected.noAttribs().isA(RType::integer) ||
+            expected.noAttribs().isA(RType::real) ||
+            expected.noAttribs().isA(RType::logical)) {
             return action({expected, new IsType(expected, i), true,
                            feedback.srcCode, feedback.origin});
         }

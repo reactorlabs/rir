@@ -3597,13 +3597,14 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
 
                     llvm::Value* res = nullptr;
-                    if (t->typeTest.isA(
+                    if (t->typeTest.noAttribs().isA(
                             PirType(RType::logical).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
-                    } else if (t->typeTest.isA(PirType(RType::integer)
-                                                   .orPromiseWrapped())) {
+                    } else if (t->typeTest.noAttribs().isA(
+                                   PirType(RType::integer)
+                                       .orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
-                    } else if (t->typeTest.isA(
+                    } else if (t->typeTest.noAttribs().isA(
                                    PirType(RType::real).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
                     } else {
@@ -3961,13 +3962,11 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto res0 = call(NativeBuiltins::extract11,
                                  {vector, idx, env, c(extract->srcIdx)});
 
+                res.addInput(convert(res0, i->type));
                 if (fastcase) {
-                    res.addInput(convert(res0, i->type));
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
-                } else {
-                    res.addInput(res0);
                 }
 
                 setVal(i, res());
@@ -4041,13 +4040,11 @@ bool LowerFunctionLLVM::tryCompile() {
                                  {vector, idx1, idx2, loadSxp(extract->env()),
                                   c(extract->srcIdx)});
 
+                res.addInput(convert(res0, i->type));
                 if (fastcase) {
-                    res.addInput(convert(res0, i->type));
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
-                } else {
-                    res.addInput(res0);
                 }
                 setVal(i, res());
                 break;
@@ -4111,13 +4108,11 @@ bool LowerFunctionLLVM::tryCompile() {
                                  c(extract->srcIdx)});
                 }
 
+                res.addInput(convert(res0, i->type));
                 if (fastcase) {
-                    res.addInput(convert(res0, i->type));
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
-                } else {
-                    res.addInput(res0);
                 }
                 setVal(i, res());
                 break;
@@ -4221,13 +4216,11 @@ bool LowerFunctionLLVM::tryCompile() {
                                  c(extract->srcIdx)});
                 }
 
+                res.addInput(convert(res0, i->type));
                 if (fastcase) {
-                    res.addInput(convert(res0, i->type));
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
-                } else {
-                    res.addInput(res0);
                 }
                 setVal(i, res());
                 break;
