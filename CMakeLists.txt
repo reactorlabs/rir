@@ -17,13 +17,30 @@ set(LLVM_COMPONENTS_USED core orcjit native vectorize lto)
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
+# use GCC 9 on macOS. Otherwise we use clang
+if(APPLE)
+    option(MACOS_USE_GCC_9 "Use GCC 9 on macOS." FALSE)
+endif(APPLE)
+
+if(${MACOS_USE_GCC_9})
+    set(ENV{MACOS_GCC9} 1)
+    set(CMAKE_C_COMPILER /usr/local/bin/gcc-9 CACHE PATH "" FORCE)
+    set(CMAKE_CXX_COMPILER /usr/local/bin/g++-9 CACHE PATH "" FORCE)
+endif()
+
 add_definitions(-g3)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror")
 set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT -DMEASURE")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT -DMEASURE")
-set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} -Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough")
+# with macOS GCC 9 we need to explicitly use libc++, since llvm does. See https://libcxx.llvm.org/docs/UsingLibcxx.html#using-libc-with-gcc
+if(${MACOS_USE_GCC_9})
+    set(CMAKE_CXX_FLAGS_LIBCXX "-nostdinc++ -nodefaultlibs -lc++ -lc++abi -lm -lc -lgcc_s.1 -lgcc")
+else()
+    set(CMAKE_CXX_FLAGS_LIBCXX "")
+endif()
+set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} ${CMAKE_CXX_FLAGS_LIBCXX} -Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 set(CMAKE_C_FLAGS_RELEASENOASSERT "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_C_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
@@ -84,6 +101,10 @@ endif(${NO_LOCAL_CONFIG})
 
 include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rir/src)
+# again we need to explicitly use libc++
+if(${MACOS_USE_GCC_9})
+    include_directories(/Library/Developer/CommandLineTools/usr/include/c++/v1)
+endif(${MACOS_USE_GCC_9})
 message(STATUS "Using R from ${R_HOME}")
 
 add_custom_target(setup-build-dir
@@ -110,6 +131,11 @@ add_custom_target(tests
 )
 
 set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
+
+# suppress macOS warning
+if(APPLE)
+    set(CMAKE_MACOSX_RPATH 1)
+endif(APPLE)
 
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/*/*.cpp" "rir/src/*.h")
