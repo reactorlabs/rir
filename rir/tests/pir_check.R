@@ -35,23 +35,29 @@ stopifnot(pir.check(
 
 # This checks that loop-invariant hoisting is working, but it's a bit brittle,
 # and it requires loop peeling to be disabled.
-stopifnot(pir.check(
-  f <- function(){
-    j <- 0
-    while (j < 2) {
-      vector("integer",0)
-      j <- j + 1
-    }
-  }, OneLdVar, warmup=function(f) f()))
+stopifnot(pir.check(f <- function(){
+  j <- 0
+  while (j < 2) {
+    vector("integer",0)
+    j <- j + 1
+  }
+}, OneLdVar, warmup=function(f) f()))
 
+# Loop hoisting + simple range constantfold dead branch removal
+stopifnot(pir.check(function() {
+  for (i in 1:5) {
+      a <- c(1)
+  }
+  a
+}, OneLdFun))
 
-stopifnot(
-  pir.check(function() {
-      for (i in 1:5) {
-          a <- c(1)
-      }
-      a
-  }, OneLdFun))
+# Loop hoisting + simple range non-constant dead branch removal
+stopifnot(pir.check(function(b) {
+  for (i in b:5) {
+      a <- c(1)
+  }
+  a
+}, OneLdFun, warmup=function(f) f(1)))
 
 stopifnot(
   pir.check(function() {
