@@ -1430,9 +1430,13 @@ class FLI(Is, 1, Effects::None()) {
 class FLI(IsType, 1, Effects::None()) {
   public:
     const PirType typeTest;
+    const bool isIntegerCastable;
+    IsType(TypeChecks typeChecks, Value* v);
     IsType(PirType type, Value* v)
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
-          typeTest(type) {}
+          typeTest(type), isIntegerCastable(false) {}
+
+    TypeChecks typeChecks() const;
 
     void printArgs(std::ostream& out, bool tty) const override;
 

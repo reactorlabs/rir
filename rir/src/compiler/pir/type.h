@@ -536,6 +536,8 @@ struct PirType {
         return t_.r.includes(o.t_.r);
     }
 
+    bool isIntegerCastable() const;
+
     // Is val an instance of this type?
     bool isInstance(SEXP val) const;
 

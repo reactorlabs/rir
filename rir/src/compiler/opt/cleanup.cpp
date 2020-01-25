@@ -115,7 +115,10 @@ class TheCleanup {
                     }
                 } else if (auto tt = IsType::Cast(i)) {
                     auto arg = tt->arg<0>().val();
-                    if (arg->type.isA(tt->typeTest)) {
+                    if ((tt->isIntegerCastable &&
+                         arg->type.isIntegerCastable()) ||
+                        (!tt->isIntegerCastable &&
+                         arg->type.isA(tt->typeTest))) {
                         tt->replaceUsesWith(True::instance());
                         removed = true;
                         next = bb->remove(ip);

@@ -219,13 +219,22 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             }
 
             if (auto isTest = IsType::Cast(i)) {
-                if (isTest->arg<0>().val()->type.isA(isTest->typeTest)) {
-                    i->replaceUsesWith(True::instance());
-                    next = bb->remove(ip);
-                } else if (!isTest->arg<0>().val()->type.maybe(
-                               isTest->typeTest)) {
-                    i->replaceUsesWith(False::instance());
-                    next = bb->remove(ip);
+                auto arg = isTest->arg<0>().val();
+                if (isTest->isIntegerCastable) {
+                    if (auto argConst = isConst(arg)) {
+                        i->replaceUsesWith(isSexpIntegerCastable(argConst->c())
+                                               ? (Value*)True::instance()
+                                               : (Value*)False::instance());
+                        next = bb->remove(ip);
+                    }
+                } else {
+                    if (arg->type.isA(isTest->typeTest)) {
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
+                    } else if (!arg->type.maybe(isTest->typeTest)) {
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
+                    }
                 }
             }
 

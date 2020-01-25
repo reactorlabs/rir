@@ -161,6 +161,13 @@ enum class TypeChecks : uint32_t {
     NoAttribsExceptDimWrapped = 3342
 };
 
+RIR_INLINE static bool isSexpIntegerCastable(SEXP val) {
+    return (TYPEOF(val) == INTSXP && XLENGTH(val) != 0) ||
+           (TYPEOF(val) == LGLSXP && XLENGTH(val) != 0) ||
+           (TYPEOF(val) == REALSXP && XLENGTH(val) != 0 &&
+            *REAL(val) == (int)*REAL(val));
+}
+
 enum class Opcode : uint8_t;
 
 struct DeoptReason {

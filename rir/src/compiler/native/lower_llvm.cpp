@@ -3570,6 +3570,12 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 auto t = IsType::Cast(i);
+                if (t->isIntegerCastable) {
+                    // TODO: Generate native code to check this
+                    success = false;
+                    break;
+                }
+
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp) {
                     auto a = loadSxp(arg);

@@ -990,6 +990,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Is(bc.immediate.i, pop())));
         break;
 
+    case Opcode::istype_:
+        push(
+            insert(new IsType(static_cast<TypeChecks>(bc.immediate.i), pop())));
+        break;
+
     case Opcode::pull_: {
         size_t i = bc.immediate.i;
         push(at(i));
@@ -1025,6 +1030,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         break;
 
+    case Opcode::force_:
+        push(insert(new Force(pop(), env)));
+        break;
+
 #define V(_, name, Name)                                                       \
     case Opcode::name##_:                                                      \
         insert(new Name());                                                    \
@@ -1058,7 +1067,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     // Opcodes that only come from PIR
     case Opcode::deopt_:
-    case Opcode::force_:
     case Opcode::mk_stub_env_:
     case Opcode::mk_env_:
     case Opcode::mk_dotlist_:
@@ -1073,7 +1081,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldloc_:
     case Opcode::stloc_:
     case Opcode::movloc_:
-    case Opcode::istype_:
     case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
