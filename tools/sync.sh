@@ -16,6 +16,10 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     USING_OSX=1
 fi
 
+if [[ "$1" == "--macos_gcc9" ]]; then
+    MACOS_GCC9=1
+fi
+
 echo "-> update submodules"
 git submodule update --init
 

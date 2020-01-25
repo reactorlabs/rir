@@ -23,7 +23,6 @@ if(APPLE)
 endif(APPLE)
 
 if(${MACOS_USE_GCC_9})
-    set(ENV{MACOS_GCC9} 1)
     set(CMAKE_C_COMPILER /usr/local/bin/gcc-9 CACHE PATH "" FORCE)
     set(CMAKE_CXX_COMPILER /usr/local/bin/g++-9 CACHE PATH "" FORCE)
 endif()
@@ -111,9 +110,15 @@ add_custom_target(setup-build-dir
     COMMAND ${CMAKE_SOURCE_DIR}/tools/setup-build-dir ${CMAKE_SOURCE_DIR} ${R_HOME}
 )
 
-add_custom_target(dependencies
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh
-)
+if(${MACOS_USE_GCC_9})
+    add_custom_target(dependencies
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh --macos_gcc9
+    )
+else()
+    add_custom_target(dependencies
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh
+    )
+endif()
 
 add_custom_target(default-gnur
     DEPENDS dependencies
@@ -151,6 +156,6 @@ if (DEFINED LLVM_PACKAGE_VERSION)
 endif(DEFINED LLVM_PACKAGE_VERSION)
 
 if(APPLE)
-    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${R_HOME}/lib")
+    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${LLVM_DIR}/lib -L${R_HOME}/lib")
     target_link_libraries(${PROJECT_NAME} R)
 endif(APPLE)
