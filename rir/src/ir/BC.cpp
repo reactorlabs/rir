@@ -677,6 +677,9 @@ void BC::print(std::ostream& out) const {
         case TypeChecks::IntegerSimpleScalarWrapped:
             out << "IntegerSimpleScalarWrapped";
             break;
+        case TypeChecks::IntegerCastable:
+            out << "IntegerCastable";
+            break;
         case TypeChecks::LogicalNonObjectWrapped:
             out << "LogicalNotObjectWrapped";
             break;

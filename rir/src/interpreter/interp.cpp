@@ -3356,6 +3356,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     val = PRVALUE(val);
                 res = fastVeceltOk(val);
                 break;
+            case TypeChecks::IntegerCastable:
+                if (TYPEOF(val) == PROMSXP)
+                    val = PRVALUE(val);
+                res = (TYPEOF(val) == INTSXP && XLENGTH(val) != 0) ||
+                      (TYPEOF(val) == LGLSXP && XLENGTH(val) != 0) ||
+                      (TYPEOF(val) == REALSXP && XLENGTH(val) != 0 &&
+                       *REAL(val) == (int)*REAL(val));
+                break;
             }
             ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
 

@@ -224,50 +224,66 @@ void emitGuardForNamePrimitive(CodeStream& cs, SEXP fun) {
     }
 }
 
-bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
-                      bool voidContext) {
+void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
+                      bool voidContext,
+                      std::function<void()> compileRegularFor) {
     Match(seq) {
         Case(LANGSXP, fun, argsSexp) {
             RList args(argsSexp);
             if (fun != symbol::Colon || args.length() != 2) {
-                return false;
-            }
-
-            SEXP start = args[0];
-            SEXP end = args[1];
-            if (TYPEOF(start) != INTSXP && TYPEOF(start) != LGLSXP &&
-                (TYPEOF(start) != REALSXP || XLENGTH(start) == 0 ||
-                *REAL(start) != (int)*REAL(start))) {
-                return false;
+                compileRegularFor();
+                return;
             }
 
             // for(i in m:n) {
             //   ...
             // }
             // =>
-            // i' <- m
-            // n' <- n
-            // if (i' > n') {
-            //   n' <- ceil(n') - 1
-            //   diff' <- -1
-            //   gt' <- TRUE
+            // m' <- force(m)
+            // if(as.integer(m') != m') {
+            //   <regular for>
             // } else {
-            //   n' <- floor(n')
-            //   diff' <- 1
-            //   gt' <- FALSE
-            // }
-            // while ((i' > n') == gt') {
-            //   i <- i'
-            //   i' <- i' + diff'
-            //   ...
+            //   i' <- m'
+            //   n' <- n
+            //   if (i' > n') {
+            //     n' <- ceil(n') - 1
+            //     diff' <- -1
+            //     gt' <- TRUE
+            //   } else {
+            //     n' <- floor(n')
+            //     diff' <- 1
+            //     gt' <- FALSE
+            //   }
+            //   while ((i' > n') == gt') {
+            //     i <- i'
+            //     i' <- i' + diff'
+            //     ...
+            //   }
             // }
 
+            SEXP start = args[0];
+            SEXP end = args[1];
             CodeStream& cs = ctx.cs();
+
+            BC::Label skipRegularForBranch = cs.mkLabel();
+            BC::Label endBranch = cs.mkLabel();
             BC::Label fwdBranch = cs.mkLabel();
             BC::Label startBranch = cs.mkLabel();
 
-            // i' <- m
+            // m' <- force(m)
             compileExpr(ctx, start);
+            cs << BC::force();
+
+            // if(as.integer(m') != m') {
+            cs << BC::dup() << BC::isType(TypeChecks::IntegerCastable)
+               << BC::brtrue(skipRegularForBranch);
+            // <regular for>
+            cs << BC::pop();
+            compileRegularFor();
+            // } else {
+            cs << BC::br(endBranch) << skipRegularForBranch;
+
+            // i' <- m
             cs << BC::floor() << BC::ensureNamed();
             // n' <- n
             compileExpr(ctx, end);
@@ -319,16 +335,19 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
                              // }
                          },
                          !containsLoop(body));
-            // } else {
+            // } (while)
             cs << BC::popn(4);
             if (!voidContext)
                 cs << BC::push(R_NilValue) << BC::invisible();
+            // } (outer if)
+            cs << endBranch;
 
-            return true;
-        }
-        Else({
-            return false;
-        })
+            return;
+}
+Else({
+    compileRegularFor();
+    return;
+})
     }
     assert(false);
 }
@@ -921,72 +940,75 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
-        if (compileSimpleFor(ctx, sym, seq, body, voidContext))
-            return true;
+        auto compileRegularFor = [&]() {
+            BC::Label nextBranch = cs.mkLabel();
+            BC::Label breakBranch = cs.mkLabel();
+            ctx.pushLoop(nextBranch, breakBranch);
 
-        BC::Label nextBranch = cs.mkLabel();
-        BC::Label breakBranch = cs.mkLabel();
-        ctx.pushLoop(nextBranch, breakBranch);
+            // Compile the seq expression (vector) and initialize the loop
+            compileExpr(ctx, seq);
+            if (!isConstant(seq))
+                cs << BC::setShared();
+            cs << BC::forSeqSize() << BC::push((int)0);
 
-        // Compile the seq expression (vector) and initialize the loop
-        compileExpr(ctx, seq);
-        if (!isConstant(seq))
-            cs << BC::setShared();
-        cs << BC::forSeqSize() << BC::push((int)0);
+            auto compileIndexOps = [&](bool record) {
+                // Increment the index and compare to the seq upper bound
+                cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
+                // We know this is an int and won't do dispatch.
+                // TODO: add a integer version of lt_
+                cs.addSrc(R_NilValue);
 
-        auto compileIndexOps = [&](bool record) {
-            // Increment the index and compare to the seq upper bound
-            cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
-            // We know this is an int and won't do dispatch.
-            // TODO: add a integer version of lt_
-            cs.addSrc(R_NilValue);
+                if (record)
+                    cs << BC::recordTest();
 
-            if (record)
-                cs << BC::recordTest();
+                // If outside bound, branch, otherwise index into the vector
+                cs << BC::brtrue(breakBranch) << BC::pull(2) << BC::pull(1)
+                   << BC::extract2_1();
+                // We know this is a loop sequence and won't do dispatch.
+                // TODO: add a non-object version of extract2_1
+                cs.addSrc(R_NilValue);
 
-            // If outside bound, branch, otherwise index into the vector
-            cs << BC::brtrue(breakBranch) << BC::pull(2) << BC::pull(1)
-               << BC::extract2_1();
-            // We know this is a loop sequence and won't do dispatch.
-            // TODO: add a non-object version of extract2_1
-            cs.addSrc(R_NilValue);
+                // Set the loop variable
+                if (ctx.code.top()->isCached(sym))
+                    cs << BC::stvarCached(sym,
+                                          ctx.code.top()->cacheSlotFor(sym));
+                else
+                    cs << BC::stvar(sym);
+            };
 
-            // Set the loop variable
-            if (ctx.code.top()->isCached(sym))
-                cs << BC::stvarCached(sym, ctx.code.top()->cacheSlotFor(sym));
-            else
-                cs << BC::stvar(sym);
+            unsigned int beginLoopPos = cs.currentPos();
+            cs << BC::beginloop(breakBranch);
+
+            // loop peel is a copy of the body (including indexing ops), with no
+            // backwards jumps
+            if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
+                compileIndexOps(true);
+                compileExpr(ctx, body, true);
+            }
+
+            cs << nextBranch;
+            compileIndexOps(false);
+
+            // Compile the loop body
+            compileExpr(ctx, body, true);
+            cs << BC::br(nextBranch) << breakBranch;
+
+            if (ctx.loopNeedsContext()) {
+                cs << BC::endloop();
+            } else {
+                cs.remove(beginLoopPos);
+            }
+
+            cs << BC::popn(3);
+            if (!voidContext) {
+                cs << BC::push(R_NilValue) << BC::invisible();
+            }
+
+            ctx.popLoop();
         };
 
-        unsigned int beginLoopPos = cs.currentPos();
-        cs << BC::beginloop(breakBranch);
+        compileSimpleFor(ctx, sym, seq, body, voidContext, compileRegularFor);
 
-        // loop peel is a copy of the body (including indexing ops), with no
-        // backwards jumps
-        if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
-            compileIndexOps(true);
-            compileExpr(ctx, body, true);
-        }
-
-        cs << nextBranch;
-        compileIndexOps(false);
-
-        // Compile the loop body
-        compileExpr(ctx, body, true);
-        cs << BC::br(nextBranch) << breakBranch;
-
-        if (ctx.loopNeedsContext()) {
-            cs << BC::endloop();
-        } else {
-            cs.remove(beginLoopPos);
-        }
-
-        cs << BC::popn(3);
-        if (!voidContext) {
-            cs << BC::push(R_NilValue) << BC::invisible();
-        }
-
-        ctx.popLoop();
         return true;
     }
 
