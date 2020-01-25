@@ -66,7 +66,7 @@ function build_r {
         if [ $USING_OSX -eq 1 ]; then
             # Mac OSX
             if [ $MACOS_GCC9 -eq 1 ]; then
-                ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no --without-aqua || cat config.log
+                MACOS_GCC9=1 ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no --without-aqua || cat config.log
             else
                 ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
             fi
