@@ -18,8 +18,6 @@ namespace pir {
 void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                           LogStream& log) const {
 
-    RangeAnalysis rangeAnalysis(function, log);
-
     std::unordered_map<Instruction*, PirType> types;
     {
         bool done = false;
@@ -173,6 +171,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         // named arguments produce named result
                         !getType(e->vec()).maybeHasAttrs() &&
                         getType(e->idx()).isScalar()) {
+                        RangeAnalysis rangeAnalysis(function, log);
                         auto range = rangeAnalysis.before(e).range;
                         if (range.count(e->idx())) {
                             if (range.at(e->idx()).first > 0) {
