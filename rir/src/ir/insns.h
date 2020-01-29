@@ -296,11 +296,6 @@ DEF_INSTR(uplus_, 0, 1, 1, 0)
  */
 DEF_INSTR(inc_, 0, 1, 1, 1)
 
-/**
- * dec_ :: decrement tos integer
- */
-DEF_INSTR(dec_, 0, 1, 1, 1)
-
 DEF_INSTR(sub_, 0, 2, 1, 0)
 DEF_INSTR(uminus_, 0, 1, 1, 0)
 DEF_INSTR(mul_, 0, 2, 1, 0)
@@ -348,12 +343,16 @@ DEF_INSTR(aslogical_, 0, 1, 1, 0)
 DEF_INSTR(asbool_, 0, 1, 1, 0)
 
 /**
- * ceil_ / floor_ :: pop object stack, convert to integer scalar and push. Ceils
- *                   or floors if real, 0 or 1 if logical, throws an NA error if
- *                   another type. For simple ranges.
+ * colon_input_effects_ :: a giant and convoluted instruction...
+ *
+ * forces m and n. If both are factors, pushes (n and m and) true for fallback.
+ * Otherwise throws errors/warnings depending on their
+ * types, pushes coerced versions (e.g. removes imaginary from m,
+ * swaps if m > n), and pushes false for fallback.
+ *
+ * everything in do_colon except creating the actual list.
  */
-DEF_INSTR(ceil_, 0, 1, 1, 1)
-DEF_INSTR(floor_, 0, 1, 1, 1)
+DEF_INSTR(colon_input_effects_, 0, 2, 3, 1)
 
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack

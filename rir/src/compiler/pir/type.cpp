@@ -138,10 +138,6 @@ void PirType::merge(const ObservedValues& other) {
     }
 }
 
-bool PirType::isIntegerCastable() const {
-    return isA(simpleScalarInt()) || isA(simpleScalarLogical());
-}
-
 bool PirType::isInstance(SEXP val) const {
     if (isRType()) {
         if (TYPEOF(val) == PROMSXP) {

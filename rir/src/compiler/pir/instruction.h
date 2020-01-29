@@ -1134,17 +1134,30 @@ class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(AsInt, 1, Effect::Error) {
+class FLI(ColonInputEffects, 2, Effect::Error) {
   public:
-    bool ceil;
+    AuxillaryValue* end =
+        addAuxillaryValue(PirType(RType::real).orAttribs(), "end");
+    AuxillaryValue* start =
+        addAuxillaryValue(PirType(RType::real).orAttribs(), "start");
+    AuxillaryValue* fallback = addAuxillaryValue(NativeType::test, "test");
 
-    explicit AsInt(Value* in, bool ceil_)
-        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
-                              {{PirType::any()}}, {{in}}),
-          ceil(ceil_) {}
+    explicit ColonInputEffects(Value* lhs, Value* rhs, unsigned srcIdx)
+        : FixedLenInstruction(PirType::voyd(),
+                              {{PirType::any(), PirType::any()}}, {{lhs, rhs}},
+                              srcIdx) {}
 
-    size_t gvnBase() const override {
-        return hash_combine(hash_combine(0, Tag::AsInt), ceil);
+    Value* lhs() const { return arg<0>().val(); }
+    Value* rhs() const { return arg<1>().val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        PirType lhsType = getType(lhs());
+        PirType rhsType = getType(rhs());
+        if (!lhsType.maybeHasAttrs() || !rhsType.maybeHasAttrs()) {
+            start->type = start->type.noAttribs().scalar();
+            end->type = end->type.noAttribs().scalar();
+        }
+        return type;
     }
 };
 
@@ -1405,15 +1418,6 @@ class FLI(Inc, 1, Effects::None()) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(Dec, 1, Effects::None()) {
-  public:
-    explicit Dec(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
-                              {{PirType(RType::integer).scalar().noAttribs()}},
-                              {{v}}) {}
-    size_t gvnBase() const override { return tagHash(); }
-};
-
 class FLI(Is, 1, Effects::None()) {
   public:
     Is(uint32_t sexpTag, Value* v)
@@ -1430,11 +1434,9 @@ class FLI(Is, 1, Effects::None()) {
 class FLI(IsType, 1, Effects::None()) {
   public:
     const PirType typeTest;
-    const bool isIntegerCastable;
-    IsType(TypeChecks typeChecks, Value* v);
     IsType(PirType type, Value* v)
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
-          typeTest(type), isIntegerCastable(false) {}
+          typeTest(type) {}
 
     TypeChecks typeChecks() const;
 

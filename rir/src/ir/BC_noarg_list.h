@@ -32,7 +32,6 @@
     V(NESTED, dup2, dup2)                                                      \
     V(NESTED, forSeqSize, for_seq_size)                                        \
     V(NESTED, inc, inc)                                                        \
-    V(NESTED, dec, dec)                                                        \
     V(NESTED, close, close)                                                    \
     V(NESTED, add, add)                                                        \
     V(NESTED, mul, mul)                                                        \
@@ -55,8 +54,6 @@
     V(NESTED, setShared, set_shared)                                           \
     V(NESTED, ensureNamed, ensure_named)                                       \
     V(NESTED, asLogical, aslogical)                                            \
-    V(NESTED, ceil, ceil)                                                      \
-    V(NESTED, floor, floor)                                                    \
     V(NESTED, lglOr, lgl_or)                                                   \
     V(NESTED, lglAnd, lgl_and)                                                 \
     V(NESTED, isfun, isfun)                                                    \
@@ -69,7 +66,8 @@
     V(NESTED, extract2_2, extract2_2)                                          \
     V(NESTED, swap, swap)                                                      \
     V(NESTED, isstubenv, isstubenv)                                            \
-    V(NESTED, return_, return )
+    V(NESTED, return_, return )                                                \
+    V(NESTED, colonInputEffects, colon_input_effects)
 
 #undef V_SIMPLE_INSTRUCTION
 

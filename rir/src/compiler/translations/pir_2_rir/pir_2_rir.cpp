@@ -784,15 +784,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
-            case Tag::AsInt: {
-                auto asInt = AsInt::Cast(instr);
-                if (asInt->ceil)
-                    cb.add(BC::ceil());
-                else
-                    cb.add(BC::floor());
-                break;
-            }
-
 #define EMPTY(Name)                                                            \
     case Tag::Name: {                                                          \
         break;                                                                 \
@@ -815,7 +806,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
-                SIMPLE(Dec, dec);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
                 SIMPLE(Length, length);
@@ -860,6 +850,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Subassign1_2D, subassign1_2);
                 SIMPLE_WITH_SRCIDX(Subassign2_2D, subassign2_2);
                 SIMPLE_WITH_SRCIDX(Subassign1_3D, subassign1_3);
+                SIMPLE_WITH_SRCIDX(ColonInputEffects, colonInputEffects);
 #undef SIMPLE_WITH_SRCIDX
 
             case Tag::Call: {

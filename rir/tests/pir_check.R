@@ -363,20 +363,51 @@ stopifnot(pir.check(function(x, y) {
 }, OneEq, warmup=function(f)f(5.7, "")))
 # Relies on better visibility
 # stopifnot(pir.check(function(x) !!!!!x, OneNot, warmup=function(f)f(1)))
-# Testing NoAsInt itself
-stopifnot(!pir.check(function(n) {
-  x <- 0
-  for (i in 1:n)
-    x <- x + i
-  x
-}, NoAsInt))
-# Ok
+# Testing simple range dead branch removal
 stopifnot(pir.check(function() {
   x <- 0
   for (i in 1:10)
     x <- x + i
   x
-}, NoAsInt))
+}, NoColon))
+stopifnot(pir.check(function(n) {
+  x <- 0
+  for (i in 1:n)
+    x <- x + i
+  x
+}, NoColon))
+stopifnot(pir.check(function(n) {
+  x <- 0
+  for (i in n:10)
+    x <- x + i
+  x
+}, NoColon))
+a <- 1
+b <- 10
+stopifnot(pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- x + i
+  x
+}, NoColon, warmup=function(f) f(1, 10)))
+stopifnot(pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- x + i
+  x
+}, NoColon, warmup=function(f) f(a, 10)))
+stopifnot(pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- x + i
+  x
+}, NoColon, warmup=function(f) f(1, b)))
+stopifnot(!pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- x + i
+  x
+}, NoColon, warmup=function(f) f(a, b)))
                      
 # More dead instruction removal
 stopifnot(!pir.check(function(x) {

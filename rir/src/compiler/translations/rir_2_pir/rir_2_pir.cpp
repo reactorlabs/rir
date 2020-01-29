@@ -272,13 +272,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
 
-    case Opcode::ceil_: {
-        push(insert(new AsInt(pop(), true)));
-        break;
-    }
-
-    case Opcode::floor_: {
-        push(insert(new AsInt(pop(), false)));
+    case Opcode::colon_input_effects_: {
+        ColonInputEffects* instr =
+            insert(new ColonInputEffects(pop(), pop(), srcIdx));
+        push(instr->end);
+        push(instr->start);
+        push(instr->fallback);
         break;
     }
 
@@ -979,7 +978,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
         UNOP_NOENV(Length, length_);
         UNOP_NOENV(Inc, inc_);
-        UNOP_NOENV(Dec, dec_);
 #undef UNOP_NOENV
 
     case Opcode::missing_:
@@ -988,11 +986,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::is_:
         push(insert(new Is(bc.immediate.i, pop())));
-        break;
-
-    case Opcode::istype_:
-        push(
-            insert(new IsType(static_cast<TypeChecks>(bc.immediate.i), pop())));
         break;
 
     case Opcode::pull_: {
@@ -1092,6 +1085,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::assert_type_:
     case Opcode::record_deopt_:
     case Opcode::update_promise_:
+    case Opcode::istype_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 

@@ -235,11 +235,6 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::printValue.llvmSignature = t::void_sexp;
 
-    NativeBuiltins::asIntCeil.llvmSignature =
-        llvm::FunctionType::get(t::Int, {t::SEXP, t::i32}, false);
-    NativeBuiltins::asIntFloor.llvmSignature =
-        llvm::FunctionType::get(t::Int, {t::SEXP, t::i32}, false);
-
     NativeBuiltins::matrixNcols.llvmSignature = t::int_sexp;
     NativeBuiltins::matrixNrows.llvmSignature = t::int_sexp;
 

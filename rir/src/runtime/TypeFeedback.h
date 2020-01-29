@@ -150,7 +150,6 @@ enum class TypeChecks : uint32_t {
     IntegerNonObjectWrapped = 3331,
     IntegerSimpleScalar = 3332,
     IntegerSimpleScalarWrapped = 3333,
-    IntegerCastable = 3334,
     RealNonObject = 3335,
     RealNonObjectWrapped = 3336,
     RealSimpleScalar = 3337,
@@ -160,13 +159,6 @@ enum class TypeChecks : uint32_t {
     NoAttribsExceptDim = 3341,
     NoAttribsExceptDimWrapped = 3342
 };
-
-RIR_INLINE static bool isSexpIntegerCastable(SEXP val) {
-    return (TYPEOF(val) == INTSXP && XLENGTH(val) != 0) ||
-           (TYPEOF(val) == LGLSXP && XLENGTH(val) != 0) ||
-           (TYPEOF(val) == REALSXP && XLENGTH(val) != 0 &&
-            *REAL(val) == (int)*REAL(val));
-}
 
 enum class Opcode : uint8_t;
 

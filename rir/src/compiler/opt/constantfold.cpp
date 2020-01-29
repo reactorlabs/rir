@@ -182,22 +182,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             });
 
-            FOLD_UNARY(AsInt, [&](SEXP arg) {
-                if (IS_SIMPLE_SCALAR(arg, INTSXP)) {
-                    i->replaceUsesWith(i->arg(0).val());
-                    next = bb->remove(ip);
-                } else if (IS_SIMPLE_SCALAR(arg, REALSXP) &&
-                           *REAL(arg) == (int)*REAL(arg)) {
-                    auto c = new LdConst(Rf_ScalarInteger((int)*REAL(arg)));
-                    i->replaceUsesWith(c);
-                    bb->replace(ip, c);
-                } else if (IS_SIMPLE_SCALAR(arg, LGLSXP)) {
-                    auto c = new LdConst(Rf_ScalarInteger((int)*LOGICAL(arg)));
-                    i->replaceUsesWith(c);
-                    bb->replace(ip, c);
-                }
-            });
-
             if (Identical::Cast(i)) {
                 // Those are targeting the checks for default argument
                 // evaluation after inlining
@@ -220,21 +204,12 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
 
             if (auto isTest = IsType::Cast(i)) {
                 auto arg = isTest->arg<0>().val();
-                if (isTest->isIntegerCastable) {
-                    if (auto argConst = isConst(arg)) {
-                        i->replaceUsesWith(isSexpIntegerCastable(argConst->c())
-                                               ? (Value*)True::instance()
-                                               : (Value*)False::instance());
-                        next = bb->remove(ip);
-                    }
-                } else {
-                    if (arg->type.isA(isTest->typeTest)) {
-                        i->replaceUsesWith(True::instance());
-                        next = bb->remove(ip);
-                    } else if (!arg->type.maybe(isTest->typeTest)) {
-                        i->replaceUsesWith(False::instance());
-                        next = bb->remove(ip);
-                    }
+                if (arg->type.isA(isTest->typeTest)) {
+                    i->replaceUsesWith(True::instance());
+                    next = bb->remove(ip);
+                } else if (!arg->type.maybe(isTest->typeTest)) {
+                    i->replaceUsesWith(False::instance());
+                    next = bb->remove(ip);
                 }
             }
 

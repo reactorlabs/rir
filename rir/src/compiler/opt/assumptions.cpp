@@ -17,13 +17,13 @@ namespace pir {
 
 struct AAssumption {
     AAssumption(Value* i, const PirType& t) : yesNo(true), kind(Typecheck) {
-        c.typecheck = {i, t, false};
+        c.typecheck = {i, t};
     }
     explicit AAssumption(Assume* a) : yesNo(a->assumeTrue) {
         auto cond = a->condition();
         if (auto t = IsType::Cast(cond)) {
             kind = Typecheck;
-            c.typecheck = {t->arg(0).val(), t->typeTest, t->isIntegerCastable};
+            c.typecheck = {t->arg(0).val(), t->typeTest};
         } else if (auto t = Identical::Cast(cond)) {
             kind = Equality;
             c.equality = {t->arg(0).val(), t->arg(1).val()};
@@ -69,7 +69,7 @@ struct AAssumption {
 
     union Content {
         Content() {}
-        std::tuple<Value*, PirType, bool> typecheck;
+        std::pair<Value*, PirType> typecheck;
         std::pair<Value*, Value*> equality;
         Value* env;
         Value* misc;
@@ -101,14 +101,10 @@ struct AAssumption {
             out << "!";
         switch (kind) {
         case Typecheck:
-            std::get<0>(c.typecheck)->printRef(out);
-            if (std::get<2>(c.typecheck)) {
-                out << ".isIntegerCastable()";
-            } else {
-                out << ".isA(";
-                std::get<1>(c.typecheck).print(out);
-                out << ")";
-            }
+            c.typecheck.first->printRef(out);
+            out << ".isA(";
+            c.typecheck.second.print(out);
+            out << ")";
             break;
         case Equality:
             c.equality.first->printRef(out);

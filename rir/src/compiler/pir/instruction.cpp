@@ -656,27 +656,7 @@ void Is::printArgs(std::ostream& out, bool tty) const {
     out << ", " << Rf_type2char(sexpTag);
 }
 
-static std::pair<PirType, bool>
-constructorParamsFromTypeChecks(TypeChecks typeChecks) {
-    switch (typeChecks) {
-    case TypeChecks::IntegerCastable:
-        return {PirType::any(), true};
-    default:
-        assert(false && "type checks don't come from RIR, don't know how to "
-                        "convert to PIR type");
-    }
-}
-
-IsType::IsType(TypeChecks typeChecks, Value* v)
-    : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
-      typeTest(constructorParamsFromTypeChecks(typeChecks).first),
-      isIntegerCastable(constructorParamsFromTypeChecks(typeChecks).second) {}
-
 TypeChecks IsType::typeChecks() const {
-    if (isIntegerCastable) {
-        return TypeChecks::IntegerCastable;
-    }
-
     auto t = typeTest;
     auto in = arg(0).val();
     assert(!t.isVoid() && !t.maybeLazy());
@@ -726,12 +706,8 @@ TypeChecks IsType::typeChecks() const {
 
 void IsType::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
-    if (isIntegerCastable) {
-        out << " isIntegerCastable";
-    } else {
         out << " isA " << typeTest;
     }
-}
 
 void Phi::printArgs(std::ostream& out, bool tty) const {
     if (nargs() > 0) {

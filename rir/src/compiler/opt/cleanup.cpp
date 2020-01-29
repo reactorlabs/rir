@@ -115,10 +115,7 @@ class TheCleanup {
                     }
                 } else if (auto tt = IsType::Cast(i)) {
                     auto arg = tt->arg<0>().val();
-                    if ((tt->isIntegerCastable &&
-                         arg->type.isIntegerCastable()) ||
-                        (!tt->isIntegerCastable &&
-                         arg->type.isA(tt->typeTest))) {
+                    if (arg->type.isA(tt->typeTest)) {
                         tt->replaceUsesWith(True::instance());
                         removed = true;
                         next = bb->remove(ip);
@@ -133,13 +130,14 @@ class TheCleanup {
                         removed = true;
                         next = bb->remove(ip);
                     }
-                } else if (auto asInt = AsInt::Cast(i)) {
-                    auto arg = asInt->arg<0>().val();
-                    if (arg->type.isA(
-                            PirType(RType::integer).scalar().notObject())) {
-                        asInt->replaceUsesWith(arg);
-                        removed = true;
-                        next = bb->remove(ip);
+                } else if (auto colonInputEffects =
+                               ColonInputEffects::Cast(i)) {
+                    auto lhs = colonInputEffects->arg<0>().val();
+                    auto rhs = colonInputEffects->arg<1>().val();
+                    if (!lhs->type.maybeHasAttrs() ||
+                        !rhs->type.maybeHasAttrs()) {
+                        colonInputEffects->fallback->replaceUsesWith(
+                            False::instance());
                     }
                 } else if (auto env = MkEnv::Cast(i)) {
                     static std::unordered_set<Tag> tags{Tag::IsEnvStub};

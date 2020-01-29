@@ -394,7 +394,6 @@ BC_NOARGS(V, _)
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
-    inline static BC asint(bool ceil);
     inline static BC pushContext(Jmp);
     inline static BC popContext(Jmp);
     inline static BC beginloop(Jmp);
