@@ -137,6 +137,11 @@ add_custom_target(tests
 
 set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
 
+# suppress macOS warning
+if(APPLE)
+    set(CMAKE_MACOSX_RPATH 1)
+endif(APPLE)
+
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/*/*.cpp" "rir/src/*.h")
 add_library(${PROJECT_NAME} SHARED ${SRC})
@@ -151,6 +156,6 @@ if (DEFINED LLVM_PACKAGE_VERSION)
 endif(DEFINED LLVM_PACKAGE_VERSION)
 
 if(APPLE)
-    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${LLVM_DIR}/lib -L${R_HOME}/lib")
+    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${R_HOME}/lib")
     target_link_libraries(${PROJECT_NAME} R)
 endif(APPLE)
