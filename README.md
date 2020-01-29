@@ -4,17 +4,21 @@ To give it a spin try
 
     docker run -it registry.gitlab.com/rirvm/rir_mirror:master /opt/rir/build/release/bin/R
 
-# Building from Source
+## Building from Source
 
     git clone https://github.com/reactorlabs/rir
     cd rir
-    cmake -DCMAKE_BUILD_TYPE=debug .
-    # Fetch and build dependencies. This will build gnur from source, which
-    # takes a while. Note that on Mac OSX, you will need to install a fortran
-    # compiler (eg. brew install gcc). 
+    cmake -DCMAKE_BUILD_TYPE=debugopt .
+    # Fetch and build dependencies. This will build gnur from source, which takes a while.
     make setup
-    cmake ..
     make
+
+### macOS
+
+macOS has some extra prerequisites:
+
+- A Fortran compiler (e.g. `brew install gcc`)
+- Xcode Command line tools
 
 ## Running tests
 
@@ -82,6 +86,13 @@ Instead do this:
 For faster build use ninja. To generate ninja files instead of makefiles add `-GNinja` to the cmake commands.
 
 Using ninja means GCC and Clang will disable color output. To force color, run cmake with `-DFORCE_COLORED_OUTPUT=true`.
+
+### Building on macOS with GCC 9
+
+By default macOS will build gnuR and rir with clang, while Linux always uses GCC. There might be some differences between the 2 compilers. However, you can force macOS to use GCC via the following:
+
+- Install GCC 9 with homebrew (`brew install gcc@9`)
+- Pass `-GMACOS_USE_GCC_9` to `cmake`
 
 ### Making changes to gnur
 
