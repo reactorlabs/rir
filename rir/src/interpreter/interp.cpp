@@ -15,6 +15,7 @@
 
 #include <assert.h>
 #include <deque>
+#include <libintl.h>
 #include <set>
 
 #define NOT_IMPLEMENTED assert(false)
@@ -3133,7 +3134,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 ostack_push(ctx, rhs);
                 ostack_push(ctx, lhs);
                 ostack_push(ctx, R_TrueValue);
-        }
+            }
 
             int lhsLen = Rf_length(lhs);
             int rhsLen = Rf_length(rhs);
@@ -3289,11 +3290,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 if (TYPEOF(val) == PROMSXP)
                     val = PRVALUE(val);
                 res = fastVeceltOk(val);
-                break;
-            case TypeChecks::IntegerCastable:
-                if (TYPEOF(val) == PROMSXP)
-                    val = PRVALUE(val);
-                res = isSexpIntegerCastable(val);
                 break;
             }
             ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
