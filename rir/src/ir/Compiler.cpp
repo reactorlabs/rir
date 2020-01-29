@@ -224,14 +224,18 @@ void emitGuardForNamePrimitive(CodeStream& cs, SEXP fun) {
     }
 }
 
+/**
+ * Try to convert this loop into a C-style for loop. If it fails or must compile
+ * a regular loop, it will use the given function.
+ */
 void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
                       bool voidContext,
-                      std::function<void()> compileRegularFor) {
+                      std::function<void(bool compiledSeq)> compileRegularFor) {
     Match(seq) {
         Case(LANGSXP, fun, argsSexp) {
             RList args(argsSexp);
             if (fun != symbol::Colon || args.length() != 2) {
-                compileRegularFor();
+                compileRegularFor(false);
                 return;
             }
 
@@ -239,24 +243,18 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             //   ...
             // }
             // =>
-            // m' <- force(m)
-            // if(as.integer(m') != m') {
+            // # forces m and n. If both are factors, pushes (m and n and) true
+            // # for fallback. Otherwise throws errors/warnings depending on
+            // # their types, pushes coerced versions (e.g. removes imaginary
+            // # from m, swaps if m > n), and pushes false for fallback.
+            // (m', n', fallback) <- colonInputEffects(m, n)
+            // if (fallback) {
             //   <regular for>
             // } else {
             //   i' <- m'
-            //   n' <- n
-            //   if (i' > n') {
-            //     n' <- ceil(n') - 1
-            //     diff' <- -1
-            //     gt' <- TRUE
-            //   } else {
-            //     n' <- floor(n')
-            //     diff' <- 1
-            //     gt' <- FALSE
-            //   }
-            //   while ((i' > n') == gt') {
+            //   while (i' < n') {
             //     i <- i'
-            //     i' <- i' + diff'
+            //     i' <- i' + 1
             //     ...
             //   }
             // }
@@ -267,88 +265,63 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
 
             BC::Label skipRegularForBranch = cs.mkLabel();
             BC::Label endBranch = cs.mkLabel();
-            BC::Label fwdBranch = cs.mkLabel();
-            BC::Label startBranch = cs.mkLabel();
 
-            // m' <- force(m)
+            // (m', n', fallback) <- colonInputEffects(m, n)
             compileExpr(ctx, start);
-            cs << BC::force();
-
-            // if(as.integer(m') != m') {
-            cs << BC::dup() << BC::isType(TypeChecks::IntegerCastable)
-               << BC::brtrue(skipRegularForBranch);
-            // <regular for>
-            cs << BC::pop();
-            compileRegularFor();
-            // } else {
-            cs << BC::br(endBranch) << skipRegularForBranch;
-
-            // i' <- m
-            cs << BC::floor() << BC::ensureNamed();
-            // n' <- n
             compileExpr(ctx, end);
-            cs << BC::ensureNamed();
-            // if (i' > n')
-            cs << BC::dup2() << BC::gt();
-            cs.addSrc(R_NilValue);
-            cs << BC::recordTest() << BC::brfalse(fwdBranch);
-            // {
-            // n' <- ceil(n') - 1
-            cs << BC::ceil() << BC::dec() << BC::ensureNamed() << BC::swap();
-            // diff' <- -1
-            cs << BC::push(-1);
-            // gt' <- TRUE
-            cs << BC::push(R_TrueValue);
-            cs << BC::put(3) << BC::put(2) << BC::br(startBranch) << fwdBranch;
+            cs << BC::colonInputEffects();
+            cs.addSrc(seq);
+
+            // if (fallback) {
+            cs << BC::brfalse(skipRegularForBranch);
+            //   <regular for>
+            cs << BC::colon();
+            cs.addSrc(seq);
+            compileRegularFor(true);
+            cs << BC::br(endBranch);
             // } else {
-            // n' <- floor(n')
-            cs << BC::floor() << BC::swap();
-            // diff' <- 1
-            cs << BC::push(1);
-            // gt' <- FALSE
-            cs << BC::push(R_FalseValue);
-            cs << BC::put(3) << BC::put(2) << startBranch;
+            cs << skipRegularForBranch;
+
+            // i' <- m' (we just reuse m')
+
             // while
-            compileWhile(ctx,
-                         [&cs]() {
-                             // ((i' > n') ...
-                             cs << BC::dup2() << BC::lt();
-                             cs.addSrc(R_NilValue);
-                             // ... == gt')
-                             cs << BC::pull(4) << BC::eq();
-                             cs.addSrc(R_NilValue);
-                         },
-                         [&ctx, &cs, &sym, &body]() {
-                             // {
-                             // i <- i'
-                             cs << BC::dup();
-                             if (ctx.code.top()->isCached(sym))
-                                 cs << BC::stvarCached(
-                                     sym, ctx.code.top()->cacheSlotFor(sym));
-                             else
-                                 cs << BC::stvar(sym);
-                             // i' <- i' + diff'
-                             cs << BC::pull(2) << BC::add();
-                             cs.addSrc(R_NilValue);
-                             // ...
-                             compileExpr(ctx, body, true);
-                             // }
-                         },
-                         !containsLoop(body));
-            // } (while)
-            cs << BC::popn(4);
+            compileWhile(
+                ctx,
+                [&cs]() {
+                    // (i' <= n')
+                    cs << BC::dup2() << BC::ge();
+                    cs.addSrc(R_NilValue);
+                },
+                [&ctx, &cs, &sym, &body]() {
+                    // {
+                    // i <- i'
+                    cs << BC::dup();
+                    if (ctx.code.top()->isCached(sym))
+                        cs << BC::stvarCached(
+                            sym, ctx.code.top()->cacheSlotFor(sym));
+                    else
+                        cs << BC::stvar(sym);
+                    // i' <- i' + 1
+                    cs << BC::push(1) << BC::add();
+                    cs.addSrc(R_NilValue);
+                    // ...
+                    compileExpr(ctx, body, true);
+                    // }
+                },
+                !containsLoop(body));
+            cs << BC::popn(2);
             if (!voidContext)
                 cs << BC::push(R_NilValue) << BC::invisible();
-            // } (outer if)
             cs << endBranch;
-
             return;
-}
-Else({
-    compileRegularFor();
-    return;
-})
+            // clang-format off
+        }
+        Else({ 
+            compileRegularFor(false);
+            return;
+        })
     }
+    // clang-format on
     assert(false);
 }
 
@@ -940,13 +913,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
-        auto compileRegularFor = [&]() {
+        auto compileRegularFor = [&](bool compiledSeq) {
             BC::Label nextBranch = cs.mkLabel();
             BC::Label breakBranch = cs.mkLabel();
             ctx.pushLoop(nextBranch, breakBranch);
 
             // Compile the seq expression (vector) and initialize the loop
-            compileExpr(ctx, seq);
+            if (!compiledSeq) {
+                compileExpr(ctx, seq);
+            }
             if (!isConstant(seq))
                 cs << BC::setShared();
             cs << BC::forSeqSize() << BC::push((int)0);
