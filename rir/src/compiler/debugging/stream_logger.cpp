@@ -24,16 +24,17 @@ StreamLogger::~StreamLogger() {
 
 FileLogStream::~FileLogStream() { fstream.close(); }
 
-bool LogStream::tty() { return ConsoleColor::isTTY(out); }
+bool ClosureStreamLogger::tty() { return ConsoleColor::isTTY(out); }
 bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 
-LogStream& StreamLogger::begin(ClosureVersion* cls) {
+ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
     assert(!streams.count(cls) && "You already started this function");
 
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
         filename << cls->owner()->name() << "-pir-function-"
                  << std::setfill('0') << std::setw(5) << logId++;
+        std::string folderName = filename.str();
         if (options.style == DebugStyle::Standard)
             filename << ".log";
         else
@@ -41,7 +42,7 @@ LogStream& StreamLogger::begin(ClosureVersion* cls) {
         streams.emplace(cls, new FileLogStream(options, cls, filename.str()));
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
-            streams.emplace(cls, new LogStream(options, cls));
+            streams.emplace(cls, new ClosureStreamLogger(options, cls));
         else
             streams.emplace(cls, new BufferedLogStream(options, cls));
     }
@@ -58,7 +59,7 @@ LogStream& StreamLogger::begin(ClosureVersion* cls) {
     return logger;
 }
 
-void LogStream::compilationEarlyPir(ClosureVersion* closure) {
+void ClosureStreamLogger::compilationEarlyPir(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         preparePrint();
         section("Compiled to PIR Version");
@@ -67,7 +68,7 @@ void LogStream::compilationEarlyPir(ClosureVersion* closure) {
     }
 }
 
-void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
+void ClosureStreamLogger::pirOptimizationsFinished(ClosureVersion* closure) {
     auto name = version->name();
     if (options.includes(DebugFlag::PrintPirAfterOpt) &&
         std::regex_match(name.begin(), name.end(), options.functionFilter)) {
@@ -99,9 +100,9 @@ static bool shouldLog(ClosureVersion* version, const PirTranslator* pass,
     return false;
 }
 
-void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
-                                       const PirTranslator* pass,
-                                       size_t passnr) {
+void ClosureStreamLogger::pirOptimizationsHeader(ClosureVersion* closure,
+                                                 const PirTranslator* pass,
+                                                 size_t passnr) {
     if (shouldLog(closure, pass, options)) {
         preparePrint();
         std::stringstream ss;
@@ -110,8 +111,8 @@ void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
     }
 }
 
-void LogStream::pirOptimizations(ClosureVersion* closure,
-                                 const PirTranslator* pass) {
+void ClosureStreamLogger::pirOptimizations(ClosureVersion* closure,
+                                           const PirTranslator* pass) {
     if (shouldLog(closure, pass, options)) {
         if (options.includes(DebugFlag::OnlyChanges)) {
             static std::string last = "";
@@ -129,7 +130,7 @@ void LogStream::pirOptimizations(ClosureVersion* closure,
     }
 }
 
-void LogStream::finalRIR(Function* fun) {
+void ClosureStreamLogger::finalRIR(Function* fun) {
     if (options.includes(DebugFlag::PrintFinalRir)) {
         preparePrint();
         section("Final RIR");
@@ -138,8 +139,8 @@ void LogStream::finalRIR(Function* fun) {
     }
 }
 
-void LogStream::afterAllocator(Code* code,
-                               std::function<void(std::ostream&)> allocDebug) {
+void ClosureStreamLogger::afterAllocator(
+    Code* code, std::function<void(std::ostream&)> allocDebug) {
     if (options.includes(DebugFlag::PrintAllocator)) {
         preparePrint();
         section("PIR SSA allocator");
@@ -150,7 +151,7 @@ void LogStream::afterAllocator(Code* code,
     }
 }
 
-void LogStream::CSSA(Code* code) {
+void ClosureStreamLogger::CSSA(Code* code) {
     if (options.includes(DebugFlag::PrintCSSA)) {
         preparePrint();
         section("CSSA Version");
@@ -160,7 +161,7 @@ void LogStream::CSSA(Code* code) {
     }
 }
 
-void LogStream::finalPIR(ClosureVersion* code) {
+void ClosureStreamLogger::finalPIR(ClosureVersion* code) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         preparePrint();
         section("Final PIR Version");
@@ -170,7 +171,8 @@ void LogStream::finalPIR(ClosureVersion* code) {
     }
 }
 
-void LogStream::unsupportedBC(const std::string& warning, const rir::BC& bc) {
+void ClosureStreamLogger::unsupportedBC(const std::string& warning,
+                                        const rir::BC& bc) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
         out << "Warning: " << warning << ": ";
@@ -190,30 +192,30 @@ void StreamLogger::warn(const std::string& msg) {
     }
 }
 
-void LogStream::warn(const std::string& msg) {
+void ClosureStreamLogger::warn(const std::string& msg) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
         out << "Warning: " << msg << " in " << version->name() << "\n";
     }
 }
 
-void LogStream::failed(const std::string& msg) {
+void ClosureStreamLogger::failed(const std::string& msg) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
         out << "Failed: " << msg << " in " << version->name() << "\n";
     }
 }
 
-void LogStream::highlightOn() {
+void ClosureStreamLogger::highlightOn() {
     if (tty())
         ConsoleColor::red(out);
 }
-void LogStream::highlightOff() {
+void ClosureStreamLogger::highlightOff() {
     if (tty())
         ConsoleColor::clear(out);
 }
 
-void LogStream::header() {
+void ClosureStreamLogger::header() {
     std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
                             options.style != DebugStyle::Standard
                         ? "// "
@@ -237,21 +239,21 @@ void LogStream::header() {
     highlightOff();
 }
 
-void LogStream::footer() {
+void ClosureStreamLogger::footer() {
     std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
                             options.style != DebugStyle::Standard
                         ? "// "
                         : "";
     highlightOn();
     out << c << "│ " << std::left << std::setw(77) << version->name() << "│\n";
-    out << c << "└";
+    out << c << "���";
     for (size_t i = 0; i < 78; ++i)
         out << "─";
     out << "┘\n";
     highlightOff();
 }
 
-void LogStream::section(const std::string& title) {
+void ClosureStreamLogger::section(const std::string& title) {
     std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
                             options.style != DebugStyle::Standard
                         ? "// "

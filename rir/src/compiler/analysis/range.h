@@ -79,7 +79,7 @@ struct RangeAnalysisState {
 class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
                                             true, AnalysisDebugLevel::None> {
   public:
-    RangeAnalysis(ClosureVersion* cls, LogStream& log)
+    RangeAnalysis(ClosureVersion* cls, ClosureStreamLogger& log)
         : StaticAnalysis("Range", cls, cls, log) {}
 
     AbstractResult apply(RangeAnalysisState& state,

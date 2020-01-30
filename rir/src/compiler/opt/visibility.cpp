@@ -14,7 +14,7 @@ namespace rir {
 namespace pir {
 
 void OptimizeVisibility::apply(RirCompiler&, ClosureVersion* function,
-                               LogStream& log) const {
+                               ClosureStreamLogger& log) const {
     VisibilityAnalysis visible(function, log);
 
     Visitor::run(function->entry, [&](BB* bb) {

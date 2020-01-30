@@ -17,7 +17,7 @@ namespace rir {
 namespace pir {
 
 void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
-                       LogStream& log) const {
+                       ClosureStreamLogger& log) const {
     auto code = closure->entry;
     AvailableCheckpoints checkpoint(closure, closure, log);
 

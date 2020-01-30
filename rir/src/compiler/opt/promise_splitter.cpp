@@ -9,7 +9,7 @@ namespace rir {
 namespace pir {
 
 void PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
-                            LogStream&) const {
+                            ClosureStreamLogger&) const {
 
     SmallSet<CastType*> candidates;
     SmallSet<Phi*> banned;

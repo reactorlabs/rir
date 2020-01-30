@@ -125,7 +125,7 @@ struct AAssumption {
 
 struct AvailableAssumptions
     : public StaticAnalysis<IntersectionSet<AAssumption>> {
-    AvailableAssumptions(ClosureVersion* cls, LogStream& log)
+    AvailableAssumptions(ClosureVersion* cls, ClosureStreamLogger& log)
         : StaticAnalysis("AvailableAssumptions", cls, cls, log) {}
     AbstractResult apply(IntersectionSet<AAssumption>& state,
                          Instruction* i) const {
@@ -150,7 +150,7 @@ struct AvailableAssumptions
 };
 
 void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
-                                LogStream& log) const {
+                                ClosureStreamLogger& log) const {
     {
         Visitor::run(function->entry, [&](BB* bb) {
             if (bb->isBranch()) {

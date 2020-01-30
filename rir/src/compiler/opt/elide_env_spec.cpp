@@ -15,7 +15,7 @@ namespace rir {
 namespace pir {
 
 void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
-                         LogStream& log) const {
+                         ClosureStreamLogger& log) const {
 
     constexpr bool debug = false;
     AvailableCheckpoints checkpoint(function, function, log);
