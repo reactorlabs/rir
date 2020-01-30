@@ -51,7 +51,7 @@ class StackUseAnalysis : public StaticAnalysis<StackUseAnalysisState> {
     LivenessIntervals const& liveness;
 
   public:
-    StackUseAnalysis(ClosureVersion* cls, Code* code, LogStream& log,
+    StackUseAnalysis(ClosureVersion* cls, Code* code, ClosureStreamLogger& log,
                      LivenessIntervals const& liveness)
         : StaticAnalysis("Stack Use", cls, code, log), liveness(liveness) {}
 

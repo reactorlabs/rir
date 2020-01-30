@@ -325,7 +325,8 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
+void Cleanup::apply(RirCompiler&, ClosureVersion* function,
+                    ClosureStreamLogger&) const {
     TheCleanup s(function);
     s();
 }

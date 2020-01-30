@@ -14,7 +14,7 @@ class PirTranslator {
     explicit PirTranslator(const std::string& name) : name(name) {}
 
     virtual void apply(RirCompiler&, ClosureVersion* function,
-                       LogStream&) const = 0;
+                       ClosureStreamLogger&) const = 0;
     std::string getName() const { return this->name; }
     virtual ~PirTranslator() {}
 

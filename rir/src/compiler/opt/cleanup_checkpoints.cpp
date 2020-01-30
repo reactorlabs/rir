@@ -8,7 +8,7 @@ namespace rir {
 namespace pir {
 
 void CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
-                               LogStream&) const {
+                               ClosureStreamLogger&) const {
     auto apply = [](Code* code) {
         std::unordered_set<Checkpoint*> used;
         Visitor::run(code->entry, [&](Instruction* i) {

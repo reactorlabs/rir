@@ -16,7 +16,7 @@ namespace rir {
 namespace pir {
 
 void TypeInference::apply(RirCompiler&, ClosureVersion* function,
-                          LogStream& log) const {
+                          ClosureStreamLogger& log) const {
 
     RangeAnalysis rangeAnalysis(function, log);
 

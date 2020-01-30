@@ -425,7 +425,8 @@ size_t Parameter::INLINER_INLINE_UNLIKELY =
         ? atoi(getenv("PIR_INLINER_INLINE_UNLIKELY"))
         : 0;
 
-void Inline::apply(RirCompiler&, ClosureVersion* version, LogStream&) const {
+void Inline::apply(RirCompiler&, ClosureVersion* version,
+                   ClosureStreamLogger&) const {
     TheInliner s(version);
     s();
 }

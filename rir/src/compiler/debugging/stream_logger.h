@@ -24,15 +24,15 @@ namespace pir {
 class PirTranslator;
 class StreamLogger;
 
-class LogStream {
+class ClosureStreamLogger {
   private:
     const ClosureVersion* version;
     DebugOptions options;
     bool printedAnything = false;
 
   public:
-    LogStream(const LogStream&) = delete;
-    LogStream& operator=(const LogStream&) = delete;
+    ClosureStreamLogger(const ClosureStreamLogger&) = delete;
+    ClosureStreamLogger& operator=(const ClosureStreamLogger&) = delete;
 
     void pirOptimizationsFinished(ClosureVersion*);
     void compilationEarlyPir(ClosureVersion*);
@@ -55,7 +55,9 @@ class LogStream {
         printedAnything = true;
     }
 
-    virtual ~LogStream() { assert(!printedAnything && "Forgot to flush"); }
+    virtual ~ClosureStreamLogger() {
+        assert(!printedAnything && "Forgot to flush");
+    }
 
     virtual void flush() {
         if (printedAnything) {
@@ -66,7 +68,7 @@ class LogStream {
     }
 
     template <typename T>
-    friend LogStream& operator<<(LogStream& log, T dump) {
+    friend ClosureStreamLogger& operator<<(ClosureStreamLogger& log, T dump) {
         log.out << dump;
         return log;
     }
@@ -88,13 +90,14 @@ class LogStream {
     void header();
     void footer();
 
-    LogStream(const DebugOptions& options, const ClosureVersion* version,
-              std::ostream& stream = std::cout)
+    ClosureStreamLogger(const DebugOptions& options,
+                        const ClosureVersion* version,
+                        std::ostream& stream = std::cout)
         : version(version), options(options), out(stream) {}
     friend class StreamLogger;
 };
 
-class FileLogStream : public LogStream {
+class FileLogStream : public ClosureStreamLogger {
   public:
     ~FileLogStream() override;
 
@@ -106,14 +109,14 @@ class FileLogStream : public LogStream {
 
     FileLogStream(const DebugOptions& options, const ClosureVersion* version,
                   const std::string& fileName)
-        : LogStream(options, version, fstream), fstream(fileName) {}
+        : ClosureStreamLogger(options, version, fstream), fstream(fileName) {}
     friend class StreamLogger;
 };
 
-class BufferedLogStream : public LogStream {
+class BufferedLogStream : public ClosureStreamLogger {
   public:
     void flush() override {
-        LogStream::flush();
+        ClosureStreamLogger::flush();
         actualOut << sstream.str();
         sstream.str("");
         actualOut.flush();
@@ -128,7 +131,8 @@ class BufferedLogStream : public LogStream {
 
     BufferedLogStream(const DebugOptions& options, ClosureVersion* version,
                       std::ostream& actualOut = std::cout)
-        : LogStream(options, version, sstream), actualOut(actualOut) {}
+        : ClosureStreamLogger(options, version, sstream), actualOut(actualOut) {
+    }
     friend class StreamLogger;
 };
 
@@ -142,8 +146,8 @@ class StreamLogger {
     StreamLogger(const StreamLogger&) = delete;
     StreamLogger& operator=(const StreamLogger&) = delete;
 
-    LogStream& begin(ClosureVersion* cls);
-    LogStream& get(ClosureVersion* cls) {
+    ClosureStreamLogger& begin(ClosureVersion* cls);
+    ClosureStreamLogger& get(ClosureVersion* cls) {
         if (!streams.count(cls))
             begin(cls);
         return *streams.at(cls);
@@ -157,7 +161,8 @@ class StreamLogger {
     void close(ClosureVersion* cls) { streams.erase(cls); }
 
   private:
-    std::unordered_map<ClosureVersion*, std::unique_ptr<LogStream>> streams;
+    std::unordered_map<ClosureVersion*, std::unique_ptr<ClosureStreamLogger>>
+        streams;
     DebugOptions options;
 };
 

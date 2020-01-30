@@ -29,7 +29,8 @@ struct AvailableCheckpointsApply {
 class FwdAvailableCheckpoints
     : public StaticAnalysis<AbstractUnique<Checkpoint>> {
   public:
-    FwdAvailableCheckpoints(ClosureVersion* cls, Code* code, LogStream& log)
+    FwdAvailableCheckpoints(ClosureVersion* cls, Code* code,
+                            ClosureStreamLogger& log)
         : StaticAnalysis("FwdAvailableCheckpoints", cls, code, log) {}
 
     AbstractResult apply(AbstractUnique<Checkpoint>& state,
@@ -45,7 +46,8 @@ class FwdAvailableCheckpoints
 class RwdAvailableCheckpoints
     : public StaticAnalysis<AbstractUnique<Checkpoint>, DummyState, false> {
   public:
-    RwdAvailableCheckpoints(ClosureVersion* cls, Code* code, LogStream& log)
+    RwdAvailableCheckpoints(ClosureVersion* cls, Code* code,
+                            ClosureStreamLogger& log)
         : StaticAnalysis("RwdAvailableCheckpoints", cls, code, log) {}
 
     AbstractResult apply(AbstractUnique<Checkpoint>& state,
@@ -66,7 +68,8 @@ class AvailableCheckpoints {
     RwdAvailableCheckpoints rwd;
 
   public:
-    AvailableCheckpoints(ClosureVersion* cls, Code* code, LogStream& log)
+    AvailableCheckpoints(ClosureVersion* cls, Code* code,
+                         ClosureStreamLogger& log)
         : fwd(cls, code, log), rwd(cls, code, log) {}
 
     Checkpoint* at(Instruction* i) { return fwd.reaching(i); }

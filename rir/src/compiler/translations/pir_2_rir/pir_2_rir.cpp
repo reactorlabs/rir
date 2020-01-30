@@ -54,7 +54,7 @@ class Context {
 class Pir2Rir {
   public:
     Pir2Rir(Pir2RirCompiler& cmp, ClosureVersion* cls, bool dryRun,
-            LogStream& log)
+            ClosureStreamLogger& log)
         : compiler(cmp), cls(cls), dryRun(dryRun), log(log) {}
     rir::Code* compileCode(Context& ctx, Code* code);
     rir::Code* getPromise(Context& ctx, Promise* code);
@@ -68,7 +68,7 @@ class Pir2Rir {
     ClosureVersion* cls;
     std::unordered_map<Promise*, rir::Code*> promises;
     bool dryRun;
-    LogStream& log;
+    ClosureStreamLogger& log;
 
     class CodeBuffer {
       private:

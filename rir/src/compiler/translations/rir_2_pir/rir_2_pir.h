@@ -14,8 +14,8 @@ struct RirStack;
 
 class Rir2Pir {
   public:
-    Rir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction, LogStream& log,
-            const std::string& name)
+    Rir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction,
+            ClosureStreamLogger& log, const std::string& name)
         : compiler(cmp), srcFunction(srcFunction), log(log), name(name) {}
 
     bool tryCompile(Builder& insert) __attribute__((warn_unused_result)) {
@@ -45,7 +45,7 @@ class Rir2Pir {
 
     Rir2PirCompiler& compiler;
     rir::Function* srcFunction;
-    LogStream& log;
+    ClosureStreamLogger& log;
     std::string name;
 
     typedef std::unordered_map<
@@ -67,7 +67,7 @@ class Rir2Pir {
 class PromiseRir2Pir : public Rir2Pir {
   public:
     PromiseRir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction,
-                   LogStream& log, const std::string& name)
+                   ClosureStreamLogger& log, const std::string& name)
         : Rir2Pir(cmp, srcFunction, log, name) {}
 
   private:

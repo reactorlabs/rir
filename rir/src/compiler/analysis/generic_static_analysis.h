@@ -103,7 +103,7 @@ class StaticAnalysis {
     AbstractState exitpoint;
 
     bool done = false;
-    LogStream& log;
+    ClosureStreamLogger& log;
 
     ClosureVersion* closure;
     Code* code;
@@ -111,14 +111,14 @@ class StaticAnalysis {
 
   public:
     StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
-                   LogStream& log)
+                   ClosureStreamLogger& log)
         : name(name), log(log), closure(cls), code(code) {
         snapshots.resize(code->nextBBId);
         seedEntries();
     }
     StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
                    const AbstractState& initialState,
-                   GlobalAbstractState* globalState, LogStream& log)
+                   GlobalAbstractState* globalState, ClosureStreamLogger& log)
         : name(name), globalState(globalState), log(log), closure(cls),
           code(code) {
         snapshots.resize(code->nextBBId);

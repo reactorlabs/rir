@@ -7,7 +7,7 @@ namespace rir {
 namespace pir {
 
 void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
-                       LogStream&) const {
+                       ClosureStreamLogger&) const {
 
     auto isTarget = [](Instruction* j) {
         if (CallSafeBuiltin::Cast(j))

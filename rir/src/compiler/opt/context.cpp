@@ -14,7 +14,7 @@ namespace rir {
 namespace pir {
 
 void OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
-                             LogStream& log) const {
+                             ClosureStreamLogger& log) const {
     UnnecessaryContexts unnecessary(function, log);
 
     std::unordered_set<Instruction*> toRemove;

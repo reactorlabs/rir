@@ -9,7 +9,7 @@ namespace pir {
 ScopeAnalysis::ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
                              const ScopeAnalysisState& initialState,
                              ScopeAnalysisResults* globalState, size_t depth,
-                             LogStream& log)
+                             ClosureStreamLogger& log)
     : StaticAnalysis("Scope", cls, prom, initialState, globalState, log),
       depth(depth), staticClosureEnv(promEnv) {}
 

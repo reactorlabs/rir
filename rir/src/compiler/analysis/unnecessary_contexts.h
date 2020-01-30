@@ -38,7 +38,7 @@ struct UnnecessaryContextsState : public AbstractUnique<PushContext> {
 
 class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
   public:
-    UnnecessaryContexts(ClosureVersion* cls, LogStream& log)
+    UnnecessaryContexts(ClosureVersion* cls, ClosureStreamLogger& log)
         : StaticAnalysis("UnnecessaryContexts", cls, cls, log) {}
 
     AbstractResult apply(UnnecessaryContextsState& state,
