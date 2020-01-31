@@ -89,9 +89,8 @@ class TheScopeResolution {
     ClosureVersion* function;
     DominanceGraph dom;
     DominanceFrontier dfront;
-    ClosureStreamLogger& log;
-    explicit TheScopeResolution(ClosureVersion* function,
-                                ClosureStreamLogger& log)
+    LogStream& log;
+    explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
         : function(function), dom(function), dfront(function, dom), log(log) {}
 
     void operator()() {
@@ -660,7 +659,7 @@ namespace rir {
 namespace pir {
 
 void ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
-                            ClosureStreamLogger& log) const {
+                            LogStream& log) const {
     TheScopeResolution s(function, log);
     s();
 

@@ -39,8 +39,7 @@ class SSAAllocator {
 
     std::unordered_map<Value*, SlotNumber> allocation;
 
-    explicit SSAAllocator(Code* code, ClosureVersion* cls,
-                          ClosureStreamLogger& log)
+    explicit SSAAllocator(Code* code, ClosureVersion* cls, LogStream& log)
         : dom(code), code(code), bbsSize(code->nextBBId),
           livenessIntervals(code, bbsSize),
           sa(cls, code, log, livenessIntervals) {

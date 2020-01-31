@@ -216,13 +216,13 @@ void Rir2PirCompiler::optimizeModule() {
     for (const auto& translation : PassScheduler::instance()) {
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
-                auto& log = logger.get(v);
-                log.pirOptimizationsHeader(v, translation.get(), passnr++);
+                auto log = logger.get(v).forPass(passnr++);
+                log.pirOptimizationsHeader(v, translation.get());
 
                 if (MEASURE_COMPILER_PERF)
                     startTime = std::chrono::high_resolution_clock::now();
 
-                translation->apply(*this, v, log);
+                translation->apply(*this, v, log.out());
                 if (MEASURE_COMPILER_PERF) {
                     endTime = std::chrono::high_resolution_clock::now();
                     std::chrono::duration<double> passDuration =
@@ -231,6 +231,7 @@ void Rir2PirCompiler::optimizeModule() {
                 }
 
                 log.pirOptimizations(v, translation.get());
+                log.flush();
 
 #ifdef FULLVERIFIER
                 Verify::apply(v, "Error after pass " + translation->getName(),

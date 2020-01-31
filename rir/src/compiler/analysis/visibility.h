@@ -38,7 +38,7 @@ class LastVisibilityUpdate {
 
 class VisibilityAnalysis : public StaticAnalysis<LastVisibilityUpdate> {
   public:
-    VisibilityAnalysis(ClosureVersion* cls, ClosureStreamLogger& log)
+    VisibilityAnalysis(ClosureVersion* cls, LogStream& log)
         : StaticAnalysis("VisibilityAnalysis", cls, cls, log) {}
 
     AbstractResult apply(LastVisibilityUpdate& vis,

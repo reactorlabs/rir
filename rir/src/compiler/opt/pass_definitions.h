@@ -15,8 +15,8 @@ class Closure;
     PirTranslator {                                                            \
       public:                                                                  \
         name() : PirTranslator(#name){};                                       \
-        void apply(RirCompiler&, ClosureVersion* function,                     \
-                   ClosureStreamLogger& log) const final override;             \
+        void apply(RirCompiler&, ClosureVersion* function, LogStream& log)     \
+            const final override;                                              \
     };
 
 /*
@@ -152,8 +152,8 @@ class PASS(HoistInstruction);
 class PhaseMarker : public PirTranslator {
   public:
     explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}
-    void apply(RirCompiler&, ClosureVersion*,
-               ClosureStreamLogger&) const final override {}
+    void apply(RirCompiler&, ClosureVersion*, LogStream&) const final override {
+    }
     bool isPhaseMarker() const final override { return true; }
 };
 

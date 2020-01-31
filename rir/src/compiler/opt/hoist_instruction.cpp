@@ -14,7 +14,7 @@ namespace rir {
 namespace pir {
 
 void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
-                             ClosureStreamLogger&) const {
+                             LogStream&) const {
     DominanceGraph dom(function);
 
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {

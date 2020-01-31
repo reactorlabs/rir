@@ -24,8 +24,8 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t, Value* env) {
 }
 
 void InsertCast::operator()() {
-    AvailableCheckpoints checkpoint(
-        nullptr, code, StreamLogger(DebugOptions(0)).begin(nullptr));
+    SimpleLogStream stdOut;
+    AvailableCheckpoints checkpoint(nullptr, code, stdOut);
     Visitor::run(code->entry, [&](BB* bb) { apply(bb, checkpoint); });
 }
 
