@@ -71,7 +71,7 @@ class FileLogStream : public LogStream {
     std::ofstream fstream;
 
   public:
-    FileLogStream(const std::string& fileName)
+    explicit FileLogStream(const std::string& fileName)
         : LogStream(fstream), fstream(fileName) {}
     ~FileLogStream() override;
 
@@ -83,7 +83,7 @@ class BufferedLogStream : public LogStream {
     std::ostream& actualOut;
 
   public:
-    BufferedLogStream(std::ostream& actualOut = std::cout)
+    explicit BufferedLogStream(std::ostream& actualOut = std::cout)
         : LogStream(sstream), actualOut(actualOut) {}
 
     void flush() override {
@@ -98,45 +98,61 @@ class BufferedLogStream : public LogStream {
 
 class SimpleLogStream : public LogStream {
   public:
-    SimpleLogStream(std::ostream& out = std::cout) : LogStream(out) {}
+    explicit SimpleLogStream(std::ostream& out = std::cout) : LogStream(out) {}
 
     bool tty() override;
 };
 
-class PassStreamLogger {
-  private:
-    const size_t number;
-    DebugOptions options;
-    ClosureStreamLogger& parent;
+class GenericStreamLogger {
+  protected:
     std::shared_ptr<LogStream> _out;
+    const DebugOptions options;
+    const ClosureVersion* version;
+
+    GenericStreamLogger(DebugOptions options, const ClosureVersion* version,
+                        std::shared_ptr<LogStream>& out)
+        : _out(out), options(options), version(version) {}
+
+    void header();
+    void footer();
+    void highlightOn();
+    void highlightOff();
 
   public:
     LogStream& out() { return *_out; }
 
-    void pirOptimizationsHeader(ClosureVersion*, const PirTranslator*);
-    void pirOptimizations(ClosureVersion*, const PirTranslator*);
+    virtual void preparePrint() = 0;
+    virtual void flush() = 0;
 
-    void flush() { out().flush(); }
+    void section(const std::string&);
+    void failed(const std::string& msg);
+    void warn(const std::string& msg);
+};
+
+class PassStreamLogger : public GenericStreamLogger {
+    const size_t number;
+    ClosureStreamLogger& parent;
+
+  public:
+    void pirOptimizationsHeader(const PirTranslator*);
+    void pirOptimizations(const PirTranslator*);
+
+    void preparePrint() override;
+    void flush() override { out().flush(); }
 
   protected:
-    PassStreamLogger(size_t number, DebugOptions options,
-                     ClosureStreamLogger& parent,
-                     std::shared_ptr<LogStream> out)
-        : number(number), options(options), parent(parent), _out(out) {}
+    PassStreamLogger(size_t number, ClosureStreamLogger& parent,
+                     std::shared_ptr<LogStream> out);
 
     friend class ClosureStreamLogger;
 };
 
-class ClosureStreamLogger {
+class ClosureStreamLogger : public GenericStreamLogger {
   private:
     bool printedAnything = false;
     const size_t logId;
-    const ClosureVersion* version;
-    DebugOptions options;
-    std::shared_ptr<LogStream> _out;
 
   public:
-    LogStream& out() { return *_out; }
     PassStreamLogger forPass(size_t number);
 
     void pirOptimizationsFinished(ClosureVersion*);
@@ -146,18 +162,14 @@ class ClosureStreamLogger {
     void finalPIR(ClosureVersion*);
     void finalRIR(Function*);
     void unsupportedBC(const std::string&, const rir::BC&);
-    void failed(const std::string& msg);
-    void warn(const std::string& msg);
 
-    void section(const std::string&);
-
-    void preparePrint() {
+    void preparePrint() override {
         if (!printedAnything)
             header();
         printedAnything = true;
     }
 
-    void flush() {
+    void flush() override {
         if (printedAnything) {
             footer();
             out().flush();
@@ -169,12 +181,7 @@ class ClosureStreamLogger {
     ClosureStreamLogger(const DebugOptions& options, const size_t logId,
                         const ClosureVersion* version,
                         std::shared_ptr<LogStream> out)
-        : logId(logId), version(version), options(options), _out(out) {}
-
-    void header();
-    void footer();
-    void highlightOn();
-    void highlightOff();
+        : GenericStreamLogger(options, version, out), logId(logId) {}
 
     friend class PassStreamLogger;
     friend class StreamLogger;
