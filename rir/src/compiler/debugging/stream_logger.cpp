@@ -8,11 +8,11 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
-
+#include <sys/stat.h>
 namespace rir {
 namespace pir {
 
-uint64_t StreamLogger::logId = 0;
+size_t StreamLogger::logId = 0;
 StreamLogger::~StreamLogger() {
     while (!streams.empty()) {
         auto it = streams.begin();
@@ -25,19 +25,29 @@ FileLogStream::~FileLogStream() { fstream.close(); }
 bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 bool SimpleLogStream::tty() { return ConsoleColor::isTTY(out); }
 
+static std::string closureLogPath(size_t logId, const ClosureVersion* cls) {
+    std::stringstream filename;
+    filename << cls->owner()->name() << "-pir-function-" << std::setfill('0')
+             << std::setw(5) << logId;
+    return filename.str();
+}
+
+static std::string logFileExtension(DebugOptions options) {
+    if (options.style == DebugStyle::Standard)
+        return ".log";
+    else
+        return ".dot";
+}
+
 ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
     assert(!streams.count(cls) && "You already started this function");
+    std::string baseName = closureLogPath(logId, cls);
 
+    // Create inner stream
     LogStream* logStream;
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
-        filename << cls->owner()->name() << "-pir-function-"
-                 << std::setfill('0') << std::setw(5) << logId++;
-        std::string folderName = filename.str();
-        if (options.style == DebugStyle::Standard)
-            filename << ".log";
-        else
-            filename << ".dot";
+        filename << baseName << logFileExtension(options);
         logStream = new FileLogStream(filename.str());
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
@@ -45,11 +55,21 @@ ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
         else
             logStream = new BufferedLogStream;
     }
+
+    // Create folder for individual pass streams
+    if (options.includes(DebugFlag::PrintPassesIntoFolders)) {
+        mkdir(baseName.c_str(), 0777);
+    }
+
+    // Add stream logger wrapper
     streams.emplace(cls,
-                    ClosureStreamLogger(options, cls,
+                    ClosureStreamLogger(options, logId, cls,
                                         std::shared_ptr<LogStream>(logStream)));
     ClosureStreamLogger& logger = streams.at(cls);
+    // Increment log id
+    logId++;
 
+    // Print early rir
     if (options.includes(DebugFlag::PrintEarlyRir)) {
         logger.preparePrint();
         logger.section("Original version");
@@ -60,8 +80,24 @@ ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
     return logger;
 }
 
+static std::string passLogFileName(size_t number) {
+    std::stringstream name;
+    name << std::setfill('0') << std::setw(5) << number;
+    return name.str();
+}
+
 PassStreamLogger ClosureStreamLogger::forPass(size_t number) {
-    return PassStreamLogger(number, options, *this, _out);
+    if (options.includes(DebugFlag::PrintPassesIntoFolders)) {
+        std::stringstream path;
+        path << closureLogPath(logId, version) << "/" << passLogFileName(number)
+             << logFileExtension(options);
+        FileLogStream* stream = new FileLogStream(path.str());
+        std::cout << path.str() << std::endl;
+        return PassStreamLogger(number, options, *this,
+                                std::shared_ptr<LogStream>(stream));
+    } else {
+        return PassStreamLogger(number, options, *this, _out);
+    }
 }
 
 void ClosureStreamLogger::compilationEarlyPir(ClosureVersion* closure) {

@@ -130,6 +130,7 @@ class PassStreamLogger {
 class ClosureStreamLogger {
   private:
     bool printedAnything = false;
+    const size_t logId;
     const ClosureVersion* version;
     DebugOptions options;
     std::shared_ptr<LogStream> _out;
@@ -165,10 +166,10 @@ class ClosureStreamLogger {
     }
 
   protected:
-    ClosureStreamLogger(const DebugOptions& options,
+    ClosureStreamLogger(const DebugOptions& options, const size_t logId,
                         const ClosureVersion* version,
                         std::shared_ptr<LogStream> out)
-        : version(version), options(options), _out(out) {}
+        : logId(logId), version(version), options(options), _out(out) {}
 
     void header();
     void footer();
@@ -180,11 +181,11 @@ class ClosureStreamLogger {
 };
 
 class StreamLogger {
+    static size_t logId;
+
   public:
     explicit StreamLogger(const DebugOptions& options) : options(options) {}
     ~StreamLogger();
-
-    static uint64_t logId;
 
     StreamLogger(const StreamLogger&) = delete;
     StreamLogger& operator=(const StreamLogger&) = delete;
