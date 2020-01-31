@@ -299,7 +299,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
     using StaticAnalysis::PositioningStyle;
     const CFG cfg;
     explicit ForceDominanceAnalysis(ClosureVersion* cls, Code* code,
-                                    ClosureStreamLogger& log)
+                                    LogStream& log)
         : StaticAnalysis("ForceDominance", cls, code, log), cfg(code) {}
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
@@ -372,7 +372,7 @@ namespace rir {
 namespace pir {
 
 void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
-                           ClosureStreamLogger& log) const {
+                           LogStream& log) const {
     SmallSet<Force*> toInline;
     SmallSet<Force*> needsUpdate;
     SmallMap<Force*, Force*> dominatedBy;

@@ -18,7 +18,7 @@ namespace pir {
 
 // Search for ExpandDots(Dotlist(...)) pairs and statically expand them
 void DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
-                       ClosureStreamLogger& log) const {
+                       LogStream& log) const {
     Visitor::run(closure->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {

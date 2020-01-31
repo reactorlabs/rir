@@ -292,7 +292,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     Visitor::run(code->entry,
                  [](Instruction* i) { i->updateTypeAndEffects(); });
 
-    SSAAllocator alloc(code, cls, log);
+    SSAAllocator alloc(code, cls, log.out());
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
     alloc.verify();
 
@@ -310,7 +310,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             bbLabels[bb] = ctx.cs().mkLabel();
     });
 
-    LastEnv lastEnv(cls, code, log);
+    LastEnv lastEnv(cls, code, log.out());
     std::unordered_map<Value*, BC::Label> pushContexts;
     std::unordered_set<BC::Label> pushContextsPopped;
 
@@ -322,7 +322,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     NeedsRefcountAdjustment refcount;
     {
-        StaticReferenceCount refcountAnalysis(cls, log);
+        StaticReferenceCount refcountAnalysis(cls, log.out());
         refcountAnalysis();
         refcount = refcountAnalysis.getGlobalState();
     }

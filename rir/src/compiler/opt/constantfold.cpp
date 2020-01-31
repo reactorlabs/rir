@@ -92,7 +92,7 @@ namespace rir {
 namespace pir {
 
 void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
-                         ClosureStreamLogger&) const {
+                         LogStream&) const {
     std::unordered_map<BB*, bool> branchRemoval;
     DominanceGraph dom(function);
 

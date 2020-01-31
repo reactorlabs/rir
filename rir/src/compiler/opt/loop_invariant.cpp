@@ -142,7 +142,7 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
 }
 
 void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
-                          ClosureStreamLogger& log) const {
+                          LogStream& log) const {
     LoopDetection loops(function);
 
     for (auto& loop : loops) {

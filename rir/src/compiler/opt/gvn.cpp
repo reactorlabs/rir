@@ -10,8 +10,7 @@
 namespace rir {
 namespace pir {
 
-void GVN::apply(RirCompiler&, ClosureVersion* cls,
-                ClosureStreamLogger& log) const {
+void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<Value*, size_t> number;
     {

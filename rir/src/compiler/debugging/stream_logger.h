@@ -22,22 +22,124 @@ class BC;
 namespace pir {
 
 class PirTranslator;
+class ClosureStreamLogger;
 class StreamLogger;
-
-class ClosureStreamLogger {
+class LogStream {
   private:
-    const ClosureVersion* version;
-    DebugOptions options;
     bool printedAnything = false;
 
   public:
-    ClosureStreamLogger(const ClosureStreamLogger&) = delete;
-    ClosureStreamLogger& operator=(const ClosureStreamLogger&) = delete;
+    std::ostream& out;
+
+    LogStream(const LogStream&) = delete;
+    LogStream& operator=(const LogStream&) = delete;
+
+    virtual bool tty() = 0;
+
+    virtual ~LogStream() { assert(!printedAnything && "Forgot to flush"); }
+
+    virtual void flush() {
+        if (printedAnything) {
+            out.flush();
+        }
+        printedAnything = false;
+    }
+
+    template <typename T>
+    friend LogStream& operator<<(LogStream& log, T dump) {
+        log.printedAnything = true;
+        log.out << dump;
+        return log;
+    }
+
+    template <typename T>
+    void operator()(T* dump) {
+        printedAnything = true;
+        dump->print(out, tty());
+    }
+    template <typename T>
+    void operator()(T dump) {
+        printedAnything = true;
+        dump.print(out, tty());
+    }
+
+  protected:
+    LogStream(std::ostream& out) : out(out) {}
+};
+
+class FileLogStream : public LogStream {
+    std::ofstream fstream;
+
+  public:
+    FileLogStream(const std::string& fileName)
+        : LogStream(fstream), fstream(fileName) {}
+    ~FileLogStream() override;
+
+    bool tty() override { return false; }
+};
+
+class BufferedLogStream : public LogStream {
+    std::stringstream sstream;
+    std::ostream& actualOut;
+
+  public:
+    BufferedLogStream(std::ostream& actualOut = std::cout)
+        : LogStream(sstream), actualOut(actualOut) {}
+
+    void flush() override {
+        LogStream::flush();
+        actualOut << sstream.str();
+        sstream.str("");
+        actualOut.flush();
+    }
+
+    bool tty() override;
+};
+
+class SimpleLogStream : public LogStream {
+  public:
+    SimpleLogStream(std::ostream& out = std::cout) : LogStream(out) {}
+
+    bool tty() override;
+};
+
+class PassStreamLogger {
+  private:
+    const size_t number;
+    DebugOptions options;
+    ClosureStreamLogger& parent;
+    std::shared_ptr<LogStream> _out;
+
+  public:
+    LogStream& out() { return *_out; }
+
+    void pirOptimizationsHeader(ClosureVersion*, const PirTranslator*);
+    void pirOptimizations(ClosureVersion*, const PirTranslator*);
+
+    void flush() { out().flush(); }
+
+  protected:
+    PassStreamLogger(size_t number, DebugOptions options,
+                     ClosureStreamLogger& parent,
+                     std::shared_ptr<LogStream> out)
+        : number(number), options(options), parent(parent), _out(out) {}
+
+    friend class ClosureStreamLogger;
+};
+
+class ClosureStreamLogger {
+  private:
+    bool printedAnything = false;
+    const ClosureVersion* version;
+    DebugOptions options;
+    std::shared_ptr<LogStream> _out;
+
+  public:
+    LogStream& out() { return *_out; }
+    PassStreamLogger forPass(size_t number);
 
     void pirOptimizationsFinished(ClosureVersion*);
     void compilationEarlyPir(ClosureVersion*);
-    void pirOptimizationsHeader(ClosureVersion*, const PirTranslator*, size_t);
-    void pirOptimizations(ClosureVersion*, const PirTranslator*);
     void afterAllocator(Code*, std::function<void(std::ostream&)>);
     void CSSA(Code*);
     void finalPIR(ClosureVersion*);
@@ -47,7 +149,6 @@ class ClosureStreamLogger {
     void warn(const std::string& msg);
 
     void section(const std::string&);
-    virtual bool tty();
 
     void preparePrint() {
         if (!printedAnything)
@@ -55,84 +156,26 @@ class ClosureStreamLogger {
         printedAnything = true;
     }
 
-    virtual ~ClosureStreamLogger() {
-        assert(!printedAnything && "Forgot to flush");
-    }
-
-    virtual void flush() {
+    void flush() {
         if (printedAnything) {
             footer();
-            out.flush();
+            out().flush();
         }
         printedAnything = false;
     }
 
-    template <typename T>
-    friend ClosureStreamLogger& operator<<(ClosureStreamLogger& log, T dump) {
-        log.out << dump;
-        return log;
-    }
-
-    template <typename T>
-    void operator()(T* dump) {
-        dump->print(out, tty());
-    }
-    template <typename T>
-    void operator()(T dump) {
-        dump.print(out, tty());
-    }
-
   protected:
-    virtual void highlightOn();
-    virtual void highlightOff();
-
-    std::ostream& out;
-    void header();
-    void footer();
-
     ClosureStreamLogger(const DebugOptions& options,
                         const ClosureVersion* version,
-                        std::ostream& stream = std::cout)
-        : version(version), options(options), out(stream) {}
-    friend class StreamLogger;
-};
+                        std::shared_ptr<LogStream> out)
+        : version(version), options(options), _out(out) {}
 
-class FileLogStream : public ClosureStreamLogger {
-  public:
-    ~FileLogStream() override;
+    void header();
+    void footer();
+    void highlightOn();
+    void highlightOff();
 
-  private:
-    std::ofstream fstream;
-
-  protected:
-    bool tty() override { return false; }
-
-    FileLogStream(const DebugOptions& options, const ClosureVersion* version,
-                  const std::string& fileName)
-        : ClosureStreamLogger(options, version, fstream), fstream(fileName) {}
-    friend class StreamLogger;
-};
-
-class BufferedLogStream : public ClosureStreamLogger {
-  public:
-    void flush() override {
-        ClosureStreamLogger::flush();
-        actualOut << sstream.str();
-        sstream.str("");
-        actualOut.flush();
-    }
-
-  private:
-    std::stringstream sstream;
-    std::ostream& actualOut;
-
-  protected:
-    bool tty() override;
-
-    BufferedLogStream(const DebugOptions& options, ClosureVersion* version,
-                      std::ostream& actualOut = std::cout)
-        : ClosureStreamLogger(options, version, sstream), actualOut(actualOut) {
-    }
+    friend class PassStreamLogger;
     friend class StreamLogger;
 };
 
@@ -150,7 +193,7 @@ class StreamLogger {
     ClosureStreamLogger& get(ClosureVersion* cls) {
         if (!streams.count(cls))
             begin(cls);
-        return *streams.at(cls);
+        return streams.at(cls);
     }
 
     void warn(const std::string& msg);
@@ -161,8 +204,7 @@ class StreamLogger {
     void close(ClosureVersion* cls) { streams.erase(cls); }
 
   private:
-    std::unordered_map<ClosureVersion*, std::unique_ptr<ClosureStreamLogger>>
-        streams;
+    std::unordered_map<ClosureVersion*, ClosureStreamLogger> streams;
     DebugOptions options;
 };
 

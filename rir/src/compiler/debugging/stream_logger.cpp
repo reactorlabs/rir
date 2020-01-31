@@ -13,23 +13,22 @@ namespace rir {
 namespace pir {
 
 uint64_t StreamLogger::logId = 0;
-
 StreamLogger::~StreamLogger() {
     while (!streams.empty()) {
         auto it = streams.begin();
-        (*it->second).flush();
+        it->second.flush();
         streams.erase(it);
     }
 }
 
 FileLogStream::~FileLogStream() { fstream.close(); }
-
-bool ClosureStreamLogger::tty() { return ConsoleColor::isTTY(out); }
 bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
+bool SimpleLogStream::tty() { return ConsoleColor::isTTY(out); }
 
 ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
     assert(!streams.count(cls) && "You already started this function");
 
+    LogStream* logStream;
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
         filename << cls->owner()->name() << "-pir-function-"
@@ -39,31 +38,37 @@ ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
             filename << ".log";
         else
             filename << ".dot";
-        streams.emplace(cls, new FileLogStream(options, cls, filename.str()));
+        logStream = new FileLogStream(filename.str());
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
-            streams.emplace(cls, new ClosureStreamLogger(options, cls));
+            logStream = new SimpleLogStream;
         else
-            streams.emplace(cls, new BufferedLogStream(options, cls));
+            logStream = new BufferedLogStream;
     }
-
-    auto& logger = get(cls);
+    streams.emplace(cls,
+                    ClosureStreamLogger(options, cls,
+                                        std::shared_ptr<LogStream>(logStream)));
+    ClosureStreamLogger& logger = streams.at(cls);
 
     if (options.includes(DebugFlag::PrintEarlyRir)) {
         logger.preparePrint();
         logger.section("Original version");
-        cls->owner()->rirFunction()->disassemble(logger.out);
-        logger.out << "\n";
+        cls->owner()->rirFunction()->disassemble(logger.out().out);
+        logger.out() << "\n";
     }
 
     return logger;
+}
+
+PassStreamLogger ClosureStreamLogger::forPass(size_t number) {
+    return PassStreamLogger(number, options, *this, _out);
 }
 
 void ClosureStreamLogger::compilationEarlyPir(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         preparePrint();
         section("Compiled to PIR Version");
-        closure->print(options.style, out, tty(),
+        closure->print(options.style, out().out, out().tty(),
                        options.includes(DebugFlag::OmitDeoptBranches));
     }
 }
@@ -74,9 +79,9 @@ void ClosureStreamLogger::pirOptimizationsFinished(ClosureVersion* closure) {
         std::regex_match(name.begin(), name.end(), options.functionFilter)) {
         preparePrint();
         section("PIR Version After Optimizations");
-        closure->print(options.style, out, tty(),
+        closure->print(options.style, out().out, out().tty(),
                        options.includes(DebugFlag::OmitDeoptBranches));
-        out << "\n";
+        out() << "\n";
     }
 }
 
@@ -100,31 +105,30 @@ static bool shouldLog(ClosureVersion* version, const PirTranslator* pass,
     return false;
 }
 
-void ClosureStreamLogger::pirOptimizationsHeader(ClosureVersion* closure,
-                                                 const PirTranslator* pass,
-                                                 size_t passnr) {
+void PassStreamLogger::pirOptimizationsHeader(ClosureVersion* closure,
+                                              const PirTranslator* pass) {
     if (shouldLog(closure, pass, options)) {
-        preparePrint();
+        parent.preparePrint();
         std::stringstream ss;
-        ss << pass->getName() << ": == " << passnr;
-        section(ss.str());
+        ss << pass->getName() << ": == " << number;
+        parent.section(ss.str());
     }
 }
 
-void ClosureStreamLogger::pirOptimizations(ClosureVersion* closure,
-                                           const PirTranslator* pass) {
+void PassStreamLogger::pirOptimizations(ClosureVersion* closure,
+                                        const PirTranslator* pass) {
     if (shouldLog(closure, pass, options)) {
         if (options.includes(DebugFlag::OnlyChanges)) {
             static std::string last = "";
             std::stringstream ss;
-            closure->print(options.style, ss, tty(),
+            closure->print(options.style, ss, out().tty(),
                            options.includes(DebugFlag::OmitDeoptBranches));
             if (last != ss.str()) {
                 last = ss.str();
-                out << last;
+                out() << last;
             }
         } else {
-            closure->print(options.style, out, tty(),
+            closure->print(options.style, out().out, out().tty(),
                            options.includes(DebugFlag::OmitDeoptBranches));
         }
     }
@@ -134,8 +138,8 @@ void ClosureStreamLogger::finalRIR(Function* fun) {
     if (options.includes(DebugFlag::PrintFinalRir)) {
         preparePrint();
         section("Final RIR");
-        fun->disassemble(out);
-        out << "\n";
+        fun->disassemble(out().out);
+        out() << "\n";
     }
 }
 
@@ -144,10 +148,10 @@ void ClosureStreamLogger::afterAllocator(
     if (options.includes(DebugFlag::PrintAllocator)) {
         preparePrint();
         section("PIR SSA allocator");
-        code->printCode(out, tty(),
+        code->printCode(out().out, out().tty(),
                         options.includes(DebugFlag::OmitDeoptBranches));
-        out << "\n";
-        allocDebug(out);
+        out() << "\n";
+        allocDebug(out().out);
     }
 }
 
@@ -155,9 +159,9 @@ void ClosureStreamLogger::CSSA(Code* code) {
     if (options.includes(DebugFlag::PrintCSSA)) {
         preparePrint();
         section("CSSA Version");
-        code->printCode(out, tty(),
+        code->printCode(out().out, out().tty(),
                         options.includes(DebugFlag::OmitDeoptBranches));
-        out << "\n";
+        out() << "\n";
     }
 }
 
@@ -165,9 +169,9 @@ void ClosureStreamLogger::finalPIR(ClosureVersion* code) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         preparePrint();
         section("Final PIR Version");
-        code->print(options.style, out, tty(),
+        code->print(options.style, out().out, out().tty(),
                     options.includes(DebugFlag::OmitDeoptBranches));
-        out << "\n";
+        out() << "\n";
     }
 }
 
@@ -175,14 +179,14 @@ void ClosureStreamLogger::unsupportedBC(const std::string& warning,
                                         const rir::BC& bc) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
-        out << "Warning: " << warning << ": ";
+        out() << "Warning: " << warning << ": ";
         if (bc.bc == Opcode::guard_fun_) {
-            out << CHAR(
+            out() << CHAR(
                 PRINTNAME(rir::Pool::get(bc.immediate.guard_fun_args.name)));
         } else {
-            bc.print(out);
+            bc.print(out().out);
         }
-        out << "\n";
+        out() << "\n";
     }
 }
 
@@ -195,24 +199,15 @@ void StreamLogger::warn(const std::string& msg) {
 void ClosureStreamLogger::warn(const std::string& msg) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
-        out << "Warning: " << msg << " in " << version->name() << "\n";
+        out() << "Warning: " << msg << " in " << version->name() << "\n";
     }
 }
 
 void ClosureStreamLogger::failed(const std::string& msg) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
-        out << "Failed: " << msg << " in " << version->name() << "\n";
+        out() << "Failed: " << msg << " in " << version->name() << "\n";
     }
-}
-
-void ClosureStreamLogger::highlightOn() {
-    if (tty())
-        ConsoleColor::red(out);
-}
-void ClosureStreamLogger::highlightOff() {
-    if (tty())
-        ConsoleColor::clear(out);
 }
 
 void ClosureStreamLogger::header() {
@@ -222,20 +217,21 @@ void ClosureStreamLogger::header() {
                         : "";
 
     highlightOn();
-    out << "\n" << c << "┌";
+    out() << "\n" << c << "┌";
     for (size_t i = 0; i < 78; ++i)
-        out << "─";
+        out() << "─";
     std::stringstream assumptions;
     assumptions << "Assumptions: " << version->assumptions();
     std::stringstream properties;
     properties << "Properties:  " << version->properties;
-    out << "┐\n";
-    out << c << "│ " << std::left << std::setw(77) << version->name() << "│\n";
-    out << c << "│ " << std::left << std::setw(77) << assumptions.str()
-        << "│\n";
+    out() << "┐\n";
+    out() << c << "│ " << std::left << std::setw(77) << version->name()
+          << "│\n";
+    out() << c << "│ " << std::left << std::setw(77) << assumptions.str()
+          << "│\n";
     if (properties.str() != "")
-        out << c << "│ " << std::left << std::setw(77) << properties.str()
-            << "│\n";
+        out() << c << "│ " << std::left << std::setw(77) << properties.str()
+              << "│\n";
     highlightOff();
 }
 
@@ -245,11 +241,12 @@ void ClosureStreamLogger::footer() {
                         ? "// "
                         : "";
     highlightOn();
-    out << c << "│ " << std::left << std::setw(77) << version->name() << "│\n";
-    out << c << "���";
+    out() << c << "│ " << std::left << std::setw(77) << version->name()
+          << "│\n";
+    out() << c << "���";
     for (size_t i = 0; i < 78; ++i)
-        out << "─";
-    out << "┘\n";
+        out() << "─";
+    out() << "┘\n";
     highlightOff();
 }
 
@@ -260,11 +257,21 @@ void ClosureStreamLogger::section(const std::string& title) {
                         : "";
     highlightOn();
     preparePrint();
-    out << c << "├────── " << title;
+    out() << c << "├────── " << title;
     if (options.includes(DebugFlag::PrintIntoStdout))
-        out << "(" << version->name() << ")";
-    out << "\n";
+        out() << "(" << version->name() << ")";
+    out() << "\n";
     highlightOff();
+}
+
+void ClosureStreamLogger::highlightOn() {
+    if (out().tty())
+        ConsoleColor::red(out().out);
+}
+
+void ClosureStreamLogger::highlightOff() {
+    if (out().tty())
+        ConsoleColor::clear(out().out);
 }
 
 void StreamLogger::title(const std::string& msg) {
@@ -295,7 +302,7 @@ void StreamLogger::title(const std::string& msg) {
 
 void StreamLogger::flush() {
     for (auto& e : streams) {
-        (*e.second).flush();
+        e.second.flush();
     }
 }
 

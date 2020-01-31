@@ -51,7 +51,7 @@ struct ALoad {
 };
 
 struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
-    AvailableLoads(ClosureVersion* cls, ClosureStreamLogger& log)
+    AvailableLoads(ClosureVersion* cls, LogStream& log)
         : StaticAnalysis("AvailableLoads", cls, cls, log) {}
     AbstractResult apply(IntersectionSet<ALoad>& state, Instruction* i) const {
         AbstractResult res;
@@ -93,7 +93,7 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
 };
 
 void LoadElision::apply(RirCompiler&, ClosureVersion* function,
-                        ClosureStreamLogger& log) const {
+                        LogStream& log) const {
     AvailableLoads loads(function, log);
 
     Visitor::runPostChange(function->entry, [&](BB* bb) {

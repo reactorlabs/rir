@@ -13,7 +13,7 @@ namespace rir {
 namespace pir {
 
 void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
-                            ClosureStreamLogger& log) const {
+                            LogStream& log) const {
 
     AvailableCheckpoints checkpoint(function, function, log);
 

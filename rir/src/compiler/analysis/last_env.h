@@ -9,7 +9,7 @@ namespace pir {
 
 class LastEnv : public StaticAnalysis<AbstractUnique<Value>> {
   public:
-    LastEnv(ClosureVersion* cls, Code* code, ClosureStreamLogger& log)
+    LastEnv(ClosureVersion* cls, Code* code, LogStream& log)
         : StaticAnalysis("Last Env", cls, code, log) {}
 
     static bool explicitEnvValue(Instruction* instr) {
