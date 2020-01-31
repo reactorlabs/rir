@@ -4,6 +4,7 @@
 #include "runtime/Function.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
+#include "utils/filesystem.h"
 
 #include <fstream>
 #include <iomanip>
@@ -58,6 +59,7 @@ ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
 
     // Create folder for individual pass streams
     if (options.includes(DebugFlag::PrintPassesIntoFolders)) {
+        removeDirectory(baseName.c_str());
         mkdir(baseName.c_str(), 0777);
     }
 
