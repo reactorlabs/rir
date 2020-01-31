@@ -216,7 +216,7 @@ void Rir2PirCompiler::optimizeModule() {
     for (const auto& translation : PassScheduler::instance()) {
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
-                auto log = logger.get(v).forPass(passnr++);
+                auto log = logger.get(v).forPass(passnr);
                 log.pirOptimizationsHeader(v, translation.get());
 
                 if (MEASURE_COMPILER_PERF)
@@ -243,6 +243,7 @@ void Rir2PirCompiler::optimizeModule() {
 #endif
             });
         });
+        passnr++;
     }
     if (MEASURE_COMPILER_PERF)
         startTime = std::chrono::high_resolution_clock::now();
