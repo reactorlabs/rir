@@ -217,7 +217,7 @@ void Rir2PirCompiler::optimizeModule() {
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
                 auto log = logger.get(v).forPass(passnr);
-                log.pirOptimizationsHeader(v, translation.get());
+                log.pirOptimizationsHeader(translation.get());
 
                 if (MEASURE_COMPILER_PERF)
                     startTime = std::chrono::high_resolution_clock::now();
@@ -230,7 +230,7 @@ void Rir2PirCompiler::optimizeModule() {
                     PERF->addTime(translation->getName(), passDuration.count());
                 }
 
-                log.pirOptimizations(v, translation.get());
+                log.pirOptimizations(translation.get());
                 log.flush();
 
 #ifdef FULLVERIFIER

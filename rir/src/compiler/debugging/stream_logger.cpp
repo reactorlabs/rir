@@ -94,13 +94,19 @@ PassStreamLogger ClosureStreamLogger::forPass(size_t number) {
         path << closureLogPath(logId, version) << "/" << passLogFileName(number)
              << logFileExtension(options);
         FileLogStream* stream = new FileLogStream(path.str());
-        std::cout << path.str() << std::endl;
-        return PassStreamLogger(number, options, *this,
+        return PassStreamLogger(number, *this,
                                 std::shared_ptr<LogStream>(stream));
     } else {
-        return PassStreamLogger(number, options, *this, _out);
+        return PassStreamLogger(number, *this, _out);
     }
 }
+
+PassStreamLogger::PassStreamLogger(size_t number, ClosureStreamLogger& parent,
+                                   std::shared_ptr<LogStream> out)
+    : GenericStreamLogger(parent.options, parent.version, out), number(number),
+      parent(parent) {}
+
+void PassStreamLogger::preparePrint() { parent.preparePrint(); }
 
 void ClosureStreamLogger::compilationEarlyPir(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
@@ -123,7 +129,7 @@ void ClosureStreamLogger::pirOptimizationsFinished(ClosureVersion* closure) {
     }
 }
 
-static bool shouldLog(ClosureVersion* version, const PirTranslator* pass,
+static bool shouldLog(const ClosureVersion* version, const PirTranslator* pass,
                       const DebugOptions& options) {
     auto name = version->name();
     if (options.includes(DebugFlag::PrintOptimizationPasses) &&
@@ -136,37 +142,112 @@ static bool shouldLog(ClosureVersion* version, const PirTranslator* pass,
     }
     if (options.includes(DebugFlag::PrintOptimizationPhases) &&
         pass->isPhaseMarker()) {
-        auto name = version->name();
         return std::regex_match(name.begin(), name.end(),
                                 options.functionFilter);
     }
     return false;
 }
 
-void PassStreamLogger::pirOptimizationsHeader(ClosureVersion* closure,
-                                              const PirTranslator* pass) {
-    if (shouldLog(closure, pass, options)) {
-        parent.preparePrint();
-        std::stringstream ss;
-        ss << pass->getName() << ": == " << number;
-        parent.section(ss.str());
+void GenericStreamLogger::header() {
+    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
+                            options.style != DebugStyle::Standard
+                        ? "// "
+                        : "";
+
+    highlightOn();
+    out() << "\n" << c << "┌";
+    for (size_t i = 0; i < 78; ++i)
+        out() << "─";
+    std::stringstream assumptions;
+    assumptions << "Assumptions: " << version->assumptions();
+    std::stringstream properties;
+    properties << "Properties:  " << version->properties;
+    out() << "┐\n";
+    out() << c << "│ " << std::left << std::setw(77) << version->name()
+          << "│\n";
+    out() << c << "│ " << std::left << std::setw(77) << assumptions.str()
+          << "│\n";
+    if (properties.str() != "")
+        out() << c << "│ " << std::left << std::setw(77) << properties.str()
+              << "│\n";
+    highlightOff();
+}
+
+void GenericStreamLogger::footer() {
+    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
+                            options.style != DebugStyle::Standard
+                        ? "// "
+                        : "";
+    highlightOn();
+    out() << c << "│ " << std::left << std::setw(77) << version->name()
+          << "│\n";
+    out() << c << "���";
+    for (size_t i = 0; i < 78; ++i)
+        out() << "─";
+    out() << "┘\n";
+    highlightOff();
+}
+
+void GenericStreamLogger::section(const std::string& title) {
+    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
+                            options.style != DebugStyle::Standard
+                        ? "// "
+                        : "";
+    highlightOn();
+    preparePrint();
+    out() << c << "├────── " << title;
+    if (options.includes(DebugFlag::PrintIntoStdout))
+        out() << "(" << version->name() << ")";
+    out() << "\n";
+    highlightOff();
+}
+
+void GenericStreamLogger::warn(const std::string& msg) {
+    if (options.includes(DebugFlag::ShowWarnings)) {
+        preparePrint();
+        out() << "Warning: " << msg << " in " << version->name() << "\n";
     }
 }
 
-void PassStreamLogger::pirOptimizations(ClosureVersion* closure,
-                                        const PirTranslator* pass) {
-    if (shouldLog(closure, pass, options)) {
+void GenericStreamLogger::failed(const std::string& msg) {
+    if (options.includes(DebugFlag::ShowWarnings)) {
+        preparePrint();
+        out() << "Failed: " << msg << " in " << version->name() << "\n";
+    }
+}
+
+void GenericStreamLogger::highlightOn() {
+    if (out().tty())
+        ConsoleColor::red(out().out);
+}
+
+void GenericStreamLogger::highlightOff() {
+    if (out().tty())
+        ConsoleColor::clear(out().out);
+}
+
+void PassStreamLogger::pirOptimizationsHeader(const PirTranslator* pass) {
+    if (shouldLog(version, pass, options)) {
+        preparePrint();
+        std::stringstream ss;
+        ss << pass->getName() << ": == " << number;
+        section(ss.str());
+    }
+}
+
+void PassStreamLogger::pirOptimizations(const PirTranslator* pass) {
+    if (shouldLog(version, pass, options)) {
         if (options.includes(DebugFlag::OnlyChanges)) {
             static std::string last = "";
             std::stringstream ss;
-            closure->print(options.style, ss, out().tty(),
+            version->print(options.style, ss, out().tty(),
                            options.includes(DebugFlag::OmitDeoptBranches));
             if (last != ss.str()) {
                 last = ss.str();
                 out() << last;
             }
         } else {
-            closure->print(options.style, out().out, out().tty(),
+            version->print(options.style, out().out, out().tty(),
                            options.includes(DebugFlag::OmitDeoptBranches));
         }
     }
@@ -232,84 +313,6 @@ void StreamLogger::warn(const std::string& msg) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         std::cerr << "Warning: " << msg << "\n";
     }
-}
-
-void ClosureStreamLogger::warn(const std::string& msg) {
-    if (options.includes(DebugFlag::ShowWarnings)) {
-        preparePrint();
-        out() << "Warning: " << msg << " in " << version->name() << "\n";
-    }
-}
-
-void ClosureStreamLogger::failed(const std::string& msg) {
-    if (options.includes(DebugFlag::ShowWarnings)) {
-        preparePrint();
-        out() << "Failed: " << msg << " in " << version->name() << "\n";
-    }
-}
-
-void ClosureStreamLogger::header() {
-    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
-                            options.style != DebugStyle::Standard
-                        ? "// "
-                        : "";
-
-    highlightOn();
-    out() << "\n" << c << "┌";
-    for (size_t i = 0; i < 78; ++i)
-        out() << "─";
-    std::stringstream assumptions;
-    assumptions << "Assumptions: " << version->assumptions();
-    std::stringstream properties;
-    properties << "Properties:  " << version->properties;
-    out() << "┐\n";
-    out() << c << "│ " << std::left << std::setw(77) << version->name()
-          << "│\n";
-    out() << c << "│ " << std::left << std::setw(77) << assumptions.str()
-          << "│\n";
-    if (properties.str() != "")
-        out() << c << "│ " << std::left << std::setw(77) << properties.str()
-              << "│\n";
-    highlightOff();
-}
-
-void ClosureStreamLogger::footer() {
-    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
-                            options.style != DebugStyle::Standard
-                        ? "// "
-                        : "";
-    highlightOn();
-    out() << c << "│ " << std::left << std::setw(77) << version->name()
-          << "│\n";
-    out() << c << "���";
-    for (size_t i = 0; i < 78; ++i)
-        out() << "─";
-    out() << "┘\n";
-    highlightOff();
-}
-
-void ClosureStreamLogger::section(const std::string& title) {
-    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
-                            options.style != DebugStyle::Standard
-                        ? "// "
-                        : "";
-    highlightOn();
-    preparePrint();
-    out() << c << "├────── " << title;
-    if (options.includes(DebugFlag::PrintIntoStdout))
-        out() << "(" << version->name() << ")";
-    out() << "\n";
-    highlightOff();
-}
-
-void ClosureStreamLogger::highlightOn() {
-    if (out().tty())
-        ConsoleColor::red(out().out);
-}
-
-void ClosureStreamLogger::highlightOff() {
-    if (out().tty())
-        ConsoleColor::clear(out().out);
 }
 
 void StreamLogger::title(const std::string& msg) {

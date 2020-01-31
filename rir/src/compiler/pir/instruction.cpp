@@ -95,10 +95,10 @@ void printPaddedInstructionName(std::ostream& out, const std::string& name) {
 }
 
 void printPaddedIdTypeRef(std::ostream& out, const Instruction* i) {
-    std::ostringstream buf;
     if (printInstructionId()) {
-        buf << (void*)i << " ";
+        out << (void*)i << " ";
     }
+    std::ostringstream buf;
     buf << i->type;
     if (!i->typeFeedback.type.isVoid()) {
         if (i->type == i->typeFeedback.type)
