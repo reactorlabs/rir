@@ -8,6 +8,7 @@
 #include "../util/visitor.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
+#include "api.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
 #include "utils/capture_out.h"
@@ -50,6 +51,10 @@ extern std::ostream& operator<<(std::ostream& out,
 
 constexpr Effects Instruction::errorWarnVisible;
 
+static bool printInstructionId() {
+    return PirDebug.flags.contains(DebugFlag::PrintInstructionIds);
+};
+
 std::string Instruction::getRef() const {
     std::stringstream ss;
     ss << "PIR";
@@ -89,8 +94,11 @@ void printPaddedInstructionName(std::ostream& out, const std::string& name) {
     out << std::left << std::setw(maxInstructionNameLength + 1) << name << " ";
 }
 
-void printPaddedTypeAndRef(std::ostream& out, const Instruction* i) {
+void printPaddedIdTypeRef(std::ostream& out, const Instruction* i) {
     std::ostringstream buf;
+    if (printInstructionId()) {
+        buf << (void*)i << " ";
+    }
     buf << i->type;
     if (!i->typeFeedback.type.isVoid()) {
         if (i->type == i->typeFeedback.type)
@@ -195,7 +203,7 @@ void Instruction::printEnv(std::ostream& out, bool tty) const {
 }
 
 void Instruction::print(std::ostream& out, bool tty) const {
-    printPaddedTypeAndRef(out, this);
+    printPaddedIdTypeRef(out, this);
     printPaddedInstructionName(out, name());
     printPaddedEffects(out, tty, this);
     printArgs(out, tty);
@@ -203,7 +211,7 @@ void Instruction::print(std::ostream& out, bool tty) const {
 }
 
 void Instruction::printGraph(std::ostream& out, bool tty) const {
-    printPaddedTypeAndRef(out, this);
+    printPaddedIdTypeRef(out, this);
     printPaddedInstructionName(out, name());
     printPaddedEffects(out, tty, this);
     printGraphArgs(out, tty);
@@ -665,7 +673,7 @@ void Phi::printArgs(std::ostream& out, bool tty) const {
 }
 
 void PirCopy::print(std::ostream& out, bool tty) const {
-    printPaddedTypeAndRef(out, this);
+    printPaddedIdTypeRef(out, this);
     arg(0).val()->printRef(out);
 }
 
