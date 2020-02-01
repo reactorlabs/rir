@@ -110,7 +110,7 @@ class GenericStreamLogger {
     const ClosureVersion* version;
 
     GenericStreamLogger(DebugOptions options, const ClosureVersion* version,
-                        std::shared_ptr<LogStream>& out)
+                        const std::shared_ptr<LogStream>& out)
         : _out(out), options(options), version(version) {}
 
     void header();
@@ -142,7 +142,7 @@ class PassStreamLogger : public GenericStreamLogger {
 
   protected:
     PassStreamLogger(size_t number, ClosureStreamLogger& parent,
-                     std::shared_ptr<LogStream> out);
+                     const std::shared_ptr<LogStream>& out);
 
     friend class ClosureStreamLogger;
 };
@@ -180,7 +180,7 @@ class ClosureStreamLogger : public GenericStreamLogger {
   protected:
     ClosureStreamLogger(const DebugOptions& options, const size_t logId,
                         const ClosureVersion* version,
-                        std::shared_ptr<LogStream> out)
+                        const std::shared_ptr<LogStream>& out)
         : GenericStreamLogger(options, version, out), logId(logId) {}
 
     friend class PassStreamLogger;
