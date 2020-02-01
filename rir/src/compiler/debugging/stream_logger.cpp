@@ -102,7 +102,7 @@ PassStreamLogger ClosureStreamLogger::forPass(size_t number) {
 }
 
 PassStreamLogger::PassStreamLogger(size_t number, ClosureStreamLogger& parent,
-                                   std::shared_ptr<LogStream> out)
+                                   const std::shared_ptr<LogStream>& out)
     : GenericStreamLogger(parent.options, parent.version, out), number(number),
       parent(parent) {}
 
