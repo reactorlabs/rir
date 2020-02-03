@@ -660,33 +660,33 @@ TypeChecks IsType::typeChecks() const {
     auto t = typeTest;
     auto in = arg(0).val();
     assert(!t.isVoid() && !t.maybeLazy());
-    if (t.isA(RType::logical)) {
-        if (t.isScalar() && !in->type.isScalar())
+    if (t.isA(PirType(RType::logical).orAttribs())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
             return TypeChecks::LogicalSimpleScalar;
         else
             return TypeChecks::LogicalNonObject;
-    } else if (t.isA(PirType(RType::logical).orPromiseWrapped())) {
-        if (t.isScalar() && !in->type.isScalar())
+    } else if (t.isA(PirType(RType::logical).orAttribs().orPromiseWrapped())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
             return TypeChecks::LogicalSimpleScalarWrapped;
         else
             return TypeChecks::LogicalNonObjectWrapped;
-    } else if (t.isA(RType::integer)) {
-        if (t.isScalar() && !in->type.isScalar())
+    } else if (t.isA(PirType(RType::integer).orAttribs())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
             return TypeChecks::IntegerSimpleScalar;
         else
             return TypeChecks::IntegerNonObject;
-    } else if (t.isA(PirType(RType::integer).orPromiseWrapped())) {
-        if (t.isScalar() && !in->type.isScalar())
+    } else if (t.isA(PirType(RType::integer).orAttribs().orPromiseWrapped())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
             return TypeChecks::IntegerSimpleScalarWrapped;
         else
             return TypeChecks::IntegerNonObjectWrapped;
-    } else if (t.isA(RType::real)) {
-        if (t.isScalar() && !in->type.isScalar())
+    } else if (t.isA(PirType(RType::real).orAttribs())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
             return TypeChecks::RealSimpleScalar;
         else
             return TypeChecks::RealNonObject;
-    } else if (t.isA(PirType(RType::real).orPromiseWrapped())) {
-        if (t.isScalar() && !in->type.isScalar())
+    } else if (t.isA(PirType(RType::real).orAttribs().orPromiseWrapped())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
             return TypeChecks::RealSimpleScalarWrapped;
         else
             return TypeChecks::RealNonObjectWrapped;
