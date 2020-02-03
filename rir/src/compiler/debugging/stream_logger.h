@@ -191,7 +191,7 @@ class StreamLogger {
     static size_t logId;
 
   public:
-    explicit StreamLogger(const DebugOptions& options) : options(options) {}
+    explicit StreamLogger(const DebugOptions& options);
     ~StreamLogger();
 
     StreamLogger(const StreamLogger&) = delete;

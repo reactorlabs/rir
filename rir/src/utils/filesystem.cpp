@@ -1,4 +1,5 @@
 #include "filesystem.h"
+#include <errno.h>
 #include <ftw.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -17,4 +18,11 @@ static int unlink_cb(const char* fpath, const struct stat* sb, int typeflag,
 
 int removeDirectory(const char* path) {
     return nftw(path, unlink_cb, 64, FTW_DEPTH | FTW_PHYS);
+}
+
+int clearOrCreateDirectory(const char* path) {
+    int rv = removeDirectory(path);
+    if (rv != 0 && errno != ENOENT)
+        return rv;
+    return mkdir(path, 0777);
 }

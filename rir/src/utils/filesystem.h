@@ -1,4 +1,4 @@
 #pragma once
 
-// Recursively delete directory
-int removeDirectory(const char* path);
+// Clear directory contents, create it if missing
+int clearOrCreateDirectory(const char* path);

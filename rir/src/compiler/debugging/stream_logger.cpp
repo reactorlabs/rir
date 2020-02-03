@@ -13,7 +13,23 @@
 namespace rir {
 namespace pir {
 
+static const std::string LOG_FOLDER = "log/";
+
 size_t StreamLogger::logId = 0;
+bool clearedLogFolderThisSession = false;
+
+static bool usesLogFolder(const DebugOptions& options) {
+    return options.includes(DebugFlag::PrintPassesIntoFolders) ||
+           options.includes(DebugFlag::PrintIntoFiles);
+}
+
+StreamLogger::StreamLogger(const DebugOptions& options) : options(options) {
+    if (!clearedLogFolderThisSession && usesLogFolder(options)) {
+        clearOrCreateDirectory(LOG_FOLDER.c_str());
+        clearedLogFolderThisSession = true;
+    }
+}
+
 StreamLogger::~StreamLogger() {
     while (!streams.empty()) {
         auto it = streams.begin();
@@ -27,10 +43,10 @@ bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 bool SimpleLogStream::tty() { return ConsoleColor::isTTY(out); }
 
 static std::string closureLogPath(size_t logId, const ClosureVersion* cls) {
-    std::stringstream filename;
-    filename << cls->owner()->name() << "-pir-function-" << std::setfill('0')
-             << std::setw(5) << logId;
-    return filename.str();
+    std::stringstream filePath;
+    filePath << LOG_FOLDER << cls->owner()->name() << "-pir-function-"
+             << std::setfill('0') << std::setw(5) << logId;
+    return filePath.str();
 }
 
 static std::string logFileExtension(DebugOptions options) {
@@ -42,14 +58,14 @@ static std::string logFileExtension(DebugOptions options) {
 
 ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
     assert(!streams.count(cls) && "You already started this function");
-    std::string baseName = closureLogPath(logId, cls);
+    std::string basePath = closureLogPath(logId, cls);
 
     // Create inner stream
     LogStream* logStream;
     if (options.includes(DebugFlag::PrintIntoFiles)) {
-        std::stringstream filename;
-        filename << baseName << logFileExtension(options);
-        logStream = new FileLogStream(filename.str());
+        std::stringstream filePath;
+        filePath << basePath << logFileExtension(options);
+        logStream = new FileLogStream(filePath.str());
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
             logStream = new SimpleLogStream;
@@ -57,10 +73,9 @@ ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
             logStream = new BufferedLogStream;
     }
 
-    // Create folder for individual pass streams
+    // Clear and create folder for individual pass streams
     if (options.includes(DebugFlag::PrintPassesIntoFolders)) {
-        removeDirectory(baseName.c_str());
-        mkdir(baseName.c_str(), 0777);
+        clearOrCreateDirectory(basePath.c_str());
     }
 
     // Add stream logger wrapper
