@@ -6,8 +6,8 @@
 
 // From
 // https://stackoverflow.com/questions/5467725/how-to-delete-a-directory-and-its-contents-in-posix-c
-static int unlink_cb(const char* fpath, const struct stat* sb, int typeflag,
-                     struct FTW* ftwbuf) {
+static int unlinkCb(const char* fpath, const struct stat* sb, int typeflag,
+                    struct FTW* ftwbuf) {
     int rv = remove(fpath);
 
     if (rv)
@@ -17,7 +17,7 @@ static int unlink_cb(const char* fpath, const struct stat* sb, int typeflag,
 }
 
 int removeDirectory(const char* path) {
-    return nftw(path, unlink_cb, 64, FTW_DEPTH | FTW_PHYS);
+    return nftw(path, unlinkCb, 64, FTW_DEPTH | FTW_PHYS);
 }
 
 int clearOrCreateDirectory(const char* path) {
