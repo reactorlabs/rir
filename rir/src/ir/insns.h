@@ -343,16 +343,27 @@ DEF_INSTR(aslogical_, 0, 1, 1, 0)
 DEF_INSTR(asbool_, 0, 1, 1, 0)
 
 /**
- * colon_input_effects_ :: a giant and convoluted instruction...
- *
- * forces m and n. If both are factors, pushes (n and m and) true for fallback.
- * Otherwise throws errors/warnings depending on their
- * types, pushes coerced versions (e.g. removes imaginary from m,
- * swaps if m > n), and pushes false for fallback.
- *
- * everything in do_colon except creating the actual list.
+ * colon_input_effects_ :: pushes false if we can't compile a simple for loop.
+ * Otherwise pushes true, and checks the lhs and rhs to throw errors which colon
+ * would.
  */
-DEF_INSTR(colon_input_effects_, 0, 2, 3, 1)
+DEF_INSTR(colon_input_effects_, 0, 0, 1, 1)
+
+/**
+ * colon_cast_lhs_ :: Converts lhs of colon for simple for loop
+ */
+DEF_INSTR(colon_cast_lhs_, 0, 1, 1, 1)
+
+/**
+ * colon_cast_rhs_ :: Converts rhs of colon for simple for loop
+ */
+DEF_INSTR(colon_cast_rhs_, 0, 1, 1, 1)
+
+/**
+ * colon_get_step_ :: step for the simple for loop: 1 if lhs < rhs, otherwise -1
+ * (in the same type - int or real - as lhs and rhs)
+ */
+DEF_INSTR(colon_get_step_, 0, 0, 1, 1)
 
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack

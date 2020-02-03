@@ -136,8 +136,7 @@ class TheCleanup {
                     auto rhs = colonInputEffects->arg<1>().val();
                     if (!lhs->type.maybeHasAttrs() ||
                         !rhs->type.maybeHasAttrs()) {
-                        colonInputEffects->fallback->replaceUsesWith(
-                            False::instance());
+                        colonInputEffects->replaceUsesWith(True::instance());
                     }
                 } else if (auto env = MkEnv::Cast(i)) {
                     static std::unordered_set<Tag> tags{Tag::IsEnvStub};

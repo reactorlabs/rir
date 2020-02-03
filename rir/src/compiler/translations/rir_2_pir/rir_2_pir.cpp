@@ -272,14 +272,21 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
 
-    case Opcode::colon_input_effects_: {
-        ColonInputEffects* instr =
-            insert(new ColonInputEffects(pop(), pop(), srcIdx));
-        push(instr->end);
-        push(instr->start);
-        push(instr->fallback);
+    case Opcode::colon_input_effects_:
+        push(insert(new ColonInputEffects(at(1), at(0), srcIdx)));
         break;
-    }
+
+    case Opcode::colon_cast_lhs_:
+        push(insert(new ColonCastLhs(pop(), srcIdx)));
+        break;
+
+    case Opcode::colon_cast_rhs_:
+        push(insert(new ColonCastRhs(at(1), pop(), srcIdx)));
+        break;
+
+    case Opcode::colon_get_step_:
+        push(insert(new ColonGetStep(at(1), at(0), srcIdx)));
+        break;
 
     case Opcode::ldfun_: {
         auto ld = insert(new LdFun(bc.immediateConst(), env));

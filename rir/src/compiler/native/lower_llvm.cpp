@@ -4688,7 +4688,10 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::ColonInputEffects:
-                // TODO: Handle via a native builtin
+            case Tag::ColonCastLhs:
+            case Tag::ColonCastRhs:
+            case Tag::ColonGetStep:
+                // TODO: Handle via native builtins
                 success = false;
                 break;
 

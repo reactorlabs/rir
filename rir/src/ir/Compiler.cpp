@@ -243,18 +243,18 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             //   ...
             // }
             // =>
-            // # forces m and n. If both are factors, pushes (m and n and) true
-            // # for fallback. Otherwise throws errors/warnings depending on
-            // # their types, pushes coerced versions (e.g. removes imaginary
-            // # from m, swaps if m > n), and pushes false for fallback.
-            // (m', n', fallback) <- colonInputEffects(m, n)
-            // if (fallback) {
-            //   <regular for>
+            // m' <- m
+            // n' <- n
+            // if (!colonInputEffects(m, n)) {
+            //    <regular for>
             // } else {
+            //   m' <- colonCastLhs(m')
+            //   n' <- colonCastRhs(m', n')
+            //   step <- colonGetStep(m', n')
             //   i' <- m'
-            //   while (i' < n') {
+            //   while (i' != n') {
             //     i <- i'
-            //     i' <- i' + 1
+            //     i' <- i' + step
             //     ...
             //   }
             // }
@@ -266,14 +266,16 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             BC::Label skipRegularForBranch = cs.mkLabel();
             BC::Label endBranch = cs.mkLabel();
 
-            // (m', n', fallback) <- colonInputEffects(m, n)
+            // m' <- m
             compileExpr(ctx, start);
+            cs << BC::force();
+            // n' <- n
             compileExpr(ctx, end);
+            cs << BC::force();
+            // if (!colonInputEffects(m, n)) {
             cs << BC::colonInputEffects();
             cs.addSrc(seq);
-
-            // if (fallback) {
-            cs << BC::brfalse(skipRegularForBranch);
+            cs << BC::brtrue(skipRegularForBranch);
             //   <regular for>
             cs << BC::colon();
             cs.addSrc(seq);
@@ -282,14 +284,25 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             // } else {
             cs << skipRegularForBranch;
 
-            // i' <- m' (we just reuse m')
+            // m' <- colonCastLhs(m')
+            cs << BC::swap() << BC::colonCastLhs() << BC::swap();
+
+            // n' <- colonCastRhs(m', n')
+            cs << BC::colonCastRhs();
+
+            // step <- colonGetStep(m', n')
+            cs << BC::colonGetStep();
+
+            // i' <- m' (we just reuse m', but we need to fix the stack as the
+            //           following bytecode expects: lhs :: rhs :: step :: ...)
+            cs << BC::swap() << BC::pick(2);
 
             // while
             compileWhile(
                 ctx,
                 [&cs]() {
-                    // (i' <= n')
-                    cs << BC::dup2() << BC::ge();
+                    // (i' != n')
+                    cs << BC::dup2() << BC::ne();
                     cs.addSrc(R_NilValue);
                 },
                 [&ctx, &cs, &sym, &body]() {
@@ -301,15 +314,15 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
                             sym, ctx.code.top()->cacheSlotFor(sym));
                     else
                         cs << BC::stvar(sym);
-                    // i' <- i' + 1
-                    cs << BC::push(1) << BC::add();
+                    // i' <- i' + step
+                    cs << BC::pull(2) << BC::ensureNamed() << BC::add();
                     cs.addSrc(R_NilValue);
                     // ...
                     compileExpr(ctx, body, true);
                     // }
                 },
                 !containsLoop(body));
-            cs << BC::popn(2);
+            cs << BC::popn(3);
             if (!voidContext)
                 cs << BC::push(R_NilValue) << BC::invisible();
             cs << endBranch;

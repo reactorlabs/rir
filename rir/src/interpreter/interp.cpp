@@ -1627,6 +1627,10 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     return args.size();
 }
 
+bool doubleCanBeCastedToInteger(double n) {
+    return n >= INT_MIN && n <= INT_MAX && (int)n == n;
+}
+
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  R_bcstack_t* localsBase, BindingCache* cache) {
@@ -3126,47 +3130,89 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(colon_input_effects_) {
-            SEXP lhs = ostack_pop(ctx);
-            SEXP rhs = ostack_pop(ctx);
+            SEXP lhs = ostack_at(ctx, 1);
+            SEXP rhs = ostack_at(ctx, 0);
 
-            // copied and modified from seq.c 147-169
-            if (inherits(lhs, "factor") && inherits(rhs, "factor")) {
-                ostack_push(ctx, rhs);
-                ostack_push(ctx, lhs);
-                ostack_push(ctx, R_TrueValue);
+            // 1. decide fastcase
+            bool fastcase =
+                !inherits(lhs, "factor") || !inherits(rhs, "factor");
+            ostack_push(ctx, fastcase ? R_TrueValue : R_FalseValue);
+
+            // 2. in fastcase, run type error effects
+            if (fastcase) {
+                int lhsLen = Rf_length(lhs);
+                int rhsLen = Rf_length(rhs);
+                if (lhsLen == 0 || rhsLen == 0)
+                    Rf_errorcall(getSrcAt(c, pc - 1, ctx),
+                                 "argument of length 0");
+                if (lhsLen > 1)
+                    Rf_warningcall(
+                        getSrcAt(c, pc - 1, ctx),
+                        ngettext("numerical expression has %d element: "
+                                 "only the first used",
+                                 "numerical expression has %d elements: "
+                                 "only the first used",
+                                 (int)lhsLen),
+                        (int)lhsLen);
+                if (rhsLen > 1)
+                    Rf_warningcall(
+                        getSrcAt(c, pc - 1, ctx),
+                        ngettext("numerical expression has %d element: "
+                                 "only the first used",
+                                 "numerical expression has %d elements: "
+                                 "only the first used",
+                                 (int)rhsLen),
+                        (int)rhsLen);
             }
 
-            int lhsLen = Rf_length(lhs);
-            int rhsLen = Rf_length(rhs);
-            if (lhsLen == 0 || rhsLen == 0)
-                Rf_errorcall(getSrcAt(c, pc - 1, ctx), "argument of length 0");
-            if (lhsLen > 1)
-                Rf_warningcall(getSrcAt(c, pc - 1, ctx),
-                               ngettext("numerical expression has %d element: "
-                                        "only the first used",
-                                        "numerical expression has %d elements: "
-                                        "only the first used",
-                                        (int)lhsLen),
-                               (int)lhsLen);
-            if (rhsLen > 1)
-                Rf_warningcall(getSrcAt(c, pc - 1, ctx),
-                               ngettext("numerical expression has %d element: "
-                                        "only the first used",
-                                        "numerical expression has %d elements: "
-                                        "only the first used",
-                                        (int)rhsLen),
-                               (int)rhsLen);
+            NEXT();
+        }
+
+        INSTRUCTION(colon_cast_lhs_) {
+            SEXP lhs = ostack_pop(ctx);
             double lhsNum = Rf_asReal(lhs);
+            SEXP newLhs = doubleCanBeCastedToInteger(lhsNum)
+                              ? Rf_ScalarInteger((int)lhsNum)
+                              : Rf_ScalarReal(lhsNum);
+            ENSURE_NAMED(newLhs);
+            ostack_push(ctx, newLhs);
+            NEXT();
+        }
+
+        INSTRUCTION(colon_cast_rhs_) {
+            SEXP rhs = ostack_pop(ctx);
+            SEXP newLhs = ostack_top(ctx);
+
+            double newLhsNum = Rf_asReal(newLhs);
             double rhsNum = Rf_asReal(rhs);
-            if (ISNAN(lhsNum) || ISNAN(rhsNum))
-                Rf_errorcall(getSrcAt(c, pc - 1, ctx), "NA/NaN argument");
 
-            double startNum = (lhsNum < rhsNum) ? lhsNum : rhsNum;
-            double endNum = (lhsNum < rhsNum) ? rhsNum : lhsNum;
+            double newRhsNum =
+                (newLhsNum <= rhsNum)
+                    ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
+                    : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
+            SEXP newRhs = (TYPEOF(newLhs) == INTSXP)
+                              ? Rf_ScalarInteger((int)newRhsNum)
+                              : Rf_ScalarReal(newRhsNum);
+            ENSURE_NAMED(newRhs);
 
-            ostack_push(ctx, Rf_ScalarReal(endNum));
-            ostack_push(ctx, Rf_ScalarReal(startNum));
-            ostack_push(ctx, R_FalseValue);
+            ostack_push(ctx, newRhs);
+            NEXT();
+        }
+
+        INSTRUCTION(colon_get_step_) {
+            SEXP newLhs = ostack_at(ctx, 1);
+            SEXP newRhs = ostack_at(ctx, 0);
+
+            double newLhsNum = Rf_asReal(newLhs);
+            double newRhsNum = Rf_asReal(newRhs);
+
+            double deltaNum = (newLhsNum <= newRhsNum) ? 1 : -1;
+            SEXP delta = (TYPEOF(newLhs) == INTSXP)
+                             ? Rf_ScalarInteger((int)deltaNum)
+                             : Rf_ScalarReal(deltaNum);
+            ENSURE_NAMED(delta);
+
+            ostack_push(ctx, delta);
             NEXT();
         }
 

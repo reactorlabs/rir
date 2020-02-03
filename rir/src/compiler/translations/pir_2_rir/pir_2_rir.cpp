@@ -851,6 +851,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Subassign2_2D, subassign2_2);
                 SIMPLE_WITH_SRCIDX(Subassign1_3D, subassign1_3);
                 SIMPLE_WITH_SRCIDX(ColonInputEffects, colonInputEffects);
+                SIMPLE_WITH_SRCIDX(ColonCastLhs, colonCastLhs);
+                SIMPLE_WITH_SRCIDX(ColonCastRhs, colonCastRhs);
+                SIMPLE_WITH_SRCIDX(ColonGetStep, colonGetStep);
 #undef SIMPLE_WITH_SRCIDX
 
             case Tag::Call: {
