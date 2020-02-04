@@ -1164,7 +1164,7 @@ class FLI(ColonCastLhs, 1, Effect::Error) {
 
     PirType inferType(const GetType& getType) const override final {
         if (getType(lhs()).isA(RType::integer)) {
-            return RType::integer;
+            return PirType(RType::integer).scalar();
         } else {
             return type;
         }
@@ -1183,7 +1183,7 @@ class FLI(ColonCastRhs, 2, Effect::Error) {
     PirType inferType(const GetType& getType) const override final {
         // This is intended - lhs type determines rhs
         if (getType(lhs()).isA(RType::integer)) {
-            return RType::integer;
+            return PirType(RType::integer).scalar();
         } else {
             return type;
         }
@@ -1203,7 +1203,7 @@ class FLI(ColonGetStep, 2, Effect::Error) {
     PirType inferType(const GetType& getType) const override final {
         // This is intended - lhs type determines step
         if (getType(lhs()).isA(RType::integer)) {
-            return RType::integer;
+            return PirType(RType::integer).scalar();
         } else {
             return type;
         }

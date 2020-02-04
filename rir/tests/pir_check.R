@@ -49,7 +49,7 @@ stopifnot(pir.check(function() {
       a <- c(1)
   }
   a
-}, OneLdFun))
+}, OneLdVar))
 
 # Loop hoisting + simple range non-constant dead branch removal
 stopifnot(pir.check(function(b) {
@@ -57,7 +57,7 @@ stopifnot(pir.check(function(b) {
       a <- c(1)
   }
   a
-}, OneLdFun, warmup=function(f) f(1)))
+}, OneLdVar, warmup=function(f) f(1)))
 
 stopifnot(
   pir.check(function() {
@@ -402,6 +402,14 @@ stopifnot(pir.check(function(a, b) {
     x <- x + i
   x
 }, NoColon, warmup=function(f) f(1, b)))
+stopifnot(pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- x + i
+  x
+}, NoColon, warmup=function(f) f(a, b)))
+a <- factor(a)
+b <- factor(b)
 stopifnot(!pir.check(function(a, b) {
   x <- 0
   for (i in a:b)
