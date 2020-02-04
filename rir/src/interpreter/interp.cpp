@@ -1728,13 +1728,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     }
 
     if (!existingLocals) {
-#ifdef TYPED_STACK
         // Zero the region of the locals to avoid keeping stuff alive and to
         // zero all the type tags. Note: this trick does not work with the stack
         // in general, since there intermediate callees might set the type tags
         // to something else.
         memset(R_BCNodeStackTop, 0, sizeof(*R_BCNodeStackTop) * c->localsCount);
-#endif
         localsBase = R_BCNodeStackTop;
     }
     Locals locals(localsBase, c->localsCount, existingLocals);
@@ -2775,21 +2773,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate i = readImmediate();
             advanceImmediate();
             R_bcstack_t* pos = ostack_cell_at(ctx, 0);
-#ifdef TYPED_STACK
             SEXP val = pos->u.sxpval;
             while (i--) {
                 pos->u.sxpval = (pos - 1)->u.sxpval;
                 pos--;
             }
             pos->u.sxpval = val;
-#else
-            SEXP val = *pos;
-            while (i--) {
-                *pos = *(pos - 1);
-                pos--;
-            }
-            *pos = val;
-#endif
             NEXT();
         }
 
@@ -2797,21 +2786,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate i = readImmediate();
             advanceImmediate();
             R_bcstack_t* pos = ostack_cell_at(ctx, i);
-#ifdef TYPED_STACK
             SEXP val = pos->u.sxpval;
             while (i--) {
                 pos->u.sxpval = (pos + 1)->u.sxpval;
                 pos++;
             }
             pos->u.sxpval = val;
-#else
-            SEXP val = *pos;
-            while (i--) {
-                *pos = *(pos + 1);
-                pos++;
-            }
-            *pos = val;
-#endif
             NEXT();
         }
 

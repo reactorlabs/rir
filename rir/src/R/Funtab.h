@@ -130,13 +130,4 @@ static inline bool builtinVisibility(int id) {
     return getFlag(id) != 1;
 }
 
-static inline int findBuiltin(const char* name) {
-    int i = 0;
-    while (true) {
-        if (strcmp(R_FunTab[i].name, name) == 0)
-            return i;
-        ++i;
-    }
-}
-
 #endif

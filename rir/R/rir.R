@@ -179,3 +179,7 @@ rir.enableLoopPeeling <- function() {
 rir.disableLoopPeeling <- function() {
     .Call("rirDisableLoopPeeling")
 }
+
+rir.printBuiltinIds <- function() {
+    invisible(.Call("rirPrintBuiltinIds"))
+}

@@ -8,6 +8,7 @@
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
@@ -570,7 +571,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (monomorphicInnerFunction) {
                 static SEXP b = nullptr;
                 if (!b) {
-                    auto idx = findBuiltin("bodyCode");
+                    auto idx = blt("bodyCode");
                     b = Rf_allocSExp(BUILTINSXP);
                     b->u.primsxp.offset = idx;
                     R_PreserveObject(b);

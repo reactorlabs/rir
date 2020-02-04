@@ -6,6 +6,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/MDBuilder.h"
 
+#include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
@@ -2274,11 +2275,9 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto yRep = representationOf(y);
 
                         static auto bitwise = {
-                            findBuiltin("bitwiseShiftL"),
-                            findBuiltin("bitwiseShiftR"),
-                            findBuiltin("bitwiseAnd"),
-                            findBuiltin("bitwiseOr"),
-                            findBuiltin("bitwiseXor"),
+                            blt("bitwiseShiftL"), blt("bitwiseShiftR"),
+                            blt("bitwiseAnd"),    blt("bitwiseOr"),
+                            blt("bitwiseXor"),
                         };
                         auto found = std::find(bitwise.begin(), bitwise.end(),
                                                b->builtinId);
@@ -2418,7 +2417,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     };
 
                     switch (b->builtinId) {
-                    case 88: // "length"
+                    case blt("length"):
                         if (irep == t::SEXP) {
                             llvm::Value* r = call(NativeBuiltins::length, {a});
                             if (orep == t::SEXP) {
@@ -2437,7 +2436,7 @@ bool LowerFunctionLLVM::tryCompile() {
                             setVal(i, constant(ScalarInteger(1), orep));
                         }
                         break;
-                    case 97: { // "names"
+                    case blt("names"): {
                         auto itype = b->callArg(0).val()->type;
                         if (itype.isA(PirType::vecs().orObject().orAttribs())) {
                             if (!itype.maybeHasAttrs() && !itype.maybeObj()) {
@@ -2471,7 +2470,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
-                    case 157: { // "abs"
+                    case blt("abs"): {
                         if (irep == Representation::Integer) {
                             assert(orep == irep);
                             setVal(i, builder.CreateSelect(
@@ -2487,7 +2486,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
-                    case 160: { // "sqrt"
+                    case blt("sqrt"): {
                         if (orep == Representation::Real &&
                             irep == Representation::Integer) {
                             a = convert(a, i->type);
@@ -2502,9 +2501,8 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
-                    case 300: // "sum"
-                    case 303: // "prod"
-                    {
+                    case blt("sum"):
+                    case blt("prod"): {
                         if (irep == Representation::Integer ||
                             irep == Representation::Real) {
                             setVal(i, convert(a, i->type));
@@ -2513,10 +2511,10 @@ bool LowerFunctionLLVM::tryCompile() {
                             assert(irep == Representation::Sexp);
                             auto itype = b->callArg(0).val()->type;
                             if (itype.isA(PirType::intReal())) {
-                                auto blt = b->builtinId == 300
+                                auto trg = b->builtinId == blt("sum")
                                                ? NativeBuiltins::sumr
                                                : NativeBuiltins::prodr;
-                                llvm::Value* res = call(blt, {a});
+                                llvm::Value* res = call(trg, {a});
                                 if (orep == Representation::Integer)
                                     res = convert(res, i->type);
                                 setVal(i, res);
@@ -2528,7 +2526,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
-                    case 311: // "as.integer"
+                    case blt("as.integer"):
                         if (irep == Representation::Integer &&
                             orep == Representation::Integer) {
                             setVal(i, a);
@@ -2557,7 +2555,7 @@ bool LowerFunctionLLVM::tryCompile() {
                             done = false;
                         }
                         break;
-                    case 372: // "is.logical"
+                    case blt("is.logical"):
                         if (b->arg(0).val()->type.isA(RType::logical)) {
                             // ensure that logicals represented as ints are
                             // handled.
@@ -2566,22 +2564,22 @@ bool LowerFunctionLLVM::tryCompile() {
                             doTypetest(LGLSXP);
                         }
                         break;
-                    case 375: // "is.complex"
+                    case blt("is.complex"):
                         doTypetest(CPLXSXP);
                         break;
-                    case 376: // "is.character"
+                    case blt("is.character"):
                         doTypetest(STRSXP);
                         break;
-                    case 377: // "is.symbol"
+                    case blt("is.symbol"):
                         doTypetest(SYMSXP);
                         break;
-                    case 382: // "is.expression"
+                    case blt("is.expression"):
                         doTypetest(EXPRSXP);
                         break;
-                    case 391: // "is.call"
+                    case blt("is.call"):
                         doTypetest(LANGSXP);
                         break;
-                    case 393: { // "is.function"
+                    case blt("is.function"): {
                         if (irep == Representation::Sexp) {
                             auto t = sexptype(a);
                             auto is = builder.CreateOr(
@@ -2597,7 +2595,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
-                    case 395: // "is.na"
+                    case blt("is.na"):
                         if (irep == Representation::Integer) {
                             setVal(i,
                                    builder.CreateSelect(
@@ -2613,7 +2611,7 @@ bool LowerFunctionLLVM::tryCompile() {
                             done = false;
                         }
                         break;
-                    case 497: { // "bodyCode"
+                    case blt("bodyCode"): {
                         assert(irep == Representation::Sexp && orep == irep);
                         llvm::Value* res = nullptr;
                         if (i->arg(0).val()->type.isA(RType::closure)) {
@@ -2626,7 +2624,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         setVal(i, res);
                         break;
                     }
-                    case 498: // "environment"
+                    case blt("environment"):
                         if (!i->arg(0).val()->type.isA(RType::closure)) {
                             success = false;
                             break;
@@ -2652,7 +2650,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto bval = load(b->arg(1).val());
 
                     switch (b->builtinId) {
-                    case 109: { // "vector"
+                    case blt("vector"): {
                         auto l = b->arg(1).val();
                         if (l->type.isA(PirType::simpleScalarInt())) {
                             if (auto con = LdConst::Cast(b->arg(0).val())) {
@@ -2686,9 +2684,9 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
-                    case 301:   // "min"
-                    case 302: { // "max"
-                        bool isMin = b->builtinId == 301;
+                    case blt("min"):
+                    case blt("max"): {
+                        bool isMin = b->builtinId == blt("min");
                         if (arep == Representation::Integer &&
                             brep == Representation::Integer &&
                             orep != Representation::Real) {
@@ -2727,7 +2725,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                 }
 
-                if (b->builtinId == 90) { // "c"
+                if (b->builtinId == blt("c")) {
                     bool allInt = true;
                     bool allReal = true;
                     b->eachCallArg([&](Value* v) {
@@ -2755,7 +2753,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                 }
 
-                if (b->builtinId == 412) { // "list"
+                if (b->builtinId == blt("list")) {
                     auto res = call(NativeBuiltins::makeVector,
                                     {c(VECSXP), c(b->nCallArgs(), 64)});
                     protectTemp(res);
