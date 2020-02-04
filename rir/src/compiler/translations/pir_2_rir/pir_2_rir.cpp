@@ -784,6 +784,35 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::ColonInputEffects: {
+                cb.add(BC::colonInputEffects(), instr->srcIdx);
+                // TODO: We might want to add some mechanism in PIR to
+                // distinguish between popped and just observed arguments.
+                // This reads 2 args but pops 0 - PIR doesn't know and loads all
+                // args, so we must manually pop them.
+                cb.add(BC::put(2));
+                cb.add(BC::popn(2));
+                break;
+            }
+
+            case Tag::ColonCastRhs: {
+                cb.add(BC::colonCastRhs());
+                // This reads 2 args but only pops 1 - PIR doesn't know and
+                // loads all args, so we must manually pop the other.
+                cb.add(BC::swap());
+                cb.add(BC::pop());
+                break;
+            }
+
+            case Tag::ColonGetStep: {
+                cb.add(BC::colonGetStep());
+                // This reads 2 args but pops 0 - PIR doesn't know and loads all
+                // args, so we must manually pop them.
+                cb.add(BC::put(2));
+                cb.add(BC::popn(2));
+                break;
+            }
+
 #define EMPTY(Name)                                                            \
     case Tag::Name: {                                                          \
         break;                                                                 \
@@ -812,6 +841,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(ChkMissing, checkMissing);
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(MkCls, close);
+                SIMPLE(ColonCastLhs, colonCastLhs);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
@@ -850,10 +880,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Subassign1_2D, subassign1_2);
                 SIMPLE_WITH_SRCIDX(Subassign2_2D, subassign2_2);
                 SIMPLE_WITH_SRCIDX(Subassign1_3D, subassign1_3);
-                SIMPLE_WITH_SRCIDX(ColonInputEffects, colonInputEffects);
-                SIMPLE_WITH_SRCIDX(ColonCastLhs, colonCastLhs);
-                SIMPLE_WITH_SRCIDX(ColonCastRhs, colonCastRhs);
-                SIMPLE_WITH_SRCIDX(ColonGetStep, colonGetStep);
 #undef SIMPLE_WITH_SRCIDX
 
             case Tag::Call: {
