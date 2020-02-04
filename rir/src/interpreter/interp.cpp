@@ -3591,7 +3591,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
-                vec = Rf_duplicate(vec);
+                vec = Rf_shallow_duplicate(vec);
                 ostack_set(ctx, 1, vec);
             }
 
@@ -3632,7 +3632,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
-                mtx = Rf_duplicate(mtx);
+                mtx = Rf_shallow_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }
 
@@ -3676,7 +3676,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
-                mtx = Rf_duplicate(mtx);
+                mtx = Rf_shallow_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }
 
@@ -3784,7 +3784,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
-                vec = Rf_duplicate(vec);
+                vec = Rf_shallow_duplicate(vec);
                 ostack_set(ctx, 1, vec);
             }
 
@@ -3898,7 +3898,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
-                mtx = Rf_duplicate(mtx);
+                mtx = Rf_shallow_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }
 
@@ -4086,7 +4086,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // flag here. What we should do instead, is use a non-dispatching
             // extract BC.
             if (isObject(seq)) {
-                seq = Rf_duplicate(seq);
+                seq = Rf_shallow_duplicate(seq);
                 SET_OBJECT(seq, 0);
                 ostack_set(ctx, 0, seq);
             }

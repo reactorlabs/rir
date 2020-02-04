@@ -333,6 +333,19 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
     assert(false);
 }
 
+// A very conservative estimation if the ast could contain an assignment to sym
+static bool maybeAssigns(SEXP sym, SEXP ast) {
+    if (TYPEOF(ast) != LANGSXP)
+        return false;
+    if (CADR(ast) == sym)
+        return true;
+    for (auto s : RList(CDR(ast))) {
+        if (maybeAssigns(sym, s))
+            return true;
+    }
+    return false;
+}
+
 // Inline some specials
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
@@ -621,6 +634,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (Compiler::profile)
             cs << BC::recordType();
+
+        if (maybeAssigns(target, *idx) ||
+            (dims > 1 && maybeAssigns(target, *(idx + 1))) ||
+            (dims > 2 && maybeAssigns(target, *(idx + 2))))
+            cs << BC::setShared();
 
         // And index
         compileExpr(ctx, *idx);
