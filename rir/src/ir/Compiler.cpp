@@ -1149,7 +1149,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 }
 
 // Lookup
-void compileGetvar(CompilerContext& ctx, SEXP name, bool needsVisible = true) {
+void compileGetvar(CompilerContext& ctx, SEXP name) {
     CodeStream& cs = ctx.cs();
     if (DDVAL(name)) {
         cs << BC::ldddvar(name);
@@ -1163,8 +1163,6 @@ void compileGetvar(CompilerContext& ctx, SEXP name, bool needsVisible = true) {
         if (Compiler::profile)
             cs << BC::recordType();
     }
-    if (needsVisible)
-        cs << BC::visible();
 }
 
 // Constant
@@ -1182,7 +1180,7 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
         }
         // Variable lookup
         Case(SYMSXP) {
-            compileGetvar(ctx, exp, !voidContext);
+            compileGetvar(ctx, exp);
             if (voidContext)
                 ctx.cs() << BC::pop();
         }

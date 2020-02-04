@@ -2125,6 +2125,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, env);
+            R_Visible = TRUE;
 
             recordForceBehavior(res);
 
@@ -2151,6 +2152,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
             res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache);
+            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);

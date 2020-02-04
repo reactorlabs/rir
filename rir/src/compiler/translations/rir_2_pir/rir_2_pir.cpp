@@ -226,6 +226,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (bc.immediateConst() == symbol::c)
             compiler.seenC = true;
         v = insert(new LdVar(bc.immediateConst(), env));
+        // PIR LdVar corresponds to ldvar_noforce_ which does not change
+        // visibility
+        insert(new Visible());
         // Checkpoint might be useful if we end up inlining this force
         if (!inPromise())
             addCheckpoint(srcCode, pos, stack, insert);
