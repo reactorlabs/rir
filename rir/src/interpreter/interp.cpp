@@ -399,7 +399,7 @@ void checkUserInterrupt() {
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
     switch (reason.reason) {
-    case DeoptReason::Valuecheck: {
+    case DeoptReason::DeadBranchReached: {
         assert(*pos == Opcode::record_test_);
         ObservedTest* feedback = (ObservedTest*)(pos + 1);
         feedback->seen = ObservedTest::Both;
@@ -427,6 +427,13 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         assert(feedback->taken > 0);
         break;
     }
+    case DeoptReason::EnvStubMaterialized: {
+        reason.srcCode->needsFullEnv = true;
+        break;
+    }
+    case DeoptReason::None:
+        assert(false);
+        break;
     }
 }
 
@@ -3981,6 +3988,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             size_t stackHeight = 0;
             for (size_t i = 0; i < m->numFrames; ++i)
                 stackHeight += m->frames[i].stackSize + 1;
+            m->frames[m->numFrames - 1].code->registerDeopt();
             c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
                                    m->numFrames - 1, stackHeight);

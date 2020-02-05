@@ -89,6 +89,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     unsigned funInvocationCount;
     unsigned deoptCount;
 
+    unsigned needsFullEnv : 1;
+
     unsigned src; /// AST of the function (or promise) represented by the code
 
     unsigned stackLength; /// Number of slots in stack required

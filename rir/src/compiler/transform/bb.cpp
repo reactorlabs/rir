@@ -176,8 +176,9 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         for (auto& origin : assume->feedbackOrigin) {
             Value* src = nullptr;
             auto cond = assume->condition();
-            auto r = DeoptReason::Typecheck;
+            auto r = DeoptReason::None;
             if (auto t = IsType::Cast(cond)) {
+                r = DeoptReason::Typecheck;
                 src = t->arg<0>().val();
             } else if (auto t = Identical::Cast(cond)) {
                 src = t->arg<0>().val();
@@ -185,23 +186,40 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                     src = t->arg<0>().val();
                 assert(!LdConst::Cast(src));
                 r = DeoptReason::Calltarget;
-            } else if (IsEnvStub::Cast(cond)) {
-                // TODO
+            } else if (auto t = IsEnvStub::Cast(cond)) {
+                src = t->arg(0).val();
+                r = DeoptReason::EnvStubMaterialized;
             } else {
                 if (auto c = Instruction::Cast(cond)) {
                     c->print(std::cerr);
                     assert(src && "Don't know how to report deopt reason");
                 }
             }
-            if (src) {
+            switch (r) {
+            case DeoptReason::Typecheck:
+            case DeoptReason::Calltarget: {
                 auto offset =
                     (uintptr_t)origin.second - (uintptr_t)origin.first;
                 auto o = *((Opcode*)origin.first + offset);
-                assert(o == Opcode::record_call_ || o == Opcode::record_type_);
+                assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
+                       o == Opcode::record_test_);
                 assert((uintptr_t)origin.second > (uintptr_t)origin.first);
                 auto rec = new RecordDeoptReason(
                     {r, origin.first, (uint32_t)offset}, src);
                 deoptBlock->append(rec);
+                break;
+            }
+            case DeoptReason::EnvStubMaterialized: {
+                auto rec = new RecordDeoptReason({r, origin.first, 0}, src);
+                deoptBlock->append(rec);
+                break;
+            }
+            case DeoptReason::DeadBranchReached: {
+                assert(false);
+                break;
+            }
+            case DeoptReason::None:
+                break;
             }
         }
     }
@@ -256,10 +274,8 @@ void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
                                Opcode* origin) {
     position = bb->insert(position, condition);
     auto assume = new Assume(condition, cp);
-    if (srcCode) {
-        assert(origin);
+    if (srcCode)
         assume->feedbackOrigin.push_back({srcCode, origin});
-    }
     if (!assumePositive)
         assume->Not();
     position = bb->insert(position + 1, assume);

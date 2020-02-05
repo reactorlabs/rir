@@ -1229,8 +1229,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                         srcCode, (deopt == fall) ? nextPos : trg, cur.stack);
                     auto offset = (uintptr_t)condition->typeFeedback.origin -
                                   (uintptr_t)srcCode;
-                    DeoptReason reason = {DeoptReason::Valuecheck, srcCode,
-                                          (uint32_t)offset};
+                    DeoptReason reason = {DeoptReason::DeadBranchReached,
+                                          srcCode, (uint32_t)offset};
                     Value* actual = condition;
                     if (auto c = AsTest::Cast(condition))
                         actual = c->arg(0).val();

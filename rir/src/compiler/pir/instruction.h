@@ -2108,6 +2108,7 @@ class VLIE(MkEnv, Effects::None()) {
     std::vector<SEXP> varName;
     std::vector<bool> missing;
     bool stub = false;
+    bool neverStub = false;
     int context = 1;
 
     size_t gvnBase() const override {
