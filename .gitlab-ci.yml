@@ -85,7 +85,7 @@ test_release_2:
   retry: 1
   script:
     - cd /opt/rir/build/release
-    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-recommended
+    - bin/gnur-make-tests check-recommended
     - ../../tools/check-gnur-make-tests-error
 
 # Run some tests in the debug mode
