@@ -333,6 +333,20 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
     assert(false);
 }
 
+// A very conservative estimation if the ast could contain an assignment, or
+// subset into sym
+static bool maybeChanges(SEXP sym, SEXP ast) {
+    if (TYPEOF(ast) != LANGSXP)
+        return false;
+    if (CADR(ast) == sym)
+        return true;
+    for (auto s : RList(CDR(ast))) {
+        if (maybeChanges(sym, s))
+            return true;
+    }
+    return false;
+}
+
 // Inline some specials
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
@@ -589,6 +603,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
+        if (maybeChanges(target, rhs)) {
+            cs << BC::ldvarForUpdate(target) << BC::setShared() << BC::pop();
+        }
+
         // First rhs (assign is right-associative)
         compileExpr(ctx, rhs);
         if (!voidContext) {
@@ -616,11 +634,16 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::ldvarForUpdateCached(
                     target, ctx.code.top()->cacheSlotFor(target));
             else
-                cs << BC::ldvar(target);
+                cs << BC::ldvarForUpdate(target);
         }
 
         if (Compiler::profile)
             cs << BC::recordType();
+
+        if (maybeChanges(target, *idx) ||
+            (dims > 1 && maybeChanges(target, *(idx + 1))) ||
+            (dims > 2 && maybeChanges(target, *(idx + 2))))
+            cs << BC::setShared();
 
         // And index
         compileExpr(ctx, *idx);
@@ -1149,7 +1172,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 }
 
 // Lookup
-void compileGetvar(CompilerContext& ctx, SEXP name, bool needsVisible = true) {
+void compileGetvar(CompilerContext& ctx, SEXP name) {
     CodeStream& cs = ctx.cs();
     if (DDVAL(name)) {
         cs << BC::ldddvar(name);
@@ -1163,8 +1186,6 @@ void compileGetvar(CompilerContext& ctx, SEXP name, bool needsVisible = true) {
         if (Compiler::profile)
             cs << BC::recordType();
     }
-    if (needsVisible)
-        cs << BC::visible();
 }
 
 // Constant
@@ -1182,7 +1203,7 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
         }
         // Variable lookup
         Case(SYMSXP) {
-            compileGetvar(ctx, exp, !voidContext);
+            compileGetvar(ctx, exp);
             if (voidContext)
                 ctx.cs() << BC::pop();
         }

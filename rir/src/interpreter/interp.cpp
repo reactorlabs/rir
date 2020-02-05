@@ -399,7 +399,7 @@ void checkUserInterrupt() {
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
     switch (reason.reason) {
-    case DeoptReason::Valuecheck: {
+    case DeoptReason::DeadBranchReached: {
         assert(*pos == Opcode::record_test_);
         ObservedTest* feedback = (ObservedTest*)(pos + 1);
         feedback->seen = ObservedTest::Both;
@@ -427,6 +427,13 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         assert(feedback->taken > 0);
         break;
     }
+    case DeoptReason::EnvStubMaterialized: {
+        reason.srcCode->needsFullEnv = true;
+        break;
+    }
+    case DeoptReason::None:
+        assert(false);
+        break;
     }
 }
 
@@ -1728,13 +1735,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     }
 
     if (!existingLocals) {
-#ifdef TYPED_STACK
         // Zero the region of the locals to avoid keeping stuff alive and to
         // zero all the type tags. Note: this trick does not work with the stack
         // in general, since there intermediate callees might set the type tags
         // to something else.
         memset(R_BCNodeStackTop, 0, sizeof(*R_BCNodeStackTop) * c->localsCount);
-#endif
         localsBase = R_BCNodeStackTop;
     }
     Locals locals(localsBase, c->localsCount, existingLocals);
@@ -2127,6 +2132,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, env);
+            R_Visible = TRUE;
 
             recordForceBehavior(res);
 
@@ -2153,6 +2159,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
             res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache);
+            R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
@@ -2775,21 +2782,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate i = readImmediate();
             advanceImmediate();
             R_bcstack_t* pos = ostack_cell_at(ctx, 0);
-#ifdef TYPED_STACK
             SEXP val = pos->u.sxpval;
             while (i--) {
                 pos->u.sxpval = (pos - 1)->u.sxpval;
                 pos--;
             }
             pos->u.sxpval = val;
-#else
-            SEXP val = *pos;
-            while (i--) {
-                *pos = *(pos - 1);
-                pos--;
-            }
-            *pos = val;
-#endif
             NEXT();
         }
 
@@ -2797,21 +2795,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Immediate i = readImmediate();
             advanceImmediate();
             R_bcstack_t* pos = ostack_cell_at(ctx, i);
-#ifdef TYPED_STACK
             SEXP val = pos->u.sxpval;
             while (i--) {
                 pos->u.sxpval = (pos + 1)->u.sxpval;
                 pos++;
             }
             pos->u.sxpval = val;
-#else
-            SEXP val = *pos;
-            while (i--) {
-                *pos = *(pos + 1);
-                pos++;
-            }
-            *pos = val;
-#endif
             NEXT();
         }
 
@@ -3609,7 +3598,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
-                vec = Rf_duplicate(vec);
+                vec = Rf_shallow_duplicate(vec);
                 ostack_set(ctx, 1, vec);
             }
 
@@ -3650,7 +3639,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
-                mtx = Rf_duplicate(mtx);
+                mtx = Rf_shallow_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }
 
@@ -3694,7 +3683,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
-                mtx = Rf_duplicate(mtx);
+                mtx = Rf_shallow_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }
 
@@ -3802,7 +3791,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(vec)) {
-                vec = Rf_duplicate(vec);
+                vec = Rf_shallow_duplicate(vec);
                 ostack_set(ctx, 1, vec);
             }
 
@@ -3916,7 +3905,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // intended, to avoid copying. Care need to be taken if `vec` is
             // used multiple times as a temporary.
             if (MAYBE_SHARED(mtx)) {
-                mtx = Rf_duplicate(mtx);
+                mtx = Rf_shallow_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }
 
@@ -3999,6 +3988,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             size_t stackHeight = 0;
             for (size_t i = 0; i < m->numFrames; ++i)
                 stackHeight += m->frames[i].stackSize + 1;
+            m->frames[m->numFrames - 1].code->registerDeopt();
             c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
                                    m->numFrames - 1, stackHeight);
@@ -4104,7 +4094,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // flag here. What we should do instead, is use a non-dispatching
             // extract BC.
             if (isObject(seq)) {
-                seq = Rf_duplicate(seq);
+                seq = Rf_shallow_duplicate(seq);
                 SET_OBJECT(seq, 0);
                 ostack_set(ctx, 0, seq);
             }

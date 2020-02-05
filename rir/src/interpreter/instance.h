@@ -96,21 +96,11 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
 
 #define ostack_length(c) (R_BCNodeStackTop - R_BCNodeStackBase)
 
-#ifdef TYPED_STACK
 #define ostack_top(c) ((R_BCNodeStackTop - 1)->u.sxpval)
-#else
-#define ostack_top(c) (*(R_BCNodeStackTop - 1))
-#endif
 
-#ifdef TYPED_STACK
 #define ostack_at(c, i) ((R_BCNodeStackTop - 1 - (i))->u.sxpval)
 #define ostack_at_cell(cell) ((cell)->u.sxpval)
-#else
-#define ostack_at(c, i) (*(R_BCNodeStackTop - 1 - (i)))
-#define ostack_at_cell(cell) (*(cell))
-#endif
 
-#ifdef TYPED_STACK
 #define ostack_set(c, i, v)                                                    \
     do {                                                                       \
         SEXP __tmp__ = (v);                                                    \
@@ -118,14 +108,6 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
         (R_BCNodeStackTop - 1 - idx)->u.sxpval = __tmp__;                      \
         (R_BCNodeStackTop - 1 - idx)->tag = 0;                                 \
     } while (0)
-#else
-#define ostack_set(c, i, v)                                                    \
-    do {                                                                       \
-        SEXP __tmp__ = (v);                                                    \
-        int idx = (i);                                                         \
-        *(R_BCNodeStackTop - 1 - idx) = __tmp__;                               \
-    } while (0)
-#endif
 
 #define ostack_cell_at(c, i) (R_BCNodeStackTop - 1 - (i))
 
@@ -136,13 +118,8 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
         R_BCNodeStackTop -= (p);                                               \
     } while (0)
 
-#ifdef TYPED_STACK
 #define ostack_pop(c) ((--R_BCNodeStackTop)->u.sxpval)
-#else
-#define ostack_pop(c) (*(--R_BCNodeStackTop))
-#endif
 
-#ifdef TYPED_STACK
 #define ostack_push(c, v)                                                      \
     do {                                                                       \
         SEXP __tmp__ = (v);                                                    \
@@ -150,14 +127,6 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
         R_BCNodeStackTop->tag = 0;                                             \
         ++R_BCNodeStackTop;                                                    \
     } while (0)
-#else
-#define ostack_push(c, v)                                                      \
-    do {                                                                       \
-        SEXP __tmp__ = (v);                                                    \
-        *R_BCNodeStackTop = __tmp__;                                           \
-        ++R_BCNodeStackTop;                                                    \
-    } while (0)
-#endif
 
 RIR_INLINE void ostack_ensureSize(InterpreterInstance* c, unsigned minFree) {
     if ((R_BCNodeStackTop + minFree) >= R_BCNodeStackEnd) {
@@ -189,22 +158,14 @@ class Locals final {
     SEXP load(unsigned offset) {
         SLOWASSERT(offset < localsCount &&
                    "Attempt to load invalid local variable.");
-#ifdef TYPED_STACK
         return (base + offset)->u.sxpval;
-#else
-        return base[offset];
-#endif
     }
 
     void store(unsigned offset, SEXP val) {
         SLOWASSERT(offset < localsCount &&
                    "Attempt to store invalid local variable.");
-#ifdef TYPED_STACK
         (base + offset)->u.sxpval = val;
         SLOWASSERT((base + offset)->tag == 0);
-#else
-        base[offset] = val;
-#endif
     }
 
     Locals(Locals const&) = delete;

@@ -1425,7 +1425,7 @@ NativeBuiltin NativeBuiltins::nativeCallTrampoline = {
 SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
                      Immediate srcIdx) {
     if (MAYBE_SHARED(vector))
-        vector = Rf_duplicate(vector);
+        vector = Rf_shallow_duplicate(vector);
     PROTECT(vector);
     SEXP args = CONS_NR(vector, CONS_NR(index, CONS_NR(value, R_NilValue)));
     SET_TAG(CDDR(args), symbol::value);
@@ -1455,7 +1455,7 @@ NativeBuiltin NativeBuiltins::subassign11 = {
 SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -1529,7 +1529,7 @@ SEXP subassign21rrImpl(SEXP vec, double idx, double val, SEXP env,
                        Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -1567,7 +1567,7 @@ SEXP subassign21irImpl(SEXP vec, int idx, double val, SEXP env,
                        Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -1605,7 +1605,7 @@ SEXP subassign21riImpl(SEXP vec, double idx, int val, SEXP env,
                        Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -1651,7 +1651,7 @@ SEXP subassign21riImpl(SEXP vec, double idx, int val, SEXP env,
 SEXP subassign21iiImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -1715,7 +1715,7 @@ NativeBuiltin NativeBuiltins::subassign21ir = {
 SEXP subassign12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP value,
                      SEXP env, Immediate srcIdx) {
     if (MAYBE_SHARED(vector))
-        vector = Rf_duplicate(vector);
+        vector = Rf_shallow_duplicate(vector);
     PROTECT(vector);
     SEXP args = CONS_NR(
         vector, CONS_NR(index1, CONS_NR(index2, CONS_NR(value, R_NilValue))));
@@ -1746,7 +1746,7 @@ NativeBuiltin NativeBuiltins::subassign12 = {
 SEXP subassign13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3,
                      SEXP value, SEXP env, Immediate srcIdx) {
     if (MAYBE_SHARED(vector))
-        vector = Rf_duplicate(vector);
+        vector = Rf_shallow_duplicate(vector);
     PROTECT(vector);
     SEXP args = CONS_NR(
         vector,
@@ -1780,7 +1780,7 @@ SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
                      Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -1853,7 +1853,7 @@ SEXP subassign22rrrImpl(SEXP vec, double idx1, double idx2, double val,
                         SEXP env, Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -1907,7 +1907,7 @@ SEXP subassign22iirImpl(SEXP vec, int idx1, int idx2, double val, SEXP env,
                         Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -1961,7 +1961,7 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
                         Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -2022,7 +2022,7 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
                         Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
-        vec = Rf_duplicate(vec);
+        vec = Rf_shallow_duplicate(vec);
         PROTECT(vec);
         prot++;
     }
@@ -2118,7 +2118,7 @@ int forSeqSizeImpl(SEXP seq) {
     // flag here. What we should do instead, is use a non-dispatching
     // extract BC.
     if (isObject(seq)) {
-        seq = Rf_duplicate(seq);
+        seq = Rf_shallow_duplicate(seq);
         SET_OBJECT(seq, 0);
         ostack_set(ctx, 0, seq);
     }

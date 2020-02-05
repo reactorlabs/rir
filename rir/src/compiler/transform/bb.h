@@ -30,10 +30,10 @@ class BBTransform {
                            bool triggerAnyway = false);
     static void insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
                              BB::Instrs::iterator& position,
-                             bool assumePositive, rir::Code* srcCode = nullptr,
+                             bool assumePositive, rir::Code* srcCode,
                              Opcode* origin = nullptr);
     static void insertAssume(Instruction* condition, Checkpoint* cp,
-                             bool assumePositive, rir::Code* srcCode = nullptr,
+                             bool assumePositive, rir::Code* srcCode,
                              Opcode* origin = nullptr);
 
     static void mergeRedundantBBs(Code* closure);

@@ -3,6 +3,7 @@
 #include "../translations/rir_compiler.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
@@ -242,24 +243,13 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     ? CallBuiltin::Cast(i)->builtinId
                                     : CallSafeBuiltin::Cast(i)->builtinId;
                 size_t nargs = CallInstruction::CastCall(i)->nCallArgs();
-                static int nargsBlt = findBuiltin("nargs");
-                static int lengthBlt = findBuiltin("length");
-                static int asintBlt = findBuiltin("as.integer");
-                static int ascharacterBlt = findBuiltin("as.character");
-                static int isatomicBlt = findBuiltin("is.atomic");
-                static int isfunctionBlt = findBuiltin("is.function");
-                static int isobjectBlt = findBuiltin("is.object");
-                static int isCharacterBlt = findBuiltin("is.character");
-                static int isComplexBlt = findBuiltin("is.complex");
-                static int bodyBlt = findBuiltin("bodyCode");
-                static int envBlt = findBuiltin("environment");
                 assert(function->assumptions().includes(
                     Assumption::NotTooManyArguments));
                 // PIR functions are always compiled for a particular number
                 // of arguments
                 auto noExplMissing = function->assumptions().includes(
                     Assumption::NoExplicitlyMissingArgs);
-                if (builtinId == nargsBlt && noExplMissing) {
+                if (builtinId == blt("nargs") && noExplMissing) {
                     // nargs inside inlinee refers to nargs passed to inlinee,
                     // which is something we cannot recover.
                     bool notInlined =
@@ -272,12 +262,12 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             function->assumptions().numMissing()));
                         i->replaceUsesAndSwapWith(nargsC, ip);
                     }
-                } else if (builtinId == lengthBlt && nargs == 1) {
+                } else if (builtinId == blt("length") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(PirType::simpleScalar())) {
                         i->replaceUsesAndSwapWith(new LdConst(1), ip);
                     }
-                } else if (builtinId == ascharacterBlt && nargs == 1) {
+                } else if (builtinId == blt("as.character") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(PirType(RType::str)
                                   .notPromiseWrapped()
@@ -293,7 +283,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             i->replaceUsesAndSwapWith(new LdConst(res), ip);
                         }
                     }
-                } else if (builtinId == asintBlt && nargs == 1) {
+                } else if (builtinId == blt("as.integer") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(PirType(RType::integer)
                                   .notPromiseWrapped()
@@ -314,21 +304,21 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                                       ip);
                         }
                     }
-                } else if (builtinId == isfunctionBlt && nargs == 1) {
+                } else if (builtinId == blt("is.function") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::closure))
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
                     else if (!t.maybe(RType::closure))
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
-                } else if (builtinId == isComplexBlt && nargs == 1) {
+                } else if (builtinId == blt("is.complex") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::cplx))
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
                     else if (!t.maybe(RType::cplx))
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
-                } else if (builtinId == isCharacterBlt && nargs == 1) {
+                } else if (builtinId == blt("is.character") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::str)) {
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
@@ -336,7 +326,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
-                } else if (builtinId == isatomicBlt && nargs == 1) {
+                } else if (builtinId == blt("is.atomic") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     static auto atomicType =
                         PirType() | RType::nil | RType::chr | RType::logical |
@@ -348,13 +338,13 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
-                } else if (builtinId == isobjectBlt && nargs == 1) {
+                } else if (builtinId == blt("is.object") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (!t.maybeObj()) {
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
-                } else if (builtinId == bodyBlt && nargs == 1) {
+                } else if (builtinId == blt("bodyCode") && nargs == 1) {
                     auto in = i->arg(0).val()->followCastsAndForce();
                     if (auto mk = MkFunCls::Cast(in)) {
                         i->replaceUsesAndSwapWith(
@@ -380,7 +370,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             }
                         }
                     }
-                } else if (builtinId == envBlt && nargs == 1) {
+                } else if (builtinId == blt("environment") && nargs == 1) {
                     auto in = i->arg(0).val()->followCastsAndForce();
                     if (auto mk = MkFunCls::Cast(in)) {
                         i->replaceUsesWith(mk->lexicalEnv());

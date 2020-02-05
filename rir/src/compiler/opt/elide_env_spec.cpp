@@ -146,6 +146,9 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                                   i->tag) == dontMaterialize.end())
                         materializableStubs.insert(m);
                 }
+                if (m->neverStub && !bannedEnvs.count(m)) {
+                    bannedEnvs.insert(m);
+                }
                 if (!m->stub && !bannedEnvs.count(m)) {
                     auto bt = CallBuiltin::Cast(i);
                     if (std::find(allowed.begin(), allowed.end(), i->tag) ==
@@ -220,7 +223,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 auto env = checks[i].second;
                 auto cp = checks[i].first;
                 auto condition = new IsEnvStub(env);
-                BBTransform::insertAssume(condition, cp, true);
+                BBTransform::insertAssume(condition, cp, true,
+                                          env->typeFeedback.srcCode, nullptr);
                 assert(cp->bb()->trueBranch() != bb);
             }
 

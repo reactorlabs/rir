@@ -1,5 +1,6 @@
 #include "builtins.h"
 #include "ArgsLazyData.h"
+#include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "interp.h"
 #include <algorithm>
@@ -113,7 +114,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     }
 
     switch (call.callee->u.primsxp.offset) {
-    case 32: { // "nargs"
+    case blt("nargs"): {
         if (nargs != 0)
             return nullptr;
 
@@ -133,7 +134,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return ScalarInteger(nargs);
     }
 
-    case 88: { // "length"
+    case blt("length"): {
         if (nargs != 1)
             return nullptr;
 
@@ -148,7 +149,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         assert(false);
     }
 
-    case 90: { // "c"
+    case blt("c"): {
         if (nargs == 0)
             return R_NilValue;
 
@@ -200,7 +201,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return res;
     }
 
-    case 109: { // "vector"
+    case blt("vector"): {
         if (nargs != 2)
             return nullptr;
         if (TYPEOF(args[0]) != STRSXP)
@@ -251,7 +252,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         break;
     }
 
-    case 136: { // "which"
+    case blt("which"): {
         if (nargs != 1)
             return nullptr;
         auto arg = args[0];
@@ -270,7 +271,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return res;
     }
 
-    case 157: { // "abs"
+    case blt("abs"): {
         if (nargs != 1)
             return nullptr;
         auto x = args[0];
@@ -311,8 +312,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return nullptr;
     }
 
-    case 301:   // "min"
-    case 302: { // "max"
+    case blt("min"):
+    case blt("max"): {
         if (nargs != 2)
             return nullptr;
 
@@ -358,7 +359,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
 #undef CMP
     }
 
-    case 310: { // "as.character"
+    case blt("as.character"): {
         if (nargs != 1)
             return nullptr;
         if (TYPEOF(args[0]) == STRSXP)
@@ -391,7 +392,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         break;
     }
 
-    case 311: { // "as.integer"
+    case blt("as.integer"): {
         if (nargs != 1)
             return nullptr;
         if (TYPEOF(args[0]) == INTSXP)
@@ -399,59 +400,59 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         break;
     }
 
-    case 597:   // "stdin"
-    case 598:   // "stdout"
-    case 599: { // "stderr"
+    case blt("stdin"):
+    case blt("stdout"):
+    case blt("stderr"): {
         if (nargs != 0)
             return nullptr;
         auto f = getBuiltin(call.callee);
         return f(R_NilValue, call.callee, R_NilValue, R_NilValue);
     }
 
-    case 372: { // "is.logical"
+    case blt("is.logical"): {
         if (nargs != 1)
             return nullptr;
         return TYPEOF(args[0]) == LGLSXP ? R_TrueValue : R_FalseValue;
     }
 
-    case 377: { // "is.symbol"
+    case blt("is.symbol"): {
         if (nargs != 1)
             return nullptr;
         return TYPEOF(args[0]) == SYMSXP ? R_TrueValue : R_FalseValue;
     }
 
-    case 382: { // "is.expression"
+    case blt("is.expression"): {
         if (nargs != 1)
             return nullptr;
         return TYPEOF(args[0]) == EXPRSXP ? R_TrueValue : R_FalseValue;
     }
 
-    case 384: { // "is.object"
+    case blt("is.object"): {
         if (nargs != 1)
             return nullptr;
         return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
     }
 
-    case 386: { // "is.numeric"
+    case blt("is.numeric"): {
         if (nargs != 1)
             return nullptr;
         return isNumeric(args[0]) && !isLogical(args[0]) ? R_TrueValue
                                                          : R_FalseValue;
     }
 
-    case 387: { // "is.matrix"
+    case blt("is.matrix"): {
         if (nargs != 1)
             return nullptr;
         return isMatrix(args[0]) ? R_TrueValue : R_FalseValue;
     }
 
-    case 388: { // "is.array"
+    case blt("is.array"): {
         if (nargs != 1)
             return nullptr;
         return isArray(args[0]) ? R_TrueValue : R_FalseValue;
     }
 
-    case 389: { // "is.atomic"
+    case blt("is.atomic"): {
         if (nargs != 1)
             return nullptr;
         switch (TYPEOF(args[0])) {
@@ -471,19 +472,19 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         assert(false);
     }
 
-    case 391: { // "is.call"
+    case blt("is.call"): {
         if (nargs != 1)
             return nullptr;
         return TYPEOF(args[0]) == LANGSXP ? R_TrueValue : R_FalseValue;
     }
 
-    case 393: { // "is.function"
+    case blt("is.function"): {
         if (nargs != 1)
             return nullptr;
         return isFunction(args[0]) ? R_TrueValue : R_FalseValue;
     }
 
-    case 395: { // "is.na"
+    case blt("is.na"): {
         if (nargs != 1)
             return nullptr;
 
@@ -505,7 +506,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         break;
     }
 
-    case 399: { // "is.vector"
+    case blt("is.vector"): {
         if (nargs != 1)
             return nullptr;
 
@@ -515,7 +516,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return TYPEOF(arg) == VECSXP ? R_TrueValue : R_FalseValue;
     }
 
-    case 412: { // "list"
+    case blt("list"): {
         // "lists" at the R level are VECSXP's in the implementation
         auto res = Rf_allocVector(VECSXP, nargs);
         for (size_t i = 0; i < nargs; ++i)
@@ -523,7 +524,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return res;
     }
 
-    case 407: { // "rep.int"
+    case blt("rep.int"): {
         if (nargs != 2)
             return nullptr;
 
@@ -562,7 +563,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return res;
     }
 
-    case 507: { // "islistfactor"
+    case blt("islistfactor"): {
         if (nargs != 2)
             return nullptr;
         auto n = XLENGTH(args[0]);
@@ -579,31 +580,31 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return R_TrueValue;
     }
 
-    case 678: { // "bitwiseAnd"
+    case blt("bitwiseAnd"): {
         if (nargs != 2)
             return nullptr;
         return bitwiseOp(std::bit_and<int>(), args[0], args[1], false);
     }
 
-    case 680: { // "bitwiseOr"
+    case blt("bitwiseOr"): {
         if (nargs != 2)
             return nullptr;
         return bitwiseOp(std::bit_or<int>(), args[0], args[1], false);
     }
 
-    case 681: { // "bitwiseXor"
+    case blt("bitwiseXor"): {
         if (nargs != 2)
             return nullptr;
         return bitwiseOp(std::bit_xor<int>(), args[0], args[1], false);
     }
 
-    case 682: { // "bitwiseShiftL"
+    case blt("bitwiseShiftL"): {
         if (nargs != 2)
             return nullptr;
         return bitwiseOp(bitShiftL(), args[0], args[1], false);
     }
 
-    case 683: { // "bitwiseShiftL"
+    case blt("bitwiseShiftR"): {
         if (nargs != 2)
             return nullptr;
         return bitwiseOp(bitShiftR(), args[0], args[1], false);
@@ -612,41 +613,41 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     return nullptr;
 }
 
-bool supportsFastBuiltinCall(SEXP blt) {
-    switch (blt->u.primsxp.offset) {
-    case 32:  // "nargs"
-    case 88:  // "length"
-    case 90:  // "c"
-    case 109: // "vector"
-    case 136: // "which"
-    case 157: // "abs"
-    case 301: // "min"
-    case 302: // "max"
-    case 310: // "as.character"
-    case 311: // "as.integer"
-    case 597: // "stdin"
-    case 598: // "stdout"
-    case 599: // "stderr"
-    case 372: // "is.logical"
-    case 377: // "is.symbol"
-    case 382: // "is.expression"
-    case 384: // "is.object"
-    case 386: // "is.numeric"
-    case 387: // "is.matrix"
-    case 388: // "is.array"
-    case 389: // "is.atomic"
-    case 391: // "is.call"
-    case 393: // "is.function"
-    case 395: // "is.na"
-    case 399: // "is.vector"
-    case 412: // "list"
-    case 407: // "rep.int"
-    case 507: // "islistfactor"
-    case 678: // "bitwiseAnd"
-    case 680: // "bitwiseOr"
-    case 681: // "bitwiseXor"
-    case 682: // "bitwiseShiftL"
-    case 683: // "bitwiseShiftL"
+bool supportsFastBuiltinCall(SEXP b) {
+    switch (b->u.primsxp.offset) {
+    case blt("nargs"):
+    case blt("length"):
+    case blt("c"):
+    case blt("vector"):
+    case blt("which"):
+    case blt("abs"):
+    case blt("min"):
+    case blt("max"):
+    case blt("as.character"):
+    case blt("as.integer"):
+    case blt("stdin"):
+    case blt("stdout"):
+    case blt("stderr"):
+    case blt("is.logical"):
+    case blt("is.symbol"):
+    case blt("is.expression"):
+    case blt("is.object"):
+    case blt("is.numeric"):
+    case blt("is.matrix"):
+    case blt("is.array"):
+    case blt("is.atomic"):
+    case blt("is.call"):
+    case blt("is.function"):
+    case blt("is.na"):
+    case blt("is.vector"):
+    case blt("list"):
+    case blt("rep.int"):
+    case blt("islistfactor"):
+    case blt("bitwiseAnd"):
+    case blt("bitwiseOr"):
+    case blt("bitwiseXor"):
+    case blt("bitwiseShiftL"):
+    case blt("bitwiseShiftR"):
         return true;
     default: {}
     }

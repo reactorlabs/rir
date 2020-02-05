@@ -8,6 +8,7 @@
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
@@ -225,6 +226,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (bc.immediateConst() == symbol::c)
             compiler.seenC = true;
         v = insert(new LdVar(bc.immediateConst(), env));
+        // PIR LdVar corresponds to ldvar_noforce_ which does not change
+        // visibility
+        insert(new Visible());
         // Checkpoint might be useful if we end up inlining this force
         if (!inPromise())
             addCheckpoint(srcCode, pos, stack, insert);
@@ -570,7 +574,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (monomorphicInnerFunction) {
                 static SEXP b = nullptr;
                 if (!b) {
-                    auto idx = findBuiltin("bodyCode");
+                    auto idx = blt("bodyCode");
                     b = Rf_allocSExp(BUILTINSXP);
                     b->u.primsxp.offset = idx;
                     R_PreserveObject(b);
@@ -1225,8 +1229,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                         srcCode, (deopt == fall) ? nextPos : trg, cur.stack);
                     auto offset = (uintptr_t)condition->typeFeedback.origin -
                                   (uintptr_t)srcCode;
-                    DeoptReason reason = {DeoptReason::Valuecheck, srcCode,
-                                          (uint32_t)offset};
+                    DeoptReason reason = {DeoptReason::DeadBranchReached,
+                                          srcCode, (uint32_t)offset};
                     Value* actual = condition;
                     if (auto c = AsTest::Cast(condition))
                         actual = c->arg(0).val();

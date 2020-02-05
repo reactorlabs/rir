@@ -164,9 +164,11 @@ enum class Opcode : uint8_t;
 
 struct DeoptReason {
     enum Reason : uint32_t {
+        None,
         Typecheck,
-        Valuecheck,
         Calltarget,
+        EnvStubMaterialized,
+        DeadBranchReached,
     };
     Reason reason;
     Code* srcCode;

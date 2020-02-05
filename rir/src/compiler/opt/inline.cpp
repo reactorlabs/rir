@@ -4,6 +4,7 @@
 #include "../util/cfg.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
+#include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
@@ -93,7 +94,7 @@ class TheInliner {
                                    Tombstone::closure()) {
                             static SEXP b = nullptr;
                             if (!b) {
-                                auto idx = findBuiltin("environment");
+                                auto idx = rir::blt("environment");
                                 b = Rf_allocSExp(BUILTINSXP);
                                 b->u.primsxp.offset = idx;
                                 R_PreserveObject(b);

@@ -53,10 +53,10 @@ function build_r {
     # wrong moment in the matrix package. There doesn't seem to be a good solution
     # other than just patching it.
     cd src/library/Recommended
-    tar xzf Matrix_1.2-14.tar.gz
+    tar xzf Matrix_1.2-18.tar.gz
     sed -i -e 's/^stopifnot((st <- system.time(show(M)))\[1\] < 1.0)/((st <- system.time(show(M)))[1] < 1.0);((st <- system.time(show(M)))[1] < 1.0);((st <- system.time(show(M)))[1] < 1.0);stopifnot((st <-  system.time(show(M)))[1] < 1.0)/' Matrix/man/printSpMatrix.Rd
-    rm Matrix_1.2-14.tar.gz
-    tar czf Matrix_1.2-14.tar.gz Matrix
+    rm Matrix_1.2-18.tar.gz
+    tar czf Matrix_1.2-18.tar.gz Matrix
     rm -rf Matrix
     cd ../../../
 
@@ -64,17 +64,12 @@ function build_r {
         echo "-> configure $NAME"
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
-            # Mac OSX
-            if [ $MACOS_GCC9 -eq 1 ]; then
-                MACOS_GCC9=1 ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no --without-aqua || cat config.log
-            else
-                ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
-            fi
+            ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
         else
             ./configure --with-ICU=no
         fi
     fi
-    
+
     if [ ! -f $R_DIR/doc/FAQ ]; then
         cd $R_DIR
         touch doc/FAQ
