@@ -4,82 +4,147 @@
 #include "runtime/Function.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
+#include "utils/filesystem.h"
 
 #include <fstream>
 #include <iomanip>
 #include <sstream>
-
+#include <sys/stat.h>
 namespace rir {
 namespace pir {
 
-uint64_t StreamLogger::logId = 0;
+static const std::string LOG_FOLDER = "log/";
+
+size_t StreamLogger::logId = 0;
+bool clearedLogFolderThisSession = false;
+
+static bool usesLogFolder(const DebugOptions& options) {
+    return options.includes(DebugFlag::PrintPassesIntoFolders) ||
+           options.includes(DebugFlag::PrintIntoFiles);
+}
+
+StreamLogger::StreamLogger(const DebugOptions& options) : options(options) {
+    if (!clearedLogFolderThisSession && usesLogFolder(options)) {
+        clearOrCreateDirectory(LOG_FOLDER.c_str());
+        clearedLogFolderThisSession = true;
+    }
+}
 
 StreamLogger::~StreamLogger() {
     while (!streams.empty()) {
         auto it = streams.begin();
-        (*it->second).flush();
+        it->second.flush();
         streams.erase(it);
     }
 }
 
 FileLogStream::~FileLogStream() { fstream.close(); }
-
-bool LogStream::tty() { return ConsoleColor::isTTY(out); }
 bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
+bool SimpleLogStream::tty() { return ConsoleColor::isTTY(out); }
 
-LogStream& StreamLogger::begin(ClosureVersion* cls) {
+static std::string closureLogPath(size_t logId, const ClosureVersion* cls) {
+    std::stringstream filePath;
+    filePath << LOG_FOLDER << cls->owner()->name() << "-pir-function-"
+             << std::setfill('0') << std::setw(5) << logId;
+    return filePath.str();
+}
+
+static std::string logFileExtension(DebugOptions options) {
+    if (options.style == DebugStyle::Standard)
+        return ".log";
+    else
+        return ".dot";
+}
+
+ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
     assert(!streams.count(cls) && "You already started this function");
+    std::string basePath = closureLogPath(logId, cls);
 
+    // Create inner stream
+    LogStream* logStream;
     if (options.includes(DebugFlag::PrintIntoFiles)) {
-        std::stringstream filename;
-        filename << cls->owner()->name() << "-pir-function-"
-                 << std::setfill('0') << std::setw(5) << logId++;
-        if (options.style == DebugStyle::Standard)
-            filename << ".log";
-        else
-            filename << ".dot";
-        streams.emplace(cls, new FileLogStream(options, cls, filename.str()));
+        std::stringstream filePath;
+        filePath << basePath << logFileExtension(options);
+        logStream = new FileLogStream(filePath.str());
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
-            streams.emplace(cls, new LogStream(options, cls));
+            logStream = new SimpleLogStream;
         else
-            streams.emplace(cls, new BufferedLogStream(options, cls));
+            logStream = new BufferedLogStream;
     }
 
-    auto& logger = get(cls);
+    // Clear and create folder for individual pass streams
+    if (options.includes(DebugFlag::PrintPassesIntoFolders)) {
+        clearOrCreateDirectory(basePath.c_str());
+    }
 
+    // Add stream logger wrapper
+    streams.emplace(cls,
+                    ClosureStreamLogger(options, logId, cls,
+                                        std::shared_ptr<LogStream>(logStream)));
+    ClosureStreamLogger& logger = streams.at(cls);
+    // Increment log id
+    logId++;
+
+    // Print early rir
     if (options.includes(DebugFlag::PrintEarlyRir)) {
         logger.preparePrint();
         logger.section("Original version");
-        cls->owner()->rirFunction()->disassemble(logger.out);
-        logger.out << "\n";
+        cls->owner()->rirFunction()->disassemble(logger.out().out);
+        logger.out() << "\n";
     }
 
     return logger;
 }
 
-void LogStream::compilationEarlyPir(ClosureVersion* closure) {
+static std::string passLogFileName(size_t number) {
+    std::stringstream name;
+    name << std::setfill('0') << std::setw(5) << number;
+    return name.str();
+}
+
+PassStreamLogger ClosureStreamLogger::forPass(size_t number) {
+    if (options.includes(DebugFlag::PrintPassesIntoFolders)) {
+        std::stringstream path;
+        path << closureLogPath(logId, version) << "/" << passLogFileName(number)
+             << logFileExtension(options);
+        FileLogStream* stream = new FileLogStream(path.str());
+        return PassStreamLogger(number, *this,
+                                std::shared_ptr<LogStream>(stream));
+    } else {
+        return PassStreamLogger(number, *this, _out);
+    }
+}
+
+PassStreamLogger::PassStreamLogger(size_t number, ClosureStreamLogger& parent,
+                                   const std::shared_ptr<LogStream>& out)
+    : GenericStreamLogger(parent.options, parent.version, out), number(number),
+      parent(parent) {}
+
+void PassStreamLogger::preparePrint() { parent.preparePrint(); }
+
+void ClosureStreamLogger::compilationEarlyPir(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         preparePrint();
         section("Compiled to PIR Version");
-        closure->print(options.style, out, tty(),
+        closure->print(options.style, out().out, out().tty(),
                        options.includes(DebugFlag::OmitDeoptBranches));
     }
 }
 
-void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
+void ClosureStreamLogger::pirOptimizationsFinished(ClosureVersion* closure) {
     auto name = version->name();
     if (options.includes(DebugFlag::PrintPirAfterOpt) &&
         std::regex_match(name.begin(), name.end(), options.functionFilter)) {
         preparePrint();
         section("PIR Version After Optimizations");
-        closure->print(options.style, out, tty(),
+        closure->print(options.style, out().out, out().tty(),
                        options.includes(DebugFlag::OmitDeoptBranches));
-        out << "\n";
+        out() << "\n";
     }
 }
 
-static bool shouldLog(ClosureVersion* version, const PirTranslator* pass,
+static bool shouldLog(const ClosureVersion* version, const PirTranslator* pass,
                       const DebugOptions& options) {
     auto name = version->name();
     if (options.includes(DebugFlag::PrintOptimizationPasses) &&
@@ -92,95 +157,170 @@ static bool shouldLog(ClosureVersion* version, const PirTranslator* pass,
     }
     if (options.includes(DebugFlag::PrintOptimizationPhases) &&
         pass->isPhaseMarker()) {
-        auto name = version->name();
         return std::regex_match(name.begin(), name.end(),
                                 options.functionFilter);
     }
     return false;
 }
 
-void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
-                                       const PirTranslator* pass,
-                                       size_t passnr) {
-    if (shouldLog(closure, pass, options)) {
+void GenericStreamLogger::header() {
+    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
+                            options.style != DebugStyle::Standard
+                        ? "// "
+                        : "";
+
+    highlightOn();
+    out() << "\n" << c << "┌";
+    for (size_t i = 0; i < 78; ++i)
+        out() << "─";
+    std::stringstream assumptions;
+    assumptions << "Assumptions: " << version->assumptions();
+    std::stringstream properties;
+    properties << "Properties:  " << version->properties;
+    out() << "┐\n";
+    out() << c << "│ " << std::left << std::setw(77) << version->name()
+          << "│\n";
+    out() << c << "│ " << std::left << std::setw(77) << assumptions.str()
+          << "│\n";
+    if (properties.str() != "")
+        out() << c << "│ " << std::left << std::setw(77) << properties.str()
+              << "│\n";
+    highlightOff();
+}
+
+void GenericStreamLogger::footer() {
+    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
+                            options.style != DebugStyle::Standard
+                        ? "// "
+                        : "";
+    highlightOn();
+    out() << c << "│ " << std::left << std::setw(77) << version->name()
+          << "│\n";
+    out() << c << "���";
+    for (size_t i = 0; i < 78; ++i)
+        out() << "─";
+    out() << "┘\n";
+    highlightOff();
+}
+
+void GenericStreamLogger::section(const std::string& title) {
+    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
+                            options.style != DebugStyle::Standard
+                        ? "// "
+                        : "";
+    highlightOn();
+    preparePrint();
+    out() << c << "├────── " << title;
+    if (options.includes(DebugFlag::PrintIntoStdout))
+        out() << "(" << version->name() << ")";
+    out() << "\n";
+    highlightOff();
+}
+
+void GenericStreamLogger::warn(const std::string& msg) {
+    if (options.includes(DebugFlag::ShowWarnings)) {
+        preparePrint();
+        out() << "Warning: " << msg << " in " << version->name() << "\n";
+    }
+}
+
+void GenericStreamLogger::failed(const std::string& msg) {
+    if (options.includes(DebugFlag::ShowWarnings)) {
+        preparePrint();
+        out() << "Failed: " << msg << " in " << version->name() << "\n";
+    }
+}
+
+void GenericStreamLogger::highlightOn() {
+    if (out().tty())
+        ConsoleColor::red(out().out);
+}
+
+void GenericStreamLogger::highlightOff() {
+    if (out().tty())
+        ConsoleColor::clear(out().out);
+}
+
+void PassStreamLogger::pirOptimizationsHeader(const PirTranslator* pass) {
+    if (shouldLog(version, pass, options)) {
         preparePrint();
         std::stringstream ss;
-        ss << pass->getName() << ": == " << passnr;
+        ss << pass->getName() << ": == " << number;
         section(ss.str());
     }
 }
 
-void LogStream::pirOptimizations(ClosureVersion* closure,
-                                 const PirTranslator* pass) {
-    if (shouldLog(closure, pass, options)) {
+void PassStreamLogger::pirOptimizations(const PirTranslator* pass) {
+    if (shouldLog(version, pass, options)) {
         if (options.includes(DebugFlag::OnlyChanges)) {
             static std::string last = "";
             std::stringstream ss;
-            closure->print(options.style, ss, tty(),
+            version->print(options.style, ss, out().tty(),
                            options.includes(DebugFlag::OmitDeoptBranches));
             if (last != ss.str()) {
                 last = ss.str();
-                out << last;
+                out() << last;
             }
         } else {
-            closure->print(options.style, out, tty(),
+            version->print(options.style, out().out, out().tty(),
                            options.includes(DebugFlag::OmitDeoptBranches));
         }
     }
 }
 
-void LogStream::finalRIR(Function* fun) {
+void ClosureStreamLogger::finalRIR(Function* fun) {
     if (options.includes(DebugFlag::PrintFinalRir)) {
         preparePrint();
         section("Final RIR");
-        fun->disassemble(out);
-        out << "\n";
+        fun->disassemble(out().out);
+        out() << "\n";
     }
 }
 
-void LogStream::afterAllocator(Code* code,
-                               std::function<void(std::ostream&)> allocDebug) {
+void ClosureStreamLogger::afterAllocator(
+    Code* code, std::function<void(std::ostream&)> allocDebug) {
     if (options.includes(DebugFlag::PrintAllocator)) {
         preparePrint();
         section("PIR SSA allocator");
-        code->printCode(out, tty(),
+        code->printCode(out().out, out().tty(),
                         options.includes(DebugFlag::OmitDeoptBranches));
-        out << "\n";
-        allocDebug(out);
+        out() << "\n";
+        allocDebug(out().out);
     }
 }
 
-void LogStream::CSSA(Code* code) {
+void ClosureStreamLogger::CSSA(Code* code) {
     if (options.includes(DebugFlag::PrintCSSA)) {
         preparePrint();
         section("CSSA Version");
-        code->printCode(out, tty(),
+        code->printCode(out().out, out().tty(),
                         options.includes(DebugFlag::OmitDeoptBranches));
-        out << "\n";
+        out() << "\n";
     }
 }
 
-void LogStream::finalPIR(ClosureVersion* code) {
+void ClosureStreamLogger::finalPIR(ClosureVersion* code) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         preparePrint();
         section("Final PIR Version");
-        code->print(options.style, out, tty(),
+        code->print(options.style, out().out, out().tty(),
                     options.includes(DebugFlag::OmitDeoptBranches));
-        out << "\n";
+        out() << "\n";
     }
 }
 
-void LogStream::unsupportedBC(const std::string& warning, const rir::BC& bc) {
+void ClosureStreamLogger::unsupportedBC(const std::string& warning,
+                                        const rir::BC& bc) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
-        out << "Warning: " << warning << ": ";
+        out() << "Warning: " << warning << ": ";
         if (bc.bc == Opcode::guard_fun_) {
-            out << CHAR(
+            out() << CHAR(
                 PRINTNAME(rir::Pool::get(bc.immediate.guard_fun_args.name)));
         } else {
-            bc.print(out);
+            bc.print(out().out);
         }
-        out << "\n";
+        out() << "\n";
     }
 }
 
@@ -188,81 +328,6 @@ void StreamLogger::warn(const std::string& msg) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         std::cerr << "Warning: " << msg << "\n";
     }
-}
-
-void LogStream::warn(const std::string& msg) {
-    if (options.includes(DebugFlag::ShowWarnings)) {
-        preparePrint();
-        out << "Warning: " << msg << " in " << version->name() << "\n";
-    }
-}
-
-void LogStream::failed(const std::string& msg) {
-    if (options.includes(DebugFlag::ShowWarnings)) {
-        preparePrint();
-        out << "Failed: " << msg << " in " << version->name() << "\n";
-    }
-}
-
-void LogStream::highlightOn() {
-    if (tty())
-        ConsoleColor::red(out);
-}
-void LogStream::highlightOff() {
-    if (tty())
-        ConsoleColor::clear(out);
-}
-
-void LogStream::header() {
-    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
-                            options.style != DebugStyle::Standard
-                        ? "// "
-                        : "";
-
-    highlightOn();
-    out << "\n" << c << "┌";
-    for (size_t i = 0; i < 78; ++i)
-        out << "─";
-    std::stringstream assumptions;
-    assumptions << "Assumptions: " << version->assumptions();
-    std::stringstream properties;
-    properties << "Properties:  " << version->properties;
-    out << "┐\n";
-    out << c << "│ " << std::left << std::setw(77) << version->name() << "│\n";
-    out << c << "│ " << std::left << std::setw(77) << assumptions.str()
-        << "│\n";
-    if (properties.str() != "")
-        out << c << "│ " << std::left << std::setw(77) << properties.str()
-            << "│\n";
-    highlightOff();
-}
-
-void LogStream::footer() {
-    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
-                            options.style != DebugStyle::Standard
-                        ? "// "
-                        : "";
-    highlightOn();
-    out << c << "│ " << std::left << std::setw(77) << version->name() << "│\n";
-    out << c << "└";
-    for (size_t i = 0; i < 78; ++i)
-        out << "─";
-    out << "┘\n";
-    highlightOff();
-}
-
-void LogStream::section(const std::string& title) {
-    std::string c = options.includes(DebugFlag::PrintIntoFiles) &&
-                            options.style != DebugStyle::Standard
-                        ? "// "
-                        : "";
-    highlightOn();
-    preparePrint();
-    out << c << "├────── " << title;
-    if (options.includes(DebugFlag::PrintIntoStdout))
-        out << "(" << version->name() << ")";
-    out << "\n";
-    highlightOff();
 }
 
 void StreamLogger::title(const std::string& msg) {
@@ -293,7 +358,7 @@ void StreamLogger::title(const std::string& msg) {
 
 void StreamLogger::flush() {
     for (auto& e : streams) {
-        (*e.second).flush();
+        e.second.flush();
     }
 }
 

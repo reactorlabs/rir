@@ -28,8 +28,32 @@ extern Rboolean R_Visible;
 
 namespace rir {
 
+// #define PRINT_INTERP
+// #define PRINT_STACK_SIZE 10
 #ifdef PRINT_INTERP
-static void printInterp(Opcode* pc, Code* c) {
+static void printInterp(Opcode* pc, Code* c, InterpreterInstance* ctx) {
+#ifdef PRINT_STACK_SIZE
+    // Print stack
+    std::cout << "#; Stack:";
+    for (int i = 0;; i++) {
+        SEXP sexp = ostack_at(ctx, i);
+        if (sexp == nullptr)
+            break;
+        else if (i == PRINT_STACK_SIZE) {
+            std::cout << " ...";
+            break;
+        }
+        std::cout << " " << dumpSexp(sexp);
+    }
+    std::cout << "\n";
+#endif
+    // Print source
+    unsigned sidx = c->getSrcIdxAt(pc, true);
+    if (sidx != 0) {
+        SEXP src = src_pool_at(ctx, sidx);
+        std::cout << "#; " << dumpSexp(src) << "\n";
+    }
+    // Print bc
     BC bc = BC::decode(pc, c);
     std::cout << "#";
     bc.print(std::cout);
@@ -61,7 +85,7 @@ static RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc,
 #ifdef PRINT_INTERP
 #define NEXT()                                                                 \
     (__extension__({                                                           \
-        printInterp(pc, c);                                                    \
+        printInterp(pc, c, ctx);                                               \
         goto* opAddr[static_cast<uint8_t>(advanceOpcode())];                   \
     }))
 #define LASTOP                                                                 \

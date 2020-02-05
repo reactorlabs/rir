@@ -26,7 +26,12 @@ completely disables the PIR optimizer. As follows are the different Options avai
 
     PIR_DEBUG=                     (only most important flags listed)
         help                       list all available flags
+        PrintPassesIntoFolders     print each pass into `log/<closure>-pir-function/<pass#>.log` (or `.out` if GraphViz)
+        PrintIntoFiles             print into `log/<closure>-pir-function.log` (or `.out` if GraphViz)
         PrintIntoStdout            print without buffering (useful for crashes during compilation)
+        PrintInstructionIds        have instructions print out their memory addresses, to track them across compilation passes
+        OmitDeoptBranches          don't print deopt branches in closures
+        OnlyChanges                only print optimization passes/phases which actually change bytecode 
         PrintEarlyRir              print after initial rir2pir translation
         PrintOptimizationPasses    print after every pass
         PrintOptimizationPhases    print before/after every phase of the compiler

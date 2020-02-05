@@ -86,8 +86,10 @@ pir.check <- function(f, ..., warmup=NULL) {
 # creates a bitset with pir debug options
 pir.debugFlags <- function(ShowWarnings = FALSE,
                            DryRun = FALSE,
+                           PrintPassesIntoFolders = FALSE,
                            PrintIntoFiles = FALSE,
                            PrintIntoStdout = FALSE,
+                           PrintInstructionIds = FALSE,
                            OmitDeoptBranches = FALSE,
                            OnlyChanges = FALSE,
                            PrintEarlyRir = FALSE,
@@ -101,9 +103,23 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            PrintFinalRir = FALSE) {
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
-    .Call("pir_debugFlags", ShowWarnings, DryRun,
-          PrintIntoFiles, PrintIntoStdout, OmitDeoptBranches, OnlyChanges, PrintEarlyRir, PrintEarlyPir,
-          PrintOptimizationPasses, PrintOptimizationPhases, PrintPirAfterOpt, PrintCSSA, PrintAllocator, PrintFinalPir,
+    .Call("pir_debugFlags",
+          ShowWarnings,
+          DryRun,
+          PrintPassesIntoFolders,
+          PrintIntoFiles,
+          PrintIntoStdout,
+          PrintInstructionIds,
+          OmitDeoptBranches,
+          OnlyChanges,
+          PrintEarlyRir,
+          PrintEarlyPir,
+          PrintOptimizationPasses,
+          PrintOptimizationPhases,
+          PrintPirAfterOpt,
+          PrintCSSA,
+          PrintAllocator,
+          PrintFinalPir,
           PrintFinalRir,
           # wants a dummy parameter at the end for technical reasons
           NULL)

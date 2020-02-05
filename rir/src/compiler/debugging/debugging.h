@@ -25,8 +25,10 @@ namespace pir {
 #define LIST_OF_PIR_DEBUGGING_FLAGS(V)                                         \
     V(ShowWarnings)                                                            \
     V(DryRun)                                                                  \
+    V(PrintPassesIntoFolders)                                                  \
     V(PrintIntoFiles)                                                          \
     V(PrintIntoStdout)                                                         \
+    V(PrintInstructionIds)                                                     \
     V(OmitDeoptBranches)                                                       \
     V(OnlyChanges)                                                             \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
