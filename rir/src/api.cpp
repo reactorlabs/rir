@@ -415,15 +415,22 @@ REXPORT SEXP rirPrintBuiltinIds() {
               << "#define RIR_BUILTIN_IDS_H\n"
               << "// This file is generated using rir.printBuiltinIds()\n"
               << "#include \"utils/String.h\"\n"
+              << "#include <cassert>\n"
               << "namespace rir {\n"
+              << "static inline void errorWrongBuiltin() { "
+              << "assert(false && \"wrong builtin id\"); }\n"
               << "constexpr static inline int blt(const char* name) {\n";
     while (finger->name) {
-        std::cout << "    if (staticStringEqual(name, \"" << finger->name
+        std::cout << "    ";
+        if (finger != R_FunTab)
+            std::cout << "else ";
+        std::cout << "if (staticStringEqual(name, \"" << finger->name
                   << "\"))\n"
                   << "        return " << i << ";\n";
         i++;
         finger++;
     }
+    std::cout << "    else\n        errorWrongBuiltin();\n";
     std::cout << "    return -1;\n}\n} // namespace rir\n#endif\n";
     return R_NilValue;
 }

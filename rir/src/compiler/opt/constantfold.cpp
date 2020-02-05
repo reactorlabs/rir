@@ -283,7 +283,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             i->replaceUsesAndSwapWith(new LdConst(res), ip);
                         }
                     }
-                } else if (builtinId == blt("as.int") && nargs == 1) {
+                } else if (builtinId == blt("as.integer") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(PirType(RType::integer)
                                   .notPromiseWrapped()
