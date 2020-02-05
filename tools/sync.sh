@@ -64,7 +64,12 @@ function build_r {
         echo "-> configure $NAME"
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
-            ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
+            # Mac OSX
+            if [ $MACOS_GCC9 -eq 1 ]; then
+                MACOS_GCC9=1 ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no --without-aqua || cat config.log
+            else
+                ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
+            fi
         else
             ./configure --with-ICU=no
         fi
