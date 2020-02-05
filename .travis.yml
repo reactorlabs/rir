@@ -111,6 +111,8 @@ before_script:
   - ${CXX} --version
   - ${CC} --version
   - cd "${TRAVIS_BUILD_DIR}"
+  # disable a test that needs latex
+  - sed -ie 's/reg-packages.R//' external/custom-r/tests/Makefile.common
   - mkdir build && cd build
   - cmake -DCMAKE_BUILD_TYPE=$BUILD ..
   - make setup
