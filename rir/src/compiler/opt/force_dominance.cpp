@@ -220,9 +220,10 @@ struct ForcedBy {
     }
 
     bool eagerLikeFunction(ClosureVersion* fun) const {
-        if (ambiguousForceOrder || argumentForceOrder.size() < fun->nargs())
+        if (ambiguousForceOrder ||
+            argumentForceOrder.size() < fun->effectiveNArgs())
             return false;
-        for (size_t i = 0; i < fun->nargs(); ++i)
+        for (size_t i = 0; i < fun->effectiveNArgs(); ++i)
             if (argumentForceOrder[i] != i)
                 return false;
         return true;
@@ -353,8 +354,9 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                     res.taint();
             }
 
-            if (i->hasEffect() && !state.ambiguousForceOrder &&
-                state.argumentForceOrder.size() < closure->nargs()) {
+            if (i->effects.includes(Effect::Force) &&
+                !state.ambiguousForceOrder &&
+                state.argumentForceOrder.size() < closure->effectiveNArgs()) {
                 // After the first effect we give up on recording force order,
                 // since we can't use it to turn the arguments into eager ones
                 // anyway. Otherwise we would reorder effects.

@@ -114,6 +114,9 @@ size_t ClosureVersion::size() const {
 }
 
 size_t ClosureVersion::nargs() const { return owner_->nargs(); }
+size_t ClosureVersion::effectiveNArgs() const {
+    return owner_->nargs() - optimizationContext_.assumptions.numMissing();
+}
 
 ClosureVersion::ClosureVersion(Closure* closure,
                                const OptimizationContext& optimizationContext,
