@@ -180,26 +180,20 @@ class TheInliner {
                         limit = (limit * 4) + 1;
                         weight *= limit;
                     }
-                    if (auto c = StaticCall::Cast(*it)) {
-                        if (auto env = Env::Cast(c->cls()->closureEnv())) {
-                            if (env->rho && R_IsNamespaceEnv(env->rho)) {
-                                weight *= 0.8;
-                                auto expr = BODY_EXPR(c->cls()->rirClosure());
-                                // Closure wrappers for internals
-                                if (CAR(expr) == rir::symbol::Internal)
-                                    weight *= 0.1;
-                                // those usually strongly benefit type
-                                // inference, since they have a lot of case
-                                // distinctions
-                                static auto profitable =
-                                    std::unordered_set<std::string>(
-                                        {"matrix", "array", "vector", "colSums",
-                                         "colMeans", "set.seed"});
-                                if (profitable.count(c->cls()->name())) {
-                                    weight *= 0.1;
-                                }
-                            }
-                        }
+                    auto env = Env::Cast(inlineeCls->closureEnv());
+                    if (env && env->rho && R_IsNamespaceEnv(env->rho)) {
+                        auto expr = BODY_EXPR(inlineeCls->rirClosure());
+                        // Closure wrappers for internals
+                        if (CAR(expr) == rir::symbol::Internal)
+                            weight *= 0.6;
+                        // those usually strongly benefit type
+                        // inference, since they have a lot of case
+                        // distinctions
+                        static auto profitable =
+                            std::unordered_set<std::string>(
+                                {"matrix", "array", "vector"});
+                        if (profitable.count(inlineeCls->name()))
+                            weight *= 0.2;
                     }
                 }
 
@@ -437,11 +431,11 @@ size_t Parameter::INLINER_MAX_SIZE = getenv("PIR_INLINER_MAX_SIZE")
 size_t Parameter::INLINER_MAX_INLINEE_SIZE =
     getenv("PIR_INLINER_MAX_INLINEE_SIZE")
         ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
-        : 350;
+        : 200;
 size_t Parameter::INLINER_INITIAL_FUEL =
     getenv("PIR_INLINER_INITIAL_FUEL")
         ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
-        : 8;
+        : 15;
 size_t Parameter::INLINER_INLINE_UNLIKELY =
     getenv("PIR_INLINER_INLINE_UNLIKELY")
         ? atoi(getenv("PIR_INLINER_INLINE_UNLIKELY"))
