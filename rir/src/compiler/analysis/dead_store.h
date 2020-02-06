@@ -44,13 +44,14 @@ class DeadStoreAnalysis {
       public:
         typedef std::unordered_set<Value*> Envs;
         std::unordered_set<MkArg*> visited;
-        Envs envs;
+        Envs leaked;
+        Envs leakedByDeopt;
         AbstractResult mergeExit(const EnvSet& other) { return merge(other); }
         AbstractResult merge(const EnvSet& other) {
             AbstractResult res;
-            for (const auto& f : other.envs) {
-                if (!envs.count(f)) {
-                    envs.insert(f);
+            for (const auto& environment : other.leaked) {
+                if (!leaked.count(environment)) {
+                    leaked.insert(environment);
                     res.update();
                 }
             }
@@ -60,10 +61,29 @@ class DeadStoreAnalysis {
                     res.update();
                 }
             }
+            for (const auto& environment : other.leakedByDeopt) {
+                if (!leaked.count(environment) &&
+                    !leakedByDeopt.count(environment)) {
+                    leakedByDeopt.insert(environment);
+                    res.update();
+                }
+            }
             return res;
         }
         void print(std::ostream& out, bool tty) const {
-            // TODO
+            out << "==============\nLeaked:\n";
+            for (auto environment : leaked) {
+                out << "\t";
+                environment->printRef(std::cout);
+                out << "\n";
+            }
+            std::cout << "Leaked only by deopt branches:\n";
+            for (auto environment : leakedByDeopt) {
+                out << "\t";
+                environment->printRef(std::cout);
+                out << "\n";
+            }
+            out << "==============\n";
         }
     };
 
@@ -103,9 +123,16 @@ class DeadStoreAnalysis {
                     if (mk->stub)
                         return effect;
                 }
-                if (!state.envs.count(env)) {
-                    state.envs.insert(env);
-                    effect.update();
+                if (i->bb()->isDeopt()) {
+                    if (!state.leakedByDeopt.count(env)) {
+                        state.leakedByDeopt.insert(env);
+                        effect.update();
+                    }
+                } else {
+                    if (!state.leaked.count(env)) {
+                        state.leaked.insert(env);
+                        effect.update();
+                    }
                 }
             }
             return effect;
@@ -135,6 +162,8 @@ class DeadStoreAnalysis {
     class ObservedStores {
       public:
         std::unordered_set<Value*> completelyObserved;
+        std::unordered_map<Value*, std::unordered_set<Instruction*>>
+            observedByDeopt;
         std::unordered_set<Variable, pairhash> partiallyObserved;
         std::unordered_set<Variable, pairhash> ignoreStore;
         std::unordered_set<MkArg*> visited;
@@ -147,7 +176,25 @@ class DeadStoreAnalysis {
             for (const auto& f : other.completelyObserved) {
                 if (!completelyObserved.count(f)) {
                     completelyObserved.insert(f);
+                    if (observedByDeopt.count(f))
+                        observedByDeopt.erase(f);
                     res.update();
+                }
+            }
+            for (const auto& instPerEnv : other.observedByDeopt) {
+                if (!completelyObserved.count(instPerEnv.first)) {
+                    if (!observedByDeopt.count(instPerEnv.first)) {
+                        observedByDeopt.emplace(instPerEnv.first,
+                                                instPerEnv.second);
+                        res.update();
+                    } else {
+                        auto& instructions =
+                            observedByDeopt.at(instPerEnv.first);
+                        for (auto instruction : instPerEnv.second) {
+                            if (instructions.insert(instruction).second)
+                                res.update();
+                        }
+                    }
                 }
             }
             for (const auto& f : other.partiallyObserved) {
@@ -172,6 +219,19 @@ class DeadStoreAnalysis {
             }
             return res;
         }
+
+        bool removeStoreIgnoralOf(Value* env) {
+            for (auto it = ignoreStore.begin(); it != ignoreStore.end();) {
+                if (it->second != env) {
+                    it++;
+                } else {
+                    it = ignoreStore.erase(it);
+                    return true;
+                }
+            }
+            return false;
+        }
+
         void print(std::ostream& out, bool tty) const {
             // TODO
         }
@@ -243,18 +303,35 @@ class DeadStoreAnalysis {
             auto observeFullEnv = [&](Value* env) {
                 for (auto& e : withPotentialParents(env)) {
                     if (!state.completelyObserved.count(e)) {
+                        if (state.observedByDeopt.count(e))
+                            state.observedByDeopt.erase(e);
                         state.completelyObserved.insert(e);
                         effect.update();
                     }
-                    for (auto it = state.ignoreStore.begin();
-                         it != state.ignoreStore.end();) {
-                        if (it->second != e) {
-                            it++;
-                        } else {
-                            it = state.ignoreStore.erase(it);
+                    if (state.removeStoreIgnoralOf(env))
+                        effect.update();
+                }
+            };
+
+            auto observeLeakedEnv = [&](Value* env, Instruction* instruction) {
+                for (auto& e : withPotentialParents(env)) {
+                    if (!MkEnv::Cast(e))
+                        return observeFullEnv(env);
+                    if (!state.completelyObserved.count(e)) {
+                        if (!state.observedByDeopt.count(e)) {
+                            std::unordered_set<Instruction*> set;
+                            set.insert(instruction);
+                            state.observedByDeopt.emplace(e, set);
                             effect.update();
+                        } else {
+                            if (state.observedByDeopt.at(e)
+                                    .insert(instruction)
+                                    .second)
+                                effect.update();
                         }
                     }
+                    if (state.removeStoreIgnoralOf(env))
+                        effect.update();
                 }
             };
 
@@ -282,10 +359,20 @@ class DeadStoreAnalysis {
                 }
             } else if (i->exits() || i->effects.contains(Effect::ExecuteCode)) {
                 auto leakedEnvs = leaked.leakedAt(i);
-                for (auto& l : leakedEnvs.envs)
+                for (auto& l : leakedEnvs.leaked)
                     observeFullEnv(l);
+                if (i->bb()->isDeopt()) {
+                    for (auto& l : leakedEnvs.leakedByDeopt)
+                        observeLeakedEnv(l, i);
+                }
             } else if (i->readsEnv()) {
-                observeFullEnv(resolveEnv(i->env()));
+                auto leakedEnvs = leaked.leakedAt(i);
+                Value* environment = resolveEnv(i->env());
+                if (i->bb()->isDeopt())
+                    observeLeakedEnv(environment, i);
+                else {
+                    observeFullEnv(environment);
+                }
             }
 
             if (i->exits() || i->readsEnv()) {
@@ -310,10 +397,28 @@ class DeadStoreAnalysis {
             Variable var({st->varName, resolveEnv(st->env())});
             if (state.ignoreStore.count(var))
                 return false;
-            if (state.completelyObserved.count(st->env()))
+            if (state.completelyObserved.count(st->env()) ||
+                state.observedByDeopt.count(st->env()))
                 return true;
             return Env::isStaticEnv(st->env()) ||
                    state.partiallyObserved.count(var);
+        }
+
+        bool isObservedOnlyByDeopt(StVar* st) const {
+            auto state = at<PositioningStyle::BeforeInstruction>(st);
+            Variable var({st->varName, st->env()});
+            assert(!(state.completelyObserved.count(st->env()) &&
+                     state.observedByDeopt.count(st->env())));
+            return !Env::isStaticEnv(st->env()) &&
+                   !state.partiallyObserved.count(var) &&
+                   state.observedByDeopt.count(st->env());
+        }
+
+        std::unordered_set<Instruction*>
+        observedByDeoptInstructions(StVar* st) const {
+            auto state = at<PositioningStyle::BeforeInstruction>(st);
+            assert(state.observedByDeopt.count(st->env()));
+            return state.observedByDeopt.at(st->env());
         }
     };
 
@@ -327,6 +432,14 @@ class DeadStoreAnalysis {
 
     bool isDead(StVar* st) const {
         return !observed.isObserved(st);
+    };
+
+    bool onlyObservedByDeopt(StVar* st) const {
+        return observed.isObservedOnlyByDeopt(st);
+    };
+
+    std::unordered_set<Instruction*> deoptInstructionsFor(StVar* st) const {
+        return observed.observedByDeoptInstructions(st);
     };
 };
 } // namespace pir

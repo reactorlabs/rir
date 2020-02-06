@@ -19,7 +19,27 @@ void DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* function,
             while (ip != bb->end()) {
                 auto next = ip + 1;
                 if (auto st = StVar::Cast(*ip)) {
-                    if (analysis.isDead(st)) {
+                    if (analysis.isDead(st)) 
+                        next = bb->remove(ip);
+                }
+                ip = next;
+            }
+        });
+
+        VisitorNoDeoptBranch::runBackward(function->entry, [&](BB* bb) {
+            auto ip = bb->begin();
+            while (ip != bb->end()) {
+                auto next = ip + 1;
+                if (auto st = StVar::Cast(*ip)) {
+                    if (analysis.onlyObservedByDeopt(st)) {
+                        std::unordered_set<BB*> copied;
+                        for (auto instruction : analysis.deoptInstructionsFor(st)) {
+                            if (!copied.count(instruction->bb())) {
+                                instruction->bb()->insert(
+                                    instruction->bb()->begin(), st->clone());
+                                copied.insert(instruction->bb());
+                            }
+                        }
                         next = bb->remove(ip);
                         continue;
                     }
