@@ -47,7 +47,7 @@ function build_r {
     cd src/library/Recommended/
     tar xf ../../../../custom-r/cache_recommended.tar
     cd ../../..
-    tools/rsync-recommended || true
+    # tools/rsync-recommended || true
 
     # There is a test that times out due to the compiler triggering in the
     # wrong moment in the matrix package. There doesn't seem to be a good solution
