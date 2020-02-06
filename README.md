@@ -87,13 +87,6 @@ For faster build use ninja. To generate ninja files instead of makefiles add `-G
 
 Using ninja means GCC and Clang will disable color output. To force color, run cmake with `-DFORCE_COLORED_OUTPUT=true`.
 
-### Building on macOS with GCC 9
-
-By default macOS will build gnuR and rir with clang, while Linux always uses GCC. There might be some differences between the 2 compilers. However, you can force macOS to use GCC via the following:
-
-- Install GCC 9 with homebrew (`brew install gcc@9`)
-- Pass `-GMACOS_USE_GCC_9` to `cmake`
-
 ### Making changes to gnur
 
 R with RIR patches is a submodule under external/custom-r. This is how you edit:

@@ -17,29 +17,13 @@ set(LLVM_COMPONENTS_USED core orcjit native vectorize lto)
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
-# use GCC 9 on macOS. Otherwise we use clang
-if(APPLE)
-    option(MACOS_USE_GCC_9 "Use GCC 9 on macOS." FALSE)
-endif(APPLE)
-
-if(${MACOS_USE_GCC_9})
-    set(CMAKE_C_COMPILER /usr/local/bin/gcc-9 CACHE PATH "" FORCE)
-    set(CMAKE_CXX_COMPILER /usr/local/bin/g++-9 CACHE PATH "" FORCE)
-endif()
-
 add_definitions(-g3)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror")
 set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT -DMEASURE")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT -DMEASURE")
-# with macOS GCC 9 we need to explicitly use libc++, since llvm does. See https://libcxx.llvm.org/docs/UsingLibcxx.html#using-libc-with-gcc
-if(${MACOS_USE_GCC_9})
-    set(CMAKE_CXX_FLAGS_LIBCXX "-nostdinc++ -nodefaultlibs -lc++ -lc++abi -lm -lc -lgcc_s.1 -lgcc")
-else()
-    set(CMAKE_CXX_FLAGS_LIBCXX "")
-endif()
-set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} ${CMAKE_CXX_FLAGS_LIBCXX} -Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough")
+set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} -Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 set(CMAKE_C_FLAGS_RELEASENOASSERT "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_C_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
@@ -109,16 +93,9 @@ message(STATUS "Using R from ${R_HOME}")
 add_custom_target(setup-build-dir
     COMMAND ${CMAKE_SOURCE_DIR}/tools/setup-build-dir ${CMAKE_SOURCE_DIR} ${R_HOME}
 )
-
-if(${MACOS_USE_GCC_9})
-    add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh --macos_gcc9
-    )
-else()
-    add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh
-    )
-endif()
+add_custom_target(dependencies
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh
+)
 
 add_custom_target(default-gnur
     DEPENDS dependencies

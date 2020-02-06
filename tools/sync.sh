@@ -11,13 +11,8 @@ fi
 SRC_DIR=`cd ${SCRIPTPATH}/.. && pwd`
 . "${SCRIPTPATH}/script_include.sh"
 
-
 if [[ "$OSTYPE" == "darwin"* ]]; then
     USING_OSX=1
-fi
-
-if [[ "$1" == "--macos_gcc9" ]]; then
-    MACOS_GCC9=1
 fi
 
 echo "-> update submodules"
@@ -63,13 +58,9 @@ function build_r {
     if [ ! -f $R_DIR/Makefile ]; then
         echo "-> configure $NAME"
         cd $R_DIR
-        if [ $USING_OSX -eq 1 ]; then
+        if [ -n "$USING_OSX" ]; then
             # Mac OSX
-            if [ $MACOS_GCC9 -eq 1 ]; then
-                MACOS_GCC9=1 ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no --without-aqua || cat config.log
-            else
-                ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
-            fi
+            ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
         else
             ./configure --with-ICU=no
         fi
