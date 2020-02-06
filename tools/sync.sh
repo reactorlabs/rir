@@ -113,7 +113,7 @@ LLVM_DIR="${SRC_DIR}/external/llvm-8.0.0"
 if [ ! -d $LLVM_DIR ]; then
     echo "-> unpacking LLVM"
     cd "${SRC_DIR}/external"
-    if [ $USING_OSX -eq 1 ]; then
+    if [ -n "$USING_OSX" ]; then
         if [ ! -f "clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz" ]; then
             curl http://releases.llvm.org/8.0.0/clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz > clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz
         fi
