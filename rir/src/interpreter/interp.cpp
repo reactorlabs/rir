@@ -799,7 +799,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     if (!isDeoptimizing() && !fun->unoptimizable &&
         fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-        ((fun->invocationCount() %
+        ((fun != table->baseline() && fun->invocationCount() >= 2 &&
+          fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
+         (fun->invocationCount() %
           (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
@@ -814,7 +816,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                 // More assumptions are available than this version uses. Let's
                 // try compile a better matching version.
 #ifdef DEBUG_DISPATCH
-                std::cout << "Optimizing for new context:";
+                std::cout << "Optimizing for new context "
+                          << fun->invocationCount() << ": ";
+                Rf_PrintValue(call.ast);
                 std::cout << given << " vs " << fun->signature().assumptions
                           << "\n";
 #endif
@@ -2022,6 +2026,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(ldvar_for_update_) {
             Immediate id = readImmediate();
             advanceImmediate();
+            assert(!LazyEnvironment::check(env));
             R_varloc_t loc = R_findVarLocInFrame(env, cp_pool_at(ctx, id));
             bool isLocal = !R_VARLOC_IS_NULL(loc);
             SEXP res = nullptr;
@@ -2063,6 +2068,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
+            assert(!LazyEnvironment::check(env));
             SEXP loc = getCellFromCache(env, id, cacheIndex, ctx, bindingCache);
             bool isLocal = loc;
             SEXP res = nullptr;
@@ -2131,6 +2137,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(ldvar_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
+            assert(!LazyEnvironment::check(env));
             res = Rf_findVar(sym, env);
             R_Visible = TRUE;
 
@@ -2158,6 +2165,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
+            assert(!LazyEnvironment::check(env));
             res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache);
             R_Visible = TRUE;
 
@@ -2185,6 +2193,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(ldvar_noforce_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
+            assert(!LazyEnvironment::check(env));
             res = Rf_findVar(sym, env);
 
             if (res == R_UnboundValue) {
@@ -2206,6 +2215,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
             advanceImmediate();
+            assert(!LazyEnvironment::check(env));
             res = cachedGetVar(env, id, cacheIndex, ctx, bindingCache);
 
             if (res == R_UnboundValue) {
@@ -2227,6 +2237,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(ldvar_super_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
+            assert(!LazyEnvironment::check(env));
             res = Rf_findVar(sym, ENCLOS(env));
 
             if (res == R_UnboundValue) {
@@ -2251,6 +2262,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(ldvar_noforce_super_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
+            assert(!LazyEnvironment::check(env));
             res = Rf_findVar(sym, ENCLOS(env));
 
             if (res == R_UnboundValue) {
@@ -2615,11 +2627,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
             bool dispatchFail = fun->dead || !matches(call, fun->signature());
+            fun->registerInvocation();
+            auto dt = DispatchTable::unpack(BODY(callee));
             if (!dispatchFail && !fun->unoptimizable &&
                 fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-                (fun->invocationCount() %
-                     ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
-                 0)) {
+                ((fun != dt->baseline() && fun->invocationCount() >= 2 &&
+                  fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
+                 (fun->invocationCount() %
+                      ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
+                  0))) {
                 Assumptions assumptions =
                     addDynamicAssumptionsForOneTarget(call, fun->signature());
                 if (assumptions != fun->signature().assumptions)
@@ -2628,7 +2644,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
 
             if (dispatchFail) {
-                auto dt = DispatchTable::unpack(BODY(callee));
                 fun = dispatch(call, dt);
                 // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
@@ -2646,7 +2661,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // by remembering the original order.
                 if (given.includes(Assumption::StaticallyArgmatched))
                     lazyArgs.content.args = nullptr;
-                fun->registerInvocation();
                 supplyMissingArgs(call, fun);
                 res = rirCallTrampoline(call, fun, symbol::delayedEnv,
                                         (SEXP)&lazyArgs, ctx);

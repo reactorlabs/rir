@@ -604,7 +604,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         emitGuardForNamePrimitive(cs, fun);
 
         if (maybeChanges(target, rhs)) {
-            cs << BC::ldvarForUpdate(target) << BC::setShared() << BC::pop();
+            if (ctx.code.top()->isCached(target))
+                cs << BC::ldvarForUpdateCached(
+                    target, ctx.code.top()->cacheSlotFor(target));
+            else
+                cs << BC::ldvarForUpdate(target);
+            cs << BC::setShared() << BC::pop();
         }
 
         // First rhs (assign is right-associative)

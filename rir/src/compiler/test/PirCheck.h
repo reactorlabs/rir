@@ -25,6 +25,8 @@ namespace rir {
     V(OneLdFun)                                                                \
     V(OneLdVar)                                                                \
     V(TwoAdd)                                                                  \
+    V(LazyCallArgs)                                                            \
+    V(EagerCallArgs)                                                           \
     V(LdVarVectorInFirstBB)
 
 struct PirCheck {

@@ -67,6 +67,7 @@ class ClosureVersion : public Code {
 
     Closure* owner() const { return owner_; }
     size_t nargs() const;
+    size_t effectiveNArgs() const;
     const std::string& name() const { return name_; }
     const std::string& nameSuffix() const { return nameSuffix_; }
 

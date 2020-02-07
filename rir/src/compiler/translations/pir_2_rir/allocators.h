@@ -502,7 +502,7 @@ class CachePosition {
             return 1;
         };
         for (const auto& env : found) {
-            if (!Env::Cast(env.first)) {
+            if (MkEnv::Cast(env.first)) {
                 envCacheRanges[env.first].first = uniqueNumbers.size();
                 auto limit = minAccessEnvSize(env.second.size());
                 for (const auto& key : env.second) {
