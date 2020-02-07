@@ -196,7 +196,7 @@ void GenericStreamLogger::footer() {
     highlightOn();
     out() << c << "│ " << std::left << std::setw(77) << version->name()
           << "│\n";
-    out() << c << "���";
+    out() << c << "└";
     for (size_t i = 0; i < 78; ++i)
         out() << "─";
     out() << "┘\n";
