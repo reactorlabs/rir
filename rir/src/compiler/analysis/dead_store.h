@@ -97,7 +97,7 @@ class DeadStoreAnalysis {
                     env = promEnv;
                 }
                 if (auto m = MaterializeEnv::Cast(env))
-                    env = m->arg(0).val();
+                    env = m->env();
                 if (auto mk = MkEnv::Cast(env)) {
                     // stubs cannot leak, or we deopt
                     if (mk->stub)
@@ -194,6 +194,10 @@ class DeadStoreAnalysis {
             std::unordered_set<Value*> res;
             assert(env);
             for (;;) {
+                if (auto e = MaterializeEnv::Cast(env)) {
+                    env = e->env();
+                    continue;
+                }
                 if (!MkEnv::Cast(env))
                     break;
                 res.insert(env);
@@ -214,7 +218,7 @@ class DeadStoreAnalysis {
                 env = promEnv;
             }
             if (auto m = MaterializeEnv::Cast(env)) {
-                return m->arg(0).val();
+                return m->env();
             }
             return env;
         }
@@ -269,7 +273,7 @@ class DeadStoreAnalysis {
                     }
                 }
             } else if (auto st = StVar::Cast(i)) {
-                Variable var({st->varName, st->env()});
+                Variable var({st->varName, resolveEnv(st->env())});
                 // Two consecutive stores between observations => the first one
                 // can be removed, since the second one overrides.
                 if (!state.ignoreStore.count(var)) {
@@ -303,7 +307,7 @@ class DeadStoreAnalysis {
       public:
         bool isObserved(StVar* st) const {
             auto state = at<PositioningStyle::BeforeInstruction>(st);
-            Variable var({st->varName, st->env()});
+            Variable var({st->varName, resolveEnv(st->env())});
             if (state.ignoreStore.count(var))
                 return false;
             if (state.completelyObserved.count(st->env()))
