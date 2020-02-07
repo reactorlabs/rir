@@ -180,6 +180,21 @@ class TheInliner {
                         limit = (limit * 4) + 1;
                         weight *= limit;
                     }
+                    auto env = Env::Cast(inlineeCls->closureEnv());
+                    if (env && env->rho && R_IsNamespaceEnv(env->rho)) {
+                        auto expr = BODY_EXPR(inlineeCls->rirClosure());
+                        // Closure wrappers for internals
+                        if (CAR(expr) == rir::symbol::Internal)
+                            weight *= 0.6;
+                        // those usually strongly benefit type
+                        // inference, since they have a lot of case
+                        // distinctions
+                        static auto profitable =
+                            std::unordered_set<std::string>(
+                                {"matrix", "array", "vector"});
+                        if (profitable.count(inlineeCls->name()))
+                            weight *= 0.2;
+                    }
                 }
 
                 // No recursive inlining
