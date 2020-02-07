@@ -40,6 +40,8 @@ static ClosureVersion* recompilePir(SEXP f, Module* m) {
         f, "pir_check", assumptions, [&](ClosureVersion* r) { res = r; },
         []() { Rf_warning("pir check failed: couldn't compile"); });
 
+    if (!res)
+        return nullptr;
     cmp.optimizeModule();
     return res;
 }
@@ -177,6 +179,37 @@ static bool testLdVarVectorInFirstBB(ClosureVersion* f) {
         }
     }
     return false;
+}
+
+static bool testLazyCallArgs(ClosureVersion* f) {
+    bool success = true;
+    for (auto instruction : *f->entry) {
+        if (auto call = CallInstruction::CastCall(instruction)) {
+            call->eachCallArg([&](Value* arg) {
+                if (auto mk = MkArg::Cast(arg)) {
+                    if (mk->isEager())
+                        success = false;
+                } else {
+                    success = false;
+                }
+            });
+        }
+    }
+    return success;
+}
+
+static bool testEagerCallArgs(ClosureVersion* f) {
+    bool success = true;
+    for (auto instruction : *f->entry) {
+        if (auto call = CallInstruction::CastCall(instruction)) {
+            call->eachCallArg([&](Value* arg) {
+                if (auto mk = MkArg::Cast(arg))
+                    if (!mk->isEager())
+                        success = false;
+            });
+        }
+    }
+    return success;
 }
 
 PirCheck::Type PirCheck::parseType(const char* str) {

@@ -218,21 +218,34 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                     continue;
                 }
 
-                auto isEager = [&](size_t i) {
+                auto preEval = [&](Value* a, unsigned i) -> MkArg* {
+                    auto mk = MkArg::Cast(a);
+                    if (!mk)
+                        return nullptr;
+
+                    auto safe =
+                        Visitor::check(mk->prom()->entry, [&](Instruction* i) {
+                            return !i->mayObserveContext();
+                        });
+                    if (!safe)
+                        return nullptr;
+
                     if (allEager)
-                        return true;
+                        return mk;
+                    unsigned count = 0;
                     for (auto a : version->properties.argumentForceOrder) {
                         // We know that a is forced before i, therefore we are
                         // not in left-to-right order
                         // TODO: support reordering of the evaluation
-                        if (a > i)
-                            return false;
+                        if (count != a)
+                            return nullptr;
+                        i++;
                         // We found the argument in the list of certainly forced
                         // promises
                         if (a == i)
-                            return true;
+                            return mk;
                     }
-                    return false;
+                    return nullptr;
                 };
 
                 bool noMissing = true;
@@ -248,8 +261,11 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 // Remember which arguments are already expected to be eager by
                 // the callee and ensure that we will evaluate them eagerly
                 // below.
+                unsigned i = 0;
+                Assumptions newAssumptions = availableAssumptions;
+                SmallSet<unsigned> eager;
                 call->eachCallArg([&](InstrArg& arg) {
-                    if (auto mk = MkArg::Cast(arg.val())) {
+                    if (auto mk = preEval(arg.val(), i)) {
                         if (mk->isEager()) {
                             arg.val() = mk->eagerArg();
                         } else {
@@ -262,15 +278,14 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                             ip = bb->insert(ip, asArg);
                             ip++;
                         }
+                        eager.insert(i);
+                        if (!newAssumptions.isEager(i))
+                            newAssumptions.setEager(i);
                     }
+                    i++;
                 });
                 next = ip + 1;
 
-                Assumptions newAssumptions = availableAssumptions;
-                for (size_t i = 0; i < call->nCallArgs(); ++i) {
-                    if (!newAssumptions.isEager(i) && isEager(i))
-                        newAssumptions.setEager(i);
-                }
                 // This might fire back, since we don't know if we really have no
                 // objects... We should have some profiling. It's still sound, since
                 // static_call_ will check the assumptions
@@ -283,7 +298,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                     version, newAssumptions, [&](ClosureVersion* newCls) {
                         Visitor::run(newCls->entry, [&](Instruction* i) {
                             if (auto ld = LdArg::Cast(i)) {
-                                if (isEager(ld->id)) {
+                                if (eager.count(ld->id)) {
                                     ld->type = PirType::promiseWrappedVal()
                                                    .notObject()
                                                    .notMissing();
