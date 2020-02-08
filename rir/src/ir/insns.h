@@ -360,12 +360,6 @@ DEF_INSTR(colon_cast_lhs_, 0, 1, 1, 1)
 DEF_INSTR(colon_cast_rhs_, 0, 1, 1, 1)
 
 /**
- * colon_get_step_ :: step for the simple for loop: 1 if lhs < rhs, otherwise -1
- * (in the same type - int or real - as lhs and rhs)
- */
-DEF_INSTR(colon_get_step_, 0, 0, 1, 1)
-
-/**
  * asast_:: pop a promise off the object stack, push its AST on object stack
 
  TODO: we do not use now, might not work... why?

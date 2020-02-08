@@ -212,7 +212,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::update_promise_:
     case Opcode::colon_cast_lhs_:
     case Opcode::colon_cast_rhs_:
-    case Opcode::colon_get_step_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

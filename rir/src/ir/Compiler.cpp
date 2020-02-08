@@ -250,7 +250,7 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             // } else {
             //   m' <- colonCastLhs(m')
             //   n' <- colonCastRhs(m', n')
-            //   step <- colonGetStep(m', n')
+            //   step <- if (m' <= n') 1L else -1L
             //   i' <- m'
             //   while (i' != n') {
             //     i <- i'
@@ -264,6 +264,8 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             CodeStream& cs = ctx.cs();
 
             BC::Label skipRegularForBranch = cs.mkLabel();
+            BC::Label stepElseBranch = cs.mkLabel();
+            BC::Label stepEndBranch = cs.mkLabel();
             BC::Label endBranch = cs.mkLabel();
 
             // m' <- m
@@ -275,7 +277,7 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             // if (!colonInputEffects(m, n)) {
             cs << BC::colonInputEffects();
             cs.addSrc(seq);
-            cs << BC::brtrue(skipRegularForBranch);
+            cs << BC::recordTest() << BC::brtrue(skipRegularForBranch);
             //   <regular for>
             cs << BC::colon();
             cs.addSrc(seq);
@@ -290,8 +292,12 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             // n' <- colonCastRhs(m', n')
             cs << BC::colonCastRhs();
 
-            // step <- colonGetStep(m', n')
-            cs << BC::colonGetStep();
+            // step <- if (m' <= n') 1L else -1L
+            cs << BC::dup2() << BC::le();
+            cs.addSrc(R_NilValue);
+            cs << BC::recordTest() << BC::brfalse(stepElseBranch) << BC::push(1)
+               << BC::br(stepEndBranch) << stepElseBranch << BC::push(-1)
+               << stepEndBranch;
 
             // i' <- m' (we just reuse m', but we need to fix the stack as the
             //           following bytecode expects: lhs :: rhs :: step :: ...)

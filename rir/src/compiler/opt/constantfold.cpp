@@ -7,6 +7,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "interpreter/interp.h"
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
 
@@ -72,6 +73,23 @@ static LdConst* isConst(Value* instr) {
             }                                                                  \
         }                                                                      \
     } while (false)
+
+static bool convertsToRealWithoutWarning(SEXP arg) {
+    if (Rf_isVectorAtomic(arg) && XLENGTH(arg) == 1) {
+        switch (TYPEOF(arg)) {
+        case LGLSXP:
+        case INTSXP:
+        case REALSXP:
+            return true;
+        case CPLXSXP:
+            return COMPLEX(arg)[0].i == 0;
+        default:
+            return false;
+        }
+    } else {
+        return false;
+    }
+};
 
 static bool convertsToLogicalWithoutWarning(SEXP arg) {
     switch (TYPEOF(arg)) {
@@ -407,6 +425,32 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     next = bb->remove(ip);
                 }
             }
+
+            if (auto colonInputEffects = ColonInputEffects::Cast(i)) {
+                auto lhs = colonInputEffects->arg<0>().val();
+                auto rhs = colonInputEffects->arg<1>().val();
+                if (!lhs->type.maybeHasAttrs() || !rhs->type.maybeHasAttrs()) {
+                    colonInputEffects->replaceUsesAndSwapWith(
+                        new LdConst(R_TrueValue), ip);
+                }
+            }
+
+            FOLD_UNARY(ColonCastLhs, [&](SEXP lhs) {
+                if (convertsToRealWithoutWarning(lhs)) {
+                    SEXP newLhs = colonCastLhs(lhs);
+                    LdConst* newLhsInstr = new LdConst(newLhs);
+                    i->replaceUsesAndSwapWith(newLhsInstr, ip);
+                }
+            });
+
+            FOLD_BINARY(ColonCastRhs, [&](SEXP newLhs, SEXP rhs) {
+                if (convertsToRealWithoutWarning(rhs) &&
+                    convertsToRealWithoutWarning(newLhs)) {
+                    SEXP newRhs = colonCastRhs(newLhs, rhs);
+                    LdConst* newRhsInstr = new LdConst(newRhs);
+                    i->replaceUsesAndSwapWith(newRhsInstr, ip);
+                }
+            });
 
             ip = next;
         }

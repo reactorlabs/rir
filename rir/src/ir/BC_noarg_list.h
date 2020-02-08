@@ -69,8 +69,7 @@
     V(NESTED, return_, return )                                                \
     V(NESTED, colonInputEffects, colon_input_effects)                          \
     V(NESTED, colonCastLhs, colon_cast_lhs)                                    \
-    V(NESTED, colonCastRhs, colon_cast_rhs)                                    \
-    V(NESTED, colonGetStep, colon_get_step)
+    V(NESTED, colonCastRhs, colon_cast_rhs)
 
 #undef V_SIMPLE_INSTRUCTION
 

@@ -150,6 +150,10 @@ struct NativeBuiltins {
 
     static NativeBuiltin sumr;
     static NativeBuiltin prodr;
+
+    static NativeBuiltin colonInputEffects;
+    static NativeBuiltin colonCastLhs;
+    static NativeBuiltin colonCastRhs;
 };
 }
 }

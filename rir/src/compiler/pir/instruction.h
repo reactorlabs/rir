@@ -1136,9 +1136,10 @@ class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
 
 class FLI(ColonInputEffects, 2, Effect::Error) {
   public:
+    // Type could technically be NativeType::test
     explicit ColonInputEffects(Value* lhs, Value* rhs, unsigned srcIdx)
-        : FixedLenInstruction(NativeType::test,
-                              {{PirType::any(), PirType::any()}}, {{lhs, rhs}},
+        : FixedLenInstruction(PirType::simpleScalarLogical(),
+                              {{PirType::val(), PirType::val()}}, {{lhs, rhs}},
                               srcIdx) {}
 
     Value* lhs() const { return arg<0>().val(); }
@@ -1157,7 +1158,7 @@ class FLI(ColonInputEffects, 2, Effect::Error) {
 class FLI(ColonCastLhs, 1, Effect::Error) {
   public:
     explicit ColonCastLhs(Value* lhs, unsigned srcIdx)
-        : FixedLenInstruction(PirType::intReal().scalar(), {{PirType::any()}},
+        : FixedLenInstruction(PirType::intReal().scalar(), {{PirType::val()}},
                               {{lhs}}, srcIdx) {}
 
     Value* lhs() const { return arg<0>().val(); }
@@ -1173,36 +1174,16 @@ class FLI(ColonCastLhs, 1, Effect::Error) {
 
 class FLI(ColonCastRhs, 2, Effect::Error) {
   public:
-    explicit ColonCastRhs(Value* lhs, Value* rhs, unsigned srcIdx)
+    explicit ColonCastRhs(Value* newLhs, Value* rhs, unsigned srcIdx)
         : FixedLenInstruction(PirType::intReal().scalar(),
-                              {{PirType::intReal().scalar(), PirType::any()}},
-                              {{lhs, rhs}}, srcIdx) {}
+                              {{PirType::intReal().scalar(), PirType::val()}},
+                              {{newLhs, rhs}}, srcIdx) {}
 
-    Value* lhs() const { return arg<0>().val(); }
+    Value* newLhs() const { return arg<0>().val(); }
 
     PirType inferType(const GetType& getType) const override final {
         // This is intended - lhs type determines rhs
-        if (getType(lhs()).isA(RType::integer)) {
-            return PirType(RType::integer).scalar();
-        } else {
-            return type;
-        }
-    }
-};
-
-class FLI(ColonGetStep, 2, Effect::Error) {
-  public:
-    explicit ColonGetStep(Value* lhs, Value* rhs, unsigned srcIdx)
-        : FixedLenInstruction(
-              PirType::intReal().scalar(),
-              {{PirType::intReal().scalar(), PirType::intReal().scalar()}},
-              {{lhs, rhs}}, srcIdx) {}
-
-    Value* lhs() const { return arg<0>().val(); }
-
-    PirType inferType(const GetType& getType) const override final {
-        // This is intended - lhs type determines step
-        if (getType(lhs()).isA(RType::integer)) {
+        if (getType(newLhs()).isA(RType::integer)) {
             return PirType(RType::integer).scalar();
         } else {
             return type;

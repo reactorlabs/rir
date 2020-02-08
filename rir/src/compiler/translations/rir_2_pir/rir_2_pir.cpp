@@ -284,10 +284,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new ColonCastRhs(at(1), pop(), srcIdx)));
         break;
 
-    case Opcode::colon_get_step_:
-        push(insert(new ColonGetStep(at(1), at(0), srcIdx)));
-        break;
-
     case Opcode::ldfun_: {
         auto ld = insert(new LdFun(bc.immediateConst(), env));
         // Add early checkpoint for efficient speculative inlining. The goal is

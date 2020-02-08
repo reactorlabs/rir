@@ -130,14 +130,6 @@ class TheCleanup {
                         removed = true;
                         next = bb->remove(ip);
                     }
-                } else if (auto colonInputEffects =
-                               ColonInputEffects::Cast(i)) {
-                    auto lhs = colonInputEffects->arg<0>().val();
-                    auto rhs = colonInputEffects->arg<1>().val();
-                    if (!lhs->type.maybeHasAttrs() ||
-                        !rhs->type.maybeHasAttrs()) {
-                        colonInputEffects->replaceUsesWith(True::instance());
-                    }
                 } else if (auto env = MkEnv::Cast(i)) {
                     static std::unordered_set<Tag> tags{Tag::IsEnvStub};
                     if (env->stub && env->usesAreOnly(function->entry, tags)) {

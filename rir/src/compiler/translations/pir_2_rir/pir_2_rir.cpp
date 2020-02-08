@@ -804,15 +804,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
-            case Tag::ColonGetStep: {
-                cb.add(BC::colonGetStep());
-                // This reads 2 args but pops 0 - PIR doesn't know and loads all
-                // args, so we must manually pop them.
-                cb.add(BC::put(2));
-                cb.add(BC::popn(2));
-                break;
-            }
-
 #define EMPTY(Name)                                                            \
     case Tag::Name: {                                                          \
         break;                                                                 \

@@ -42,6 +42,7 @@ void InsertCast::apply(BB* bb, AvailableCheckpoints& cp) {
                 auto c = cast(arg.val(), arg.type(), env);
                 if (!c) {
                     bb->print(std::cerr, true);
+                    bb->owner->printCode(std::cerr, true, false);
                     assert(false);
                 }
                 auto argument = Instruction::Cast(arg.val());

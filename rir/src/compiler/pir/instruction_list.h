@@ -56,7 +56,6 @@
     V(ColonInputEffects)                                                       \
     V(ColonCastLhs)                                                            \
     V(ColonCastRhs)                                                            \
-    V(ColonGetStep)                                                            \
     V(IsEnvStub)                                                               \
     V(Return)                                                                  \
     V(MkArg)                                                                   \

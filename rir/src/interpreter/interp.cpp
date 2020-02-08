@@ -2,6 +2,7 @@
 #include "ArgsLazyData.h"
 #include "LazyEnvironment.h"
 #include "R/Funtab.h"
+#include "R/Printing.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "cache.h"
@@ -34,11 +35,17 @@ namespace rir {
 #ifdef PRINT_INTERP
 static void printInterp(Opcode* pc, Code* c, InterpreterInstance* ctx) {
 #ifdef PRINT_STACK_SIZE
+    // Prevent printing instructions (and recursing) while printing stack
+    static bool printingStackSize = false;
+    if (printingStackSize)
+        return;
+
     // Print stack
+    printingStackSize = true;
     std::cout << "#; Stack:";
     for (int i = 0;; i++) {
         SEXP sexp = ostack_at(ctx, i);
-        if (sexp == nullptr)
+        if (sexp == nullptr || ostack_length(ctx) == 0)
             break;
         else if (i == PRINT_STACK_SIZE) {
             std::cout << " ...";
@@ -47,6 +54,7 @@ static void printInterp(Opcode* pc, Code* c, InterpreterInstance* ctx) {
         std::cout << " " << dumpSexp(sexp);
     }
     std::cout << "\n";
+    printingStackSize = false;
 #endif
     // Print source
     unsigned sidx = c->getSrcIdxAt(pc, true);
@@ -1627,8 +1635,58 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     return args.size();
 }
 
-bool doubleCanBeCastedToInteger(double n) {
+static bool doubleCanBeCastedToInteger(double n) {
     return n >= INT_MIN && n <= INT_MAX && (int)n == n;
+}
+
+bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
+    auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
+
+    // 1. decide fastcase
+    bool fastcase = !inherits(lhs, "factor") || !inherits(rhs, "factor");
+
+    // 2. in fastcase, run type error effects
+    if (fastcase) {
+        int lhsLen = Rf_length(lhs);
+        int rhsLen = Rf_length(rhs);
+        if (lhsLen == 0 || rhsLen == 0)
+            Rf_errorcall(getSrc(), "argument of length 0");
+        if (lhsLen > 1)
+            Rf_warningcall(getSrc(),
+                           ngettext("numerical expression has %d element: "
+                                    "only the first used",
+                                    "numerical expression has %d elements: "
+                                    "only the first used",
+                                    (int)lhsLen),
+                           (int)lhsLen);
+        if (rhsLen > 1)
+            Rf_warningcall(getSrc(),
+                           ngettext("numerical expression has %d element: "
+                                    "only the first used",
+                                    "numerical expression has %d elements: "
+                                    "only the first used",
+                                    (int)rhsLen),
+                           (int)rhsLen);
+    }
+
+    return fastcase;
+}
+
+SEXP colonCastLhs(SEXP lhs) {
+    double lhsNum = Rf_asReal(lhs);
+    return doubleCanBeCastedToInteger(lhsNum) ? Rf_ScalarInteger((int)lhsNum)
+                                              : Rf_ScalarReal(lhsNum);
+}
+
+SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
+    double newLhsNum = Rf_asReal(newLhs);
+    double rhsNum = Rf_asReal(rhs);
+
+    double newRhsNum = (newLhsNum <= rhsNum)
+                           ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
+                           : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
+    return (TYPEOF(newLhs) == INTSXP) ? Rf_ScalarInteger((int)newRhsNum)
+                                      : Rf_ScalarReal(newRhsNum);
 }
 
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
@@ -3133,47 +3191,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
 
-            // 1. decide fastcase
-            bool fastcase =
-                !inherits(lhs, "factor") || !inherits(rhs, "factor");
+            bool fastcase = colonInputEffects(lhs, rhs, 0);
             ostack_push(ctx, fastcase ? R_TrueValue : R_FalseValue);
-
-            // 2. in fastcase, run type error effects
-            if (fastcase) {
-                int lhsLen = Rf_length(lhs);
-                int rhsLen = Rf_length(rhs);
-                if (lhsLen == 0 || rhsLen == 0)
-                    Rf_errorcall(getSrcAt(c, pc - 1, ctx),
-                                 "argument of length 0");
-                if (lhsLen > 1)
-                    Rf_warningcall(
-                        getSrcAt(c, pc - 1, ctx),
-                        ngettext("numerical expression has %d element: "
-                                 "only the first used",
-                                 "numerical expression has %d elements: "
-                                 "only the first used",
-                                 (int)lhsLen),
-                        (int)lhsLen);
-                if (rhsLen > 1)
-                    Rf_warningcall(
-                        getSrcAt(c, pc - 1, ctx),
-                        ngettext("numerical expression has %d element: "
-                                 "only the first used",
-                                 "numerical expression has %d elements: "
-                                 "only the first used",
-                                 (int)rhsLen),
-                        (int)rhsLen);
-            }
 
             NEXT();
         }
 
         INSTRUCTION(colon_cast_lhs_) {
             SEXP lhs = ostack_pop(ctx);
-            double lhsNum = Rf_asReal(lhs);
-            SEXP newLhs = doubleCanBeCastedToInteger(lhsNum)
-                              ? Rf_ScalarInteger((int)lhsNum)
-                              : Rf_ScalarReal(lhsNum);
+            SEXP newLhs = colonCastLhs(lhs);
             ENSURE_NAMED(newLhs);
             ostack_push(ctx, newLhs);
             NEXT();
@@ -3182,37 +3208,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(colon_cast_rhs_) {
             SEXP rhs = ostack_pop(ctx);
             SEXP newLhs = ostack_top(ctx);
-
-            double newLhsNum = Rf_asReal(newLhs);
-            double rhsNum = Rf_asReal(rhs);
-
-            double newRhsNum =
-                (newLhsNum <= rhsNum)
-                    ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
-                    : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
-            SEXP newRhs = (TYPEOF(newLhs) == INTSXP)
-                              ? Rf_ScalarInteger((int)newRhsNum)
-                              : Rf_ScalarReal(newRhsNum);
+            SEXP newRhs = colonCastRhs(newLhs, rhs);
             ENSURE_NAMED(newRhs);
-
             ostack_push(ctx, newRhs);
-            NEXT();
-        }
-
-        INSTRUCTION(colon_get_step_) {
-            SEXP newLhs = ostack_at(ctx, 1);
-            SEXP newRhs = ostack_at(ctx, 0);
-
-            double newLhsNum = Rf_asReal(newLhs);
-            double newRhsNum = Rf_asReal(newRhs);
-
-            double deltaNum = (newLhsNum <= newRhsNum) ? 1 : -1;
-            SEXP delta = (TYPEOF(newLhs) == INTSXP)
-                             ? Rf_ScalarInteger((int)deltaNum)
-                             : Rf_ScalarReal(deltaNum);
-            ENSURE_NAMED(delta);
-
-            ostack_push(ctx, delta);
             NEXT();
         }
 

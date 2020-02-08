@@ -4688,11 +4688,20 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::ColonInputEffects:
+                setVal(i, call(NativeBuiltins::colonInputEffects,
+                               {loadSxp(i->arg(0).val()),
+                                loadSxp(i->arg(1).val()), c(i->srcIdx)}));
+                break;
+
             case Tag::ColonCastLhs:
+                setVal(i, call(NativeBuiltins::colonCastLhs,
+                               {loadSxp(i->arg(0).val())}));
+                break;
+
             case Tag::ColonCastRhs:
-            case Tag::ColonGetStep:
-                // TODO: Handle via native builtins
-                success = false;
+                setVal(i, call(NativeBuiltins::colonCastRhs,
+                               {loadSxp(i->arg(0).val()),
+                                loadSxp(i->arg(1).val())}));
                 break;
 
             case Tag::Int3:

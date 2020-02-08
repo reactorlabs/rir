@@ -2222,5 +2222,20 @@ NativeBuiltin NativeBuiltins::sumr = {
     "sumr",
     (void*)sumrImpl,
 };
+
+NativeBuiltin NativeBuiltins::colonInputEffects = {
+    "colonInputEffects",
+    (void*)rir::colonInputEffects,
+};
+
+NativeBuiltin NativeBuiltins::colonCastLhs = {
+    "colonCastLhs",
+    (void*)rir::colonCastLhs,
+};
+
+NativeBuiltin NativeBuiltins::colonCastRhs = {
+    "colonCastRhs",
+    (void*)rir::colonCastRhs,
+};
 }
 }
