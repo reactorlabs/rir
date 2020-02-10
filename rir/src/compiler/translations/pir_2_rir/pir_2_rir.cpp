@@ -1156,6 +1156,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         if (auto n = native.tryCompile(cls, code, promMap, refcount,
                                        needsLdVarForUpdate, log.out())) {
             res->nativeCode = (NativeCode)n;
+            if (native.registerMap)
+                res->pirRegisterMap(native.registerMap);
         }
     }
     return res;

@@ -35,7 +35,7 @@ class SSAAllocator {
     const LivenessIntervals& livenessIntervals;
     std::unique_ptr<StackUseAnalysis> sa;
 
-    typedef size_t SlotNumber;
+    typedef unsigned SlotNumber;
     const static SlotNumber unassignedSlot = 0;
     const static SlotNumber stackSlot = -1;
 
@@ -485,6 +485,7 @@ class SSAAllocator {
     }
 
     bool hasSlot(Value* v) const { return allocation.count(v); }
+    unsigned getSlot(Value* v) const { return allocation.at(v); }
 
     size_t getStackOffset(Instruction* instr, std::vector<bool>& used,
                           Value* what, bool remove) const {

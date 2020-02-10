@@ -175,6 +175,7 @@ class LowerFunctionLLVM {
     MDNode* branchMostlyFalse;
 
   public:
+    PirRegisterMap* registerMap = nullptr;
     llvm::Function* fun;
 
     LowerFunctionLLVM(
@@ -506,6 +507,8 @@ class LowerFunctionLLVM {
     llvm::Value* fastVeceltOkNative(llvm::Value*);
     llvm::Value* isAltrep(llvm::Value*);
     llvm::Value* sxpinfoPtr(llvm::Value*);
+
+    llvm::Value* container(llvm::Value*);
 
     void protectTemp(llvm::Value* v);
 
@@ -1698,6 +1701,12 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 }
 
+llvm::Value* LowerFunctionLLVM::container(llvm::Value* v) {
+    auto casted = builder.CreatePtrToInt(v, t::i64);
+    auto container = builder.CreateSub(casted, c(sizeof(VECTOR_SEXPREC)));
+    return builder.CreateIntToPtr(container, t::SEXP);
+}
+
 llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
                                         const std::vector<llvm::Value*>& args) {
 #ifdef ENABLE_SLOWASSERT
@@ -2183,6 +2192,15 @@ bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
 };
 
 bool LowerFunctionLLVM::tryCompile() {
+    {
+        auto arg = fun->arg_begin();
+        for (size_t i = 0; i < argNames.size(); ++i) {
+            args.push_back(arg);
+            args.back()->setName(argNames[i]);
+            arg++;
+        }
+    }
+
     std::unordered_map<BB*, BasicBlock*> blockMapping_;
     auto getBlock = [&](BB* bb) {
         auto b = blockMapping_.find(bb);
@@ -2197,6 +2215,11 @@ bool LowerFunctionLLVM::tryCompile() {
     builder.SetInsertPoint(entryBlock);
     nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop,
                                         PointerType::get(t::stackCellPtr, 0));
+    numLocals++;
+    // Store the code object as the first element of our frame, for the value
+    // profiler to find it.
+    incStack(1, false);
+    stack({container(paramCode())});
     {
         SmallSet<std::pair<Value*, SEXP>> bindings;
         Visitor::run(code->entry, [&](Instruction* i) {
@@ -2228,16 +2251,17 @@ bool LowerFunctionLLVM::tryCompile() {
         NativeAllocator allocator(code, cls, liveness, log);
         allocator.compute();
         allocator.verify();
-        numLocals = allocator.slots();
+        auto numLocalsBase = numLocals;
+        numLocals += allocator.slots();
 
         auto createVariable = [&](Instruction* i, bool mut) -> void {
             if (representationOf(i) == Representation::Sexp) {
                 if (mut)
                     variables_[i] = Variable::MutableRVariable(
-                        i, allocator[i], builder, basepointer);
+                        i, allocator[i] + numLocalsBase, builder, basepointer);
                 else
-                    variables_[i] = Variable::RVariable(i, allocator[i],
-                                                        builder, basepointer);
+                    variables_[i] = Variable::RVariable(
+                        i, allocator[i] + numLocalsBase, builder, basepointer);
             } else {
                 if (mut)
                     variables_[i] =
@@ -2246,13 +2270,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     variables_[i] = Variable::Immutable(i);
             }
         };
-
-        auto arg = fun->arg_begin();
-        for (size_t i = 0; i < argNames.size(); ++i) {
-            args.push_back(arg);
-            args.back()->setName(argNames[i]);
-            arg++;
-        }
 
         constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
         constantpool = builder.CreateGEP(constantpool, c(1));
@@ -2306,8 +2323,8 @@ bool LowerFunctionLLVM::tryCompile() {
     }
 
     numLocals += MAX_TEMPS;
-    if (numLocals > 0)
-        incStack(numLocals, true);
+    if (numLocals > 1)
+        incStack(numLocals - 1, true);
 
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
@@ -5095,6 +5112,42 @@ bool LowerFunctionLLVM::tryCompile() {
         // fun->dump();
         // code->printCode(std::cout, true, true);
     }
+
+    std::unordered_set<rir::Code*> codes;
+    std::unordered_map<size_t, std::pair<rir::Code*, Opcode*>> variableMapping;
+#ifdef DEBUG_REGISTER_MAP
+    std::unordered_set<size_t> usedSlots;
+#endif
+    for (auto& var : variables_) {
+        auto i = var.first;
+        if (representationOf(i) != Representation::Sexp)
+            continue;
+        if (!i->typeFeedback.origin)
+            continue;
+        if (!var.second.initialized)
+            continue;
+        if (var.second.stackSlot < PirRegisterMap::MAX_SLOT_IDX) {
+            codes.insert(i->typeFeedback.srcCode);
+            variableMapping[var.second.stackSlot] = {i->typeFeedback.srcCode,
+                                                     i->typeFeedback.origin};
+#ifdef DEBUG_REGISTER_MAP
+            assert(!usedSlots.count(var.second.stackSlot));
+            usedSlots.insert(var.second.stackSlot);
+#endif
+        }
+        if (variableMapping.size() == PirRegisterMap::MAX_SLOT_IDX)
+            break;
+    }
+    if (!variableMapping.empty()) {
+        registerMap = PirRegisterMap::New(codes, variableMapping);
+#ifdef DEBUG_REGISTER_MAP
+        for (auto m : variableMapping) {
+            auto origin = registerMap->getOriginOfSlot(m.first);
+            assert(origin == m.second.second);
+        }
+#endif
+    }
+
     return success;
 }
 
@@ -5119,7 +5172,7 @@ void* LowerLLVM::tryCompile(
                                   needsLdVarForUpdate, log);
     if (!funCompiler.tryCompile())
         return nullptr;
-
+    registerMap = funCompiler.registerMap;
     return JitLLVM::tryCompile(funCompiler.fun);
 }
 
