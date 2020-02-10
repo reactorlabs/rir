@@ -1212,6 +1212,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         if (auto n = native.tryCompile(cls, code, promMap, refcount,
                                        needsLdVarForUpdate)) {
             res->nativeCode = (NativeCode)n;
+            if (native.metadata)
+                res->setValueProfilerMetadata(native.metadata);
         }
     }
     return res;

@@ -51,7 +51,7 @@ typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
     friend class CodeVerifier;
-    static constexpr size_t NumLocals = 1;
+    static constexpr size_t NumLocals = 2;
 
     static Code* withUid(UUID uid);
 
@@ -79,6 +79,28 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void registerDeopt() {
         if (deoptCount < UINT_MAX)
             deoptCount++;
+    }
+
+    struct MetadataEntry {
+        Opcode* origin;
+        ObservedValues feedback;
+    };
+
+    MetadataEntry* getValueProfilerMetadata() {
+        SEXP metadata = getEntry(1);
+        if (!metadata)
+            return nullptr;
+        assert(TYPEOF(metadata) == RAWSXP);
+        return reinterpret_cast<MetadataEntry*>(DATAPTR(metadata));
+    }
+
+    size_t getValueProfilerMetadataSize() {
+        return XLENGTH(getEntry(1)) / sizeof(MetadataEntry);
+    }
+
+    void setValueProfilerMetadata(SEXP metadata) {
+        assert(TYPEOF(metadata) == RAWSXP);
+        setEntry(1, metadata);
     }
 
     // UID for persistence when serializing/deserializing

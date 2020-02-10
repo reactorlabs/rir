@@ -33,7 +33,7 @@ class SSAAllocator {
     LivenessIntervals livenessIntervals;
     StackUseAnalysis sa;
 
-    typedef size_t SlotNumber;
+    typedef unsigned SlotNumber;
     const static SlotNumber unassignedSlot = 0;
     const static SlotNumber stackSlot = -1;
 
@@ -393,6 +393,14 @@ class SSAAllocator {
     bool onStack(Value* v) const { return allocation.at(v) == stackSlot; }
 
     bool hasSlot(Value* v) const { return allocation.count(v); }
+    unsigned getSlot(Value* v) const { return allocation.at(v); }
+
+    size_t getStackOffset(Instruction* instr, Value* what) const {
+        auto stack = sa.stackBefore(instr);
+        auto pos = std::find(stack.begin(), stack.end(), what);
+        assert(pos != stack.end());
+        return pos - stack.begin();
+    }
 
     size_t getStackOffset(Instruction* instr, std::vector<bool>& used,
                           Value* what, bool remove) const {

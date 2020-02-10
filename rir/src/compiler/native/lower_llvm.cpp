@@ -146,6 +146,7 @@ class LowerFunctionLLVM {
     MDNode* branchMostlyFalse;
 
   public:
+    SEXP metadata = nullptr;
     llvm::Function* fun;
 
     LowerFunctionLLVM(
@@ -194,6 +195,7 @@ class LowerFunctionLLVM {
                                          llvm::Value* basepointer) {
             auto v = RVariable(i, pos, builder, basepointer);
             v.kind = MutableLocalRVariable;
+            v.idx = pos;
             return v;
         }
 
@@ -206,7 +208,7 @@ class LowerFunctionLLVM {
             assert(representationOf(i) == Representation::Sexp);
             auto ptr = builder.CreateGEP(basepointer, {c(pos), c(1)});
             ptr->setName(i->getRef());
-            return {ImmutableLocalRVariable, ptr, false};
+            return {ImmutableLocalRVariable, ptr, false, pos};
         }
 
         static Variable Mutable(Instruction* i, AllocaInst* location) {
@@ -274,6 +276,7 @@ class LowerFunctionLLVM {
 
         llvm::Value* slot;
         bool initialized;
+        size_t idx;
     };
 
     class PhiBuilder {
@@ -426,6 +429,8 @@ class LowerFunctionLLVM {
     llvm::Value* fastVeceltOkNative(llvm::Value*);
     llvm::Value* isAltrep(llvm::Value*);
     llvm::Value* sxpinfoPtr(llvm::Value*);
+
+    llvm::Value* container(llvm::Value*);
 
     void protectTemp(llvm::Value* v);
 
@@ -1539,6 +1544,12 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 }
 
+llvm::Value* LowerFunctionLLVM::container(llvm::Value* v) {
+    auto casted = builder.CreatePtrToInt(v, t::i64);
+    auto container = builder.CreateSub(casted, c(sizeof(VECTOR_SEXPREC)));
+    return builder.CreateIntToPtr(container, t::SEXP);
+}
+
 llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
                                         const std::vector<llvm::Value*>& args) {
 #ifdef ENABLE_SLOWASSERT
@@ -2012,6 +2023,15 @@ bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
 };
 
 bool LowerFunctionLLVM::tryCompile() {
+    {
+        auto arg = fun->arg_begin();
+        for (size_t i = 0; i < argNames.size(); ++i) {
+            args.push_back(arg);
+            args.back()->setName(argNames[i]);
+            arg++;
+        }
+    }
+
     std::unordered_map<BB*, BasicBlock*> blockMapping_;
     auto getBlock = [&](BB* bb) {
         auto b = blockMapping_.find(bb);
@@ -2026,6 +2046,11 @@ bool LowerFunctionLLVM::tryCompile() {
     builder.SetInsertPoint(entryBlock);
     nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop,
                                         PointerType::get(t::stackCellPtr, 0));
+    numLocals++;
+    // Store the code object as the first element of our frame, for the value
+    // profiler to find it.
+    incStack(1, false);
+    stack({container(paramCode())});
     {
         SmallSet<std::pair<Value*, SEXP>> bindings;
         Visitor::run(code->entry, [&](Instruction* i) {
@@ -2074,13 +2099,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     variables[i] = Variable::Immutable(i);
             }
         };
-
-        auto arg = fun->arg_begin();
-        for (size_t i = 0; i < argNames.size(); ++i) {
-            args.push_back(arg);
-            args.back()->setName(argNames[i]);
-            arg++;
-        }
 
         constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
         constantpool = builder.CreateGEP(constantpool, c(1));
@@ -2131,8 +2149,8 @@ bool LowerFunctionLLVM::tryCompile() {
     }
 
     numLocals += MAX_TEMPS;
-    if (numLocals > 0)
-        incStack(numLocals, true);
+    if (numLocals > 1)
+        incStack(numLocals - 1, true);
 
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
@@ -3494,6 +3512,7 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::Return: {
+                call(NativeBuiltins::runValueProfiler, {});
                 auto res = loadSxp(Return::Cast(i)->arg<0>().val());
                 if (numLocals > 0)
                     decStack(numLocals);
@@ -4823,6 +4842,32 @@ bool LowerFunctionLLVM::tryCompile() {
         // fun->dump();
         // code->printCode(std::cout, true, true);
     }
+
+    std::map<size_t, Opcode*> variableMapping;
+    for (auto& var : variables) {
+        auto i = var.first;
+        if (representationOf(i) != Representation::Sexp)
+            continue;
+        if (!i->typeFeedback.origin)
+            continue;
+        if (!var.second.initialized)
+            continue;
+        variableMapping[var.second.idx] = i->typeFeedback.origin;
+    }
+    if (!variableMapping.empty()) {
+        size_t size = sizeof(rir::Code::MetadataEntry) *
+                      (variableMapping.rbegin()->first + 1);
+        metadata = Rf_allocVector(RAWSXP, size);
+        auto payload =
+            reinterpret_cast<rir::Code::MetadataEntry*>(DATAPTR(metadata));
+        memset(payload, 0, size);
+        for (auto& m : variableMapping) {
+            assert((char*)&payload[m.first] <
+                   ((char*)DATAPTR(metadata)) + size);
+            payload[m.first].origin = m.second;
+        }
+    }
+
     return success;
 }
 
@@ -4846,7 +4891,7 @@ void* LowerLLVM::tryCompile(
                                   needsLdVarForUpdate);
     if (!funCompiler.tryCompile())
         return nullptr;
-
+    metadata = funCompiler.metadata;
     return JitLLVM::tryCompile(funCompiler.fun);
 }
 

@@ -313,6 +313,9 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::prodr.llvmSignature =
         llvm::FunctionType::get(t::Double, {t::SEXP}, false);
 
+    NativeBuiltins::runValueProfiler.llvmSignature =
+        llvm::FunctionType::get(t::Void, {}, false);
+
     return 1;
 }
 

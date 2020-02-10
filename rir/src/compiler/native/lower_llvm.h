@@ -13,6 +13,7 @@ namespace pir {
 
 class LowerLLVM {
   public:
+    SEXP metadata = nullptr;
     void*
     tryCompile(ClosureVersion* cls, Code* code,
                const std::unordered_map<Promise*, unsigned>&,

@@ -2240,5 +2240,35 @@ NativeBuiltin NativeBuiltins::sumr = {
     "sumr",
     (void*)sumrImpl,
 };
+
+void runValueProfilerImpl() {
+    auto& ctx = R_GlobalContext;
+    auto& stack = ctx->nodestack;
+    if (R_BCNodeStackTop == R_BCNodeStackBase)
+        return;
+    if ((stack)->tag != 0)
+        return;
+    auto tos = (stack)->u.sxpval;
+    if (!tos)
+        return;
+    auto code = Code::check(tos);
+    if (!code)
+        return;
+    auto md = code->getValueProfilerMetadata();
+    if (!md)
+        return;
+    for (size_t i = 0; i < code->getValueProfilerMetadataSize(); ++i) {
+        if (md[i].origin) {
+            auto slot = *(stack + i);
+            assert(slot.tag == 0);
+            if (slot.u.sxpval)
+                md[i].feedback.record(slot.u.sxpval);
+        }
+    }
+}
+NativeBuiltin NativeBuiltins::runValueProfiler = {
+    "runValueProfiler",
+    (void*)runValueProfilerImpl,
+};
 }
 }

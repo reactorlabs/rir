@@ -153,6 +153,8 @@ struct NativeBuiltins {
 
     static NativeBuiltin sumr;
     static NativeBuiltin prodr;
+
+    static NativeBuiltin runValueProfiler;
 };
 }
 }
