@@ -18,7 +18,6 @@ extern llvm::Type* i1;
 extern llvm::Type* Int;
 extern llvm::Type* Double;
 extern llvm::Type* Void;
-extern llvm::Type* Bool;
 extern llvm::PointerType* IntPtr;
 extern llvm::PointerType* DoublePtr;
 
