@@ -1,6 +1,6 @@
-#include "lower_function_llvm.h"
 #include "builtins.h"
 #include "jit_llvm.h"
+#include "lower_function_llvm.h"
 #include "types_llvm.h"
 
 #include "R/BuiltinIds.h"
