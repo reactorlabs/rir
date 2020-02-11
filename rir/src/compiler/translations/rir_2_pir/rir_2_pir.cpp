@@ -272,15 +272,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
 
-    case Opcode::ceil_: {
-        push(insert(new AsInt(pop(), true)));
+    case Opcode::colon_input_effects_:
+        push(insert(new ColonInputEffects(at(1), at(0), srcIdx)));
         break;
-    }
 
-    case Opcode::floor_: {
-        push(insert(new AsInt(pop(), false)));
+    case Opcode::colon_cast_lhs_:
+        push(insert(new ColonCastLhs(pop(), srcIdx)));
         break;
-    }
+
+    case Opcode::colon_cast_rhs_:
+        push(insert(new ColonCastRhs(at(1), pop(), srcIdx)));
+        break;
 
     case Opcode::ldfun_: {
         auto ld = insert(new LdFun(bc.immediateConst(), env));
@@ -979,7 +981,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
         UNOP_NOENV(Length, length_);
         UNOP_NOENV(Inc, inc_);
-        UNOP_NOENV(Dec, dec_);
 #undef UNOP_NOENV
 
     case Opcode::missing_:
@@ -1025,6 +1026,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         break;
 
+    case Opcode::force_:
+        push(insert(new Force(pop(), env)));
+        break;
+
 #define V(_, name, Name)                                                       \
     case Opcode::name##_:                                                      \
         insert(new Name());                                                    \
@@ -1058,7 +1063,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     // Opcodes that only come from PIR
     case Opcode::deopt_:
-    case Opcode::force_:
     case Opcode::mk_stub_env_:
     case Opcode::mk_env_:
     case Opcode::mk_dotlist_:
@@ -1073,7 +1077,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldloc_:
     case Opcode::stloc_:
     case Opcode::movloc_:
-    case Opcode::istype_:
     case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
@@ -1085,6 +1088,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::assert_type_:
     case Opcode::record_deopt_:
     case Opcode::update_promise_:
+    case Opcode::istype_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 

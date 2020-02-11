@@ -780,73 +780,27 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::IsType: {
                 auto is = IsType::Cast(instr);
-                auto t = is->typeTest;
-                auto in = is->arg(0).val();
-                assert(!t.isVoid() && !t.maybeLazy());
-
-                if (t.noAttribs().isA(RType::logical)) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(BC::isType(TypeChecks::LogicalSimpleScalar));
-                    else
-                        cb.add(BC::isType(TypeChecks::LogicalNonObject));
-                } else if (t.noAttribs().isA(
-                               PirType(RType::logical).orPromiseWrapped())) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(
-                            BC::isType(TypeChecks::LogicalSimpleScalarWrapped));
-                    else
-                        cb.add(BC::isType(TypeChecks::LogicalNonObjectWrapped));
-                } else if (t.noAttribs().isA(RType::integer)) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(BC::isType(TypeChecks::IntegerSimpleScalar));
-                    else
-                        cb.add(BC::isType(TypeChecks::IntegerNonObject));
-                } else if (t.noAttribs().isA(
-                               PirType(RType::integer).orPromiseWrapped())) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(
-                            BC::isType(TypeChecks::IntegerSimpleScalarWrapped));
-                    else
-                        cb.add(BC::isType(TypeChecks::IntegerNonObjectWrapped));
-                } else if (t.noAttribs().isA(RType::real)) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(BC::isType(TypeChecks::RealSimpleScalar));
-                    else
-                        cb.add(BC::isType(TypeChecks::RealNonObject));
-                } else if (t.noAttribs().isA(
-                               PirType(RType::real).orPromiseWrapped())) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(BC::isType(TypeChecks::RealSimpleScalarWrapped));
-                    else
-                        cb.add(BC::isType(TypeChecks::RealNonObjectWrapped));
-                } else if (in->type.notMissing().notObject().isA(t)) {
-                    cb.add(BC::isType(TypeChecks::NotObject));
-                } else if (in->type.notMissing()
-                               .notPromiseWrapped()
-                               .notObject()
-                               .isA(t)) {
-                    cb.add(BC::isType(TypeChecks::NotObjectWrapped));
-                } else if (in->type.notMissing().noAttribs().isA(t)) {
-                    cb.add(BC::isType(TypeChecks::NoAttribsExceptDim));
-                } else if (in->type.notMissing()
-                               .notPromiseWrapped()
-                               .noAttribs()
-                               .isA(t)) {
-                    cb.add(BC::isType(TypeChecks::NoAttribsExceptDimWrapped));
-                } else {
-                    t.print(std::cerr);
-                    std::cerr << "\n";
-                    assert(false && "IsType used for unsupported type check");
-                }
+                cb.add(BC::isType(is->typeChecks()));
                 break;
             }
 
-            case Tag::AsInt: {
-                auto asInt = AsInt::Cast(instr);
-                if (asInt->ceil)
-                    cb.add(BC::ceil());
-                else
-                    cb.add(BC::floor());
+            case Tag::ColonInputEffects: {
+                cb.add(BC::colonInputEffects(), instr->srcIdx);
+                // TODO: We might want to add some mechanism in PIR to
+                // distinguish between popped and just observed arguments.
+                // This reads 2 args but pops 0 - PIR doesn't know and loads all
+                // args, so we must manually pop them.
+                cb.add(BC::put(2));
+                cb.add(BC::popn(2));
+                break;
+            }
+
+            case Tag::ColonCastRhs: {
+                cb.add(BC::colonCastRhs());
+                // This reads 2 args but only pops 1 - PIR doesn't know and
+                // loads all args, so we must manually pop the other.
+                cb.add(BC::swap());
+                cb.add(BC::pop());
                 break;
             }
 
@@ -872,13 +826,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
-                SIMPLE(Dec, dec);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
                 SIMPLE(Length, length);
                 SIMPLE(ChkMissing, checkMissing);
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(MkCls, close);
+                SIMPLE(ColonCastLhs, colonCastLhs);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V

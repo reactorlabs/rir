@@ -22,6 +22,18 @@
     "iosfwd": "cpp",
     "__locale": "cpp",
     "ios": "cpp",
-    "__functional_03": "cpp"
+    "__functional_03": "cpp",
+    "__config": "cpp",
+    "functional": "cpp",
+    "queue": "cpp",
+    "stack": "cpp",
+    "__hash_table": "cpp",
+    "__tree": "cpp",
+    "algorithm": "cpp",
+    "filesystem": "cpp",
+    "forward_list": "cpp",
+    "list": "cpp",
+    "*.tcc": "cpp",
+    "chrono": "cpp"
   }
 }

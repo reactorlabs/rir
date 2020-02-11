@@ -58,7 +58,9 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 void recordDeoptReason(SEXP val, const DeoptReason& reason);
 void jit(SEXP cls, SEXP name, InterpreterInstance* ctx);
 
-int asInt(SEXP val, bool ceil_, Immediate srcIdx, InterpreterInstance* ctx);
+bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx);
+SEXP colonCastLhs(SEXP lhs);
+SEXP colonCastRhs(SEXP newLhs, SEXP rhs);
 
 } // namespace rir
 #endif // RIR_INTERPRETER_C_H

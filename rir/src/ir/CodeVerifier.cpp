@@ -117,6 +117,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::eq_:
     case Opcode::ne_:
     case Opcode::colon_:
+    case Opcode::colon_input_effects_:
     case Opcode::subassign1_1_:
     case Opcode::subassign2_1_:
     case Opcode::subassign1_2_:
@@ -125,7 +126,6 @@ static Sources hasSources(Opcode bc) {
         return Sources::Required;
 
     case Opcode::inc_:
-    case Opcode::dec_:
     case Opcode::identical_noforce_:
     case Opcode::push_:
     case Opcode::ldfun_:
@@ -204,14 +204,14 @@ static Sources hasSources(Opcode bc) {
     case Opcode::record_deopt_:
     case Opcode::pop_context_:
     case Opcode::push_context_:
-    case Opcode::ceil_:
-    case Opcode::floor_:
     case Opcode::clear_binding_cache_:
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
     case Opcode::starg_stubbed_:
     case Opcode::assert_type_:
     case Opcode::update_promise_:
+    case Opcode::colon_cast_lhs_:
+    case Opcode::colon_cast_rhs_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

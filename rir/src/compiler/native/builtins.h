@@ -138,9 +138,6 @@ struct NativeBuiltins {
     static NativeBuiltin subassign22;
     static NativeBuiltin subassign13;
 
-    static NativeBuiltin asIntFloor;
-    static NativeBuiltin asIntCeil;
-
     static NativeBuiltin nativeCallTrampoline;
 
     static NativeBuiltin initClosureContext;
@@ -153,6 +150,10 @@ struct NativeBuiltins {
 
     static NativeBuiltin sumr;
     static NativeBuiltin prodr;
+
+    static NativeBuiltin colonInputEffects;
+    static NativeBuiltin colonCastLhs;
+    static NativeBuiltin colonCastRhs;
 };
 }
 }

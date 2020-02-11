@@ -2933,50 +2933,12 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
-            case Tag::AsInt: {
-                auto arg = i->arg(0).val();
-                auto asint = AsInt::Cast(i);
-                llvm::Value* res = nullptr;
-                if (representationOf(arg) == Representation::Integer) {
-                    res = load(arg, Representation::Integer);
-                } else if (representationOf(arg) == Representation::Real) {
-                    auto a = load(arg, Representation::Real);
-                    if (asint->ceil) {
-                        res = builder.CreateIntrinsic(Intrinsic::ceil,
-                                                      {a->getType()}, {a});
-                    } else {
-                        res = builder.CreateIntrinsic(Intrinsic::floor,
-                                                      {a->getType()}, {a});
-                    }
-                    res = builder.CreateFPToSI(res, t::Int);
-                } else {
-                    auto bt = asint->ceil ? NativeBuiltins::asIntCeil
-                                          : NativeBuiltins::asIntFloor;
-                    res = call(bt, {loadSxp(arg), c(i->srcIdx)});
-                }
-                setVal(i, res);
-                break;
-            }
-
             case Tag::Inc: {
                 auto arg = i->arg(0).val();
                 llvm::Value* res = nullptr;
                 if (representationOf(arg) == Representation::Integer) {
                     res = load(arg, Representation::Integer);
                     res = builder.CreateAdd(res, c(1), "", true, true);
-                } else {
-                    success = false;
-                }
-                setVal(i, res);
-                break;
-            }
-
-            case Tag::Dec: {
-                auto arg = i->arg(0).val();
-                llvm::Value* res = nullptr;
-                if (representationOf(arg) == Representation::Integer) {
-                    res = load(arg, Representation::Integer);
-                    res = builder.CreateSub(res, c(1), "", true, true);
                 } else {
                     success = false;
                 }
@@ -4725,6 +4687,23 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
+            case Tag::ColonInputEffects:
+                setVal(i, call(NativeBuiltins::colonInputEffects,
+                               {loadSxp(i->arg(0).val()),
+                                loadSxp(i->arg(1).val()), c(i->srcIdx)}));
+                break;
+
+            case Tag::ColonCastLhs:
+                setVal(i, call(NativeBuiltins::colonCastLhs,
+                               {loadSxp(i->arg(0).val())}));
+                break;
+
+            case Tag::ColonCastRhs:
+                setVal(i, call(NativeBuiltins::colonCastRhs,
+                               {loadSxp(i->arg(0).val()),
+                                loadSxp(i->arg(1).val())}));
+                break;
+
             case Tag::Int3:
             case Tag::PrintInvocation:
                 success = false;
@@ -4743,14 +4722,9 @@ bool LowerFunctionLLVM::tryCompile() {
                 success = false;
                 break;
 
-            case Tag::True:
-            case Tag::False:
-            case Tag::NaLogical:
-            case Tag::Tombstone:
-            case Tag::MissingArg:
-            case Tag::UnboundValue:
-            case Tag::Env:
-            case Tag::Nil:
+#define V(Value) case Tag::Value:
+            COMPILER_VALUES(V)
+#undef V
                 assert(false && "Values should not occur in instructions");
                 success = false;
                 break;

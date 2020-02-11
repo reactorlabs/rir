@@ -53,7 +53,9 @@
     V(ExpandDots)                                                              \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
-    V(AsInt)                                                                   \
+    V(ColonInputEffects)                                                       \
+    V(ColonCastLhs)                                                            \
+    V(ColonCastRhs)                                                            \
     V(IsEnvStub)                                                               \
     V(Return)                                                                  \
     V(MkArg)                                                                   \
@@ -76,7 +78,6 @@
     V(LOr)                                                                     \
     V(Not)                                                                     \
     V(Inc)                                                                     \
-    V(Dec)                                                                     \
     V(Is)                                                                      \
     V(IsType)                                                                  \
     V(Plus)                                                                    \

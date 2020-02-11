@@ -235,11 +235,6 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::printValue.llvmSignature = t::void_sexp;
 
-    NativeBuiltins::asIntCeil.llvmSignature =
-        llvm::FunctionType::get(t::Int, {t::SEXP, t::i32}, false);
-    NativeBuiltins::asIntFloor.llvmSignature =
-        llvm::FunctionType::get(t::Int, {t::SEXP, t::i32}, false);
-
     NativeBuiltins::matrixNcols.llvmSignature = t::int_sexp;
     NativeBuiltins::matrixNrows.llvmSignature = t::int_sexp;
 
@@ -313,6 +308,13 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::prodr.llvmSignature =
         llvm::FunctionType::get(t::Double, {t::SEXP}, false);
 
+    NativeBuiltins::colonInputEffects.llvmSignature =
+        llvm::FunctionType::get(t::Int, {t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::colonCastLhs.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
+    NativeBuiltins::colonCastRhs.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+
     return 1;
 }
 
@@ -322,7 +324,6 @@ Type* i1;
 Type* Int;
 Type* Double;
 Type* Void;
-Type* Bool;
 Type* VectorLength;
 
 PointerType* IntPtr;

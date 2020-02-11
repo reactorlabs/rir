@@ -1134,17 +1134,60 @@ class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(AsInt, 1, Effect::Error) {
+class FLI(ColonInputEffects, 2, Effect::Error) {
   public:
-    bool ceil;
+    // Type could technically be NativeType::test
+    explicit ColonInputEffects(Value* lhs, Value* rhs, unsigned srcIdx)
+        : FixedLenInstruction(PirType::simpleScalarLogical(),
+                              {{PirType::val(), PirType::val()}}, {{lhs, rhs}},
+                              srcIdx) {}
 
-    explicit AsInt(Value* in, bool ceil_)
-        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
-                              {{PirType::any()}}, {{in}}),
-          ceil(ceil_) {}
+    Value* lhs() const { return arg<0>().val(); }
+    Value* rhs() const { return arg<1>().val(); }
 
-    size_t gvnBase() const override {
-        return hash_combine(hash_combine(0, Tag::AsInt), ceil);
+    Effects inferEffects(const GetType& getType) const override final {
+        if (getType(lhs()).isA(PirType::num().scalar()) &&
+            getType(rhs()).isA(PirType::num().scalar())) {
+            return Effects::None();
+        } else {
+            return effects;
+        }
+    }
+};
+
+class FLI(ColonCastLhs, 1, Effect::Error) {
+  public:
+    explicit ColonCastLhs(Value* lhs, unsigned srcIdx)
+        : FixedLenInstruction(PirType::intReal().scalar(), {{PirType::val()}},
+                              {{lhs}}, srcIdx) {}
+
+    Value* lhs() const { return arg<0>().val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        if (getType(lhs()).isA(RType::integer)) {
+            return PirType(RType::integer).scalar();
+        } else {
+            return type;
+        }
+    }
+};
+
+class FLI(ColonCastRhs, 2, Effect::Error) {
+  public:
+    explicit ColonCastRhs(Value* newLhs, Value* rhs, unsigned srcIdx)
+        : FixedLenInstruction(PirType::intReal().scalar(),
+                              {{PirType::intReal().scalar(), PirType::val()}},
+                              {{newLhs, rhs}}, srcIdx) {}
+
+    Value* newLhs() const { return arg<0>().val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        // This is intended - lhs type determines rhs
+        if (getType(newLhs()).isA(RType::integer)) {
+            return PirType(RType::integer).scalar();
+        } else {
+            return type;
+        }
     }
 };
 
@@ -1405,15 +1448,6 @@ class FLI(Inc, 1, Effects::None()) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(Dec, 1, Effects::None()) {
-  public:
-    explicit Dec(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
-                              {{PirType(RType::integer).scalar().noAttribs()}},
-                              {{v}}) {}
-    size_t gvnBase() const override { return tagHash(); }
-};
-
 class FLI(Is, 1, Effects::None()) {
   public:
     Is(uint32_t sexpTag, Value* v)
@@ -1433,6 +1467,8 @@ class FLI(IsType, 1, Effects::None()) {
     IsType(PirType type, Value* v)
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
           typeTest(type) {}
+
+    TypeChecks typeChecks() const;
 
     void printArgs(std::ostream& out, bool tty) const override;
 

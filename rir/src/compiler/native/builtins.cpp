@@ -2152,24 +2152,6 @@ NativeBuiltin NativeBuiltins::endClosureContext = {
     (void*)&endClosureContextImpl,
 };
 
-static int asIntFloorImpl(SEXP val, Immediate srcIdx) {
-    return asInt(val, false, srcIdx, globalContext());
-}
-
-NativeBuiltin NativeBuiltins::asIntFloor = {
-    "asIntFloor",
-    (void*)asIntFloorImpl,
-};
-
-static int asIntCeilImpl(SEXP val, Immediate srcIdx) {
-    return asInt(val, true, srcIdx, globalContext());
-}
-
-NativeBuiltin NativeBuiltins::asIntCeil = {
-    "asIntCeil",
-    (void*)asIntCeilImpl,
-};
-
 int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }
 NativeBuiltin NativeBuiltins::matrixNcols = {
     "ncols",
@@ -2239,6 +2221,21 @@ double sumrImpl(SEXP v) {
 NativeBuiltin NativeBuiltins::sumr = {
     "sumr",
     (void*)sumrImpl,
+};
+
+NativeBuiltin NativeBuiltins::colonInputEffects = {
+    "colonInputEffects",
+    (void*)rir::colonInputEffects,
+};
+
+NativeBuiltin NativeBuiltins::colonCastLhs = {
+    "colonCastLhs",
+    (void*)rir::colonCastLhs,
+};
+
+NativeBuiltin NativeBuiltins::colonCastRhs = {
+    "colonCastRhs",
+    (void*)rir::colonCastRhs,
 };
 }
 }

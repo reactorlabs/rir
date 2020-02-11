@@ -2,6 +2,7 @@
 #include "ArgsLazyData.h"
 #include "LazyEnvironment.h"
 #include "R/Funtab.h"
+#include "R/Printing.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "cache.h"
@@ -15,6 +16,7 @@
 
 #include <assert.h>
 #include <deque>
+#include <libintl.h>
 #include <set>
 
 #define NOT_IMPLEMENTED assert(false)
@@ -33,11 +35,17 @@ namespace rir {
 #ifdef PRINT_INTERP
 static void printInterp(Opcode* pc, Code* c, InterpreterInstance* ctx) {
 #ifdef PRINT_STACK_SIZE
+    // Prevent printing instructions (and recursing) while printing stack
+    static bool printingStackSize = false;
+    if (printingStackSize)
+        return;
+
     // Print stack
+    printingStackSize = true;
     std::cout << "#; Stack:";
     for (int i = 0;; i++) {
         SEXP sexp = ostack_at(ctx, i);
-        if (sexp == nullptr)
+        if (sexp == nullptr || ostack_length(ctx) == 0)
             break;
         else if (i == PRINT_STACK_SIZE) {
             std::cout << " ...";
@@ -46,6 +54,7 @@ static void printInterp(Opcode* pc, Code* c, InterpreterInstance* ctx) {
         std::cout << " " << dumpSexp(sexp);
     }
     std::cout << "\n";
+    printingStackSize = false;
 #endif
     // Print source
     unsigned sidx = c->getSrcIdxAt(pc, true);
@@ -1395,78 +1404,6 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-int asInt(SEXP val, bool ceil_, Immediate srcIdx, InterpreterInstance* ctx) {
-    // Scalar integers (already done)
-    if (IS_SIMPLE_SCALAR(val, INTSXP) && *INTEGER(val) != NA_INTEGER) {
-        return INTEGER(val)[0];
-    } else if (IS_SIMPLE_SCALAR(val, REALSXP) && !ISNAN(*REAL(val))) {
-        double r = *REAL(val);
-        return (int)(ceil_ ? ceil(r) : floor(r));
-    } else if (IS_SIMPLE_SCALAR(val, LGLSXP) && *LOGICAL(val) != NA_LOGICAL) {
-        return LOGICAL(val)[0];
-    }
-    int x;
-    bool isNaOrNan = false;
-    if (TYPEOF(val) == INTSXP || TYPEOF(val) == REALSXP ||
-        TYPEOF(val) == LGLSXP) {
-        if (XLENGTH(val) == 0) {
-            Rf_errorcall(src_pool_at(ctx, srcIdx), "argument of length 0");
-            x = NA_INTEGER;
-            isNaOrNan = false;
-        } else {
-            switch (TYPEOF(val)) {
-            case INTSXP: {
-                int i = *INTEGER(val);
-                if (i == NA_INTEGER) {
-                    x = NA_INTEGER;
-                    isNaOrNan = true;
-                } else {
-                    x = i;
-                    isNaOrNan = false;
-                }
-                break;
-            }
-            case REALSXP: {
-                double r = *REAL(val);
-                if (ISNAN(r)) {
-                    x = NA_INTEGER;
-                    isNaOrNan = true;
-                } else {
-                    x = (int)(ceil_ ? ceil(r) : floor(r));
-                    isNaOrNan = false;
-                }
-                break;
-            }
-            case LGLSXP: {
-                int l = *LOGICAL(val);
-                if (l == NA_LOGICAL) {
-                    x = NA_INTEGER;
-                    isNaOrNan = true;
-                } else {
-                    x = (int)l;
-                    isNaOrNan = false;
-                }
-                break;
-            }
-            default:
-                assert(false);
-            }
-            if (XLENGTH(val) > 1) {
-                Rf_warningcall(src_pool_at(ctx, srcIdx),
-                               "numerical expression has multiple "
-                               "elements: only the first used");
-            }
-        }
-    } else { // Everything else
-        x = NA_INTEGER;
-        isNaOrNan = true;
-    }
-    if (isNaOrNan) {
-        Rf_errorcall(src_pool_at(ctx, srcIdx), "NA/NaN argument");
-    }
-    return x;
-}
-
 bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
     SEXP val = R_findVarLocInFrame(environment, symbol).cell;
     if (val == NULL) {
@@ -1696,6 +1633,60 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     for (const auto& a : args)
         ostack_push(ctx, a);
     return args.size();
+}
+
+static bool doubleCanBeCastedToInteger(double n) {
+    return n >= INT_MIN && n <= INT_MAX && (int)n == n;
+}
+
+bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
+    auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
+
+    // 1. decide fastcase
+    bool fastcase = !inherits(lhs, "factor") || !inherits(rhs, "factor");
+
+    // 2. in fastcase, run type error effects
+    if (fastcase) {
+        int lhsLen = Rf_length(lhs);
+        int rhsLen = Rf_length(rhs);
+        if (lhsLen == 0 || rhsLen == 0)
+            Rf_errorcall(getSrc(), "argument of length 0");
+        if (lhsLen > 1)
+            Rf_warningcall(getSrc(),
+                           ngettext("numerical expression has %d element: "
+                                    "only the first used",
+                                    "numerical expression has %d elements: "
+                                    "only the first used",
+                                    (int)lhsLen),
+                           (int)lhsLen);
+        if (rhsLen > 1)
+            Rf_warningcall(getSrc(),
+                           ngettext("numerical expression has %d element: "
+                                    "only the first used",
+                                    "numerical expression has %d elements: "
+                                    "only the first used",
+                                    (int)rhsLen),
+                           (int)rhsLen);
+    }
+
+    return fastcase;
+}
+
+SEXP colonCastLhs(SEXP lhs) {
+    double lhsNum = Rf_asReal(lhs);
+    return doubleCanBeCastedToInteger(lhsNum) ? Rf_ScalarInteger((int)lhsNum)
+                                              : Rf_ScalarReal(lhsNum);
+}
+
+SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
+    double newLhsNum = Rf_asReal(newLhs);
+    double rhsNum = Rf_asReal(rhs);
+
+    double newRhsNum = (newLhsNum <= rhsNum)
+                           ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
+                           : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
+    return (TYPEOF(newLhs) == INTSXP) ? Rf_ScalarInteger((int)newRhsNum)
+                                      : Rf_ScalarReal(newRhsNum);
 }
 
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
@@ -2854,21 +2845,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(dec_) {
-            SEXP val = ostack_top(ctx);
-            SLOWASSERT(TYPEOF(val) == INTSXP);
-            if (MAYBE_REFERENCED(val)) {
-                int i = INTEGER(val)[0];
-                ostack_pop(ctx);
-                SEXP n = Rf_allocVector(INTSXP, 1);
-                INTEGER(n)[0] = i - 1;
-                ostack_push(ctx, n);
-            } else {
-                INTEGER(val)[0]--;
-            }
-            NEXT();
-        }
-
         INSTRUCTION(sub_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
@@ -3211,27 +3187,30 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(ceil_) {
-            res = ostack_pop(ctx);
-            auto x = asInt(res, true, c->getSrcIdxAt(pc - 1, true), ctx);
-            if (NO_REFERENCES(res) && XLENGTH(res) == 1)
-                TYPEOF(res) = INTSXP;
-            else
-                res = Rf_allocVector(INTSXP, 1);
-            INTEGER(res)[0] = x;
-            ostack_push(ctx, res);
+        INSTRUCTION(colon_input_effects_) {
+            SEXP lhs = ostack_at(ctx, 1);
+            SEXP rhs = ostack_at(ctx, 0);
+
+            bool fastcase = colonInputEffects(lhs, rhs, 0);
+            ostack_push(ctx, fastcase ? R_TrueValue : R_FalseValue);
+
             NEXT();
         }
 
-        INSTRUCTION(floor_) {
-            res = ostack_pop(ctx);
-            auto x = asInt(res, false, c->getSrcIdxAt(pc - 1, true), ctx);
-            if (NO_REFERENCES(res) && XLENGTH(res) == 1)
-                TYPEOF(res) = INTSXP;
-            else
-                res = Rf_allocVector(INTSXP, 1);
-            INTEGER(res)[0] = x;
-            ostack_push(ctx, res);
+        INSTRUCTION(colon_cast_lhs_) {
+            SEXP lhs = ostack_pop(ctx);
+            SEXP newLhs = colonCastLhs(lhs);
+            ENSURE_NAMED(newLhs);
+            ostack_push(ctx, newLhs);
+            NEXT();
+        }
+
+        INSTRUCTION(colon_cast_rhs_) {
+            SEXP rhs = ostack_pop(ctx);
+            SEXP newLhs = ostack_top(ctx);
+            SEXP newRhs = colonCastRhs(newLhs, rhs);
+            ENSURE_NAMED(newRhs);
+            ostack_push(ctx, newRhs);
             NEXT();
         }
 
