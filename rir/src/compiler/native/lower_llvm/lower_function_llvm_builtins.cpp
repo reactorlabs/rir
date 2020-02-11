@@ -1,23 +1,17 @@
+#include "builtins.h"
+#include "jit_llvm.h"
 #include "lower_function_llvm.h"
-#include "lower_llvm.h"
-#include "nan_box.h"
 #include "phi_builder.h"
 #include "representation.h"
+#include "types_llvm.h"
 #include "variable.h"
-
-#include "compiler/analysis/reference_count.h"
-#include "compiler/native/builtins.h"
-#include "compiler/native/jit_llvm.h"
-#include "compiler/native/types_llvm.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/MDBuilder.h"
 
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/analysis/liveness.h"
+#include "compiler/analysis/reference_count.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/LazyEnvironment.h"
@@ -39,9 +33,18 @@ namespace pir {
 
 using namespace llvm;
 
-LLVMContext& C = rir::pir::JitLLVM::C;
+static LLVMContext& C = rir::pir::JitLLVM::C;
 
-bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
+bool LowerFunctionLLVM::tryInlineBuiltin(
+    CallSafeBuiltin* b, std::function<llvm::Value*()> callTheBuiltin) {
+    auto fixVisibility = [&]() {
+        if (!b->effects.contains(Effect::Visibility))
+            return;
+        int flag = getFlag(b->builtinId);
+        if (flag < 2)
+            setVisible(flag != 1);
+    };
+
     if (representationOf(b) == Representation::Integer) {
         if (b->nargs() == 2) {
             auto x = b->arg(0).val();
@@ -154,7 +157,7 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                     }
 
                     builder.SetInsertPoint(done);
-                    setVal(i, res());
+                    setVal(b, res());
                     fixVisibility();
                     return true;
                 }
@@ -165,17 +168,17 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
     if (b->nargs() == 1) {
         auto a = load(b->callArg(0).val());
         auto irep = representationOf(b->arg(0).val());
-        auto orep = representationOf(i);
+        auto orep = representationOf(b);
         bool done = true;
 
         auto doTypetest = [&](int type) {
             if (irep == t::SEXP) {
-                setVal(i, builder.CreateSelect(
+                setVal(b, builder.CreateSelect(
                               builder.CreateICmpEQ(sexptype(a), c(type)),
                               constant(R_TrueValue, orep),
                               constant(R_FalseValue, orep)));
             } else {
-                setVal(i, constant(R_FalseValue, orep));
+                setVal(b, constant(R_FalseValue, orep));
             }
         };
 
@@ -194,16 +197,16 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                     assert(orep == Representation::Integer);
                     r = builder.CreateTrunc(r, t::Int);
                 }
-                setVal(i, r);
+                setVal(b, r);
             } else {
-                setVal(i, constant(ScalarInteger(1), orep));
+                setVal(b, constant(ScalarInteger(1), orep));
             }
             break;
         case blt("names"): {
             auto itype = b->callArg(0).val()->type;
             if (itype.isA(PirType::vecs().orObject().orAttribs())) {
                 if (!itype.maybeHasAttrs() && !itype.maybeObj()) {
-                    setVal(i, constant(R_NilValue, t::SEXP));
+                    setVal(b, constant(R_NilValue, t::SEXP));
                 } else {
                     auto res = phiBuilder(t::SEXP);
                     auto done = BasicBlock::Create(C, "", fun);
@@ -225,7 +228,7 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
-                    setVal(i, res());
+                    setVal(b, res());
                 }
             } else {
                 success = false;
@@ -235,11 +238,11 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
         case blt("abs"): {
             if (irep == Representation::Integer) {
                 assert(orep == irep);
-                setVal(i, builder.CreateSelect(builder.CreateICmpSGE(a, c(0)),
+                setVal(b, builder.CreateSelect(builder.CreateICmpSGE(a, c(0)),
                                                a, builder.CreateNeg(a)));
             } else if (irep == Representation::Real) {
                 assert(orep == irep);
-                setVal(i, builder.CreateSelect(builder.CreateFCmpOGE(a, c(0.0)),
+                setVal(b, builder.CreateSelect(builder.CreateFCmpOGE(a, c(0.0)),
                                                a, builder.CreateFNeg(a)));
             } else {
                 done = false;
@@ -249,11 +252,11 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
         case blt("sqrt"): {
             if (orep == Representation::Real &&
                 irep == Representation::Integer) {
-                a = convert(a, i->type);
-                setVal(i, builder.CreateIntrinsic(Intrinsic::sqrt, {t::Double},
+                a = convert(a, b->type);
+                setVal(b, builder.CreateIntrinsic(Intrinsic::sqrt, {t::Double},
                                                   {a}));
             } else if (orep == irep && irep == Representation::Real) {
-                setVal(i, builder.CreateIntrinsic(Intrinsic::sqrt, {t::Double},
+                setVal(b, builder.CreateIntrinsic(Intrinsic::sqrt, {t::Double},
                                                   {a}));
             } else {
                 done = false;
@@ -264,7 +267,7 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
         case blt("prod"): {
             if (irep == Representation::Integer ||
                 irep == Representation::Real) {
-                setVal(i, convert(a, i->type));
+                setVal(b, convert(a, b->type));
             } else if (orep == Representation::Real ||
                        orep == Representation::Integer) {
                 assert(irep == Representation::Sexp);
@@ -275,8 +278,8 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                                    : NativeBuiltins::prodr;
                     llvm::Value* res = call(trg, {a});
                     if (orep == Representation::Integer)
-                        res = convert(res, i->type);
-                    setVal(i, res);
+                        res = convert(res, b->type);
+                    setVal(b, res);
                 } else {
                     done = false;
                 }
@@ -288,15 +291,15 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
         case blt("as.integer"):
             if (irep == Representation::Integer &&
                 orep == Representation::Integer) {
-                setVal(i, a);
+                setVal(b, a);
             } else if (irep == Representation::Real &&
                        orep == Representation::Integer) {
-                setVal(i, builder.CreateSelect(
+                setVal(b, builder.CreateSelect(
                               builder.CreateFCmpUNE(a, a), c(NA_INTEGER),
                               builder.CreateFPToSI(a, t::Int)));
             } else if (irep == Representation::Real &&
                        orep == Representation::Real) {
-                setVal(i, builder.CreateSelect(
+                setVal(b, builder.CreateSelect(
                               builder.CreateFCmpUNE(a, a), a,
                               builder.CreateIntrinsic(Intrinsic::floor,
                                                       {a->getType()}, {a})));
@@ -305,7 +308,7 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                     builder.CreateICmpEQ(attr(a),
                                          constant(R_NilValue, t::SEXP)),
                     builder.CreateICmpEQ(sexptype(a), c(INTSXP)));
-                setVal(i, builder.CreateSelect(isSimpleInt, convert(a, i->type),
+                setVal(b, builder.CreateSelect(isSimpleInt, convert(a, b->type),
                                                callTheBuiltin()));
             } else {
                 done = false;
@@ -315,7 +318,7 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
             if (b->arg(0).val()->type.isA(RType::logical)) {
                 // ensure that logicals represented as ints are
                 // handled.
-                setVal(i, constant(R_TrueValue, orep));
+                setVal(b, constant(R_TrueValue, orep));
             } else {
                 doTypetest(LGLSXP);
             }
@@ -342,21 +345,21 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                     builder.CreateICmpEQ(t, c(CLOSXP)),
                     builder.CreateOr(builder.CreateICmpEQ(t, c(BUILTINSXP)),
                                      builder.CreateICmpEQ(t, c(SPECIALSXP))));
-                setVal(i, builder.CreateSelect(is, constant(R_TrueValue, orep),
+                setVal(b, builder.CreateSelect(is, constant(R_TrueValue, orep),
                                                constant(R_FalseValue, orep)));
             } else {
-                setVal(i, constant(R_FalseValue, orep));
+                setVal(b, constant(R_FalseValue, orep));
             }
             break;
         }
         case blt("is.na"):
             if (irep == Representation::Integer) {
-                setVal(i, builder.CreateSelect(
+                setVal(b, builder.CreateSelect(
                               builder.CreateICmpEQ(a, c(NA_INTEGER)),
                               constant(R_TrueValue, orep),
                               constant(R_FalseValue, orep)));
             } else if (irep == Representation::Real) {
-                setVal(i, builder.CreateSelect(builder.CreateFCmpUNE(a, a),
+                setVal(b, builder.CreateSelect(builder.CreateFCmpUNE(a, a),
                                                constant(R_TrueValue, orep),
                                                constant(R_FalseValue, orep)));
             } else {
@@ -366,30 +369,30 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
         case blt("bodyCode"): {
             assert(irep == Representation::Sexp && orep == irep);
             llvm::Value* res = nullptr;
-            if (i->arg(0).val()->type.isA(RType::closure)) {
+            if (b->arg(0).val()->type.isA(RType::closure)) {
                 res = cdr(a);
             } else {
                 res = builder.CreateSelect(
                     builder.CreateICmpEQ(c(CLOSXP), sexptype(a)), cdr(a),
                     constant(R_NilValue, t::SEXP));
             }
-            setVal(i, res);
+            setVal(b, res);
             break;
         }
         case blt("environment"):
-            if (!i->arg(0).val()->type.isA(RType::closure)) {
+            if (!b->arg(0).val()->type.isA(RType::closure)) {
                 success = false;
                 break;
             }
             assert(irep == Representation::Sexp && orep == irep);
-            setVal(i, tag(a));
+            setVal(b, tag(a));
             break;
         default:
             done = false;
         };
         if (done) {
             fixVisibility();
-            break;
+            return true;
         }
     }
 
@@ -417,7 +420,7 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                         case EXPRSXP:
                         case VECSXP:
                         case RAWSXP:
-                            setVal(i,
+                            setVal(b,
                                    call(NativeBuiltins::makeVector,
                                         {c(type),
                                          builder.CreateZExt(
@@ -444,10 +447,10 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                           : builder.CreateICmpSLT(aval, bval),
                     bval, aval);
                 if (orep == Representation::Integer) {
-                    setVal(i, res);
+                    setVal(b, res);
                 } else {
                     assert(orep == Representation::Sexp);
-                    setVal(i, boxInt(res, false));
+                    setVal(b, boxInt(res, false));
                 }
                 success = true;
             } else if (arep == Representation::Real &&
@@ -458,10 +461,10 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                           : builder.CreateFCmpUGT(aval, bval),
                     aval, bval);
                 if (orep == Representation::Real) {
-                    setVal(i, res);
+                    setVal(b, res);
                 } else {
                     assert(orep == Representation::Sexp);
-                    setVal(i, boxReal(res, false));
+                    setVal(b, boxReal(res, false));
                 }
                 success = true;
             }
@@ -495,7 +498,7 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
                 assignVector(res, c(pos), load(v), resT);
                 pos++;
             });
-            setVal(i, res);
+            setVal(b, res);
             fixVisibility();
             return true;
         }
@@ -512,7 +515,7 @@ bool LowerFunctionLLVM::tryInlineBuiltin(CallSafeBuiltin* b) {
             assignVector(res, c(pos), loadSxp(v), resT);
             pos++;
         });
-        setVal(i, res);
+        setVal(b, res);
         fixVisibility();
         return true;
     }

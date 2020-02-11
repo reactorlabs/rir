@@ -1,23 +1,17 @@
+#include "builtins.h"
+#include "jit_llvm.h"
 #include "lower_function_llvm.h"
-#include "lower_llvm.h"
-#include "nan_box.h"
 #include "phi_builder.h"
 #include "representation.h"
+#include "types_llvm.h"
 #include "variable.h"
-
-#include "compiler/analysis/reference_count.h"
-#include "compiler/native/builtins.h"
-#include "compiler/native/jit_llvm.h"
-#include "compiler/native/types_llvm.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/MDBuilder.h"
 
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/analysis/liveness.h"
+#include "compiler/analysis/reference_count.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/LazyEnvironment.h"
@@ -39,7 +33,7 @@ namespace pir {
 
 using namespace llvm;
 
-LLVMContext& C = rir::pir::JitLLVM::C;
+static LLVMContext& C = rir::pir::JitLLVM::C;
 
 bool LowerFunctionLLVM::tryCompile() {
     std::unordered_map<BB*, BasicBlock*> blockMapping_;
@@ -287,15 +281,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                         constant(R_BaseEnv, t::SEXP));
                 };
 
-                auto fixVisibility = [&]() {
-                    if (!b->effects.contains(Effect::Visibility))
-                        return;
-                    int flag = getFlag(b->builtinId);
-                    if (flag < 2)
-                        setVisible(flag != 1);
-                };
-
-                if (!tryInlineBuiltin(b)) {
+                if (!tryInlineBuiltin(b, callTheBuiltin)) {
                     setVal(i, callTheBuiltin());
                 }
 

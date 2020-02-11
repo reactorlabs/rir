@@ -1,8 +1,7 @@
+#include "llvm_imports.h"
+
 #ifndef TYPES_H_
 #define TYPES_H_
-
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/LLVMContext.h>
 
 namespace rir {
 namespace pir {

@@ -322,15 +322,15 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     for (auto& F : *M) {
         PM->run(F);
 #ifdef ENABLE_SLOWASSERT
-            verifyFunction(F);
+        verifyFunction(F);
 #endif
-        }
-        PM->doFinalization();
-
-        MPM.run(*M);
-
-        return M;
     }
+    PM->doFinalization();
+
+    MPM.run(*M);
+
+    return M;
+}
 
 } // namespace
 

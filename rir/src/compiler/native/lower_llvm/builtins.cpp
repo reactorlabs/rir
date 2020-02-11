@@ -2237,5 +2237,5 @@ NativeBuiltin NativeBuiltins::colonCastRhs = {
     "colonCastRhs",
     (void*)rir::colonCastRhs,
 };
-}
-}
+} // namespace pir
+} // namespace rir

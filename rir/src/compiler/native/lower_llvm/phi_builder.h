@@ -1,11 +1,10 @@
 #pragma once
 
+#include "llvm_imports.h"
+
 #include "compiler/pir/instruction.h"
 #include "constants.h"
 #include "representation.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/MDBuilder.h"
 
 namespace rir {
 namespace pir {

@@ -1,9 +1,8 @@
 #pragma once
 
+#include "llvm_imports.h"
+
 #include "types_llvm.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/MDBuilder.h"
 #include <vector>
 
 namespace rir {

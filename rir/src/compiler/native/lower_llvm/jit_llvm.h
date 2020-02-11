@@ -1,9 +1,7 @@
 #ifndef RIR_COMPILER_JIT_LLVM_H
 #define RIR_COMPILER_JIT_LLVM_H
 
-#include "llvm/ExecutionEngine/JITSymbol.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
+#include "llvm_imports.h"
 
 namespace rir {
 namespace pir {

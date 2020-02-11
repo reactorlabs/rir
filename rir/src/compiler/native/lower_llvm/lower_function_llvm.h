@@ -1,18 +1,17 @@
 #ifndef PIR_COMPILER_LOWER_FUNCTION_LLVM_H
 #define PIR_COMPILER_LOWER_FUNCTION_LLVM_H
 
+#include "llvm_imports.h"
+
+#include "builtins.h"
 #include "compiler/analysis/liveness.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/pir/pir.h"
 #include "constants.h"
-#include "nan_box.h"
 #include "phi_builder.h"
 #include "representation.h"
 #include "runtime/Code.h"
 #include "variable.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/MDBuilder.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -65,9 +64,9 @@ class LowerFunctionLLVM {
         const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate)
         : cls(cls), code(code), promMap(promMap), refcount(refcount),
-          needsLdVarForUpdate(needsLdVarForUpdate), builder(C), MDB(C),
-          liveness(code, code->nextBBId), numLocals(0), numTemps(0),
-          branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
+          needsLdVarForUpdate(needsLdVarForUpdate), builder(JitLLVM::C),
+          MDB(JitLLVM::C), liveness(code, code->nextBBId), numLocals(0),
+          numTemps(0), branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)) {
@@ -81,13 +80,15 @@ class LowerFunctionLLVM {
     static llvm::Constant* convertToPointer(void* what, Type* ty = t::voidPtr) {
         return llvm::ConstantExpr::getCast(
             llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(C, llvm::APInt(64, (std::uint64_t)what)),
+            llvm::ConstantInt::get(JitLLVM::C,
+                                   llvm::APInt(64, (std::uint64_t)what)),
             ty);
     }
     static llvm::Constant* convertToPointer(SEXP what) {
         return llvm::ConstantExpr::getCast(
             llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(C, llvm::APInt(64, (std::uint64_t)what)),
+            llvm::ConstantInt::get(JitLLVM::C,
+                                   llvm::APInt(64, (std::uint64_t)what)),
             t::SEXP);
     }
 
@@ -146,6 +147,8 @@ class LowerFunctionLLVM {
     llvm::AllocaInst* topAlloca(llvm::Type* t, size_t len = 1);
 
     llvm::Value* argument(int i);
+    llvm::Value* intToDouble(llvm::Value* val);
+    llvm::Value* doubleToInt(llvm::Value* val);
     llvm::Value* convert(llvm::Value* val, PirType to, bool protect = true);
     void setVal(Instruction* i, llvm::Value* val);
 
@@ -240,7 +243,8 @@ class LowerFunctionLLVM {
     bool success = true;
     bool tryCompile();
 
-    bool tryInlineBuiltin(int builtin);
+    bool tryInlineBuiltin(CallSafeBuiltin* builtin,
+                          std::function<llvm::Value*()> callTheBuiltin);
 
   private:
     bool vectorTypeSupport(Value* v);

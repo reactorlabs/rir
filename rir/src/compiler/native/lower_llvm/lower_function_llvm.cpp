@@ -1,18 +1,14 @@
 #include "lower_function_llvm.h"
-
-#include "compiler/analysis/reference_count.h"
-#include "compiler/native/builtins.h"
-#include "compiler/native/jit_llvm.h"
-#include "compiler/native/types_llvm.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/MDBuilder.h"
+#include "builtins.h"
+#include "jit_llvm.h"
+#include "types_llvm.h"
 
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/analysis/liveness.h"
+#include "compiler/analysis/reference_count.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/LazyEnvironment.h"
@@ -34,7 +30,7 @@ namespace pir {
 
 using namespace llvm;
 
-LLVMContext& C = rir::pir::JitLLVM::C;
+static LLVMContext& C = rir::pir::JitLLVM::C;
 
 extern "C" size_t R_NSize;
 extern "C" size_t R_NodesInUse;
@@ -102,7 +98,7 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg) {
     builder.SetInsertPoint(ok);
 }
 
-llvm::Value* constantSexp(SEXP co) {
+llvm::Value* LowerFunctionLLVM::constantSexp(SEXP co) {
     static std::unordered_set<SEXP> eternal = {R_TrueValue,  R_NilValue,
                                                R_FalseValue, R_UnboundValue,
                                                R_MissingArg, R_GlobalEnv};
@@ -121,7 +117,7 @@ llvm::Value* constantSexp(SEXP co) {
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
     switch (Representation(needed).t) {
-    case Representation::Type::Int:
+    case Representation::Type::Integer:
         // Note: This is different from prev, in that we can't represent sexps
         // with attributes
         if (IS_SIMPLE_SCALAR(co, INTSXP))
@@ -131,7 +127,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
         if (IS_SIMPLE_SCALAR(co, LGLSXP))
             return c((int)LOGICAL(co)[0]);
         assert(false && "can't represent this as int");
-    case Representation::Type::Double:
+    case Representation::Type::Real:
         // Note: This is different from prev, in that we can't represent sexps
         // with attributes, and can represent logicals
         if (IS_SIMPLE_SCALAR(co, INTSXP))
@@ -646,14 +642,14 @@ llvm::Value* LowerFunctionLLVM::assignVector(llvm::Value* vector,
                                vectorPositionPtr(vector, position, type));
 }
 
-llvm::Value LowerFunctionLLVM::unbox(llvm::Value* val, Representation to) {
+llvm::Value* LowerFunctionLLVM::unbox(llvm::Value* val, Representation to) {
     assert(val->getType() == t::SEXP);
     switch (to.t) {
     case Representation::Type::Integer:
         return unboxIntLgl(val);
-    case Representation::Type::Double:
+    case Representation::Type::Real:
         return unboxRealIntLgl(val);
-    case Representation::Type::SEXP:
+    case Representation::Type::Sexp:
         assert(false && "never actually happens");
         return val;
     case Representation::Type::Bottom:

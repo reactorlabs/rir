@@ -155,7 +155,7 @@ struct NativeBuiltins {
     static NativeBuiltin colonCastLhs;
     static NativeBuiltin colonCastRhs;
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

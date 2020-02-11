@@ -1,5 +1,8 @@
-#include "lower_llvm.h"
-#include "compiler/native/jit_llvm.h"
+// Needed at the top because lower_llvm.h imports R macros
+#include "llvm_imports.h"
+
+#include "compiler/native/lower_llvm.h"
+#include "jit_llvm.h"
 #include "lower_function_llvm.h"
 
 namespace rir {
