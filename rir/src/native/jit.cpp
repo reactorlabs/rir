@@ -1,6 +1,6 @@
-#include "jit_llvm.h"
+#include "jit.h"
 
-#include "types_llvm.h"
+#include "types.h"
 
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Analysis/BasicAliasAnalysis.h>
@@ -45,9 +45,9 @@ namespace {
 using namespace llvm;
 using namespace llvm::orc;
 
-LLVMContext& C = rir::pir::JitLLVM::C;
+LLVMContext& C = rir::pir::Jit::C;
 
-class JitLLVMImplementation {
+class JitImplementation {
   private:
     ExecutionSession ES;
     std::shared_ptr<SymbolResolver> Resolver;
@@ -67,7 +67,7 @@ class JitLLVMImplementation {
 
   public:
     llvm::Module* module = nullptr;
-    JitLLVMImplementation()
+    JitImplementation()
         : Resolver(createLegacyLookupResolver(
               ES,
               [this](const std::string& Name) {
@@ -107,7 +107,7 @@ class JitLLVMImplementation {
                                     llvm::FunctionType* signature) {
         assert(!funs.count(v));
         auto f = Function::Create(signature, Function::ExternalLinkage, name,
-                                  JitLLVMImplementation::instance().module);
+                                  JitImplementation::instance().module);
         funs[v] = f;
         return f;
     }
@@ -137,14 +137,14 @@ class JitLLVMImplementation {
         return nullptr;
     }
 
-    static JitLLVMImplementation& instance() {
-        static std::unique_ptr<JitLLVMImplementation> singleton;
+    static JitImplementation& instance() {
+        static std::unique_ptr<JitImplementation> singleton;
         if (!singleton) {
             InitializeNativeTarget();
             InitializeNativeTargetAsmPrinter();
             InitializeNativeTargetAsmParser();
             rir::pir::initializeTypes(C);
-            singleton.reset(new JitLLVMImplementation());
+            singleton.reset(new JitImplementation());
         }
         return *singleton;
     }
@@ -287,7 +287,7 @@ static RegisterPass<NooptCold> X("noopt-cold", "Don't optimize cold functions",
                                  false /* Analysis Pass */);
 
 std::unique_ptr<llvm::Module>
-JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
+JitImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
 
     M->setTargetTriple(TM->getTargetTriple().str());
     M->setDataLayout(TM->createDataLayout());
@@ -337,34 +337,31 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
 namespace rir {
 namespace pir {
 
-LLVMContext JitLLVM::C;
+LLVMContext Jit::C;
 
-std::string JitLLVM::mangle(const std::string& name) {
-    return JitLLVMImplementation::instance().mangle(name);
+std::string Jit::mangle(const std::string& name) {
+    return JitImplementation::instance().mangle(name);
 }
-void JitLLVM::createModule() {
-    JitLLVMImplementation::instance().createModule();
-}
+void Jit::createModule() { JitImplementation::instance().createModule(); }
 
-void* JitLLVM::tryCompile(llvm::Function* fun) {
-    JitLLVMImplementation::instance();
-    return JitLLVMImplementation::instance().tryCompile(fun);
+void* Jit::tryCompile(llvm::Function* fun) {
+    JitImplementation::instance();
+    return JitImplementation::instance().tryCompile(fun);
 }
 
-llvm::Function* JitLLVM::get(ClosureVersion* v) {
-    return JitLLVMImplementation::instance().getFunction(v);
+llvm::Function* Jit::get(ClosureVersion* v) {
+    return JitImplementation::instance().getFunction(v);
 }
 
-llvm::Function* JitLLVM::declare(ClosureVersion* v, const std::string& name,
-                                 llvm::FunctionType* signature) {
-    return JitLLVMImplementation::instance().declareFunction(v, name,
-                                                             signature);
+llvm::Function* Jit::declare(ClosureVersion* v, const std::string& name,
+                             llvm::FunctionType* signature) {
+    return JitImplementation::instance().declareFunction(v, name, signature);
 }
 
-llvm::Value* JitLLVM::getFunctionDeclaration(const std::string& name,
-                                             llvm::FunctionType* signature,
-                                             llvm::IRBuilder<>& builder) {
-    auto sym = JitLLVMImplementation::instance().findSymbol(name).getAddress();
+llvm::Value* Jit::getFunctionDeclaration(const std::string& name,
+                                         llvm::FunctionType* signature,
+                                         llvm::IRBuilder<>& builder) {
+    auto sym = JitImplementation::instance().findSymbol(name).getAddress();
     if (!sym) {
         return nullptr;
     }
@@ -373,9 +370,7 @@ llvm::Value* JitLLVM::getFunctionDeclaration(const std::string& name,
     return builder.CreateIntToPtr(ptr, tp);
 }
 
-llvm::Module& JitLLVM::module() {
-    return *JitLLVMImplementation::instance().module;
-}
+llvm::Module& Jit::module() { return *JitImplementation::instance().module; }
 
 } // namespace pir
 } // namespace rir

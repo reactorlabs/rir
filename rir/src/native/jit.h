@@ -1,5 +1,5 @@
-#ifndef RIR_COMPILER_JIT_LLVM_H
-#define RIR_COMPILER_JIT_LLVM_H
+#ifndef RIR_COMPILER_JIT_H
+#define RIR_COMPILER_JIT_H
 
 #include "llvm_imports.h"
 
@@ -7,7 +7,7 @@ namespace rir {
 namespace pir {
 
 class ClosureVersion;
-class JitLLVM {
+class Jit {
   public:
     static std::string mangle(const std::string&);
     static llvm::LLVMContext C;

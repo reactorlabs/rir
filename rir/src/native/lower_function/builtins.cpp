@@ -1,10 +1,11 @@
-#include "builtins.h"
-#include "jit_llvm.h"
-#include "lower_function_llvm.h"
-#include "phi_builder.h"
-#include "representation.h"
-#include "types_llvm.h"
-#include "variable.h"
+#include "native/lower_function.h"
+
+#include "native/builtins.h"
+#include "native/jit.h"
+#include "native/phi_builder.h"
+#include "native/representation.h"
+#include "native/types.h"
+#include "native/variable.h"
 
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
@@ -33,9 +34,9 @@ namespace pir {
 
 using namespace llvm;
 
-static LLVMContext& C = rir::pir::JitLLVM::C;
+static LLVMContext& C = rir::pir::Jit::C;
 
-bool LowerFunctionLLVM::tryInlineBuiltin(
+bool LowerFunction::tryInlineBuiltin(
     CallSafeBuiltin* b, std::function<llvm::Value*()> callTheBuiltin) {
     auto fixVisibility = [&]() {
         if (!b->effects.contains(Effect::Visibility))

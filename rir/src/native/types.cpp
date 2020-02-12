@@ -1,4 +1,4 @@
-#include "types_llvm.h"
+#include "types.h"
 #include "builtins.h"
 
 namespace rir {

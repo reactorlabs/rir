@@ -2,7 +2,7 @@
 
 #include "llvm_imports.h"
 
-#include "types_llvm.h"
+#include "types.h"
 #include <vector>
 
 namespace rir {

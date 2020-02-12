@@ -1,5 +1,5 @@
-#ifndef PIR_COMPILER_LOWER_FUNCTION_LLVM_H
-#define PIR_COMPILER_LOWER_FUNCTION_LLVM_H
+#ifndef PIR_COMPILER_LOWER_FUNCTION_H
+#define PIR_COMPILER_LOWER_FUNCTION_H
 
 #include "llvm_imports.h"
 
@@ -19,7 +19,7 @@
 namespace rir {
 namespace pir {
 
-class LowerFunctionLLVM {
+class LowerFunction {
 
     ClosureVersion* cls;
     Code* code;
@@ -58,20 +58,19 @@ class LowerFunctionLLVM {
   public:
     llvm::Function* fun;
 
-    LowerFunctionLLVM(
-        const std::string& name, ClosureVersion* cls, Code* code,
-        const std::unordered_map<Promise*, unsigned>& promMap,
-        const NeedsRefcountAdjustment& refcount,
-        const std::unordered_set<Instruction*>& needsLdVarForUpdate)
+    LowerFunction(const std::string& name, ClosureVersion* cls, Code* code,
+                  const std::unordered_map<Promise*, unsigned>& promMap,
+                  const NeedsRefcountAdjustment& refcount,
+                  const std::unordered_set<Instruction*>& needsLdVarForUpdate)
         : cls(cls), code(code), promMap(promMap), refcount(refcount),
-          needsLdVarForUpdate(needsLdVarForUpdate), builder(JitLLVM::C),
-          MDB(JitLLVM::C), liveness(code, code->nextBBId), numLocals(0),
+          needsLdVarForUpdate(needsLdVarForUpdate), builder(Jit::C),
+          MDB(Jit::C), liveness(code, code->nextBBId), numLocals(0),
           numTemps(0), branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)) {
 
-        fun = JitLLVM::declare(cls, name, t::nativeFunction);
+        fun = Jit::declare(cls, name, t::nativeFunction);
         // prevent Wunused
         this->cls->size();
         this->promMap.size();
@@ -80,14 +79,14 @@ class LowerFunctionLLVM {
     static llvm::Constant* convertToPointer(void* what, Type* ty = t::voidPtr) {
         return llvm::ConstantExpr::getCast(
             llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(JitLLVM::C,
+            llvm::ConstantInt::get(Jit::C,
                                    llvm::APInt(64, (std::uint64_t)what)),
             ty);
     }
     static llvm::Constant* convertToPointer(SEXP what) {
         return llvm::ConstantExpr::getCast(
             llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(JitLLVM::C,
+            llvm::ConstantInt::get(Jit::C,
                                    llvm::APInt(64, (std::uint64_t)what)),
             t::SEXP);
     }

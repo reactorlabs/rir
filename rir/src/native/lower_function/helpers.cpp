@@ -1,7 +1,8 @@
-#include "builtins.h"
-#include "jit_llvm.h"
-#include "lower_function_llvm.h"
-#include "types_llvm.h"
+#include "native/lower_function.h"
+
+#include "native/builtins.h"
+#include "native/jit.h"
+#include "native/types.h"
 
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
@@ -30,16 +31,16 @@ namespace pir {
 
 using namespace llvm;
 
-static LLVMContext& C = rir::pir::JitLLVM::C;
+static LLVMContext& C = rir::pir::Jit::C;
 
 extern "C" size_t R_NSize;
 extern "C" size_t R_NodesInUse;
 
-void LowerFunctionLLVM::setVisible(int i) {
+void LowerFunction::setVisible(int i) {
     builder.CreateStore(c(i), convertToPointer(&R_Visible, t::IntPtr));
 }
 
-llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
+llvm::Value* LowerFunction::force(Instruction* i, llvm::Value* arg) {
 
     auto isProm = BasicBlock::Create(C, "", fun);
     auto needsEval = BasicBlock::Create(C, "", fun);
@@ -85,7 +86,7 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     return result;
 }
 
-void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg) {
+void LowerFunction::insn_assert(llvm::Value* v, const char* msg) {
     auto nok = BasicBlock::Create(C, "assertFail", fun);
     auto ok = BasicBlock::Create(C, "assertOk", fun);
 
@@ -98,7 +99,7 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg) {
     builder.SetInsertPoint(ok);
 }
 
-llvm::Value* LowerFunctionLLVM::constantSexp(SEXP co) {
+llvm::Value* LowerFunction::constantSexp(SEXP co) {
     static std::unordered_set<SEXP> eternal = {R_TrueValue,  R_NilValue,
                                                R_FalseValue, R_UnboundValue,
                                                R_MissingArg, R_GlobalEnv};
@@ -115,7 +116,7 @@ llvm::Value* LowerFunctionLLVM::constantSexp(SEXP co) {
     return res;
 }
 
-llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
+llvm::Value* LowerFunction::constant(SEXP co, llvm::Type* needed) {
     switch (Representation(needed).t) {
     case Representation::Type::Integer:
         // Note: This is different from prev, in that we can't represent sexps
@@ -145,17 +146,17 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
     }
 }
 
-llvm::Value* LowerFunctionLLVM::nodestackPtr() {
+llvm::Value* LowerFunction::nodestackPtr() {
     return builder.CreateLoad(nodestackPtrAddr);
 }
 
-llvm::Value* LowerFunctionLLVM::stack(int i) {
+llvm::Value* LowerFunction::stack(int i) {
     auto offset = -(i + 1);
     auto pos = builder.CreateGEP(nodestackPtr(), {c(offset), c(1)});
     return builder.CreateLoad(t::SEXP, pos);
 }
 
-void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
+void LowerFunction::stack(const std::vector<llvm::Value*>& args) {
     auto stackptr = nodestackPtr();
     // set type tag to 0
     builder.CreateMemSet(builder.CreateGEP(stackptr, c(-args.size())), c(0, 8),
@@ -170,20 +171,20 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
     assert(pos == 0);
 }
 
-void LowerFunctionLLVM::setLocal(size_t i, llvm::Value* v) {
+void LowerFunction::setLocal(size_t i, llvm::Value* v) {
     assert(i < numLocals);
     assert(v->getType() == t::SEXP);
     auto pos = builder.CreateGEP(basepointer, {c(i), c(1)});
     builder.CreateStore(v, pos, true);
 }
 
-llvm::Value* LowerFunctionLLVM::getLocal(size_t i) {
+llvm::Value* LowerFunction::getLocal(size_t i) {
     assert(i < numLocals);
     auto pos = builder.CreateGEP(basepointer, {c(i), c(1)});
     return builder.CreateLoad(pos);
 }
 
-void LowerFunctionLLVM::incStack(int i, bool zero) {
+void LowerFunction::incStack(int i, bool zero) {
     if (i == 0)
         return;
     auto cur = nodestackPtr();
@@ -194,7 +195,7 @@ void LowerFunctionLLVM::incStack(int i, bool zero) {
     builder.CreateStore(up, nodestackPtrAddr);
 }
 
-void LowerFunctionLLVM::decStack(int i) {
+void LowerFunction::decStack(int i) {
     if (i == 0)
         return;
     auto cur = nodestackPtr();
@@ -202,10 +203,10 @@ void LowerFunctionLLVM::decStack(int i) {
     builder.CreateStore(up, nodestackPtrAddr);
 }
 
-llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
-                                             const std::vector<Value*>& args,
-                                             int srcIdx, CCODE builtinFun,
-                                             llvm::Value* env) {
+llvm::Value* LowerFunction::callRBuiltin(SEXP builtin,
+                                         const std::vector<Value*>& args,
+                                         int srcIdx, CCODE builtinFun,
+                                         llvm::Value* env) {
     if (supportsFastBuiltinCall(builtin)) {
         return withCallFrame(args, [&]() -> llvm::Value* {
             return call(NativeBuiltins::callBuiltin,
@@ -250,9 +251,9 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
 }
 
 llvm::Value*
-LowerFunctionLLVM::withCallFrame(const std::vector<Value*>& args,
-                                 const std::function<llvm::Value*()>& theCall,
-                                 bool pop) {
+LowerFunction::withCallFrame(const std::vector<Value*>& args,
+                             const std::function<llvm::Value*()>& theCall,
+                             bool pop) {
     auto nargs = args.size();
     incStack(nargs, false);
     std::vector<llvm::Value*> jitArgs;
@@ -265,19 +266,19 @@ LowerFunctionLLVM::withCallFrame(const std::vector<Value*>& args,
     return res;
 }
 
-llvm::Value* LowerFunctionLLVM::load(Value* v, Representation r) {
+llvm::Value* LowerFunction::load(Value* v, Representation r) {
     return load(v, v->type, r);
 }
 
-llvm::Value* LowerFunctionLLVM::load(Value* v) {
+llvm::Value* LowerFunction::load(Value* v) {
     return load(v, v->type, representationOf(v));
 }
-llvm::Value* LowerFunctionLLVM::loadSxp(Value* v) {
+llvm::Value* LowerFunction::loadSxp(Value* v) {
     return load(v, Representation::Sexp);
 }
 
-llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
-                                     Representation needed) {
+llvm::Value* LowerFunction::load(Value* val, PirType type,
+                                 Representation needed) {
     llvm::Value* res;
 
     if (auto cast = CastType::Cast(val)) {
@@ -408,10 +409,10 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
     return res;
 }
 
-llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
-                                                     llvm::Value* vector,
-                                                     BasicBlock* fallback,
-                                                     llvm::Value* max) {
+llvm::Value* LowerFunction::computeAndCheckIndex(Value* index,
+                                                 llvm::Value* vector,
+                                                 BasicBlock* fallback,
+                                                 llvm::Value* max) {
     BasicBlock* hit1 = BasicBlock::Create(C, "", fun);
     BasicBlock* hit = BasicBlock::Create(C, "", fun);
 
@@ -464,7 +465,7 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
     return nativeIndex;
 }
 
-void LowerFunctionLLVM::compilePopContext(Instruction* i) {
+void LowerFunction::compilePopContext(Instruction* i) {
     auto popc = PopContext::Cast(i);
     auto data = contexts.at(popc->push());
     auto arg = load(popc->result());
@@ -484,7 +485,7 @@ void LowerFunctionLLVM::compilePopContext(Instruction* i) {
     setVal(i, ret);
 }
 
-void LowerFunctionLLVM::compilePushContext(Instruction* i) {
+void LowerFunction::compilePushContext(Instruction* i) {
     auto ct = PushContext::Cast(i);
     auto ast = loadSxp(ct->arg(0).val());
     auto op = loadSxp(ct->arg(1).val());
@@ -531,13 +532,13 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         auto setjmpType = FunctionType::get(
             t::i32, {PointerType::get(t::i32, 0), t::i32}, false);
         auto setjmpFun =
-            JitLLVM::getFunctionDeclaration("sigsetjmp", setjmpType, builder);
+            Jit::getFunctionDeclaration("sigsetjmp", setjmpType, builder);
 #else
         auto setjmpBuf = builder.CreateGEP(data.rcntxt, {c(0), c(2)});
         auto setjmpType =
             FunctionType::get(t::i32, {t::setjmp_buf_ptr, t::i32}, false);
         auto setjmpFun =
-            JitLLVM::getFunctionDeclaration("__sigsetjmp", setjmpType, builder);
+            Jit::getFunctionDeclaration("__sigsetjmp", setjmpType, builder);
 #endif
         auto longjmp = builder.CreateCall(setjmpFun, {setjmpBuf, c(0)});
 
@@ -590,7 +591,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     builder.SetInsertPoint(cont);
 }
 
-llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v, bool enableAsserts) {
+llvm::Value* LowerFunction::dataPtr(llvm::Value* v, bool enableAsserts) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
     if (enableAsserts)
@@ -601,7 +602,7 @@ llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v, bool enableAsserts) {
     return builder.CreateGEP(pos, c(1));
 }
 
-bool LowerFunctionLLVM::vectorTypeSupport(Value* vector) {
+bool LowerFunction::vectorTypeSupport(Value* vector) {
     auto type = vector->type;
     return type.isA(PirType(RType::vec).notObject()) ||
            type.isA(PirType(RType::integer).notObject()) ||
@@ -609,9 +610,9 @@ bool LowerFunctionLLVM::vectorTypeSupport(Value* vector) {
            type.isA(PirType(RType::real).notObject());
 }
 
-llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
-                                                  llvm::Value* position,
-                                                  PirType type) {
+llvm::Value* LowerFunction::vectorPositionPtr(llvm::Value* vector,
+                                              llvm::Value* position,
+                                              PirType type) {
     assert(vector->getType() == t::SEXP);
     PointerType* nativeType;
     if (type.isA(PirType(RType::integer).notObject()) ||
@@ -629,20 +630,19 @@ llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
     return builder.CreateInBoundsGEP(pos, builder.CreateZExt(position, t::i64));
 }
 
-llvm::Value* LowerFunctionLLVM::accessVector(llvm::Value* vector,
-                                             llvm::Value* position,
-                                             PirType type) {
+llvm::Value* LowerFunction::accessVector(llvm::Value* vector,
+                                         llvm::Value* position, PirType type) {
     return builder.CreateLoad(vectorPositionPtr(vector, position, type));
 }
 
-llvm::Value* LowerFunctionLLVM::assignVector(llvm::Value* vector,
-                                             llvm::Value* position,
-                                             llvm::Value* value, PirType type) {
+llvm::Value* LowerFunction::assignVector(llvm::Value* vector,
+                                         llvm::Value* position,
+                                         llvm::Value* value, PirType type) {
     return builder.CreateStore(value,
                                vectorPositionPtr(vector, position, type));
 }
 
-llvm::Value* LowerFunctionLLVM::unbox(llvm::Value* val, Representation to) {
+llvm::Value* LowerFunction::unbox(llvm::Value* val, Representation to) {
     assert(val->getType() == t::SEXP);
     switch (to.t) {
     case Representation::Type::Integer:
@@ -658,13 +658,13 @@ llvm::Value* LowerFunctionLLVM::unbox(llvm::Value* val, Representation to) {
     }
 }
 
-llvm::Value* LowerFunctionLLVM::unboxIntLgl(llvm::Value* v) {
+llvm::Value* LowerFunction::unboxIntLgl(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     checkSexptype(v, {LGLSXP, INTSXP});
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
 }
-llvm::Value* LowerFunctionLLVM::unboxInt(llvm::Value* v) {
+llvm::Value* LowerFunction::unboxInt(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
     checkSexptype(v, {INTSXP});
@@ -673,7 +673,7 @@ llvm::Value* LowerFunctionLLVM::unboxInt(llvm::Value* v) {
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
 }
-llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
+llvm::Value* LowerFunction::unboxLgl(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
     checkSexptype(v, {LGLSXP});
@@ -682,7 +682,7 @@ llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
 }
-llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
+llvm::Value* LowerFunction::unboxReal(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
     checkSexptype(v, {REALSXP});
@@ -692,7 +692,7 @@ llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     auto res = builder.CreateLoad(pos);
     return res;
 }
-llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v) {
+llvm::Value* LowerFunction::unboxRealIntLgl(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto done = BasicBlock::Create(C, "", fun);
     auto isReal = BasicBlock::Create(C, "isReal", fun);
@@ -726,13 +726,13 @@ llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v) {
     return res();
 }
 
-llvm::Value* LowerFunctionLLVM::argument(int i) {
+llvm::Value* LowerFunction::argument(int i) {
     auto pos = builder.CreateGEP(paramArgs(), c(i));
     pos = builder.CreateGEP(pos, {c(0), c(1)});
     return builder.CreateLoad(t::SEXP, pos);
 }
 
-AllocaInst* LowerFunctionLLVM::topAlloca(llvm::Type* t, size_t len) {
+AllocaInst* LowerFunction::topAlloca(llvm::Type* t, size_t len) {
     auto cur = builder.GetInsertBlock();
     builder.SetInsertPoint(entryBlock);
     auto res = builder.CreateAlloca(t, 0, c(len));
@@ -740,19 +740,19 @@ AllocaInst* LowerFunctionLLVM::topAlloca(llvm::Type* t, size_t len) {
     return res;
 }
 
-llvm::Value* LowerFunctionLLVM::intToDouble(llvm::Value* val) {
+llvm::Value* LowerFunction::intToDouble(llvm::Value* val) {
     return builder.CreateSelect(builder.CreateICmpEQ(val, c(NA_INTEGER)),
                                 c(NA_REAL),
                                 builder.CreateSIToFP(val, t::Double));
 }
 
-llvm::Value* LowerFunctionLLVM::doubleToInt(llvm::Value* val) {
+llvm::Value* LowerFunction::doubleToInt(llvm::Value* val) {
     return builder.CreateSelect(builder.CreateFCmpUNE(val, val), c(NA_INTEGER),
                                 builder.CreateFPToSI(val, t::Int));
 }
 
-llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
-                                        bool protect) {
+llvm::Value* LowerFunction::convert(llvm::Value* val, PirType toType,
+                                    bool protect) {
     auto to = representationOf(toType);
     auto from = val->getType();
     if (from == to)
@@ -774,7 +774,7 @@ llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
     }
 }
 
-void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
+void LowerFunction::setVal(Instruction* i, llvm::Value* val) {
     assert(i->producesRirResult() && !CastType::Cast(i) &&
            !PushContext::Cast(i));
     val = convert(val, i->type, false);
@@ -785,7 +785,7 @@ void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
                         inPushContext && escapesInlineContext.count(i));
 }
 
-llvm::Value* LowerFunctionLLVM::isExternalsxp(llvm::Value* v, uint32_t magic) {
+llvm::Value* LowerFunction::isExternalsxp(llvm::Value* v, uint32_t magic) {
     assert(v->getType() == t::SEXP);
     auto isExternalsxp = builder.CreateICmpEQ(c(EXTERNALSXP), sexptype(v));
     auto es = builder.CreateBitCast(dataPtr(v, false),
@@ -795,8 +795,8 @@ llvm::Value* LowerFunctionLLVM::isExternalsxp(llvm::Value* v, uint32_t magic) {
     return builder.CreateAnd(isExternalsxp, isCorrectMagic);
 }
 
-void LowerFunctionLLVM::checkSexptype(llvm::Value* v,
-                                      const std::vector<SEXPTYPE>& types) {
+void LowerFunction::checkSexptype(llvm::Value* v,
+                                  const std::vector<SEXPTYPE>& types) {
 #ifdef ENABLE_SLOWASSERT
     auto type = sexptype(v);
     llvm::Value* match = builder.getTrue();
@@ -809,7 +809,7 @@ void LowerFunctionLLVM::checkSexptype(llvm::Value* v,
 #endif
 }
 
-void LowerFunctionLLVM::checkIsSexp(llvm::Value* v, const std::string& msg) {
+void LowerFunction::checkIsSexp(llvm::Value* v, const std::string& msg) {
 #ifdef ENABLE_SLOWASSERT
     static bool checking = false;
     if (checking)
@@ -829,7 +829,7 @@ void LowerFunctionLLVM::checkIsSexp(llvm::Value* v, const std::string& msg) {
 #endif
 }
 
-llvm::Value* LowerFunctionLLVM::sxpinfoPtr(llvm::Value* v) {
+llvm::Value* LowerFunction::sxpinfoPtr(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     checkIsSexp(v, "in sxpinfoPtr");
     auto sxpinfoPtr = builder.CreateGEP(t::SEXPREC, v, {c(0), c(0)});
@@ -837,7 +837,7 @@ llvm::Value* LowerFunctionLLVM::sxpinfoPtr(llvm::Value* v) {
     return builder.CreateBitCast(sxpinfoPtr, t::i64ptr);
 }
 
-void LowerFunctionLLVM::setSexptype(llvm::Value* v, int t) {
+void LowerFunction::setSexptype(llvm::Value* v, int t) {
     auto ptr = sxpinfoPtr(v);
     llvm::Value* sxpinfo = builder.CreateLoad(ptr);
     sxpinfo =
@@ -846,19 +846,19 @@ void LowerFunctionLLVM::setSexptype(llvm::Value* v, int t) {
     builder.CreateStore(sxpinfo, ptr);
 }
 
-llvm::Value* LowerFunctionLLVM::sexptype(llvm::Value* v) {
+llvm::Value* LowerFunction::sexptype(llvm::Value* v) {
     auto sxpinfo = builder.CreateLoad(sxpinfoPtr(v));
     auto t = builder.CreateAnd(sxpinfo, c(MAX_NUM_SEXPTYPE - 1, 64));
     return builder.CreateTrunc(t, t::Int);
 }
 
-llvm::Value* LowerFunctionLLVM::tag(llvm::Value* v) {
+llvm::Value* LowerFunction::tag(llvm::Value* v) {
     auto pos = builder.CreateGEP(v, {c(0), c(4), c(2)});
     return builder.CreateLoad(pos);
 }
 
-void LowerFunctionLLVM::setCar(llvm::Value* x, llvm::Value* y,
-                               bool needsWriteBarrier) {
+void LowerFunction::setCar(llvm::Value* x, llvm::Value* y,
+                           bool needsWriteBarrier) {
     auto fast = [&]() {
         auto xx = builder.CreateGEP(x, {c(0), c(4), c(0)});
         builder.CreateStore(y, xx);
@@ -870,8 +870,8 @@ void LowerFunctionLLVM::setCar(llvm::Value* x, llvm::Value* y,
     writeBarrier(x, y, fast, [&]() { call(NativeBuiltins::setCar, {x, y}); });
 }
 
-void LowerFunctionLLVM::setCdr(llvm::Value* x, llvm::Value* y,
-                               bool needsWriteBarrier) {
+void LowerFunction::setCdr(llvm::Value* x, llvm::Value* y,
+                           bool needsWriteBarrier) {
     auto fast = [&]() {
         auto xx = builder.CreateGEP(x, {c(0), c(4), c(1)});
         builder.CreateStore(y, xx);
@@ -883,8 +883,8 @@ void LowerFunctionLLVM::setCdr(llvm::Value* x, llvm::Value* y,
     writeBarrier(x, y, fast, [&]() { call(NativeBuiltins::setCdr, {x, y}); });
 }
 
-void LowerFunctionLLVM::setTag(llvm::Value* x, llvm::Value* y,
-                               bool needsWriteBarrier) {
+void LowerFunction::setTag(llvm::Value* x, llvm::Value* y,
+                           bool needsWriteBarrier) {
     auto fast = [&]() {
         auto xx = builder.CreateGEP(x, {c(0), c(4), c(2)});
         builder.CreateStore(y, xx);
@@ -896,29 +896,29 @@ void LowerFunctionLLVM::setTag(llvm::Value* x, llvm::Value* y,
     writeBarrier(x, y, fast, [&]() { call(NativeBuiltins::setTag, {x, y}); });
 }
 
-llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
+llvm::Value* LowerFunction::car(llvm::Value* v) {
     v = builder.CreateGEP(v, {c(0), c(4), c(0)});
     return builder.CreateLoad(v);
 }
 
-llvm::Value* LowerFunctionLLVM::cdr(llvm::Value* v) {
+llvm::Value* LowerFunction::cdr(llvm::Value* v) {
     v = builder.CreateGEP(v, {c(0), c(4), c(1)});
     return builder.CreateLoad(v);
 }
 
-llvm::Value* LowerFunctionLLVM::attr(llvm::Value* v) {
+llvm::Value* LowerFunction::attr(llvm::Value* v) {
     auto pos = builder.CreateGEP(v, {c(0), c(1)});
     return builder.CreateLoad(pos);
 }
 
-llvm::Value* LowerFunctionLLVM::isScalar(llvm::Value* v) {
+llvm::Value* LowerFunction::isScalar(llvm::Value* v) {
     auto va = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
     auto lp = builder.CreateGEP(va, {c(0), c(4), c(0)});
     auto l = builder.CreateLoad(lp);
     return builder.CreateICmpEQ(l, c(1, 64));
 }
 
-llvm::Value* LowerFunctionLLVM::isSimpleScalar(llvm::Value* v, SEXPTYPE t) {
+llvm::Value* LowerFunction::isSimpleScalar(llvm::Value* v, SEXPTYPE t) {
     auto sxpinfo = builder.CreateLoad(sxpinfoPtr(v));
 
     auto type = builder.CreateAnd(sxpinfo, c(MAX_NUM_SEXPTYPE - 1, 64));
@@ -934,13 +934,13 @@ llvm::Value* LowerFunctionLLVM::isSimpleScalar(llvm::Value* v, SEXPTYPE t) {
     return builder.CreateAnd(okType, builder.CreateAnd(isScalar, noAttrib));
 }
 
-llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
+llvm::Value* LowerFunction::vectorLength(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto pos = builder.CreateBitCast(v, t::VECTOR_SEXPREC_ptr);
     pos = builder.CreateGEP(pos, {c(0), c(4), c(0)});
     return builder.CreateLoad(pos);
 }
-void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
+void LowerFunction::assertNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
@@ -961,7 +961,7 @@ void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 };
 
-llvm::Value* LowerFunctionLLVM::shared(llvm::Value* v) {
+llvm::Value* LowerFunction::shared(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
@@ -972,7 +972,7 @@ llvm::Value* LowerFunctionLLVM::shared(llvm::Value* v) {
     return builder.CreateICmpUGT(named, c(1ul));
 }
 
-void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
+void LowerFunction::ensureNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
@@ -996,7 +996,7 @@ void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 };
 
-void LowerFunctionLLVM::ensureShared(llvm::Value* v) {
+void LowerFunction::ensureShared(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = sxpinfoPtr(v);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
@@ -1025,7 +1025,7 @@ void LowerFunctionLLVM::ensureShared(llvm::Value* v) {
     builder.SetInsertPoint(done);
 };
 
-void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
+void LowerFunction::incrementNamed(llvm::Value* v, int max) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = sxpinfoPtr(v);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
@@ -1055,8 +1055,8 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
     builder.SetInsertPoint(done);
 };
 
-void LowerFunctionLLVM::nacheck(llvm::Value* v, BasicBlock* isNa,
-                                BasicBlock* notNa) {
+void LowerFunction::nacheck(llvm::Value* v, BasicBlock* isNa,
+                            BasicBlock* notNa) {
     if (!notNa)
         notNa = BasicBlock::Create(C, "", fun);
     if (v->getType() == t::Double) {
@@ -1070,7 +1070,7 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, BasicBlock* isNa,
     builder.SetInsertPoint(notNa);
 }
 
-void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
+void LowerFunction::checkMissing(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto ok = BasicBlock::Create(C, "", fun);
     auto nok = BasicBlock::Create(C, "", fun);
@@ -1084,7 +1084,7 @@ void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 }
 
-void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
+void LowerFunction::checkUnbound(llvm::Value* v) {
     auto ok = BasicBlock::Create(C, "", fun);
     auto nok = BasicBlock::Create(C, "", fun);
     auto t = builder.CreateICmpEQ(v, constant(R_UnboundValue, t::SEXP));
@@ -1097,8 +1097,8 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 }
 
-llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
-                                        const std::vector<llvm::Value*>& args) {
+llvm::CallInst* LowerFunction::call(const NativeBuiltin& builtin,
+                                    const std::vector<llvm::Value*>& args) {
 #ifdef ENABLE_SLOWASSERT
     // abuse BB lable as comment
     auto callBB = BasicBlock::Create(C, builtin.name, fun);
@@ -1110,7 +1110,7 @@ llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
     return builder.CreateCall(trg, args);
 }
 
-llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
+llvm::Value* LowerFunction::box(llvm::Value* v, PirType t, bool protect) {
     llvm::Value* res = nullptr;
     if (t.isA(PirType(RType::integer).notObject()))
         res = boxInt(v, protect);
@@ -1123,37 +1123,37 @@ llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
         protectTemp(res);
     return res;
 }
-llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
+llvm::Value* LowerFunction::boxInt(llvm::Value* v, bool protect) {
     if (v->getType() == t::Int)
         return call(NativeBuiltins::newInt, {v});
     assert(v->getType() == t::Double);
     return call(NativeBuiltins::newIntFromReal, {v});
 }
-llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool protect) {
+llvm::Value* LowerFunction::boxReal(llvm::Value* v, bool protect) {
     if (v->getType() == t::Double)
         return call(NativeBuiltins::newReal, {v});
     assert(v->getType() == t::Int);
     return call(NativeBuiltins::newRealFromInt, {v});
 }
-llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v, bool protect) {
+llvm::Value* LowerFunction::boxLgl(llvm::Value* v, bool protect) {
     if (v->getType() == t::Int)
         return call(NativeBuiltins::newLgl, {v});
     assert(v->getType() == t::Double);
     return call(NativeBuiltins::newLglFromReal, {v});
 }
-llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v, bool protect) {
+llvm::Value* LowerFunction::boxTst(llvm::Value* v, bool protect) {
     assert(v->getType() == t::Int);
     return builder.CreateSelect(builder.CreateICmpNE(v, c(0)),
                                 constant(R_TrueValue, t::SEXP),
                                 constant(R_FalseValue, t::SEXP));
 }
 
-void LowerFunctionLLVM::protectTemp(llvm::Value* val) {
+void LowerFunction::protectTemp(llvm::Value* val) {
     assert(numTemps < MAX_TEMPS);
     setLocal(numLocals - 1 - numTemps++, val);
 }
 
-llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
+llvm::Value* LowerFunction::depromise(llvm::Value* arg) {
 
     auto isProm = BasicBlock::Create(C, "isProm", fun);
     auto isVal = BasicBlock::Create(C, "", fun);
@@ -1182,7 +1182,7 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
     return res();
 }
 
-void LowerFunctionLLVM::compileRelop(
+void LowerFunction::compileRelop(
     Instruction* i,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
@@ -1243,7 +1243,7 @@ void LowerFunctionLLVM::compileRelop(
     }
 };
 
-void LowerFunctionLLVM::compileBinop(
+void LowerFunction::compileBinop(
     Instruction* i, Value* lhs, Value* rhs,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
@@ -1325,7 +1325,7 @@ void LowerFunctionLLVM::compileBinop(
     }
 };
 
-void LowerFunctionLLVM::compileUnop(
+void LowerFunction::compileUnop(
     Instruction* i, Value* arg,
     const std::function<llvm::Value*(llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*)>& fpInsert, UnopKind kind) {
@@ -1388,9 +1388,9 @@ void LowerFunctionLLVM::compileUnop(
     setVal(i, res());
 };
 
-void LowerFunctionLLVM::writeBarrier(llvm::Value* x, llvm::Value* y,
-                                     std::function<void()> no,
-                                     std::function<void()> yes) {
+void LowerFunction::writeBarrier(llvm::Value* x, llvm::Value* y,
+                                 std::function<void()> no,
+                                 std::function<void()> yes) {
     auto sxpinfoX = builder.CreateLoad(sxpinfoPtr(x));
 
     auto markBitPos = c((unsigned long)(1ul << (TYPE_BITS + 19)));
@@ -1429,9 +1429,9 @@ void LowerFunctionLLVM::writeBarrier(llvm::Value* x, llvm::Value* y,
     builder.SetInsertPoint(done);
 };
 
-bool LowerFunctionLLVM::compileDotcall(
-    Instruction* i, const std::function<llvm::Value*()>& callee,
-    const std::function<SEXP(size_t)>& names) {
+bool LowerFunction::compileDotcall(Instruction* i,
+                                   const std::function<llvm::Value*()>& callee,
+                                   const std::function<SEXP(size_t)>& names) {
     auto calli = CallInstruction::CastCall(i);
     assert(calli);
     std::vector<Value*> args;
@@ -1476,7 +1476,7 @@ bool LowerFunctionLLVM::compileDotcall(
     return true;
 }
 
-llvm::Value* LowerFunctionLLVM::envStubGet(llvm::Value* x, int i, size_t size) {
+llvm::Value* LowerFunction::envStubGet(llvm::Value* x, int i, size_t size) {
     // We could use externalsxpGetEntry, but this is faster
     assert(x->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
@@ -1493,7 +1493,7 @@ llvm::Value* LowerFunctionLLVM::envStubGet(llvm::Value* x, int i, size_t size) {
     return builder.CreateLoad(pos);
 }
 
-void LowerFunctionLLVM::envStubSetNotMissing(llvm::Value* x, int i) {
+void LowerFunction::envStubSetNotMissing(llvm::Value* x, int i) {
     auto le = builder.CreateBitCast(dataPtr(x, false),
                                     PointerType::get(t::LazyEnvironment, 0));
     auto missingBits =
@@ -1502,8 +1502,8 @@ void LowerFunctionLLVM::envStubSetNotMissing(llvm::Value* x, int i) {
     builder.CreateStore(c(1, 8), pos);
 }
 
-void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y,
-                                   size_t size, bool setNotMissing) {
+void LowerFunction::envStubSet(llvm::Value* x, int i, llvm::Value* y,
+                               size_t size, bool setNotMissing) {
     // We could use externalsxpSetEntry, but this is faster
     writeBarrier(
         x, y,
@@ -1537,7 +1537,7 @@ void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y,
     }
 }
 
-llvm::Value* LowerFunctionLLVM::isObj(llvm::Value* v) {
+llvm::Value* LowerFunction::isObj(llvm::Value* v) {
     checkIsSexp(v, "in IsObj");
     auto sxpinfo = builder.CreateLoad(sxpinfoPtr(v));
     return builder.CreateICmpNE(
@@ -1545,7 +1545,7 @@ llvm::Value* LowerFunctionLLVM::isObj(llvm::Value* v) {
         builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 1)))));
 };
 
-llvm::Value* LowerFunctionLLVM::fastVeceltOkNative(llvm::Value* v) {
+llvm::Value* LowerFunction::fastVeceltOkNative(llvm::Value* v) {
     checkIsSexp(v, "in IsFastVeceltOkNative");
     auto attrs = attr(v);
     auto isNil = builder.CreateICmpEQ(attrs, constant(R_NilValue, t::SEXP));
@@ -1557,7 +1557,7 @@ llvm::Value* LowerFunctionLLVM::fastVeceltOkNative(llvm::Value* v) {
     return builder.CreateOr(isNil, isMatr);
 };
 
-llvm::Value* LowerFunctionLLVM::isAltrep(llvm::Value* v) {
+llvm::Value* LowerFunction::isAltrep(llvm::Value* v) {
     checkIsSexp(v, "in is altrep");
     auto sxpinfo = builder.CreateLoad(sxpinfoPtr(v));
     return builder.CreateICmpNE(
