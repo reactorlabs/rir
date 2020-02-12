@@ -1153,6 +1153,8 @@ class FLI(ColonInputEffects, 2, Effect::Error) {
             return effects;
         }
     }
+
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
 class FLI(ColonCastLhs, 1, Effect::Error) {
