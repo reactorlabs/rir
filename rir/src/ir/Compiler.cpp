@@ -291,7 +291,7 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
                << BC::swap();
 
             // n' <- colonCastRhs(m', n')
-            cs << BC::colonCastRhs() << BC::ensureNamed();
+            cs << BC::colonCastRhs();
 
             // step <- if (m' <= n') 1L else -1L
             cs << BC::dup2() << BC::le();
