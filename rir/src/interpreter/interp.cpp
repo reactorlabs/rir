@@ -1674,8 +1674,11 @@ bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
 
 SEXP colonCastLhs(SEXP lhs) {
     double lhsNum = Rf_asReal(lhs);
-    return doubleCanBeCastedToInteger(lhsNum) ? Rf_ScalarInteger((int)lhsNum)
-                                              : Rf_ScalarReal(lhsNum);
+    SEXP result = doubleCanBeCastedToInteger(lhsNum)
+                      ? Rf_ScalarInteger((int)lhsNum)
+                      : Rf_ScalarReal(lhsNum);
+    ENSURE_NAMED(result);
+    return result;
 }
 
 SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
@@ -1685,8 +1688,10 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
     double newRhsNum = (newLhsNum <= rhsNum)
                            ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
                            : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
-    return (TYPEOF(newLhs) == INTSXP) ? Rf_ScalarInteger((int)newRhsNum)
-                                      : Rf_ScalarReal(newRhsNum);
+    SEXP result = (TYPEOF(newLhs) == INTSXP) ? Rf_ScalarInteger((int)newRhsNum)
+                                             : Rf_ScalarReal(newRhsNum);
+    ENSURE_NAMED(result);
+    return result;
 }
 
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
@@ -3200,7 +3205,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(colon_cast_lhs_) {
             SEXP lhs = ostack_pop(ctx);
             SEXP newLhs = colonCastLhs(lhs);
-            ENSURE_NAMED(newLhs);
             ostack_push(ctx, newLhs);
             NEXT();
         }
@@ -3209,7 +3213,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP rhs = ostack_pop(ctx);
             SEXP newLhs = ostack_top(ctx);
             SEXP newRhs = colonCastRhs(newLhs, rhs);
-            ENSURE_NAMED(newRhs);
             ostack_push(ctx, newRhs);
             NEXT();
         }
