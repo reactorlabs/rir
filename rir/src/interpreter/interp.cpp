@@ -1677,7 +1677,6 @@ SEXP colonCastLhs(SEXP lhs) {
     SEXP result = doubleCanBeCastedToInteger(lhsNum)
                       ? Rf_ScalarInteger((int)lhsNum)
                       : Rf_ScalarReal(lhsNum);
-    ENSURE_NAMED(result);
     return result;
 }
 
@@ -1690,7 +1689,6 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
                            : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
     SEXP result = (TYPEOF(newLhs) == INTSXP) ? Rf_ScalarInteger((int)newRhsNum)
                                              : Rf_ScalarReal(newRhsNum);
-    ENSURE_NAMED(result);
     return result;
 }
 
