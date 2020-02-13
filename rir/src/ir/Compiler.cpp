@@ -287,11 +287,11 @@ void compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
             cs << skipRegularForBranch;
 
             // m' <- colonCastLhs(m')
-            cs << BC::swap() << BC::colonCastLhs() << BC::ensureNamed()
-               << BC::swap();
+            cs << BC::swap() << BC::colonCastLhs() << BC::recordType()
+               << BC::ensureNamed() << BC::swap();
 
             // n' <- colonCastRhs(m', n')
-            cs << BC::colonCastRhs();
+            cs << BC::colonCastRhs() << BC::recordType();
 
             // step <- if (m' <= n') 1L else -1L
             cs << BC::dup2() << BC::le();
