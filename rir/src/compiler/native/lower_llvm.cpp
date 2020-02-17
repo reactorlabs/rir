@@ -3434,17 +3434,21 @@ bool LowerFunctionLLVM::tryCompile() {
             }
             case Tag::Colon: {
                 assert(representationOf(i) == t::SEXP);
-                auto a = loadSxp(i->arg(0).val());
-                auto b = loadSxp(i->arg(1).val());
+                auto a = i->arg(0).val();
+                auto b = i->arg(1).val();
                 llvm::Value* res;
                 if (i->hasEnv()) {
                     auto e = loadSxp(i->env());
-                    res =
-                        call(NativeBuiltins::binopEnv,
-                             {a, b, e, c(i->srcIdx), c((int)BinopKind::COLON)});
+                    res = call(NativeBuiltins::binopEnv,
+                               {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
+                                c((int)BinopKind::COLON)});
+                } else if (representationOf(a) == Representation::Integer &&
+                           representationOf(b) == Representation::Integer) {
+                    res = call(NativeBuiltins::colon, {load(a), load(b)});
                 } else {
-                    res = call(NativeBuiltins::binop,
-                               {a, b, c((int)BinopKind::COLON)});
+                    res =
+                        call(NativeBuiltins::binop, {loadSxp(a), loadSxp(b),
+                                                     c((int)BinopKind::COLON)});
                 }
                 setVal(i, res);
                 break;

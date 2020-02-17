@@ -154,6 +154,8 @@ struct NativeBuiltins {
     static NativeBuiltin colonInputEffects;
     static NativeBuiltin colonCastLhs;
     static NativeBuiltin colonCastRhs;
+
+    static NativeBuiltin colon;
 };
 }
 }

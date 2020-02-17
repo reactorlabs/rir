@@ -897,6 +897,21 @@ NativeBuiltin NativeBuiltins::binop = {
     (void*)&binopImpl,
 };
 
+SEXP colonImpl(int from, int to) {
+    if (from != NA_INTEGER && to != NA_INTEGER) {
+        return seq_int(from, to);
+    }
+    Rf_errorcall(
+        // TODO: pass srcid
+        R_NilValue, "NA/NaN argument");
+    return nullptr;
+}
+
+NativeBuiltin NativeBuiltins::colon = {
+    "colon",
+    (void*)&colonImpl,
+};
+
 int isMissingImpl(SEXP symbol, SEXP environment) {
     // TODO: Send the proper src
     return rir::isMissing(symbol, environment, nullptr, nullptr);
