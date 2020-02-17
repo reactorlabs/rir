@@ -274,10 +274,15 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             cs << BC::force();
 
             // if (!colonInputEffects(m, n)) {
+            cs << BC::colonInputEffects();
+            cs.addSrc(seq);
             bool staticNoSlowcase = isConstant(start) || isConstant(end);
-            if (!staticNoSlowcase) {
-                cs << BC::colonInputEffects();
-                cs.addSrc(seq);
+            if (staticNoSlowcase) {
+                // We statically know that colonInputEffects is true, so we can
+                // just pop the result and don't need to compile the slowcase
+                // branch
+                cs << BC::pop();
+            } else {
                 cs << BC::recordTest() << BC::brtrue(skipRegularForBranch);
                 //   <regular for>
                 // Note that we call the builtin `for` and pass the body as a
