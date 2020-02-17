@@ -5,6 +5,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "R/BuiltinIds.h"
 #include "allocators.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
@@ -1185,7 +1186,22 @@ void Pir2Rir::lower(Code* code) {
             auto next = it + 1;
             if (auto call = CallInstruction::CastCall(*it))
                 call->clearFrameState();
-            if (auto ldfun = LdFun::Cast(*it)) {
+            if (auto b = CallSafeBuiltin::Cast(*it)) {
+                if (b->builtinId == blt("length") && it != bb->end()) {
+                    if (auto t = IsType::Cast(*(it + 1))) {
+                        if (t->typeTest.isA(PirType::simpleScalarInt()) &&
+                            t->arg(0).val() == b) {
+                            // Type test follows, let's cheat and load this as
+                            // an integer already. this avoids boxing in the
+                            // native backend. NOTE: don't move this to an
+                            // earlier pass, since otherwise the check will be
+                            // optimized away!
+                            b->type = PirType::simpleScalarInt();
+                            break;
+                        }
+                    }
+                }
+            } else if (auto ldfun = LdFun::Cast(*it)) {
                 // The guessed binding in ldfun is just used as a temporary
                 // store. If we did not manage to resolve ldfun by now, we
                 // have to remove the guess again, since apparently we
