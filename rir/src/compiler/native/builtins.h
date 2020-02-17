@@ -80,6 +80,7 @@ struct NativeBuiltins {
     static NativeBuiltin createClosure;
 
     static NativeBuiltin newInt;
+    static NativeBuiltin newIntDebug;
     static NativeBuiltin newLgl;
     static NativeBuiltin newReal;
     static NativeBuiltin newIntFromReal;

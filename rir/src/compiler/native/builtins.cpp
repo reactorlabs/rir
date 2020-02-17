@@ -482,6 +482,13 @@ SEXP newIntImpl(int i) {
     return res;
 }
 
+SEXP newIntDebugImpl(int i, void* debug) {
+    std::cout << (char*)debug << "\n";
+    auto res = Rf_allocVector(INTSXP, 1);
+    INTEGER(res)[0] = i;
+    return res;
+}
+
 SEXP newLglFromRealImpl(double d) {
     auto res = Rf_allocVector(LGLSXP, 1);
     if (d != d)
@@ -529,6 +536,10 @@ NativeBuiltin NativeBuiltins::newLglFromReal = {
 NativeBuiltin NativeBuiltins::newInt = {
     "newInt",
     (void*)&newIntImpl,
+};
+NativeBuiltin NativeBuiltins::newIntDebug = {
+    "newIntDebug",
+    (void*)&newIntDebugImpl,
 };
 NativeBuiltin NativeBuiltins::newReal = {
     "newReal",
