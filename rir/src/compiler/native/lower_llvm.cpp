@@ -2624,6 +2624,15 @@ bool LowerFunctionLLVM::tryCompile() {
                             done = false;
                         }
                         break;
+                    case blt("is.object"):
+                        if (irep == Representation::Sexp) {
+                            setVal(i, builder.CreateSelect(
+                                          isObj(a), constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_FalseValue, orep));
+                        }
+                        break;
                     case blt("bodyCode"): {
                         assert(irep == Representation::Sexp && orep == irep);
                         llvm::Value* res = nullptr;
