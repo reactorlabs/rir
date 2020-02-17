@@ -413,7 +413,7 @@ b <- factor(b)
 stopifnot(!pir.check(function(a, b) {
   x <- 0
   for (i in a:b)
-    x <- x + i
+    x <- i
   x
 }, NoColon, warmup=function(f) f(a, b)))
                      
