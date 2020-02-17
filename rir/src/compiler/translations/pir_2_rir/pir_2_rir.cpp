@@ -830,7 +830,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(AsTest, asbool);
                 SIMPLE(Length, length);
                 SIMPLE(ChkMissing, checkMissing);
-                SIMPLE(ChkClosure, isfun);
+                SIMPLE(ChkClosure, checkClosure);
                 SIMPLE(MkCls, close);
                 SIMPLE(ColonCastLhs, colonCastLhs);
 #define V(V, name, Name) SIMPLE(Name, name);

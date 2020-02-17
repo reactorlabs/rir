@@ -189,7 +189,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::set_shared_:
     case Opcode::ensure_named_:
     case Opcode::return_:
-    case Opcode::isfun_:
+    case Opcode::check_closure_:
     case Opcode::invisible_:
     case Opcode::visible_:
     case Opcode::endloop_:

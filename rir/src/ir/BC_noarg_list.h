@@ -56,7 +56,7 @@
     V(NESTED, asLogical, aslogical)                                            \
     V(NESTED, lglOr, lgl_or)                                                   \
     V(NESTED, lglAnd, lgl_and)                                                 \
-    V(NESTED, isfun, isfun)                                                    \
+    V(NESTED, checkClosure, check_closure)                                     \
     V(NESTED, invisible, invisible)                                            \
     V(NESTED, visible, visible)                                                \
     V(NESTED, extract1_1, extract1_1)                                          \
