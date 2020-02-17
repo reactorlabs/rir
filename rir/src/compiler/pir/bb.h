@@ -68,6 +68,7 @@ class BB {
 
     void replace(Instrs::iterator it, Instruction* i);
 
+    void eraseLast() { instrs.pop_back(); }
     void remove(Instruction* i);
 
     Instrs::iterator atPosition(Instruction* i);

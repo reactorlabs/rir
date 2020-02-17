@@ -1042,6 +1042,7 @@ class FLIE(Force, 2, Effects::Any()) {
                 effects.reset(Effect::Reflection);
             }
         }
+        updateTypeAndEffects();
     }
     Value* input() const { return arg(0).val(); }
 

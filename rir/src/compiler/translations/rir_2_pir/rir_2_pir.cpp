@@ -1351,7 +1351,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
         });
 
         if (!skip) {
-            int size = cur.stack.size();
+            auto oldStack = cur.stack;
             if (!compileBC(bc, pos, nextPos, srcCode, cur.stack, insert,
                            callTargetFeedback)) {
                 log.failed("Abort r2p due to unsupported bc");
@@ -1366,17 +1366,43 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                     continue;
                 }
 
+                // Here we iterate over the arguments to the last instruction
+                // and insert forces where required. This is actually done later
+                // by the insert_cast helper. However there we cannot create
+                // checkpoints. Here we ensure that between every force
+                // we will have a checkpoint with the updated forced value.
+                if (!cur.stack.empty() && cur.stack.top() == last) {
+                    insert.getCurrentBB()->eraseLast();
+                    last->eachArg([&](InstrArg& arg) {
+                        if (!arg.type().maybePromiseWrapped() &&
+                            arg.val()->type.maybePromiseWrapped()) {
+                            size_t idx = 0;
+                            while (idx < oldStack.size() &&
+                                   oldStack.at(idx) != arg.val())
+                                idx++;
+                            if (idx < oldStack.size()) {
+                                arg.val() = oldStack.at(idx) =
+                                    insert(new Force(arg.val(), insert.env));
+                                addCheckpoint(srcCode, pos, oldStack, insert);
+                            }
+                        }
+                    });
+                    insert(last);
+                }
+
                 if (last->isDeoptBarrier())
                     addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
 
-            if (cur.stack.size() != size - bc.popCount() + bc.pushCount()) {
+            if (cur.stack.size() !=
+                oldStack.size() - bc.popCount() + bc.pushCount()) {
                 srcCode->print(std::cerr);
                 std::cerr << "After interpreting '";
                 bc.print(std::cerr);
                 std::cerr << "' which is supposed to pop " << bc.popCount()
                           << " and push " << bc.pushCount() << " we got from "
-                          << size << " to " << cur.stack.size() << "\n";
+                          << oldStack.size() << " to " << cur.stack.size()
+                          << "\n";
                 assert(false);
                 return nullptr;
             }
