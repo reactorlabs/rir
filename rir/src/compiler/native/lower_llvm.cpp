@@ -2447,7 +2447,11 @@ bool LowerFunctionLLVM::tryCompile() {
                         break;
                     case blt("names"): {
                         auto itype = b->callArg(0).val()->type;
-                        if (itype.isA(PirType::vecs().orObject().orAttribs())) {
+                        if (representationOf(b->callArg(0).val()) != t::SEXP) {
+                            setVal(i, constant(R_NilValue, t::SEXP));
+                        } else if (itype.isA(PirType::vecs()
+                                                 .orObject()
+                                                 .orAttribs())) {
                             if (!itype.maybeHasAttrs() && !itype.maybeObj()) {
                                 setVal(i, constant(R_NilValue, t::SEXP));
                             } else {
@@ -2475,7 +2479,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                 setVal(i, res());
                             }
                         } else {
-                            success = false;
+                            done = false;
                         }
                         break;
                     }
