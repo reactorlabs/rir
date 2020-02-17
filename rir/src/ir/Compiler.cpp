@@ -272,40 +272,46 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             // n' <- n
             compileExpr(ctx, end);
             cs << BC::force();
+
             // if (!colonInputEffects(m, n)) {
-            cs << BC::colonInputEffects();
-            cs.addSrc(seq);
-            cs << BC::recordTest() << BC::brtrue(skipRegularForBranch);
-            //   <regular for>
-            // Note that we call the builtin `for` and pass the body as a
-            // promise to lower the bytecode size
+            bool staticNoSlowcase = isConstant(start) || isConstant(end);
+            if (!staticNoSlowcase) {
+                cs << BC::colonInputEffects();
+                cs.addSrc(seq);
+                cs << BC::recordTest() << BC::brtrue(skipRegularForBranch);
+                //   <regular for>
+                // Note that we call the builtin `for` and pass the body as a
+                // promise to lower the bytecode size
 
-            // 1) Finish creating the seq, and add its SEXP as a promise (it's
-            // eager but it needs to be a promise to be an arg)
-            cs << BC::colon();
-            cs.addSrc(seq);
-            Code* seqProm = compilePromise(ctx, seq);
-            size_t seqPromIdx = cs.addPromise(seqProm);
+                // 1) Finish creating the seq, and add its SEXP as a promise
+                // (it's eager but it needs to be a promise to be an arg)
+                cs << BC::colon();
+                cs.addSrc(seq);
+                Code* seqProm = compilePromise(ctx, seq);
+                size_t seqPromIdx = cs.addPromise(seqProm);
 
-            // 2) Create a promise with the body
-            Code* bodyProm = compilePromise(ctx, body);
-            size_t bodyPromIdx = cs.addPromise(bodyProm);
+                // 2) Create a promise with the body
+                Code* bodyProm = compilePromise(ctx, body);
+                size_t bodyPromIdx = cs.addPromise(bodyProm);
 
-            // 3) Add the function, arguments, and call
-            Assumptions assumptions = Assumptions(Assumption::Arg0IsEager_) |
-                                      Assumption::CorrectOrderOfArguments |
-                                      Assumption::NotTooManyArguments;
-            cs << BC::ldfun(symbol::For) << BC::swap()
-               << BC::mkEagerPromise(seqPromIdx) << BC::mkPromise(bodyPromIdx)
-               << BC::call(2, fullAst, assumptions);
-            if (voidContext)
-                cs << BC::pop();
-            else if (Compiler::profile)
-                cs << BC::recordType();
+                // 3) Add the function, arguments, and call
+                Assumptions assumptions =
+                    Assumptions(Assumption::Arg0IsEager_) |
+                    Assumption::CorrectOrderOfArguments |
+                    Assumption::NotTooManyArguments;
+                cs << BC::ldfun(symbol::For) << BC::swap()
+                   << BC::mkEagerPromise(seqPromIdx)
+                   << BC::mkPromise(bodyPromIdx)
+                   << BC::call(2, fullAst, assumptions);
+                if (voidContext)
+                    cs << BC::pop();
+                else if (Compiler::profile)
+                    cs << BC::recordType();
 
-            cs << BC::br(endBranch);
+                cs << BC::br(endBranch);
+                cs << skipRegularForBranch;
+            }
             // } else {
-            cs << skipRegularForBranch;
 
             // m' <- colonCastLhs(m')
             cs << BC::swap() << BC::colonCastLhs() << BC::recordType()
