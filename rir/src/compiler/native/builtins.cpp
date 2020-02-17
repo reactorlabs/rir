@@ -1110,19 +1110,20 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
     if (res)
         return res;
 
-    SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
-    PROTECT(args);
-
     if (isObject(vector)) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
+        SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
+        PROTECT(args);
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
         if (!res)
             res = do_subset_dflt(call, symbol::Bracket, args, env);
+        UNPROTECT(1);
     } else {
+        SEXP args;
+        FAKE_ARGS2(args, vector, index);
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
-    UNPROTECT(1);
     return res;
 }
 
