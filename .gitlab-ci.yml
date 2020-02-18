@@ -12,7 +12,7 @@ before_script:
   - export PIR_INLINER_MAX_SIZE=10000
   - export PIR_DEOPT_CHAOS_SEED=$RANDOM
   - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
-  - export REBENCH_OPTIONS="-df $CI_PROJECT_DIR/benchmarks.data --commit-id=$CI_COMMIT_SHA --branch=master"
+  - export REBENCH_OPTIONS="-S -df $CI_PROJECT_DIR/benchmarks.data --commit-id=$CI_COMMIT_SHA --branch=master"
   - export REBENCH_RUN="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   - export REBENCH_RUN_BL="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
 
