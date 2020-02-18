@@ -206,6 +206,12 @@ NativeBuiltin NativeBuiltins::stvar = {
     (void*)&stvarImpl,
 };
 
+void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapperI(a, val, c); };
+NativeBuiltin NativeBuiltins::stvari = {
+    "stvari",
+    (void*)&stvarImplI,
+};
+
 void stargImpl(SEXP sym, SEXP val, SEXP env) {
     // In case there is a local binding we must honor missingness which
     // defineVar does not

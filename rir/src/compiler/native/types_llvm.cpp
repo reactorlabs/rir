@@ -154,6 +154,8 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::ldvarCacheMiss.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP_ptr}, false);
     NativeBuiltins::stvar.llvmSignature = t::void_sexpsexpsexp;
+    NativeBuiltins::stvari.llvmSignature =
+        llvm::FunctionType::get(t::Void, {t::SEXP, t::Int, t::SEXP}, false);
     NativeBuiltins::defvar.llvmSignature = t::void_sexpsexpsexp;
     NativeBuiltins::starg.llvmSignature = t::void_sexpsexpsexp;
     NativeBuiltins::ldfun.llvmSignature = t::sexp_sexpsexp;
