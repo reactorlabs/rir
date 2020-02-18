@@ -1674,6 +1674,10 @@ bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
 
 SEXP colonCastLhs(SEXP lhs) {
     double lhsNum = Rf_asReal(lhs);
+
+    if (isnan(lhsNum)) {
+        Rf_error("NA/NaN argument");
+    }
     SEXP result = doubleCanBeCastedToInteger(lhsNum)
                       ? Rf_ScalarInteger((int)lhsNum)
                       : Rf_ScalarReal(lhsNum);
@@ -1684,6 +1688,9 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
     double newLhsNum = Rf_asReal(newLhs);
     double rhsNum = Rf_asReal(rhs);
 
+    if (isnan(rhsNum)) {
+        Rf_error("NA/NaN argument");
+    }
     double newRhsNum = (newLhsNum <= rhsNum)
                            ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
                            : (newLhsNum - floor(newLhsNum - rhsNum) - 1);

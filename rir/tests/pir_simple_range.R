@@ -43,3 +43,86 @@ f(c(1, 2))
 f(c(1, 2))
 f(c(1, 2))
 stopifnot(f(c(1, 2, 3, 4)) == 4)
+
+# Factor tests
+# Test when lhs and rhs are
+# - Scalar (regular)
+# - Vector (warning)
+# - Factor (slowcase if both are factors)
+# - String (error)
+
+f <- function(lhs, rhs) {
+  x <- list(10)
+  i <- 1
+  for (elem in lhs:rhs) {
+    x[[i]] <- elem
+    i <- i + 1
+  }
+  x
+}
+g <- function(lhs, rhs) tryCatch(
+  f(lhs, rhs),
+  error=function(error) paste("error:", conditionMessage(error)),
+  warning=function(warning) tryCatch(
+    {suppressWarnings(f(lhs, rhs)); paste("warning:", conditionMessage(warning))},
+    error=function(error) paste("error:", conditionMessage(error), "+ warning:", conditionMessage(warning))
+  )
+)
+test <- function(lhs, rhs, expected) {
+  print(g(lhs, rhs))
+  stopifnot(toString(g(lhs, rhs)) == toString(expected))
+  stopifnot(toString(g(lhs, rhs)) == toString(expected))
+  stopifnot(toString(g(lhs, rhs)) == toString(expected))
+}
+
+rhs <- 7
+lhs <- 5L
+test(lhs, rhs, list(5, 6, 7))
+
+lhs <- c(1, 2, 3)
+test(lhs, rhs, "warning: numerical expression has 3 elements: only the first used")
+
+lhs <- factor(lhs)
+test(lhs, rhs, "warning: numerical expression has 3 elements: only the first used")
+
+lhs <- "foobar"
+test(lhs, rhs, "error: NA/NaN argument + warning: NAs introduced by coercion")
+
+rhs <- c(7, 8, 9)
+lhs <- 5L
+test(lhs, rhs, "warning: numerical expression has 3 elements: only the first used")
+
+lhs <- c(1, 2, 3)
+test(lhs, rhs, "warning: numerical expression has 3 elements: only the first used")
+
+lhs <- factor(lhs)
+test(lhs, rhs, "warning: numerical expression has 3 elements: only the first used")
+
+lhs <- "foo-bar"
+test(lhs, rhs, "error: NA/NaN argument + warning: numerical expression has 3 elements: only the first used")
+
+rhs <- factor(rhs)
+lhs <- 5L
+test(lhs, rhs, "warning: numerical expression has 3 elements: only the first used")
+
+lhs <- c(1, 2, 3)
+test(lhs, rhs, "warning: numerical expression has 3 elements: only the first used")
+
+lhs <- factor(lhs)
+test(lhs, rhs, list("1:7", "2:8", "3:9"))
+
+lhs <- "foo-bar"
+test(lhs, rhs, "error: NA/NaN argument + warning: numerical expression has 3 elements: only the first used")
+
+rhs <- "foo-bar"
+lhs <- 5L
+test(lhs, rhs, "error: NA/NaN argument + warning: NAs introduced by coercion")
+
+lhs <- c(1, 2, 3)
+test(lhs, rhs, "error: NA/NaN argument + warning: numerical expression has 3 elements: only the first used")
+
+lhs <- factor(lhs)
+test(lhs, rhs, "error: NA/NaN argument + warning: numerical expression has 3 elements: only the first used")
+
+lhs <- "foo-bar"
+test(lhs, rhs, "error: NA/NaN argument + warning: NAs introduced by coercion")
