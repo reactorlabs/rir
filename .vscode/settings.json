@@ -34,6 +34,15 @@
     "forward_list": "cpp",
     "list": "cpp",
     "*.tcc": "cpp",
-    "chrono": "cpp"
+    "chrono": "cpp",
+    "deque": "cpp",
+    "map": "cpp",
+    "set": "cpp",
+    "string": "cpp",
+    "unordered_map": "cpp",
+    "unordered_set": "cpp",
+    "vector": "cpp",
+    "iterator": "cpp",
+    "random": "cpp"
   }
 }
