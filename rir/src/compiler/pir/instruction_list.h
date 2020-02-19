@@ -95,6 +95,9 @@
     V(Missing)                                                                 \
     V(Visible)                                                                 \
     V(Invisible)                                                               \
+    V(Names)                                                                   \
+    V(SetNames)                                                                \
+    V(Alloc)                                                                   \
     V(PirCopy)                                                                 \
     V(RecordDeoptReason)                                                       \
     V(Nop)

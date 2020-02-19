@@ -249,6 +249,8 @@ struct PirType {
             .scalar();
     }
 
+    static constexpr PirType simpleVector() { return PirType(RType::vec); }
+
     constexpr bool unboxable() {
         return isA(simpleScalarLogical()) || isA(simpleScalarInt()) ||
                isA(simpleScalarReal());

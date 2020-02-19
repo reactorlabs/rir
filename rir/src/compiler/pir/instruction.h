@@ -1502,6 +1502,36 @@ class FLI(Invisible, 0, Effect::Visibility) {
     }
 };
 
+class FLI(Names, 1, Effects::None()) {
+  public:
+    explicit Names(Value* v)
+        : FixedLenInstruction(PirType(RType::str) | RType::nil,
+                              {{PirType::val()}}, {{v}}) {}
+    size_t gvnBase() const override { return tagHash(); }
+};
+
+class FLI(SetNames, 2, Effect::Error) {
+  public:
+    explicit SetNames(Value* v, Value* names)
+        : FixedLenInstruction(v->type, {{PirType::val(), PirType::val()}},
+                              {{v, names}}) {}
+    size_t gvnBase() const override { return tagHash(); }
+};
+
+class FLI(Alloc, 1, Effects::None()) {
+  public:
+    Alloc(uint32_t sexpTag, Value* len)
+        : FixedLenInstruction(PirType::simpleVector(),
+                              {{PirType(RType::integer).scalar().noAttribs()}},
+                              {{len}}),
+          sexpTag(sexpTag) {
+        assert(sexpTag == VECSXP &&
+               "Only generic vectors are supported by Alloc for now.");
+    }
+    uint32_t sexpTag;
+    size_t gvnBase() const override { return hash_combine(tagHash(), sexpTag); }
+};
+
 class FLI(PirCopy, 1, Effects::None()) {
   public:
     explicit PirCopy(Value* v)
