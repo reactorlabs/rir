@@ -629,7 +629,7 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     UNPROTECT(1);
 
     return newrho;
-};
+}
 
 static SEXP findRootPromise(SEXP p) {
     if (TYPEOF(p) == PROMSXP) {
@@ -857,7 +857,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             auto formals = FORMALS(call.callee);
             env = Rf_NewEnvironment(formals, arglist, CLOENV(call.callee));
 
-            // Add missing arguments. Stattically argmatched means that still
+            // Add missing arguments. Statically argmatched means that still
             // some missing args might need to be supplied.
             if (!call.givenAssumptions.includes(
                     Assumption::NoExplicitlyMissingArgs) ||
@@ -4054,15 +4054,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(set_names_) {
-            SEXP val = ostack_pop(ctx);
-            if (!isNull(val))
-                Rf_setAttrib(ostack_top(ctx), R_NamesSymbol, val);
+            SEXP names = ostack_pop(ctx);
+            Rf_setAttrib(ostack_top(ctx), R_NamesSymbol, names);
             NEXT();
         }
 
         INSTRUCTION(alloc_) {
             SEXP val = ostack_pop(ctx);
             assert(TYPEOF(val) == INTSXP);
+            assert(XLENGTH(val) == 1);
             int type = readSignedImmediate();
             advanceImmediate();
             res = Rf_allocVector(type, INTEGER(val)[0]);
