@@ -2283,5 +2283,32 @@ NativeBuiltin NativeBuiltins::colonCastRhs = {
     "colonCastRhs",
     (void*)rir::colonCastRhs,
 };
+
+SEXP namesImpl(SEXP val) {
+    return Rf_getAttrib(val, R_NamesSymbol);
+}
+NativeBuiltin NativeBuiltins::names = {
+    "names",
+    (void*)&namesImpl,
+};
+
+SEXP setNamesImpl(SEXP val, SEXP names) {
+    return Rf_setAttrib(val, R_NamesSymbol, names);
+}
+NativeBuiltin NativeBuiltins::setNames = {
+    "setNames",
+    (void*)&setNamesImpl,
+};
+
+SEXP allocImpl(int type, SEXP len) {
+    assert(TYPEOF(len) == INTSXP);
+    assert(XLENGTH(len) == 1);
+    return Rf_allocVector(type, INTEGER(len)[0]);
+}
+NativeBuiltin NativeBuiltins::alloc = {
+    "alloc",
+    (void*)allocImpl,
+};
+
 }
 }

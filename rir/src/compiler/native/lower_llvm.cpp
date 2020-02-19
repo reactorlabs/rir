@@ -4778,6 +4778,25 @@ bool LowerFunctionLLVM::tryCompile() {
                                 loadSxp(i->arg(1).val())}));
                 break;
 
+            case Tag::Names:
+                setVal(i,
+                       call(NativeBuiltins::names, {loadSxp(i->arg(0).val())}));
+                break;
+
+            case Tag::SetNames:
+                setVal(i, call(NativeBuiltins::setNames,
+                               {loadSxp(i->arg(0).val()),
+                                loadSxp(i->arg(1).val())}));
+                break;
+
+            case Tag::Alloc: {
+                auto alloc = Alloc::Cast(i);
+                auto len = i->arg(0).val();
+                setVal(i, call(NativeBuiltins::alloc,
+                               {alloc->sexpTag, loadSxp(len)}));
+                break;
+            }
+
             case Tag::Int3:
             case Tag::PrintInvocation:
                 success = false;

@@ -158,6 +158,10 @@ struct NativeBuiltins {
     static NativeBuiltin colonCastRhs;
 
     static NativeBuiltin colon;
+
+    static NativeBuiltin names;
+    static NativeBuiltin setNames;
+    static NativeBuiltin alloc;
 };
 }
 }
