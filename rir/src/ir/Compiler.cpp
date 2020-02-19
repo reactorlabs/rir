@@ -1122,6 +1122,71 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
                 return true;
             }
+
+            if (fun == symbol::lapply && args.length() == 2) {
+
+                BC::Label loopBranch = cs.mkLabel();
+                BC::Label nextBranch = cs.mkLabel();
+
+                compileExpr(ctx, args[0]); // [X]
+
+                // get length and names of the vector X
+                cs << BC::dup()
+                   << BC::names()
+                   << BC::swap()
+                   << BC::length() // [names(X), length(X)]
+                   << BC::dup()
+                   << BC::alloc(VECSXP) // [names(X), length(X), ans]
+                   << BC::pick(2)
+                   << BC::setNames()
+                   << BC::swap()
+                   << BC::push((int)0); // [ans, length(X), i]
+
+                // loop invariant stack layout: [ans, length(X), i]
+
+                // check end condition
+                cs << loopBranch
+                   << BC::inc()
+                   << BC::dup2()
+                   << BC::lt();
+                cs.addSrc(ast);
+
+                SEXP isym = Rf_install("i");
+                cs << BC::brtrue(nextBranch)
+                   << BC::dup()
+                   << BC::stvar(isym);
+
+                // construct ast for FUN(X[[i]], ...)
+                SEXP tmp = LCONS(symbol::DoubleBracket,
+                                 LCONS(args[0], LCONS(isym, R_NilValue)));
+                SEXP call =
+                    LCONS(args[1], LCONS(tmp, LCONS(R_DotsSymbol, R_NilValue)));
+
+                PROTECT(call);
+                compileCall(ctx, call, CAR(call), CDR(call), false);
+                UNPROTECT(1);
+
+                // store result
+                cs << BC::pull(1)
+                   << BC::pick(4)
+                   << BC::swap() // [length(X), i, fun(X[[i]], ...), ans, i]
+                   << BC::subassign2_1();
+                cs.addSrc(ast);
+
+                cs << BC::put(2) // [ans, length(X), i]
+                   << BC::br(loopBranch);
+
+                // put ans to the top and remove rest
+                cs << nextBranch
+                   << BC::pop()
+                   << BC::pop()
+                   << BC::visible();
+
+                if (voidContext)
+                    cs << BC::pop();
+
+                return true;
+            }
         }
     }
 
