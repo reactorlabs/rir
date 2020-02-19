@@ -520,6 +520,9 @@ struct PirType {
     constexpr bool isA(const PirType& o) const { return o.isSuper(*this); }
 
     constexpr bool isSuper(const PirType& o) const {
+        if (isRType() && !o.isRType() && o.t_.n == NativeType::test) {
+            return isSuper(PirType::simpleScalarLogical());
+        }
         if (isRType() != o.isRType()) {
             return false;
         }

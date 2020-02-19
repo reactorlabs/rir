@@ -430,11 +430,9 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 auto lhs = colonInputEffects->arg<0>().val();
                 auto rhs = colonInputEffects->arg<1>().val();
                 if (!lhs->type.maybeHasAttrs() || !rhs->type.maybeHasAttrs()) {
-                    LdConst* trueConst = new LdConst(R_TrueValue);
-                    next = bb->insert(next, trueConst);
                     // We still need to keep the colonInputEffects because it
                     // could raise warnings / errors
-                    colonInputEffects->replaceUsesWith(trueConst);
+                    colonInputEffects->replaceUsesWith(True::instance());
                 }
             }
 

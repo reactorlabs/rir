@@ -1136,9 +1136,8 @@ class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
 
 class FLI(ColonInputEffects, 2, Effect::Error) {
   public:
-    // Type could technically be NativeType::test
     explicit ColonInputEffects(Value* lhs, Value* rhs, unsigned srcIdx)
-        : FixedLenInstruction(PirType::simpleScalarLogical(),
+        : FixedLenInstruction(NativeType::test,
                               {{PirType::val(), PirType::val()}}, {{lhs, rhs}},
                               srcIdx) {}
 
