@@ -243,8 +243,6 @@ benchmark_pir_ginger:
   variables:
     GIT_STRATEGY: none
   only:
-    - master
-  except:
     - schedules
   tags:
     - benchmarks-ginger
@@ -259,8 +257,6 @@ benchmark_llvm_ginger:
   stage: Benchmark
   variables:
     GIT_STRATEGY: none
-  except:
-    - schedules
   tags:
     - benchmarks-ginger
   script:
