@@ -259,8 +259,6 @@ benchmark_llvm_ginger:
   stage: Benchmark
   variables:
     GIT_STRATEGY: none
-  only:
-    - master
   except:
     - schedules
   tags:
@@ -270,7 +268,7 @@ benchmark_llvm_ginger:
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 6 month
+    expire_in: 24 month
 benchmark_gnur_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
