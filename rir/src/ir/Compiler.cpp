@@ -325,7 +325,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
                << BC::ensureNamed() << BC::swap();
 
             // n' <- colonCastRhs(m', n')
-            cs << BC::colonCastRhs() << BC::recordType();
+            cs << BC::colonCastRhs() << BC::ensureNamed() << BC::recordType();
 
             // step <- if (m' <= n') 1L else -1L
             cs << BC::dup2() << BC::le();
