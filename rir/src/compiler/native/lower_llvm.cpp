@@ -4564,9 +4564,15 @@ bool LowerFunctionLLVM::tryCompile() {
                     break;
                 }
 
+                auto pirVal = st->arg<0>().val();
+                bool integerValueCase =
+                    representationOf(pirVal) == Representation::Integer &&
+                    pirVal->type.isA(RType::integer);
                 auto setter = NativeBuiltins::stvar;
                 if (st->isStArg)
                     setter = NativeBuiltins::starg;
+                if (!st->isStArg && integerValueCase)
+                    setter = NativeBuiltins::stvari;
 
                 if (bindingsCache.count(environment)) {
                     auto offset = bindingsCache.at(environment).at(st->varName);
@@ -4581,8 +4587,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto miss = BasicBlock::Create(C, "", fun);
                     auto done = BasicBlock::Create(C, "", fun);
 
-                    auto newVal = loadSxp(st->arg<0>().val());
-
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
                             builder.CreatePtrToInt(cache, t::i64), c(1, 64)),
@@ -4596,8 +4600,40 @@ bool LowerFunctionLLVM::tryCompile() {
                         miss, hit2, branchMostlyFalse);
 
                     builder.SetInsertPoint(hit2);
-                    builder.CreateCondBr(builder.CreateICmpEQ(val, newVal),
-                                         identical, hit3, branchMostlyFalse);
+
+                    llvm::Value* newVal = nullptr;
+                    if (integerValueCase) {
+                        auto hitInt = BasicBlock::Create(C, "", fun);
+                        auto hitInt2 = BasicBlock::Create(C, "", fun);
+                        auto fallbackInt = BasicBlock::Create(C, "", fun);
+                        auto isScalarInt = builder.CreateAnd(
+                            builder.CreateICmpEQ(sexptype(val), c(INTSXP)),
+                            isScalar(val));
+                        auto notShared = builder.CreateNot(shared(val));
+                        builder.CreateCondBr(
+                            builder.CreateAnd(isScalarInt, notShared), hitInt,
+                            fallbackInt);
+
+                        builder.SetInsertPoint(hitInt);
+                        auto newValNative = load(pirVal);
+                        auto same = builder.CreateICmpEQ(
+                            newValNative,
+                            accessVector(val, c(0), RType::integer));
+                        builder.CreateCondBr(same, identical, hitInt2);
+
+                        builder.SetInsertPoint(hitInt2);
+                        assignVector(val, c(0), newValNative, RType::integer);
+                        builder.CreateBr(done);
+
+                        builder.SetInsertPoint(fallbackInt);
+                        newVal = loadSxp(pirVal);
+                        builder.CreateBr(hit3);
+                    } else {
+                        newVal = loadSxp(pirVal);
+                        builder.CreateCondBr(builder.CreateICmpEQ(val, newVal),
+                                             identical, hit3,
+                                             branchMostlyFalse);
+                    }
 
                     builder.SetInsertPoint(hit3);
                     incrementNamed(newVal);
@@ -4613,16 +4649,23 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(miss);
-                    call(setter, {constant(st->varName, t::SEXP), newVal,
+                    call(setter, {constant(st->varName, t::SEXP),
+                                  setter.llvmSignature->getFunctionParamType(
+                                      1) == t::Int
+                                      ? load(pirVal)
+                                      : loadSxp(pirVal),
                                   loadSxp(st->env())});
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
 
                 } else {
-                    call(setter,
-                         {constant(st->varName, t::SEXP),
-                          loadSxp(st->arg<0>().val()), loadSxp(st->env())});
+                    call(setter, {constant(st->varName, t::SEXP),
+                                  setter.llvmSignature->getFunctionParamType(
+                                      1) == t::Int
+                                      ? load(pirVal)
+                                      : loadSxp(pirVal),
+                                  loadSxp(st->env())});
                 }
                 break;
             }
