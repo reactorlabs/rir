@@ -1040,7 +1040,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     // Silently ignored
     case Opcode::clear_binding_cache_:
     // TODO implement!
-    case Opcode::isfun_:
+    case Opcode::check_closure_:
         break;
 
     // Currently unused opcodes:

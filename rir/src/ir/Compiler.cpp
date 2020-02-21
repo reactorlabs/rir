@@ -1151,7 +1151,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         }
         Else({
             compileExpr(ctx, fun);
-            cs << BC::isfun();
+            cs << BC::checkClosure();
         });
     }
 

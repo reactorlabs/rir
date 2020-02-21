@@ -859,7 +859,7 @@ class FLI(ChkMissing, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(ChkClosure, 1, Effect::Warn) {
+class FLI(ChkClosure, 1, Effect::Error) {
   public:
     explicit ChkClosure(Value* in)
         : FixedLenInstruction(RType::closure, {{PirType::val()}}, {{in}}) {}

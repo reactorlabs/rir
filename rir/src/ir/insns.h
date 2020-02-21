@@ -210,10 +210,10 @@ DEF_INSTR(call_builtin_, 3, -1, 1, 0)
 DEF_INSTR(close_, 0, 3, 1, 1)
 
 /**
- * isfun_:: pop object stack, convert to RIR code or assert error, push code to
- * object stack
+ * check_closure_:: pop object stack, convert to RIR code or assert error, push
+ * code to object stack
  */
-DEF_INSTR(isfun_, 0, 1, 1, 1)
+DEF_INSTR(check_closure_, 0, 1, 1, 1)
 
 /**
  * promise_:: take immediate CP index of Code, create promise & push on object

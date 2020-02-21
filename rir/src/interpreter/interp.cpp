@@ -2690,7 +2690,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(isfun_) {
+        INSTRUCTION(check_closure_) {
             SEXP val = ostack_top(ctx);
 
             switch (TYPEOF(val)) {
