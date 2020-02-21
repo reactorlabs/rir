@@ -1566,8 +1566,17 @@ llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
     return res;
 }
 llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
-    if (v->getType() == t::Int)
+    if (v->getType() == t::Int) {
+        if (false) {
+            std::ostringstream dbg;
+            currentInstr->printRecursive(dbg, 2);
+            auto l = new std::string;
+            l->append(dbg.str());
+            return call(NativeBuiltins::newIntDebug,
+                        {v, c((unsigned long)l->data())});
+        }
         return call(NativeBuiltins::newInt, {v});
+    }
     assert(v->getType() == t::Double);
     return call(NativeBuiltins::newIntFromReal, {v});
 }
@@ -2438,7 +2447,11 @@ bool LowerFunctionLLVM::tryCompile() {
                         break;
                     case blt("names"): {
                         auto itype = b->callArg(0).val()->type;
-                        if (itype.isA(PirType::vecs().orObject().orAttribs())) {
+                        if (representationOf(b->callArg(0).val()) != t::SEXP) {
+                            setVal(i, constant(R_NilValue, t::SEXP));
+                        } else if (itype.isA(PirType::vecs()
+                                                 .orObject()
+                                                 .orAttribs())) {
                             if (!itype.maybeHasAttrs() && !itype.maybeObj()) {
                                 setVal(i, constant(R_NilValue, t::SEXP));
                             } else {
@@ -2466,7 +2479,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                 setVal(i, res());
                             }
                         } else {
-                            success = false;
+                            done = false;
                         }
                         break;
                     }
@@ -2609,6 +2622,15 @@ bool LowerFunctionLLVM::tryCompile() {
                                           constant(R_FalseValue, orep)));
                         } else {
                             done = false;
+                        }
+                        break;
+                    case blt("is.object"):
+                        if (irep == Representation::Sexp) {
+                            setVal(i, builder.CreateSelect(
+                                          isObj(a), constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_FalseValue, orep));
                         }
                         break;
                     case blt("bodyCode"): {
@@ -3434,17 +3456,21 @@ bool LowerFunctionLLVM::tryCompile() {
             }
             case Tag::Colon: {
                 assert(representationOf(i) == t::SEXP);
-                auto a = loadSxp(i->arg(0).val());
-                auto b = loadSxp(i->arg(1).val());
+                auto a = i->arg(0).val();
+                auto b = i->arg(1).val();
                 llvm::Value* res;
                 if (i->hasEnv()) {
                     auto e = loadSxp(i->env());
-                    res =
-                        call(NativeBuiltins::binopEnv,
-                             {a, b, e, c(i->srcIdx), c((int)BinopKind::COLON)});
+                    res = call(NativeBuiltins::binopEnv,
+                               {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
+                                c((int)BinopKind::COLON)});
+                } else if (representationOf(a) == Representation::Integer &&
+                           representationOf(b) == Representation::Integer) {
+                    res = call(NativeBuiltins::colon, {load(a), load(b)});
                 } else {
-                    res = call(NativeBuiltins::binop,
-                               {a, b, c((int)BinopKind::COLON)});
+                    res =
+                        call(NativeBuiltins::binop, {loadSxp(a), loadSxp(b),
+                                                     c((int)BinopKind::COLON)});
                 }
                 setVal(i, res);
                 break;

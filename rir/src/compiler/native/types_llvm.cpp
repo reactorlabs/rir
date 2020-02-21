@@ -186,6 +186,8 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::newInt.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
+    NativeBuiltins::newIntDebug.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::Int, t::i64}, false);
     NativeBuiltins::newLgl.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
     NativeBuiltins::newReal.llvmSignature =
@@ -196,6 +198,9 @@ int initializeTypes(LLVMContext& context) {
         llvm::FunctionType::get(t::SEXP, {t::Double}, false);
     NativeBuiltins::newRealFromInt.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
+
+    NativeBuiltins::colon.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::Int, t::Int}, false);
 
     NativeBuiltins::call.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64}, false);

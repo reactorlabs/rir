@@ -240,6 +240,26 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     next = bb->remove(ip);
             }
 
+            if (auto cl = Colon::Cast(i)) {
+                if (auto a = isConst(cl->arg(0).val())) {
+                    if (TYPEOF(a->c()) == REALSXP && Rf_length(a->c()) == 1 &&
+                        REAL(a->c())[0] == (double)(int)REAL(a->c())[0]) {
+                        ip = bb->insert(ip, new LdConst((int)REAL(a->c())[0]));
+                        cl->arg(0).val() = *ip;
+                        ip++;
+                    }
+                }
+                if (auto a = isConst(cl->arg(1).val())) {
+                    if (TYPEOF(a->c()) == REALSXP && Rf_length(a->c()) == 1 &&
+                        REAL(a->c())[0] == (double)(int)REAL(a->c())[0]) {
+                        ip = bb->insert(ip, new LdConst((int)REAL(a->c())[0]));
+                        cl->arg(1).val() = *ip;
+                        ip++;
+                    }
+                }
+                next = ip + 1;
+            }
+
             if (CallSafeBuiltin::Cast(i) || CallBuiltin::Cast(i)) {
                 int builtinId = CallBuiltin::Cast(i)
                                     ? CallBuiltin::Cast(i)->builtinId

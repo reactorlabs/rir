@@ -81,6 +81,7 @@ struct NativeBuiltins {
     static NativeBuiltin createClosure;
 
     static NativeBuiltin newInt;
+    static NativeBuiltin newIntDebug;
     static NativeBuiltin newLgl;
     static NativeBuiltin newReal;
     static NativeBuiltin newIntFromReal;
@@ -155,6 +156,8 @@ struct NativeBuiltins {
     static NativeBuiltin colonInputEffects;
     static NativeBuiltin colonCastLhs;
     static NativeBuiltin colonCastRhs;
+
+    static NativeBuiltin colon;
 };
 }
 }
