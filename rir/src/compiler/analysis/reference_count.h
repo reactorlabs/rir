@@ -258,7 +258,6 @@ class StaticReferenceCount
         case Tag::PirCopy:
         case Tag::RecordDeoptReason:
         case Tag::Return:
-        case Tag::Length:
         case Tag::Colon:
         case Tag::CastType:
         case Tag::IsType:

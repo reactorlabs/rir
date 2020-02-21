@@ -393,7 +393,6 @@ BC_NOARGS(V, _)
     inline static BC stvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
-    inline static BC alloc(int type);
     inline static BC pushContext(Jmp);
     inline static BC popContext(Jmp);
     inline static BC beginloop(Jmp);
@@ -710,7 +709,6 @@ BC_NOARGS(V, _)
         case Opcode::is_:
         case Opcode::istype_:
         case Opcode::put_:
-        case Opcode::alloc_:
         case Opcode::ldvar_noforce_stubbed_:
         case Opcode::stvar_stubbed_:
         case Opcode::starg_stubbed_:

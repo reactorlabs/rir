@@ -1134,9 +1134,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::dup()
                    << BC::names()
                    << BC::swap()
-                   << BC::length() // [names(X), length(X)]
+                   << BC::callBuiltin(1, symbol::tmp, getBuiltinFun("length")) // [names(X), length(X)]
                    << BC::dup()
-                   << BC::alloc(VECSXP) // [names(X), length(X), ans]
+                   << BC::push(Rf_mkString("list"))
+                   << BC::swap()
+                   << BC::callBuiltin(2, symbol::tmp, getBuiltinFun("vector")) // [names(X), length(X), ans]
                    << BC::pick(2)
                    << BC::setNames()
                    << BC::swap()

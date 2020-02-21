@@ -4747,20 +4747,6 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
-            case Tag::Length: {
-                llvm::Value* l;
-                if (representationOf(i) == Representation::Sexp) {
-                    l = vectorLength(loadSxp(i->arg(0).val()));
-                } else if (representationOf(i) == Representation::Real) {
-                    l = c((double)1);
-                } else {
-                    assert(representationOf(i) == Representation::Integer);
-                    l = c(1);
-                }
-                setVal(i, l);
-                break;
-            }
-
             case Tag::ColonInputEffects:
                 setVal(i, call(NativeBuiltins::colonInputEffects,
                                {loadSxp(i->arg(0).val()),
@@ -4788,14 +4774,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                {loadSxp(i->arg(0).val()),
                                 loadSxp(i->arg(1).val())}));
                 break;
-
-            case Tag::Alloc: {
-                auto alloc = Alloc::Cast(i);
-                auto len = i->arg(0).val();
-                setVal(i, call(NativeBuiltins::alloc,
-                               {alloc->sexpTag, loadSxp(len)}));
-                break;
-            }
 
             case Tag::Int3:
             case Tag::PrintInvocation:

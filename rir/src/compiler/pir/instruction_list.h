@@ -83,7 +83,6 @@
     V(Plus)                                                                    \
     V(Minus)                                                                   \
     V(Identical)                                                               \
-    V(Length)                                                                  \
     V(ForSeqSize)                                                              \
     V(FrameState)                                                              \
     V(Checkpoint)                                                              \
@@ -97,7 +96,6 @@
     V(Invisible)                                                               \
     V(Names)                                                                   \
     V(SetNames)                                                                \
-    V(Alloc)                                                                   \
     V(PirCopy)                                                                 \
     V(RecordDeoptReason)                                                       \
     V(Nop)

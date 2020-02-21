@@ -4059,25 +4059,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(alloc_) {
-            SEXP val = ostack_pop(ctx);
-            assert(TYPEOF(val) == INTSXP);
-            assert(XLENGTH(val) == 1);
-            int type = readSignedImmediate();
-            advanceImmediate();
-            res = Rf_allocVector(type, INTEGER(val)[0]);
-            ostack_push(ctx, res);
-            NEXT();
-        }
-
-        INSTRUCTION(length_) {
-            SEXP val = ostack_pop(ctx);
-            R_xlen_t len = XLENGTH(val);
-            ostack_push(ctx, Rf_allocVector(INTSXP, 1));
-            INTEGER(ostack_top(ctx))[0] = len;
-            NEXT();
-        }
-
         INSTRUCTION(for_seq_size_) {
             SEXP seq = ostack_at(ctx, 0);
             // TODO: we should extract the length just once at the begining of

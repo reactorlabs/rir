@@ -1518,20 +1518,6 @@ class FLI(SetNames, 2, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(Alloc, 1, Effects::None()) {
-  public:
-    Alloc(uint32_t sexpTag, Value* len)
-        : FixedLenInstruction(PirType::simpleVector(),
-                              {{PirType(RType::integer).scalar().noAttribs()}},
-                              {{len}}),
-          sexpTag(sexpTag) {
-        assert(sexpTag == VECSXP &&
-               "Only generic vectors are supported by Alloc for now.");
-    }
-    uint32_t sexpTag;
-    size_t gvnBase() const override { return hash_combine(tagHash(), sexpTag); }
-};
-
 class FLI(PirCopy, 1, Effects::None()) {
   public:
     explicit PirCopy(Value* v)
@@ -1811,14 +1797,6 @@ ARITHMETIC_UNOP(Minus);
 
 #undef ARITHMETIC_UNOP
 #undef LOGICAL_UNOP
-
-class FLI(Length, 1, Effects::None()) {
-  public:
-    explicit Length(Value* v)
-        : FixedLenInstruction(PirType::simpleScalarInt(), {{PirType::val()}},
-                              {{v}}) {}
-    size_t gvnBase() const override { return tagHash(); }
-};
 
 struct RirStack {
   private:

@@ -2285,7 +2285,8 @@ NativeBuiltin NativeBuiltins::colonCastRhs = {
 };
 
 SEXP namesImpl(SEXP val) {
-    return Rf_getAttrib(val, R_NamesSymbol);
+    Rf_getAttrib(val, R_NamesSymbol);
+    return val;
 }
 NativeBuiltin NativeBuiltins::names = {
     "names",
@@ -2293,21 +2294,12 @@ NativeBuiltin NativeBuiltins::names = {
 };
 
 SEXP setNamesImpl(SEXP val, SEXP names) {
-    return Rf_setAttrib(val, R_NamesSymbol, names);
+    Rf_setAttrib(val, R_NamesSymbol, names);
+    return val;
 }
 NativeBuiltin NativeBuiltins::setNames = {
     "setNames",
     (void*)&setNamesImpl,
-};
-
-SEXP allocImpl(int type, SEXP len) {
-    assert(TYPEOF(len) == INTSXP);
-    assert(XLENGTH(len) == 1);
-    return Rf_allocVector(type, INTEGER(len)[0]);
-}
-NativeBuiltin NativeBuiltins::alloc = {
-    "alloc",
-    (void*)allocImpl,
 };
 
 }

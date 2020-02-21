@@ -985,7 +985,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Name(pop())));                                         \
         break;                                                                 \
     }
-        UNOP_NOENV(Length, length_);
         UNOP_NOENV(Inc, inc_);
 #undef UNOP_NOENV
 
@@ -1046,10 +1045,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new SetNames(vec, names)));
         break;
     }
-
-    case Opcode::alloc_:
-        push(insert(new Alloc(bc.immediate.i, pop())));
-        break;
 
     case Opcode::check_closure_:
         push(insert(new ChkClosure(pop())));

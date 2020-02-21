@@ -805,12 +805,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
-            case Tag::Alloc: {
-                auto alloc = Alloc::Cast(instr);
-                cb.add(BC::alloc(alloc->sexpTag));
-                break;
-            }
-
 #define EMPTY(Name)                                                            \
     case Tag::Name: {                                                          \
         break;                                                                 \
@@ -837,7 +831,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Inc, inc);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
-                SIMPLE(Length, length);
                 SIMPLE(ChkMissing, checkMissing);
                 SIMPLE(ChkClosure, checkClosure);
                 SIMPLE(MkCls, close);
