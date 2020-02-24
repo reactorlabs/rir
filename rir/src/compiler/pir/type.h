@@ -259,6 +259,7 @@ struct PirType {
     static constexpr PirType list() {
         return PirType(RType::cons) | RType::nil;
     }
+    // Note: This includes any R type, but not native types
     static constexpr PirType any() { return val().orLazy(); }
 
     RIR_INLINE constexpr bool maybeMissing() const {
