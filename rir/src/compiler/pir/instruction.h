@@ -1161,14 +1161,14 @@ class FLI(ColonInputEffects, 2, Effect::Error) {
 class FLI(ColonCastLhs, 1, Effect::Error) {
   public:
     explicit ColonCastLhs(Value* lhs, unsigned srcIdx)
-        : FixedLenInstruction(PirType::intReal().scalar(), {{PirType::val()}},
-                              {{lhs}}, srcIdx) {}
+        : FixedLenInstruction(PirType::intReal().scalar().notNa(),
+                              {{PirType::val()}}, {{lhs}}, srcIdx) {}
 
     Value* lhs() const { return arg<0>().val(); }
 
     PirType inferType(const GetType& getType) const override final {
         if (getType(lhs()).isA(RType::integer)) {
-            return PirType(RType::integer).scalar();
+            return PirType(RType::integer).scalar().notNa();
         } else {
             return type;
         }
@@ -1178,16 +1178,17 @@ class FLI(ColonCastLhs, 1, Effect::Error) {
 class FLI(ColonCastRhs, 2, Effect::Error) {
   public:
     explicit ColonCastRhs(Value* newLhs, Value* rhs, unsigned srcIdx)
-        : FixedLenInstruction(PirType::intReal().scalar(),
-                              {{PirType::intReal().scalar(), PirType::val()}},
-                              {{newLhs, rhs}}, srcIdx) {}
+        : FixedLenInstruction(
+              PirType::intReal().scalar().notNa(),
+              {{PirType::intReal().scalar().notNa(), PirType::val()}},
+              {{newLhs, rhs}}, srcIdx) {}
 
     Value* newLhs() const { return arg<0>().val(); }
 
     PirType inferType(const GetType& getType) const override final {
         // This is intended - lhs type determines rhs
         if (getType(newLhs()).isA(RType::integer)) {
-            return PirType(RType::integer).scalar();
+            return PirType(RType::integer).scalar().notNa();
         } else {
             return type;
         }
