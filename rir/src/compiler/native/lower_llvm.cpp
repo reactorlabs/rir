@@ -3796,7 +3796,9 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::UpdatePromise: {
-                setCar(loadSxp(i->arg(0).val()), loadSxp(i->arg(1).val()));
+                auto val = loadSxp(i->arg(1).val());
+                ensureShared(val);
+                setCar(loadSxp(i->arg(0).val()), val);
                 break;
             }
 

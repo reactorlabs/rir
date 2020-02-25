@@ -2733,6 +2733,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto prom = ostack_pop(ctx);
             SLOWASSERT(TYPEOF(prom) == PROMSXP);
             SLOWASSERT(TYPEOF(val) != PROMSXP);
+            ENSURE_NAMEDMAX(val);
             SET_PRVALUE(prom, val);
             NEXT();
         }
