@@ -1732,15 +1732,18 @@ void LowerFunctionLLVM::compileBinop(
     auto a = load(lhs, lhsRep);
     auto b = load(rhs, rhsRep);
 
-    auto checkNa = [&](llvm::Value* v, Representation r) {
-        if (r == Representation::Integer) {
-            if (!isNaBr)
-                isNaBr = BasicBlock::Create(C, "isNa", fun);
-            nacheck(v, isNaBr);
+    auto checkNa = [&](llvm::Value* llvmValue, Value* pirValue,
+                       Representation r) {
+        if (pirValue->type.maybeNa()) {
+            if (r == Representation::Integer) {
+                if (!isNaBr)
+                    isNaBr = BasicBlock::Create(C, "isNa", fun);
+                nacheck(llvmValue, isNaBr);
+            }
         }
     };
-    checkNa(a, lhsRep);
-    checkNa(b, rhsRep);
+    checkNa(a, lhs, lhsRep);
+    checkNa(b, rhs, rhsRep);
 
     if (a->getType() == t::Int && b->getType() == t::Int) {
         res.addInput(intInsert(a, b));
