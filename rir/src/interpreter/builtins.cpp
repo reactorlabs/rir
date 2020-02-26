@@ -306,7 +306,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             auto y = allocVector(REALSXP, n);
             double* py = REAL(y);
             for (i = 0; i < n; i++)
-                py[0] = hypot(px[0].r, px[0].i);
+                py[i] = hypot(px[i].r, px[i].i);
             return y;
         }
         return nullptr;
