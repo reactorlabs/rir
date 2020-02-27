@@ -342,7 +342,7 @@ class LowerFunctionLLVM {
     llvm::Value* unboxInt(llvm::Value* v);
     llvm::Value* unboxLgl(llvm::Value* v);
     llvm::Value* unboxReal(llvm::Value* v);
-    llvm::Value* unboxRealIntLgl(llvm::Value* v);
+    llvm::Value* unboxRealIntLgl(llvm::Value* v, PirType toType);
 
     void writeBarrier(llvm::Value* x, llvm::Value* y, std::function<void()> no,
                       std::function<void()> yes);
@@ -437,7 +437,10 @@ class LowerFunctionLLVM {
     void assertNamed(llvm::Value* v);
     void ensureShared(llvm::Value* v);
     void incrementNamed(llvm::Value* v, int max = NAMEDMAX);
-    void nacheck(llvm::Value* v, BasicBlock* isNa, BasicBlock* notNa = nullptr);
+    // We explicitly require the type of the argument to ensure we use non-NA
+    // info. If the type is not NA, this will not actually emit a check
+    void nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
+                 BasicBlock* notNa = nullptr);
     void checkMissing(llvm::Value* v);
     void checkUnbound(llvm::Value* v);
 
@@ -821,7 +824,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
                        (PirType(RType::real) | RType::integer | RType::logical)
                            .scalar()
                            .notObject())) {
-            res = unboxRealIntLgl(res);
+            res = unboxRealIntLgl(res, type);
             assert(res->getType() == t::Double);
         } else {
             // code->printCode(std::cout, true, true);
@@ -887,7 +890,7 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
             nativeIndex = unboxInt(nativeIndex);
             representation = Representation::Integer;
         } else {
-            nativeIndex = unboxRealIntLgl(nativeIndex);
+            nativeIndex = unboxRealIntLgl(nativeIndex, index->type);
             representation = Representation::Real;
         }
     }
@@ -1045,7 +1048,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
             returned = unboxIntLgl(returned);
         } else if (data.result->getType()->getPointerElementType() ==
                    t::Double) {
-            returned = unboxRealIntLgl(returned);
+            returned = unboxRealIntLgl(returned, PirType(RType::real).scalar());
         }
         builder.CreateStore(returned, data.result);
         builder.CreateBr(data.popContextTarget);
@@ -1140,7 +1143,8 @@ llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     auto res = builder.CreateLoad(pos);
     return res;
 }
-llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v) {
+llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v,
+                                                PirType toType) {
     assert(v->getType() == t::SEXP);
     auto done = BasicBlock::Create(C, "", fun);
     auto isReal = BasicBlock::Create(C, "isReal", fun);
@@ -1157,7 +1161,7 @@ llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v) {
     auto intres = unboxIntLgl(v);
 
     auto isNaBr = BasicBlock::Create(C, "isNa", fun);
-    nacheck(intres, isNaBr);
+    nacheck(intres, toType, isNaBr);
 
     res.addInput(builder.CreateSIToFP(intres, t::Double));
     builder.CreateBr(done);
@@ -1198,7 +1202,7 @@ llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
     if (from == t::SEXP && to == t::Int)
         return unboxIntLgl(val);
     if (from == t::SEXP && to == t::Double)
-        return unboxRealIntLgl(val);
+        return unboxRealIntLgl(val, toType);
     if (from != t::SEXP && to == t::SEXP)
         return box(val, toType, protect);
 
@@ -1565,19 +1569,29 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
     builder.SetInsertPoint(done);
 };
 
-void LowerFunctionLLVM::nacheck(llvm::Value* v, BasicBlock* isNa,
+void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
                                 BasicBlock* notNa) {
-    if (!notNa)
-        notNa = BasicBlock::Create(C, "", fun);
-    if (v->getType() == t::Double) {
-        auto isNotNa = builder.CreateFCmpUEQ(v, v);
-        builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
+    assert(type.isA(PirType::num().scalar()));
+    if (!type.maybeNa()) {
+        // Don't actually check na because we statically know it's not
+        builder.CreateBr(isNa);
     } else {
-        assert(v->getType() == t::Int);
-        auto isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
-        builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
+        // Actually check na
+        if (!notNa)
+            notNa = BasicBlock::Create(C, "", fun);
+        if (v->getType() == t::Double) {
+            assert(type.isA(RType::real));
+
+            auto isNotNa = builder.CreateFCmpUEQ(v, v);
+            builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
+        } else {
+            assert(v->getType() == t::Int && !type.isA(RType::real));
+
+            auto isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
+            builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
+        }
+        builder.SetInsertPoint(notNa);
     }
-    builder.SetInsertPoint(notNa);
 }
 
 void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
@@ -1734,8 +1748,8 @@ void LowerFunctionLLVM::compileRelop(
     auto a = load(lhs, lhsRep);
     auto b = load(rhs, rhsRep);
 
-    nacheck(a, isNaBr);
-    nacheck(b, isNaBr);
+    nacheck(a, lhs->type, isNaBr);
+    nacheck(b, rhs->type, isNaBr);
 
     if (a->getType() == t::Int && b->getType() == t::Int) {
         res.addInput(builder.CreateZExt(intInsert(a, b), t::Int));
@@ -1800,18 +1814,17 @@ void LowerFunctionLLVM::compileBinop(
     auto a = load(lhs, lhsRep);
     auto b = load(rhs, rhsRep);
 
-    auto checkNa = [&](llvm::Value* llvmValue, Value* pirValue,
-                       Representation r) {
-        if (pirValue->type.maybeNa()) {
+    auto checkNa = [&](llvm::Value* llvmValue, PirType type, Representation r) {
+        if (type.maybeNa()) {
             if (r == Representation::Integer) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(C, "isNa", fun);
-                nacheck(llvmValue, isNaBr);
+                nacheck(llvmValue, type, isNaBr);
             }
         }
     };
-    checkNa(a, lhs, lhsRep);
-    checkNa(b, rhs, rhsRep);
+    checkNa(a, lhs->type, lhsRep);
+    checkNa(b, rhs->type, rhsRep);
 
     if (a->getType() == t::Int && b->getType() == t::Int) {
         res.addInput(intInsert(a, b));
@@ -1876,14 +1889,16 @@ void LowerFunctionLLVM::compileUnop(
     auto res = phiBuilder(r);
     auto a = load(arg, argRep);
 
-    auto checkNa = [&](llvm::Value* v, Representation r) {
-        if (r == Representation::Integer) {
-            if (!isNaBr)
-                isNaBr = BasicBlock::Create(C, "isNa", fun);
-            nacheck(v, isNaBr);
+    auto checkNa = [&](llvm::Value* value, PirType type, Representation r) {
+        if (type.maybeNa()) {
+            if (r == Representation::Integer) {
+                if (!isNaBr)
+                    isNaBr = BasicBlock::Create(C, "isNa", fun);
+                nacheck(value, type, isNaBr);
+            }
         }
     };
-    checkNa(a, argRep);
+    checkNa(a, arg->type, argRep);
 
     if (a->getType() == t::Int) {
         res.addInput(intInsert(a));
@@ -2388,18 +2403,21 @@ bool LowerFunctionLLVM::tryCompile() {
 
                                 auto naCheck = [&](Value* v, llvm::Value* asInt,
                                                    Representation rep) {
-                                    if (rep == Representation::Real) {
-                                        auto vv = load(v, rep);
-                                        if (!isNaBr)
-                                            isNaBr = BasicBlock::Create(
-                                                C, "isNa", fun);
-                                        nacheck(vv, isNaBr);
-                                    } else {
-                                        assert(rep == Representation::Integer);
-                                        if (!isNaBr)
-                                            isNaBr = BasicBlock::Create(
-                                                C, "isNa", fun);
-                                        nacheck(asInt, isNaBr);
+                                    if (v->type.maybeNa()) {
+                                        if (rep == Representation::Real) {
+                                            auto vv = load(v, rep);
+                                            if (!isNaBr)
+                                                isNaBr = BasicBlock::Create(
+                                                    C, "isNa", fun);
+                                            nacheck(vv, v->type, isNaBr);
+                                        } else {
+                                            assert(rep ==
+                                                   Representation::Integer);
+                                            if (!isNaBr)
+                                                isNaBr = BasicBlock::Create(
+                                                    C, "isNa", fun);
+                                            nacheck(asInt, v->type, isNaBr);
+                                        }
                                     }
                                 };
                                 naCheck(x, xInt, xRep);
@@ -3336,7 +3354,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 auto argumentNative = load(argument, argumentRep);
 
-                nacheck(argumentNative, isNa);
+                nacheck(argumentNative, argument->type, isNa);
 
                 auto res = phiBuilder(t::Int);
 
@@ -3871,7 +3889,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto done = BasicBlock::Create(C, "", fun);
                     auto isNaBr = BasicBlock::Create(C, "isNa", fun);
                     auto notNaBr = BasicBlock::Create(C, "", fun);
-                    nacheck(nin, isNaBr, notNaBr);
+                    nacheck(nin, arg->type, isNaBr, notNaBr);
 
                     builder.SetInsertPoint(isNaBr);
                     phi.addInput(c(NA_INTEGER));
