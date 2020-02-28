@@ -274,7 +274,7 @@ benchmark_gnur_ginger:
     refs:
       - schedules
     variables:
-      - $DISABLE_SPEC == 0
+      - $DISABLE_SPEC == "0"
   tags:
     - benchmarks-ginger
   script:
@@ -292,7 +292,7 @@ benchmark_fastr_ginger:
     refs:
       - schedules
     variables:
-      - $DISABLE_SPEC == 0
+      - $DISABLE_SPEC == "0"
   tags:
     - benchmarks-ginger
   script:
@@ -311,7 +311,7 @@ benchmark_noEnvSpec_ginger:
     refs:
       - schedules
     variables:
-      - $DISABLE_SPEC == 1
+      - $DISABLE_SPEC == "1"
   tags:
     - benchmarks-ginger
   script:
@@ -329,7 +329,7 @@ benchmark_noTypeSpec_ginger:
     refs:
       - schedules
     variables:
-      - $DISABLE_SPEC == 1
+      - $DISABLE_SPEC == "1"
   tags:
     - benchmarks-ginger
   script:
@@ -347,7 +347,7 @@ benchmark_noSpec_ginger:
     refs:
       - schedules
     variables:
-      - $DISABLE_SPEC == 1
+      - $DISABLE_SPEC == "1"
   tags:
     - benchmarks-ginger
   script:
