@@ -271,7 +271,10 @@ benchmark_gnur_ginger:
   variables:
     GIT_STRATEGY: none
   only:
-    - schedules
+    refs:
+      - schedules
+    variables:
+      - $DISABLE_SPEC == "0"
   tags:
     - benchmarks-ginger
   script:
@@ -286,7 +289,10 @@ benchmark_fastr_ginger:
   variables:
     GIT_STRATEGY: none
   only:
-    - schedules
+    refs:
+      - schedules
+    variables:
+      - $DISABLE_SPEC == "0"
   tags:
     - benchmarks-ginger
   script:
@@ -296,3 +302,57 @@ benchmark_fastr_ginger:
     paths:
     - benchmarks.data
     expire_in: 6 month
+benchmark_noEnvSpec_ginger:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    refs:
+      - schedules
+    variables:
+      - $DISABLE_SPEC == "1"
+  tags:
+    - benchmarks-ginger
+  script:
+    - $REBENCH_RUN "e:PIR-LLVM-NOENVSPEC $REBENCH_OPTIONS -S"
+  artifacts:
+    paths:
+    - benchmarks.data
+    expire_in: 24 month
+benchmark_noTypeSpec_ginger:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    refs:
+      - schedules
+    variables:
+      - $DISABLE_SPEC == "1"
+  tags:
+    - benchmarks-ginger
+  script:
+    - $REBENCH_RUN "e:PIR-LLVM-NOTYPESPEC $REBENCH_OPTIONS -S"
+  artifacts:
+    paths:
+    - benchmarks.data
+    expire_in: 24 month
+benchmark_noSpec_ginger:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    refs:
+      - schedules
+    variables:
+      - $DISABLE_SPEC == "1"
+  tags:
+    - benchmarks-ginger
+  script:
+    - $REBENCH_RUN "e:PIR-LLVM-NOSPECULATION $REBENCH_OPTIONS -S"
+  artifacts:
+    paths:
+    - benchmarks.data
+    expire_in: 24 month
