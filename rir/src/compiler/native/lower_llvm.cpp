@@ -1663,20 +1663,23 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
 void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
                                 BasicBlock* notNa) {
     assert(type.isA(PirType::num().scalar()));
-    if (!type.maybeNa()) {
+    if (!type.maybeNan()) {
         // Don't actually check na because we statically know it's not
-        builder.CreateBr(isNa);
+        if (!notNa)
+            notNa = BasicBlock::Create(C, "", fun);
+        // Was having trouble using just CreateBr. The conditional jump will get
+        // optimized away
+        builder.CreateCondBr(c(1), notNa, isNa, branchAlwaysTrue);
+        builder.SetInsertPoint(notNa);
     } else {
         // Actually check na
         if (!notNa)
             notNa = BasicBlock::Create(C, "", fun);
         if (v->getType() == t::Double) {
-            assert(type.isA(RType::real));
-
             auto isNotNa = builder.CreateFCmpUEQ(v, v);
             builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
         } else {
-            assert(v->getType() == t::Int && !type.isA(RType::real));
+            assert(v->getType() == t::Int);
 
             auto isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
             builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
@@ -1915,7 +1918,7 @@ void LowerFunctionLLVM::compileBinop(
     auto b = load(rhs, rhsRep);
 
     auto checkNa = [&](llvm::Value* llvmValue, PirType type, Representation r) {
-        if (type.maybeNa()) {
+        if (type.maybeNan()) {
             if (r == Representation::Integer) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(C, "isNa", fun);
@@ -1990,7 +1993,7 @@ void LowerFunctionLLVM::compileUnop(
     auto a = load(arg, argRep);
 
     auto checkNa = [&](llvm::Value* value, PirType type, Representation r) {
-        if (type.maybeNa()) {
+        if (type.maybeNan()) {
             if (r == Representation::Integer) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(C, "isNa", fun);
@@ -2532,7 +2535,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
                                 auto naCheck = [&](Value* v, llvm::Value* asInt,
                                                    Representation rep) {
-                                    if (v->type.maybeNa()) {
+                                    if (v->type.maybeNan()) {
                                         if (rep == Representation::Real) {
                                             auto vv = load(v, rep);
                                             if (!isNaBr)
@@ -3377,52 +3380,58 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::Add:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateAdd(a, b, "", false,
-                                                          true);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFAdd(a, b);
-                             },
-                             BinopKind::ADD);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA
+                        return builder.CreateAdd(a, b, "", false, true);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFAdd(a, b);
+                    },
+                    BinopKind::ADD);
                 break;
             case Tag::Sub:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateSub(a, b, "", false,
-                                                          true);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFSub(a, b);
-                             },
-                             BinopKind::SUB);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA
+                        return builder.CreateSub(a, b, "", false, true);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFSub(a, b);
+                    },
+                    BinopKind::SUB);
                 break;
             case Tag::Mul:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateMul(a, b, "", false,
-                                                          true);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFMul(a, b);
-                             },
-                             BinopKind::MUL);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA
+                        return builder.CreateMul(a, b, "", false, true);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFMul(a, b);
+                    },
+                    BinopKind::MUL);
                 break;
             case Tag::Div:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateSDiv(a, b);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFDiv(a, b);
-                             },
-                             BinopKind::DIV);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA
+                        return builder.CreateSDiv(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFDiv(a, b);
+                    },
+                    BinopKind::DIV);
                 break;
             case Tag::Pow:
                 compileBinop(
                     i,
                     [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA?
                         return builder.CreateIntrinsic(
                             Intrinsic::powi, {a->getType(), b->getType()},
                             {a, b});
