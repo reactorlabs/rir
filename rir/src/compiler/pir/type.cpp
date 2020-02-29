@@ -90,34 +90,40 @@ void PirType::merge(SEXPTYPE sexptype) {
     }
 }
 
-static bool containsNa(SEXP vector) {
-    for (int i = 0; i < Rf_length(vector); i++) {
-        switch (TYPEOF(vector)) {
-        case INTSXP:
-            if (INTEGER(vector)[i] == NA_INTEGER)
-                return true;
-            break;
-        case REALSXP:
-            if (R_IsNA(REAL(vector)[i]))
-                return true;
-            break;
-        case LGLSXP:
-            if (LOGICAL(vector)[i] == NA_LOGICAL)
-                return true;
-            break;
-        case CPLXSXP:
-            if (R_IsNA(COMPLEX(vector)[i].i))
-                return true;
-            break;
-        case STRSXP:
-            if (STRING_ELT(vector, i) == NA_STRING)
-                return true;
-            break;
-        default:
-            break;
+static bool containsNan(SEXP vector) {
+    if (TYPEOF(vector) == CHARSXP) {
+        return vector == NA_STRING;
+    } else if (TYPEOF(vector) == INTSXP || TYPEOF(vector) == REALSXP ||
+               TYPEOF(vector) == LGLSXP || TYPEOF(vector) == CPLXSXP ||
+               TYPEOF(vector) == STRSXP) {
+        for (int i = 0; i < Rf_length(vector); i++) {
+            switch (TYPEOF(vector)) {
+            case INTSXP:
+                if (INTEGER(vector)[i] == NA_INTEGER)
+                    return true;
+                break;
+            case REALSXP:
+                if (R_IsNA(REAL(vector)[i]))
+                    return true;
+                break;
+            case LGLSXP:
+                if (LOGICAL(vector)[i] == NA_LOGICAL)
+                    return true;
+                break;
+            case CPLXSXP:
+                if (R_IsNA(COMPLEX(vector)[i].i))
+                    return true;
+                break;
+            case STRSXP:
+                if (STRING_ELT(vector, i) == NA_STRING)
+                    return true;
+                break;
+            default:
+                assert(false);
+            }
         }
+        return false;
     }
-    return false;
 }
 
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
@@ -136,8 +142,8 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
             flags_.reset(TypeFlags::maybeNotScalar);
-        if (!containsNa(e))
-            flags_.reset(TypeFlags::maybeNa);
+        if (!containsNan(e))
+            flags_.reset(TypeFlags::maybeNan);
     }
 }
 
