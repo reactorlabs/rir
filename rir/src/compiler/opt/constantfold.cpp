@@ -463,6 +463,15 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
+                } else if (builtinId == blt("is.na") && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    static PirType typeThatDoesntError =
+                        (PirType::num() | RType::chr | RType::str | RType::vec)
+                            .orAttribs();
+                    if (typeThatDoesntError.isA(t) && !t.maybeNan()) {
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                    }
                 } else if (builtinId == blt("bodyCode") && nargs == 1) {
                     auto in = i->arg(0).val()->followCastsAndForce();
                     if (auto mk = MkFunCls::Cast(in)) {

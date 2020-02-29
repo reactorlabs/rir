@@ -43,6 +43,7 @@
     "unordered_set": "cpp",
     "vector": "cpp",
     "iterator": "cpp",
-    "random": "cpp"
+    "random": "cpp",
+    "cmath": "cpp"
   }
 }
