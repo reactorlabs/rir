@@ -1657,7 +1657,6 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
 ARITHMETIC_BINOP(Mul);
 ARITHMETIC_BINOP(IDiv);
 ARITHMETIC_BINOP(Add);
-ARITHMETIC_BINOP(Mod);
 ARITHMETIC_BINOP(Pow);
 ARITHMETIC_BINOP(Sub);
 
@@ -1672,6 +1671,17 @@ class Div : public ArithmeticBinop<Div, Tag::Div> {
         if (t.maybe(RType::integer) || t.maybe(RType::logical))
             return t | RType::real;
         return t;
+    }
+};
+
+class Mod : public ArithmeticBinop<Mod, Tag::Mod> {
+  public:
+    Mod(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : ArithmeticBinop<Mod, Tag::Mod>(lhs, rhs, env, srcIdx) {}
+
+    PirType inferType(const GetType& getType) const override final {
+        // 0 %% 0 = NaN
+        return ArithmeticBinop<Mod, Tag::Mod>::inferType(getType).orNan();
     }
 };
 
