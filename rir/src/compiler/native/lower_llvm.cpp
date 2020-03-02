@@ -5021,10 +5021,10 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::ChkClosure: {
                 auto arg = loadSxp(i->arg(0).val());
-                call(
-                    NativeBuiltins::chkfun,
-                    {constant(Rf_install(ChkClosure::Cast(i)->name()), t::SEXP),
-                     arg});
+                call(NativeBuiltins::chkfun,
+                     {constant(Rf_install(ChkClosure::Cast(i)->name().c_str()),
+                               t::SEXP),
+                      arg});
                 setVal(i, arg);
                 break;
             }
