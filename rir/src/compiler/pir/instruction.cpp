@@ -661,31 +661,43 @@ TypeChecks IsType::typeChecks() const {
     auto in = arg(0).val();
     assert(!t.isVoid() && !t.maybeLazy());
     if (t.isA(PirType(RType::logical).orAttribs())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
-            return TypeChecks::LogicalSimpleScalar;
-        else
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
+            if (!t.maybeNan())
+                return TypeChecks::LogicalSimpleScalarNotNaN;
+            else
+                return TypeChecks::LogicalSimpleScalar;
+        } else
             return TypeChecks::LogicalNonObject;
     } else if (t.isA(PirType(RType::logical).orAttribs().orPromiseWrapped())) {
+        assert(t.maybeNan() && "need to add non-NaN promise-wrapped typecheck");
         if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
             return TypeChecks::LogicalSimpleScalarWrapped;
         else
             return TypeChecks::LogicalNonObjectWrapped;
     } else if (t.isA(PirType(RType::integer).orAttribs())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
-            return TypeChecks::IntegerSimpleScalar;
-        else
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
+            if (!t.maybeNan())
+                return TypeChecks::IntegerSimpleScalarNotNaN;
+            else
+                return TypeChecks::IntegerSimpleScalar;
+        } else
             return TypeChecks::IntegerNonObject;
     } else if (t.isA(PirType(RType::integer).orAttribs().orPromiseWrapped())) {
+        assert(t.maybeNan() && "need to add non-NaN promise-wrapped typecheck");
         if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
             return TypeChecks::IntegerSimpleScalarWrapped;
         else
             return TypeChecks::IntegerNonObjectWrapped;
     } else if (t.isA(PirType(RType::real).orAttribs())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
-            return TypeChecks::RealSimpleScalar;
-        else
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
+            if (!t.maybeNan())
+                return TypeChecks::RealSimpleScalarNotNaN;
+            else
+                return TypeChecks::RealSimpleScalar;
+        } else
             return TypeChecks::RealNonObject;
     } else if (t.isA(PirType(RType::real).orAttribs().orPromiseWrapped())) {
+        assert(t.maybeNan() && "need to add non-NaN promise-wrapped typecheck");
         if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
             return TypeChecks::RealSimpleScalarWrapped;
         else
