@@ -258,7 +258,7 @@ class Instruction : public Value {
 
     InstructionUID id() const;
 
-    virtual const char* name() const { return tagToStr(tag); }
+    virtual std::string name() const { return tagToStr(tag); }
 
     Instruction* hasSingleUse();
     void eraseAndRemove();
@@ -1063,7 +1063,7 @@ class FLIE(Force, 2, Effects::Any()) {
     }
     Value* input() const { return arg(0).val(); }
 
-    const char* name() const override {
+    std::string name() const override {
         std::stringstream ss;
         ss << "Force";
         if (strict)
@@ -1074,7 +1074,7 @@ class FLIE(Force, 2, Effects::Any()) {
             ss << "<wrapped>";
         else if (observed == ArgumentKind::value)
             ss << "<value>";
-        return ss.str().c_str();
+        return ss.str();
     }
 
     PirType inferType(const GetType& getType) const override final {
@@ -2247,7 +2247,7 @@ class VLIE(MkEnv, Effects::None()) {
 
     void printArgs(std::ostream& out, bool tty) const override;
     void printEnv(std::ostream& out, bool tty) const override final{};
-    const char* name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
+    std::string name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
 
@@ -2451,7 +2451,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
         assumeTrue = !assumeTrue;
         return this;
     }
-    const char* name() const override {
+    std::string name() const override {
         return assumeTrue ? "Assume" : "AssumeNot";
     }
 };
