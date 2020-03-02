@@ -19,7 +19,7 @@ class TypeTest {
                        const PirType& suggested, const PirType& required,
                        const std::function<void(Info)>& action,
                        const std::function<void()>& failed) {
-        auto expected = i->type & feedback.type.orNan();
+        auto expected = i->type & feedback.type;
 
         if (i->type.isA(expected))
             return;

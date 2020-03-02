@@ -10,6 +10,45 @@ namespace rir {
 
 struct Code;
 
+static bool containsNan(SEXP vector) {
+    if (TYPEOF(vector) == CHARSXP) {
+        return vector == NA_STRING;
+    } else if (TYPEOF(vector) == INTSXP || TYPEOF(vector) == REALSXP ||
+               TYPEOF(vector) == LGLSXP || TYPEOF(vector) == CPLXSXP ||
+               TYPEOF(vector) == STRSXP) {
+        for (int i = 0; i < Rf_length(vector); i++) {
+            switch (TYPEOF(vector)) {
+            case INTSXP:
+                if (INTEGER(vector)[i] == NA_INTEGER)
+                    return true;
+                break;
+            case REALSXP:
+                if (ISNAN(REAL(vector)[i]))
+                    return true;
+                break;
+            case LGLSXP:
+                if (LOGICAL(vector)[i] == NA_LOGICAL)
+                    return true;
+                break;
+            case CPLXSXP:
+                if (ISNAN(COMPLEX(vector)[i].i))
+                    return true;
+                break;
+            case STRSXP:
+                if (STRING_ELT(vector, i) == NA_STRING)
+                    return true;
+                break;
+            default:
+                assert(false);
+            }
+        }
+        return false;
+    } else {
+        // Not a type which can represent NaN
+        return true;
+    }
+}
+
 #pragma pack(push)
 #pragma pack(1)
 
@@ -40,15 +79,17 @@ inline bool fastVeceltOk(SEXP vec) {
 }
 
 struct ObservedType {
-    uint8_t sexptype : 5;
-    uint8_t scalar : 1;
-    uint8_t object : 1;
-    uint8_t attribs : 1;
+    uint16_t sexptype : 12;
+    uint16_t scalar : 1;
+    uint16_t isNan : 1;
+    uint16_t object : 1;
+    uint16_t attribs : 1;
 
     ObservedType() {}
     explicit ObservedType(SEXP s)
-        : sexptype((uint8_t)TYPEOF(s)), scalar(IS_SIMPLE_SCALAR(s, TYPEOF(s))),
-          object(isObject(s)), attribs(object || !fastVeceltOk(s)) {
+        : sexptype((uint16_t)TYPEOF(s)), scalar(IS_SIMPLE_SCALAR(s, TYPEOF(s))),
+          isNan(containsNan(s)), object(isObject(s)),
+          attribs(object || !fastVeceltOk(s)) {
         assert(!object || attribs);
     }
 
@@ -61,6 +102,7 @@ struct ObservedType {
         ObservedType t;
         t.sexptype = sexptype;
         t.scalar = scalar && other.scalar;
+        t.isNan = isNan || other.isNan;
         t.object = object || other.object;
         t.attribs = attribs || other.attribs;
         return t;
@@ -110,9 +152,9 @@ struct ObservedValues {
     };
 
     static constexpr unsigned MaxTypes = 3;
-    uint8_t numTypes : 2;
-    uint8_t stateBeforeLastForce : 2;
-    uint8_t unused : 4;
+    uint16_t numTypes : 2;
+    uint16_t stateBeforeLastForce : 2;
+    uint16_t unused : 12;
 
     std::array<ObservedType, MaxTypes> seen;
 
@@ -137,27 +179,37 @@ struct ObservedValues {
         }
     }
 };
-static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
+static_assert(sizeof(ObservedValues) == sizeof(uint64_t),
               "Size needs to fit inside a record_ bc immediate args");
+
+#define TYPE_CHECKS(V)                                                         \
+    V(LogicalNonObject)                                                        \
+    V(LogicalNonObjectWrapped)                                                 \
+    V(LogicalSimpleScalar)                                                     \
+    V(LogicalSimpleScalarNotNaN)                                               \
+    V(LogicalSimpleScalarWrapped)                                              \
+    V(IntegerNonObject)                                                        \
+    V(IntegerNonObjectWrapped)                                                 \
+    V(IntegerSimpleScalar)                                                     \
+    V(IntegerSimpleScalarNotNaN)                                               \
+    V(IntegerSimpleScalarWrapped)                                              \
+    V(RealNonObject)                                                           \
+    V(RealNonObjectWrapped)                                                    \
+    V(RealSimpleScalar)                                                        \
+    V(RealSimpleScalarNotNaN)                                                  \
+    V(RealSimpleScalarWrapped)                                                 \
+    V(NotObject)                                                               \
+    V(NotObjectWrapped)                                                        \
+    V(NoAttribsExceptDim)                                                      \
+    V(NoAttribsExceptDimWrapped)
 
 enum class TypeChecks : uint32_t {
     // Must be bigger than smallest sexptype
-    LogicalNonObject = 3326,
-    LogicalNonObjectWrapped = 3327,
-    LogicalSimpleScalar = 3328,
-    LogicalSimpleScalarWrapped = 3329,
-    IntegerNonObject = 3330,
-    IntegerNonObjectWrapped = 3331,
-    IntegerSimpleScalar = 3332,
-    IntegerSimpleScalarWrapped = 3333,
-    RealNonObject = 3335,
-    RealNonObjectWrapped = 3336,
-    RealSimpleScalar = 3337,
-    RealSimpleScalarWrapped = 3338,
-    NotObject = 3339,
-    NotObjectWrapped = 3340,
-    NoAttribsExceptDim = 3341,
-    NoAttribsExceptDimWrapped = 3342
+    _START_ = 3326,
+#define V(TypeCheck) TypeCheck,
+    TYPE_CHECKS(V)
+#undef V
+        _END_
 };
 
 enum class Opcode : uint8_t;

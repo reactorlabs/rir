@@ -90,42 +90,6 @@ void PirType::merge(SEXPTYPE sexptype) {
     }
 }
 
-static bool containsNan(SEXP vector) {
-    if (TYPEOF(vector) == CHARSXP) {
-        return vector == NA_STRING;
-    } else if (TYPEOF(vector) == INTSXP || TYPEOF(vector) == REALSXP ||
-               TYPEOF(vector) == LGLSXP || TYPEOF(vector) == CPLXSXP ||
-               TYPEOF(vector) == STRSXP) {
-        for (int i = 0; i < Rf_length(vector); i++) {
-            switch (TYPEOF(vector)) {
-            case INTSXP:
-                if (INTEGER(vector)[i] == NA_INTEGER)
-                    return true;
-                break;
-            case REALSXP:
-                if (R_IsNA(REAL(vector)[i]))
-                    return true;
-                break;
-            case LGLSXP:
-                if (LOGICAL(vector)[i] == NA_LOGICAL)
-                    return true;
-                break;
-            case CPLXSXP:
-                if (R_IsNA(COMPLEX(vector)[i].i))
-                    return true;
-                break;
-            case STRSXP:
-                if (STRING_ELT(vector, i) == NA_STRING)
-                    return true;
-                break;
-            default:
-                assert(false);
-            }
-        }
-        return false;
-    }
-}
-
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     if (e == R_MissingArg)
         t_.r.set(RType::missing);
@@ -160,6 +124,7 @@ void PirType::merge(const ObservedValues& other) {
         flags_.set(TypeFlags::maybeObject);
         flags_.set(TypeFlags::maybeAttrib);
         flags_.set(TypeFlags::maybeNotScalar);
+        flags_.set(TypeFlags::maybeNan);
         return;
     }
 
@@ -171,6 +136,8 @@ void PirType::merge(const ObservedValues& other) {
             flags_.set(TypeFlags::maybeAttrib);
         if (!record.scalar)
             flags_.set(TypeFlags::maybeNotScalar);
+        if (record.isNan)
+            flags_.set(TypeFlags::maybeNan);
 
         merge(record.sexptype);
     }
@@ -192,7 +159,7 @@ bool PirType::isInstance(SEXP val) const {
             return PirType(RType::env).isA(*this);
         return PirType(val).isA(*this);
     } else if (*this == NativeType::test) {
-        return IS_SIMPLE_SCALAR(val, LGLSXP) && *LOGICAL(val) != NA_LOGICAL;
+        return val == R_TrueValue || val == R_FalseValue;
     } else {
         std::cerr << "can't check val is instance of " << *this << ", value:\n";
         Rf_PrintValue(val);
