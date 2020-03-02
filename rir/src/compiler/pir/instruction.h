@@ -2318,7 +2318,7 @@ class VLI(Phi, Effects::None()) {
 
   public:
     Phi() : VarLenInstruction(PirType::any()) {}
-    Phi(const std::initializer_list<std::pair<BB*, Value*>>& inputs)
+    explicit Phi(const std::initializer_list<std::pair<BB*, Value*>>& inputs)
         : VarLenInstruction(PirType::any()) {
         for (auto a : inputs)
             addInput(a.first, a.second);
