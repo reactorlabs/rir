@@ -10,13 +10,20 @@ namespace rir {
 
 struct Code;
 
+// For non-scalars, it takes too long to determine whether they
+// contain NaN for the benefit, so we simple assume they do
+static const R_xlen_t MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK = 1;
+
 static bool containsNan(SEXP vector) {
     if (TYPEOF(vector) == CHARSXP) {
         return vector == NA_STRING;
     } else if (TYPEOF(vector) == INTSXP || TYPEOF(vector) == REALSXP ||
                TYPEOF(vector) == LGLSXP || TYPEOF(vector) == CPLXSXP ||
                TYPEOF(vector) == STRSXP) {
-        for (int i = 0; i < Rf_length(vector); i++) {
+        if (XLENGTH(vector) > MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK) {
+            return true;
+        }
+        for (int i = 0; i < XLENGTH(vector); i++) {
             switch (TYPEOF(vector)) {
             case INTSXP:
                 if (INTEGER(vector)[i] == NA_INTEGER)

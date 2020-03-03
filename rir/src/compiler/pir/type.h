@@ -499,14 +499,17 @@ struct PirType {
         } else if (isA(num() | RType::str | RType::nil)) {
             PirType t = *this;
             t.t_.r.reset(RType::nil);
-            if (numArgs > 1)
-                t.setNotScalar();
+            if (numArgs > 1) {
+                // The orNan is only needed because we don't check NaN on
+                // vectors, technically the vector doesn't contain NaN
+                t = t.orNotScalar().orNan();
+            }
             return t;
         } else if (t_.r.contains(RType::prom) ||
                    t_.r.contains(RType::expandedDots)) {
             return val();
         } else {
-            return forced().notObject().orNotScalar() | RType::vec;
+            return forced().notObject().orNotScalar().orNan() | RType::vec;
         }
     }
 
