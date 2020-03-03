@@ -10,45 +10,71 @@
 
 namespace rir {
 
-enum class Assumption {
+enum class TypeAssumption {
     // Arg is already evaluated
     Arg0IsEager_,
     Arg1IsEager_,
     Arg2IsEager_,
+    Arg3IsEager_,
+    Arg4IsEager_,
+    Arg5IsEager_,
+    Arg6IsEager_,
+    Arg7IsEager_,
 
     // Arg is not an object
     Arg0IsNotObj_,
     Arg1IsNotObj_,
     Arg2IsNotObj_,
+    Arg3IsNotObj_,
+    Arg4IsNotObj_,
+    Arg5IsNotObj_,
+    Arg6IsNotObj_,
+    Arg7IsNotObj_,
 
     // Arg is simple integer scalar
     Arg0IsSimpleInt_,
     Arg1IsSimpleInt_,
     Arg2IsSimpleInt_,
+    Arg3IsSimpleInt_,
+    Arg4IsSimpleInt_,
+    Arg5IsSimpleInt_,
+    Arg6IsSimpleInt_,
+    Arg7IsSimpleInt_,
 
     // Arg is simple real scalar
     Arg0IsSimpleReal_,
     Arg1IsSimpleReal_,
     Arg2IsSimpleReal_,
+    Arg3IsSimpleReal_,
+    Arg4IsSimpleReal_,
+    Arg5IsSimpleReal_,
+    Arg6IsSimpleReal_,
+    Arg7IsSimpleReal_,
 
+    FIRST = Arg0IsEager_,
+    LAST = Arg7IsSimpleReal_,
+};
+
+enum class Assumption {
     NoExplicitlyMissingArgs, // Explicitly missing, e.g. f(,,)
     CorrectOrderOfArguments, // Ie. the args are not named
     NotTooManyArguments,     // The number of args supplied is <= nargs
     NoReflectiveArgument,    // Argument promises are not reflective
     StaticallyArgmatched,    // Arguments are statically matched
 
-    FIRST = Arg0IsEager_,
+    FIRST = NoExplicitlyMissingArgs,
     LAST = StaticallyArgmatched,
 };
 
 #pragma pack(push)
 #pragma pack(1)
 struct Assumptions {
-    typedef EnumSet<Assumption, uint32_t> Flags;
+    typedef EnumSet<TypeAssumption, uint32_t> TypeFlags;
+    typedef EnumSet<Assumption, uint8_t> Flags;
 
     constexpr static size_t MAX_MISSING = 255;
     // # of args with type assumptions
-    constexpr static size_t NUM_ARGS = 3;
+    constexpr static size_t NUM_TYPED_ARGS = 8;
 
     Assumptions() = default;
     Assumptions(const Assumptions&) noexcept = default;
@@ -56,10 +82,10 @@ struct Assumptions {
     explicit constexpr Assumptions(const Flags& flags) : flags(flags) {}
     constexpr Assumptions(const Flags& flags, uint8_t missing)
         : flags(flags), missing(missing) {}
+    constexpr Assumptions(const Flags& flags, const TypeFlags& typeFlags,
+                          uint8_t missing)
+        : flags(flags), typeFlags(typeFlags), missing(missing) {}
     explicit Assumptions(void* pos) {
-        // Silences unused warning:
-        (void)unused;
-        (void)unused2;
         memcpy((void*)this, pos, sizeof(*this));
     }
     explicit Assumptions(unsigned long val) {
@@ -79,18 +105,22 @@ struct Assumptions {
     RIR_INLINE bool includes(const Flags& a) const { return flags.includes(a); }
 
 #define TYPE_ASSUMPTIONS(Type)                                                 \
-    static constexpr std::array<Assumption, NUM_ARGS> Type##Assumptions = {    \
-        {Assumption::Arg0Is##Type##_, Assumption::Arg1Is##Type##_,             \
-         Assumption::Arg2Is##Type##_}};                                        \
+    static constexpr std::array<TypeAssumption, NUM_TYPED_ARGS>                \
+        Type##Assumptions = {                                                  \
+            {TypeAssumption::Arg0Is##Type##_, TypeAssumption::Arg1Is##Type##_, \
+             TypeAssumption::Arg2Is##Type##_, TypeAssumption::Arg3Is##Type##_, \
+             TypeAssumption::Arg4Is##Type##_, TypeAssumption::Arg5Is##Type##_, \
+             TypeAssumption::Arg6Is##Type##_,                                  \
+             TypeAssumption::Arg7Is##Type##_}};                                \
     RIR_INLINE bool is##Type(size_t i) const {                                 \
-        if (i < Type##Assumptions.size())                                      \
-            if (flags.includes(Type##Assumptions[i]))                          \
+        if (i < NUM_TYPED_ARGS)                                                \
+            if (typeFlags.includes(Type##Assumptions[i]))                      \
                 return true;                                                   \
         return false;                                                          \
     }                                                                          \
     RIR_INLINE void set##Type(size_t i) {                                      \
-        if (i < Type##Assumptions.size())                                      \
-            flags.set(Type##Assumptions[i]);                                   \
+        if (i < NUM_TYPED_ARGS)                                                \
+            typeFlags.set(Type##Assumptions[i]);                               \
     }
     TYPE_ASSUMPTIONS(Eager);
     TYPE_ASSUMPTIONS(NotObj);
@@ -105,17 +135,24 @@ struct Assumptions {
         missing = i;
     }
 
-    RIR_INLINE bool empty() const { return flags.empty() && missing == 0; }
-
-    RIR_INLINE size_t count() const { return flags.count(); }
-
-    constexpr Assumptions operator|(const Flags& other) const {
-        return Assumptions(flags | other, missing);
+    RIR_INLINE bool empty() const {
+        return flags.empty() && typeFlags.empty() && missing == 0;
     }
 
+    RIR_INLINE size_t count() const {
+        return flags.count() + typeFlags.count();
+    }
+
+    constexpr Assumptions operator|(const Flags& other) const {
+        return Assumptions(other | flags, typeFlags, missing);
+    }
+    constexpr Assumptions operator|(const TypeFlags& other) const {
+        return Assumptions(flags, other | typeFlags, missing);
+    }
     constexpr Assumptions operator|(const Assumptions& other) const {
         assert(missing == other.missing);
-        return Assumptions(other.flags | flags, missing);
+        return Assumptions(other.flags | flags, other.typeFlags | typeFlags,
+                           missing);
     }
 
     RIR_INLINE bool operator<(const Assumptions& other) const {
@@ -132,19 +169,26 @@ struct Assumptions {
             return missing < other.missing;
         if (flags.count() != other.flags.count())
             return flags.count() < other.flags.count();
-        return flags.to_i() < other.flags.to_i();
+        if (typeFlags.count() != other.typeFlags.count())
+            return typeFlags.count() < other.typeFlags.count();
+        if (flags.to_i() != other.flags.to_i())
+            return flags.to_i() < other.flags.to_i();
+        return typeFlags.to_i() < other.typeFlags.to_i();
     }
 
     RIR_INLINE bool operator!=(const Assumptions& other) const {
-        return flags != other.flags || missing != other.missing;
+        return flags != other.flags || typeFlags != other.typeFlags ||
+               missing != other.missing;
     }
 
     RIR_INLINE bool operator==(const Assumptions& other) const {
-        return flags == other.flags && missing == other.missing;
+        return flags == other.flags && typeFlags == other.typeFlags &&
+               missing == other.missing;
     }
 
     RIR_INLINE bool subtype(const Assumptions& other) const {
-        return missing == other.missing && other.flags.includes(flags);
+        return missing == other.missing && other.flags.includes(flags) &&
+               other.typeFlags.includes(typeFlags);
     }
 
     static Assumptions deserialize(SEXP refTable, R_inpstream_t inp);
@@ -155,9 +199,8 @@ struct Assumptions {
 
   private:
     Flags flags;
+    TypeFlags typeFlags;
     uint8_t missing = 0;
-
-    uint8_t unused = 0;
     uint16_t unused2 = 0;
 };
 #pragma pack(pop)
@@ -167,6 +210,7 @@ static_assert(sizeof(Assumptions) == 2 * sizeof(Immediate),
               "Assumptions needs to be 2 immediate args long");
 
 std::ostream& operator<<(std::ostream& out, Assumption a);
+std::ostream& operator<<(std::ostream& out, TypeAssumption a);
 
 } // namespace rir
 
@@ -174,7 +218,9 @@ namespace std {
 template <>
 struct hash<rir::Assumptions> {
     std::size_t operator()(const rir::Assumptions& v) const {
-        return hash_combine(hash_combine(0, v.flags.to_i()), v.missing);
+        return hash_combine(
+            hash_combine(hash_combine(0, v.flags.to_i()), v.typeFlags.to_i()),
+            v.missing);
     }
 };
 } // namespace std
