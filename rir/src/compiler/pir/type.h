@@ -454,10 +454,12 @@ struct PirType {
             return RType::nil;
         }
         if (isA((num() | RType::str | RType::cons | RType::code).orAttribs())) {
+            // If the index is out of bounds, NA is returned (even if both args
+            // are non-NA) so we must add orNan()
             if (idx.isA(PirType(RType::str).scalar()))
-                return scalar().orAttribs();
+                return scalar().orAttribs().orNan();
             // e.g. c(1,2,3)[-1] returns c(2,3)
-            return orNotScalar();
+            return orNotScalar().orNan();
         } else if (isA(RType::vec)) {
             return PirType(RType::vec);
         } else if (isA(PirType(RType::vec).orAttribs())) {
