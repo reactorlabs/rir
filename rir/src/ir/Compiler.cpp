@@ -302,10 +302,10 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
                 size_t bodyPromIdx = cs.addPromise(bodyProm);
 
                 // 3) Add the function, arguments, and call
-                Assumptions assumptions =
-                    Assumptions(Assumption::Arg0IsEager_) |
-                    Assumption::CorrectOrderOfArguments |
-                    Assumption::NotTooManyArguments;
+                Assumptions assumptions = Assumptions() |
+                                          TypeAssumption::Arg0IsEager_ |
+                                          Assumption::CorrectOrderOfArguments |
+                                          Assumption::NotTooManyArguments;
                 cs << BC::ldfun(symbol::For) << BC::swap()
                    << BC::mkEagerPromise(seqPromIdx)
                    << BC::mkPromise(bodyPromIdx)
