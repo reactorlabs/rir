@@ -30,16 +30,38 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
     case Assumption::NotTooManyArguments:
         out << "!TMany";
         break;
+    }
+    return out;
+};
+
+std::ostream& operator<<(std::ostream& out, TypeAssumption a) {
+    switch (a) {
 #define TYPE_ASSUMPTIONS(Type, Msg)                                            \
-    case Assumption::Arg0Is##Type##_:                                          \
+    case TypeAssumption::Arg0Is##Type##_:                                      \
         out << Msg << "0";                                                     \
         break;                                                                 \
-    case Assumption::Arg1Is##Type##_:                                          \
+    case TypeAssumption::Arg1Is##Type##_:                                      \
         out << Msg << "1";                                                     \
         break;                                                                 \
-    case Assumption::Arg2Is##Type##_:                                          \
+    case TypeAssumption::Arg2Is##Type##_:                                      \
         out << Msg << "2";                                                     \
+        break;                                                                 \
+    case TypeAssumption::Arg3Is##Type##_:                                      \
+        out << Msg << "3";                                                     \
+        break;                                                                 \
+    case TypeAssumption::Arg4Is##Type##_:                                      \
+        out << Msg << "4";                                                     \
+        break;                                                                 \
+    case TypeAssumption::Arg5Is##Type##_:                                      \
+        out << Msg << "5";                                                     \
+        break;                                                                 \
+    case TypeAssumption::Arg6Is##Type##_:                                      \
+        out << Msg << "6";                                                     \
+        break;                                                                 \
+    case TypeAssumption::Arg7Is##Type##_:                                      \
+        out << Msg << "7";                                                     \
         break;
+
         TYPE_ASSUMPTIONS(Eager, "Eager");
         TYPE_ASSUMPTIONS(NotObj, "!Obj");
         TYPE_ASSUMPTIONS(SimpleInt, "SimpleInt");
@@ -59,13 +81,13 @@ std::ostream& operator<<(std::ostream& out, const Assumptions& a) {
     return out;
 }
 
-constexpr std::array<Assumption, Assumptions::NUM_ARGS>
+constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
     Assumptions::EagerAssumptions;
-constexpr std::array<Assumption, Assumptions::NUM_ARGS>
+constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
     Assumptions::NotObjAssumptions;
-constexpr std::array<Assumption, Assumptions::NUM_ARGS>
+constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
     Assumptions::SimpleIntAssumptions;
-constexpr std::array<Assumption, Assumptions::NUM_ARGS>
+constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
     Assumptions::SimpleRealAssumptions;
 
 } // namespace rir
