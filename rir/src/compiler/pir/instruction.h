@@ -836,7 +836,7 @@ class FLI(LdArg, 0, Effects::None()) {
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
-class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
+class FLIE(Missing, 1, Effects() | Effect::ReadsEnv | Effect::Error) {
   public:
     SEXP varName;
     explicit Missing(SEXP varName, Value* env)
