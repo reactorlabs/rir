@@ -3301,10 +3301,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             case TypeChecks::LogicalSimpleScalar:
                 res = IS_SIMPLE_SCALAR(val, LGLSXP);
                 break;
-            case TypeChecks::LogicalSimpleScalarNotNaN:
-                res = IS_SIMPLE_SCALAR(val, LGLSXP) &&
-                      *LOGICAL(val) != NA_LOGICAL;
-                break;
             case TypeChecks::LogicalSimpleScalarWrapped:
                 if (TYPEOF(val) == PROMSXP)
                     val = PRVALUE(val);
@@ -3323,10 +3319,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             case TypeChecks::IntegerSimpleScalar:
                 res = IS_SIMPLE_SCALAR(val, INTSXP);
                 break;
-            case TypeChecks::IntegerSimpleScalarNotNaN:
-                res = IS_SIMPLE_SCALAR(val, INTSXP) &&
-                      *INTEGER(val) != NA_INTEGER;
-                break;
             case TypeChecks::IntegerSimpleScalarWrapped:
                 if (TYPEOF(val) == PROMSXP)
                     val = PRVALUE(val);
@@ -3344,9 +3336,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             case TypeChecks::RealSimpleScalar:
                 res = IS_SIMPLE_SCALAR(val, REALSXP);
-                break;
-            case TypeChecks::RealSimpleScalarNotNaN:
-                res = IS_SIMPLE_SCALAR(val, REALSXP) && !ISNAN(*REAL(val));
                 break;
             case TypeChecks::RealSimpleScalarWrapped:
                 if (TYPEOF(val) == PROMSXP)
