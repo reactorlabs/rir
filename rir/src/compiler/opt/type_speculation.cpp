@@ -35,7 +35,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
         if (auto force = Force::Cast(i)) {
             if (auto arg = Instruction::Cast(force->input()->followCasts())) {
                 // Blacklist of where it is not worthwhile
-                if (!LdConst::Cast(arg) &&
+                if (!LdArg::Cast(arg) && !LdConst::Cast(arg) &&
                     // leave this to the promise inliner
                     !MkArg::Cast(arg) && !Force::Cast(arg)) {
 
@@ -77,11 +77,13 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                    (i->type.isA(PirType::num()) &&
                     !i->type.scalar().unboxable() &&
                     i->typeFeedback.type.scalar().unboxable())) {
-            speculateOn = i;
-            feedback = i->typeFeedback;
-            guardPos = checkpoint.next(i, i, dom);
-            if (guardPos)
-                typecheckPos = guardPos->nextBB();
+            if (!LdArg::Cast(i)) {
+                speculateOn = i;
+                feedback = i->typeFeedback;
+                guardPos = checkpoint.next(i, i, dom);
+                if (guardPos)
+                    typecheckPos = guardPos->nextBB();
+            }
         }
 
         if (!speculateOn || !guardPos)
