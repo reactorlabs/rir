@@ -148,17 +148,14 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
     V(LogicalNonObject)                                                        \
     V(LogicalNonObjectWrapped)                                                 \
     V(LogicalSimpleScalar)                                                     \
-    V(LogicalSimpleScalarNotNaN)                                               \
     V(LogicalSimpleScalarWrapped)                                              \
     V(IntegerNonObject)                                                        \
     V(IntegerNonObjectWrapped)                                                 \
     V(IntegerSimpleScalar)                                                     \
-    V(IntegerSimpleScalarNotNaN)                                               \
     V(IntegerSimpleScalarWrapped)                                              \
     V(RealNonObject)                                                           \
     V(RealNonObjectWrapped)                                                    \
     V(RealSimpleScalar)                                                        \
-    V(RealSimpleScalarNotNaN)                                                  \
     V(RealSimpleScalarWrapped)                                                 \
     V(NotObject)                                                               \
     V(NotObjectWrapped)                                                        \

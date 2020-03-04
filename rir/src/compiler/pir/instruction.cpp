@@ -662,10 +662,8 @@ TypeChecks IsType::typeChecks() const {
     assert(!t.isVoid() && !t.maybeLazy());
     if (t.isA(PirType(RType::logical).orAttribs())) {
         if (t.isScalar() && !t.maybeHasAttrs()) {
-            if (!t.maybeNan())
-                return TypeChecks::LogicalSimpleScalarNotNaN;
-            else
-                return TypeChecks::LogicalSimpleScalar;
+            assert(t.maybeNan() || !in->type.maybeNan());
+            return TypeChecks::LogicalSimpleScalar;
         } else {
             assert(t.maybeNan());
             return TypeChecks::LogicalNonObject;
@@ -679,10 +677,8 @@ TypeChecks IsType::typeChecks() const {
         }
     } else if (t.isA(PirType(RType::integer).orAttribs())) {
         if (t.isScalar() && !t.maybeHasAttrs()) {
-            if (!t.maybeNan())
-                return TypeChecks::IntegerSimpleScalarNotNaN;
-            else
-                return TypeChecks::IntegerSimpleScalar;
+            assert(t.maybeNan() || !in->type.maybeNan());
+            return TypeChecks::IntegerSimpleScalar;
         } else {
             assert(t.maybeNan());
             return TypeChecks::IntegerNonObject;
@@ -696,10 +692,8 @@ TypeChecks IsType::typeChecks() const {
         }
     } else if (t.isA(PirType(RType::real).orAttribs())) {
         if (t.isScalar() && !t.maybeHasAttrs()) {
-            if (!t.maybeNan())
-                return TypeChecks::RealSimpleScalarNotNaN;
-            else
-                return TypeChecks::RealSimpleScalar;
+            assert(t.maybeNan() || !in->type.maybeNan());
+            return TypeChecks::RealSimpleScalar;
         } else {
             assert(t.maybeNan());
             return TypeChecks::RealNonObject;
