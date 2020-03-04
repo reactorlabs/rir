@@ -675,7 +675,6 @@ TypeChecks IsType::typeChecks() const {
         if (t.isScalar() && !t.maybeHasAttrs())
             return TypeChecks::LogicalSimpleScalarWrapped;
         else {
-            assert(t.maybeNan());
             return TypeChecks::LogicalNonObjectWrapped;
         }
     } else if (t.isA(PirType(RType::integer).orAttribs())) {
@@ -693,7 +692,6 @@ TypeChecks IsType::typeChecks() const {
         if (t.isScalar() && !t.maybeHasAttrs())
             return TypeChecks::IntegerSimpleScalarWrapped;
         else {
-            assert(t.maybeNan());
             return TypeChecks::IntegerNonObjectWrapped;
         }
     } else if (t.isA(PirType(RType::real).orAttribs())) {
@@ -711,7 +709,6 @@ TypeChecks IsType::typeChecks() const {
         if (t.isScalar() && !t.maybeHasAttrs())
             return TypeChecks::RealSimpleScalarWrapped;
         else {
-            assert(t.maybeNan());
             return TypeChecks::RealNonObjectWrapped;
         }
     } else if (in->type.notMissing().notObject().isA(t)) {

@@ -90,6 +90,48 @@ void PirType::merge(SEXPTYPE sexptype) {
     }
 }
 
+static bool containsNan(SEXP vector) {
+    if (TYPEOF(vector) == CHARSXP) {
+        return vector == NA_STRING;
+    } else if (TYPEOF(vector) == INTSXP || TYPEOF(vector) == REALSXP ||
+               TYPEOF(vector) == LGLSXP || TYPEOF(vector) == CPLXSXP ||
+               TYPEOF(vector) == STRSXP) {
+        if (XLENGTH(vector) > MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK) {
+            return true;
+        }
+        for (int i = 0; i < XLENGTH(vector); i++) {
+            switch (TYPEOF(vector)) {
+            case INTSXP:
+                if (INTEGER(vector)[i] == NA_INTEGER)
+                    return true;
+                break;
+            case REALSXP:
+                if (ISNAN(REAL(vector)[i]))
+                    return true;
+                break;
+            case LGLSXP:
+                if (LOGICAL(vector)[i] == NA_LOGICAL)
+                    return true;
+                break;
+            case CPLXSXP:
+                if (ISNAN(COMPLEX(vector)[i].i))
+                    return true;
+                break;
+            case STRSXP:
+                if (STRING_ELT(vector, i) == NA_STRING)
+                    return true;
+                break;
+            default:
+                assert(false);
+            }
+        }
+        return false;
+    } else {
+        // Not a type which can represent NaN
+        return true;
+    }
+}
+
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     if (e == R_MissingArg)
         t_.r.set(RType::missing);
@@ -136,8 +178,7 @@ void PirType::merge(const ObservedValues& other) {
             flags_.set(TypeFlags::maybeAttrib);
         if (!record.scalar)
             flags_.set(TypeFlags::maybeNotScalar);
-        if (record.isNan)
-            flags_.set(TypeFlags::maybeNan);
+        flags_.set(TypeFlags::maybeNan);
 
         merge(record.sexptype);
     }
