@@ -37,15 +37,6 @@ class TypeTest {
             (expected.noAttribs().isA(RType::integer) ||
              expected.noAttribs().isA(RType::real) ||
              expected.noAttribs().isA(RType::logical))) {
-            // Do not check for non-NaN unless the value is also a simple
-            // scalar. Checking for non-NaN in vectors takes too long (requires
-            // iterating every element) and rarely helps us.
-            // We also skip scalars with attribs because they rarely help us too
-            if ((!expected.isScalar() || expected.maybeHasAttrs()) &&
-                !expected.maybeNan()) {
-                expected = expected.orNan();
-            }
-
             return action({expected, new IsType(expected, i), true,
                            feedback.srcCode, feedback.origin});
         }
