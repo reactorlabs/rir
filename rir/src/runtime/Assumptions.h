@@ -75,6 +75,7 @@ struct Assumptions {
     constexpr static size_t MAX_MISSING = 255;
     // # of args with type assumptions
     constexpr static size_t NUM_TYPED_ARGS = 8;
+    constexpr static size_t NUM_TYPED_ARGS_SPECULATE = 0;
 
     Assumptions() = default;
     Assumptions(const Assumptions&) noexcept = default;
@@ -113,13 +114,13 @@ struct Assumptions {
              TypeAssumption::Arg6Is##Type##_,                                  \
              TypeAssumption::Arg7Is##Type##_}};                                \
     RIR_INLINE bool is##Type(size_t i) const {                                 \
-        if (i < NUM_TYPED_ARGS)                                                \
+        if (i < NUM_TYPED_ARGS_SPECULATE)                                      \
             if (typeFlags.includes(Type##Assumptions[i]))                      \
                 return true;                                                   \
         return false;                                                          \
     }                                                                          \
     RIR_INLINE void set##Type(size_t i) {                                      \
-        if (i < NUM_TYPED_ARGS)                                                \
+        if (i < NUM_TYPED_ARGS_SPECULATE)                                      \
             typeFlags.set(Type##Assumptions[i]);                               \
     }
     TYPE_ASSUMPTIONS(Eager);
