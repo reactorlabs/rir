@@ -75,7 +75,7 @@ struct Assumptions {
     constexpr static size_t MAX_MISSING = 255;
     // # of args with type assumptions
     constexpr static size_t NUM_TYPED_ARGS = 8;
-    constexpr static size_t NUM_TYPED_ARGS_SPECULATE = 0;
+    constexpr static size_t NUM_TYPED_ARGS_SPECULATE = 1;
 
     Assumptions() = default;
     Assumptions(const Assumptions&) noexcept = default;
