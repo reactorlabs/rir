@@ -183,8 +183,6 @@ class StaticAnalysis {
             log(i);
             if (res == AbstractResult::Tainted) {
                 log << " (State got tainted)";
-            } else {
-                log(i);
             }
             log << " we have\n";
             log(post);
@@ -202,10 +200,9 @@ class StaticAnalysis {
                 log(pre);
             }
             log << "===== After applying instruction ";
+            log(i);
             if (res == AbstractResult::Tainted) {
                 log << " (State got tainted)";
-            } else {
-                log(i);
             }
             log << " we have\n";
             log(post);
@@ -460,7 +457,7 @@ class StaticAnalysis {
                         << (mres == AbstractResult::LostPrecision
                                 ? " lost precision"
                                 : "")
-                        << " updated state:\n";
+                        << ", updated state:\n";
                     log << "===- In state is:\n";
                     log(state);
                     log << "===- Old state is:\n";

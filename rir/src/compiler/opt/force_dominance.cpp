@@ -294,7 +294,7 @@ struct ForcedBy {
     }
 };
 
-//, DummyState, AnalysisDebugLevel::Taint
+//, DummyState, true, AnalysisDebugLevel::Taint
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
     using StaticAnalysis::PositioningStyle;
