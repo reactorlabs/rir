@@ -115,6 +115,88 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
     std::unordered_map<BB*, bool> branchRemoval;
     DominanceGraph dom(function);
 
+    {
+        // Branch Elimination
+        //
+        // Given branch `a` and `b`, where both have the same
+        // condition and `a` dominates `b`, we can replace the condition of `b`
+        // by
+        //
+        //     c' = Phi([TRUE, a->trueBranch()], [FALSE, a->falseBranch()])
+        //     b  = Branch(c')
+        //
+        // and even constantfold the `b` branch if either
+        // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach `b`.
+        std::unordered_map<Instruction*, std::vector<Branch*>> condition;
+        Visitor::run(function->entry, [&](BB* bb) {
+            if (bb->isEmpty())
+                return;
+            auto branch = Branch::Cast(bb->last());
+            if (!branch)
+                return;
+            if (auto i = Instruction::Cast(branch->arg(0).val()))
+                condition[i].push_back(branch);
+        });
+        std::unordered_set<Branch*> removed;
+        for (auto& c : condition) {
+            auto uses = c.second;
+            if (uses.size() > 1) {
+                for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
+                    if (removed.count(*a))
+                        continue;
+                    for (auto b = a + 1; b != uses.end(); b++) {
+                        if (removed.count(*b))
+                            continue;
+                        auto bb1 = (*a)->bb();
+                        auto bb2 = (*b)->bb();
+                        if (dom.dominates(bb1, bb2)) {
+                            if (dom.dominates(bb1->trueBranch(), bb2)) {
+                                (*b)->arg(0).val() = True::instance();
+                            } else if (dom.dominates(bb1->falseBranch(), bb2)) {
+                                (*b)->arg(0).val() = False::instance();
+                            } else {
+
+                                bool success = true;
+
+                                BB* next = dom.immediateDominator(bb2);
+                                BB* target = bb2;
+
+                                while (next != bb1) {
+                                    if (dom.dominates(next, bb2))
+                                        target = next;
+
+                                    next = dom.immediateDominator(next);
+                                }
+
+                                auto p = new Phi;
+                                for (auto pred : target->predecessors()) {
+                                    if (dom.dominates(bb1->trueBranch(),
+                                                      pred)) {
+                                        p->addInput(pred, True::instance());
+                                    } else if (dom.dominates(bb1->falseBranch(),
+                                                             pred)) {
+                                        p->addInput(pred, False::instance());
+                                    } else {
+                                        success = false;
+                                    }
+                                }
+
+                                if (!success) {
+                                    delete p;
+                                    continue;
+                                }
+                                p->type = NativeType::test;
+                                target->insert(target->begin(), p);
+                                (*b)->arg(0).val() = p;
+                            }
+                            removed.insert(*b);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;

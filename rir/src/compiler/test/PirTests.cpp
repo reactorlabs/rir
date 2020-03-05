@@ -726,8 +726,9 @@ static Test tests[] = {
          }),
     Test("merge_missing",
          []() {
-             return hasLoadVar("theFun <- function(a) {if (a) {q <-1} else {if "
-                               "(a) 3 else q <- 2}; q}");
+             return hasLoadVar(
+                 "theFun <- function(a, b) {if (a) {q <-1} else {if "
+                 "(b) 3 else q <- 2}; q}");
          }),
     Test("PIR to RIR: basic",
          []() { return testPir2Rir("foo", "function() 42L", ""); }),
