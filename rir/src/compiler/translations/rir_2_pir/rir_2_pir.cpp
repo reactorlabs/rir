@@ -786,6 +786,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new ForSeqSize(top())));
         break;
 
+    case Opcode::xlength_:
+        push(insert(new XLength(pop())));
+        break;
+
     case Opcode::extract1_1_: {
         forceIfPromised(1); // <- ensure forced captured in framestate
         if (!inPromise())

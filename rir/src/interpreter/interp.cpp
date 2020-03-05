@@ -4059,6 +4059,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(xlength_) {
+            SEXP len = Rf_allocVector(INTSXP, 1);
+            INTEGER(len)[0] = Rf_xlength(ostack_pop(ctx));
+            ostack_push(ctx, len);
+            NEXT();
+        }
+
         INSTRUCTION(for_seq_size_) {
             SEXP seq = ostack_at(ctx, 0);
             // TODO: we should extract the length just once at the begining of

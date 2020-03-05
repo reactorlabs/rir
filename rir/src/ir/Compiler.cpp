@@ -1134,7 +1134,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::dup()
                    << BC::names()
                    << BC::swap()
-                   << BC::callBuiltin(1, symbol::tmp, getBuiltinFun("length")) // [names(X), length(X)]
+                   << BC::xlength_() // [names(X), length(X)]
                    << BC::dup()
                    << BC::push(Rf_mkString("list"))
                    << BC::swap()

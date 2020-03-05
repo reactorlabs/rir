@@ -84,6 +84,7 @@
     V(Minus)                                                                   \
     V(Identical)                                                               \
     V(ForSeqSize)                                                              \
+    V(XLength)                                                                 \
     V(FrameState)                                                              \
     V(Checkpoint)                                                              \
     V(Assume)                                                                  \

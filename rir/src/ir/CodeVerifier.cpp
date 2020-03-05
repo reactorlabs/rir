@@ -183,6 +183,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::dup_:
     case Opcode::dup2_:
     case Opcode::for_seq_size_:
+    case Opcode::xlength_:
     case Opcode::swap_:
     case Opcode::set_shared_:
     case Opcode::ensure_named_:

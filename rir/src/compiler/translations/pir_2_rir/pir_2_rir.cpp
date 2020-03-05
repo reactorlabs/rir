@@ -829,6 +829,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
+                SIMPLE(XLength, xlength_);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
                 SIMPLE(ChkMissing, checkMissing);

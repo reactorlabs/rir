@@ -326,6 +326,8 @@ int initializeTypes(LLVMContext& context) {
         llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
     NativeBuiltins::setNames.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+    NativeBuiltins::xlength_.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
 
     return 1;
 }

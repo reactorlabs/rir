@@ -30,6 +30,7 @@
     V(NESTED, dup, dup)                                                        \
     V(NESTED, dup2, dup2)                                                      \
     V(NESTED, forSeqSize, for_seq_size)                                        \
+    V(NESTED, xlength_, xlength)                                               \
     V(NESTED, inc, inc)                                                        \
     V(NESTED, close, close)                                                    \
     V(NESTED, add, add)                                                        \

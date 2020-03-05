@@ -2302,5 +2302,15 @@ NativeBuiltin NativeBuiltins::setNames = {
     (void*)&setNamesImpl,
 };
 
+SEXP xlength_Impl(SEXP val) {
+    SEXP len = Rf_allocVector(INTSXP, 1);
+    INTEGER(len)[0] = Rf_xlength(val);
+    return len;
+}
+NativeBuiltin NativeBuiltins::xlength_ = {
+    "xlength_",
+    (void*)&xlength_Impl,
+};
+
 }
 }

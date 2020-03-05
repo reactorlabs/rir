@@ -4775,6 +4775,11 @@ bool LowerFunctionLLVM::tryCompile() {
                                 loadSxp(i->arg(1).val())}));
                 break;
 
+            case Tag::XLength:
+                setVal(i, call(NativeBuiltins::xlength_,
+                               {loadSxp(i->arg(0).val())}));
+                break;
+
             case Tag::Int3:
             case Tag::PrintInvocation:
                 success = false;
