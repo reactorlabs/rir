@@ -724,16 +724,12 @@ static Test tests[] = {
                  "theFun <- function() {a<-FALSE; if (a) {q <-1} else "
                  "{if (a) q <- 3 else q <- 2}; q}");
          }),
-    /*
-          // it was removed because with the 'branch elim' optimization
-          // the LoadVar is not present anymore
-          Test("merge_missing",
-           []() {
-               return hasLoadVar("theFun <- function(a) {if (a) {q <-1} else {if
-       "
-                                 "(a) 3 else q <- 2}; q}");
-           }),
-           */
+    Test("merge_missing",
+         []() {
+             return hasLoadVar(
+                 "theFun <- function(a, b) {if (a) {q <-1} else {if "
+                 "(b) 3 else q <- 2}; q}");
+         }),
     Test("PIR to RIR: basic",
          []() { return testPir2Rir("foo", "function() 42L", ""); }),
     Test("PIR to RIR: simple argument",
