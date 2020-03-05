@@ -1282,6 +1282,7 @@ void Pir2Rir::lower(Code* code) {
 }
 
 void Pir2Rir::toCSSA(Code* code) {
+
     // For each Phi, insert copies
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         // TODO: move all phi's to the beginning, then insert the copies not
@@ -1289,6 +1290,7 @@ void Pir2Rir::toCSSA(Code* code) {
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
             if (auto phi = Phi::Cast(instr)) {
+
                 for (size_t i = 0; i < phi->nargs(); ++i) {
                     BB* pred = phi->inputAt(i);
                     // If pred is branch insert a new split block
@@ -1309,9 +1311,15 @@ void Pir2Rir::toCSSA(Code* code) {
                         auto copy = pred->insert(pred->end(), new PirCopy(iav));
                         phi->arg(i).val() = *copy;
                     } else {
+
                         auto val = phi->arg(i).val()->asRValue();
                         auto copy = pred->insert(pred->end(), new LdConst(val));
+
                         phi->arg(i).val() = *copy;
+
+                        if (phi->arg(i).type() == NativeType::test) {
+                            (*copy)->type = phi->arg(i).type();
+                        }
                     }
                 }
                 auto phiCopy = new PirCopy(phi);

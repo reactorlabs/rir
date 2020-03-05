@@ -249,56 +249,76 @@ cleanup_registry:
   script:
     - echo "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
 
-benchmark_rir_ginger:
+benchmark_llvm:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
   variables:
     GIT_STRATEGY: none
-  only:
-    - schedules
-  except:
-    changes:
-      - "experiments.lock"
   tags:
-    - benchmarks-ginger
+    - benchmarks
   script:
-    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS --environment=Prg-Ginger"
+    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data
-    expire_in: 6 month
-benchmark_pir_ginger:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    - schedules
-  except:
-    changes:
-      - "experiments.lock"
-  tags:
-    - benchmarks-ginger
-  script:
-    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS  --environment=Prg-Ginger"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 6 month
+    expire_in: 24 month
+
+# legacy benchmark server
 benchmark_llvm_ginger:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
   variables:
     GIT_STRATEGY: none
+  only:
+    - schedules
+  except:
+    changes:
+      - "experiments.lock"
   tags:
     - benchmarks-ginger
   script:
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS  --environment=Prg-Ginger"
+    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data
     expire_in: 24 month
-benchmark_gnur_ginger:
+
+benchmark_pir:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - schedules
+  except:
+    changes:
+      - "experiments.lock"
+  tags:
+    - benchmarks
+  script:
+    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS"
+  artifacts:
+    paths:
+    - benchmarks.data
+    expire_in: 6 month
+
+benchmark_rir:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+  stage: Benchmark
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - schedules
+  tags:
+    - benchmarks
+  script:
+    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS"
+  artifacts:
+    paths:
+    - benchmarks.data
+    expire_in: 6 month
+
+benchmark_gnur:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
   variables:
@@ -312,14 +332,14 @@ benchmark_gnur_ginger:
     changes:
       - "experiments.lock"
   tags:
-    - benchmarks-ginger
+    - benchmarks
   script:
-    - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS  --environment=Prg-Ginger"
+    - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data
     expire_in: 6 month
-benchmark_fastr_ginger:
+benchmark_fastr:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
   variables:
@@ -333,15 +353,16 @@ benchmark_fastr_ginger:
     changes:
       - "experiments.lock"
   tags:
-    - benchmarks-ginger
+    - benchmarks
   script:
-    - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS  --environment=Prg-Ginger"
-  allow_failure: true
+    - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data
     expire_in: 6 month
-benchmark_noEnvSpec_ginger:
+
+# experiments:
+benchmark_noEnvSpec:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
   variables:
@@ -352,14 +373,14 @@ benchmark_noEnvSpec_ginger:
     variables:
       - $DISABLE_SPEC == "1"
   tags:
-    - benchmarks-ginger
+    - benchmarks
   script:
-    - $REBENCH_RUN "e:PIR-LLVM-NOENVSPEC $REBENCH_OPTIONS -S"
+    - $REBENCH_RUN "e:PIR-LLVM-NOENVSPEC $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data
     expire_in: 24 month
-benchmark_noTypeSpec_ginger:
+benchmark_noTypeSpec:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
   variables:
@@ -370,14 +391,14 @@ benchmark_noTypeSpec_ginger:
     variables:
       - $DISABLE_SPEC == "1"
   tags:
-    - benchmarks-ginger
+    - benchmarks
   script:
-    - $REBENCH_RUN "e:PIR-LLVM-NOTYPESPEC $REBENCH_OPTIONS -S"
+    - $REBENCH_RUN "e:PIR-LLVM-NOTYPESPEC $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data
     expire_in: 24 month
-benchmark_noSpec_ginger:
+benchmark_noSpec:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
   variables:
@@ -388,9 +409,9 @@ benchmark_noSpec_ginger:
     variables:
       - $DISABLE_SPEC == "1"
   tags:
-    - benchmarks-ginger
+    - benchmarks
   script:
-    - $REBENCH_RUN "e:PIR-LLVM-NOSPECULATION $REBENCH_OPTIONS -S"
+    - $REBENCH_RUN "e:PIR-LLVM-NOSPECULATION $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data

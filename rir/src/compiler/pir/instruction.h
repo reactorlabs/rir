@@ -2318,18 +2318,17 @@ class VLI(Phi, Effects::None()) {
 
   public:
     Phi() : VarLenInstruction(PirType::any()) {}
-    Phi(const std::initializer_list<Value*>& vals,
-        const std::initializer_list<BB*>& inputs)
+    explicit Phi(const std::initializer_list<std::pair<BB*, Value*>>& inputs)
         : VarLenInstruction(PirType::any()) {
-        assert(vals.size() == inputs.size());
-        std::copy(inputs.begin(), inputs.end(), std::back_inserter(input));
-        for (auto a : vals)
-            VarLenInstruction::pushArg(a);
+        for (auto a : inputs)
+            addInput(a.first, a.second);
         assert(nargs() == inputs.size());
     }
     void printArgs(std::ostream& out, bool tty) const override;
     PirType inferType(const GetType& getType) const override final {
-        return mergedInputType(getType);
+        if (type.isRType())
+            return mergedInputType(getType);
+        return Instruction::inferType(getType);
     }
     void pushArg(Value* a, PirType t) override {
         assert(false && "use addInput");
