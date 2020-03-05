@@ -342,7 +342,7 @@ class Instruction : public Value {
         return otherwise;
     }
 
-    PirType inferedTypeForArtithmeticInstruction(const GetType& getType) const {
+    PirType inferredTypeForArithmeticInstruction(const GetType& getType) const {
         auto m = mergedInputType(getType);
         if (!m.maybeObj()) {
             auto t = PirType::bottom();
@@ -355,19 +355,12 @@ class Instruction : public Value {
             // e.g. TRUE + TRUE == 2
             if (m.maybe(RType::logical))
                 t = t | RType::integer;
-            // the binop result becomes NA if it can't be represented in a
-            // fixpoint integer (e.g. INT_MAX + 1 == NA)
-            // * the condition checks iff at least one of the arguments is an
-            // integer (doesn't happen with only logicals), and the result is an
-            // integer (doesn't happen with real coercion)
-            if (m.maybe(RType::integer) && t.maybe(RType::integer))
-                t.setMaybeNan();
             return type & t;
         }
         return type;
     }
 
-    PirType inferedTypeForLogicalInstruction(const GetType& getType) const {
+    PirType inferredTypeForLogicalInstruction(const GetType& getType) const {
         auto t = mergedInputType(getType);
         if (!t.maybeObj()) {
             auto res = PirType(RType::logical).notMissing();
@@ -381,7 +374,7 @@ class Instruction : public Value {
     }
 
     Effects
-    inferedEffectsForArtithmeticInstruction(const GetType& getType) const {
+    inferredEffectsForArithmeticInstruction(const GetType& getType) const {
         auto e = effects;
         auto t = mergedInputType(getType);
         if (!t.maybeObj())
@@ -396,7 +389,7 @@ class Instruction : public Value {
         return e;
     }
 
-    Effects inferedEffectsForLogicalInstruction(const GetType& getType) const {
+    Effects inferredEffectsForLogicalInstruction(const GetType& getType) const {
         auto e = effects;
         auto t = mergedInputType(getType);
         if (!t.maybeObj())
@@ -1586,7 +1579,7 @@ class FLIE(Colon, 3, Effects::Any()) {
     PirType inferType(const GetType& getType) const override;
 
     Effects inferEffects(const GetType& getType) const override {
-        return inferedEffectsForArtithmeticInstruction(getType);
+        return inferredEffectsForArithmeticInstruction(getType);
     }
 };
 
@@ -1639,14 +1632,14 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
     ArithmeticBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
         : Super(lhs, rhs, env, srcIdx) {}
 
-    using Super::inferedEffectsForArtithmeticInstruction;
-    using Super::inferedTypeForArtithmeticInstruction;
+    using Super::inferredEffectsForArithmeticInstruction;
+    using Super::inferredTypeForArithmeticInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferedTypeForArtithmeticInstruction(getType);
+        return inferredTypeForArithmeticInstruction(getType);
     }
     Effects inferEffects(const GetType& getType) const override {
-        return inferedEffectsForArtithmeticInstruction(getType);
+        return inferredEffectsForArithmeticInstruction(getType);
     }
 };
 
@@ -1696,14 +1689,14 @@ class LogicalBinop : public Binop<BASE, TAG> {
     LogicalBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
         : Super(lhs, rhs, env, srcIdx) {}
 
-    using Super::inferedEffectsForLogicalInstruction;
-    using Super::inferedTypeForLogicalInstruction;
+    using Super::inferredEffectsForLogicalInstruction;
+    using Super::inferredTypeForLogicalInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferedTypeForLogicalInstruction(getType);
+        return inferredTypeForLogicalInstruction(getType);
     }
     Effects inferEffects(const GetType& getType) const override {
-        return inferedEffectsForLogicalInstruction(getType);
+        return inferredEffectsForLogicalInstruction(getType);
     }
 };
 
@@ -1779,14 +1772,14 @@ class ArithmeticUnop : public Unop<BASE, TAG> {
     ArithmeticUnop(Value* val, Value* env, unsigned srcIdx)
         : Super(val, env, srcIdx) {}
 
-    using Super::inferedEffectsForArtithmeticInstruction;
-    using Super::inferedTypeForArtithmeticInstruction;
+    using Super::inferredEffectsForArithmeticInstruction;
+    using Super::inferredTypeForArithmeticInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferedTypeForArtithmeticInstruction(getType);
+        return inferredTypeForArithmeticInstruction(getType);
     }
     Effects inferEffects(const GetType& getType) const override {
-        return inferedEffectsForArtithmeticInstruction(getType);
+        return inferredEffectsForArithmeticInstruction(getType);
     }
 };
 
@@ -1798,14 +1791,14 @@ class LogicalUnop : public Unop<BASE, TAG> {
     LogicalUnop(Value* val, Value* env, unsigned srcIdx)
         : Super(val, env, srcIdx) {}
 
-    using Super::inferedEffectsForLogicalInstruction;
-    using Super::inferedTypeForLogicalInstruction;
+    using Super::inferredEffectsForLogicalInstruction;
+    using Super::inferredTypeForLogicalInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferedTypeForLogicalInstruction(getType);
+        return inferredTypeForLogicalInstruction(getType);
     }
     Effects inferEffects(const GetType& getType) const override {
-        return inferedEffectsForLogicalInstruction(getType);
+        return inferredEffectsForLogicalInstruction(getType);
     }
 };
 
