@@ -294,7 +294,7 @@ struct ForcedBy {
     }
 };
 
-//, DummyState, AnalysisDebugLevel::Taint
+//, DummyState, true, AnalysisDebugLevel::Taint
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
     using StaticAnalysis::PositioningStyle;
@@ -315,7 +315,11 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                         res.update();
             });
         };
-        if (auto f = Force::Cast(i)) {
+        if (auto phi = Phi::Cast(i)) {
+            if (phi->type.maybeLazy() && state.forcedBy.count(phi) == 0 &&
+                state.declare(phi))
+                res.update();
+        } else if (auto f = Force::Cast(i)) {
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
                 if (arg->type.maybeLazy()) {
                     if (state.forcedAt(arg, f))
