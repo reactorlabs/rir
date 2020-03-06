@@ -1643,7 +1643,10 @@ bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
     auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
 
     // 1. decide fastcase
-    bool fastcase = !inherits(lhs, "factor") || !inherits(rhs, "factor");
+    bool fastcase = (!inherits(lhs, "factor") || !inherits(rhs, "factor")) &&
+                    !((TYPEOF(lhs) == INTSXP || TYPEOF(lhs) == LGLSXP) &&
+                      TYPEOF(rhs) == INTSXP &&
+                      (*INTEGER(rhs) == INT_MIN || *INTEGER(rhs) == INT_MAX));
 
     // 2. in fastcase, run type error effects
     if (fastcase) {
@@ -1694,6 +1697,8 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
     double newRhsNum = (newLhsNum <= rhsNum)
                            ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
                            : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
+    assert(newRhsNum >= INT_MIN && newRhsNum <= INT_MAX &&
+           "nan RHS - should've went to slowcase");
     SEXP result = (TYPEOF(newLhs) == INTSXP) ? Rf_ScalarInteger((int)newRhsNum)
                                              : Rf_ScalarReal(newRhsNum);
     return result;

@@ -277,8 +277,12 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             cs << BC::colonInputEffects();
             cs.addSrc(seq);
             bool staticFastcase =
-                (isConstant(start) && !inherits(start, "factor")) ||
-                (isConstant(end) && !inherits(end, "factor"));
+                (isConstant(start) && !inherits(start, "factor") &&
+                 TYPEOF(start) != INTSXP && TYPEOF(start) != LGLSXP) ||
+                (isConstant(end) && !inherits(end, "factor") &&
+                 (TYPEOF(end) != INTSXP ||
+                  (TYPEOF(end) == INTSXP && *INTEGER(end) != INT_MIN &&
+                   *INTEGER(end) != INT_MAX)));
             if (staticFastcase) {
                 // We statically know that colonInputEffects is true, so we can
                 // just pop the result and don't need to compile the slowcase

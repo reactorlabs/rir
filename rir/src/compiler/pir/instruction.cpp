@@ -218,6 +218,30 @@ void Instruction::printGraph(std::ostream& out, bool tty) const {
     printEnv(out, tty);
 }
 
+bool Instruction::isColonInputEffectsAdd() const {
+    if (!Add::Cast(this)) {
+        return false;
+    }
+    std::unordered_set<const Instruction*> seen;
+    ArgumentValuePredicateIterator isColonCastLhs = [&](const Value* value) {
+        value = value->cFollowCasts();
+        if (ColonCastLhs::Cast(value)) {
+            return true;
+        } else if (Add::Cast(value) || Phi::Cast(value)) {
+            const Instruction* instr = (const Instruction*)value;
+            if (!seen.count(instr)) {
+                seen.insert(instr);
+                return instr->anyArg(isColonCastLhs);
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    };
+    return isColonCastLhs(arg(0).val());
+}
+
 bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
 
 bool Instruction::nonObjectArgs() {

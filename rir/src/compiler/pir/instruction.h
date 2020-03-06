@@ -342,6 +342,10 @@ class Instruction : public Value {
         return otherwise;
     }
 
+  private:
+    bool isColonInputEffectsAdd() const;
+
+  protected:
     PirType inferredTypeForArithmeticInstruction(const GetType& getType) const {
         auto m = mergedInputType(getType);
         if (!m.maybeObj()) {
@@ -355,6 +359,17 @@ class Instruction : public Value {
             // e.g. TRUE + TRUE == 2
             if (m.maybe(RType::logical))
                 t = t | RType::integer;
+            // the binop result becomes NA if it can't be represented in a
+            // fixpoint integer (e.g. INT_MAX + 1 == NA)
+            // * the condition checks iff at least one of the arguments is an
+            // integer (doesn't happen with only logicals), and the result is an
+            // integer (doesn't happen with real coercion)
+            // However, indices in simple for loops we will never be NA,
+            // and skipping the NA check causes major performance benefits, so
+            // we explicitly handle that case
+            if (m.maybe(RType::integer) && t.maybe(RType::integer) &&
+                !isColonInputEffectsAdd())
+                t.setMaybeNan();
             return type & t;
         }
         return type;
