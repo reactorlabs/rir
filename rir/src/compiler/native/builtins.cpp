@@ -2284,16 +2284,15 @@ NativeBuiltin NativeBuiltins::colonCastRhs = {
     (void*)rir::colonCastRhs,
 };
 
-SEXP namesImpl(SEXP val) {
-    Rf_getAttrib(val, R_NamesSymbol);
-    return val;
-}
+SEXP namesImpl(SEXP val) { return Rf_getAttrib(val, R_NamesSymbol); }
 NativeBuiltin NativeBuiltins::names = {
     "names",
     (void*)&namesImpl,
 };
 
 SEXP setNamesImpl(SEXP val, SEXP names) {
+    // If names is R_NilValue, setAttrib doesn't return the val but rather
+    // R_NilValue, hence we cannot return val directly...
     Rf_setAttrib(val, R_NamesSymbol, names);
     return val;
 }
