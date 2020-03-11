@@ -1187,7 +1187,7 @@ void Pir2Rir::lower(Code* code) {
             if (auto call = CallInstruction::CastCall(*it))
                 call->clearFrameState();
             if (auto b = CallSafeBuiltin::Cast(*it)) {
-                if (b->builtinId == blt("length") && it != bb->end()) {
+                if (b->builtinId == blt("length") && next != bb->end()) {
                     if (auto t = IsType::Cast(*(it + 1))) {
                         if (t->typeTest.isA(PirType::simpleScalarInt()) &&
                             t->arg(0).val() == b) {
