@@ -1390,16 +1390,18 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         BINOP_FALLBACK(#op);                                                   \
     } while (false)
 
-static SEXP seq_int(int n1, int n2) {
+SEXP seq_int(int n1, int n2) {
     int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
     SEXP ans = Rf_allocVector(INTSXP, n);
     int* data = INTEGER(ans);
-    if (n1 <= n2) {
-        while (n1 <= n2)
-            *data++ = n1++;
+    int64_t current = n1;
+    int64_t end = n2;
+    if (current <= end) {
+        while (current <= end)
+            *data++ = current++;
     } else {
-        while (n1 >= n2)
-            *data++ = n1--;
+        while (current >= end)
+            *data++ = current--;
     }
     return ans;
 }
