@@ -116,7 +116,7 @@ if [ ! -d $LLVM_DIR ]; then
         mv clang+llvm-8.0.0-x86_64-apple-darwin llvm-8.0.0
     else
         if [ ! -f "clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz" ]; then
-            curl L http://releases.llvm.org/8.0.0/clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz > clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+            curl -L http://releases.llvm.org/8.0.0/clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz > clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
         fi
         tar xf clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
         mv clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04 llvm-8.0.0
