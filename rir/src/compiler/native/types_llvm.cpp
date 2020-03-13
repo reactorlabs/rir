@@ -319,7 +319,7 @@ int initializeTypes(LLVMContext& context) {
         llvm::FunctionType::get(t::Double, {t::SEXP}, false);
 
     NativeBuiltins::colonInputEffects.llvmSignature =
-        llvm::FunctionType::get(t::Int, {t::SEXP, t::SEXP, t::Int}, false);
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::Int}, false);
     NativeBuiltins::colonCastLhs.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
     NativeBuiltins::colonCastRhs.llvmSignature =

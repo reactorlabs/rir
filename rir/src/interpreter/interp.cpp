@@ -1655,7 +1655,7 @@ static bool doubleCanBeCastedToInteger(double n) {
     return n >= INT_MIN && n <= INT_MAX && (int)n == n;
 }
 
-bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
+SEXP colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
     auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
 
     // 1. decide fastcase
@@ -1688,7 +1688,7 @@ bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
                            (int)rhsLen);
     }
 
-    return fastcase;
+    return fastcase ? R_TrueValue : R_FalseValue;
 }
 
 SEXP colonCastLhs(SEXP lhs) {
@@ -3225,8 +3225,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
 
-            bool fastcase = colonInputEffects(lhs, rhs, 0);
-            ostack_push(ctx, fastcase ? R_TrueValue : R_FalseValue);
+            SEXP fastcaseSexp = colonInputEffects(lhs, rhs, 0);
+            ostack_push(ctx, fastcaseSexp);
 
             NEXT();
         }
