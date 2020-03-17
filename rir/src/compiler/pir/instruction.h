@@ -1929,9 +1929,17 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         assert(fs);
         pushArg(fs, NativeType::frameState);
         pushArg(fun, RType::closure);
+
+        // Calling builtins with names or ... is not supported by callBuiltin,
+        // that's why those calls go through the normall call BC.
+        auto argtype =
+            PirType(RType::prom) | RType::missing | RType::expandedDots;
+        if (auto con = LdConst::Cast(fun))
+            if (TYPEOF(con->c()) == BUILTINSXP)
+                argtype = argtype | PirType::val();
+
         for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], PirType(RType::prom) | RType::missing |
-                                 RType::expandedDots);
+            pushArg(args[i], argtype);
     }
 
     Closure* tryGetCls() const override final {

@@ -1044,9 +1044,16 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
+
+    // Calling builtins with names or ... is not supported by callBuiltin,
+    // that's why those calls go through the normall call BC.
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    if (auto con = LdConst::Cast(fun))
+        if (TYPEOF(con->c()) == BUILTINSXP)
+            argtype = argtype | PirType::val();
+
     for (unsigned i = 0; i < args.size(); ++i) {
-        pushArg(args[i],
-                PirType(RType::prom) | RType::missing | RType::expandedDots);
+        pushArg(args[i], argtype);
         auto name = names_[i];
         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
         names.push_back(name);
@@ -1059,9 +1066,16 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
+
+    // Calling builtins with names or ... is not supported by callBuiltin,
+    // that's why those calls go through the normall call BC.
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    if (auto con = LdConst::Cast(fun))
+        if (TYPEOF(con->c()) == BUILTINSXP)
+            argtype = argtype | PirType::val();
+
     for (unsigned i = 0; i < args.size(); ++i) {
-        pushArg(args[i],
-                PirType(RType::prom) | RType::missing | RType::expandedDots);
+        pushArg(args[i], argtype);
         auto name = Pool::get(names_[i]);
         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
         names.push_back(name);
