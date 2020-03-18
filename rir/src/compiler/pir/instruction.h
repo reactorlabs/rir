@@ -343,7 +343,7 @@ class Instruction : public Value {
     }
 
   private:
-    bool isColonInputEffectsAdd() const;
+    bool willDefinitelyNotOverflow() const;
 
   protected:
     PirType inferredTypeForArithmeticInstruction(const GetType& getType) const {
@@ -364,11 +364,8 @@ class Instruction : public Value {
             // * the condition checks iff at least one of the arguments is an
             // integer (doesn't happen with only logicals), and the result is an
             // integer (doesn't happen with real coercion)
-            // However, indices in simple for loops we will never be NA,
-            // and skipping the NA check causes major performance benefits, so
-            // we explicitly handle that case
             if (m.maybe(RType::integer) && t.maybe(RType::integer) &&
-                !isColonInputEffectsAdd())
+                willDefinitelyNotOverflow())
                 t.setMaybeNan();
             return type & t;
         }
