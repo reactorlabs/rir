@@ -160,3 +160,12 @@ f(2147483646L, 2147483647L)
 f(2147483646L, 2147483647L)
 f(-2147483645L, -2147483646L)
 f(-2147483645L, -2147483646L)
+
+scalarFor <- function(n) {
+  for (i in 1:n) {
+    
+  }
+  FALSE
+}
+
+stopifnot(tryCatch(scalarFor(10000000000L), error=function(err) TRUE))

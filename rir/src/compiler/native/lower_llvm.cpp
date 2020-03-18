@@ -1663,24 +1663,21 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
 void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
                                 BasicBlock* notNa) {
     assert(type.isA(PirType::num().scalar()));
+    if (!notNa)
+        notNa = BasicBlock::Create(C, "", fun);
     if (!type.maybeNan()) {
         // Don't actually check na because we statically know it's not
-        if (!notNa)
-            notNa = BasicBlock::Create(C, "", fun);
         // Was having trouble using just CreateBr. The conditional jump will get
         // optimized away
         builder.CreateCondBr(c(1), notNa, isNa, branchAlwaysTrue);
         builder.SetInsertPoint(notNa);
     } else {
         // Actually check na
-        if (!notNa)
-            notNa = BasicBlock::Create(C, "", fun);
         if (v->getType() == t::Double) {
             auto isNotNa = builder.CreateFCmpUEQ(v, v);
             builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
         } else {
             assert(v->getType() == t::Int);
-
             auto isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
             builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
         }
