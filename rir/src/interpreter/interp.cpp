@@ -1637,7 +1637,7 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     return args.size();
 }
 
-static bool doubleCanBeCastedToInteger(double n) {
+bool doubleCanBeCastedToInteger(double n) {
     return n >= INT_MIN && n <= INT_MAX && (int)n == n;
 }
 
@@ -1645,10 +1645,18 @@ SEXP colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
     auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
 
     // 1. decide fastcase
-    bool fastcase = (!inherits(lhs, "factor") || !inherits(rhs, "factor")) &&
-                    !((TYPEOF(lhs) == INTSXP || TYPEOF(lhs) == LGLSXP) &&
-                      TYPEOF(rhs) == INTSXP &&
-                      (*INTEGER(rhs) == INT_MIN || *INTEGER(rhs) == INT_MAX));
+    bool fastcase =
+        (!inherits(lhs, "factor") || !inherits(rhs, "factor")) &&
+        !((TYPEOF(lhs) == INTSXP || TYPEOF(lhs) == LGLSXP ||
+           (TYPEOF(lhs) == REALSXP && doubleCanBeCastedToInteger(*REAL(lhs))) ||
+           (TYPEOF(lhs) == CPLXSXP &&
+            doubleCanBeCastedToInteger(COMPLEX(lhs)->r))) &&
+          ((TYPEOF(rhs) == INTSXP &&
+            (*INTEGER(rhs) == INT_MIN || *INTEGER(rhs) == INT_MAX)) ||
+           (TYPEOF(rhs) == REALSXP &&
+            (*REAL(rhs) <= INT_MIN || *REAL(rhs) >= INT_MAX)) ||
+           (TYPEOF(rhs) == CPLXSXP &&
+            (COMPLEX(rhs)->r <= INT_MIN || COMPLEX(rhs)->r >= INT_MAX))));
 
     // 2. in fastcase, run type error effects
     if (fastcase) {
@@ -1699,8 +1707,9 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
     double newRhsNum = (newLhsNum <= rhsNum)
                            ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
                            : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
-    assert(newRhsNum >= INT_MIN && newRhsNum <= INT_MAX &&
-           "nan RHS - should've went to slowcase");
+    // nan RHS - should've went to slowcase
+    assert(TYPEOF(newLhs) != INTSXP ||
+           (newRhsNum >= INT_MIN && newRhsNum <= INT_MAX));
     SEXP result = (TYPEOF(newLhs) == INTSXP) ? Rf_ScalarInteger((int)newRhsNum)
                                              : Rf_ScalarReal(newRhsNum);
     return result;
