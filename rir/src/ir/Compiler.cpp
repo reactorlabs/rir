@@ -1076,9 +1076,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         SEXP fun = CAR(inAst);
 
         if (TYPEOF(fun) == SYMSXP) {
-            for (RListIter a = args.begin(); a != args.end(); ++a)
-                if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
-                    return false;
+            Assumptions assumptions;
 
             SEXP internal = fun->u.symsxp.internal;
             int i = ((sexprec_rjit*)internal)->u.i;
@@ -1086,9 +1084,39 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // If the .Internal call goes to a builtin, then we call eagerly
             if (R_FunTab[i].eval % 10 == 1) {
                 emitGuardForNamePrimitive(cs, symbol::Internal);
-                for (SEXP a : args)
-                    compileExpr(ctx, a);
-                cs << BC::callBuiltin(args.length(), inAst, internal);
+
+                bool hasDots = false;
+                for (RListIter arg = args.begin(); arg != RList::end(); ++arg)
+                    if (*arg == R_DotsSymbol)
+                        hasDots = true;
+                if (hasDots)
+                    cs << BC::push(internal);
+
+                std::vector<SEXP> names;
+                for (RListIter arg = args.begin(); arg != RList::end(); ++arg) {
+                    if (*arg == R_DotsSymbol) {
+                        cs << BC::push(R_DotsSymbol);
+                        names.push_back(R_DotsSymbol);
+                        continue;
+                    }
+
+                    if (hasDots)
+                        names.push_back(arg.tag());
+
+                    if (*arg == R_MissingArg) {
+                        cs << BC::push(R_MissingArg);
+                        continue;
+                    }
+
+                    compileExpr(ctx, *arg);
+                }
+
+                if (hasDots) {
+                    cs << BC::callDots(args.length(), names, inAst,
+                                       Assumptions());
+                } else {
+                    cs << BC::callBuiltin(args.length(), inAst, internal);
+                }
                 if (voidContext)
                     cs << BC::pop();
 

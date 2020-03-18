@@ -486,6 +486,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         }
 
+        bool staticCallee = false;
+        if (auto con = LdConst::Cast(callee)) {
+            monomorphic = con->c();
+            staticCallee = true;
+        }
+
         bool monomorphicClosure =
             monomorphic && isValidClosureSEXP(monomorphic);
         bool monomorphicBuiltin = monomorphic &&
@@ -540,8 +546,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Assume* assumption = nullptr;
         Value* guardedCallee = callee;
         // Insert a guard if we want to speculate
-        if (monomorphicBuiltin || monomorphicClosure ||
-            monomorphicInnerFunction) {
+        if (!staticCallee && (monomorphicBuiltin || monomorphicClosure ||
+                              monomorphicInnerFunction)) {
             // We use ldvar instead of ldfun for the guard. The reason is that
             // ldfun can force promises, which is a pain for our optimizer to
             // deal with. If we use a ldvar here, the actual ldfun will be
