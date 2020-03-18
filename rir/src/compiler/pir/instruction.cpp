@@ -218,20 +218,34 @@ void Instruction::printGraph(std::ostream& out, bool tty) const {
     printEnv(out, tty);
 }
 
-bool Instruction::isColonInputEffectsAdd() const {
-    if (!Add::Cast(this)) {
+bool Instruction::willDefinitelyNotOverflow() const {
+    if (!Add::Cast(this) && !Sub::Cast(this)) {
         return false;
     }
+    UsesTree uses(bb()->owner);
     std::unordered_set<const Instruction*> seen;
-    ArgumentValuePredicateIterator isColonCastLhs = [&](const Value* value) {
+    ArgumentValuePredicateIterator isSimpleForIndex = [&](const Value* value) {
         value = value->cFollowCasts();
-        if (ColonCastLhs::Cast(value)) {
+        auto isComparedToColonCastRhs = [&]() {
+            if (auto instruction =
+                    Instruction::Cast(const_cast<Value*>(value))) {
+                for (auto use : uses.at(instruction)) {
+                    if (use->anyArg([&](const Value* arg) {
+                            return ColonCastRhs::Cast(arg);
+                        })) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        if (ColonCastLhs::Cast(value) || isComparedToColonCastRhs()) {
             return true;
-        } else if (Add::Cast(value) || Phi::Cast(value)) {
+        } else if (Add::Cast(value) || Sub::Cast(value) || Phi::Cast(value)) {
             const Instruction* instr = (const Instruction*)value;
             if (!seen.count(instr)) {
                 seen.insert(instr);
-                return instr->anyArg(isColonCastLhs);
+                return instr->anyArg(isSimpleForIndex);
             } else {
                 return false;
             }
@@ -239,7 +253,7 @@ bool Instruction::isColonInputEffectsAdd() const {
             return false;
         }
     };
-    return isColonCastLhs(arg(0).val());
+    return isSimpleForIndex(arg(0).val());
 }
 
 bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
