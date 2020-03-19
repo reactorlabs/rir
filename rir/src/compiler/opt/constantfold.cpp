@@ -2,6 +2,7 @@
 #include "../transform/bb.h"
 #include "../translations/rir_compiler.h"
 #include "../util/cfg.h"
+#include "../util/phi_placement.h"
 #include "../util/visitor.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
@@ -120,6 +121,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                          LogStream&) const {
     std::unordered_map<BB*, bool> branchRemoval;
     DominanceGraph dom(function);
+    DominanceFrontier dfront(function, dom);
 
     {
         // Branch Elimination
@@ -133,7 +135,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         //
         // and even constantfold the `b` branch if either
         // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach `b`.
-        std::unordered_map<Instruction*, std::list<Branch*>> condition;
+        std::unordered_map<Instruction*, std::vector<Branch*>> condition;
         Visitor::run(function->entry, [&](BB* bb) {
             if (bb->isEmpty())
                 return;
@@ -150,38 +152,62 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             removed.clear();
             auto uses = c.second;
             if (uses.size() > 1) {
-                for (auto a = uses.begin(); a.next != uses.end(); a++) {
+                for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
                     if (removed.count(*a))
                         continue;
 
-                    auto b = a;
-                    b++;
-                    for (; b != uses.end(); b++) {
-                        
+                    auto phiPlaced = false;
+
+                    for (auto b = a + 1; b != uses.end(); b++) {
+
                         if (removed.count(*b))
                             continue;
                         auto bb1 = (*a)->bb();
                         auto bb2 = (*b)->bb();
                         if (dom.dominates(bb1, bb2)) {
-                            auto succeded = false;
                             if (dom.dominates(bb1->trueBranch(), bb2)) {
                                 (*b)->arg(0).val() = True::instance();
-                                succeded = true;
                             } else if (dom.dominates(bb1->falseBranch(), bb2)) {
                                 (*b)->arg(0).val() = False::instance();
-                                succeded = true;
-                            } 
-                            
-                            if (succeded)
-                                removed.insert(*b);
+                            } else {
+
+                                if (!phiPlaced) {
+                                    // place phi  ****
+                                    std::unordered_map<BB*, Value*> inputs;
+                                    inputs[bb1->trueBranch()] =
+                                        True::instance();
+                                    inputs[bb1->falseBranch()] =
+                                        False::instance();
+
+                                    auto pl = PhiPlacement(function, inputs,
+                                                           dom, dfront);
+
+                                    for (auto& placement : pl.placement) {
+                                        auto targetForPhi = placement.first;
+
+                                        auto phi = new Phi;
+
+                                        for (auto& input : placement.second) {
+                                            phi->addInput(input.inputBlock,
+                                                          input.aValue);
+                                        }
+                                        phi->type = NativeType::test;
+                                        targetForPhi->insert(
+                                            targetForPhi->begin(), phi);
+                                        (*b)->arg(0).val() = phi;
+                                    }
+
+                                    phiPlaced = true;
+                                }
+                            }
+
+                            removed.insert(*b);
                         }
                     }
                 }
-
-                for (auto it = removed.begin(); it != removed.end(); it++) 
-                    uses.remove(*it); 
             }
         }
+
 /*
         // second pass: phi placement. 
         for (auto& c : condition) {
