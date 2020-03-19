@@ -11,7 +11,13 @@
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
 
+//#include <set>
 #include <unordered_set>
+
+#include <list>
+#include <iterator>
+
+
 
 namespace {
 
@@ -127,7 +133,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         //
         // and even constantfold the `b` branch if either
         // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach `b`.
-        std::unordered_map<Instruction*, std::vector<Branch*>> condition;
+        std::unordered_map<Instruction*, std::list<Branch*>> condition;
         Visitor::run(function->entry, [&](BB* bb) {
             if (bb->isEmpty())
                 return;
@@ -138,63 +144,86 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 condition[i].push_back(branch);
         });
         std::unordered_set<Branch*> removed;
+
+        // first pass , solve the easy cases where a.trueBranch() dom b OR a.falseBranch() dom b
         for (auto& c : condition) {
+            removed.clear();
             auto uses = c.second;
             if (uses.size() > 1) {
-                for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
+                for (auto a = uses.begin(); a.next != uses.end(); a++) {
                     if (removed.count(*a))
                         continue;
-                    for (auto b = a + 1; b != uses.end(); b++) {
+
+                    auto b = a;
+                    b++;
+                    for (; b != uses.end(); b++) {
+                        
                         if (removed.count(*b))
                             continue;
                         auto bb1 = (*a)->bb();
                         auto bb2 = (*b)->bb();
                         if (dom.dominates(bb1, bb2)) {
+                            auto succeded = false;
                             if (dom.dominates(bb1->trueBranch(), bb2)) {
                                 (*b)->arg(0).val() = True::instance();
+                                succeded = true;
                             } else if (dom.dominates(bb1->falseBranch(), bb2)) {
                                 (*b)->arg(0).val() = False::instance();
-                            } else {
+                                succeded = true;
+                            } 
+                            
+                            if (succeded)
+                                removed.insert(*b);
+                        }
+                    }
+                }
 
-                                bool success = true;
+                for (auto it = removed.begin(); it != removed.end(); it++) 
+                    uses.remove(*it); 
+            }
+        }
+/*
+        // second pass: phi placement. 
+        for (auto& c : condition) {
+            removed.clear();
+            auto uses = c.second;
+            if (uses.size() > 1) {
+                for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
+                     if (removed.count(*b))
+                        continue;
+  
+                    auto phiPlaced = false;
+     
+                    for (auto b = a + 1; b != uses.end(); b++) {
+                        if (removed.count(*b))
+                            continue;
+                                   
+                        auto bb1 = (*a)->bb();
+                        auto bb2 = (*b)->bb();
+                        if (dom.dominates(bb1, bb2)) {
 
-                                BB* next = dom.immediateDominator(bb2);
-                                BB* target = bb2;
+                            if (!phiPlaced) {
+                                // place phi  ****
+                                phiPlaced = true;
 
-                                while (next != bb1) {
-                                    if (dom.dominates(next, bb2))
-                                        target = next;
-
-                                    next = dom.immediateDominator(next);
-                                }
-
-                                auto p = new Phi;
-                                for (auto pred : target->predecessors()) {
-                                    if (dom.dominates(bb1->trueBranch(),
-                                                      pred)) {
-                                        p->addInput(pred, True::instance());
-                                    } else if (dom.dominates(bb1->falseBranch(),
-                                                             pred)) {
-                                        p->addInput(pred, False::instance());
-                                    } else {
-                                        success = false;
-                                    }
-                                }
-
-                                if (!success) {
-                                    delete p;
-                                    continue;
-                                }
-                                p->type = NativeType::test;
-                                target->insert(target->begin(), p);
-                                (*b)->arg(0).val() = p;
                             }
+
+                            //replace  b with x
+                            //auto p = new Phi;
+                            //p->type = NativeType::test;
+                            //target->insert(target->begin(), p);
+                            //(*b)->arg(0).val() = p;
+
+
                             removed.insert(*b);
                         }
                     }
                 }
+
             }
         }
+        */
+                             
     }
 
     Visitor::run(function->entry, [&](BB* bb) {
