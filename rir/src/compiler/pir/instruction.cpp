@@ -226,20 +226,18 @@ bool Instruction::willDefinitelyNotOverflow() const {
     std::unordered_set<const Instruction*> seen;
     ArgumentValuePredicateIterator isSimpleForIndex = [&](const Value* value) {
         value = value->cFollowCasts();
-        auto isComparedToColonCastRhs = [&]() {
+        auto isUsedByColonCastRhs = [&]() {
             if (auto instruction =
                     Instruction::Cast(const_cast<Value*>(value))) {
                 for (auto use : uses.at(instruction)) {
-                    if (use->anyArg([&](const Value* arg) {
-                            return ColonCastRhs::Cast(arg);
-                        })) {
+                    if (ColonCastRhs::Cast(use)) {
                         return true;
                     }
                 }
             }
             return false;
         };
-        if (ColonCastLhs::Cast(value) || isComparedToColonCastRhs()) {
+        if (ColonCastLhs::Cast(value) || isUsedByColonCastRhs()) {
             return true;
         } else if (Add::Cast(value) || Sub::Cast(value) || Phi::Cast(value)) {
             const Instruction* instr = (const Instruction*)value;
