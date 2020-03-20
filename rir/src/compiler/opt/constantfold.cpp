@@ -463,12 +463,14 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
-                } else if (builtinId == blt("is.na") && nargs == 1) {
+                } else if ((builtinId == blt("is.na") ||
+                            builtinId == blt("is.nan")) &&
+                           nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     static PirType typeThatDoesntError =
                         (PirType::num() | RType::chr | RType::str | RType::vec)
                             .orAttribs();
-                    if (typeThatDoesntError.isA(t) && !t.maybeNan()) {
+                    if (typeThatDoesntError.isA(t) && !t.maybeNAOrNaN()) {
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }

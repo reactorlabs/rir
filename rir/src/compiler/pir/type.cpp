@@ -149,7 +149,7 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         if (Rf_length(e) == 1)
             flags_.reset(TypeFlags::maybeNotScalar);
         if (!containsNan(e))
-            flags_.reset(TypeFlags::maybeNan);
+            flags_.reset(TypeFlags::maybeNAOrNaN);
     }
 }
 
@@ -166,7 +166,7 @@ void PirType::merge(const ObservedValues& other) {
         flags_.set(TypeFlags::maybeObject);
         flags_.set(TypeFlags::maybeAttrib);
         flags_.set(TypeFlags::maybeNotScalar);
-        flags_.set(TypeFlags::maybeNan);
+        flags_.set(TypeFlags::maybeNAOrNaN);
         return;
     }
 
@@ -178,7 +178,7 @@ void PirType::merge(const ObservedValues& other) {
             flags_.set(TypeFlags::maybeAttrib);
         if (!record.scalar)
             flags_.set(TypeFlags::maybeNotScalar);
-        flags_.set(TypeFlags::maybeNan);
+        flags_.set(TypeFlags::maybeNAOrNaN);
 
         merge(record.sexptype);
     }
