@@ -150,7 +150,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         // first pass , solve the easy cases where a.trueBranch() dom b OR a.falseBranch() dom b
         for (auto& c : condition) {
             removed.clear();
-            auto uses = c.second;
+            auto& uses = c.second;
             if (uses.size() > 1) {
                 for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
                     if (removed.count(*a))
@@ -172,7 +172,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             } else {
 
                                 if (!phiPlaced) {
-                                    // place phi  ****
+                                    // create and place phi
                                     std::unordered_map<BB*, Value*> inputs;
                                     inputs[bb1->trueBranch()] =
                                         True::instance();
@@ -208,47 +208,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             }
         }
 
-/*
-        // second pass: phi placement. 
-        for (auto& c : condition) {
-            removed.clear();
-            auto uses = c.second;
-            if (uses.size() > 1) {
-                for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
-                     if (removed.count(*b))
-                        continue;
-  
-                    auto phiPlaced = false;
-     
-                    for (auto b = a + 1; b != uses.end(); b++) {
-                        if (removed.count(*b))
-                            continue;
-                                   
-                        auto bb1 = (*a)->bb();
-                        auto bb2 = (*b)->bb();
-                        if (dom.dominates(bb1, bb2)) {
-
-                            if (!phiPlaced) {
-                                // place phi  ****
-                                phiPlaced = true;
-
-                            }
-
-                            //replace  b with x
-                            //auto p = new Phi;
-                            //p->type = NativeType::test;
-                            //target->insert(target->begin(), p);
-                            //(*b)->arg(0).val() = p;
-
-
-                            removed.insert(*b);
-                        }
-                    }
-                }
-
-            }
-        }
-        */
                              
     }
 
