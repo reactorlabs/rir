@@ -366,7 +366,7 @@ class Instruction : public Value {
             // integer (doesn't happen with real coercion)
             if (m.maybe(RType::integer) && t.maybe(RType::integer) &&
                 willDefinitelyNotOverflow())
-                t.setMaybeNan();
+                t.setMaybeNAOrNaN();
             return type & t;
         }
         return type;
@@ -378,8 +378,8 @@ class Instruction : public Value {
             auto res = PirType(RType::logical).notMissing();
             if (t.isScalar())
                 res.setScalar();
-            if (!t.maybeNan())
-                res.setNotNan();
+            if (!t.maybeNAOrNaN())
+                res.setNotNAOrNaN();
             return type & res;
         }
         return type;
@@ -1185,14 +1185,14 @@ class FLI(ColonInputEffects, 2, Effect::Error) {
 class FLI(ColonCastLhs, 1, Effect::Error) {
   public:
     explicit ColonCastLhs(Value* lhs, unsigned srcIdx)
-        : FixedLenInstruction(PirType::intReal().scalar().notNan(),
+        : FixedLenInstruction(PirType::intReal().scalar().notNAOrNaN(),
                               {{PirType::val()}}, {{lhs}}, srcIdx) {}
 
     Value* lhs() const { return arg<0>().val(); }
 
     PirType inferType(const GetType& getType) const override final {
         if (getType(lhs()).isA(RType::integer)) {
-            return PirType(RType::integer).scalar().notNan();
+            return PirType(RType::integer).scalar().notNAOrNaN();
         } else {
             return type;
         }
@@ -1203,8 +1203,8 @@ class FLI(ColonCastRhs, 2, Effect::Error) {
   public:
     explicit ColonCastRhs(Value* newLhs, Value* rhs, unsigned srcIdx)
         : FixedLenInstruction(
-              PirType::intReal().scalar().notNan(),
-              {{PirType::intReal().scalar().notNan(), PirType::val()}},
+              PirType::intReal().scalar().notNAOrNaN(),
+              {{PirType::intReal().scalar().notNAOrNaN(), PirType::val()}},
               {{newLhs, rhs}}, srcIdx) {}
 
     Value* newLhs() const { return arg<0>().val(); }
@@ -1212,7 +1212,7 @@ class FLI(ColonCastRhs, 2, Effect::Error) {
     PirType inferType(const GetType& getType) const override final {
         // This is intended - lhs type determines rhs
         if (getType(newLhs()).isA(RType::integer)) {
-            return PirType(RType::integer).scalar().notNan();
+            return PirType(RType::integer).scalar().notNAOrNaN();
         } else {
             return type;
         }
@@ -1675,7 +1675,7 @@ class Div : public ArithmeticBinop<Div, Tag::Div> {
 
     PirType inferType(const GetType& getType) const override final {
         // 0 / 0 = NaN
-        auto t = ArithmeticBinop<Div, Tag::Div>::inferType(getType).orNan();
+        auto t = ArithmeticBinop<Div, Tag::Div>::inferType(getType).orNAOrNaN();
         if (t.maybe(RType::integer) || t.maybe(RType::logical))
             return t | RType::real;
         return t;
@@ -1689,7 +1689,7 @@ class Mod : public ArithmeticBinop<Mod, Tag::Mod> {
 
     PirType inferType(const GetType& getType) const override final {
         // 0 %% 0 = NaN
-        return ArithmeticBinop<Mod, Tag::Mod>::inferType(getType).orNan();
+        return ArithmeticBinop<Mod, Tag::Mod>::inferType(getType).orNAOrNaN();
     }
 };
 

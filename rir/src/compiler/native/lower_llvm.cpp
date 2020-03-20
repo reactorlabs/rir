@@ -1665,7 +1665,7 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
     assert(type.isA(PirType::num().scalar()));
     if (!notNa)
         notNa = BasicBlock::Create(C, "", fun);
-    if (!type.maybeNan()) {
+    if (!type.maybeNAOrNaN()) {
         // Don't actually check na because we statically know it's not
         // Was having trouble using just CreateBr. The conditional jump will get
         // optimized away
@@ -1915,7 +1915,7 @@ void LowerFunctionLLVM::compileBinop(
     auto b = load(rhs, rhsRep);
 
     auto checkNa = [&](llvm::Value* llvmValue, PirType type, Representation r) {
-        if (type.maybeNan()) {
+        if (type.maybeNAOrNaN()) {
             if (r == Representation::Integer) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(C, "isNa", fun);
@@ -1990,7 +1990,7 @@ void LowerFunctionLLVM::compileUnop(
     auto a = load(arg, argRep);
 
     auto checkNa = [&](llvm::Value* value, PirType type, Representation r) {
-        if (type.maybeNan()) {
+        if (type.maybeNAOrNaN()) {
             if (r == Representation::Integer) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(C, "isNa", fun);
@@ -2532,7 +2532,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
                                 auto naCheck = [&](Value* v, llvm::Value* asInt,
                                                    Representation rep) {
-                                    if (v->type.maybeNan()) {
+                                    if (v->type.maybeNAOrNaN()) {
                                         if (rep == Representation::Real) {
                                             auto vv = load(v, rep);
                                             if (!isNaBr)
