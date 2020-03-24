@@ -236,21 +236,6 @@ benchmark_llvm:
     - benchmarks.data
     expire_in: 24 month
 
-# legacy benchmark server
-benchmark_llvm_ginger:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  tags:
-    - benchmarks-ginger
-  script:
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 24 month
-
 benchmark_pir:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
