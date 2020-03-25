@@ -609,6 +609,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             switch (instr->tag) {
             case Tag::LdDots: {
                 SLOWASSERT(instr->usesAreOnly(bb, {Tag::ExpandDots}));
+                auto mkenv = MkEnv::Cast(instr->env());
+                if (mkenv && mkenv->stub) {
+                    cb.add(
+                        BC::ldvarNoForceStubbed(mkenv->indexOf(R_DotsSymbol)));
+                    break;
+                }
                 cb.add(BC::push(R_DotsSymbol));
                 break;
             }

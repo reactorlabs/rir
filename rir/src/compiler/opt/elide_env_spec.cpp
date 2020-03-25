@@ -130,13 +130,13 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     // If we only see these (and call instructions) then we stub an environment,
     // since it can only be accessed reflectively.
     static constexpr auto allowed = {
-        Tag::Force,      Tag::PushContext, Tag::LdVar,
-        Tag::StVar,      Tag::StVarSuper,  Tag::Call,
-        Tag::FrameState, Tag::CallBuiltin, Tag::StaticCall};
+        Tag::Force,      Tag::PushContext, Tag::LdVar,      Tag::StVar,
+        Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin,
+        Tag::StaticCall, Tag::LdDots};
     // Those do not materialize the stub in any case
-    static constexpr auto dontMaterialize = {Tag::PushContext, Tag::LdVar,
-                                             Tag::StVar,       Tag::StVarSuper,
-                                             Tag::FrameState,  Tag::IsEnvStub};
+    static constexpr auto dontMaterialize = {
+        Tag::PushContext, Tag::LdVar,     Tag::StVar, Tag::StVarSuper,
+        Tag::FrameState,  Tag::IsEnvStub, Tag::LdDots};
     VisitorNoDeoptBranch::run(function->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
