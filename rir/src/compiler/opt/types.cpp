@@ -149,7 +149,8 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "is.raw",      "is.object",    "isS4",
                         "is.numeric",  "is.matrix",    "is.array",
                         "is.atomic",   "is.recursive", "is.call",
-                        "is.language", "is.function",  "is.single"};
+                        "is.language", "is.function",  "is.single",
+                        "all",         "any"};
                     if (tests.count(name)) {
                         if (!getType(c->callArg(0).val()).maybeObj())
                             inferred =
