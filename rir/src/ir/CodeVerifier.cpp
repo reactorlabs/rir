@@ -305,7 +305,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
         if (oldo != c->stackLength)
             Rf_error("RIR Verifier: Invalid stack layout reported");
 
-        if (((uintptr_t)(c + 1) + pad4(c->codeSize) +
+        if (((uintptr_t)(c + 1) + Code::pad4(c->codeSize) +
              c->srcLength * sizeof(Code::SrclistEntry)) == 0)
             Rf_error("RIR Verifier: Invalid code length reported");
 
