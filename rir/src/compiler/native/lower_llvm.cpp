@@ -3205,8 +3205,9 @@ bool LowerFunctionLLVM::tryCompile() {
                               c(mkenv->context)});
                     size_t pos = 0;
                     mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
-                        envStubSet(env, pos++, loadSxp(v), mkenv->nLocals(),
-                                   false);
+                        auto vn = loadSxp(v);
+                        envStubSet(env, pos++, vn, mkenv->nLocals(), false);
+                        incrementNamed(vn);
                     });
                     setVal(i, env);
                     break;
