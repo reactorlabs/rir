@@ -501,14 +501,9 @@ DEF_INSTR(names_, 0, 1, 1, 1)
 DEF_INSTR(set_names_, 0, 2, 1, 1)
 
 /**
- * alloc_ :: allocate vector. type immediate, length as integer on stack
+ * xlength_ :: get length of a vector
  */
-DEF_INSTR(alloc_, 1, 1, 1, 1)
-
-/**
- * length_ :: get length of a vector
- */
-DEF_INSTR(length_, 0, 1, 1, 1)
+DEF_INSTR(xlength_, 0, 1, 1, 1)
 
 /**
  * for_seq_size_ :: get size of the for loop sequence

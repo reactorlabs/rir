@@ -822,14 +822,16 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(LdFunctionEnv, getEnv);
                 SIMPLE(Visible, visible);
                 SIMPLE(Invisible, invisible);
+                SIMPLE(Names, names);
+                SIMPLE(SetNames, setNames);
                 SIMPLE(Identical, identicalNoforce);
                 SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
+                SIMPLE(XLength, xlength_);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
-                SIMPLE(Length, length);
                 SIMPLE(ChkMissing, checkMissing);
                 SIMPLE(ChkClosure, checkClosure);
                 SIMPLE(MkCls, close);

@@ -1,5 +1,46 @@
 define berr
-    b errors.c:707
+    b Rf_errorcall
+end
+
+define pv
+    if $arg0==R_MissingArg
+        printf "R_MissingArg"
+    end
+    if $arg0!=R_MissingArg
+        call Rf_PrintValue($arg0)
+    end
+end
+
+define pe
+    set $x=R_lsInternal($arg0, 1)
+    pv $x
+end
+
+define pve
+    set $x=Rf_findVar(Rf_install($arg0), $arg1)
+    pv $x
+end
+
+define pp
+    if TYPEOF($arg0)!=PROMSXP
+        printf "Not a promise\n"
+    end
+    if TYPEOF($arg0)==PROMSXP
+        printf "Value: "
+        if PRVALUE($arg0)==R_UnboundValue
+            printf "R_UnboundValue\n"
+        end
+        if PRVALUE($arg0)!=R_UnboundValue
+            pv PRVALUE($arg0)
+        end
+        printf "Expr: "
+        if PRCODE($arg0)==R_MissingArg
+            printf "R_MissingArg\n"
+        end
+        if PRCODE($arg0)!=R_MissingArg
+            pv PRCODE($arg0)
+        end
+    end
 end
 
 set history save

@@ -26,7 +26,7 @@ int initializeTypes(LLVMContext& context) {
     // t::Bool = t::Int;
     StructType* t_sxpinfo_struct =
         StructType::create(context, "struct.sxpinfo_struct");
-    // sxpinfo_struct is just int32 in a structure, the bitmasking is not a
+    // sxpinfo_struct is just int64 in a structure, the bitmasking is not a
     // concern of the type
     fields = {t::i64};
     t_sxpinfo_struct->setBody(fields, false);
@@ -321,6 +321,13 @@ int initializeTypes(LLVMContext& context) {
         llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
     NativeBuiltins::colonCastRhs.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+
+    NativeBuiltins::names.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
+    NativeBuiltins::setNames.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+    NativeBuiltins::xlength_.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
 
     return 1;
 }

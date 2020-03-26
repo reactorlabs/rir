@@ -1022,19 +1022,28 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
             given.numMissing(missing);
         }
     }
-    given.add(Assumption::NotTooManyArguments);
 
     // Make some optimistic assumptions, they might be reset below...
     given.add(Assumption::NoExplicitlyMissingArgs);
     given.add(Assumption::NoReflectiveArgument);
 
+    bool hasDotsArg = false;
     size_t i = 0;
     eachCallArg([&](Value* arg) {
         if (arg->type.maybe(RType::expandedDots))
-            given.remove(Assumption::CorrectOrderOfArguments);
-        writeArgTypeToAssumptions(given, arg, i);
+            hasDotsArg = true;
+        else
+            writeArgTypeToAssumptions(given, arg, i);
         ++i;
     });
+
+    if (hasDotsArg) {
+        given.remove(Assumption::CorrectOrderOfArguments);
+        given.remove(Assumption::NotTooManyArguments);
+        given.numMissing(0);
+        given.remove(Assumption::NoReflectiveArgument);
+    }
+
     return given;
 }
 
