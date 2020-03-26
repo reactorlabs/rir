@@ -20,6 +20,7 @@ int initializeTypes(LLVMContext& context) {
 
     t::i8ptr = PointerType::get(IntegerType::get(context, 8), 0);
     t::voidPtr = t::i8ptr;
+    t::charPtr = t::i8ptr;
 
     t::VectorLength = IntegerType::get(context, sizeof(ptrdiff_t) * 8);
     // for now, bool is the same as integer
@@ -168,8 +169,10 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::externalsxpSetEntry.llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::SEXP, t::Int, t::SEXP}, false);
 
-    NativeBuiltins::error.llvmSignature = t::void_void;
-    NativeBuiltins::warn.llvmSignature = t::void_voidPtr;
+    NativeBuiltins::error.llvmSignature =
+        llvm::FunctionType::get(t::t_void, {t::charPtr}, false);
+    NativeBuiltins::warn.llvmSignature =
+        llvm::FunctionType::get(t::t_void, {t::charPtr}, false);
 
     NativeBuiltins::createEnvironment.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::Int}, false);
@@ -367,6 +370,7 @@ StructType* DeoptReason;
 
 Type* t_void;
 Type* voidPtr;
+Type* charPtr;
 Type* i64;
 Type* i32;
 PointerType* i64ptr;
