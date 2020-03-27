@@ -2311,5 +2311,10 @@ NativeBuiltin NativeBuiltins::xlength_ = {
     (void*)&xlength_Impl,
 };
 
+SEXP getAttribImpl(SEXP val, SEXP sym) { return Rf_getAttrib(val, sym); }
+NativeBuiltin NativeBuiltins::getAttrb = {
+    "getAttrib",
+    (void*)&getAttribImpl,
+};
 }
 }

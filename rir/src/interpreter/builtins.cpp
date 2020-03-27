@@ -96,22 +96,53 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
 SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(!call.hasNames());
 
-    static constexpr size_t MAXARGS = 16;
+    static constexpr size_t MAXARGS = 8;
     std::array<SEXP, MAXARGS> args;
     auto nargs = call.suppliedArgs;
 
     if (nargs > MAXARGS)
         return nullptr;
 
+    bool hasAttrib = false;
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = call.stackArg(i);
         if (TYPEOF(arg) == PROMSXP)
             arg = PRVALUE(arg);
-        if (arg == R_UnboundValue || arg == R_MissingArg ||
-            ATTRIB(arg) != R_NilValue)
+        if (arg == R_UnboundValue || arg == R_MissingArg)
             return nullptr;
+        if (ATTRIB(arg) != R_NilValue)
+            hasAttrib = true;
         args[i] = arg;
     }
+
+    switch (call.callee->u.primsxp.offset) {
+    case blt("is.logical"): {
+        if (nargs != 1)
+            return nullptr;
+        return TYPEOF(args[0]) == LGLSXP ? R_TrueValue : R_FalseValue;
+    }
+
+    case blt("is.symbol"): {
+        if (nargs != 1)
+            return nullptr;
+        return TYPEOF(args[0]) == SYMSXP ? R_TrueValue : R_FalseValue;
+    }
+
+    case blt("is.expression"): {
+        if (nargs != 1)
+            return nullptr;
+        return TYPEOF(args[0]) == EXPRSXP ? R_TrueValue : R_FalseValue;
+    }
+
+    case blt("is.object"): {
+        if (nargs != 1)
+            return nullptr;
+        return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
+    }
+    }
+
+    if (hasAttrib)
+        return nullptr;
 
     switch (call.callee->u.primsxp.offset) {
     case blt("nargs"): {
@@ -407,30 +438,6 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         auto f = getBuiltin(call.callee);
         return f(R_NilValue, call.callee, R_NilValue, R_NilValue);
-    }
-
-    case blt("is.logical"): {
-        if (nargs != 1)
-            return nullptr;
-        return TYPEOF(args[0]) == LGLSXP ? R_TrueValue : R_FalseValue;
-    }
-
-    case blt("is.symbol"): {
-        if (nargs != 1)
-            return nullptr;
-        return TYPEOF(args[0]) == SYMSXP ? R_TrueValue : R_FalseValue;
-    }
-
-    case blt("is.expression"): {
-        if (nargs != 1)
-            return nullptr;
-        return TYPEOF(args[0]) == EXPRSXP ? R_TrueValue : R_FalseValue;
-    }
-
-    case blt("is.object"): {
-        if (nargs != 1)
-            return nullptr;
-        return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
     }
 
     case blt("is.numeric"): {
