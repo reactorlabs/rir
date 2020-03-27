@@ -90,7 +90,7 @@ void PirType::merge(SEXPTYPE sexptype) {
     }
 }
 
-static bool containsNan(SEXP vector) {
+static bool maybeContainsNAOrNaN(SEXP vector) {
     if (TYPEOF(vector) == CHARSXP) {
         return vector == NA_STRING;
     } else if (TYPEOF(vector) == INTSXP || TYPEOF(vector) == REALSXP ||
@@ -148,7 +148,7 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
             flags_.reset(TypeFlags::maybeNotScalar);
-        if (!containsNan(e))
+        if (!maybeContainsNAOrNaN(e))
             flags_.reset(TypeFlags::maybeNAOrNaN);
     }
 }

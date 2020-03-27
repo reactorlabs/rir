@@ -218,42 +218,6 @@ void Instruction::printGraph(std::ostream& out, bool tty) const {
     printEnv(out, tty);
 }
 
-bool Instruction::willDefinitelyNotOverflow() const {
-    if (!Add::Cast(this) && !Sub::Cast(this)) {
-        return false;
-    }
-    UsesTree uses(bb()->owner);
-    std::unordered_set<const Instruction*> seen;
-    ArgumentValuePredicateIterator isSimpleForIndex = [&](const Value* value) {
-        value = value->cFollowCasts();
-        auto isUsedByColonCastRhs = [&]() {
-            if (auto instruction =
-                    Instruction::Cast(const_cast<Value*>(value))) {
-                for (auto use : uses.at(instruction)) {
-                    if (ColonCastRhs::Cast(use)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        };
-        if (ColonCastLhs::Cast(value) || isUsedByColonCastRhs()) {
-            return true;
-        } else if (Add::Cast(value) || Sub::Cast(value) || Phi::Cast(value)) {
-            const Instruction* instr = (const Instruction*)value;
-            if (!seen.count(instr)) {
-                seen.insert(instr);
-                return instr->anyArg(isSimpleForIndex);
-            } else {
-                return false;
-            }
-        } else {
-            return false;
-        }
-    };
-    return isSimpleForIndex(arg(0).val());
-}
-
 bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
 
 bool Instruction::nonObjectArgs() {
@@ -696,52 +660,47 @@ TypeChecks IsType::typeChecks() const {
     auto t = typeTest;
     auto in = arg(0).val();
     assert(!t.isVoid() && !t.maybeLazy());
+    assert(t.maybeNAOrNaN() || !in->type.maybeNAOrNaN());
     if (t.isA(PirType(RType::logical).orAttribs())) {
         if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
-            assert(t.maybeNAOrNaN() || !in->type.maybeNAOrNaN());
             return TypeChecks::LogicalSimpleScalar;
         } else {
-            assert(t.maybeNAOrNaN() || !in->type.maybeNAOrNaN());
             return TypeChecks::LogicalNonObject;
         }
     } else if (t.isA(PirType(RType::logical).orAttribs().orPromiseWrapped())) {
         assert(t.maybeNAOrNaN() &&
                "need to add non-NaN promise-wrapped typecheck");
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
             return TypeChecks::LogicalSimpleScalarWrapped;
-        else {
+        } else {
             return TypeChecks::LogicalNonObjectWrapped;
         }
     } else if (t.isA(PirType(RType::integer).orAttribs())) {
         if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
-            assert(t.maybeNAOrNaN() || !in->type.maybeNAOrNaN());
             return TypeChecks::IntegerSimpleScalar;
         } else {
-            assert(t.maybeNAOrNaN() || !in->type.maybeNAOrNaN());
             return TypeChecks::IntegerNonObject;
         }
     } else if (t.isA(PirType(RType::integer).orAttribs().orPromiseWrapped())) {
         assert(t.maybeNAOrNaN() &&
                "need to add non-NaN promise-wrapped typecheck");
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
             return TypeChecks::IntegerSimpleScalarWrapped;
-        else {
+        } else {
             return TypeChecks::IntegerNonObjectWrapped;
         }
     } else if (t.isA(PirType(RType::real).orAttribs())) {
         if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
-            assert(t.maybeNAOrNaN() || !in->type.maybeNAOrNaN());
             return TypeChecks::RealSimpleScalar;
         } else {
-            assert(t.maybeNAOrNaN() || !in->type.maybeNAOrNaN());
             return TypeChecks::RealNonObject;
         }
     } else if (t.isA(PirType(RType::real).orAttribs().orPromiseWrapped())) {
         assert(t.maybeNAOrNaN() &&
                "need to add non-NaN promise-wrapped typecheck");
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
             return TypeChecks::RealSimpleScalarWrapped;
-        else {
+        } else {
             return TypeChecks::RealNonObjectWrapped;
         }
     } else if (in->type.notMissing().notObject().isA(t)) {

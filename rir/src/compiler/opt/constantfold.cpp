@@ -559,9 +559,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 auto rhs = colonInputEffects->arg<1>().val();
                 if ((!lhs->type.maybeHasAttrs() ||
                      !rhs->type.maybeHasAttrs()) &&
-                    !((lhs->type.maybe(RType::integer) ||
-                       lhs->type.maybe(RType::logical)) &&
-                      rhs->type.maybe(RType::integer))) {
+                    !(lhs->type.maybe(PirType::num()) &&
+                      rhs->type.maybe(PirType::num()))) {
                     // We still need to keep the colonInputEffects because it
                     // could raise warnings / errors
                     colonInputEffects->replaceUsesWith(True::instance());
