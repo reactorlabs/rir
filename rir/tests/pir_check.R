@@ -364,24 +364,26 @@ stopifnot(pir.check(function(x, y) {
 # Relies on better visibility
 # stopifnot(pir.check(function(x) !!!!!x, OneNot, warmup=function(f)f(1)))
 # Testing simple range dead branch removal
+# This one gets constantfolded...
 stopifnot(pir.check(function() {
   x <- 0
   for (i in 1:10)
     x <- x + i
   x
 }, NoColon))
+# ...but not these, we need to call the function more often for test feedback
 stopifnot(pir.check(function(n) {
   x <- 0
   for (i in 1:n)
     x <- x + i
   x
-}, NoColon))
+}, NoColon, warmup=function(f){f(10); f(10)}))
 stopifnot(pir.check(function(n) {
   x <- 0
   for (i in n:10)
     x <- x + i
   x
-}, NoColon))
+}, NoColon, warmup=function(f){f(10); f(10)}))
 a <- 1
 b <- 10
 stopifnot(pir.check(function(a, b) {
@@ -389,25 +391,25 @@ stopifnot(pir.check(function(a, b) {
   for (i in a:b)
     x <- x + i
   x
-}, NoColon, warmup=function(f) f(1, 10)))
+}, NoColon, warmup=function(f) {f(1, 10); f(1, 10)}))
 stopifnot(pir.check(function(a, b) {
   x <- 0
   for (i in a:b)
     x <- x + i
   x
-}, NoColon, warmup=function(f) f(a, 10)))
+}, NoColon, warmup=function(f) {f(a, 10); f(a, 10)}))
 stopifnot(pir.check(function(a, b) {
   x <- 0
   for (i in a:b)
     x <- x + i
   x
-}, NoColon, warmup=function(f) f(1, b)))
+}, NoColon, warmup=function(f) {f(1, b); f(1, b)}))
 stopifnot(pir.check(function(a, b) {
   x <- 0
   for (i in a:b)
     x <- x + i
   x
-}, NoColon, warmup=function(f) f(a, b)))
+}, NoColon, warmup=function(f) {f(a, b); f(a, b)}))
 a <- factor(a)
 b <- factor(b)
 stopifnot(!pir.check(function(a, b) {
@@ -415,7 +417,7 @@ stopifnot(!pir.check(function(a, b) {
   for (i in a:b)
     x <- i
   x
-}, NoColon, warmup=function(f) f(a, b)))
+}, NoColon, warmup=function(f) {f(a, b); f(a, b)}))
                      
 # More dead instruction removal
 stopifnot(!pir.check(function(x) {
@@ -462,3 +464,12 @@ simplifiedBounceInit <- function () {
 stopifnot(
   pir.check(simplifiedBounceInit, NoEnvSpec, NoPromise, warmup=function(f) {f()})
 )
+
+emptyFor <- function(n) {
+  for (i in 1:n) {
+    
+  }
+}
+stopifnot(pir.check(emptyFor, OneAdd, AnAddIsNotNAOrNaN, warmup=function(f) {f(1000)}))
+arg <- 1000
+stopifnot(pir.check(emptyFor, OneAdd, AnAddIsNotNAOrNaN, warmup=function(f) {f(arg)}))

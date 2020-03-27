@@ -51,6 +51,7 @@ PassScheduler::PassScheduler() {
         add<Cleanup>();
 
         add<TypeInference>();
+        add<Overflow>();
     };
     auto addDefaultPrePhaseOpt = [&]() {
     };

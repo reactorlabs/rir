@@ -1574,24 +1574,18 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
     assert(type.isA(PirType::num().scalar()));
     if (!notNa)
         notNa = BasicBlock::Create(C, "", fun);
+    llvm::Value* isNotNa;
     if (!type.maybeNAOrNaN()) {
-        // Don't actually check na because we statically know it's not
-        // Was having trouble using just CreateBr. The conditional jump will get
-        // optimized away
-        builder.CreateCondBr(c(1), notNa, isNa, branchAlwaysTrue);
-        builder.SetInsertPoint(notNa);
+        // Don't actually check NA
+        isNotNa = builder.getTrue();
+    } else if (v->getType() == t::Double) {
+        isNotNa = builder.CreateFCmpUEQ(v, v);
     } else {
-        // Actually check na
-        if (v->getType() == t::Double) {
-            auto isNotNa = builder.CreateFCmpUEQ(v, v);
-            builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
-        } else {
-            assert(v->getType() == t::Int);
-            auto isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
-            builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
-        }
-        builder.SetInsertPoint(notNa);
+        assert(v->getType() == t::Int);
+        isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
     }
+    builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
+    builder.SetInsertPoint(notNa);
 }
 
 void LowerFunctionLLVM::checkMissing(llvm::Value* v) {

@@ -342,9 +342,6 @@ class Instruction : public Value {
         return otherwise;
     }
 
-  private:
-    bool willDefinitelyNotOverflow() const;
-
   protected:
     PirType inferredTypeForArithmeticInstruction(const GetType& getType) const {
         auto m = mergedInputType(getType);
@@ -364,8 +361,7 @@ class Instruction : public Value {
             // * the condition checks iff at least one of the arguments is an
             // integer (doesn't happen with only logicals), and the result is an
             // integer (doesn't happen with real coercion)
-            if (m.maybe(RType::integer) && t.maybe(RType::integer) &&
-                willDefinitelyNotOverflow())
+            if (m.maybe(RType::integer) && t.maybe(RType::integer))
                 t.setMaybeNAOrNaN();
             return type & t;
         }

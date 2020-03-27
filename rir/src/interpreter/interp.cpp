@@ -1645,9 +1645,19 @@ SEXP colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
     auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
 
     // 1. decide fastcase
+    // In order for the fastcase 2 conditions must be met:
+    // - Both lhs and rhs must not be factors
+    // - rhs must not be coerced to INT_MIN or INT_MAX (because we expect lhs >
+    // rhs or lhs < rhs). To ensure this:
+    //   - lhs must not be a number which gets coerced into an integer
+    //   (implying, it can't be a real/complex which is integral)
+    //   - rhs must not be a number which gets coerced into INT_MIN or INT_MAX
+    //   (implying, it can't be the real/complex representation of INT_MIN or
+    //   INT_MAX)
     bool fastcase =
         (!inherits(lhs, "factor") || !inherits(rhs, "factor")) &&
-        !((TYPEOF(lhs) == INTSXP || TYPEOF(lhs) == LGLSXP ||
+        !(XLENGTH(lhs) > 0 && XLENGTH(rhs) > 0 &&
+          (TYPEOF(lhs) == INTSXP || TYPEOF(lhs) == LGLSXP ||
            (TYPEOF(lhs) == REALSXP && doubleCanBeCastedToInteger(*REAL(lhs))) ||
            (TYPEOF(lhs) == CPLXSXP &&
             doubleCanBeCastedToInteger(COMPLEX(lhs)->r))) &&

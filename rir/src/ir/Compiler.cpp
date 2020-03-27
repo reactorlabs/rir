@@ -277,6 +277,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             // if (!colonInputEffects(m, n)) {
             cs << BC::colonInputEffects();
             cs.addSrc(seq);
+            // See interp.cpp for explanation on the conditions for fastcase
             bool staticFastcase =
                 (isConstant(start) && !inherits(start, "factor") &&
                  TYPEOF(start) != INTSXP && TYPEOF(start) != LGLSXP &&
