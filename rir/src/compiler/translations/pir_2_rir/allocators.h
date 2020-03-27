@@ -442,7 +442,7 @@ class SSAAllocator {
                 }
             }
 
-            auto succs = bb->succsessors();
+            auto succs = bb->successors();
             for (auto suc : succs) {
                 if (branchTaken.count({bb, suc}))
                     continue;

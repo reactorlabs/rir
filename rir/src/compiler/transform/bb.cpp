@@ -29,7 +29,7 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
     // Fixup CFG: next pointers of copied BB's need to be filled in.
     Visitor::run(src, [&](BB* bb) {
         bbs[bb->id]->setSuccessors(
-            bb->succsessors().map([&](BB* suc) { return bbs[suc->id]; }));
+            bb->successors().map([&](BB* suc) { return bbs[suc->id]; }));
     });
 
     std::unordered_map<Promise*, Promise*> promMap;
@@ -88,7 +88,7 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
     BB* split = new BB(target, next_id);
     while (it != src->end())
         it = src->moveToEnd(it, split);
-    split->setSuccessors(src->succsessors());
+    split->setSuccessors(src->successors());
     src->overrideSuccessors({split});
     Visitor::run(split, [&](Instruction* i) {
         if (auto phi = Phi::Cast(i)) {
@@ -328,7 +328,7 @@ void BBTransform::mergeRedundantBBs(Code* closure) {
         while (instr != next->end()) {
             instr = next->moveToEnd(instr, bb);
         }
-        bb->overrideSuccessors(next->succsessors());
+        bb->overrideSuccessors(next->successors());
         next->deleteSuccessors();
         delete next;
     }

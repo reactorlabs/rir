@@ -67,7 +67,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
                     pendingInput[next] = input;
             };
 
-            for (auto suc : cur->succsessors())
+            for (auto suc : cur->successors())
                 apply(suc);
         });
     }

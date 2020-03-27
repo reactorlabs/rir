@@ -107,11 +107,11 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                 else if (target->isBranch())
                     // both branches dominate bb, then we should move target
                     // forward until they join again
-                    while (*target->succsessors().begin() != bb &&
-                           dom.dominates(*target->succsessors().begin(), bb) &&
+                    while (*target->successors().begin() != bb &&
+                           dom.dominates(*target->successors().begin(), bb) &&
                            (!target->isBranch() ||
                             dom.dominates(target->falseBranch(), bb)))
-                        target = *target->succsessors().begin();
+                        target = *target->successors().begin();
             }
 
             if (!target) {
@@ -151,9 +151,9 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                             return false;
                         }
 
-                    return x->succsessors().all(compute);
+                    return x->successors().all(compute);
                 };
-                return x->succsessors().all(compute);
+                return x->successors().all(compute);
             };
 
             auto noUnneccessaryComputation = [&](BB* x, unsigned exceptions) {
@@ -173,9 +173,9 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                             }
                         }
                     }
-                    return x->succsessors().all(compute);
+                    return x->successors().all(compute);
                 };
-                return x->succsessors().all(compute);
+                return x->successors().all(compute);
             };
 
             bool success = true;
