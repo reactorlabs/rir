@@ -62,6 +62,18 @@ void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
 void Rir2PirCompiler::compileClosure(Closure* closure,
                                      const OptimizationContext& ctx,
                                      MaybeCls success, Maybe fail) {
+#ifdef ENABLE_EVENT_COUNTERS
+    MaybeCls originalSuccess = success;
+    Maybe originalFail = fail;
+    success = ENABLE_EVENT_COUNTERS ? [&](ClosureVersion* result) {
+        EventCounters::instance().count(PirOptimized);
+        originalSuccess(result);
+    } : originalSuccess;
+    fail = ENABLE_EVENT_COUNTERS ? [&]() {
+        EventCounters::instance().count(Unoptimizable);
+        originalFail();
+    } : originalFail;
+#endif
 
     if (!ctx.assumptions.includes(minimalAssumptions)) {
         for (const auto& a : minimalAssumptions) {
