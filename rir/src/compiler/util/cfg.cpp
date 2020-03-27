@@ -20,7 +20,7 @@ CFG::CFG(Code* start)
                 transitivePredecessors[next->id].push_back(bb);
             }
         };
-        auto succs = bb->succsessors();
+        auto succs = bb->successors();
         for (auto suc : succs)
             apply(suc);
         if (succs.size() == 0)
@@ -90,7 +90,7 @@ DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
             if (d.merge(curState))
                 todo.push(bb);
         };
-        for (auto suc : cur->succsessors())
+        for (auto suc : cur->successors())
             apply(suc);
     }
 }
@@ -147,7 +147,7 @@ DominanceGraph::BBSet DominanceGraph::dominatedSet(Code* start,
                 }
             }
         };
-        for (auto suc : cur->succsessors())
+        for (auto suc : cur->successors())
             apply(suc);
     }
 

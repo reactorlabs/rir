@@ -365,7 +365,7 @@ class LowerFunctionLLVM {
 
         if (auto phi = Phi::Cast(variable)) {
             bool isNext = false;
-            for (auto n : currentBB->succsessors())
+            for (auto n : currentBB->successors())
                 if (n == phi->bb())
                     isNext = true;
             if (!isNext) {
@@ -5098,7 +5098,7 @@ bool LowerFunctionLLVM::tryCompile() {
         if (bb->isJmp())
             builder.CreateBr(getBlock(bb->next()));
 
-        for (auto suc : bb->succsessors())
+        for (auto suc : bb->successors())
             blockInPushContext[suc] = inPushContext;
     });
 

@@ -246,7 +246,7 @@ class TheCleanup {
                 BB* d = bb->next();
                 while (!d->isEmpty())
                     d->moveToEnd(d->begin(), bb);
-                bb->overrideSuccessors(d->succsessors());
+                bb->overrideSuccessors(d->successors());
                 d->deleteSuccessors();
                 fixupPhiInput(d, bb);
                 toDel[d] = nullptr;
@@ -261,7 +261,7 @@ class TheCleanup {
                 while (!d->isEmpty()) {
                     d->moveToEnd(d->begin(), bb);
                 }
-                bb->overrideSuccessors(d->succsessors());
+                bb->overrideSuccessors(d->successors());
                 d->deleteSuccessors();
                 fixupPhiInput(d, bb);
                 toDel[d] = nullptr;
@@ -292,7 +292,7 @@ class TheCleanup {
             while (!d->isEmpty()) {
                 d->moveToEnd(d->begin(), bb);
             }
-            bb->overrideSuccessors(d->succsessors());
+            bb->overrideSuccessors(d->successors());
             d->deleteSuccessors();
             fixupPhiInput(d, bb);
             toDel[d] = nullptr;
