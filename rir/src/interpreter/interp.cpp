@@ -1574,13 +1574,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     ostack_push(ctx, res);
 }
 
-#ifdef ENABLE_EVENT_COUNTERS
-static unsigned EnvAllocated =
-    EventCounters::instance().registerCounter("env allocated");
-static unsigned EnvStubAllocated =
-    EventCounters::instance().registerCounter("envstub allocated");
-#endif
-
 size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                                Immediate* names_, SEXP env, bool explicitDots) {
     std::vector<SEXP> args;
@@ -1785,9 +1778,20 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     checkUserInterrupt();
     if (!initialPC && c->nativeCode) {
+#ifdef ENABLE_EVENT_COUNTERS
+        if (ENABLE_EVENT_COUNTERS) {
+            EventCounters::instance().count(LlvmEvaled);
+        }
+#endif
         return c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
                              env, callCtxt ? callCtxt->callee : nullptr);
     }
+
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS) {
+        EventCounters::instance().count(RirEvaled);
+    }
+#endif
 
 #ifdef THREADED_CODE
     static void* opAddr[static_cast<uint8_t>(Opcode::num_of)] = {
@@ -1811,11 +1815,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         // Optimized functions explicitly manage the cache
         if (env != symbol::delayedEnv)
             clearCache(bindingCache);
-
-#ifdef ENABLE_EVENT_COUNTERS
-        if (ENABLE_EVENT_COUNTERS && env != symbol::delayedEnv)
-            EventCounters::instance().count(EnvAllocated);
-#endif
     }
 
     if (!existingLocals) {
@@ -2002,11 +2001,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             ostack_push(ctx, res);
             UNPROTECT(1);
 
-#ifdef ENABLE_EVENT_COUNTERS
-            if (ENABLE_EVENT_COUNTERS)
-                EventCounters::instance().count(EnvAllocated);
-#endif
-
             NEXT();
         }
 
@@ -2043,10 +2037,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     cptr->cloenv = wrapper;
             }
 
-#ifdef ENABLE_EVENT_COUNTERS
-            if (ENABLE_EVENT_COUNTERS)
-                EventCounters::instance().count(EnvStubAllocated);
-#endif
             NEXT();
         }
 

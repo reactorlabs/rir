@@ -3,6 +3,7 @@
 
 #include "PirTypeFeedback.h"
 #include "RirRuntimeObject.h"
+#include "event_counters.h"
 #include "ir/BC_inc.h"
 #include "utils/UUID.h"
 
@@ -78,6 +79,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     void registerDeopt() {
+#ifdef ENABLE_EVENT_COUNTERS
+        if (ENABLE_EVENT_COUNTERS) {
+            EventCounters::instance().count(Deopt);
+        }
+#endif
         if (deoptCount < UINT_MAX)
             deoptCount++;
     }

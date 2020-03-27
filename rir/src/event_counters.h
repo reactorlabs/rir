@@ -51,10 +51,26 @@ class EventCounters {
         return isEnabled;
     }
 };
-}
 
 #ifdef MEASURE
 #define ENABLE_EVENT_COUNTERS EventCounters::enabled()
+
+static unsigned LlvmEvaled =
+    EventCounters::instance().registerCounter("LLVM evaled");
+static unsigned RirEvaled =
+    EventCounters::instance().registerCounter("RIR evaled");
+static unsigned PirOptimized =
+    EventCounters::instance().registerCounter("PIR optimized");
+static unsigned Unoptimizable =
+    EventCounters::instance().registerCounter("unoptimizable");
+static unsigned LlvmLowered =
+    EventCounters::instance().registerCounter("LLVM lowered");
+static unsigned RirLowered =
+    EventCounters::instance().registerCounter("RIR lowered");
+static unsigned Deopt = EventCounters::instance().registerCounter("deopt");
+
 #endif
+
+} // namespace rir
 
 #endif
