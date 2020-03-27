@@ -408,6 +408,21 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                                       ip);
                         }
                     }
+                } else if (builtinId == blt("is.vector") && nargs == 2) {
+                    // We could do better here but for now we just look
+                    // at the default mode "any"
+                    // Also, the names attribute is allowed but we approximate
+                    // by checking that there are no attributes
+                    auto argType = i->arg(0).val()->type;
+                    auto modeType = i->arg(1).val()->type;
+                    auto mode = LdConst::Cast(i->arg(1).val());
+                    if (!argType.maybeHasAttrs() &&
+                        argType.isA(PirType::vecs()) &&
+                        modeType.isA(PirType::simpleScalarString()) && mode &&
+                        staticStringEqual(CHAR(STRING_ELT(mode->c(), 0)),
+                                          "any")) {
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                    }
                 } else if (builtinId == blt("is.function") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::closure))
