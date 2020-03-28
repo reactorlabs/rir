@@ -1709,7 +1709,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     }
 
 #ifdef ENABLE_EVENT_COUNTERS
-    if (ENABLE_EVENT_COUNTERS) {
+    if (ENABLE_EVENT_COUNTERS && !initialPC) {
         EventCounters::instance().count(RirEvaled);
     }
 #endif
