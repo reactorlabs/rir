@@ -1076,8 +1076,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         SEXP fun = CAR(inAst);
 
         if (TYPEOF(fun) == SYMSXP) {
-            Assumptions assumptions;
-
             SEXP internal = fun->u.symsxp.internal;
             int i = ((sexprec_rjit*)internal)->u.i;
 

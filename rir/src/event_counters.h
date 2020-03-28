@@ -16,6 +16,7 @@ class EventCounters {
     EventCounters() {}
 
   public:
+    static bool isEnabled;
     static EventCounters& instance() {
         static EventCounters c;
         return c;
@@ -24,8 +25,6 @@ class EventCounters {
 #ifndef MEASURE
         assert(false);
 #endif
-        if (!enabled())
-            return 0;
         auto existing = std::find(names.begin(), names.end(), name);
         if (existing != names.end()) {
             return existing - names.begin();
@@ -35,8 +34,16 @@ class EventCounters {
         return counters.size() - 1;
     }
     void count(unsigned counter, size_t n = 1) { counters.at(counter) += n; }
+    bool aCounterIsNonzero() {
+        for (size_t counter : counters) {
+            if (counter > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
     ~EventCounters() {
-        if (enabled()) {
+        if (aCounterIsNonzero()) {
             std::ofstream file;
             file.open("rir_statistics.csv");
             for (unsigned i = 0; i < counters.size(); ++i) {
@@ -45,15 +52,10 @@ class EventCounters {
             file.close();
         }
     }
-    static bool enabled() {
-        static bool isEnabled = getenv("ENABLE_EVENT_COUNTERS") &&
-                                *getenv("ENABLE_EVENT_COUNTERS") == '1';
-        return isEnabled;
-    }
 };
 
 #ifdef MEASURE
-#define ENABLE_EVENT_COUNTERS EventCounters::enabled()
+#define ENABLE_EVENT_COUNTERS EventCounters::isEnabled
 
 static unsigned LlvmEvaled =
     EventCounters::instance().registerCounter("LLVM evaled");

@@ -180,6 +180,14 @@ rir.disableLoopPeeling <- function() {
     .Call("rirDisableLoopPeeling")
 }
 
+rir.enableEventCounters <- function() {
+    .Call("rirEnableEventCounters")
+}
+
+rir.disableEventCounters <- function() {
+    .Call("rirDisableEventCounters")
+}
+
 rir.printBuiltinIds <- function() {
     invisible(.Call("rirPrintBuiltinIds"))
 }
