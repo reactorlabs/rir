@@ -449,6 +449,13 @@ class Instruction : public Value {
         return false;
     }
 
+    bool allNonEnvArgs(Instruction::ArgumentValuePredicateIterator it) const {
+        for (size_t i = 0; i < nargs(); ++i)
+            if (!(mayHaveEnv() && i == envSlot()) && !it(arg(i).val()))
+                return false;
+        return true;
+    }
+
     void eachArg(const Instruction::ArgumentValueIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i).val());

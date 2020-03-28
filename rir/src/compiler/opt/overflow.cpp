@@ -67,18 +67,20 @@ void Overflow::apply(RirCompiler&, ClosureVersion* closure, LogStream&) const {
         if (!Add::Cast(instr) && !Sub::Cast(instr))
             return;
         // is a binop which we can infer may not overflow / underflow
-        if (!instr->anyArg([&](Value* arg) {
-                return !(arg->type.maybe(RType::integer) &&
-                         (!arg->type.maybeNAOrNaN() ||
-                          (Phi::Cast(arg) &&
-                           !((Instruction*)arg)->anyArg([&](Value* phiArg) {
-                               return !(phiArg->type.maybeNAOrNaN() &&
-                                        phiArg != instr);
-                           }))));
-            }) &&
-            instr->type.maybeNAOrNaN())
+        if (!instr->allNonEnvArgs([&](Value* arg) {
+                return arg->type.maybe(RType::integer) &&
+                       (!arg->type.maybeNAOrNaN() ||
+                        (Phi::Cast(arg) &&
+                         ((Instruction*)arg)->allNonEnvArgs([&](Value* phiArg) {
+                             return !phiArg->type.maybeNAOrNaN() ||
+                                    phiArg == instr;
+                         })));
+            }))
             return;
-        // is on non-NA typed integers but produces a maybe-NA typed result
+        // is on non-NA typed integers
+        if (!instr->type.maybeNAOrNaN())
+            return;
+        // didn't already infer that it's non-NA
         if (!willDefinitelyNotOverflow(instr))
             return;
         // will definitely not overflow / underflow
