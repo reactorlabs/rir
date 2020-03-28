@@ -470,6 +470,15 @@ REXPORT SEXP rirDisableLoopPeeling() {
     return R_NilValue;
 }
 
+REXPORT SEXP rirEnableEventCounters() {
+    EventCounters::isEnabled = true;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirDisableEventCounters() {
+    EventCounters::isEnabled = false;
+    return R_NilValue;
+}
 REXPORT SEXP rirPrintBuiltinIds() {
     FUNTAB* finger = R_FunTab;
     int i = 0;

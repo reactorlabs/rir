@@ -87,6 +87,7 @@ struct Assumptions {
                           uint8_t missing)
         : flags(flags), typeFlags(typeFlags), missing(missing) {}
     explicit Assumptions(void* pos) {
+        (void)unused2;
         memcpy((void*)this, pos, sizeof(*this));
     }
     explicit Assumptions(unsigned long val) {
