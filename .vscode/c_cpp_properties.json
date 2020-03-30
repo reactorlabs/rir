@@ -16,7 +16,6 @@
             "includePath": [
                 "${workspaceFolder}/rir/**",
                 "${workspaceFolder}/external/custom-r/src/**",
-                "${workspaceFolder}/external/libjit/**",
                 "${workspaceFolder}/external/llvm-8.0.0/**"
             ],
             "defines": [],
