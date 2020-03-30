@@ -162,6 +162,8 @@ struct NativeBuiltins {
     static NativeBuiltin names;
     static NativeBuiltin setNames;
     static NativeBuiltin xlength_;
+
+    static NativeBuiltin getAttrb;
 };
 
 }
