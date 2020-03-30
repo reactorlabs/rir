@@ -186,14 +186,16 @@ struct PirType {
         auto res = *this | other;
 
         auto fixup = [&](PirType a, PirType b) {
-            if (a.isA(PirType() | RType::integer | RType::logical) &&
-                b.isA(RType::integer)) {
-                res = res & RType::integer;
+            auto isInt = PirType() | RType::integer;
+            auto isReal = PirType() | RType::real;
+            auto isIntIsh = PirType() | RType::integer | RType::logical;
+            auto isNum =
+                PirType() | RType::real | RType::integer | RType::logical;
+            if (a.isA(isIntIsh) && b.isA(isInt)) {
+                res = res & isInt;
                 return true;
-            } else if (a.isA(PirType() | RType::real | RType::logical |
-                             RType::integer) &&
-                       b.isA(RType::real)) {
-                res = res & RType::real;
+            } else if (a.isA(isNum) && b.isA(isReal)) {
+                res = res & isReal;
                 return true;
             }
             return false;
