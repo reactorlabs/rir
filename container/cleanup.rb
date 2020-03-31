@@ -26,7 +26,7 @@ REPOS = {
     ]},
 }
 
-TOKEN = ARGF.read
+TOKEN = ARGF.read.chomp
 
 def curl(what)
   JSON.parse(`curl -s --header "PRIVATE-TOKEN: #{TOKEN}" #{what}`)

@@ -220,7 +220,7 @@ cleanup_registry:
   image: ruby:2.5
   before_script: []
   script:
-    - echo "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
+    - echo -n "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
 
 benchmark_llvm:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
