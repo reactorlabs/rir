@@ -10,6 +10,10 @@ namespace rir {
 
 struct Code;
 
+// For non-scalars, it takes too long to determine whether they
+// contain NaN for the benefit, so we simple assume they do
+static const R_xlen_t MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK = 1;
+
 #pragma pack(push)
 #pragma pack(1)
 
@@ -140,24 +144,31 @@ struct ObservedValues {
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
+#define TYPE_CHECKS(V)                                                         \
+    V(LogicalNonObject)                                                        \
+    V(LogicalNonObjectWrapped)                                                 \
+    V(LogicalSimpleScalar)                                                     \
+    V(LogicalSimpleScalarWrapped)                                              \
+    V(IntegerNonObject)                                                        \
+    V(IntegerNonObjectWrapped)                                                 \
+    V(IntegerSimpleScalar)                                                     \
+    V(IntegerSimpleScalarWrapped)                                              \
+    V(RealNonObject)                                                           \
+    V(RealNonObjectWrapped)                                                    \
+    V(RealSimpleScalar)                                                        \
+    V(RealSimpleScalarWrapped)                                                 \
+    V(NotObject)                                                               \
+    V(NotObjectWrapped)                                                        \
+    V(NoAttribsExceptDim)                                                      \
+    V(NoAttribsExceptDimWrapped)
+
 enum class TypeChecks : uint32_t {
     // Must be bigger than smallest sexptype
-    LogicalNonObject = 3326,
-    LogicalNonObjectWrapped = 3327,
-    LogicalSimpleScalar = 3328,
-    LogicalSimpleScalarWrapped = 3329,
-    IntegerNonObject = 3330,
-    IntegerNonObjectWrapped = 3331,
-    IntegerSimpleScalar = 3332,
-    IntegerSimpleScalarWrapped = 3333,
-    RealNonObject = 3335,
-    RealNonObjectWrapped = 3336,
-    RealSimpleScalar = 3337,
-    RealSimpleScalarWrapped = 3338,
-    NotObject = 3339,
-    NotObjectWrapped = 3340,
-    NoAttribsExceptDim = 3341,
-    NoAttribsExceptDimWrapped = 3342
+    _START_ = 3326,
+#define V(TypeCheck) TypeCheck,
+    TYPE_CHECKS(V)
+#undef V
+        _END_
 };
 
 enum class Opcode : uint8_t;

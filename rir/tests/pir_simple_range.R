@@ -126,3 +126,52 @@ test(lhs, rhs, "error: NA/NaN argument + warning: numerical expression has 3 ele
 
 lhs <- "foo-bar"
 test(lhs, rhs, "error: NA/NaN argument + warning: NAs introduced by coercion")
+
+## Test with integer min and max
+rhs <- 2147483647L
+lhs <- 2147483646L
+test(lhs, rhs, list(2147483646L, 2147483647L))
+
+rhs <- -2147483646L
+lhs <- -2147483645L
+test(lhs, rhs, list(-2147483645L, -2147483646L))
+
+f <- function(lhs, rhs) {
+  x <- list(10)
+  i <- 1
+  for (elem in lhs:rhs) {
+    x[[i]] <- elem
+    i <- i + 1
+  }
+  x
+}
+
+# Warmup
+f(1L, 2L)
+f(-1L, -2L)
+f(0L, 0L)
+
+# Try with deopt and recompile
+f(2147483646L, 2147483647L)
+f(2147483646L, 2147483647L)
+f(-2147483645L, -2147483646L)
+f(-2147483645L, -2147483646L)
+f(2147483646L, 2147483647L)
+f(2147483646L, 2147483647L)
+f(-2147483645L, -2147483646L)
+f(-2147483645L, -2147483646L)
+
+f(2147483646, 2147483647)
+f(2147483646, 2147483647)
+f(2147483646, 2147483647)
+f(2147483646, 2147483647)
+f(1, 2)
+
+scalarFor <- function(n) {
+  for (i in 1:n) {
+    
+  }
+  FALSE
+}
+
+stopifnot(tryCatch(scalarFor(10000000000L), error=function(err) TRUE))

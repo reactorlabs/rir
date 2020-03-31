@@ -495,7 +495,7 @@ LdConst::LdConst(SEXP c, PirType t)
 LdConst::LdConst(SEXP c)
     : FixedLenInstruction(PirType(c)), idx(Pool::insert(c)) {}
 LdConst::LdConst(int num)
-    : FixedLenInstruction(PirType(RType::integer).scalar().notNa()),
+    : FixedLenInstruction(PirType(RType::integer).scalar().notNAOrNaN()),
       idx(Pool::getInt(num)) {}
 
 SEXP LdConst::c() const { return Pool::get(idx); }
@@ -660,36 +660,49 @@ TypeChecks IsType::typeChecks() const {
     auto t = typeTest;
     auto in = arg(0).val();
     assert(!t.isVoid() && !t.maybeLazy());
+    assert(t.maybeNAOrNaN() || !in->type.maybeNAOrNaN());
     if (t.isA(PirType(RType::logical).orAttribs())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
             return TypeChecks::LogicalSimpleScalar;
-        else
+        } else {
             return TypeChecks::LogicalNonObject;
+        }
     } else if (t.isA(PirType(RType::logical).orAttribs().orPromiseWrapped())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+        assert(t.maybeNAOrNaN() &&
+               "need to add non-NaN promise-wrapped typecheck");
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
             return TypeChecks::LogicalSimpleScalarWrapped;
-        else
+        } else {
             return TypeChecks::LogicalNonObjectWrapped;
+        }
     } else if (t.isA(PirType(RType::integer).orAttribs())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
             return TypeChecks::IntegerSimpleScalar;
-        else
+        } else {
             return TypeChecks::IntegerNonObject;
+        }
     } else if (t.isA(PirType(RType::integer).orAttribs().orPromiseWrapped())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+        assert(t.maybeNAOrNaN() &&
+               "need to add non-NaN promise-wrapped typecheck");
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
             return TypeChecks::IntegerSimpleScalarWrapped;
-        else
+        } else {
             return TypeChecks::IntegerNonObjectWrapped;
+        }
     } else if (t.isA(PirType(RType::real).orAttribs())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
             return TypeChecks::RealSimpleScalar;
-        else
+        } else {
             return TypeChecks::RealNonObject;
+        }
     } else if (t.isA(PirType(RType::real).orAttribs().orPromiseWrapped())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+        assert(t.maybeNAOrNaN() &&
+               "need to add non-NaN promise-wrapped typecheck");
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
             return TypeChecks::RealSimpleScalarWrapped;
-        else
+        } else {
             return TypeChecks::RealNonObjectWrapped;
+        }
     } else if (in->type.notMissing().notObject().isA(t)) {
         return TypeChecks::NotObject;
     } else if (in->type.notMissing().notPromiseWrapped().notObject().isA(t)) {
@@ -1157,7 +1170,7 @@ PirType Colon::inferType(const GetType& getType) const {
         return false;
     };
 
-    auto t = inferedTypeForArtithmeticInstruction(getType);
+    auto t = inferredTypeForArithmeticInstruction(getType);
 
     if (convertsToInt(lhs()) && convertsToInt(rhs())) {
         t = RType::integer;

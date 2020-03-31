@@ -90,6 +90,8 @@ struct Assumptions {
         memcpy((void*)this, pos, sizeof(*this));
     }
     explicit Assumptions(unsigned long val) {
+        // Silence unused field warning
+        (void)unused2;
         memcpy((void*)this, &val, sizeof(*this));
     }
 
