@@ -1191,15 +1191,14 @@ void Pir2Rir::lower(Code* code) {
             if (auto b = CallSafeBuiltin::Cast(*it)) {
                 if (b->builtinId == blt("length") && next != bb->end()) {
                     if (auto t = IsType::Cast(*(it + 1))) {
-                        if (t->typeTest.isA(
-                                PirType::simpleScalarInt().notNAOrNaN()) &&
+                        if (t->typeTest.isA(PirType::simpleScalarInt()) &&
                             t->arg(0).val() == b) {
                             // Type test follows, let's cheat and load this as
                             // an integer already. this avoids boxing in the
                             // native backend. NOTE: don't move this to an
                             // earlier pass, since otherwise the check will be
                             // optimized away!
-                            b->type = PirType::simpleScalarInt().notNAOrNaN();
+                            b->type = PirType::simpleScalarInt();
                             break;
                         }
                     }

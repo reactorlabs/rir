@@ -58,8 +58,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 void recordDeoptReason(SEXP val, const DeoptReason& reason);
 void jit(SEXP cls, SEXP name, InterpreterInstance* ctx);
 
-SEXP seq_int(int n1, int n2);
-bool doubleCanBeCastedToInteger(double n);
 bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx);
 SEXP colonCastLhs(SEXP lhs);
 SEXP colonCastRhs(SEXP newLhs, SEXP rhs);
