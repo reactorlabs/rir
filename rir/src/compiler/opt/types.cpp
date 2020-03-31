@@ -55,16 +55,12 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         if (getType(c->callArg(0).val()).isScalar() &&
                             getType(c->callArg(1).val()).isScalar())
                             inferred.setScalar();
-                        if (!getType(c->callArg(0).val()).maybeNAOrNaN() &&
-                            !getType(c->callArg(1).val()).maybeNAOrNaN())
-                            inferred.setNotNAOrNaN();
                         break;
                     }
 
                     if ("length" == name) {
-                        inferred = (PirType() | RType::integer | RType::real)
-                                       .scalar()
-                                       .notNAOrNaN();
+                        inferred =
+                            (PirType() | RType::integer | RType::real).scalar();
                         break;
                     }
 
@@ -113,8 +109,6 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                             inferred = PirType(RType::integer);
                             if (getType(c->callArg(0).val()).isScalar())
                                 inferred.setScalar();
-                            if (!getType(c->callArg(0).val()).maybeNAOrNaN())
-                                inferred.setNotNAOrNaN();
                         } else {
                             inferred = i->inferType(getType);
                         }
@@ -133,8 +127,6 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                             inferred = PirType(RType::logical);
                             if (getType(c->callArg(0).val()).isScalar())
                                 inferred.setScalar();
-                            if (!getType(c->callArg(0).val()).maybeNAOrNaN())
-                                inferred.setNotNAOrNaN();
                         } else {
                             inferred = i->inferType(getType);
                         }
@@ -152,8 +144,7 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "is.language", "is.function",  "is.single"};
                     if (tests.count(name)) {
                         if (!getType(c->callArg(0).val()).maybeObj())
-                            inferred =
-                                PirType(RType::logical).scalar().notNAOrNaN();
+                            inferred = PirType(RType::logical).scalar();
                         else
                             inferred = i->inferType(getType);
                         break;

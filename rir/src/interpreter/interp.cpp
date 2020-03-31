@@ -1390,18 +1390,16 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         BINOP_FALLBACK(#op);                                                   \
     } while (false)
 
-SEXP seq_int(int n1, int n2) {
+static SEXP seq_int(int n1, int n2) {
     int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
     SEXP ans = Rf_allocVector(INTSXP, n);
     int* data = INTEGER(ans);
-    int64_t current = n1;
-    int64_t end = n2;
-    if (current <= end) {
-        while (current <= end)
-            *data++ = current++;
+    if (n1 <= n2) {
+        while (n1 <= n2)
+            *data++ = n1++;
     } else {
-        while (current >= end)
-            *data++ = current--;
+        while (n1 >= n2)
+            *data++ = n1--;
     }
     return ans;
 }
@@ -1637,7 +1635,7 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     return args.size();
 }
 
-bool doubleCanBeCastedToInteger(double n) {
+static bool doubleCanBeCastedToInteger(double n) {
     return n >= INT_MIN && n <= INT_MAX && (int)n == n;
 }
 
@@ -1645,28 +1643,7 @@ bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
     auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
 
     // 1. decide fastcase
-    // In order for the fastcase 2 conditions must be met:
-    // - Both lhs and rhs must not be factors
-    // - rhs must not be coerced to INT_MIN or INT_MAX (because we expect lhs >
-    // rhs or lhs < rhs). To ensure this:
-    //   - lhs must not be a number which gets coerced into an integer
-    //   (implying, it can't be a real/complex which is integral)
-    //   - rhs must not be a number which gets coerced into INT_MIN or INT_MAX
-    //   (implying, it can't be the real/complex representation of INT_MIN or
-    //   INT_MAX)
-    bool fastcase =
-        (!inherits(lhs, "factor") || !inherits(rhs, "factor")) &&
-        !(XLENGTH(lhs) > 0 && XLENGTH(rhs) > 0 &&
-          (TYPEOF(lhs) == INTSXP || TYPEOF(lhs) == LGLSXP ||
-           (TYPEOF(lhs) == REALSXP && doubleCanBeCastedToInteger(*REAL(lhs))) ||
-           (TYPEOF(lhs) == CPLXSXP &&
-            doubleCanBeCastedToInteger(COMPLEX(lhs)->r))) &&
-          ((TYPEOF(rhs) == INTSXP &&
-            (*INTEGER(rhs) == INT_MIN || *INTEGER(rhs) == INT_MAX)) ||
-           (TYPEOF(rhs) == REALSXP &&
-            (*REAL(rhs) <= INT_MIN || *REAL(rhs) >= INT_MAX)) ||
-           (TYPEOF(rhs) == CPLXSXP &&
-            (COMPLEX(rhs)->r <= INT_MIN || COMPLEX(rhs)->r >= INT_MAX))));
+    bool fastcase = !inherits(lhs, "factor") || !inherits(rhs, "factor");
 
     // 2. in fastcase, run type error effects
     if (fastcase) {
@@ -1717,9 +1694,6 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
     double newRhsNum = (newLhsNum <= rhsNum)
                            ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
                            : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
-    // nan RHS - should've went to slowcase
-    assert(TYPEOF(newLhs) != INTSXP ||
-           (newRhsNum >= INT_MIN && newRhsNum <= INT_MAX));
     SEXP result = (TYPEOF(newLhs) == INTSXP) ? Rf_ScalarInteger((int)newRhsNum)
                                              : Rf_ScalarReal(newRhsNum);
     return result;
@@ -3370,10 +3344,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     val = PRVALUE(val);
                 res = fastVeceltOk(val);
                 break;
-
-            case TypeChecks::_START_:
-            case TypeChecks::_END_:
-                assert(false);
             }
             ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
 

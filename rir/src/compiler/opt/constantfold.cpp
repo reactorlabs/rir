@@ -463,17 +463,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
-                } else if ((builtinId == blt("is.na") ||
-                            builtinId == blt("is.nan")) &&
-                           nargs == 1) {
-                    auto t = i->arg(0).val()->type;
-                    static PirType typeThatDoesntError =
-                        (PirType::num() | RType::chr | RType::str | RType::vec)
-                            .orAttribs();
-                    if (typeThatDoesntError.isA(t) && !t.maybeNAOrNaN()) {
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
-                    }
                 } else if (builtinId == blt("bodyCode") && nargs == 1) {
                     auto in = i->arg(0).val()->followCastsAndForce();
                     if (auto mk = MkFunCls::Cast(in)) {
@@ -557,10 +546,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             if (auto colonInputEffects = ColonInputEffects::Cast(i)) {
                 auto lhs = colonInputEffects->arg<0>().val();
                 auto rhs = colonInputEffects->arg<1>().val();
-                if ((!lhs->type.maybeHasAttrs() ||
-                     !rhs->type.maybeHasAttrs()) &&
-                    !(lhs->type.maybe(PirType::num()) &&
-                      rhs->type.maybe(PirType::num()))) {
+                if (!lhs->type.maybeHasAttrs() || !rhs->type.maybeHasAttrs()) {
                     // We still need to keep the colonInputEffects because it
                     // could raise warnings / errors
                     colonInputEffects->replaceUsesWith(True::instance());

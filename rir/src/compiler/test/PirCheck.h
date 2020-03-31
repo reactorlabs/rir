@@ -27,8 +27,7 @@ namespace rir {
     V(TwoAdd)                                                                  \
     V(LazyCallArgs)                                                            \
     V(EagerCallArgs)                                                           \
-    V(LdVarVectorInFirstBB)                                                    \
-    V(AnAddIsNotNAOrNaN)
+    V(LdVarVectorInFirstBB)
 
 struct PirCheck {
     enum class Type : unsigned {

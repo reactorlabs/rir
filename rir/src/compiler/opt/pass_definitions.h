@@ -145,12 +145,6 @@ class PASS(TypeSpeculation);
 class PASS(PromiseSplitter);
 
 /*
- * Range analysis to detect and optimize code which will not create overflows /
- * underflows
- */
-class PASS(Overflow);
-
-/*
  * Loop Invariant Code motion
  */
 class PASS(HoistInstruction);

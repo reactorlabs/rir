@@ -643,12 +643,54 @@ void BC::print(std::ostream& out) const {
     case Opcode::is_:
     case Opcode::istype_:
         switch (static_cast<TypeChecks>(immediate.i)) {
-#define V(TypeCheck)                                                           \
-    case TypeChecks::TypeCheck:                                                \
-        out << #TypeCheck;                                                     \
-        break;
-            TYPE_CHECKS(V)
-#undef V
+        case TypeChecks::RealNonObject:
+            out << "RealNonObject";
+            break;
+        case TypeChecks::RealSimpleScalar:
+            out << "RealSimpleScalar";
+            break;
+        case TypeChecks::IntegerNonObject:
+            out << "IntegerNotObject";
+            break;
+        case TypeChecks::IntegerSimpleScalar:
+            out << "IntegerSimpleScalar";
+            break;
+        case TypeChecks::LogicalNonObject:
+            out << "LogicalNotObject";
+            break;
+        case TypeChecks::LogicalSimpleScalar:
+            out << "LogicalSimpleScalar";
+            break;
+        case TypeChecks::RealNonObjectWrapped:
+            out << "RealNonObjectWrapped";
+            break;
+        case TypeChecks::RealSimpleScalarWrapped:
+            out << "RealSimpleScalarWrapped";
+            break;
+        case TypeChecks::IntegerNonObjectWrapped:
+            out << "IntegerNotObjectWrapped";
+            break;
+        case TypeChecks::IntegerSimpleScalarWrapped:
+            out << "IntegerSimpleScalarWrapped";
+            break;
+        case TypeChecks::LogicalNonObjectWrapped:
+            out << "LogicalNotObjectWrapped";
+            break;
+        case TypeChecks::LogicalSimpleScalarWrapped:
+            out << "LogicalSimpleScalarWrapped";
+            break;
+        case TypeChecks::NotObject:
+            out << "NotObject";
+            break;
+        case TypeChecks::NotObjectWrapped:
+            out << "NotObjectWrapped";
+            break;
+        case TypeChecks::NoAttribsExceptDim:
+            out << "NoAttribsExceptDim";
+            break;
+        case TypeChecks::NoAttribsExceptDimWrapped:
+            out << "NoAttribsExceptDimWrapped";
+            break;
         default:
             out << type2char(immediate.i);
             break;

@@ -776,6 +776,20 @@ NativeBuiltin NativeBuiltins::binopEnv = {
     (void*)&binopEnvImpl,
 };
 
+static SEXP seq_int(int n1, int n2) {
+    int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
+    SEXP ans = Rf_allocVector(INTSXP, n);
+    int* data = INTEGER(ans);
+    if (n1 <= n2) {
+        while (n1 <= n2)
+            *data++ = n1++;
+    } else {
+        while (n1 >= n2)
+            *data++ = n1--;
+    }
+    return ans;
+}
+
 bool debugBinopImpl = false;
 static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     SEXP res = nullptr;

@@ -95,7 +95,7 @@ enum class TypeFlags : uint8_t {
     maybeNotScalar,
     maybeObject,
     maybeAttrib,
-    maybeNAOrNaN,
+    maybeNa,
     rtype,
 
     FIRST = lazy,
@@ -133,14 +133,14 @@ struct PirType {
     Type t_;
 
     static constexpr FlagSet defaultRTypeFlags() {
-        return FlagSet() | TypeFlags::maybeNotScalar | TypeFlags::maybeNAOrNaN |
+        return FlagSet() | TypeFlags::maybeNotScalar | TypeFlags::maybeNa |
                TypeFlags::rtype;
     }
 
     static constexpr FlagSet topRTypeFlags() {
         return FlagSet() | TypeFlags::lazy | TypeFlags::promiseWrapped |
                TypeFlags::maybeObject | TypeFlags::maybeAttrib |
-               TypeFlags::maybeNotScalar | TypeFlags::maybeNAOrNaN |
+               TypeFlags::maybeNotScalar | TypeFlags::maybeNa |
                TypeFlags::rtype;
     }
     static constexpr FlagSet optimisticRTypeFlags() {
@@ -287,10 +287,10 @@ struct PirType {
         return flags_.includes(TypeFlags::promiseWrapped) ||
                flags_.includes(TypeFlags::lazy);
     }
-    RIR_INLINE constexpr bool maybeNAOrNaN() const {
+    RIR_INLINE constexpr bool maybeNa() const {
         if (!isRType())
             return false;
-        return flags_.includes(TypeFlags::maybeNAOrNaN);
+        return flags_.includes(TypeFlags::maybeNa);
     }
     RIR_INLINE constexpr bool isScalar() const {
         if (!isRType())
@@ -369,9 +369,9 @@ struct PirType {
         return PirType(t_.r & ~RTypeSet(RType::missing), flags_);
     }
 
-    RIR_INLINE constexpr PirType notNAOrNaN() const {
+    RIR_INLINE constexpr PirType notNa() const {
         assert(isRType());
-        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNAOrNaN));
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNa));
     }
 
     RIR_INLINE constexpr PirType scalar() const {
@@ -389,9 +389,9 @@ struct PirType {
         return PirType(t_.r | t, flags_);
     }
 
-    RIR_INLINE constexpr PirType orNAOrNaN() const {
+    RIR_INLINE constexpr PirType orNa() const {
         assert(isRType());
-        return PirType(t_.r, flags_ | TypeFlags::maybeNAOrNaN);
+        return PirType(t_.r, flags_ | TypeFlags::maybeNa);
     }
 
     RIR_INLINE constexpr PirType orNotScalar() const {
@@ -454,12 +454,10 @@ struct PirType {
             return RType::nil;
         }
         if (isA((num() | RType::str | RType::cons | RType::code).orAttribs())) {
-            // If the index is out of bounds, NA is returned (even if both args
-            // are non-NA) so we must add orNAOrNaN()
             if (idx.isA(PirType(RType::str).scalar()))
-                return scalar().orAttribs().orNAOrNaN();
+                return scalar().orAttribs();
             // e.g. c(1,2,3)[-1] returns c(2,3)
-            return orNotScalar().orNAOrNaN();
+            return orNotScalar();
         } else if (isA(RType::vec)) {
             return PirType(RType::vec);
         } else if (isA(PirType(RType::vec).orAttribs())) {
@@ -501,17 +499,14 @@ struct PirType {
         } else if (isA(num() | RType::str | RType::nil)) {
             PirType t = *this;
             t.t_.r.reset(RType::nil);
-            if (numArgs > 1) {
-                // The orNAOrNaN is only needed because we don't check NA or NaN
-                // on vectors, technically the vector doesn't contain NA or NaN
-                t = t.orNotScalar().orNAOrNaN();
-            }
+            if (numArgs > 1)
+                t.setNotScalar();
             return t;
         } else if (t_.r.contains(RType::prom) ||
                    t_.r.contains(RType::expandedDots)) {
             return val();
         } else {
-            return forced().notObject().orNotScalar().orNAOrNaN() | RType::vec;
+            return forced().notObject().orNotScalar() | RType::vec;
         }
     }
 
@@ -519,8 +514,7 @@ struct PirType {
     RIR_INLINE void setNotMissing() { *this = notMissing(); }
     RIR_INLINE void setNotObject() { *this = notObject(); }
     RIR_INLINE void setNoAttribs() { *this = noAttribs(); }
-    RIR_INLINE void setNotNAOrNaN() { *this = notNAOrNaN(); }
-    RIR_INLINE void setMaybeNAOrNaN() { *this = orNAOrNaN(); }
+    RIR_INLINE void setNotNa() { *this = notNa(); }
     RIR_INLINE void setScalar() { *this = scalar(); }
 
     RIR_INLINE void setScalar(RType rtype) {
@@ -562,8 +556,7 @@ struct PirType {
             (!maybePromiseWrapped() && o.maybePromiseWrapped()) ||
             (!maybeObj() && o.maybeObj()) ||
             (!maybeHasAttrs() && o.maybeHasAttrs()) ||
-            (!maybeNAOrNaN() && o.maybeNAOrNaN()) ||
-            (isScalar() && !o.isScalar())) {
+            (!maybeNa() && o.maybeNa()) || (isScalar() && !o.isScalar())) {
             return false;
         }
         return t_.r.includes(o.t_.r);
@@ -714,7 +707,7 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
 
     if (t.isScalar())
         out << "$";
-    if (!t.maybeNAOrNaN())
+    if (!t.maybeNa())
         out << "#";
     if (t.maybeLazy())
         out << "^";

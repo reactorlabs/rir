@@ -258,7 +258,7 @@ class Instruction : public Value {
 
     InstructionUID id() const;
 
-    virtual std::string name() const { return tagToStr(tag); }
+    virtual const char* name() const { return tagToStr(tag); }
 
     Instruction* hasSingleUse();
     void eraseAndRemove();
@@ -342,8 +342,7 @@ class Instruction : public Value {
         return otherwise;
     }
 
-  protected:
-    PirType inferredTypeForArithmeticInstruction(const GetType& getType) const {
+    PirType inferedTypeForArtithmeticInstruction(const GetType& getType) const {
         auto m = mergedInputType(getType);
         if (!m.maybeObj()) {
             auto t = PirType::bottom();
@@ -356,33 +355,24 @@ class Instruction : public Value {
             // e.g. TRUE + TRUE == 2
             if (m.maybe(RType::logical))
                 t = t | RType::integer;
-            // the binop result becomes NA if it can't be represented in a
-            // fixpoint integer (e.g. INT_MAX + 1 == NA)
-            // * the condition checks iff at least one of the arguments is an
-            // integer (doesn't happen with only logicals), and the result is an
-            // integer (doesn't happen with real coercion)
-            if (m.maybe(RType::integer) && t.maybe(RType::integer))
-                t.setMaybeNAOrNaN();
             return type & t;
         }
         return type;
     }
 
-    PirType inferredTypeForLogicalInstruction(const GetType& getType) const {
+    PirType inferedTypeForLogicalInstruction(const GetType& getType) const {
         auto t = mergedInputType(getType);
         if (!t.maybeObj()) {
             auto res = PirType(RType::logical).notMissing();
             if (t.isScalar())
                 res.setScalar();
-            if (!t.maybeNAOrNaN())
-                res.setNotNAOrNaN();
             return type & res;
         }
         return type;
     }
 
     Effects
-    inferredEffectsForArithmeticInstruction(const GetType& getType) const {
+    inferedEffectsForArtithmeticInstruction(const GetType& getType) const {
         auto e = effects;
         auto t = mergedInputType(getType);
         if (!t.maybeObj())
@@ -397,7 +387,7 @@ class Instruction : public Value {
         return e;
     }
 
-    Effects inferredEffectsForLogicalInstruction(const GetType& getType) const {
+    Effects inferedEffectsForLogicalInstruction(const GetType& getType) const {
         auto e = effects;
         auto t = mergedInputType(getType);
         if (!t.maybeObj())
@@ -447,13 +437,6 @@ class Instruction : public Value {
             if (it(arg(i).val()))
                 return true;
         return false;
-    }
-
-    bool allNonEnvArgs(Instruction::ArgumentValuePredicateIterator it) const {
-        for (size_t i = 0; i < nargs(); ++i)
-            if (!(mayHaveEnv() && i == envSlot()) && !it(arg(i).val()))
-                return false;
-        return true;
     }
 
     void eachArg(const Instruction::ArgumentValueIterator& it) const {
@@ -1071,7 +1054,7 @@ class FLIE(Force, 2, Effects::Any()) {
     }
     Value* input() const { return arg(0).val(); }
 
-    std::string name() const override {
+    const char* name() const override {
         std::stringstream ss;
         ss << "Force";
         if (strict)
@@ -1082,7 +1065,7 @@ class FLIE(Force, 2, Effects::Any()) {
             ss << "<wrapped>";
         else if (observed == ArgumentKind::value)
             ss << "<value>";
-        return ss.str();
+        return ss.str().c_str();
     }
 
     PirType inferType(const GetType& getType) const override final {
@@ -1185,14 +1168,14 @@ class FLI(ColonInputEffects, 2, Effect::Error) {
 class FLI(ColonCastLhs, 1, Effect::Error) {
   public:
     explicit ColonCastLhs(Value* lhs, unsigned srcIdx)
-        : FixedLenInstruction(PirType::intReal().scalar().notNAOrNaN(),
+        : FixedLenInstruction(PirType::intReal().scalar().notNa(),
                               {{PirType::val()}}, {{lhs}}, srcIdx) {}
 
     Value* lhs() const { return arg<0>().val(); }
 
     PirType inferType(const GetType& getType) const override final {
         if (getType(lhs()).isA(RType::integer)) {
-            return PirType(RType::integer).scalar().notNAOrNaN();
+            return PirType(RType::integer).scalar().notNa();
         } else {
             return type;
         }
@@ -1203,8 +1186,8 @@ class FLI(ColonCastRhs, 2, Effect::Error) {
   public:
     explicit ColonCastRhs(Value* newLhs, Value* rhs, unsigned srcIdx)
         : FixedLenInstruction(
-              PirType::intReal().scalar().notNAOrNaN(),
-              {{PirType::intReal().scalar().notNAOrNaN(), PirType::val()}},
+              PirType::intReal().scalar().notNa(),
+              {{PirType::intReal().scalar().notNa(), PirType::val()}},
               {{newLhs, rhs}}, srcIdx) {}
 
     Value* newLhs() const { return arg<0>().val(); }
@@ -1212,7 +1195,7 @@ class FLI(ColonCastRhs, 2, Effect::Error) {
     PirType inferType(const GetType& getType) const override final {
         // This is intended - lhs type determines rhs
         if (getType(newLhs()).isA(RType::integer)) {
-            return PirType(RType::integer).scalar().notNAOrNaN();
+            return PirType(RType::integer).scalar().notNa();
         } else {
             return type;
         }
@@ -1591,7 +1574,7 @@ class FLIE(Colon, 3, Effects::Any()) {
     PirType inferType(const GetType& getType) const override;
 
     Effects inferEffects(const GetType& getType) const override {
-        return inferredEffectsForArithmeticInstruction(getType);
+        return inferedEffectsForArtithmeticInstruction(getType);
     }
 };
 
@@ -1644,14 +1627,14 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
     ArithmeticBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
         : Super(lhs, rhs, env, srcIdx) {}
 
-    using Super::inferredEffectsForArithmeticInstruction;
-    using Super::inferredTypeForArithmeticInstruction;
+    using Super::inferedEffectsForArtithmeticInstruction;
+    using Super::inferedTypeForArtithmeticInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferredTypeForArithmeticInstruction(getType);
+        return inferedTypeForArtithmeticInstruction(getType);
     }
     Effects inferEffects(const GetType& getType) const override {
-        return inferredEffectsForArithmeticInstruction(getType);
+        return inferedEffectsForArtithmeticInstruction(getType);
     }
 };
 
@@ -1665,6 +1648,7 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
 ARITHMETIC_BINOP(Mul);
 ARITHMETIC_BINOP(IDiv);
 ARITHMETIC_BINOP(Add);
+ARITHMETIC_BINOP(Mod);
 ARITHMETIC_BINOP(Pow);
 ARITHMETIC_BINOP(Sub);
 
@@ -1674,22 +1658,10 @@ class Div : public ArithmeticBinop<Div, Tag::Div> {
         : ArithmeticBinop<Div, Tag::Div>(lhs, rhs, env, srcIdx) {}
 
     PirType inferType(const GetType& getType) const override final {
-        // 0 / 0 = NaN
-        auto t = ArithmeticBinop<Div, Tag::Div>::inferType(getType).orNAOrNaN();
+        auto t = ArithmeticBinop<Div, Tag::Div>::inferType(getType);
         if (t.maybe(RType::integer) || t.maybe(RType::logical))
             return t | RType::real;
         return t;
-    }
-};
-
-class Mod : public ArithmeticBinop<Mod, Tag::Mod> {
-  public:
-    Mod(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : ArithmeticBinop<Mod, Tag::Mod>(lhs, rhs, env, srcIdx) {}
-
-    PirType inferType(const GetType& getType) const override final {
-        // 0 %% 0 = NaN
-        return ArithmeticBinop<Mod, Tag::Mod>::inferType(getType).orNAOrNaN();
     }
 };
 
@@ -1701,14 +1673,14 @@ class LogicalBinop : public Binop<BASE, TAG> {
     LogicalBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
         : Super(lhs, rhs, env, srcIdx) {}
 
-    using Super::inferredEffectsForLogicalInstruction;
-    using Super::inferredTypeForLogicalInstruction;
+    using Super::inferedEffectsForLogicalInstruction;
+    using Super::inferedTypeForLogicalInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferredTypeForLogicalInstruction(getType);
+        return inferedTypeForLogicalInstruction(getType);
     }
     Effects inferEffects(const GetType& getType) const override {
-        return inferredEffectsForLogicalInstruction(getType);
+        return inferedEffectsForLogicalInstruction(getType);
     }
 };
 
@@ -1784,14 +1756,14 @@ class ArithmeticUnop : public Unop<BASE, TAG> {
     ArithmeticUnop(Value* val, Value* env, unsigned srcIdx)
         : Super(val, env, srcIdx) {}
 
-    using Super::inferredEffectsForArithmeticInstruction;
-    using Super::inferredTypeForArithmeticInstruction;
+    using Super::inferedEffectsForArtithmeticInstruction;
+    using Super::inferedTypeForArtithmeticInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferredTypeForArithmeticInstruction(getType);
+        return inferedTypeForArtithmeticInstruction(getType);
     }
     Effects inferEffects(const GetType& getType) const override {
-        return inferredEffectsForArithmeticInstruction(getType);
+        return inferedEffectsForArtithmeticInstruction(getType);
     }
 };
 
@@ -1803,14 +1775,14 @@ class LogicalUnop : public Unop<BASE, TAG> {
     LogicalUnop(Value* val, Value* env, unsigned srcIdx)
         : Super(val, env, srcIdx) {}
 
-    using Super::inferredEffectsForLogicalInstruction;
-    using Super::inferredTypeForLogicalInstruction;
+    using Super::inferedEffectsForLogicalInstruction;
+    using Super::inferedTypeForLogicalInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferredTypeForLogicalInstruction(getType);
+        return inferedTypeForLogicalInstruction(getType);
     }
     Effects inferEffects(const GetType& getType) const override {
-        return inferredEffectsForLogicalInstruction(getType);
+        return inferedEffectsForLogicalInstruction(getType);
     }
 };
 
@@ -2265,7 +2237,7 @@ class VLIE(MkEnv, Effects::None()) {
 
     void printArgs(std::ostream& out, bool tty) const override;
     void printEnv(std::ostream& out, bool tty) const override final{};
-    std::string name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
+    const char* name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
 
@@ -2469,7 +2441,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
         assumeTrue = !assumeTrue;
         return this;
     }
-    std::string name() const override {
+    const char* name() const override {
         return assumeTrue ? "Assume" : "AssumeNot";
     }
 };
