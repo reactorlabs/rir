@@ -340,7 +340,7 @@ NativeBuiltin NativeBuiltins::warn = {
     (void*)&warnImpl,
 };
 
-static void errorImpl() { Rf_error("Some error in compiled code"); };
+static void errorImpl(const char* e) { Rf_error(e); }
 
 NativeBuiltin NativeBuiltins::error = {
     "error",

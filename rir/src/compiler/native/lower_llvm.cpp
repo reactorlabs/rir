@@ -1588,7 +1588,9 @@ void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
     builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
-    call(NativeBuiltins::error, {});
+    auto msg =
+        builder.CreateGlobalString("argument is missing, with no default");
+    call(NativeBuiltins::error, {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
@@ -1601,7 +1603,8 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
-    call(NativeBuiltins::error, {});
+    auto msg = builder.CreateGlobalString("object not found");
+    call(NativeBuiltins::error, {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
@@ -3190,8 +3193,9 @@ bool LowerFunctionLLVM::tryCompile() {
                               c(mkenv->context)});
                     size_t pos = 0;
                     mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
-                        envStubSet(env, pos++, loadSxp(v), mkenv->nLocals(),
-                                   false);
+                        auto vn = loadSxp(v);
+                        envStubSet(env, pos++, vn, mkenv->nLocals(), false);
+                        incrementNamed(vn);
                     });
                     setVal(i, env);
                     break;
@@ -3537,7 +3541,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto msg = builder.CreateGlobalString(
                             "probable complete loss of accuracy in modulus");
                         call(NativeBuiltins::warn,
-                             {builder.CreateBitCast(msg, t::voidPtr)});
+                             {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                         builder.CreateBr(noWarn);
 
                         builder.SetInsertPoint(noWarn);
@@ -3845,7 +3849,10 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 builder.SetInsertPoint(isNa);
-                call(NativeBuiltins::error, {});
+                auto msg = builder.CreateGlobalString(
+                    "missing value where TRUE/FALSE needed");
+                call(NativeBuiltins::error,
+                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                 builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
 
                 builder.SetInsertPoint(done);
