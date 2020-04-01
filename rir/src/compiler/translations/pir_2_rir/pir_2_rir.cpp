@@ -65,7 +65,7 @@ class Pir2Rir {
     rir::Function* finalize();
 
   private:
-    bool isInfiniteLoopHead(BB* bb, const DominanceGraph& dom);
+    // bool isInfiniteLoopHead(BB* bb, const DominanceGraph& dom);
 
     Pir2RirCompiler& compiler;
     ClosureVersion* cls;
@@ -300,6 +300,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     alloc.verify();
 
     auto isJumpThrough = [&](BB* bb) {
+        return false;
         if (!bb->isJmp())
             return false;
         return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
@@ -377,6 +378,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         cb.add(bbLabels[bb]);
 
         auto jumpThroughEmpty = [&](BB* bb) {
+            return bb;
             while (isJumpThrough(bb))
                 bb = bb->next();
             return bb;
@@ -1324,15 +1326,16 @@ void Pir2Rir::lower(Code* code) {
     // }
 }
 
-bool Pir2Rir::isInfiniteLoopHead(BB* bb, const DominanceGraph& dom) {
-    if (!bb->isJmp())
-        return false;
-    return bb == bb->next() &&
-           (bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last())));
+// bool Pir2Rir::isInfiniteLoopHead(BB* bb, const DominanceGraph& dom) {
+//     if (!bb->isJmp())
+//         return false;
+//     return bb == bb->next() &&
+//            (bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last())));
 
-    // return bb->isJmp() && (bb == bb->next() || (/*bb->next()->isJmp() && */
-    // dom.dominates(bb->next(), bb)));
-}
+//     // return bb->isJmp() && (bb == bb->next() || (/*bb->next()->isJmp() &&
+//     */
+//     // dom.dominates(bb->next(), bb)));
+// }
 
 void Pir2Rir::toCSSA(Code* code) {
 
