@@ -144,7 +144,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         std::unordered_set<Branch*> removed;
 
         for (auto& c : condition) {
-            // continue;
+            continue;
             removed.clear();
             auto& uses = c.second;
             if (uses.size() > 1) {

@@ -1293,35 +1293,35 @@ void Pir2Rir::lower(Code* code) {
     // toDrop
     // ************
 
-    std::vector<BB*> headBBs;
-    DominanceGraph dom(code);
+    // std::vector<BB*> headBBs;
+    // DominanceGraph dom(code);
 
-    Visitor::run(code->entry, [&](BB* bb) {
-        if (isInfiniteLoopHead(bb, dom)) {
-            headBBs.push_back(bb);
-        }
-    });
+    // Visitor::run(code->entry, [&](BB* bb) {
+    //     if (isInfiniteLoopHead(bb, dom)) {
+    //         headBBs.push_back(bb);
+    //     }
+    // });
 
-    for (auto bb : headBBs) {
+    // for (auto bb : headBBs) {
 
-        auto fakeFalseBranch = new BB(code, code->nextBBId++);
+    //     auto fakeFalseBranch = new BB(code, code->nextBBId++);
 
-        auto nilConst = new LdConst(R_NilValue);
-        auto ret = new Return(nilConst);
+    //     auto nilConst = new LdConst(R_NilValue);
+    //     auto ret = new Return(nilConst);
 
-        fakeFalseBranch->append(nilConst);
-        fakeFalseBranch->append(ret);
+    //     fakeFalseBranch->append(nilConst);
+    //     fakeFalseBranch->append(ret);
 
-        auto oldTrueBranch = bb->next();
+    //     auto oldTrueBranch = bb->next();
 
-        auto fakeTrueBranch = new BB(code, code->nextBBId++);
-        bb->overrideNext(fakeTrueBranch);
-        fakeTrueBranch->setNext(oldTrueBranch);
+    //     auto fakeTrueBranch = new BB(code, code->nextBBId++);
+    //     bb->overrideNext(fakeTrueBranch);
+    //     fakeTrueBranch->setNext(oldTrueBranch);
 
-        bb->setFalseBranch(fakeFalseBranch);
-        auto branch = new Branch(True::instance());
-        bb->append(branch);
-    }
+    //     bb->setFalseBranch(fakeFalseBranch);
+    //     auto branch = new Branch(True::instance());
+    //     bb->append(branch);
+    // }
 }
 
 bool Pir2Rir::isInfiniteLoopHead(BB* bb, const DominanceGraph& dom) {
