@@ -10,6 +10,8 @@
 
 namespace rir {
 
+// Global event counters. CodeEventCounters contains the closure-specific
+// ones
 class EventCounters {
     std::vector<size_t> counters;
     std::vector<std::string> names;
@@ -42,21 +44,33 @@ class EventCounters {
         }
         return false;
     }
-    ~EventCounters() {
-        if (aCounterIsNonzero()) {
-            std::ofstream file;
-            file.open("rir_statistics.csv");
-            for (unsigned i = 0; i < counters.size(); ++i) {
-                file << names.at(i) << ", " << counters.at(i) << "\n";
-            }
-            file.close();
+    void dump() {
+        if (!aCounterIsNonzero()) {
+            return;
         }
+
+        std::ofstream file;
+        file.open("events.csv");
+        for (unsigned i = 0; i < counters.size(); ++i) {
+            file << names.at(i) << ", " << counters.at(i) << "\n";
+        }
+        file.close();
+    }
+    void reset() {
+        for (unsigned i = 0; i < counters.size(); ++i) {
+            counters[i] = 0;
+        }
+    }
+    void flush() {
+        dump();
+        reset();
     }
 };
 
 #ifdef MEASURE
 #define ENABLE_EVENT_COUNTERS EventCounters::isEnabled
 
+namespace events {
 static unsigned LlvmEvaled =
     EventCounters::instance().registerCounter("LLVM evaled");
 static unsigned RirEvaled =
@@ -70,6 +84,7 @@ static unsigned LlvmLowered =
 static unsigned RirLowered =
     EventCounters::instance().registerCounter("RIR lowered");
 static unsigned Deopt = EventCounters::instance().registerCounter("deopt");
+} // namespace events
 
 #endif
 

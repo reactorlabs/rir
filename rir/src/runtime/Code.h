@@ -3,7 +3,7 @@
 
 #include "PirTypeFeedback.h"
 #include "RirRuntimeObject.h"
-#include "event_counters.h"
+#include "event_counters/code_event_counters.h"
 #include "ir/BC_inc.h"
 #include "utils/UUID.h"
 
@@ -50,6 +50,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class CodeVerifier;
     static constexpr size_t NumLocals = 2;
 
+    // Returns null otherwise
+    static Code* withUidIfExists(UUID uid);
     static Code* withUid(UUID uid);
 
     Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,
@@ -73,15 +75,29 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
     }
 
-    void registerInvocation() {
+    void registerInvocationStart() {
+#ifdef ENABLE_EVENT_COUNTERS
+        if (ENABLE_EVENT_COUNTERS) {
+            CodeEventCounters::instance().count(this, codeEvents::Invocations);
+            CodeEventCounters::instance().profileStart(this);
+        }
+#endif
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;
+    }
+
+    void registerInvocationEnd() {
+#ifdef ENABLE_EVENT_COUNTERS
+        if (ENABLE_EVENT_COUNTERS) {
+            CodeEventCounters::instance().profileEnd(this);
+        }
+#endif
     }
 
     void registerDeopt() {
 #ifdef ENABLE_EVENT_COUNTERS
         if (ENABLE_EVENT_COUNTERS) {
-            EventCounters::instance().count(Deopt);
+            EventCounters::instance().count(events::Deopt);
         }
 #endif
         if (deoptCount < UINT_MAX)
@@ -177,6 +193,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
+
+    SEXP getAst() const;
 
     static Code* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;

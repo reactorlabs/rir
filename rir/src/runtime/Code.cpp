@@ -11,7 +11,23 @@
 namespace rir {
 std::unordered_map<UUID, Code*> allCodes;
 
-Code* Code::withUid(UUID uid) { return allCodes.at(uid); }
+Code* Code::withUidIfExists(UUID uid) {
+    if (!allCodes.count(uid)) {
+        return nullptr;
+    }
+    Code* code = allCodes.at(uid);
+    if (code->uid != uid) {
+        // This means the code was silently gc'd
+        return nullptr;
+    }
+    return code;
+}
+
+Code* Code::withUid(UUID uid) {
+    Code* code = allCodes.at(uid);
+    assert(code->uid == uid && "code silently gc'd");
+    return code;
+}
 
 // cppcheck-suppress uninitMemberVar symbol=data
 Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
@@ -73,6 +89,8 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
 
     return sidx;
 }
+
+SEXP Code::getAst() const { return src_pool_at(globalContext(), src); }
 
 Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     size_t size = InInteger(inp);

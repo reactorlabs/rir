@@ -179,6 +179,10 @@ rir.deserialize <- function(path) {
     .Call("rir_deserialize", path)
 }
 
+rir.printBuiltinIds <- function() {
+    invisible(.Call("rirPrintBuiltinIds"))
+}
+
 rir.enableLoopPeeling <- function() {
     .Call("rirEnableLoopPeeling")
 }
@@ -195,6 +199,19 @@ rir.disableEventCounters <- function() {
     .Call("rirDisableEventCounters")
 }
 
-rir.printBuiltinIds <- function() {
-    invisible(.Call("rirPrintBuiltinIds"))
+# Resets the event counters
+rir.resetEventCounters <- function() {
+    .Call("rirResetEventCounters")
 }
+
+# Writes results of the event counters if there are any results, and resets them
+rir.flushEventCounters <- function() {
+    .Call("rirFlushEventCounters")
+}
+
+# Will silently do nothing if event counters aren't actually enabled
+.rir.flushEventCountersIfEnabled <- function() {
+    .Call("rirFlushEventCountersIfEnabled")
+}
+
+.Last <- .rir.flushEventCountersIfEnabled
