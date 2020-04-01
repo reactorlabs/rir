@@ -44,6 +44,8 @@ bool UUID::operator==(const UUID& other) const {
     return true;
 }
 
+bool UUID::operator!=(const UUID& other) const { return !(*this == other); }
+
 UUID UUID::operator^(const UUID& other) const {
     UUID uuid;
     for (int i = 0; i < UUID_SIZE; i++) {

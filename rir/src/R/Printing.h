@@ -3,6 +3,8 @@
 
 #include "R/r.h"
 #include "utils/capture_out.h"
+#include <iomanip>
+#include <sstream>
 
 namespace rir {
 

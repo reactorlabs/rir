@@ -66,11 +66,11 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     MaybeCls originalSuccess = success;
     Maybe originalFail = fail;
     success = ENABLE_EVENT_COUNTERS ? [&](ClosureVersion* result) {
-        EventCounters::instance().count(PirOptimized);
+        EventCounters::instance().count(events::PirOptimized);
         originalSuccess(result);
     } : originalSuccess;
     fail = ENABLE_EVENT_COUNTERS ? [&]() {
-        EventCounters::instance().count(Unoptimizable);
+        EventCounters::instance().count(events::Unoptimizable);
         originalFail();
     } : originalFail;
 #endif

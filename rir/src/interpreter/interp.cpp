@@ -8,7 +8,7 @@
 #include "cache.h"
 #include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
-#include "event_counters.h"
+#include "event_counters/code_event_counters.h"
 #include "ir/Deoptimization.h"
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
@@ -238,10 +238,17 @@ static SEXP materializeCallerEnv(CallContext& callCtx,
     return callCtx.callerEnv;
 }
 
-SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
+SEXP createLegacyArgsListFromStackValues(const Code* caller, size_t length,
+                                         const R_bcstack_t* args,
                                          const Immediate* names,
                                          bool eagerCallee,
                                          InterpreterInstance* ctx) {
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS) {
+        CodeEventCounters::instance().count(caller,
+                                            codeEvents::ArgsListCreated);
+    }
+#endif
     assert(args && "Cannot materialize promargs for statically reordered "
                    "arguments. Static Call to UseMethod function?");
     SEXP result = R_NilValue;
@@ -321,12 +328,12 @@ SEXP materialize(SEXP rirDataWrapper) {
 static RIR_INLINE SEXP createLegacyLazyArgsList(CallContext& call,
                                                 InterpreterInstance* ctx) {
     return createLegacyArgsListFromStackValues(
-        call.suppliedArgs, call.stackArgs, call.names, false, ctx);
+        call.caller, call.suppliedArgs, call.stackArgs, call.names, false, ctx);
 }
 
 static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
                                             InterpreterInstance* ctx) {
-    return createLegacyArgsListFromStackValues(call.suppliedArgs,
+    return createLegacyArgsListFromStackValues(call.caller, call.suppliedArgs,
                                                call.stackArgs, call.names,
                                                call.hasEagerCallee(), ctx);
 }
@@ -804,13 +811,13 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     addDynamicAssumptionsFromContext(call);
     Function* fun = dispatch(call, table);
-    fun->registerInvocation();
+    size_t nextFunInvocationCount = fun->invocationCount() + 1;
 
     if (!isDeoptimizing() && !fun->unoptimizable &&
         fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-        ((fun != table->baseline() && fun->invocationCount() >= 2 &&
-          fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-         (fun->invocationCount() %
+        ((fun != table->baseline() && nextFunInvocationCount >= 2 &&
+          nextFunInvocationCount <= pir::Parameter::RIR_WARMUP) ||
+         (nextFunInvocationCount %
           (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
@@ -840,6 +847,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             }
         }
     }
+
+    fun->registerInvocationStart();
     Assumptions derived =
         addDynamicAssumptionsForOneTarget(call, fun->signature());
     call.givenAssumptions = derived;
@@ -909,8 +918,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             // Instead of a SEXP with the argslist we create an
             // structure with the information needed to recreate
             // the list lazily if the gnu-r interpreter needs it
-            ArgsLazyData lazyArgs(call.suppliedArgs, call.stackArgs, call.names,
-                                  ctx);
+            ArgsLazyData lazyArgs(call.caller, call.suppliedArgs,
+                                  call.stackArgs, call.names, ctx);
             if (!arglist)
                 arglist = (SEXP)&lazyArgs;
 
@@ -927,8 +936,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     if (bodyPreserved)
         UNPROTECT(1);
 
+    fun->registerInvocationEnd();
     assert(result);
-
     assert(!fun->deopt);
     return result;
 }
@@ -1456,7 +1465,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(ctx, stackHeight);
     auto code = f.code;
-    code->registerInvocation();
+    code->registerInvocationStart();
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
@@ -1561,6 +1570,8 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv, res);
         assert(false);
     }
+
+    code->registerInvocationEnd();
 
     ostack_push(ctx, res);
 }
@@ -1701,7 +1712,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     if (!initialPC && c->nativeCode) {
 #ifdef ENABLE_EVENT_COUNTERS
         if (ENABLE_EVENT_COUNTERS) {
-            EventCounters::instance().count(LlvmEvaled);
+            EventCounters::instance().count(events::LlvmEvaled);
         }
 #endif
         return c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
@@ -1710,7 +1721,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
 #ifdef ENABLE_EVENT_COUNTERS
     if (ENABLE_EVENT_COUNTERS && !initialPC) {
-        EventCounters::instance().count(RirEvaled);
+        EventCounters::instance().count(events::RirEvaled);
     }
 #endif
 
@@ -2618,13 +2629,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
             bool dispatchFail = fun->dead || !matches(call, fun->signature());
-            fun->registerInvocation();
+            size_t nextInvocationCount = fun->invocationCount() + 1;
             auto dt = DispatchTable::unpack(BODY(callee));
             if (!dispatchFail && !fun->unoptimizable &&
                 fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-                ((fun != dt->baseline() && fun->invocationCount() >= 2 &&
-                  fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-                 (fun->invocationCount() %
+                ((fun != dt->baseline() && nextInvocationCount >= 2 &&
+                  nextInvocationCount <= pir::Parameter::RIR_WARMUP) ||
+                 (nextInvocationCount %
                       ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
                   0))) {
                 Assumptions assumptions =
@@ -2641,12 +2652,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             advanceImmediate();
 
+            fun->registerInvocationStart();
             if (fun->signature().envCreation ==
                 FunctionSignature::Environment::CallerProvided) {
                 res = rirCall(call, ctx);
             } else {
-                ArgsLazyData lazyArgs(call.suppliedArgs, call.stackArgs,
-                                      call.names, ctx);
+                ArgsLazyData lazyArgs(call.caller, call.suppliedArgs,
+                                      call.stackArgs, call.names, ctx);
                 // Currently we cannot recreate the original arglist if we
                 // statically reordered arguments. TODO this needs to be fixed
                 // by remembering the original order.
@@ -2656,6 +2668,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 res = rirCallTrampoline(call, fun, symbol::delayedEnv,
                                         (SEXP)&lazyArgs, ctx);
             }
+            fun->registerInvocationEnd();
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 
@@ -4235,21 +4248,20 @@ SEXP rirEval_f(SEXP what, SEXP env) {
         return evalRirCodeExtCaller(code, globalContext(), env);
     }
 
+    Function* fun;
     if (auto table = DispatchTable::check(what)) {
         // TODO: add an adapter frame to be able to call something else than
         // the baseline version!
-        Function* fun = table->baseline();
-        fun->registerInvocation();
-
-        return evalRirCodeExtCaller(fun->body(), globalContext(), env);
+        fun = table->baseline();
+    } else if ((fun = Function::check(what))) {
+        // fun gets set in the condition
+    } else {
+        assert(false && "Expected a code object or a dispatch table");
     }
 
-    if (auto fun = Function::check(what)) {
-        fun->registerInvocation();
-        return evalRirCodeExtCaller(fun->body(), globalContext(), env);
-    }
-
-    assert(false && "Expected a code object or a dispatch table");
-    return nullptr;
+    fun->registerInvocationStart();
+    SEXP res = evalRirCodeExtCaller(fun->body(), globalContext(), env);
+    fun->registerInvocationEnd();
+    return res;
 }
 } // namespace rir

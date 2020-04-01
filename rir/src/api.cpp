@@ -409,14 +409,53 @@ REXPORT SEXP rirDisableLoopPeeling() {
 }
 
 REXPORT SEXP rirEnableEventCounters() {
+#ifndef ENABLE_EVENT_COUNTERS
+    Rf_error("RIR must be compiled with event counters to support this");
+#else
     EventCounters::isEnabled = true;
+#endif
     return R_NilValue;
 }
 
 REXPORT SEXP rirDisableEventCounters() {
+#ifndef ENABLE_EVENT_COUNTERS
+    Rf_error("RIR must be compiled with event counters to support this");
+#else
     EventCounters::isEnabled = false;
+#endif
     return R_NilValue;
 }
+
+REXPORT SEXP rirResetEventCounters() {
+#ifndef ENABLE_EVENT_COUNTERS
+    Rf_error("RIR must be compiled with event counters to support this");
+#else
+    EventCounters::instance().reset();
+    CodeEventCounters::instance().reset();
+#endif
+    return R_NilValue;
+}
+
+REXPORT SEXP rirFlushEventCounters() {
+#ifndef ENABLE_EVENT_COUNTERS
+    Rf_error("RIR must be compiled with event counters to support this");
+#else
+    EventCounters::instance().flush();
+    CodeEventCounters::instance().flush();
+#endif
+    return R_NilValue;
+}
+
+REXPORT SEXP rirFlushEventCountersIfEnabled() {
+#ifndef ENABLE_EVENT_COUNTERS
+    return R_NilValue;
+#else
+    EventCounters::instance().flush();
+    CodeEventCounters::instance().flush();
+#endif
+    return R_NilValue;
+}
+
 REXPORT SEXP rirPrintBuiltinIds() {
     FUNTAB* finger = R_FunTab;
     int i = 0;

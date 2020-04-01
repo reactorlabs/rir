@@ -1369,18 +1369,22 @@ NativeBuiltin NativeBuiltins::extract22rr = {
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
                                SEXP env, SEXP callee) {
-    code->registerInvocation();
+    code->registerInvocationStart();
     if ((SETJMP(cntxt.cjmpbuf))) {
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
-            code->registerInvocation();
-            return code->nativeCode(code, args, env, callee);
+            code->registerInvocationStart();
+            SEXP res = code->nativeCode(code, args, env, callee);
+            code->registerInvocationEnd();
+            return res;
         } else {
             return R_ReturnedValue;
         }
     }
-    return code->nativeCode(code, args, env, callee);
+    SEXP res = code->nativeCode(code, args, env, callee);
+    code->registerInvocationEnd();
+    return res;
 }
 
 void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
@@ -1418,7 +1422,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
     R_bcstack_t* args = ostack_cell_at(ctx, nargs + missing - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
-    ArgsLazyData lazyArgs(nargs, args, nullptr, globalContext());
+    ArgsLazyData lazyArgs(fun->body(), nargs, args, nullptr, globalContext());
     SEXP arglist = (SEXP)&lazyArgs;
 
     assert(fun->signature().envCreation ==

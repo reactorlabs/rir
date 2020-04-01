@@ -11,7 +11,7 @@
 #include "compiler/analysis/verifier.h"
 #include "compiler/native/lower_llvm.h"
 #include "compiler/parameter.h"
-#include "event_counters.h"
+#include "event_counters/code_event_counters.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -1349,8 +1349,9 @@ rir::Function* Pir2Rir::finalize() {
 #ifdef ENABLE_EVENT_COUNTERS
     if (ENABLE_EVENT_COUNTERS) {
         int numClosuresCompiled = cls->inlinees + 1;
-        EventCounters::instance().count(
-            body->nativeCode ? LlvmLowered : RirLowered, numClosuresCompiled);
+        EventCounters::instance().count(body->nativeCode ? events::LlvmLowered
+                                                         : events::RirLowered,
+                                        numClosuresCompiled);
     }
 #endif
     return function.function();

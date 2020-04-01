@@ -19,6 +19,7 @@ class UUID {
     std::string str();
 
     bool operator==(const UUID& other) const;
+    bool operator!=(const UUID& other) const;
     UUID operator^(const UUID& other) const;
     friend struct std::hash<UUID>;
 };
