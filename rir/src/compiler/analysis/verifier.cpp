@@ -192,6 +192,7 @@ class TheVerifier {
     }
 
     void verify(Instruction* i, BB* bb) {
+
         if (i->bb() != bb) {
             std::cerr << "Error: instruction '";
             i->print(std::cerr);
@@ -354,8 +355,9 @@ class TheVerifier {
         i->eachArg([&](const InstrArg& a) -> void {
             auto v = a.val();
             auto t = a.type();
+
             if (auto iv = Instruction::Cast(v)) {
-                if (!Phi::Cast(i))
+                if (!Phi::Cast(i)) {
                     if ((iv->bb() == i->bb() &&
                          bb->indexOf(iv) > bb->indexOf(i)) ||
                         (iv->bb() != i->bb() && slow &&
@@ -367,6 +369,7 @@ class TheVerifier {
                         std::cerr << "' used before definition.\n";
                         ok = false;
                     }
+                }
 
                 if (iv->bb()->owner != i->bb()->owner) {
                     std::cerr << "Error at instruction '";
