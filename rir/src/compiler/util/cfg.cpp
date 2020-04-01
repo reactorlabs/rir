@@ -193,10 +193,20 @@ const DominanceFrontier::BBList& DominanceFrontier::at(BB* bb) const {
 }
 
 DominanceFrontier::DominanceFrontier(Code* code, const DominanceGraph& dom) {
+    // Algorithm taking from Figure 5 of Cooper, Harvey, and Kennedy, 2001.
+    // A simple, fast dominance algorithm. Software Practice & Experience.
+    // http://www.hipersoft.rice.edu/grads/publications/dom14.pdf
     frontier.resize(code->nextBBId);
     Visitor::run(code->entry, [&](BB* n) {
+        // Nodes in dominance frontier represent join points, so skip if there
+        // is only one predecessor.
+        if (n->predecessors().size() < 2) {
+            return;
+        }
         for (const auto& p : n->predecessors()) {
+            // Start at p and walk up the dominator tree.
             auto r = p;
+            // Stop when we reach n's immediate dominator.
             while (r != dom.immediateDominator(n)) {
                 frontier[r->id].insert(n);
                 r = dom.immediateDominator(r);
