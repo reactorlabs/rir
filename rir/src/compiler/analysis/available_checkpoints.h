@@ -82,8 +82,10 @@ class AvailableCheckpoints {
         // Search for the next cp only in main path, not the deopt branch
         if (auto cp = Checkpoint::Cast(i)) {
             auto n = cp->nextBB();
-            while (n->isEmpty())
+            if (n->isEmpty())
                 n = n->next();
+            if (n->isEmpty())
+                return nullptr;
             return rwd.reachingThrough(*n->begin());
         }
         return rwd.reaching(i);

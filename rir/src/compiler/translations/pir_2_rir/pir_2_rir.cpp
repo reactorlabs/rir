@@ -368,14 +368,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         cb.add(BC::clearBindingCache(0, cache.globalEnvsCacheSize()));
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
-        if (isJumpThrough(bb))
-            return;
-
         order.pop_front();
         cb.add(bbLabels[bb]);
 
         auto jumpThroughEmpty = [&](BB* bb) {
-            while (isJumpThrough(bb))
+            if (isJumpThrough(bb))
                 bb = bb->next();
             return bb;
         };
