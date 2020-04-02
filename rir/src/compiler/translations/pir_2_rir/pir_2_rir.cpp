@@ -301,10 +301,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto isJumpThrough = [&](BB* bb) {
         return false;
-        if (!bb->isJmp())
-            return false;
-        return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
-                                 alloc.sa.toDrop(bb->last()).empty());
+        // if (!bb->isJmp())
+        //     return false;
+        // return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
+        //                          alloc.sa.toDrop(bb->last()).empty());
     };
 
     // Create labels for all bbs
@@ -379,9 +379,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
         auto jumpThroughEmpty = [&](BB* bb) {
             return bb;
-            while (isJumpThrough(bb))
-                bb = bb->next();
-            return bb;
+            // while (isJumpThrough(bb))
+            //     bb = bb->next();
+            // return bb;
         };
 
         // Only needed for deopt branches
