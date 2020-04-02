@@ -192,7 +192,17 @@ bool LivenessIntervals::interfere(Value* v1, Value* v2) const {
         const auto& int1 = l1[i];
         const auto& int2 = l2[i];
         if (int1.live && int2.live) {
-            return int1.begin <= int2.end && int2.begin <= int1.end;
+            if (int1.begin < int1.end) {
+                if (int2.begin < int2.end)
+                    return int1.begin < int2.end && int2.begin < int1.end;
+                else
+                    return int1.begin < int2.end || int2.begin < int1.end;
+            } else {
+                if (int2.begin < int2.end)
+                    return int1.begin < int2.end || int2.begin < int1.end;
+                else
+                    return true;
+            }
         }
     }
     return false;
