@@ -73,6 +73,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                 }
             }
         } else if ((!i->type.unboxable() && i->typeFeedback.type.unboxable()) ||
+                   (i->type.maybeLazy() && !i->typeFeedback.type.maybeLazy()) ||
                    // Vector where Extract is unboxed if we speculate
                    (i->type.isA(PirType::num()) &&
                     !i->type.scalar().unboxable() &&

@@ -340,7 +340,7 @@ NativeBuiltin NativeBuiltins::warn = {
     (void*)&warnImpl,
 };
 
-static void errorImpl() { Rf_error("Some error in compiled code"); };
+static void errorImpl(const char* e) { Rf_error(e); }
 
 NativeBuiltin NativeBuiltins::error = {
     "error",
@@ -2282,6 +2282,39 @@ NativeBuiltin NativeBuiltins::colonCastLhs = {
 NativeBuiltin NativeBuiltins::colonCastRhs = {
     "colonCastRhs",
     (void*)rir::colonCastRhs,
+};
+
+SEXP namesImpl(SEXP val) { return Rf_getAttrib(val, R_NamesSymbol); }
+NativeBuiltin NativeBuiltins::names = {
+    "names",
+    (void*)&namesImpl,
+};
+
+SEXP setNamesImpl(SEXP val, SEXP names) {
+    // If names is R_NilValue, setAttrib doesn't return the val but rather
+    // R_NilValue, hence we cannot return val directly...
+    Rf_setAttrib(val, R_NamesSymbol, names);
+    return val;
+}
+NativeBuiltin NativeBuiltins::setNames = {
+    "setNames",
+    (void*)&setNamesImpl,
+};
+
+SEXP xlength_Impl(SEXP val) {
+    SEXP len = Rf_allocVector(INTSXP, 1);
+    INTEGER(len)[0] = Rf_xlength(val);
+    return len;
+}
+NativeBuiltin NativeBuiltins::xlength_ = {
+    "xlength_",
+    (void*)&xlength_Impl,
+};
+
+SEXP getAttribImpl(SEXP val, SEXP sym) { return Rf_getAttrib(val, sym); }
+NativeBuiltin NativeBuiltins::getAttrb = {
+    "getAttrib",
+    (void*)&getAttribImpl,
 };
 }
 }

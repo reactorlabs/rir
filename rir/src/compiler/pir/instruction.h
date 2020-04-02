@@ -824,6 +824,14 @@ class FLI(ForSeqSize, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
+class FLI(XLength, 1, Effects::None()) {
+  public:
+    explicit XLength(Value* val)
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType::val()}}, {{val}}) {}
+    size_t gvnBase() const override { return tagHash(); }
+};
+
 class FLI(LdArg, 0, Effects::None()) {
   public:
     size_t id;
@@ -836,7 +844,7 @@ class FLI(LdArg, 0, Effects::None()) {
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
-class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
+class FLIE(Missing, 1, Effects() | Effect::ReadsEnv | Effect::Error) {
   public:
     SEXP varName;
     explicit Missing(SEXP varName, Value* env)
@@ -1502,6 +1510,22 @@ class FLI(Invisible, 0, Effect::Visibility) {
     }
 };
 
+class FLI(Names, 1, Effects::None()) {
+  public:
+    explicit Names(Value* v)
+        : FixedLenInstruction(PirType(RType::str) | RType::nil,
+                              {{PirType::val()}}, {{v}}) {}
+    size_t gvnBase() const override { return tagHash(); }
+};
+
+class FLI(SetNames, 2, Effect::Error) {
+  public:
+    explicit SetNames(Value* v, Value* names)
+        : FixedLenInstruction(v->type, {{PirType::val(), PirType::val()}},
+                              {{v, names}}) {}
+    size_t gvnBase() const override { return tagHash(); }
+};
+
 class FLI(PirCopy, 1, Effects::None()) {
   public:
     explicit PirCopy(Value* v)
@@ -1781,14 +1805,6 @@ ARITHMETIC_UNOP(Minus);
 
 #undef ARITHMETIC_UNOP
 #undef LOGICAL_UNOP
-
-class FLI(Length, 1, Effects::None()) {
-  public:
-    explicit Length(Value* v)
-        : FixedLenInstruction(PirType::simpleScalarInt(), {{PirType::val()}},
-                              {{v}}) {}
-    size_t gvnBase() const override { return tagHash(); }
-};
 
 struct RirStack {
   private:

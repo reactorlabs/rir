@@ -675,6 +675,11 @@ bool testTypeRules() {
     assert(t == a);
     t = PirType::any() & t;
     assert(t == a);
+    auto real = PirType(RType::real).orAttribs().notObject();
+    auto realScalar = PirType::simpleScalarReal();
+    assert(real.maybeHasAttrs());
+    assert(!realScalar.maybeHasAttrs());
+    assert(real.mergeWithConversion(realScalar).maybeHasAttrs());
     return true;
 }
 

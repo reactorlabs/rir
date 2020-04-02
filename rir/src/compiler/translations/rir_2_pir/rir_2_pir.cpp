@@ -786,6 +786,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new ForSeqSize(top())));
         break;
 
+    case Opcode::xlength_:
+        push(insert(new XLength(pop())));
+        break;
+
     case Opcode::extract1_1_: {
         forceIfPromised(1); // <- ensure forced captured in framestate
         if (!inPromise())
@@ -985,7 +989,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Name(pop())));                                         \
         break;                                                                 \
     }
-        UNOP_NOENV(Length, length_);
         UNOP_NOENV(Inc, inc_);
 #undef UNOP_NOENV
 
@@ -1036,6 +1039,21 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Force(pop(), env)));
         break;
 
+    case Opcode::names_:
+        push(insert(new Names(pop())));
+        break;
+
+    case Opcode::set_names_: {
+        Value* names = pop();
+        Value* vec = pop();
+        push(insert(new SetNames(vec, names)));
+        break;
+    }
+
+    case Opcode::check_closure_:
+        push(insert(new ChkClosure(pop())));
+        break;
+
 #define V(_, name, Name)                                                       \
     case Opcode::name##_:                                                      \
         insert(new Name());                                                    \
@@ -1045,15 +1063,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     // Silently ignored
     case Opcode::clear_binding_cache_:
-    // TODO implement!
-    case Opcode::check_closure_:
         break;
 
     // Currently unused opcodes:
-    case Opcode::alloc_:
     case Opcode::push_code_:
-    case Opcode::set_names_:
-    case Opcode::names_:
 
     // Invalid opcodes:
     case Opcode::invalid_:

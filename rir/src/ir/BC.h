@@ -238,11 +238,6 @@ BC BC::stvarSuper(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_super_, i);
 }
-BC BC::alloc(int type) {
-    ImmediateArguments i;
-    i.i = type;
-    return BC(Opcode::alloc_, i);
-}
 BC BC::br(Jmp j) {
     ImmediateArguments i;
     i.offset = j;

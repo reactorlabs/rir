@@ -51,6 +51,9 @@ void DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
                             names.push_back(n);
                             args.push_back(v);
                         });
+                    } else if (splat &&
+                               splat->arg(0).val() == MissingArg::instance()) {
+                        hasDots = true;
                     } else {
                         args.push_back(v);
                         if (namedCall) {

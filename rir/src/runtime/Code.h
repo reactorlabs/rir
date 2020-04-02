@@ -39,11 +39,6 @@ typedef SEXP CodeSEXP;
 #pragma pack(push)
 #pragma pack(1)
 
-static unsigned pad4(unsigned sizeInBytes) {
-    unsigned x = sizeInBytes % 4;
-    return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
-}
-
 struct InterpreterInstance;
 struct Code;
 typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
@@ -70,6 +65,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
   public:
     NativeCode nativeCode;
+
+    static unsigned pad4(unsigned sizeInBytes) {
+        unsigned x = sizeInBytes % 4;
+        return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
+    }
 
     void registerInvocation() {
         if (funInvocationCount < UINT_MAX)

@@ -161,7 +161,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::is_:
     case Opcode::istype_:
     case Opcode::put_:
-    case Opcode::alloc_:
     case Opcode::ldarg_:
     case Opcode::stloc_:
     case Opcode::movloc_:
@@ -174,7 +173,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::set_env_:
     case Opcode::materialize_env_:
     case Opcode::ret_:
-    case Opcode::length_:
     case Opcode::names_:
     case Opcode::set_names_:
     case Opcode::force_:
@@ -185,6 +183,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::dup_:
     case Opcode::dup2_:
     case Opcode::for_seq_size_:
+    case Opcode::xlength_:
     case Opcode::swap_:
     case Opcode::set_shared_:
     case Opcode::ensure_named_:
@@ -305,7 +304,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
         if (oldo != c->stackLength)
             Rf_error("RIR Verifier: Invalid stack layout reported");
 
-        if (((uintptr_t)(c + 1) + pad4(c->codeSize) +
+        if (((uintptr_t)(c + 1) + Code::pad4(c->codeSize) +
              c->srcLength * sizeof(Code::SrclistEntry)) == 0)
             Rf_error("RIR Verifier: Invalid code length reported");
 

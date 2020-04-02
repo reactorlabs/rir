@@ -1,6 +1,8 @@
 #ifndef RIR_FUNTAB_H
 #define RIR_FUNTAB_H
 
+#include "BuiltinIds.h"
+
 #include <R.h>
 #define USE_RINTERNALS
 #include <Rinternals.h>
@@ -128,6 +130,14 @@ static inline bool builtinUpdatesVisibility(int id) { return getFlag(id) < 2; }
 static inline bool builtinVisibility(int id) {
     assert(builtinUpdatesVisibility(id));
     return getFlag(id) != 1;
+}
+
+static inline SEXP getBuiltinFun(char const* name) {
+    assert(R_FunTab[rir::blt(name)].eval % 10 == 1 && "Only use for BUILTINSXP");
+    if (R_FunTab[rir::blt(name)].eval % 100 / 10 == 0)
+        return Rf_install(name)->u.symsxp.value;
+    else
+        return Rf_install(name)->u.symsxp.internal;
 }
 
 #endif

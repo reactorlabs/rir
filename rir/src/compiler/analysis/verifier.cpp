@@ -125,7 +125,7 @@ class TheVerifier {
                   C      D
 
             or
-                _
+               _
             | / \
             A __/
             |

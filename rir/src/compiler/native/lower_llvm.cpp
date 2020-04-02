@@ -411,6 +411,9 @@ class LowerFunctionLLVM {
     void checkSexptype(llvm::Value* v, const std::vector<SEXPTYPE>& types);
     void checkIsSexp(llvm::Value* v, const std::string& msg = "");
     void setSexptype(llvm::Value* v, int t);
+    llvm::Value* isVector(llvm::Value* v);
+    llvm::Value* isArray(llvm::Value* v);
+    llvm::Value* isMatrix(llvm::Value* v);
     llvm::Value* sexptype(llvm::Value* v);
     llvm::Value* attr(llvm::Value* v);
     llvm::Value* vectorLength(llvm::Value* v);
@@ -1294,6 +1297,71 @@ llvm::Value* LowerFunctionLLVM::sexptype(llvm::Value* v) {
     return builder.CreateTrunc(t, t::Int);
 }
 
+llvm::Value* LowerFunctionLLVM::isVector(llvm::Value* v) {
+    auto t = sexptype(v);
+    return builder.CreateOr(
+        builder.CreateICmpEQ(t, c(LGLSXP)),
+        builder.CreateOr(
+            builder.CreateICmpEQ(t, c(INTSXP)),
+            builder.CreateOr(
+                builder.CreateICmpEQ(t, c(REALSXP)),
+                builder.CreateOr(
+                    builder.CreateICmpEQ(t, c(CPLXSXP)),
+                    builder.CreateOr(
+                        builder.CreateICmpEQ(t, c(STRSXP)),
+                        builder.CreateOr(
+                            builder.CreateICmpEQ(t, c(RAWSXP)),
+                            builder.CreateOr(
+                                builder.CreateICmpEQ(t, c(VECSXP)),
+                                builder.CreateICmpEQ(t, c(EXPRSXP)))))))));
+}
+
+llvm::Value* LowerFunctionLLVM::isMatrix(llvm::Value* v) {
+    auto res = phiBuilder(t::i1);
+    auto isVec = BasicBlock::Create(C, "", fun);
+    auto notVec = BasicBlock::Create(C, "", fun);
+    auto done = BasicBlock::Create(C, "", fun);
+    builder.CreateCondBr(isVector(v), isVec, notVec);
+
+    builder.SetInsertPoint(isVec);
+    auto t =
+        call(NativeBuiltins::getAttrb, {v, constant(R_DimSymbol, t::SEXP)});
+    res.addInput(
+        builder.CreateAnd(builder.CreateICmpEQ(sexptype(t), c(INTSXP)),
+                          builder.CreateICmpEQ(vectorLength(t), c(2, 64))));
+    builder.CreateBr(done);
+
+    builder.SetInsertPoint(notVec);
+    res.addInput(builder.getFalse());
+    builder.CreateBr(done);
+
+    builder.SetInsertPoint(done);
+    return res();
+}
+
+llvm::Value* LowerFunctionLLVM::isArray(llvm::Value* v) {
+    auto res = phiBuilder(t::i1);
+    auto isVec = BasicBlock::Create(C, "", fun);
+    auto notVec = BasicBlock::Create(C, "", fun);
+    auto done = BasicBlock::Create(C, "", fun);
+    builder.CreateCondBr(isVector(v), isVec, notVec);
+
+    builder.SetInsertPoint(isVec);
+    auto t =
+        call(NativeBuiltins::getAttrb, {v, constant(R_DimSymbol, t::SEXP)});
+    res.addInput(
+        builder.CreateAnd(builder.CreateICmpEQ(sexptype(t), c(INTSXP)),
+                          builder.CreateICmpUGT(vectorLength(t), c(0, 64))));
+    builder.CreateBr(done);
+
+    builder.SetInsertPoint(notVec);
+    res.addInput(builder.getFalse());
+    builder.CreateBr(done);
+
+    builder.SetInsertPoint(done);
+    return res();
+}
+
 llvm::Value* LowerFunctionLLVM::tag(llvm::Value* v) {
     auto pos = builder.CreateGEP(v, {c(0), c(4), c(2)});
     return builder.CreateLoad(pos);
@@ -1520,7 +1588,9 @@ void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
     builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
-    call(NativeBuiltins::error, {});
+    auto msg =
+        builder.CreateGlobalString("argument is missing, with no default");
+    call(NativeBuiltins::error, {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
@@ -1533,7 +1603,8 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
-    call(NativeBuiltins::error, {});
+    auto msg = builder.CreateGlobalString("object not found");
+    call(NativeBuiltins::error, {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
@@ -2636,6 +2707,46 @@ bool LowerFunctionLLVM::tryCompile() {
                             setVal(i, constant(R_FalseValue, orep));
                         }
                         break;
+                    case blt("is.array"):
+                        if (irep == Representation::Sexp) {
+                            setVal(i,
+                                   builder.CreateSelect(
+                                       isArray(a), constant(R_TrueValue, orep),
+                                       constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_FalseValue, orep));
+                        }
+                        break;
+                    case blt("is.atomic"):
+                        if (irep == Representation::Sexp) {
+                            auto t = sexptype(a);
+                            auto isatomic = builder.CreateOr(
+                                builder.CreateICmpEQ(t, c(NILSXP)),
+                                builder.CreateOr(
+                                    builder.CreateICmpEQ(t, c(CHARSXP)),
+                                    builder.CreateOr(
+                                        builder.CreateICmpEQ(t, c(LGLSXP)),
+                                        builder.CreateOr(
+                                            builder.CreateICmpEQ(t, c(INTSXP)),
+                                            builder.CreateOr(
+                                                builder.CreateICmpEQ(
+                                                    t, c(REALSXP)),
+                                                builder.CreateOr(
+                                                    builder.CreateICmpEQ(
+                                                        t, c(CPLXSXP)),
+                                                    builder.CreateOr(
+                                                        builder.CreateICmpEQ(
+                                                            t, c(STRSXP)),
+                                                        builder.CreateICmpEQ(
+                                                            t,
+                                                            c(RAWSXP)))))))));
+                            setVal(i, builder.CreateSelect(
+                                          isatomic, constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_TrueValue, orep));
+                        }
+                        break;
                     case blt("bodyCode"): {
                         assert(irep == Representation::Sexp && orep == irep);
                         llvm::Value* res = nullptr;
@@ -2667,7 +2778,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 if (b->nargs() == 2) {
-                    bool success = false;
+                    bool fastcase = false;
                     auto arep = representationOf(b->arg(0).val());
                     auto brep = representationOf(b->arg(1).val());
                     auto orep = representationOf(b);
@@ -2700,7 +2811,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                                       load(l, Representation::
                                                                   Integer),
                                                       t::i64)}));
-                                        success = true;
+                                        fastcase = true;
                                         break;
                                     default: {}
                                     }
@@ -2725,7 +2836,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                 assert(orep == Representation::Sexp);
                                 setVal(i, boxInt(res, false));
                             }
-                            success = true;
+                            fastcase = true;
                         } else if (arep == Representation::Real &&
                                    brep == Representation::Real &&
                                    orep != Representation::Integer) {
@@ -2739,12 +2850,33 @@ bool LowerFunctionLLVM::tryCompile() {
                                 assert(orep == Representation::Sexp);
                                 setVal(i, boxReal(res, false));
                             }
-                            success = true;
+                            fastcase = true;
                         }
                         break;
                     }
+                    case blt("is.vector"):
+                        if (auto cnst = LdConst::Cast(b->arg(1).val())) {
+                            if (TYPEOF(cnst->c()) == STRSXP &&
+                                LENGTH(cnst->c()) == 1) {
+                                auto kind = STRING_ELT(cnst->c(), 0);
+                                if (std::string("any") == CHAR(kind)) {
+                                    if (arep == Representation::Sexp) {
+                                        setVal(
+                                            i,
+                                            builder.CreateSelect(
+                                                isVector(aval),
+                                                constant(R_TrueValue, orep),
+                                                constant(R_FalseValue, orep)));
+                                    } else {
+                                        setVal(i, constant(R_TrueValue, orep));
+                                    }
+                                    fastcase = true;
+                                }
+                            }
+                        }
+                        break;
                     }
-                    if (success) {
+                    if (fastcase) {
                         fixVisibility();
                         break;
                     }
@@ -3061,8 +3193,9 @@ bool LowerFunctionLLVM::tryCompile() {
                               c(mkenv->context)});
                     size_t pos = 0;
                     mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
-                        envStubSet(env, pos++, loadSxp(v), mkenv->nLocals(),
-                                   false);
+                        auto vn = loadSxp(v);
+                        envStubSet(env, pos++, vn, mkenv->nLocals(), false);
+                        incrementNamed(vn);
                     });
                     setVal(i, env);
                     break;
@@ -3408,7 +3541,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto msg = builder.CreateGlobalString(
                             "probable complete loss of accuracy in modulus");
                         call(NativeBuiltins::warn,
-                             {builder.CreateBitCast(msg, t::voidPtr)});
+                             {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                         builder.CreateBr(noWarn);
 
                         builder.SetInsertPoint(noWarn);
@@ -3716,7 +3849,10 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 builder.SetInsertPoint(isNa);
-                call(NativeBuiltins::error, {});
+                auto msg = builder.CreateGlobalString(
+                    "missing value where TRUE/FALSE needed");
+                call(NativeBuiltins::error,
+                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                 builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
 
                 builder.SetInsertPoint(done);
@@ -4747,20 +4883,6 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
-            case Tag::Length: {
-                llvm::Value* l;
-                if (representationOf(i) == Representation::Sexp) {
-                    l = vectorLength(loadSxp(i->arg(0).val()));
-                } else if (representationOf(i) == Representation::Real) {
-                    l = c((double)1);
-                } else {
-                    assert(representationOf(i) == Representation::Integer);
-                    l = c(1);
-                }
-                setVal(i, l);
-                break;
-            }
-
             case Tag::ColonInputEffects:
                 setVal(i, call(NativeBuiltins::colonInputEffects,
                                {loadSxp(i->arg(0).val()),
@@ -4776,6 +4898,22 @@ bool LowerFunctionLLVM::tryCompile() {
                 setVal(i, call(NativeBuiltins::colonCastRhs,
                                {loadSxp(i->arg(0).val()),
                                 loadSxp(i->arg(1).val())}));
+                break;
+
+            case Tag::Names:
+                setVal(i,
+                       call(NativeBuiltins::names, {loadSxp(i->arg(0).val())}));
+                break;
+
+            case Tag::SetNames:
+                setVal(i, call(NativeBuiltins::setNames,
+                               {loadSxp(i->arg(0).val()),
+                                loadSxp(i->arg(1).val())}));
+                break;
+
+            case Tag::XLength:
+                setVal(i, call(NativeBuiltins::xlength_,
+                               {loadSxp(i->arg(0).val())}));
                 break;
 
             case Tag::Int3:
