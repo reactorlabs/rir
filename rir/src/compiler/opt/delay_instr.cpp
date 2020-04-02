@@ -92,8 +92,6 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
         };
     std::unordered_map<Instruction*, SmallSet<std::pair<BB*, Instruction*>>>
         replacements;
-    std::unordered_map<BB*, std::vector<rir::pir::Instruction*>::iterator>
-        insertPositions;
 
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
@@ -102,14 +100,25 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
             if (usedOnlyInDeopt.count(instruction)) {
                 for (auto targetBB : usedOnlyInDeopt[instruction]) {
+                    auto insertPosition = targetBB->begin();
+                    // ensure we don't insert any instruction before its
+                    // arguments
+                    auto seek = [&](Instruction* instr) {
+                        instr->eachArg([&](Value* v) {
+                            if (auto dep = Instruction::Cast(v)) {
+                                if (dep->bb() == targetBB) {
+                                    auto depPos = targetBB->atPosition(dep);
+                                    if (depPos >= insertPosition)
+                                        insertPosition = depPos + 1;
+                                }
+                            }
+                        });
+                    };
                     auto newInstr = instruction->clone();
                     newInstr->eachArg([&](InstrArg& arg) {
                         replaceArgs(arg, replacements, targetBB);
                     });
-                    if (!insertPositions.count(targetBB))
-                        insertPositions[targetBB] = targetBB->begin();
-                    std::vector<rir::pir::Instruction*>::iterator&
-                        insertPosition = insertPositions[targetBB];
+                    seek(newInstr);
                     insertPosition =
                         targetBB->insert(insertPosition, newInstr) + 1;
                     instruction->replaceUsesIn(newInstr, targetBB);
@@ -117,10 +126,14 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                     for (auto updatePromise : updatePromises[instruction]) {
                         if (udatePromiseTargets[updatePromise].count(
                                 targetBB)) {
-                            auto newInstr = updatePromise->clone();
+                            if (updatePromise->bb() == bb)
+                                continue;
+                            auto newInstr =
+                                UpdatePromise::Cast(updatePromise->clone());
                             newInstr->eachArg([&](InstrArg& arg) {
                                 replaceArgs(arg, replacements, targetBB);
                             });
+                            seek(newInstr);
                             assert(bb != targetBB);
                             insertPosition =
                                 targetBB->insert(insertPosition, newInstr) + 1;
