@@ -1,6 +1,7 @@
 #pragma once
 
 #include "event_counters.h"
+#include "utils/Set.h"
 #include "utils/UUID.h"
 #include <algorithm>
 #include <cassert>
@@ -38,6 +39,23 @@ class CodeEventCounters {
         InfoDuringProfile(Timestamp startTime);
     };
 
+    struct CallSite {
+        UUID callerCodeUid;
+        ptrdiff_t bytecodeOffset;
+
+        CallSite(const Code* callerCode, const void* address);
+
+        bool operator==(const CallSite& other) const;
+    };
+
+    struct DispatchTableInfo {
+        std::string name;
+        unsigned size;
+
+        DispatchTableInfo(const DispatchTable* dispatchTable,
+                          const std::string& name);
+    };
+
     // Names of the events. names.size() is the # of events
     std::vector<std::string> names;
     std::unordered_map<UUID, InfoDuringProfile> codesBeingProfiled;
@@ -46,6 +64,11 @@ class CodeEventCounters {
     std::unordered_map<UUID, std::vector<size_t>> counters;
     // Names inferred for closure code blocks
     std::unordered_map<UUID, std::string> closureNames;
+    // Map of closure code uids to RIR call sites so far
+    std::unordered_map<UUID, SmallSet<CallSite>> closureCallSites;
+    // Map of dispatch table's baseline's body's uid (more reliable than
+    // address) to info about the entire table
+    std::unordered_map<UUID, DispatchTableInfo> closureDispatchTables;
 
     CodeEventCounters() {}
 
@@ -59,23 +82,34 @@ class CodeEventCounters {
     void count(const Code* code, unsigned counter, size_t n = 1);
     void profileStart(const Code* code);
     void profileEnd(const Code* code, bool isBecauseOfContextJump = false);
-    void assignName(SEXP dispatchTableSexp, SEXP name);
-    void assignName(DispatchTable* dispatchTable, const std::string& name);
-    void assignName(Function* function, const std::string& name);
+    void countCallSite(const Function* callee, const Code* callerCode,
+                       const void* address);
+    void updateDispatchTableInfo(SEXP dispatchTableSexp, SEXP name);
+    void updateDispatchTableInfo(const DispatchTable* dispatchTable,
+                                 const std::string& name);
+    void updateDispatchTableButNotContainedFunctionInfo(
+        const DispatchTable* dispatchTable, const std::string& name);
+    void assignName(const DispatchTable* dispatchTable,
+                    const std::string& name);
+    void assignName(const Function* function, const std::string& name,
+                    size_t version);
     bool aCounterIsNonzero() const;
-    void dump();
+    bool hasADispatchTable() const;
+    void dump() const;
+    void dumpCodeCounters() const;
+    void dumpNumClosureVersions() const;
     void reset();
     void flush();
 };
 
 #ifdef MEASURE
 namespace codeEvents {
+static unsigned CallSites =
+    CodeEventCounters::instance().registerCounter("# distinct callsites");
 static unsigned Invocations =
     CodeEventCounters::instance().registerCounter("# invocations");
 static unsigned TotalExecutionTime =
     CodeEventCounters::instance().registerCounter("total execution time (µs)");
-static unsigned ArgsListCreated =
-    CodeEventCounters::instance().registerCounter("# times argslist created");
 } // namespace codeEvents
 
 #endif

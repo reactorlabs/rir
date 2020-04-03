@@ -20,12 +20,14 @@
 namespace rir {
 
 struct CallContext {
-    CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
-                R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
-                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
-        : caller(c), suppliedArgs(nargs), passedArgs(nargs),
-          stackArgs(stackArgs), names(names), callerEnv(callerEnv), ast(ast),
-          callee(callee), givenAssumptions(givenAssumptions) {
+    CallContext(Code* c, void* callSiteAddress, SEXP callee, size_t nargs,
+                SEXP ast, R_bcstack_t* stackArgs, Immediate* names,
+                SEXP callerEnv, const Assumptions& givenAssumptions,
+                InterpreterInstance* ctx)
+        : caller(c), callSiteAddress(callSiteAddress), suppliedArgs(nargs),
+          passedArgs(nargs), stackArgs(stackArgs), names(names),
+          callerEnv(callerEnv), ast(ast), callee(callee),
+          givenAssumptions(givenAssumptions) {
         assert(callerEnv);
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
@@ -35,12 +37,33 @@ struct CallContext {
                    LazyEnvironment::check(callerEnv));
     }
 
+    CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
+                R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
+                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
+        : CallContext(c, nullptr, callee, nargs, ast, stackArgs, names,
+                      callerEnv, givenAssumptions, ctx) {}
+
+    // cppcheck-suppress uninitMemberVar
+    CallContext(Code* c, void* callSiteAddress, SEXP callee, size_t nargs,
+                Immediate ast, R_bcstack_t* stackArgs, Immediate* names,
+                SEXP callerEnv, const Assumptions& givenAssumptions,
+                InterpreterInstance* ctx)
+        : CallContext(c, callSiteAddress, callee, nargs, cp_pool_at(ctx, ast),
+                      stackArgs, names, callerEnv, givenAssumptions, ctx) {}
+
     // cppcheck-suppress uninitMemberVar
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
                 const Assumptions& givenAssumptions, InterpreterInstance* ctx)
         : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), stackArgs, names,
                       callerEnv, givenAssumptions, ctx) {}
+
+    // cppcheck-suppress uninitMemberVar
+    CallContext(Code* c, void* callSiteAddress, SEXP callee, size_t nargs,
+                Immediate ast, R_bcstack_t* stackArgs, SEXP callerEnv,
+                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
+        : CallContext(c, callSiteAddress, callee, nargs, cp_pool_at(ctx, ast),
+                      stackArgs, nullptr, callerEnv, givenAssumptions, ctx) {}
 
     // cppcheck-suppress uninitMemberVar
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
@@ -50,6 +73,7 @@ struct CallContext {
                       nullptr, callerEnv, givenAssumptions, ctx) {}
 
     const Code* caller;
+    const void* callSiteAddress;
     const size_t suppliedArgs;
     size_t passedArgs;
     const R_bcstack_t* stackArgs;

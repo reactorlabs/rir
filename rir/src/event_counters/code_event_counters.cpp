@@ -10,6 +10,7 @@ using Clock = std::chrono::system_clock;
 using Timestamp = Clock::time_point;
 
 const std::string ANONYMOUS_DEALLOCATED = "<anonymous deallocated>";
+const ptrdiff_t UNKNOWN_BYTECODE_OFFSET = -1;
 
 static void endProfileBecauseOfContextSwitch(void* data) {
     const Code* code = (const Code*)data;
@@ -42,6 +43,23 @@ void CodeEventCounters::InfoDuringProfile::pushCall(
 
 CodeEventCounters::InfoDuringProfile::InfoDuringProfile(Timestamp startTime)
     : startTime(startTime) {}
+
+CodeEventCounters::CallSite::CallSite(const Code* callerCode,
+                                      const void* address)
+    : callerCodeUid(callerCode->uid),
+      bytecodeOffset(address == nullptr
+                         ? UNKNOWN_BYTECODE_OFFSET
+                         : (ptrdiff_t)address - (ptrdiff_t)callerCode->code()) {
+}
+
+bool CodeEventCounters::CallSite::operator==(const CallSite& other) const {
+    return callerCodeUid == other.callerCodeUid &&
+           bytecodeOffset == other.bytecodeOffset;
+}
+
+CodeEventCounters::DispatchTableInfo::DispatchTableInfo(
+    const DispatchTable* dispatchTable, const std::string& name)
+    : name(name), size(dispatchTable->size()) {}
 
 unsigned CodeEventCounters::registerCounter(const std::string& name) {
 #ifndef MEASURE
@@ -116,31 +134,74 @@ void CodeEventCounters::profileEnd(const Code* code,
 #ifdef MEASURE
     count(code, codeEvents::TotalExecutionTime, durationMicros);
 #else
+    (void)durationMicros;
     assert(false);
 #endif
 }
 
-void CodeEventCounters::assignName(SEXP dispatchTableSexp, SEXP name) {
-    assignName(DispatchTable::unpack(BODY(dispatchTableSexp)), dumpSexp(name));
-}
+void CodeEventCounters::countCallSite(const Function* callee,
+                                      const Code* callerCode,
+                                      const void* address) {
+    const Code* calleeCode = callee->body();
+    SmallSet<CallSite>& callSites = closureCallSites[calleeCode->uid];
+    CallSite callSite(callerCode, address);
 
-void CodeEventCounters::assignName(DispatchTable* dispatchTable,
-                                   const std::string& name) {
-    for (size_t i = 0; i < dispatchTable->size(); i++) {
-        Function* function = dispatchTable->get(i);
-        assignName(function, name + std::to_string(i));
+    if (!callSites.count(callSite)) {
+        callSites.insert(callSite);
+#ifdef MEASURE
+        count(calleeCode, codeEvents::CallSites);
+#else
+        assert(false);
+#endif
     }
 }
 
-void CodeEventCounters::assignName(Function* function,
+void CodeEventCounters::updateDispatchTableInfo(SEXP dispatchTableSexp,
+                                                SEXP name) {
+    updateDispatchTableInfo(DispatchTable::unpack(BODY(dispatchTableSexp)),
+                            dumpSexp(name));
+}
+
+void CodeEventCounters::updateDispatchTableInfo(
+    const DispatchTable* dispatchTable, const std::string& name) {
+    updateDispatchTableButNotContainedFunctionInfo(dispatchTable, name);
+    assignName(dispatchTable, name);
+}
+
+void CodeEventCounters::updateDispatchTableButNotContainedFunctionInfo(
+    const DispatchTable* dispatchTable, const std::string& name) {
+    UUID firstCodeUidWhichIdentifiesEntireTable =
+        dispatchTable->get(0)->body()->uid;
+    closureDispatchTables.emplace(firstCodeUidWhichIdentifiesEntireTable,
+                                  DispatchTableInfo(dispatchTable, name));
+}
+
+void CodeEventCounters::assignName(const DispatchTable* dispatchTable,
                                    const std::string& name) {
+    for (size_t i = 0; i < dispatchTable->size(); i++) {
+        Function* function = dispatchTable->get(i);
+        assignName(function, name, i);
+    }
+}
+
+void CodeEventCounters::assignName(const Function* function,
+                                   const std::string& name, size_t version) {
     UUID uid = function->body()->uid;
-    closureNames[uid] = name;
+    closureNames[uid] = name + "$" + std::to_string(version);
 }
 
 bool CodeEventCounters::aCounterIsNonzero() const { return !counters.empty(); }
 
-void CodeEventCounters::dump() {
+bool CodeEventCounters::hasADispatchTable() const {
+    return !closureDispatchTables.empty();
+}
+
+void CodeEventCounters::dump() const {
+    dumpCodeCounters();
+    dumpNumClosureVersions();
+}
+
+void CodeEventCounters::dumpCodeCounters() const {
     if (!aCounterIsNonzero()) {
         return;
     }
@@ -167,8 +228,8 @@ void CodeEventCounters::dump() {
             codeName = closureNames.at(codeUid);
         } else {
             if (code == nullptr) {
-                // The code was deallocated - must've been an anonymous closure
-                // anyways
+                // The code was deallocated - must've been an anonymous
+                // closure anyways
                 codeName = ANONYMOUS_DEALLOCATED;
             } else {
                 SEXP codeAst = code->getAst();
@@ -178,11 +239,9 @@ void CodeEventCounters::dump() {
 
         if (code != nullptr) {
             if (codesBeingProfiled.count(code->uid)) {
-                std::cout << "Warning: profiling not ended for " << codeName
-                          << "\n";
-                while (codesBeingProfiled.count(code->uid)) {
-                    profileEnd(code, true);
-                }
+                Rf_warning("Warning: profiling not ended for %s, ignoring last "
+                           "invocation execution time...",
+                           codeName.c_str());
             }
         }
 
@@ -191,6 +250,28 @@ void CodeEventCounters::dump() {
             file << ", " << codeCounters.at(i);
         }
         file << "\n";
+    }
+
+    file.close();
+}
+
+void CodeEventCounters::dumpNumClosureVersions() const {
+    if (!hasADispatchTable()) {
+        return;
+    }
+
+    std::ofstream file;
+    file.open("num_closures_per_table.csv");
+
+    // Heading
+    file << "name, # versions\n";
+
+    // Body
+    for (std::pair<UUID, DispatchTableInfo> dispatchTableFirstCodeUidAndInfo :
+         closureDispatchTables) {
+        DispatchTableInfo info = dispatchTableFirstCodeUidAndInfo.second;
+
+        file << std::quoted(info.name) << ", " << info.size << "\n";
     }
 
     file.close();
