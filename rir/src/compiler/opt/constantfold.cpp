@@ -107,9 +107,9 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
 
      static int iter = 0;
      // if (iter % 500 == 0) {
-     std::cerr << "------ iteration iter: " << iter
-               << " ------------------------"
-               << "\n";
+     // std::cerr << "------ iteration iter: " << iter
+     //          << " ------------------------"
+     //          << "\n";
      //}
      DominanceGraph dom(function);
      DominanceFrontier dfront(function, dom);
@@ -152,7 +152,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                  // std::cerr << "KEYYYY --------------------------- ";
                  // std::cin.get();
 
-                 std::cerr << "size uses: " << uses.size() << "\n";
+                 // std::cerr << "size uses: " << uses.size() << "\n";
 
                  for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
                      if (removed.count(*a))
@@ -167,8 +167,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                          auto bb1 = (*a)->bb();
                          auto bb2 = (*b)->bb();
                          if (dom.dominates(bb1, bb2)) {
-                             std::cerr << "action taken "
-                                       << "\n";
+                             // std::cerr << "action taken "
+                             //          << "\n";
                              if (dom.dominates(bb1->trueBranch(), bb2)) {
                                  (*b)->arg(0).val() = True::instance();
                              } else if (dom.dominates(bb1->falseBranch(),
@@ -177,8 +177,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                              } else {
                                  // assert(false && "hard case");
                                  // continue;
-                                 std::cerr << "hard case"
-                                           << "\n";
+                                 // std::cerr << "hard case"
+                                 //          << "\n";
                                  if (!phisPlaced) {
                                      // create and place phi
                                      std::unordered_map<BB*, Value*> inputs;
@@ -204,8 +204,9 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                      }
                                      phisPlaced = true;
                                  }
-                                 std::cerr << "number of phis: " << phis.size()
-                                           << "\n";
+                                 // std::cerr << "number of phis: " <<
+                                 // phis.size()
+                                 //          << "\n";
                                  auto count = 0;
                                  for (auto phi : phis) {
                                      if (phi->bb() == bb2 ||
@@ -221,8 +222,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                          dom.dominates(phi->bb(), bb2)) {
                                          (*b)->arg(0).val() = phi;
                                          aa = true;
-                                         std::cerr << "phi refereced at bb: "
-                                                   << (*b)->id() << "\n";
+                                         // std::cerr << "phi refereced at bb: "
+                                         //          << (*b)->id() << "\n";
                                          break;
                                      }
                                  }
