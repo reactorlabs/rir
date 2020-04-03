@@ -104,7 +104,7 @@ namespace pir {
 void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                          LogStream&) const {
     std::unordered_map<BB*, bool> branchRemoval;
-    /*
+
      static int iter = 0;
      // if (iter % 500 == 0) {
      std::cerr << "------ iteration iter: " << iter
@@ -125,7 +125,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
          //
          // and even constantfold the `b` branch if either
          // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach
-     `b`. std::unordered_map<Instruction*, std::vector<Branch*>> condition;
+         std::unordered_map<Instruction*, std::vector<Branch*>> condition;
          // DepthFirstVisitor::run(function->entry, [&](BB* bb) {
          // Visitor::run(function->entry, [&](BB* bb) {
          DominatorTreeVisitor<>(dom).run(function->entry, [&](BB* bb) {
@@ -145,7 +145,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
          std::unordered_set<Branch*> removed;
 
          for (auto& c : condition) {
-             continue;
+             // continue;
              removed.clear();
              auto& uses = c.second;
              if (uses.size() > 1) {
@@ -235,7 +235,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
          }
          iter++;
      }
- */
 
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())

@@ -65,7 +65,7 @@ class Pir2Rir {
     rir::Function* finalize();
 
   private:
-    // bool isInfiniteLoopHead(BB* bb, const DominanceGraph& dom);
+    bool isInfiniteLoopHead(BB* bb, const DominanceGraph& dom);
 
     Pir2RirCompiler& compiler;
     ClosureVersion* cls;
@@ -299,30 +299,17 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
     alloc.verify();
 
-    auto isJumpThrough = [&](BB* bb) {
-        return false;
-        // if (!bb->isJmp())
-        //     return false;
-        // return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
-        //                          alloc.sa.toDrop(bb->last()).empty());
-    };
-
     // Create labels for all bbs
     std::unordered_map<BB*, BC::Label> bbLabels;
-    BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
-        if (!isJumpThrough(bb))
-            bbLabels[bb] = ctx.cs().mkLabel();
-    });
+    BreadthFirstVisitor::run(
+        code->entry, [&](BB* bb) { bbLabels[bb] = ctx.cs().mkLabel(); });
 
     LastEnv lastEnv(cls, code, log.out());
     std::unordered_map<Value*, BC::Label> pushContexts;
     std::unordered_set<BC::Label> pushContextsPopped;
 
     std::deque<unsigned> order;
-    LoweringVisitor::run(code->entry, [&](BB* bb) {
-        if (!isJumpThrough(bb))
-            order.push_back(bb->id);
-    });
+    LoweringVisitor::run(code->entry, [&](BB* bb) { order.push_back(bb->id); });
 
     NeedsRefcountAdjustment refcount;
     {
@@ -371,18 +358,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         cb.add(BC::clearBindingCache(0, cache.globalEnvsCacheSize()));
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
-        if (isJumpThrough(bb))
-            return;
-
         order.pop_front();
         cb.add(bbLabels[bb]);
-
-        auto jumpThroughEmpty = [&](BB* bb) {
-            return bb;
-            // while (isJumpThrough(bb))
-            //     bb = bb->next();
-            // return bb;
-        };
 
         // Only needed for deopt branches
         for (auto it = bb->begin(); it != bb->end(); ++it) {
@@ -1034,8 +1011,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             // BB exitting instructions
             case Tag::Branch: {
                 assert(bb->isBranch());
-                auto trueBranch = jumpThroughEmpty(bb->trueBranch());
-                auto falseBranch = jumpThroughEmpty(bb->falseBranch());
+                auto trueBranch = bb->trueBranch();
+                auto falseBranch = bb->falseBranch();
                 if (trueBranch->id == order.front()) {
                     cb.add(BC::brfalse(bbLabels[falseBranch]));
                     cb.add(BC::br(bbLabels[trueBranch]));
@@ -1147,7 +1124,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
         // This BB has exactly one successor
         assert(bb->isJmp());
-        auto next = jumpThroughEmpty(bb->next());
+        auto next = bb->next();
         cb.add(BC::br(bbLabels[next]));
     });
 
@@ -1303,47 +1280,47 @@ void Pir2Rir::lower(Code* code) {
     // toDrop
     // ************
 
-    // std::vector<BB*> headBBs;
-    // DominanceGraph dom(code);
+    std::vector<BB*> headBBs;
+    DominanceGraph dom(code);
 
-    // Visitor::run(code->entry, [&](BB* bb) {
-    //     if (isInfiniteLoopHead(bb, dom)) {
-    //         headBBs.push_back(bb);
-    //     }
-    // });
+    Visitor::run(code->entry, [&](BB* bb) {
+        if (isInfiniteLoopHead(bb, dom)) {
+            headBBs.push_back(bb);
+        }
+    });
 
-    // for (auto bb : headBBs) {
+    for (auto bb : headBBs) {
 
-    //     auto fakeFalseBranch = new BB(code, code->nextBBId++);
+        auto fakeFalseBranch = new BB(code, code->nextBBId++);
 
-    //     auto nilConst = new LdConst(R_NilValue);
-    //     auto ret = new Return(nilConst);
+        auto nilConst = new LdConst(R_NilValue);
+        auto ret = new Return(nilConst);
 
-    //     fakeFalseBranch->append(nilConst);
-    //     fakeFalseBranch->append(ret);
+        fakeFalseBranch->append(nilConst);
+        fakeFalseBranch->append(ret);
 
-    //     auto oldTrueBranch = bb->next();
+        auto oldTrueBranch = bb->next();
 
-    //     auto fakeTrueBranch = new BB(code, code->nextBBId++);
-    //     bb->overrideNext(fakeTrueBranch);
-    //     fakeTrueBranch->setNext(oldTrueBranch);
+        auto fakeTrueBranch = new BB(code, code->nextBBId++);
+        bb->overrideNext(fakeTrueBranch);
+        fakeTrueBranch->setNext(oldTrueBranch);
 
-    //     bb->setFalseBranch(fakeFalseBranch);
-    //     auto branch = new Branch(True::instance());
-    //     bb->append(branch);
-    // }
+        bb->setFalseBranch(fakeFalseBranch);
+        auto branch = new Branch(True::instance());
+        bb->append(branch);
+    }
 }
 
-// bool Pir2Rir::isInfiniteLoopHead(BB* bb, const DominanceGraph& dom) {
-//     if (!bb->isJmp())
-//         return false;
-//     return bb == bb->next() &&
-//            (bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last())));
+bool Pir2Rir::isInfiniteLoopHead(BB* bb, const DominanceGraph& dom) {
+    if (!bb->isJmp())
+        return false;
+    return bb == bb->next() &&
+           (bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last())));
 
-//     // return bb->isJmp() && (bb == bb->next() || (/*bb->next()->isJmp() &&
-//     */
-//     // dom.dominates(bb->next(), bb)));
-// }
+    // return bb->isJmp() && (bb == bb->next() || (/*bb->next()->isJmp() &&
+
+    // dom.dominates(bb->next(), bb)));
+}
 
 void Pir2Rir::toCSSA(Code* code) {
 
