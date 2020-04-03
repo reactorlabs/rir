@@ -246,12 +246,6 @@ SEXP createLegacyArgsListFromStackValues(SEXP callee, size_t length,
                                          const Immediate* names,
                                          bool eagerCallee,
                                          InterpreterInstance* ctx) {
-#ifdef ENABLE_EVENT_COUNTERS
-    if (ENABLE_EVENT_COUNTERS) {
-        CodeEventCounters::instance().count(callee,
-                                            codeEvents::ArgsListCreated);
-    }
-#endif
     assert(args && "Cannot materialize promargs for statically reordered "
                    "arguments. Static Call to UseMethod function?");
     SEXP result = R_NilValue;
@@ -859,6 +853,10 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         }
     }
 
+#ifdef MEASURE
+    CodeEventCounters::instance().countCallSite(fun, call.caller,
+                                                call.callSiteAddress);
+#endif
     fun->registerInvocationStart();
 
     bool needsEnv = fun->signature().envCreation ==
@@ -2590,7 +2588,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Assumptions given(pc);
             pc += sizeof(Assumptions);
 
-            CallContext call(c, ostack_at(ctx, n), n, ast,
+            CallContext call(c, pc, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, (long)n - 1), env, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
@@ -2616,7 +2614,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             pc += sizeof(Assumptions);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, ostack_at(ctx, n), n, ast,
+            CallContext call(c, pc, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, (long)n - 1), names, env,
                              given, ctx);
             res = doCall(call, ctx);
@@ -2657,7 +2655,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     names = (Immediate*)DATAPTR(namesStore);
                 pushed = 1;
             }
-            CallContext call(c, callee, n, ast,
+            CallContext call(c, pc, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), names, env,
                              given, ctx);
             res = doCall(call, ctx);
@@ -2681,7 +2679,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
-            CallContext call(c, callee, n, ast,
+            CallContext call(c, pc, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), env,
                              Assumptions(), ctx);
             res = builtinCall(call, ctx);
@@ -2710,23 +2708,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
-            CallContext call(c, callee, n, ast,
+            CallContext call(c, pc, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), env, given, ctx);
             auto fun = Function::unpack(version);
-<<<<<<< HEAD
             addDynamicAssumptionsFromContext(
                 call, fun->signature().formalNargs(), ctx);
             Assumptions assumptions = call.givenAssumptions;
             auto flags = fun->flags;
             bool dispatchFail = flags.contains(Function::Dead) ||
                                 !matches(assumptions, fun->signature());
-            fun->registerInvocation();
-=======
-            addDynamicAssumptionsFromContext(call);
-            auto flags = fun->flags;
-            bool dispatchFail = flags.contains(Function::Dead) ||
             size_t nextInvocationCount = fun->invocationCount() + 1;
->>>>>>> improved event counters:
             auto dt = DispatchTable::unpack(BODY(callee));
             if (!dispatchFail && !flags.contains(Function::NotOptimizable) &&
                 fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&

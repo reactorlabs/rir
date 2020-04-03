@@ -306,13 +306,15 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
 
                            DispatchTable* dispatchTable =
                                DispatchTable::unpack(BODY(what));
-#ifdef MEASURE
-                           CodeEventCounters::instance().assignName(
-                               fun,
-                               name + std::to_string(dispatchTable->size()));
-#endif
+
                            Protect p(fun->container());
                            dispatchTable->insert(fun);
+
+#ifdef MEASURE
+                           CodeEventCounters::instance()
+                               .updateDispatchTableInfo(dispatchTable, name);
+#endif
+
                        },
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
