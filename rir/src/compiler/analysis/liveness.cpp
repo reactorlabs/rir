@@ -1,6 +1,7 @@
 #include "liveness.h"
 #include "../pir/bb.h"
 #include "../pir/instruction.h"
+#include "../util/cfg.h"
 #include "../util/visitor.h"
 
 #include <map>
@@ -14,6 +15,7 @@ LivenessIntervals::LivenessIntervals(Code* code, unsigned bbsSize) {
     // ordered set so we can use std::includes
     std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
+    DominanceGraph dom(code);
     // this is a backwards analysis, starting from CFG exits
     std::unordered_set<BB*> todo;
     Visitor::run(code->entry, [&](BB* bb) {
@@ -21,6 +23,7 @@ LivenessIntervals::LivenessIntervals(Code* code, unsigned bbsSize) {
             todo.insert(bb);
     });
 
+restart:
     while (!todo.empty()) {
         BB* bb = *todo.begin();
         todo.erase(todo.begin());
@@ -145,6 +148,15 @@ LivenessIntervals::LivenessIntervals(Code* code, unsigned bbsSize) {
             }
         }
     }
+
+    Visitor::run(code->entry, [&](BB* bb) {
+        for (auto n : bb->succsessors()) {
+            if (!liveAtEnd.count(n))
+                todo.insert(n);
+        }
+    });
+    if (!todo.empty())
+        goto restart;
 
 #ifdef DEBUG_LIVENESS
     for (const auto& kv : intervals) {
