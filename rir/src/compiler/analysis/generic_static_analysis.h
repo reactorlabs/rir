@@ -481,6 +481,7 @@ class StaticAnalysis {
             return;
         }
 
+        // TODO add headers of infinite loops
         Visitor::run(code->entry, [&](BB* bb) {
             if (bb->isExit()) {
                 entrypoints.push_back(bb);
