@@ -14,6 +14,8 @@
 
 namespace rir {
 
+struct DispatchTable;
+struct Function;
 struct Code;
 
 // Closure-specific event counters
@@ -42,6 +44,8 @@ class CodeEventCounters {
     // Each entry counts events for one rir code block - the key is the
     // code's uid, the value contains the events aligned with names
     std::unordered_map<UUID, std::vector<size_t>> counters;
+    // Names inferred for closure code blocks
+    std::unordered_map<UUID, std::string> closureNames;
 
     CodeEventCounters() {}
 
@@ -51,9 +55,13 @@ class CodeEventCounters {
         return c;
     }
     unsigned registerCounter(const std::string& name);
+    void count(SEXP calleeSexp, unsigned counter, size_t n = 1);
     void count(const Code* code, unsigned counter, size_t n = 1);
     void profileStart(const Code* code);
     void profileEnd(const Code* code, bool isBecauseOfContextJump = false);
+    void assignName(SEXP dispatchTableSexp, SEXP name);
+    void assignName(DispatchTable* dispatchTable, const std::string& name);
+    void assignName(Function* function, const std::string& name);
     bool aCounterIsNonzero() const;
     void dump();
     void reset();
@@ -65,7 +73,7 @@ namespace codeEvents {
 static unsigned Invocations =
     CodeEventCounters::instance().registerCounter("# invocations");
 static unsigned TotalExecutionTime =
-    CodeEventCounters::instance().registerCounter("total execution time (ms)");
+    CodeEventCounters::instance().registerCounter("total execution time (µs)");
 static unsigned ArgsListCreated =
     CodeEventCounters::instance().registerCounter("# times argslist created");
 } // namespace codeEvents

@@ -1,5 +1,6 @@
 #include "instance.h"
 #include "api.h"
+#include "event_counters/code_event_counters.h"
 
 namespace rir {
 
@@ -44,21 +45,33 @@ InterpreterInstance* context_create() {
 
     c->exprCompiler = rir_compile;
     c->closureCompiler = [](SEXP closure, SEXP name) {
-        return rir_compile(closure, R_NilValue);
+        SEXP rir = rir_compile(closure, R_NilValue);
+#ifdef MEASURE
+        CodeEventCounters::instance().assignName(rir, name);
+#endif
+        return rir;
     };
     c->closureOptimizer = [](SEXP f, const Assumptions&, SEXP n) { return f; };
 
     if (pir && std::string(pir).compare("off") == 0) {
         // do nothing; use defaults
     } else if (pir && std::string(pir).compare("force") == 0) {
-        c->closureCompiler = [](SEXP f, SEXP n) {
+        c->closureCompiler = [](SEXP f, SEXP name) {
             SEXP rir = rir_compile(f, R_NilValue);
-            return rirOptDefaultOpts(rir, Assumptions(), n);
+            rir = rirOptDefaultOpts(rir, Assumptions(), name);
+#ifdef MEASURE
+            CodeEventCounters::instance().assignName(rir, name);
+#endif
+            return rir;
         };
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
-        c->closureCompiler = [](SEXP f, SEXP n) {
+        c->closureCompiler = [](SEXP f, SEXP name) {
             SEXP rir = rir_compile(f, R_NilValue);
-            return rirOptDefaultOptsDryrun(rir, Assumptions(), n);
+            rir = rirOptDefaultOptsDryrun(rir, Assumptions(), name);
+#ifdef MEASURE
+            CodeEventCounters::instance().assignName(rir, name);
+#endif
+            return rir;
         };
     } else {
         c->closureOptimizer = rirOptDefaultOpts;
