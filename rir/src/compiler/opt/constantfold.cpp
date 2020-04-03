@@ -171,11 +171,12 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                        << "\n";
                              if (dom.dominates(bb1->trueBranch(), bb2)) {
                                  (*b)->arg(0).val() = True::instance();
-                             } else if (dom.dominates(bb1->falseBranch(), bb2))
-     {
+                             } else if (dom.dominates(bb1->falseBranch(),
+                                                      bb2)) {
                                  (*b)->arg(0).val() = False::instance();
                              } else {
                                  // assert(false && "hard case");
+                                 // continue;
                                  std::cerr << "hard case"
                                            << "\n";
                                  if (!phisPlaced) {
