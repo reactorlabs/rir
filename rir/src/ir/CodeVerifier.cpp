@@ -246,8 +246,14 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
         if (state.find(i.pc) != state.end()) {
             assert(i.pc >= code->code() && i.pc < code->endCode());
             State current = state[i.pc];
-            if (current != i)
+            if (current != i) {
+                std::cerr << "Error, stack imbalance at " << i.pc - code->code()
+                          << "\nexpected " << current.ostack << " but got "
+                          << i.ostack << "\n"
+                          << "\nIn:\n";
+                code->print(std::cerr);
                 assert(false and "Stack imbalance detected");
+            }
             continue;
         }
         while (true) {
