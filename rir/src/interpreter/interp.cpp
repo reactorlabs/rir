@@ -238,14 +238,14 @@ static SEXP materializeCallerEnv(CallContext& callCtx,
     return callCtx.callerEnv;
 }
 
-SEXP createLegacyArgsListFromStackValues(const Code* caller, size_t length,
+SEXP createLegacyArgsListFromStackValues(SEXP callee, size_t length,
                                          const R_bcstack_t* args,
                                          const Immediate* names,
                                          bool eagerCallee,
                                          InterpreterInstance* ctx) {
 #ifdef ENABLE_EVENT_COUNTERS
     if (ENABLE_EVENT_COUNTERS) {
-        CodeEventCounters::instance().count(caller,
+        CodeEventCounters::instance().count(callee,
                                             codeEvents::ArgsListCreated);
     }
 #endif
@@ -328,12 +328,12 @@ SEXP materialize(SEXP rirDataWrapper) {
 static RIR_INLINE SEXP createLegacyLazyArgsList(CallContext& call,
                                                 InterpreterInstance* ctx) {
     return createLegacyArgsListFromStackValues(
-        call.caller, call.suppliedArgs, call.stackArgs, call.names, false, ctx);
+        call.callee, call.suppliedArgs, call.stackArgs, call.names, false, ctx);
 }
 
 static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
                                             InterpreterInstance* ctx) {
-    return createLegacyArgsListFromStackValues(call.caller, call.suppliedArgs,
+    return createLegacyArgsListFromStackValues(call.callee, call.suppliedArgs,
                                                call.stackArgs, call.names,
                                                call.hasEagerCallee(), ctx);
 }
@@ -918,7 +918,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             // Instead of a SEXP with the argslist we create an
             // structure with the information needed to recreate
             // the list lazily if the gnu-r interpreter needs it
-            ArgsLazyData lazyArgs(call.caller, call.suppliedArgs,
+            ArgsLazyData lazyArgs(call.callee, call.suppliedArgs,
                                   call.stackArgs, call.names, ctx);
             if (!arglist)
                 arglist = (SEXP)&lazyArgs;
@@ -2657,7 +2657,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 FunctionSignature::Environment::CallerProvided) {
                 res = rirCall(call, ctx);
             } else {
-                ArgsLazyData lazyArgs(call.caller, call.suppliedArgs,
+                ArgsLazyData lazyArgs(call.callee, call.suppliedArgs,
                                       call.stackArgs, call.names, ctx);
                 // Currently we cannot recreate the original arglist if we
                 // statically reordered arguments. TODO this needs to be fixed

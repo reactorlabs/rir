@@ -1422,7 +1422,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
     R_bcstack_t* args = ostack_cell_at(ctx, nargs + missing - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
-    ArgsLazyData lazyArgs(fun->body(), nargs, args, nullptr, globalContext());
+    ArgsLazyData lazyArgs(callee, nargs, args, nullptr, globalContext());
     SEXP arglist = (SEXP)&lazyArgs;
 
     assert(fun->signature().envCreation ==

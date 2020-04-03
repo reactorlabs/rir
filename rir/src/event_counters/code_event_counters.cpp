@@ -1,6 +1,8 @@
 #include "code_event_counters.h"
 #include "R/Printing.h"
 #include "runtime/Code.h"
+#include "runtime/DispatchTable.h"
+#include "runtime/Function.h"
 
 namespace rir {
 
@@ -53,6 +55,17 @@ unsigned CodeEventCounters::registerCounter(const std::string& name) {
     return names.size() - 1;
 }
 
+void CodeEventCounters::count(SEXP calleeSexp, unsigned counter, size_t n) {
+    if (auto dispatchTable = DispatchTable::check(calleeSexp)) {
+        for (size_t i = 0; i < dispatchTable->size(); i++) {
+            Function* function = dispatchTable->get(i);
+            count(function->body(), counter, n);
+        }
+    } else if (auto function = Function::check(calleeSexp)) {
+        count(function->body(), counter, n);
+    }
+}
+
 void CodeEventCounters::count(const Code* code, unsigned counter, size_t n) {
     if (!counters.count(code->uid)) {
         counters[code->uid] = std::vector<size_t>(names.size(), 0);
@@ -93,18 +106,36 @@ void CodeEventCounters::profileEnd(const Code* code,
     Timestamp startTime = info.startTime;
     Timestamp endTime = Clock::now();
     Timestamp::duration duration = endTime - startTime;
-    size_t durationMillis =
-        (size_t)std::chrono::duration_cast<std::chrono::milliseconds>(duration)
+    size_t durationMicros =
+        (size_t)std::chrono::duration_cast<std::chrono::microseconds>(duration)
             .count();
 
     // so we know it's no longer being profiled
     codesBeingProfiled.erase(code->uid);
 
 #ifdef MEASURE
-    count(code, codeEvents::TotalExecutionTime, durationMillis);
+    count(code, codeEvents::TotalExecutionTime, durationMicros);
 #else
     assert(false);
 #endif
+}
+
+void CodeEventCounters::assignName(SEXP dispatchTableSexp, SEXP name) {
+    assignName(DispatchTable::unpack(BODY(dispatchTableSexp)), dumpSexp(name));
+}
+
+void CodeEventCounters::assignName(DispatchTable* dispatchTable,
+                                   const std::string& name) {
+    for (size_t i = 0; i < dispatchTable->size(); i++) {
+        Function* function = dispatchTable->get(i);
+        assignName(function, name + std::to_string(i));
+    }
+}
+
+void CodeEventCounters::assignName(Function* function,
+                                   const std::string& name) {
+    UUID uid = function->body()->uid;
+    closureNames[uid] = name;
 }
 
 bool CodeEventCounters::aCounterIsNonzero() const { return !counters.empty(); }
@@ -129,16 +160,30 @@ void CodeEventCounters::dump() {
          counters) {
         UUID codeUid = codeUidAndCodeCounters.first;
         std::vector<size_t> codeCounters = codeUidAndCodeCounters.second;
-
         Code* code = Code::withUidIfExists(codeUid);
+
         std::string codeName;
-        if (code == nullptr) {
-            // The code was deallocated - must've been an anonymous closure
-            // anyways
-            codeName = ANONYMOUS_DEALLOCATED;
+        if (closureNames.count(codeUid)) {
+            codeName = closureNames.at(codeUid);
         } else {
-            SEXP codeAst = code->getAst();
-            codeName = dumpSexp(codeAst);
+            if (code == nullptr) {
+                // The code was deallocated - must've been an anonymous closure
+                // anyways
+                codeName = ANONYMOUS_DEALLOCATED;
+            } else {
+                SEXP codeAst = code->getAst();
+                codeName = "<code: " + dumpSexp(codeAst) + ">";
+            }
+        }
+
+        if (code != nullptr) {
+            if (codesBeingProfiled.count(code->uid)) {
+                std::cout << "Warning: profiling not ended for " << codeName
+                          << "\n";
+                while (codesBeingProfiled.count(code->uid)) {
+                    profileEnd(code, true);
+                }
+            }
         }
 
         file << std::quoted(codeName);

@@ -26,21 +26,20 @@ struct ArgsLazyDataContent
     ArgsLazyDataContent(const ArgsLazyDataContent&) = delete;
     ArgsLazyDataContent& operator=(const ArgsLazyDataContent&) = delete;
 
-    ArgsLazyDataContent(const Code* caller, size_t length,
-                        const R_bcstack_t* args, const Immediate* names,
-                        InterpreterInstance* cmpCtx)
-        : RirRuntimeObject(sizeof(ArgsLazyDataContent), 0), caller(caller),
+    ArgsLazyDataContent(SEXP callee, size_t length, const R_bcstack_t* args,
+                        const Immediate* names, InterpreterInstance* cmpCtx)
+        : RirRuntimeObject(sizeof(ArgsLazyDataContent), 0), callee(callee),
           length(length), args(args), names(names),
           compilationContext(cmpCtx){};
 
-    const Code* caller;
+    SEXP callee;
     size_t length;
     const R_bcstack_t* args;
     const Immediate* names;
     InterpreterInstance* compilationContext;
 
     SEXP createArgsLists() {
-        return createLegacyArgsListFromStackValues(caller, length, args, names,
+        return createLegacyArgsListFromStackValues(callee, length, args, names,
                                                    false, compilationContext);
     }
 };
@@ -55,9 +54,9 @@ struct ArgsLazyData {
     ArgsLazyData(const ArgsLazyData&) = delete;
     ArgsLazyData& operator=(const ArgsLazyData&) = delete;
 
-    ArgsLazyData(const Code* caller, size_t length, const R_bcstack_t* args,
+    ArgsLazyData(SEXP callee, size_t length, const R_bcstack_t* args,
                  const Immediate* names, InterpreterInstance* cmpCtx)
-        : content(caller, length, args, names, cmpCtx) {
+        : content(callee, length, args, names, cmpCtx) {
         fakeSEXP.attrib = R_NilValue;
         fakeSEXP.gengc_next_node = R_NilValue;
         fakeSEXP.gengc_prev_node = R_NilValue;
