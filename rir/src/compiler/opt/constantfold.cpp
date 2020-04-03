@@ -105,137 +105,136 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                          LogStream&) const {
     std::unordered_map<BB*, bool> branchRemoval;
 
-     static int iter = 0;
-     // if (iter % 500 == 0) {
-     // std::cerr << "------ iteration iter: " << iter
-     //          << " ------------------------"
-     //          << "\n";
-     //}
-     DominanceGraph dom(function);
-     DominanceFrontier dfront(function, dom);
-     {
-         // Branch Elimination
-         //
-         // Given branch `a` and `b`, where both have the same
-         // condition and `a` dominates `b`, we can replace the condition of `b`
-         // by
-         //
-         //     c' = Phi([TRUE, a->trueBranch()], [FALSE, a->falseBranch()])
-         //     b  = Branch(c')
-         //
-         // and even constantfold the `b` branch if either
-         // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach
-         std::unordered_map<Instruction*, std::vector<Branch*>> condition;
-         // DepthFirstVisitor::run(function->entry, [&](BB* bb) {
-         // Visitor::run(function->entry, [&](BB* bb) {
-         DominatorTreeVisitor<>(dom).run(function->entry, [&](BB* bb) {
-             if (bb->isEmpty())
-                 return;
-             auto branch = Branch::Cast(bb->last());
-             if (!branch)
-                 return;
-             if (auto i = Instruction::Cast(branch->arg(0).val())) {
+    // static int iter = 0;
+    // if (iter % 500 == 0) {
+    // std::cerr << "------ iteration iter: " << iter
+    //          << " ------------------------"
+    //          << "\n";
+    //}
+    DominanceGraph dom(function);
+    DominanceFrontier dfront(function, dom);
+    {
+        // Branch Elimination
+        //
+        // Given branch `a` and `b`, where both have the same
+        // condition and `a` dominates `b`, we can replace the condition of `b`
+        // by
+        //
+        //     c' = Phi([TRUE, a->trueBranch()], [FALSE, a->falseBranch()])
+        //     b  = Branch(c')
+        //
+        // and even constantfold the `b` branch if either
+        // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach
+        std::unordered_map<Instruction*, std::vector<Branch*>> condition;
+        // DepthFirstVisitor::run(function->entry, [&](BB* bb) {
+        // Visitor::run(function->entry, [&](BB* bb) {
+        DominatorTreeVisitor<>(dom).run(function->entry, [&](BB* bb) {
+            if (bb->isEmpty())
+                return;
+            auto branch = Branch::Cast(bb->last());
+            if (!branch)
+                return;
+            if (auto i = Instruction::Cast(branch->arg(0).val())) {
 
-                 auto ii = branch->arg(0).val();
-                 if (ii != True::instance() && ii != False::instance()) {
-                     condition[i].push_back(branch);
-                 }
-             }
-         });
-         std::unordered_set<Branch*> removed;
+                auto ii = branch->arg(0).val();
+                if (ii != True::instance() && ii != False::instance()) {
+                    condition[i].push_back(branch);
+                }
+            }
+        });
+        std::unordered_set<Branch*> removed;
 
-         for (auto& c : condition) {
-             // continue;
-             removed.clear();
-             auto& uses = c.second;
-             if (uses.size() > 1) {
-                 // std::cerr << "KEYYYY --------------------------- ";
-                 // std::cin.get();
+        for (auto& c : condition) {
+            // continue;
+            removed.clear();
+            auto& uses = c.second;
+            if (uses.size() > 1) {
+                // std::cerr << "KEYYYY --------------------------- ";
+                // std::cin.get();
 
-                 // std::cerr << "size uses: " << uses.size() << "\n";
+                // std::cerr << "size uses: " << uses.size() << "\n";
 
-                 for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
-                     if (removed.count(*a))
-                         continue;
-                     auto phisPlaced = false;
-                     std::unordered_set<Phi*> phis;
-                     phis.clear();
-                     for (auto b = a + 1; b != uses.end(); b++) {
+                for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
+                    if (removed.count(*a))
+                        continue;
+                    auto phisPlaced = false;
+                    std::unordered_set<Phi*> phis;
+                    phis.clear();
+                    for (auto b = a + 1; b != uses.end(); b++) {
 
-                         if (removed.count(*b))
-                             continue;
-                         auto bb1 = (*a)->bb();
-                         auto bb2 = (*b)->bb();
-                         if (dom.dominates(bb1, bb2)) {
-                             // std::cerr << "action taken "
-                             //          << "\n";
-                             if (dom.dominates(bb1->trueBranch(), bb2)) {
-                                 (*b)->arg(0).val() = True::instance();
-                             } else if (dom.dominates(bb1->falseBranch(),
-                                                      bb2)) {
-                                 (*b)->arg(0).val() = False::instance();
-                             } else {
-                                 // assert(false && "hard case");
-                                 // continue;
-                                 // std::cerr << "hard case"
-                                 //          << "\n";
-                                 if (!phisPlaced) {
-                                     // create and place phi
-                                     std::unordered_map<BB*, Value*> inputs;
-                                     inputs[bb1->trueBranch()] =
-                                         True::instance();
-                                     inputs[bb1->falseBranch()] =
-                                         False::instance();
-                                     auto pl = PhiPlacement(function, inputs,
-                                                            dom, dfront);
-                                     assert(pl.placement.size() > 0 &&
-                                            "error: 0 phis to place!!!");
-                                     for (auto& placement : pl.placement) {
-                                         auto targetForPhi = placement.first;
-                                         auto phi = new Phi;
-                                         phis.insert(phi);
-                                         for (auto& input : placement.second) {
-                                             phi->addInput(input.inputBlock,
-                                                           input.aValue);
-                                         }
-                                         phi->type = NativeType::test;
-                                         targetForPhi->insert(
-                                             targetForPhi->begin(), phi);
-                                     }
-                                     phisPlaced = true;
-                                 }
-                                 // std::cerr << "number of phis: " <<
-                                 // phis.size()
-                                 //          << "\n";
-                                 auto count = 0;
-                                 for (auto phi : phis) {
-                                     if (phi->bb() == bb2 ||
-                                         dom.dominates(phi->bb(), bb2)) {
-                                         count++;
-                                     }
-                                 }
-                                 assert(count == 1 &&
-                                        "more than one phi dominates!!");
-                                 auto aa = false;
-                                 for (auto phi : phis) {
-                                     if (phi->bb() == bb2 ||
-                                         dom.dominates(phi->bb(), bb2)) {
-                                         (*b)->arg(0).val() = phi;
-                                         aa = true;
-                                         // std::cerr << "phi refereced at bb: "
-                                         //          << (*b)->id() << "\n";
-                                         break;
-                                     }
-                                 }
-                                 assert(aa && "phi not found");
-                             }
-                         }
-                         removed.insert(*b);
-                     }
-                 }
-             }
-         }
-         iter++;
+                        if (removed.count(*b))
+                            continue;
+                        auto bb1 = (*a)->bb();
+                        auto bb2 = (*b)->bb();
+                        if (dom.dominates(bb1, bb2)) {
+                            // std::cerr << "action taken "
+                            //          << "\n";
+                            if (dom.dominates(bb1->trueBranch(), bb2)) {
+                                (*b)->arg(0).val() = True::instance();
+                            } else if (dom.dominates(bb1->falseBranch(), bb2)) {
+                                (*b)->arg(0).val() = False::instance();
+                            } else {
+                                // assert(false && "hard case");
+                                // continue;
+                                // std::cerr << "hard case"
+                                //          << "\n";
+                                if (!phisPlaced) {
+                                    // create and place phi
+                                    std::unordered_map<BB*, Value*> inputs;
+                                    inputs[bb1->trueBranch()] =
+                                        True::instance();
+                                    inputs[bb1->falseBranch()] =
+                                        False::instance();
+                                    auto pl = PhiPlacement(function, inputs,
+                                                           dom, dfront);
+                                    assert(pl.placement.size() > 0 &&
+                                           "error: 0 phis to place!!!");
+                                    for (auto& placement : pl.placement) {
+                                        auto targetForPhi = placement.first;
+                                        auto phi = new Phi;
+                                        phis.insert(phi);
+                                        for (auto& input : placement.second) {
+                                            phi->addInput(input.inputBlock,
+                                                          input.aValue);
+                                        }
+                                        phi->type = NativeType::test;
+                                        targetForPhi->insert(
+                                            targetForPhi->begin(), phi);
+                                    }
+                                    phisPlaced = true;
+                                }
+                                // std::cerr << "number of phis: " <<
+                                // phis.size()
+                                //          << "\n";
+                                auto count = 0;
+                                for (auto phi : phis) {
+                                    if (phi->bb() == bb2 ||
+                                        dom.dominates(phi->bb(), bb2)) {
+                                        count++;
+                                    }
+                                }
+                                assert(count == 1 &&
+                                       "more than one phi dominates!!");
+                                auto aa = false;
+                                for (auto phi : phis) {
+                                    if (phi->bb() == bb2 ||
+                                        dom.dominates(phi->bb(), bb2)) {
+                                        (*b)->arg(0).val() = phi;
+                                        aa = true;
+                                        // std::cerr << "phi refereced at bb: "
+                                        //          << (*b)->id() << "\n";
+                                        break;
+                                    }
+                                }
+                                assert(aa && "phi not found");
+                            }
+                        }
+                        removed.insert(*b);
+                    }
+                }
+            }
+        }
+        // iter++;
      }
 
     Visitor::run(function->entry, [&](BB* bb) {
