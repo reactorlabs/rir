@@ -49,7 +49,6 @@ bool CFG::isPredecessor(BB* a, BB* b) const {
         std::bind(std::equal_to<BB*>(), std::placeholders::_1, a));
 }
 
-// TODO: fix bug, algorithm assumes start node has no predecessor...
 DominanceGraph::DominanceGraph(Code* start) : idom(start->nextBBId) {
     int size = start->nextBBId;
     int N = 0;

@@ -576,7 +576,11 @@ void MkArg::printArgs(std::ostream& out, bool tty) const {
 
 bool MkArg::usesPromEnv() const {
     if (!isEager()) {
-        BB* bb = prom()->entry;
+        // Note that the entry block is empty and jumps to the next block; this
+        // is to ensure that it has no predecessors.
+        BB* entry = prom()->entry;
+        assert(entry->isEmpty() && entry->isJmp() && !entry->next()->isEmpty());
+        BB* bb = entry->next();
         if (bb->size() > 0 && LdFunctionEnv::Cast(*bb->begin())) {
             return true;
         }

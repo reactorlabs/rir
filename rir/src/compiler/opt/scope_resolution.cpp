@@ -20,9 +20,11 @@ using namespace rir::pir;
 // reflective effects
 static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
                          ScopeAnalysis& analysis, ScopeAnalysisState& state) {
+    // Note that the entry block is empty and jumps to the next block; this is
+    // to ensure that it has no predecessors.
     auto entry = code->entry;
-    assert(!entry->isEmpty());
-    auto funEnv = LdFunctionEnv::Cast(*entry->begin());
+    assert(entry->isEmpty() && entry->isJmp() && !entry->next()->isEmpty());
+    auto funEnv = LdFunctionEnv::Cast(*entry->next()->begin());
 
     return Visitor::check(code->entry, [&](Instruction* i) {
         if (CallSafeBuiltin::Cast(i))
