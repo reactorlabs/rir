@@ -258,7 +258,6 @@ class StaticReferenceCount
         case Tag::PirCopy:
         case Tag::RecordDeoptReason:
         case Tag::Return:
-        case Tag::Length:
         case Tag::Colon:
         case Tag::CastType:
         case Tag::IsType:
@@ -292,6 +291,8 @@ class StaticReferenceCount
         case Tag::ScheduledDeopt:
         case Tag::PopContext:
         case Tag::Extract2_2D:
+        case Tag::ColonCastLhs:
+        case Tag::ColonCastRhs:
             break;
 
         // Those may override the vector (which is arg 1)

@@ -272,15 +272,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
 
-    case Opcode::ceil_: {
-        push(insert(new AsInt(pop(), true)));
+    case Opcode::colon_input_effects_:
+        push(insert(new ColonInputEffects(at(1), at(0), srcIdx)));
         break;
-    }
 
-    case Opcode::floor_: {
-        push(insert(new AsInt(pop(), false)));
+    case Opcode::colon_cast_lhs_:
+        push(insert(new ColonCastLhs(pop(), srcIdx)));
         break;
-    }
+
+    case Opcode::colon_cast_rhs_:
+        push(insert(new ColonCastRhs(at(1), pop(), srcIdx)));
+        break;
 
     case Opcode::ldfun_: {
         auto ld = insert(new LdFun(bc.immediateConst(), env));
@@ -484,6 +486,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         }
 
+        bool staticCallee = false;
+        if (auto con = LdConst::Cast(callee)) {
+            monomorphic = con->c();
+            staticCallee = true;
+        }
+
         bool monomorphicClosure =
             monomorphic && isValidClosureSEXP(monomorphic);
         bool monomorphicBuiltin = monomorphic &&
@@ -538,8 +546,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Assume* assumption = nullptr;
         Value* guardedCallee = callee;
         // Insert a guard if we want to speculate
-        if (monomorphicBuiltin || monomorphicClosure ||
-            monomorphicInnerFunction) {
+        if (!staticCallee && (monomorphicBuiltin || monomorphicClosure ||
+                              monomorphicInnerFunction)) {
             // We use ldvar instead of ldfun for the guard. The reason is that
             // ldfun can force promises, which is a pain for our optimizer to
             // deal with. If we use a ldvar here, the actual ldfun will be
@@ -778,6 +786,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new ForSeqSize(top())));
         break;
 
+    case Opcode::xlength_:
+        push(insert(new XLength(pop())));
+        break;
+
     case Opcode::extract1_1_: {
         forceIfPromised(1); // <- ensure forced captured in framestate
         if (!inPromise())
@@ -977,9 +989,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Name(pop())));                                         \
         break;                                                                 \
     }
-        UNOP_NOENV(Length, length_);
         UNOP_NOENV(Inc, inc_);
-        UNOP_NOENV(Dec, dec_);
 #undef UNOP_NOENV
 
     case Opcode::missing_:
@@ -1025,6 +1035,25 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         break;
 
+    case Opcode::force_:
+        push(insert(new Force(pop(), env)));
+        break;
+
+    case Opcode::names_:
+        push(insert(new Names(pop())));
+        break;
+
+    case Opcode::set_names_: {
+        Value* names = pop();
+        Value* vec = pop();
+        push(insert(new SetNames(vec, names)));
+        break;
+    }
+
+    case Opcode::check_closure_:
+        push(insert(new ChkClosure(pop())));
+        break;
+
 #define V(_, name, Name)                                                       \
     case Opcode::name##_:                                                      \
         insert(new Name());                                                    \
@@ -1034,15 +1063,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     // Silently ignored
     case Opcode::clear_binding_cache_:
-    // TODO implement!
-    case Opcode::isfun_:
         break;
 
     // Currently unused opcodes:
-    case Opcode::alloc_:
     case Opcode::push_code_:
-    case Opcode::set_names_:
-    case Opcode::names_:
 
     // Invalid opcodes:
     case Opcode::invalid_:
@@ -1058,7 +1082,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     // Opcodes that only come from PIR
     case Opcode::deopt_:
-    case Opcode::force_:
     case Opcode::mk_stub_env_:
     case Opcode::mk_env_:
     case Opcode::mk_dotlist_:
@@ -1073,7 +1096,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldloc_:
     case Opcode::stloc_:
     case Opcode::movloc_:
-    case Opcode::istype_:
     case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
@@ -1085,6 +1107,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::assert_type_:
     case Opcode::record_deopt_:
     case Opcode::update_promise_:
+    case Opcode::istype_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
@@ -1347,7 +1370,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
         });
 
         if (!skip) {
-            int size = cur.stack.size();
+            auto oldStack = cur.stack;
             if (!compileBC(bc, pos, nextPos, srcCode, cur.stack, insert,
                            callTargetFeedback)) {
                 log.failed("Abort r2p due to unsupported bc");
@@ -1362,17 +1385,43 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                     continue;
                 }
 
+                // Here we iterate over the arguments to the last instruction
+                // and insert forces where required. This is actually done later
+                // by the insert_cast helper. However there we cannot create
+                // checkpoints. Here we ensure that between every force
+                // we will have a checkpoint with the updated forced value.
+                if (!cur.stack.empty() && cur.stack.top() == last) {
+                    insert.getCurrentBB()->eraseLast();
+                    last->eachArg([&](InstrArg& arg) {
+                        if (!arg.type().maybePromiseWrapped() &&
+                            arg.val()->type.maybePromiseWrapped()) {
+                            size_t idx = 0;
+                            while (idx < oldStack.size() &&
+                                   oldStack.at(idx) != arg.val())
+                                idx++;
+                            if (idx < oldStack.size()) {
+                                arg.val() = oldStack.at(idx) =
+                                    insert(new Force(arg.val(), insert.env));
+                                addCheckpoint(srcCode, pos, oldStack, insert);
+                            }
+                        }
+                    });
+                    insert(last);
+                }
+
                 if (last->isDeoptBarrier())
                     addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
 
-            if (cur.stack.size() != size - bc.popCount() + bc.pushCount()) {
+            if (cur.stack.size() !=
+                oldStack.size() - bc.popCount() + bc.pushCount()) {
                 srcCode->print(std::cerr);
                 std::cerr << "After interpreting '";
                 bc.print(std::cerr);
                 std::cerr << "' which is supposed to pop " << bc.popCount()
                           << " and push " << bc.pushCount() << " we got from "
-                          << size << " to " << cur.stack.size() << "\n";
+                          << oldStack.size() << " to " << cur.stack.size()
+                          << "\n";
                 assert(false);
                 return nullptr;
             }

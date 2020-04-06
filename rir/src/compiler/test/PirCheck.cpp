@@ -108,9 +108,9 @@ static bool testReturns42L(ClosureVersion* f) {
     return true;
 };
 
-static bool testNoAsInt(ClosureVersion* f) {
+static bool testNoColon(ClosureVersion* f) {
     return Visitor::check(f->entry,
-                          [&](Instruction* i) { return !AsInt::Cast(i); });
+                          [&](Instruction* i) { return !Colon::Cast(i); });
 }
 
 static bool testNoEq(ClosureVersion* f) {

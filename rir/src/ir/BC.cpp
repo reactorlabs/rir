@@ -130,7 +130,6 @@ void BC::write(CodeStream& cs) const {
     case Opcode::is_:
     case Opcode::istype_:
     case Opcode::put_:
-    case Opcode::alloc_:
     case Opcode::stvar_stubbed_:
     case Opcode::starg_stubbed_:
     case Opcode::ldvar_noforce_stubbed_:
@@ -289,7 +288,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::is_:
         case Opcode::istype_:
         case Opcode::put_:
-        case Opcode::alloc_:
         case Opcode::ldarg_:
         case Opcode::starg_:
         case Opcode::starg_cached_:
@@ -432,7 +430,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::is_:
         case Opcode::istype_:
         case Opcode::put_:
-        case Opcode::alloc_:
         case Opcode::ldarg_:
         case Opcode::starg_:
         case Opcode::starg_cached_:
@@ -619,7 +616,6 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::is_:
     case Opcode::istype_:
-    case Opcode::alloc_:
         switch (static_cast<TypeChecks>(immediate.i)) {
         case TypeChecks::RealNonObject:
             out << "RealNonObject";

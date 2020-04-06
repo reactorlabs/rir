@@ -224,8 +224,12 @@ void emitGuardForNamePrimitive(CodeStream& cs, SEXP fun) {
     }
 }
 
-bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
-                      bool voidContext) {
+/**
+ * Try to convert this loop into a C-style for loop. If it fails or must compile
+ * a regular loop, it will use the given function.
+ */
+bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
+                      SEXP body, bool voidContext) {
     Match(seq) {
         Case(LANGSXP, fun, argsSexp) {
             RList args(argsSexp);
@@ -233,103 +237,144 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body,
                 return false;
             }
 
-            SEXP start = args[0];
-            SEXP end = args[1];
-            if (TYPEOF(start) != INTSXP && TYPEOF(start) != LGLSXP &&
-                (TYPEOF(start) != REALSXP || XLENGTH(start) == 0 ||
-                *REAL(start) != (int)*REAL(start))) {
-                return false;
-            }
-
             // for(i in m:n) {
             //   ...
             // }
             // =>
-            // i' <- m
+            // m' <- m
             // n' <- n
-            // if (i' > n') {
-            //   n' <- ceil(n') - 1
-            //   diff' <- -1
-            //   gt' <- TRUE
+            // if (!colonInputEffects(m, n)) {
+            //    <regular for>
             // } else {
-            //   n' <- floor(n')
-            //   diff' <- 1
-            //   gt' <- FALSE
-            // }
-            // while ((i' > n') == gt') {
-            //   i <- i'
-            //   i' <- i' + diff'
-            //   ...
+            //   m' <- colonCastLhs(m')
+            //   n' <- colonCastRhs(m', n')
+            //   step <- if (m' <= n') 1L else -1L
+            //   i' <- m'
+            //   while (i' != n') {
+            //     i <- i'
+            //     i' <- i' + step
+            //     ...
+            //   }
             // }
 
+            SEXP start = args[0];
+            SEXP end = args[1];
             CodeStream& cs = ctx.cs();
-            BC::Label fwdBranch = cs.mkLabel();
-            BC::Label startBranch = cs.mkLabel();
 
-            // i' <- m
+            BC::Label skipRegularForBranch = cs.mkLabel();
+            BC::Label stepElseBranch = cs.mkLabel();
+            BC::Label stepEndBranch = cs.mkLabel();
+            BC::Label endBranch = cs.mkLabel();
+
+            // m' <- m
             compileExpr(ctx, start);
-            cs << BC::floor() << BC::ensureNamed();
+            cs << BC::force();
             // n' <- n
             compileExpr(ctx, end);
-            cs << BC::ensureNamed();
-            // if (i' > n')
-            cs << BC::dup2() << BC::gt();
+            cs << BC::force();
+
+            // if (!colonInputEffects(m, n)) {
+            cs << BC::colonInputEffects();
+            cs.addSrc(seq);
+            bool staticFastcase =
+                (isConstant(start) && !inherits(start, "factor")) ||
+                (isConstant(end) && !inherits(end, "factor"));
+            if (staticFastcase) {
+                // We statically know that colonInputEffects is true, so we can
+                // just pop the result and don't need to compile the slowcase
+                // branch
+                cs << BC::pop();
+            } else {
+                cs << BC::recordTest() << BC::brtrue(skipRegularForBranch);
+                //   <regular for>
+                // Note that we call the builtin `for` and pass the body as a
+                // promise to lower the bytecode size
+
+                // 1) Finish creating the seq, and add its SEXP as a promise
+                // (it's eager but it needs to be a promise to be an arg)
+                cs << BC::colon();
+                cs.addSrc(seq);
+                Code* seqProm = compilePromise(ctx, seq);
+                size_t seqPromIdx = cs.addPromise(seqProm);
+
+                // 2) Create a promise with the body
+                Code* bodyProm = compilePromise(ctx, body);
+                size_t bodyPromIdx = cs.addPromise(bodyProm);
+
+                // 3) Add the function, arguments, and call
+                Assumptions assumptions = Assumptions() |
+                                          TypeAssumption::Arg0IsEager_ |
+                                          Assumption::CorrectOrderOfArguments |
+                                          Assumption::NotTooManyArguments;
+                cs << BC::ldfun(symbol::For) << BC::swap()
+                   << BC::mkEagerPromise(seqPromIdx)
+                   << BC::mkPromise(bodyPromIdx)
+                   << BC::call(2, fullAst, assumptions);
+                if (voidContext)
+                    cs << BC::pop();
+                else if (Compiler::profile)
+                    cs << BC::recordType();
+
+                cs << BC::br(endBranch);
+                cs << skipRegularForBranch;
+            }
+            // } else {
+
+            // m' <- colonCastLhs(m')
+            cs << BC::swap() << BC::colonCastLhs() << BC::recordType()
+               << BC::ensureNamed() << BC::swap();
+
+            // n' <- colonCastRhs(m', n')
+            cs << BC::colonCastRhs() << BC::ensureNamed() << BC::recordType();
+
+            // step <- if (m' <= n') 1L else -1L
+            cs << BC::dup2() << BC::le();
             cs.addSrc(R_NilValue);
-            cs << BC::recordTest() << BC::brfalse(fwdBranch);
-            // {
-            // n' <- ceil(n') - 1
-            cs << BC::ceil() << BC::dec() << BC::ensureNamed() << BC::swap();
-            // diff' <- -1
-            cs << BC::push(-1);
-            // gt' <- TRUE
-            cs << BC::push(R_TrueValue);
-            cs << BC::put(3) << BC::put(2) << BC::br(startBranch) << fwdBranch;
-            // } else {
-            // n' <- floor(n')
-            cs << BC::floor() << BC::swap();
-            // diff' <- 1
-            cs << BC::push(1);
-            // gt' <- FALSE
-            cs << BC::push(R_FalseValue);
-            cs << BC::put(3) << BC::put(2) << startBranch;
+            cs << BC::recordTest() << BC::brfalse(stepElseBranch) << BC::push(1)
+               << BC::br(stepEndBranch) << stepElseBranch << BC::push(-1)
+               << stepEndBranch;
+
+            // i' <- m' (we just reuse m', but we need to fix the stack as the
+            //           following bytecode expects: lhs :: rhs :: step :: ...)
+            cs << BC::swap() << BC::pick(2);
+
             // while
-            compileWhile(ctx,
-                         [&cs]() {
-                             // ((i' > n') ...
-                             cs << BC::dup2() << BC::lt();
-                             cs.addSrc(R_NilValue);
-                             // ... == gt')
-                             cs << BC::pull(4) << BC::eq();
-                             cs.addSrc(R_NilValue);
-                         },
-                         [&ctx, &cs, &sym, &body]() {
-                             // {
-                             // i <- i'
-                             cs << BC::dup();
-                             if (ctx.code.top()->isCached(sym))
-                                 cs << BC::stvarCached(
-                                     sym, ctx.code.top()->cacheSlotFor(sym));
-                             else
-                                 cs << BC::stvar(sym);
-                             // i' <- i' + diff'
-                             cs << BC::pull(2) << BC::add();
-                             cs.addSrc(R_NilValue);
-                             // ...
-                             compileExpr(ctx, body, true);
-                             // }
-                         },
-                         !containsLoop(body));
-            // } else {
-            cs << BC::popn(4);
+            compileWhile(
+                ctx,
+                [&cs]() {
+                    // (i' != n')
+                    cs << BC::dup2() << BC::ne();
+                    cs.addSrc(R_NilValue);
+                },
+                [&ctx, &cs, &sym, &body]() {
+                    // {
+                    // i <- i'
+                    cs << BC::dup();
+                    if (ctx.code.top()->isCached(sym))
+                        cs << BC::stvarCached(
+                            sym, ctx.code.top()->cacheSlotFor(sym));
+                    else
+                        cs << BC::stvar(sym);
+                    // i' <- i' + step
+                    cs << BC::pull(2) << BC::ensureNamed() << BC::add();
+                    cs.addSrc(R_NilValue);
+                    // ...
+                    compileExpr(ctx, body, true);
+                    // }
+                },
+                !containsLoop(body));
+            cs << BC::popn(3);
             if (!voidContext)
                 cs << BC::push(R_NilValue) << BC::invisible();
-
+            cs << endBranch;
             return true;
+            // clang-format off
         }
-        Else({
+        Else({ 
             return false;
         })
     }
+    // clang-format on
     assert(false);
 }
 
@@ -921,8 +966,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
-        if (compileSimpleFor(ctx, sym, seq, body, voidContext))
+        if (compileSimpleFor(ctx, ast, sym, seq, body, voidContext)) {
             return true;
+        }
 
         BC::Label nextBranch = cs.mkLabel();
         BC::Label breakBranch = cs.mkLabel();
@@ -987,6 +1033,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
 
         ctx.popLoop();
+
         return true;
     }
 
@@ -1029,9 +1076,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         SEXP fun = CAR(inAst);
 
         if (TYPEOF(fun) == SYMSXP) {
-            for (RListIter a = args.begin(); a != args.end(); ++a)
-                if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
-                    return false;
+            Assumptions assumptions;
 
             SEXP internal = fun->u.symsxp.internal;
             int i = ((sexprec_rjit*)internal)->u.i;
@@ -1039,9 +1084,106 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // If the .Internal call goes to a builtin, then we call eagerly
             if (R_FunTab[i].eval % 10 == 1) {
                 emitGuardForNamePrimitive(cs, symbol::Internal);
-                for (SEXP a : args)
-                    compileExpr(ctx, a);
-                cs << BC::callBuiltin(args.length(), inAst, internal);
+
+                bool hasDots = false;
+                for (RListIter arg = args.begin(); arg != RList::end(); ++arg)
+                    if (*arg == R_DotsSymbol)
+                        hasDots = true;
+                if (hasDots)
+                    cs << BC::push(internal);
+
+                std::vector<SEXP> names;
+                for (RListIter arg = args.begin(); arg != RList::end(); ++arg) {
+                    if (*arg == R_DotsSymbol) {
+                        cs << BC::push(R_DotsSymbol);
+                        names.push_back(R_DotsSymbol);
+                        continue;
+                    }
+
+                    if (hasDots)
+                        names.push_back(arg.tag());
+
+                    if (*arg == R_MissingArg) {
+                        cs << BC::push(R_MissingArg);
+                        continue;
+                    }
+
+                    compileExpr(ctx, *arg);
+                }
+
+                if (hasDots) {
+                    cs << BC::callDots(args.length(), names, inAst,
+                                       Assumptions());
+                } else {
+                    cs << BC::callBuiltin(args.length(), inAst, internal);
+                }
+                if (voidContext)
+                    cs << BC::pop();
+
+                return true;
+            }
+
+            if (fun == symbol::lapply && args.length() == 2) {
+
+                BC::Label loopBranch = cs.mkLabel();
+                BC::Label nextBranch = cs.mkLabel();
+
+                compileExpr(ctx, args[0]); // [X]
+
+                // get length and names of the vector X
+                cs << BC::dup()
+                   << BC::names()
+                   << BC::swap()
+                   << BC::xlength_() // [names(X), length(X)]
+                   << BC::dup()
+                   << BC::push(Rf_mkString("list"))
+                   << BC::swap()
+                   << BC::callBuiltin(2, symbol::tmp, getBuiltinFun("vector")) // [names(X), length(X), ans]
+                   << BC::pick(2)
+                   << BC::setNames()
+                   << BC::swap()
+                   << BC::push((int)0); // [ans, length(X), i]
+
+                // loop invariant stack layout: [ans, length(X), i]
+
+                // check end condition
+                cs << loopBranch
+                   << BC::inc()
+                   << BC::dup2()
+                   << BC::lt();
+                cs.addSrc(ast);
+
+                SEXP isym = Rf_install("i");
+                cs << BC::brtrue(nextBranch)
+                   << BC::dup()
+                   << BC::stvar(isym);
+
+                // construct ast for FUN(X[[i]], ...)
+                SEXP tmp = LCONS(symbol::DoubleBracket,
+                                 LCONS(args[0], LCONS(isym, R_NilValue)));
+                SEXP call =
+                    LCONS(args[1], LCONS(tmp, LCONS(R_DotsSymbol, R_NilValue)));
+
+                PROTECT(call);
+                compileCall(ctx, call, CAR(call), CDR(call), false);
+                UNPROTECT(1);
+
+                // store result
+                cs << BC::pull(1)
+                   << BC::pick(4)
+                   << BC::swap() // [length(X), i, fun(X[[i]], ...), ans, i]
+                   << BC::subassign2_1();
+                cs.addSrc(ast);
+
+                cs << BC::put(2) // [ans, length(X), i]
+                   << BC::br(loopBranch);
+
+                // put ans to the top and remove rest
+                cs << nextBranch
+                   << BC::pop()
+                   << BC::pop()
+                   << BC::visible();
+
                 if (voidContext)
                     cs << BC::pop();
 
@@ -1104,7 +1246,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         }
         Else({
             compileExpr(ctx, fun);
-            cs << BC::isfun();
+            cs << BC::checkClosure();
         });
     }
 

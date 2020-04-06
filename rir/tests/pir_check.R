@@ -35,23 +35,29 @@ stopifnot(pir.check(
 
 # This checks that loop-invariant hoisting is working, but it's a bit brittle,
 # and it requires loop peeling to be disabled.
-stopifnot(pir.check(
-  f <- function(){
-    j <- 0
-    while (j < 2) {
-      vector("integer",0)
-      j <- j + 1
-    }
-  }, OneLdVar, warmup=function(f) f()))
+stopifnot(pir.check(f <- function(){
+  j <- 0
+  while (j < 2) {
+    vector("integer",0)
+    j <- j + 1
+  }
+}, OneLdVar, warmup=function(f) f()))
 
+# Loop hoisting + simple range constantfold dead branch removal
+stopifnot(pir.check(function() {
+  for (i in 1:5) {
+      a <- c(1)
+  }
+  a
+}, OneLdFun))
 
-stopifnot(
-  pir.check(function() {
-      for (i in 1:5) {
-          a <- c(1)
-      }
-      a
-  }, OneLdFun))
+# Loop hoisting + simple range non-constant dead branch removal
+stopifnot(pir.check(function(b) {
+  for (i in b:5) {
+      a <- c(1)
+  }
+  a
+}, OneLdVar, warmup=function(f) f(1)))
 
 stopifnot(
   pir.check(function() {
@@ -357,20 +363,59 @@ stopifnot(pir.check(function(x, y) {
 }, OneEq, warmup=function(f)f(5.7, "")))
 # Relies on better visibility
 # stopifnot(pir.check(function(x) !!!!!x, OneNot, warmup=function(f)f(1)))
-# Testing NoAsInt itself
-stopifnot(!pir.check(function(n) {
-  x <- 0
-  for (i in 1:n)
-    x <- x + i
-  x
-}, NoAsInt))
-# Ok
+# Testing simple range dead branch removal
 stopifnot(pir.check(function() {
   x <- 0
   for (i in 1:10)
     x <- x + i
   x
-}, NoAsInt))
+}, NoColon))
+stopifnot(pir.check(function(n) {
+  x <- 0
+  for (i in 1:n)
+    x <- x + i
+  x
+}, NoColon))
+stopifnot(pir.check(function(n) {
+  x <- 0
+  for (i in n:10)
+    x <- x + i
+  x
+}, NoColon))
+a <- 1
+b <- 10
+stopifnot(pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- x + i
+  x
+}, NoColon, warmup=function(f) f(1, 10)))
+stopifnot(pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- x + i
+  x
+}, NoColon, warmup=function(f) f(a, 10)))
+stopifnot(pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- x + i
+  x
+}, NoColon, warmup=function(f) f(1, b)))
+stopifnot(pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- x + i
+  x
+}, NoColon, warmup=function(f) f(a, b)))
+a <- factor(a)
+b <- factor(b)
+stopifnot(!pir.check(function(a, b) {
+  x <- 0
+  for (i in a:b)
+    x <- i
+  x
+}, NoColon, warmup=function(f) f(a, b)))
                      
 # More dead instruction removal
 stopifnot(!pir.check(function(x) {

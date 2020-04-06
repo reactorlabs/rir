@@ -57,11 +57,8 @@ class SSAAllocator {
     void computeStackAllocation() {
 
         static auto toStack = [](Instruction* i) -> bool {
-            if (MkEnv::Cast(i)) {
-                auto use = i->hasSingleUse();
-                auto next = *(i->bb()->atPosition(i) + 1);
-                return use && use == next;
-            }
+            if (MkEnv::Cast(i))
+                return false;
             return true;
         };
 

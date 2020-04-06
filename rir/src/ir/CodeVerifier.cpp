@@ -117,6 +117,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::eq_:
     case Opcode::ne_:
     case Opcode::colon_:
+    case Opcode::colon_input_effects_:
     case Opcode::subassign1_1_:
     case Opcode::subassign2_1_:
     case Opcode::subassign1_2_:
@@ -125,7 +126,6 @@ static Sources hasSources(Opcode bc) {
         return Sources::Required;
 
     case Opcode::inc_:
-    case Opcode::dec_:
     case Opcode::identical_noforce_:
     case Opcode::push_:
     case Opcode::ldfun_:
@@ -161,7 +161,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::is_:
     case Opcode::istype_:
     case Opcode::put_:
-    case Opcode::alloc_:
     case Opcode::ldarg_:
     case Opcode::stloc_:
     case Opcode::movloc_:
@@ -174,7 +173,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::set_env_:
     case Opcode::materialize_env_:
     case Opcode::ret_:
-    case Opcode::length_:
     case Opcode::names_:
     case Opcode::set_names_:
     case Opcode::force_:
@@ -185,11 +183,12 @@ static Sources hasSources(Opcode bc) {
     case Opcode::dup_:
     case Opcode::dup2_:
     case Opcode::for_seq_size_:
+    case Opcode::xlength_:
     case Opcode::swap_:
     case Opcode::set_shared_:
     case Opcode::ensure_named_:
     case Opcode::return_:
-    case Opcode::isfun_:
+    case Opcode::check_closure_:
     case Opcode::invisible_:
     case Opcode::visible_:
     case Opcode::endloop_:
@@ -204,14 +203,14 @@ static Sources hasSources(Opcode bc) {
     case Opcode::record_deopt_:
     case Opcode::pop_context_:
     case Opcode::push_context_:
-    case Opcode::ceil_:
-    case Opcode::floor_:
     case Opcode::clear_binding_cache_:
     case Opcode::ldvar_noforce_stubbed_:
     case Opcode::stvar_stubbed_:
     case Opcode::starg_stubbed_:
     case Opcode::assert_type_:
     case Opcode::update_promise_:
+    case Opcode::colon_cast_lhs_:
+    case Opcode::colon_cast_rhs_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:
@@ -247,8 +246,14 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
         if (state.find(i.pc) != state.end()) {
             assert(i.pc >= code->code() && i.pc < code->endCode());
             State current = state[i.pc];
-            if (current != i)
+            if (current != i) {
+                std::cerr << "Error, stack imbalance at " << i.pc - code->code()
+                          << "\nexpected " << current.ostack << " but got "
+                          << i.ostack << "\n"
+                          << "\nIn:\n";
+                code->print(std::cerr);
                 assert(false and "Stack imbalance detected");
+            }
             continue;
         }
         while (true) {
@@ -305,7 +310,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
         if (oldo != c->stackLength)
             Rf_error("RIR Verifier: Invalid stack layout reported");
 
-        if (((uintptr_t)(c + 1) + pad4(c->codeSize) +
+        if (((uintptr_t)(c + 1) + Code::pad4(c->codeSize) +
              c->srcLength * sizeof(Code::SrclistEntry)) == 0)
             Rf_error("RIR Verifier: Invalid code length reported");
 

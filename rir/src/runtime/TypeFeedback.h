@@ -177,14 +177,14 @@ enum class TypeChecks : uint32_t {
     IntegerNonObjectWrapped = 3331,
     IntegerSimpleScalar = 3332,
     IntegerSimpleScalarWrapped = 3333,
-    RealNonObject = 3334,
-    RealNonObjectWrapped = 3335,
-    RealSimpleScalar = 3336,
-    RealSimpleScalarWrapped = 3337,
-    NotObject = 3338,
-    NotObjectWrapped = 3339,
-    NoAttribsExceptDim = 3340,
-    NoAttribsExceptDimWrapped = 3341,
+    RealNonObject = 3335,
+    RealNonObjectWrapped = 3336,
+    RealSimpleScalar = 3337,
+    RealSimpleScalarWrapped = 3338,
+    NotObject = 3339,
+    NotObjectWrapped = 3340,
+    NoAttribsExceptDim = 3341,
+    NoAttribsExceptDimWrapped = 3342
 };
 
 enum class Opcode : uint8_t;

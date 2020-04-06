@@ -44,7 +44,80 @@ cachedSetBindingCell(Immediate cacheIdx, BindingCache* cache, R_varloc_t loc) {
     cache->entry[cacheIdx] = loc.cell;
 }
 
-static void rirDefineVarWrapper(SEXP symbol, SEXP value, SEXP rho) {
+static inline void rirDefineVarWrapperI(SEXP symbol, int value, SEXP rho) {
+    if (rho == R_EmptyEnv)
+        return;
+
+    if (OBJECT(rho) || HASHTAB(rho) != R_NilValue) {
+        auto val = ScalarInteger(value);
+        PROTECT(val);
+        INCREMENT_NAMED(val);
+        Rf_defineVar(symbol, val, rho);
+        UNPROTECT(1);
+        return;
+    }
+
+    if (rho == R_BaseNamespace || rho == R_BaseEnv) {
+        auto cur = SYMVALUE(symbol);
+        if (IS_SIMPLE_SCALAR(cur, INTSXP) && !MAYBE_SHARED(cur)) {
+            ENSURE_NAMED(cur);
+            if (*INTEGER(cur) == value)
+                return;
+            *INTEGER(cur) = value;
+            return;
+        }
+        auto val = ScalarInteger(value);
+        INCREMENT_NAMED(val);
+        Rf_defineVar(symbol, val, rho);
+        return;
+    }
+
+    if (IS_SPECIAL_SYMBOL(symbol))
+        UNSET_NO_SPECIAL_SYMBOLS(rho);
+
+    /* First check for an existing binding */
+    SEXP frame = FRAME(rho);
+    while (frame != R_NilValue) {
+        if (TAG(frame) == symbol) {
+            SEXP cur = CAR(frame);
+            if (!MAYBE_SHARED(cur) && IS_SIMPLE_SCALAR(cur, INTSXP)) {
+                // subassign.c primitives and instructions clear the name
+                // expecting a store to happen later Thus, the increment must be
+                // done always
+                ENSURE_NAMED(cur);
+                if (*INTEGER(cur) == value) {
+                    return;
+                }
+                *INTEGER(cur) = value;
+                return;
+            }
+            auto val = ScalarInteger(value);
+            INCREMENT_NAMED(val);
+            // we don't handle these
+            if (BINDING_IS_LOCKED(frame) || IS_ACTIVE_BINDING(frame)) {
+                PROTECT(val);
+                Rf_defineVar(symbol, val, rho);
+                UNPROTECT(1);
+                return;
+            }
+            SETCAR(frame, val);
+            SET_MISSING(frame, 0); /* Over-ride */
+            return;
+        }
+        frame = CDR(frame);
+    }
+
+    if (FRAME_IS_LOCKED(rho))
+        Rf_error("cannot add bindings to a locked environment");
+    auto val = ScalarInteger(value);
+    PROTECT(val);
+    INCREMENT_NAMED(val);
+    SET_FRAME(rho, Rf_cons(val, FRAME(rho)));
+    UNPROTECT(1);
+    SET_TAG(FRAME(rho), symbol);
+}
+
+static inline void rirDefineVarWrapper(SEXP symbol, SEXP value, SEXP rho) {
     if (rho == R_EmptyEnv)
         return;
 

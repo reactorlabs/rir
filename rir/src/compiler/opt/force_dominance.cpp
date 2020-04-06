@@ -184,10 +184,13 @@ struct ForcedBy {
         // Those are the cases where we merge two branches where one branch has
         // the promise evaluated and the other not. For exits we don't care
         // about this case.
+        // For Phis, it's possible that an argument is not in scope (if it isn't
+        // added by declare before) but that still means it's not forced on that
+        // path, so we need to set ambiguous in that case too.
         for (auto& e : forcedBy) {
             auto v = e.first;
             if (!other.forcedBy.count(v)) {
-                if (other.inScope.count(v)) {
+                if (other.inScope.count(v) || Phi::Cast(v)) {
                     if (e.second != ambiguous()) {
                         e.second = ambiguous();
                         res.lostPrecision();
@@ -196,9 +199,10 @@ struct ForcedBy {
             }
         }
         for (auto& e : other.forcedBy) {
-            if (!forcedBy.count(e.first)) {
-                if (inScope.count(e.first)) {
-                    forcedBy[e.first] = ambiguous();
+            auto v = e.first;
+            if (!forcedBy.count(v)) {
+                if (inScope.count(v) || Phi::Cast(v)) {
+                    forcedBy[v] = ambiguous();
                     res.lostPrecision();
                 }
             }
@@ -294,7 +298,7 @@ struct ForcedBy {
     }
 };
 
-//, DummyState, AnalysisDebugLevel::Taint
+//, DummyState, true, AnalysisDebugLevel::Taint
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
     using StaticAnalysis::PositioningStyle;
@@ -315,7 +319,14 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                         res.update();
             });
         };
-        if (auto f = Force::Cast(i)) {
+        if (auto phi = Phi::Cast(i)) {
+            if (phi->type.maybeLazy()) {
+                if (state.forcedBy.count(phi) == 0 && state.declare(phi)) {
+                    res.update();
+                }
+            }
+            apply(i);
+        } else if (auto f = Force::Cast(i)) {
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
                 if (arg->type.maybeLazy()) {
                     if (state.forcedAt(arg, f))

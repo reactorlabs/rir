@@ -53,7 +53,9 @@
     V(ExpandDots)                                                              \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
-    V(AsInt)                                                                   \
+    V(ColonInputEffects)                                                       \
+    V(ColonCastLhs)                                                            \
+    V(ColonCastRhs)                                                            \
     V(IsEnvStub)                                                               \
     V(Return)                                                                  \
     V(MkArg)                                                                   \
@@ -76,14 +78,13 @@
     V(LOr)                                                                     \
     V(Not)                                                                     \
     V(Inc)                                                                     \
-    V(Dec)                                                                     \
     V(Is)                                                                      \
     V(IsType)                                                                  \
     V(Plus)                                                                    \
     V(Minus)                                                                   \
     V(Identical)                                                               \
-    V(Length)                                                                  \
     V(ForSeqSize)                                                              \
+    V(XLength)                                                                 \
     V(FrameState)                                                              \
     V(Checkpoint)                                                              \
     V(Assume)                                                                  \
@@ -94,6 +95,8 @@
     V(Missing)                                                                 \
     V(Visible)                                                                 \
     V(Invisible)                                                               \
+    V(Names)                                                                   \
+    V(SetNames)                                                                \
     V(PirCopy)                                                                 \
     V(RecordDeoptReason)                                                       \
     V(Nop)

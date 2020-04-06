@@ -206,6 +206,12 @@ NativeBuiltin NativeBuiltins::stvar = {
     (void*)&stvarImpl,
 };
 
+void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapperI(a, val, c); };
+NativeBuiltin NativeBuiltins::stvari = {
+    "stvari",
+    (void*)&stvarImplI,
+};
+
 void stargImpl(SEXP sym, SEXP val, SEXP env) {
     // In case there is a local binding we must honor missingness which
     // defineVar does not
@@ -334,7 +340,7 @@ NativeBuiltin NativeBuiltins::warn = {
     (void*)&warnImpl,
 };
 
-static void errorImpl() { Rf_error("Some error in compiled code"); };
+static void errorImpl(const char* e) { Rf_error(e); }
 
 NativeBuiltin NativeBuiltins::error = {
     "error",
@@ -482,6 +488,13 @@ SEXP newIntImpl(int i) {
     return res;
 }
 
+SEXP newIntDebugImpl(int i, void* debug) {
+    std::cout << (char*)debug << "\n";
+    auto res = Rf_allocVector(INTSXP, 1);
+    INTEGER(res)[0] = i;
+    return res;
+}
+
 SEXP newLglFromRealImpl(double d) {
     auto res = Rf_allocVector(LGLSXP, 1);
     if (d != d)
@@ -529,6 +542,10 @@ NativeBuiltin NativeBuiltins::newLglFromReal = {
 NativeBuiltin NativeBuiltins::newInt = {
     "newInt",
     (void*)&newIntImpl,
+};
+NativeBuiltin NativeBuiltins::newIntDebug = {
+    "newIntDebug",
+    (void*)&newIntDebugImpl,
 };
 NativeBuiltin NativeBuiltins::newReal = {
     "newReal",
@@ -897,6 +914,21 @@ NativeBuiltin NativeBuiltins::binop = {
     (void*)&binopImpl,
 };
 
+SEXP colonImpl(int from, int to) {
+    if (from != NA_INTEGER && to != NA_INTEGER) {
+        return seq_int(from, to);
+    }
+    Rf_errorcall(
+        // TODO: pass srcid
+        R_NilValue, "NA/NaN argument");
+    return nullptr;
+}
+
+NativeBuiltin NativeBuiltins::colon = {
+    "colon",
+    (void*)&colonImpl,
+};
+
 int isMissingImpl(SEXP symbol, SEXP environment) {
     // TODO: Send the proper src
     return rir::isMissing(symbol, environment, nullptr, nullptr);
@@ -1084,19 +1116,20 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
     if (res)
         return res;
 
-    SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
-    PROTECT(args);
-
     if (isObject(vector)) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
+        SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
+        PROTECT(args);
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
         if (!res)
             res = do_subset_dflt(call, symbol::Bracket, args, env);
+        UNPROTECT(1);
     } else {
+        SEXP args;
+        FAKE_ARGS2(args, vector, index);
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
-    UNPROTECT(1);
     return res;
 }
 
@@ -1460,7 +1493,7 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
         prot++;
     }
 
-    if (!isObject(vec)) {
+    if (!isObject(vec) && !ALTREP(vec)) {
         R_xlen_t pos = -1;
         if (IS_SIMPLE_SCALAR(idx, INTSXP)) {
             if (*INTEGER(idx) >= 1 && *INTEGER(idx) != NA_INTEGER)
@@ -1471,7 +1504,8 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
         }
         if (pos != (R_xlen_t)-1) {
             if (IS_SIMPLE_SCALAR(val, INTSXP) && TYPEOF(vec) == INTSXP) {
-                if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) > pos ||
+                    (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                     if (XLENGTH(vec) == pos)
                         SETLENGTH(vec, pos + 1);
                     INTEGER(vec)[pos] = *INTEGER(val);
@@ -1480,7 +1514,8 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
                 }
             }
             if (IS_SIMPLE_SCALAR(val, REALSXP) && TYPEOF(vec) == REALSXP) {
-                if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) > pos ||
+                    (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                     if (XLENGTH(vec) == pos)
                         SETLENGTH(vec, pos + 1);
                     REAL(vec)[pos] = *REAL(val);
@@ -1489,7 +1524,8 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
                 }
             }
             if (TYPEOF(vec) == VECSXP) {
-                if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+                if (XLENGTH(vec) > pos ||
+                    (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                     if (XLENGTH(vec) == pos)
                         SETLENGTH(vec, pos + 1);
                     SET_VECTOR_ELT(vec, pos, val);
@@ -1534,11 +1570,12 @@ SEXP subassign21rrImpl(SEXP vec, double idx, double val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && idx == idx) {
+    if (!isObject(vec) && idx == idx && !ALTREP(vec)) {
         auto pos = (R_xlen_t)(idx - 1);
 
         if (TYPEOF(vec) == REALSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
                 REAL(vec)[pos] = val;
@@ -1547,7 +1584,8 @@ SEXP subassign21rrImpl(SEXP vec, double idx, double val, SEXP env,
             }
         }
         if (TYPEOF(vec) == VECSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
                 SET_VECTOR_ELT(vec, pos, ScalarReal(val));
@@ -1572,11 +1610,12 @@ SEXP subassign21irImpl(SEXP vec, int idx, double val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && idx != NA_INTEGER && idx >= 1) {
+    if (!isObject(vec) && idx != NA_INTEGER && idx >= 1 && !ALTREP(vec)) {
         auto pos = (idx - 1);
 
         if (TYPEOF(vec) == REALSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
                 REAL(vec)[pos] = val;
@@ -1585,7 +1624,8 @@ SEXP subassign21irImpl(SEXP vec, int idx, double val, SEXP env,
             }
         }
         if (TYPEOF(vec) == VECSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
                 SET_VECTOR_ELT(vec, pos, ScalarReal(val));
@@ -1610,11 +1650,12 @@ SEXP subassign21riImpl(SEXP vec, double idx, int val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && idx == idx) {
+    if (!isObject(vec) && idx == idx && !ALTREP(vec)) {
         auto pos = (R_xlen_t)(idx - 1);
 
         if (TYPEOF(vec) == INTSXP || TYPEOF(vec) == LGLSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
                 INTEGER(vec)[pos] = val;
@@ -1623,16 +1664,18 @@ SEXP subassign21riImpl(SEXP vec, double idx, int val, SEXP env,
             }
         }
         if (TYPEOF(vec) == REALSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
-                REAL(vec)[pos] = val;
+                REAL(vec)[pos] = val == NA_INTEGER ? NAN : val;
                 UNPROTECT(prot);
                 return vec;
             }
         }
         if (TYPEOF(vec) == VECSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
                 SET_VECTOR_ELT(vec, pos, ScalarInteger(val));
@@ -1656,11 +1699,12 @@ SEXP subassign21iiImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
         prot++;
     }
 
-    if (!isObject(vec) && idx != NA_INTEGER) {
+    if (!isObject(vec) && idx != NA_INTEGER && !ALTREP(vec)) {
         auto pos = idx - 1;
 
         if (TYPEOF(vec) == INTSXP || TYPEOF(vec) == LGLSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
                 INTEGER(vec)[pos] = val;
@@ -1669,16 +1713,18 @@ SEXP subassign21iiImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
             }
         }
         if (TYPEOF(vec) == REALSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
-                REAL(vec)[pos] = val;
+                REAL(vec)[pos] = val == NA_INTEGER ? NAN : val;
                 UNPROTECT(prot);
                 return vec;
             }
         }
         if (TYPEOF(vec) == VECSXP) {
-            if (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos) {
+            if (XLENGTH(vec) > pos ||
+                (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
                 SET_VECTOR_ELT(vec, pos, ScalarInteger(val));
@@ -1980,7 +2026,7 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
         }
         if (TYPEOF(vec) == REALSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                REAL(vec)[n.row * pos2 + pos1] = val;
+                REAL(vec)[n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
                 UNPROTECT(prot);
                 return vec;
             }
@@ -2042,7 +2088,7 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
         }
         if (TYPEOF(vec) == REALSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                REAL(vec)[n.row * pos2 + pos1] = val;
+                REAL(vec)[n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
                 UNPROTECT(prot);
                 return vec;
             }
@@ -2152,24 +2198,6 @@ NativeBuiltin NativeBuiltins::endClosureContext = {
     (void*)&endClosureContextImpl,
 };
 
-static int asIntFloorImpl(SEXP val, Immediate srcIdx) {
-    return asInt(val, false, srcIdx, globalContext());
-}
-
-NativeBuiltin NativeBuiltins::asIntFloor = {
-    "asIntFloor",
-    (void*)asIntFloorImpl,
-};
-
-static int asIntCeilImpl(SEXP val, Immediate srcIdx) {
-    return asInt(val, true, srcIdx, globalContext());
-}
-
-NativeBuiltin NativeBuiltins::asIntCeil = {
-    "asIntCeil",
-    (void*)asIntCeilImpl,
-};
-
 int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }
 NativeBuiltin NativeBuiltins::matrixNcols = {
     "ncols",
@@ -2241,36 +2269,52 @@ NativeBuiltin NativeBuiltins::sumr = {
     (void*)sumrImpl,
 };
 
-/*
-void runValueProfilerImpl() {
-    auto& ctx = R_GlobalContext;
-    auto& stack = ctx->nodestack;
-    if (R_BCNodeStackTop == R_BCNodeStackBase)
-        return;
-    if ((stack)->tag != 0)
-        return;
-    auto tos = (stack)->u.sxpval;
-    if (!tos)
-        return;
-    auto code = Code::check(tos);
-    if (!code)
-        return;
-    auto md = code->getValueProfilerMetadata();
-    if (!md)
-        return;
-    for (size_t i = 0; i < code->getValueProfilerMetadataSize(); ++i) {
-        if (md[i].origin) {
-            auto slot = *(stack + i);
-            assert(slot.tag == 0);
-            if (slot.u.sxpval)
-                md[i].feedback.record(slot.u.sxpval);
-        }
-    }
-}
-NativeBuiltin NativeBuiltins::runValueProfiler = {
-    "runValueProfiler",
-    (void*)runValueProfilerImpl,
+NativeBuiltin NativeBuiltins::colonInputEffects = {
+    "colonInputEffects",
+    (void*)rir::colonInputEffects,
 };
-*/
+
+NativeBuiltin NativeBuiltins::colonCastLhs = {
+    "colonCastLhs",
+    (void*)rir::colonCastLhs,
+};
+
+NativeBuiltin NativeBuiltins::colonCastRhs = {
+    "colonCastRhs",
+    (void*)rir::colonCastRhs,
+};
+
+SEXP namesImpl(SEXP val) { return Rf_getAttrib(val, R_NamesSymbol); }
+NativeBuiltin NativeBuiltins::names = {
+    "names",
+    (void*)&namesImpl,
+};
+
+SEXP setNamesImpl(SEXP val, SEXP names) {
+    // If names is R_NilValue, setAttrib doesn't return the val but rather
+    // R_NilValue, hence we cannot return val directly...
+    Rf_setAttrib(val, R_NamesSymbol, names);
+    return val;
+}
+NativeBuiltin NativeBuiltins::setNames = {
+    "setNames",
+    (void*)&setNamesImpl,
+};
+
+SEXP xlength_Impl(SEXP val) {
+    SEXP len = Rf_allocVector(INTSXP, 1);
+    INTEGER(len)[0] = Rf_xlength(val);
+    return len;
+}
+NativeBuiltin NativeBuiltins::xlength_ = {
+    "xlength_",
+    (void*)&xlength_Impl,
+};
+
+SEXP getAttribImpl(SEXP val, SEXP sym) { return Rf_getAttrib(val, sym); }
+NativeBuiltin NativeBuiltins::getAttrb = {
+    "getAttrib",
+    (void*)&getAttribImpl,
+};
 }
 }

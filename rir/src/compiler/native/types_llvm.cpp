@@ -20,13 +20,14 @@ int initializeTypes(LLVMContext& context) {
 
     t::i8ptr = PointerType::get(IntegerType::get(context, 8), 0);
     t::voidPtr = t::i8ptr;
+    t::charPtr = t::i8ptr;
 
     t::VectorLength = IntegerType::get(context, sizeof(ptrdiff_t) * 8);
     // for now, bool is the same as integer
     // t::Bool = t::Int;
     StructType* t_sxpinfo_struct =
         StructType::create(context, "struct.sxpinfo_struct");
-    // sxpinfo_struct is just int32 in a structure, the bitmasking is not a
+    // sxpinfo_struct is just int64 in a structure, the bitmasking is not a
     // concern of the type
     fields = {t::i64};
     t_sxpinfo_struct->setBody(fields, false);
@@ -154,6 +155,8 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::ldvarCacheMiss.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP_ptr}, false);
     NativeBuiltins::stvar.llvmSignature = t::void_sexpsexpsexp;
+    NativeBuiltins::stvari.llvmSignature =
+        llvm::FunctionType::get(t::Void, {t::SEXP, t::Int, t::SEXP}, false);
     NativeBuiltins::defvar.llvmSignature = t::void_sexpsexpsexp;
     NativeBuiltins::starg.llvmSignature = t::void_sexpsexpsexp;
     NativeBuiltins::ldfun.llvmSignature = t::sexp_sexpsexp;
@@ -166,8 +169,10 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::externalsxpSetEntry.llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::SEXP, t::Int, t::SEXP}, false);
 
-    NativeBuiltins::error.llvmSignature = t::void_void;
-    NativeBuiltins::warn.llvmSignature = t::void_voidPtr;
+    NativeBuiltins::error.llvmSignature =
+        llvm::FunctionType::get(t::t_void, {t::charPtr}, false);
+    NativeBuiltins::warn.llvmSignature =
+        llvm::FunctionType::get(t::t_void, {t::charPtr}, false);
 
     NativeBuiltins::createEnvironment.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::Int}, false);
@@ -184,6 +189,8 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::newInt.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
+    NativeBuiltins::newIntDebug.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::Int, t::i64}, false);
     NativeBuiltins::newLgl.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
     NativeBuiltins::newReal.llvmSignature =
@@ -194,6 +201,9 @@ int initializeTypes(LLVMContext& context) {
         llvm::FunctionType::get(t::SEXP, {t::Double}, false);
     NativeBuiltins::newRealFromInt.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
+
+    NativeBuiltins::colon.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::Int, t::Int}, false);
 
     NativeBuiltins::call.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64}, false);
@@ -234,11 +244,6 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::assertFail.llvmSignature = t::void_voidPtr;
 
     NativeBuiltins::printValue.llvmSignature = t::void_sexp;
-
-    NativeBuiltins::asIntCeil.llvmSignature =
-        llvm::FunctionType::get(t::Int, {t::SEXP, t::i32}, false);
-    NativeBuiltins::asIntFloor.llvmSignature =
-        llvm::FunctionType::get(t::Int, {t::SEXP, t::i32}, false);
 
     NativeBuiltins::matrixNcols.llvmSignature = t::int_sexp;
     NativeBuiltins::matrixNrows.llvmSignature = t::int_sexp;
@@ -313,8 +318,21 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::prodr.llvmSignature =
         llvm::FunctionType::get(t::Double, {t::SEXP}, false);
 
-    //  NativeBuiltins::runValueProfiler.llvmSignature =
-    //      llvm::FunctionType::get(t::Void, {}, false);
+    NativeBuiltins::colonInputEffects.llvmSignature =
+        llvm::FunctionType::get(t::Int, {t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::colonCastLhs.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
+    NativeBuiltins::colonCastRhs.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+
+    NativeBuiltins::names.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
+    NativeBuiltins::setNames.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+    NativeBuiltins::xlength_.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
+    NativeBuiltins::getAttrb.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
 
     return 1;
 }
@@ -325,7 +343,6 @@ Type* i1;
 Type* Int;
 Type* Double;
 Type* Void;
-Type* Bool;
 Type* VectorLength;
 
 PointerType* IntPtr;
@@ -353,6 +370,7 @@ StructType* DeoptReason;
 
 Type* t_void;
 Type* voidPtr;
+Type* charPtr;
 Type* i64;
 Type* i32;
 PointerType* i64ptr;

@@ -18,7 +18,6 @@ extern llvm::Type* i1;
 extern llvm::Type* Int;
 extern llvm::Type* Double;
 extern llvm::Type* Void;
-extern llvm::Type* Bool;
 extern llvm::PointerType* IntPtr;
 extern llvm::PointerType* DoublePtr;
 
@@ -46,6 +45,7 @@ extern llvm::PointerType* stackCellPtr;
 
 extern llvm::Type* t_void;
 extern llvm::Type* voidPtr;
+extern llvm::Type* charPtr;
 extern llvm::Type* i64;
 extern llvm::Type* i32;
 extern llvm::PointerType* i64ptr;

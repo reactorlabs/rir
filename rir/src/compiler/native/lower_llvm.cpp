@@ -414,6 +414,9 @@ class LowerFunctionLLVM {
     void checkSexptype(llvm::Value* v, const std::vector<SEXPTYPE>& types);
     void checkIsSexp(llvm::Value* v, const std::string& msg = "");
     void setSexptype(llvm::Value* v, int t);
+    llvm::Value* isVector(llvm::Value* v);
+    llvm::Value* isArray(llvm::Value* v);
+    llvm::Value* isMatrix(llvm::Value* v);
     llvm::Value* sexptype(llvm::Value* v);
     llvm::Value* attr(llvm::Value* v);
     llvm::Value* vectorLength(llvm::Value* v);
@@ -1299,6 +1302,71 @@ llvm::Value* LowerFunctionLLVM::sexptype(llvm::Value* v) {
     return builder.CreateTrunc(t, t::Int);
 }
 
+llvm::Value* LowerFunctionLLVM::isVector(llvm::Value* v) {
+    auto t = sexptype(v);
+    return builder.CreateOr(
+        builder.CreateICmpEQ(t, c(LGLSXP)),
+        builder.CreateOr(
+            builder.CreateICmpEQ(t, c(INTSXP)),
+            builder.CreateOr(
+                builder.CreateICmpEQ(t, c(REALSXP)),
+                builder.CreateOr(
+                    builder.CreateICmpEQ(t, c(CPLXSXP)),
+                    builder.CreateOr(
+                        builder.CreateICmpEQ(t, c(STRSXP)),
+                        builder.CreateOr(
+                            builder.CreateICmpEQ(t, c(RAWSXP)),
+                            builder.CreateOr(
+                                builder.CreateICmpEQ(t, c(VECSXP)),
+                                builder.CreateICmpEQ(t, c(EXPRSXP)))))))));
+}
+
+llvm::Value* LowerFunctionLLVM::isMatrix(llvm::Value* v) {
+    auto res = phiBuilder(t::i1);
+    auto isVec = BasicBlock::Create(C, "", fun);
+    auto notVec = BasicBlock::Create(C, "", fun);
+    auto done = BasicBlock::Create(C, "", fun);
+    builder.CreateCondBr(isVector(v), isVec, notVec);
+
+    builder.SetInsertPoint(isVec);
+    auto t =
+        call(NativeBuiltins::getAttrb, {v, constant(R_DimSymbol, t::SEXP)});
+    res.addInput(
+        builder.CreateAnd(builder.CreateICmpEQ(sexptype(t), c(INTSXP)),
+                          builder.CreateICmpEQ(vectorLength(t), c(2, 64))));
+    builder.CreateBr(done);
+
+    builder.SetInsertPoint(notVec);
+    res.addInput(builder.getFalse());
+    builder.CreateBr(done);
+
+    builder.SetInsertPoint(done);
+    return res();
+}
+
+llvm::Value* LowerFunctionLLVM::isArray(llvm::Value* v) {
+    auto res = phiBuilder(t::i1);
+    auto isVec = BasicBlock::Create(C, "", fun);
+    auto notVec = BasicBlock::Create(C, "", fun);
+    auto done = BasicBlock::Create(C, "", fun);
+    builder.CreateCondBr(isVector(v), isVec, notVec);
+
+    builder.SetInsertPoint(isVec);
+    auto t =
+        call(NativeBuiltins::getAttrb, {v, constant(R_DimSymbol, t::SEXP)});
+    res.addInput(
+        builder.CreateAnd(builder.CreateICmpEQ(sexptype(t), c(INTSXP)),
+                          builder.CreateICmpUGT(vectorLength(t), c(0, 64))));
+    builder.CreateBr(done);
+
+    builder.SetInsertPoint(notVec);
+    res.addInput(builder.getFalse());
+    builder.CreateBr(done);
+
+    builder.SetInsertPoint(done);
+    return res();
+}
+
 llvm::Value* LowerFunctionLLVM::tag(llvm::Value* v) {
     auto pos = builder.CreateGEP(v, {c(0), c(4), c(2)});
     return builder.CreateLoad(pos);
@@ -1525,7 +1593,9 @@ void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
     builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
-    call(NativeBuiltins::error, {});
+    auto msg =
+        builder.CreateGlobalString("argument is missing, with no default");
+    call(NativeBuiltins::error, {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
@@ -1538,7 +1608,8 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
-    call(NativeBuiltins::error, {});
+    auto msg = builder.CreateGlobalString("object not found");
+    call(NativeBuiltins::error, {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
@@ -1577,8 +1648,17 @@ llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
     return res;
 }
 llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
-    if (v->getType() == t::Int)
+    if (v->getType() == t::Int) {
+        if (false) {
+            std::ostringstream dbg;
+            currentInstr->printRecursive(dbg, 2);
+            auto l = new std::string;
+            l->append(dbg.str());
+            return call(NativeBuiltins::newIntDebug,
+                        {v, c((unsigned long)l->data())});
+        }
         return call(NativeBuiltins::newInt, {v});
+    }
     assert(v->getType() == t::Double);
     return call(NativeBuiltins::newIntFromReal, {v});
 }
@@ -1734,15 +1814,18 @@ void LowerFunctionLLVM::compileBinop(
     auto a = load(lhs, lhsRep);
     auto b = load(rhs, rhsRep);
 
-    auto checkNa = [&](llvm::Value* v, Representation r) {
-        if (r == Representation::Integer) {
-            if (!isNaBr)
-                isNaBr = BasicBlock::Create(C, "isNa", fun);
-            nacheck(v, isNaBr);
+    auto checkNa = [&](llvm::Value* llvmValue, Value* pirValue,
+                       Representation r) {
+        if (pirValue->type.maybeNa()) {
+            if (r == Representation::Integer) {
+                if (!isNaBr)
+                    isNaBr = BasicBlock::Create(C, "isNa", fun);
+                nacheck(llvmValue, isNaBr);
+            }
         }
     };
-    checkNa(a, lhsRep);
-    checkNa(b, rhsRep);
+    checkNa(a, lhs, lhsRep);
+    checkNa(b, rhs, rhsRep);
 
     if (a->getType() == t::Int && b->getType() == t::Int) {
         res.addInput(intInsert(a, b));
@@ -2456,7 +2539,11 @@ bool LowerFunctionLLVM::tryCompile() {
                         break;
                     case blt("names"): {
                         auto itype = b->callArg(0).val()->type;
-                        if (itype.isA(PirType::vecs().orObject().orAttribs())) {
+                        if (representationOf(b->callArg(0).val()) != t::SEXP) {
+                            setVal(i, constant(R_NilValue, t::SEXP));
+                        } else if (itype.isA(PirType::vecs()
+                                                 .orObject()
+                                                 .orAttribs())) {
                             if (!itype.maybeHasAttrs() && !itype.maybeObj()) {
                                 setVal(i, constant(R_NilValue, t::SEXP));
                             } else {
@@ -2484,7 +2571,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                 setVal(i, res());
                             }
                         } else {
-                            success = false;
+                            done = false;
                         }
                         break;
                     }
@@ -2629,6 +2716,55 @@ bool LowerFunctionLLVM::tryCompile() {
                             done = false;
                         }
                         break;
+                    case blt("is.object"):
+                        if (irep == Representation::Sexp) {
+                            setVal(i, builder.CreateSelect(
+                                          isObj(a), constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_FalseValue, orep));
+                        }
+                        break;
+                    case blt("is.array"):
+                        if (irep == Representation::Sexp) {
+                            setVal(i,
+                                   builder.CreateSelect(
+                                       isArray(a), constant(R_TrueValue, orep),
+                                       constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_FalseValue, orep));
+                        }
+                        break;
+                    case blt("is.atomic"):
+                        if (irep == Representation::Sexp) {
+                            auto t = sexptype(a);
+                            auto isatomic = builder.CreateOr(
+                                builder.CreateICmpEQ(t, c(NILSXP)),
+                                builder.CreateOr(
+                                    builder.CreateICmpEQ(t, c(CHARSXP)),
+                                    builder.CreateOr(
+                                        builder.CreateICmpEQ(t, c(LGLSXP)),
+                                        builder.CreateOr(
+                                            builder.CreateICmpEQ(t, c(INTSXP)),
+                                            builder.CreateOr(
+                                                builder.CreateICmpEQ(
+                                                    t, c(REALSXP)),
+                                                builder.CreateOr(
+                                                    builder.CreateICmpEQ(
+                                                        t, c(CPLXSXP)),
+                                                    builder.CreateOr(
+                                                        builder.CreateICmpEQ(
+                                                            t, c(STRSXP)),
+                                                        builder.CreateICmpEQ(
+                                                            t,
+                                                            c(RAWSXP)))))))));
+                            setVal(i, builder.CreateSelect(
+                                          isatomic, constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            setVal(i, constant(R_TrueValue, orep));
+                        }
+                        break;
                     case blt("bodyCode"): {
                         assert(irep == Representation::Sexp && orep == irep);
                         llvm::Value* res = nullptr;
@@ -2660,7 +2796,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 if (b->nargs() == 2) {
-                    bool success = false;
+                    bool fastcase = false;
                     auto arep = representationOf(b->arg(0).val());
                     auto brep = representationOf(b->arg(1).val());
                     auto orep = representationOf(b);
@@ -2693,7 +2829,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                                       load(l, Representation::
                                                                   Integer),
                                                       t::i64)}));
-                                        success = true;
+                                        fastcase = true;
                                         break;
                                     default: {}
                                     }
@@ -2718,7 +2854,7 @@ bool LowerFunctionLLVM::tryCompile() {
                                 assert(orep == Representation::Sexp);
                                 setVal(i, boxInt(res, false));
                             }
-                            success = true;
+                            fastcase = true;
                         } else if (arep == Representation::Real &&
                                    brep == Representation::Real &&
                                    orep != Representation::Integer) {
@@ -2732,12 +2868,33 @@ bool LowerFunctionLLVM::tryCompile() {
                                 assert(orep == Representation::Sexp);
                                 setVal(i, boxReal(res, false));
                             }
-                            success = true;
+                            fastcase = true;
                         }
                         break;
                     }
+                    case blt("is.vector"):
+                        if (auto cnst = LdConst::Cast(b->arg(1).val())) {
+                            if (TYPEOF(cnst->c()) == STRSXP &&
+                                LENGTH(cnst->c()) == 1) {
+                                auto kind = STRING_ELT(cnst->c(), 0);
+                                if (std::string("any") == CHAR(kind)) {
+                                    if (arep == Representation::Sexp) {
+                                        setVal(
+                                            i,
+                                            builder.CreateSelect(
+                                                isVector(aval),
+                                                constant(R_TrueValue, orep),
+                                                constant(R_FalseValue, orep)));
+                                    } else {
+                                        setVal(i, constant(R_TrueValue, orep));
+                                    }
+                                    fastcase = true;
+                                }
+                            }
+                        }
+                        break;
                     }
-                    if (success) {
+                    if (fastcase) {
                         fixVisibility();
                         break;
                     }
@@ -2951,50 +3108,12 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
-            case Tag::AsInt: {
-                auto arg = i->arg(0).val();
-                auto asint = AsInt::Cast(i);
-                llvm::Value* res = nullptr;
-                if (representationOf(arg) == Representation::Integer) {
-                    res = load(arg, Representation::Integer);
-                } else if (representationOf(arg) == Representation::Real) {
-                    auto a = load(arg, Representation::Real);
-                    if (asint->ceil) {
-                        res = builder.CreateIntrinsic(Intrinsic::ceil,
-                                                      {a->getType()}, {a});
-                    } else {
-                        res = builder.CreateIntrinsic(Intrinsic::floor,
-                                                      {a->getType()}, {a});
-                    }
-                    res = builder.CreateFPToSI(res, t::Int);
-                } else {
-                    auto bt = asint->ceil ? NativeBuiltins::asIntCeil
-                                          : NativeBuiltins::asIntFloor;
-                    res = call(bt, {loadSxp(arg), c(i->srcIdx)});
-                }
-                setVal(i, res);
-                break;
-            }
-
             case Tag::Inc: {
                 auto arg = i->arg(0).val();
                 llvm::Value* res = nullptr;
                 if (representationOf(arg) == Representation::Integer) {
                     res = load(arg, Representation::Integer);
                     res = builder.CreateAdd(res, c(1), "", true, true);
-                } else {
-                    success = false;
-                }
-                setVal(i, res);
-                break;
-            }
-
-            case Tag::Dec: {
-                auto arg = i->arg(0).val();
-                llvm::Value* res = nullptr;
-                if (representationOf(arg) == Representation::Integer) {
-                    res = load(arg, Representation::Integer);
-                    res = builder.CreateSub(res, c(1), "", true, true);
                 } else {
                     success = false;
                 }
@@ -3092,8 +3211,9 @@ bool LowerFunctionLLVM::tryCompile() {
                               c(mkenv->context)});
                     size_t pos = 0;
                     mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
-                        envStubSet(env, pos++, loadSxp(v), mkenv->nLocals(),
-                                   false);
+                        auto vn = loadSxp(v);
+                        envStubSet(env, pos++, vn, mkenv->nLocals(), false);
+                        incrementNamed(vn);
                     });
                     setVal(i, env);
                     break;
@@ -3439,7 +3559,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto msg = builder.CreateGlobalString(
                             "probable complete loss of accuracy in modulus");
                         call(NativeBuiltins::warn,
-                             {builder.CreateBitCast(msg, t::voidPtr)});
+                             {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                         builder.CreateBr(noWarn);
 
                         builder.SetInsertPoint(noWarn);
@@ -3490,17 +3610,21 @@ bool LowerFunctionLLVM::tryCompile() {
             }
             case Tag::Colon: {
                 assert(representationOf(i) == t::SEXP);
-                auto a = loadSxp(i->arg(0).val());
-                auto b = loadSxp(i->arg(1).val());
+                auto a = i->arg(0).val();
+                auto b = i->arg(1).val();
                 llvm::Value* res;
                 if (i->hasEnv()) {
                     auto e = loadSxp(i->env());
-                    res =
-                        call(NativeBuiltins::binopEnv,
-                             {a, b, e, c(i->srcIdx), c((int)BinopKind::COLON)});
+                    res = call(NativeBuiltins::binopEnv,
+                               {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
+                                c((int)BinopKind::COLON)});
+                } else if (representationOf(a) == Representation::Integer &&
+                           representationOf(b) == Representation::Integer) {
+                    res = call(NativeBuiltins::colon, {load(a), load(b)});
                 } else {
-                    res = call(NativeBuiltins::binop,
-                               {a, b, c((int)BinopKind::COLON)});
+                    res =
+                        call(NativeBuiltins::binop, {loadSxp(a), loadSxp(b),
+                                                     c((int)BinopKind::COLON)});
                 }
                 setVal(i, res);
                 break;
@@ -3744,7 +3868,10 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 builder.SetInsertPoint(isNa);
-                call(NativeBuiltins::error, {});
+                auto msg = builder.CreateGlobalString(
+                    "missing value where TRUE/FALSE needed");
+                call(NativeBuiltins::error,
+                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                 builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
 
                 builder.SetInsertPoint(done);
@@ -3827,7 +3954,9 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::UpdatePromise: {
-                setCar(loadSxp(i->arg(0).val()), loadSxp(i->arg(1).val()));
+                auto val = loadSxp(i->arg(1).val());
+                ensureShared(val);
+                setCar(loadSxp(i->arg(0).val()), val);
                 break;
             }
 
@@ -4621,9 +4750,15 @@ bool LowerFunctionLLVM::tryCompile() {
                     break;
                 }
 
+                auto pirVal = st->arg<0>().val();
+                bool integerValueCase =
+                    representationOf(pirVal) == Representation::Integer &&
+                    pirVal->type.isA(RType::integer);
                 auto setter = NativeBuiltins::stvar;
                 if (st->isStArg)
                     setter = NativeBuiltins::starg;
+                if (!st->isStArg && integerValueCase)
+                    setter = NativeBuiltins::stvari;
 
                 if (bindingsCache.count(environment)) {
                     auto offset = bindingsCache.at(environment).at(st->varName);
@@ -4638,8 +4773,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     auto miss = BasicBlock::Create(C, "", fun);
                     auto done = BasicBlock::Create(C, "", fun);
 
-                    auto newVal = loadSxp(st->arg<0>().val());
-
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
                             builder.CreatePtrToInt(cache, t::i64), c(1, 64)),
@@ -4653,8 +4786,40 @@ bool LowerFunctionLLVM::tryCompile() {
                         miss, hit2, branchMostlyFalse);
 
                     builder.SetInsertPoint(hit2);
-                    builder.CreateCondBr(builder.CreateICmpEQ(val, newVal),
-                                         identical, hit3, branchMostlyFalse);
+
+                    llvm::Value* newVal = nullptr;
+                    if (integerValueCase) {
+                        auto hitInt = BasicBlock::Create(C, "", fun);
+                        auto hitInt2 = BasicBlock::Create(C, "", fun);
+                        auto fallbackInt = BasicBlock::Create(C, "", fun);
+                        auto isScalarInt = builder.CreateAnd(
+                            builder.CreateICmpEQ(sexptype(val), c(INTSXP)),
+                            isScalar(val));
+                        auto notShared = builder.CreateNot(shared(val));
+                        builder.CreateCondBr(
+                            builder.CreateAnd(isScalarInt, notShared), hitInt,
+                            fallbackInt);
+
+                        builder.SetInsertPoint(hitInt);
+                        auto newValNative = load(pirVal);
+                        auto same = builder.CreateICmpEQ(
+                            newValNative,
+                            accessVector(val, c(0), RType::integer));
+                        builder.CreateCondBr(same, identical, hitInt2);
+
+                        builder.SetInsertPoint(hitInt2);
+                        assignVector(val, c(0), newValNative, RType::integer);
+                        builder.CreateBr(done);
+
+                        builder.SetInsertPoint(fallbackInt);
+                        newVal = loadSxp(pirVal);
+                        builder.CreateBr(hit3);
+                    } else {
+                        newVal = loadSxp(pirVal);
+                        builder.CreateCondBr(builder.CreateICmpEQ(val, newVal),
+                                             identical, hit3,
+                                             branchMostlyFalse);
+                    }
 
                     builder.SetInsertPoint(hit3);
                     incrementNamed(newVal);
@@ -4670,16 +4835,23 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(miss);
-                    call(setter, {constant(st->varName, t::SEXP), newVal,
+                    call(setter, {constant(st->varName, t::SEXP),
+                                  setter.llvmSignature->getFunctionParamType(
+                                      1) == t::Int
+                                      ? load(pirVal)
+                                      : loadSxp(pirVal),
                                   loadSxp(st->env())});
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
 
                 } else {
-                    call(setter,
-                         {constant(st->varName, t::SEXP),
-                          loadSxp(st->arg<0>().val()), loadSxp(st->env())});
+                    call(setter, {constant(st->varName, t::SEXP),
+                                  setter.llvmSignature->getFunctionParamType(
+                                      1) == t::Int
+                                      ? load(pirVal)
+                                      : loadSxp(pirVal),
+                                  loadSxp(st->env())});
                 }
                 break;
             }
@@ -4730,19 +4902,38 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
-            case Tag::Length: {
-                llvm::Value* l;
-                if (representationOf(i) == Representation::Sexp) {
-                    l = vectorLength(loadSxp(i->arg(0).val()));
-                } else if (representationOf(i) == Representation::Real) {
-                    l = c((double)1);
-                } else {
-                    assert(representationOf(i) == Representation::Integer);
-                    l = c(1);
-                }
-                setVal(i, l);
+            case Tag::ColonInputEffects:
+                setVal(i, call(NativeBuiltins::colonInputEffects,
+                               {loadSxp(i->arg(0).val()),
+                                loadSxp(i->arg(1).val()), c(i->srcIdx)}));
                 break;
-            }
+
+            case Tag::ColonCastLhs:
+                setVal(i, call(NativeBuiltins::colonCastLhs,
+                               {loadSxp(i->arg(0).val())}));
+                break;
+
+            case Tag::ColonCastRhs:
+                setVal(i, call(NativeBuiltins::colonCastRhs,
+                               {loadSxp(i->arg(0).val()),
+                                loadSxp(i->arg(1).val())}));
+                break;
+
+            case Tag::Names:
+                setVal(i,
+                       call(NativeBuiltins::names, {loadSxp(i->arg(0).val())}));
+                break;
+
+            case Tag::SetNames:
+                setVal(i, call(NativeBuiltins::setNames,
+                               {loadSxp(i->arg(0).val()),
+                                loadSxp(i->arg(1).val())}));
+                break;
+
+            case Tag::XLength:
+                setVal(i, call(NativeBuiltins::xlength_,
+                               {loadSxp(i->arg(0).val())}));
+                break;
 
             case Tag::Int3:
             case Tag::PrintInvocation:
@@ -4762,14 +4953,9 @@ bool LowerFunctionLLVM::tryCompile() {
                 success = false;
                 break;
 
-            case Tag::True:
-            case Tag::False:
-            case Tag::NaLogical:
-            case Tag::Tombstone:
-            case Tag::MissingArg:
-            case Tag::UnboundValue:
-            case Tag::Env:
-            case Tag::Nil:
+#define V(Value) case Tag::Value:
+            COMPILER_VALUES(V)
+#undef V
                 assert(false && "Values should not occur in instructions");
                 success = false;
                 break;

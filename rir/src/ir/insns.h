@@ -210,10 +210,10 @@ DEF_INSTR(call_builtin_, 3, -1, 1, 0)
 DEF_INSTR(close_, 0, 3, 1, 1)
 
 /**
- * isfun_:: pop object stack, convert to RIR code or assert error, push code to
- * object stack
+ * check_closure_:: pop object stack, convert to RIR code or assert error, push
+ * code to object stack
  */
-DEF_INSTR(isfun_, 0, 1, 1, 1)
+DEF_INSTR(check_closure_, 0, 1, 1, 1)
 
 /**
  * promise_:: take immediate CP index of Code, create promise & push on object
@@ -296,11 +296,6 @@ DEF_INSTR(uplus_, 0, 1, 1, 0)
  */
 DEF_INSTR(inc_, 0, 1, 1, 1)
 
-/**
- * dec_ :: decrement tos integer
- */
-DEF_INSTR(dec_, 0, 1, 1, 1)
-
 DEF_INSTR(sub_, 0, 2, 1, 0)
 DEF_INSTR(uminus_, 0, 1, 1, 0)
 DEF_INSTR(mul_, 0, 2, 1, 0)
@@ -348,12 +343,21 @@ DEF_INSTR(aslogical_, 0, 1, 1, 0)
 DEF_INSTR(asbool_, 0, 1, 1, 0)
 
 /**
- * ceil_ / floor_ :: pop object stack, convert to integer scalar and push. Ceils
- *                   or floors if real, 0 or 1 if logical, throws an NA error if
- *                   another type. For simple ranges.
+ * colon_input_effects_ :: pushes false if we can't compile a simple for loop.
+ * Otherwise pushes true, and checks the lhs and rhs to throw errors which colon
+ * would.
  */
-DEF_INSTR(ceil_, 0, 1, 1, 1)
-DEF_INSTR(floor_, 0, 1, 1, 1)
+DEF_INSTR(colon_input_effects_, 0, 0, 1, 1)
+
+/**
+ * colon_cast_lhs_ :: Converts lhs of colon for simple for loop
+ */
+DEF_INSTR(colon_cast_lhs_, 0, 1, 1, 1)
+
+/**
+ * colon_cast_rhs_ :: Converts rhs of colon for simple for loop
+ */
+DEF_INSTR(colon_cast_rhs_, 0, 1, 1, 1)
 
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack
@@ -497,14 +501,9 @@ DEF_INSTR(names_, 0, 1, 1, 1)
 DEF_INSTR(set_names_, 0, 2, 1, 1)
 
 /**
- * alloc_ :: allocate vector. type immediate, length as integer on stack
+ * xlength_ :: get length of a vector
  */
-DEF_INSTR(alloc_, 1, 1, 1, 1)
-
-/**
- * length_ :: get length of a vector
- */
-DEF_INSTR(length_, 0, 1, 1, 1)
+DEF_INSTR(xlength_, 0, 1, 1, 1)
 
 /**
  * for_seq_size_ :: get size of the for loop sequence

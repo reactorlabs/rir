@@ -17,7 +17,7 @@ namespace rir {
     V(NoPromise)                                                               \
     V(NoExternalCalls)                                                         \
     V(Returns42L)                                                              \
-    V(NoAsInt)                                                                 \
+    V(NoColon)                                                                 \
     V(NoEq)                                                                    \
     V(OneEq)                                                                   \
     V(OneNot)                                                                  \

@@ -5,6 +5,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "R/BuiltinIds.h"
 #include "allocators.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
@@ -296,29 +297,17 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
     alloc.verify();
 
-    auto isJumpThrough = [&](BB* bb) {
-        if (!bb->isJmp())
-            return false;
-        return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
-                                 alloc.sa.toDrop(bb->last()).empty());
-    };
-
     // Create labels for all bbs
     std::unordered_map<BB*, BC::Label> bbLabels;
-    BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
-        if (!isJumpThrough(bb))
-            bbLabels[bb] = ctx.cs().mkLabel();
-    });
+    BreadthFirstVisitor::run(
+        code->entry, [&](BB* bb) { bbLabels[bb] = ctx.cs().mkLabel(); });
 
     LastEnv lastEnv(cls, code, log.out());
     std::unordered_map<Value*, BC::Label> pushContexts;
     std::unordered_set<BC::Label> pushContextsPopped;
 
     std::deque<unsigned> order;
-    LoweringVisitor::run(code->entry, [&](BB* bb) {
-        if (!isJumpThrough(bb))
-            order.push_back(bb->id);
-    });
+    LoweringVisitor::run(code->entry, [&](BB* bb) { order.push_back(bb->id); });
 
     NeedsRefcountAdjustment refcount;
     {
@@ -367,17 +356,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         cb.add(BC::clearBindingCache(0, cache.globalEnvsCacheSize()));
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
-        if (isJumpThrough(bb))
-            return;
-
         order.pop_front();
         cb.add(bbLabels[bb]);
-
-        auto jumpThroughEmpty = [&](BB* bb) {
-            while (isJumpThrough(bb))
-                bb = bb->next();
-            return bb;
-        };
 
         // Only needed for deopt branches
         for (auto it = bb->begin(); it != bb->end(); ++it) {
@@ -608,6 +588,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             switch (instr->tag) {
             case Tag::LdDots: {
                 SLOWASSERT(instr->usesAreOnly(bb, {Tag::ExpandDots}));
+                auto mkenv = MkEnv::Cast(instr->env());
+                if (mkenv && mkenv->stub) {
+                    cb.add(
+                        BC::ldvarNoForceStubbed(mkenv->indexOf(R_DotsSymbol)));
+                    break;
+                }
                 cb.add(BC::push(R_DotsSymbol));
                 break;
             }
@@ -780,73 +766,27 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::IsType: {
                 auto is = IsType::Cast(instr);
-                auto t = is->typeTest;
-                auto in = is->arg(0).val();
-                assert(!t.isVoid() && !t.maybeLazy());
-
-                if (t.noAttribs().isA(RType::logical)) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(BC::isType(TypeChecks::LogicalSimpleScalar));
-                    else
-                        cb.add(BC::isType(TypeChecks::LogicalNonObject));
-                } else if (t.noAttribs().isA(
-                               PirType(RType::logical).orPromiseWrapped())) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(
-                            BC::isType(TypeChecks::LogicalSimpleScalarWrapped));
-                    else
-                        cb.add(BC::isType(TypeChecks::LogicalNonObjectWrapped));
-                } else if (t.noAttribs().isA(RType::integer)) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(BC::isType(TypeChecks::IntegerSimpleScalar));
-                    else
-                        cb.add(BC::isType(TypeChecks::IntegerNonObject));
-                } else if (t.noAttribs().isA(
-                               PirType(RType::integer).orPromiseWrapped())) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(
-                            BC::isType(TypeChecks::IntegerSimpleScalarWrapped));
-                    else
-                        cb.add(BC::isType(TypeChecks::IntegerNonObjectWrapped));
-                } else if (t.noAttribs().isA(RType::real)) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(BC::isType(TypeChecks::RealSimpleScalar));
-                    else
-                        cb.add(BC::isType(TypeChecks::RealNonObject));
-                } else if (t.noAttribs().isA(
-                               PirType(RType::real).orPromiseWrapped())) {
-                    if (t.isScalar() && !in->type.isScalar())
-                        cb.add(BC::isType(TypeChecks::RealSimpleScalarWrapped));
-                    else
-                        cb.add(BC::isType(TypeChecks::RealNonObjectWrapped));
-                } else if (in->type.notMissing().notObject().isA(t)) {
-                    cb.add(BC::isType(TypeChecks::NotObject));
-                } else if (in->type.notMissing()
-                               .notPromiseWrapped()
-                               .notObject()
-                               .isA(t)) {
-                    cb.add(BC::isType(TypeChecks::NotObjectWrapped));
-                } else if (in->type.notMissing().noAttribs().isA(t)) {
-                    cb.add(BC::isType(TypeChecks::NoAttribsExceptDim));
-                } else if (in->type.notMissing()
-                               .notPromiseWrapped()
-                               .noAttribs()
-                               .isA(t)) {
-                    cb.add(BC::isType(TypeChecks::NoAttribsExceptDimWrapped));
-                } else {
-                    t.print(std::cerr);
-                    std::cerr << "\n";
-                    assert(false && "IsType used for unsupported type check");
-                }
+                cb.add(BC::isType(is->typeChecks()));
                 break;
             }
 
-            case Tag::AsInt: {
-                auto asInt = AsInt::Cast(instr);
-                if (asInt->ceil)
-                    cb.add(BC::ceil());
-                else
-                    cb.add(BC::floor());
+            case Tag::ColonInputEffects: {
+                cb.add(BC::colonInputEffects(), instr->srcIdx);
+                // TODO: We might want to add some mechanism in PIR to
+                // distinguish between popped and just observed arguments.
+                // This reads 2 args but pops 0 - PIR doesn't know and loads all
+                // args, so we must manually pop them.
+                cb.add(BC::put(2));
+                cb.add(BC::popn(2));
+                break;
+            }
+
+            case Tag::ColonCastRhs: {
+                cb.add(BC::colonCastRhs());
+                // This reads 2 args but only pops 1 - PIR doesn't know and
+                // loads all args, so we must manually pop the other.
+                cb.add(BC::swap());
+                cb.add(BC::pop());
                 break;
             }
 
@@ -867,18 +807,20 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(LdFunctionEnv, getEnv);
                 SIMPLE(Visible, visible);
                 SIMPLE(Invisible, invisible);
+                SIMPLE(Names, names);
+                SIMPLE(SetNames, setNames);
                 SIMPLE(Identical, identicalNoforce);
                 SIMPLE(IsEnvStub, isstubenv);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
-                SIMPLE(Dec, dec);
+                SIMPLE(XLength, xlength_);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
-                SIMPLE(Length, length);
                 SIMPLE(ChkMissing, checkMissing);
-                SIMPLE(ChkClosure, isfun);
+                SIMPLE(ChkClosure, checkClosure);
                 SIMPLE(MkCls, close);
+                SIMPLE(ColonCastLhs, colonCastLhs);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
@@ -1067,8 +1009,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             // BB exitting instructions
             case Tag::Branch: {
                 assert(bb->isBranch());
-                auto trueBranch = jumpThroughEmpty(bb->trueBranch());
-                auto falseBranch = jumpThroughEmpty(bb->falseBranch());
+                auto trueBranch = bb->trueBranch();
+                auto falseBranch = bb->falseBranch();
                 if (trueBranch->id == order.front()) {
                     cb.add(BC::brfalse(bbLabels[falseBranch]));
                     cb.add(BC::br(bbLabels[trueBranch]));
@@ -1180,7 +1122,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
         // This BB has exactly one successor
         assert(bb->isJmp());
-        auto next = jumpThroughEmpty(bb->next());
+        auto next = bb->next();
         cb.add(BC::br(bbLabels[next]));
     });
 
@@ -1233,7 +1175,22 @@ void Pir2Rir::lower(Code* code) {
             auto next = it + 1;
             if (auto call = CallInstruction::CastCall(*it))
                 call->clearFrameState();
-            if (auto ldfun = LdFun::Cast(*it)) {
+            if (auto b = CallSafeBuiltin::Cast(*it)) {
+                if (b->builtinId == blt("length") && next != bb->end()) {
+                    if (auto t = IsType::Cast(*(it + 1))) {
+                        if (t->typeTest.isA(PirType::simpleScalarInt()) &&
+                            t->arg(0).val() == b) {
+                            // Type test follows, let's cheat and load this as
+                            // an integer already. this avoids boxing in the
+                            // native backend. NOTE: don't move this to an
+                            // earlier pass, since otherwise the check will be
+                            // optimized away!
+                            b->type = PirType::simpleScalarInt();
+                            break;
+                        }
+                    }
+                }
+            } else if (auto ldfun = LdFun::Cast(*it)) {
                 // The guessed binding in ldfun is just used as a temporary
                 // store. If we did not manage to resolve ldfun by now, we
                 // have to remove the guess again, since apparently we
@@ -1314,6 +1271,7 @@ void Pir2Rir::lower(Code* code) {
 }
 
 void Pir2Rir::toCSSA(Code* code) {
+
     // For each Phi, insert copies
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         // TODO: move all phi's to the beginning, then insert the copies not
@@ -1321,6 +1279,7 @@ void Pir2Rir::toCSSA(Code* code) {
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
             if (auto phi = Phi::Cast(instr)) {
+
                 for (size_t i = 0; i < phi->nargs(); ++i) {
                     BB* pred = phi->inputAt(i);
                     // If pred is branch insert a new split block
@@ -1341,9 +1300,15 @@ void Pir2Rir::toCSSA(Code* code) {
                         auto copy = pred->insert(pred->end(), new PirCopy(iav));
                         phi->arg(i).val() = *copy;
                     } else {
+
                         auto val = phi->arg(i).val()->asRValue();
                         auto copy = pred->insert(pred->end(), new LdConst(val));
+
                         phi->arg(i).val() = *copy;
+
+                        if (phi->arg(i).type() == NativeType::test) {
+                            (*copy)->type = phi->arg(i).type();
+                        }
                     }
                 }
                 auto phiCopy = new PirCopy(phi);

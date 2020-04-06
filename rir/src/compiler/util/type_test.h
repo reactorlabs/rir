@@ -19,7 +19,7 @@ class TypeTest {
                        const PirType& suggested, const PirType& required,
                        const std::function<void(Info)>& action,
                        const std::function<void()>& failed) {
-        auto expected = i->type & feedback.type;
+        auto expected = i->type & feedback.type.orNa();
 
         if (i->type.isA(expected))
             return;
@@ -33,9 +33,10 @@ class TypeTest {
 
         assert(feedback.origin);
         // First try to refine the type
-        if (expected.noAttribs().isA(RType::integer) ||
-            expected.noAttribs().isA(RType::real) ||
-            expected.noAttribs().isA(RType::logical)) {
+        if (!expected.maybeObj() && // TODO: Is this right?
+            (expected.noAttribs().isA(RType::integer) ||
+             expected.noAttribs().isA(RType::real) ||
+             expected.noAttribs().isA(RType::logical))) {
             return action({expected, new IsType(expected, i), true,
                            feedback.srcCode, feedback.origin});
         }

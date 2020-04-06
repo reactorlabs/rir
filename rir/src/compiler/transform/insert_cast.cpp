@@ -33,10 +33,10 @@ void InsertCast::apply(BB* bb, AvailableCheckpoints& cp) {
     auto ip = bb->begin();
     while (ip != bb->end()) {
         Instruction* instr = *ip;
-        Phi* p = nullptr;
-        if ((p = Phi::Cast(instr))) {
+        if (auto p = Phi::Cast(instr))
             p->updateTypeAndEffects();
-        }
+        if (auto f = Force::Cast(instr))
+            f->updateTypeAndEffects();
         instr->eachArg([&](InstrArg& arg) {
             while (!arg.type().isSuper(arg.val()->type)) {
                 auto c = cast(arg.val(), arg.type(), env);
@@ -44,16 +44,7 @@ void InsertCast::apply(BB* bb, AvailableCheckpoints& cp) {
                     bb->print(std::cerr, true);
                     assert(false);
                 }
-                auto argument = Instruction::Cast(arg.val());
-                if (argument && !instr->bb()->isDeopt() && Force::Cast(c) &&
-                    !cp.next(instr) && cp.next(argument)) {
-                    auto iterator = argument->bb()->insert(
-                        argument->bb()->atPosition(argument) + 1, c);
-                    if (argument->bb() == bb)
-                        ip = iterator;
-                } else {
-                    ip = bb->insert(ip, c) + 1;
-                }
+                ip = bb->insert(ip, c) + 1;
                 arg.val() = c;
             }
         });

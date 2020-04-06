@@ -7,6 +7,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "interpreter/interp.h"
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
 
@@ -73,6 +74,23 @@ static LdConst* isConst(Value* instr) {
         }                                                                      \
     } while (false)
 
+static bool convertsToRealWithoutWarning(SEXP arg) {
+    if (Rf_isVectorAtomic(arg) && XLENGTH(arg) == 1) {
+        switch (TYPEOF(arg)) {
+        case LGLSXP:
+        case INTSXP:
+        case REALSXP:
+            return true;
+        case CPLXSXP:
+            return COMPLEX(arg)[0].i == 0;
+        default:
+            return false;
+        }
+    } else {
+        return false;
+    }
+};
+
 static bool convertsToLogicalWithoutWarning(SEXP arg) {
     switch (TYPEOF(arg)) {
     case LGLSXP:
@@ -96,6 +114,88 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                          LogStream&) const {
     std::unordered_map<BB*, bool> branchRemoval;
     DominanceGraph dom(function);
+
+    {
+        // Branch Elimination
+        //
+        // Given branch `a` and `b`, where both have the same
+        // condition and `a` dominates `b`, we can replace the condition of `b`
+        // by
+        //
+        //     c' = Phi([TRUE, a->trueBranch()], [FALSE, a->falseBranch()])
+        //     b  = Branch(c')
+        //
+        // and even constantfold the `b` branch if either
+        // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach `b`.
+        std::unordered_map<Instruction*, std::vector<Branch*>> condition;
+        Visitor::run(function->entry, [&](BB* bb) {
+            if (bb->isEmpty())
+                return;
+            auto branch = Branch::Cast(bb->last());
+            if (!branch)
+                return;
+            if (auto i = Instruction::Cast(branch->arg(0).val()))
+                condition[i].push_back(branch);
+        });
+        std::unordered_set<Branch*> removed;
+        for (auto& c : condition) {
+            auto uses = c.second;
+            if (uses.size() > 1) {
+                for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
+                    if (removed.count(*a))
+                        continue;
+                    for (auto b = a + 1; b != uses.end(); b++) {
+                        if (removed.count(*b))
+                            continue;
+                        auto bb1 = (*a)->bb();
+                        auto bb2 = (*b)->bb();
+                        if (dom.dominates(bb1, bb2)) {
+                            if (dom.dominates(bb1->trueBranch(), bb2)) {
+                                (*b)->arg(0).val() = True::instance();
+                            } else if (dom.dominates(bb1->falseBranch(), bb2)) {
+                                (*b)->arg(0).val() = False::instance();
+                            } else {
+
+                                bool success = true;
+
+                                BB* next = dom.immediateDominator(bb2);
+                                BB* target = bb2;
+
+                                while (next != bb1) {
+                                    if (dom.dominates(next, bb2))
+                                        target = next;
+
+                                    next = dom.immediateDominator(next);
+                                }
+
+                                auto p = new Phi;
+                                for (auto pred : target->predecessors()) {
+                                    if (dom.dominates(bb1->trueBranch(),
+                                                      pred)) {
+                                        p->addInput(pred, True::instance());
+                                    } else if (dom.dominates(bb1->falseBranch(),
+                                                             pred)) {
+                                        p->addInput(pred, False::instance());
+                                    } else {
+                                        success = false;
+                                    }
+                                }
+
+                                if (!success) {
+                                    delete p;
+                                    continue;
+                                }
+                                p->type = NativeType::test;
+                                target->insert(target->begin(), p);
+                                (*b)->arg(0).val() = p;
+                            }
+                            removed.insert(*b);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
@@ -182,22 +282,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             });
 
-            FOLD_UNARY(AsInt, [&](SEXP arg) {
-                if (IS_SIMPLE_SCALAR(arg, INTSXP)) {
-                    i->replaceUsesWith(i->arg(0).val());
-                    next = bb->remove(ip);
-                } else if (IS_SIMPLE_SCALAR(arg, REALSXP) &&
-                           *REAL(arg) == (int)*REAL(arg)) {
-                    auto c = new LdConst(Rf_ScalarInteger((int)*REAL(arg)));
-                    i->replaceUsesWith(c);
-                    bb->replace(ip, c);
-                } else if (IS_SIMPLE_SCALAR(arg, LGLSXP)) {
-                    auto c = new LdConst(Rf_ScalarInteger((int)*LOGICAL(arg)));
-                    i->replaceUsesWith(c);
-                    bb->replace(ip, c);
-                }
-            });
-
             if (Identical::Cast(i)) {
                 // Those are targeting the checks for default argument
                 // evaluation after inlining
@@ -219,11 +303,11 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             }
 
             if (auto isTest = IsType::Cast(i)) {
-                if (isTest->arg<0>().val()->type.isA(isTest->typeTest)) {
+                auto arg = isTest->arg<0>().val();
+                if (arg->type.isA(isTest->typeTest)) {
                     i->replaceUsesWith(True::instance());
                     next = bb->remove(ip);
-                } else if (!isTest->arg<0>().val()->type.maybe(
-                               isTest->typeTest)) {
+                } else if (!arg->type.maybe(isTest->typeTest)) {
                     i->replaceUsesWith(False::instance());
                     next = bb->remove(ip);
                 }
@@ -236,6 +320,26 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 else if (assume->arg<0>().val() == False::instance() &&
                          !assume->assumeTrue)
                     next = bb->remove(ip);
+            }
+
+            if (auto cl = Colon::Cast(i)) {
+                if (auto a = isConst(cl->arg(0).val())) {
+                    if (TYPEOF(a->c()) == REALSXP && Rf_length(a->c()) == 1 &&
+                        REAL(a->c())[0] == (double)(int)REAL(a->c())[0]) {
+                        ip = bb->insert(ip, new LdConst((int)REAL(a->c())[0]));
+                        cl->arg(0).val() = *ip;
+                        ip++;
+                    }
+                }
+                if (auto a = isConst(cl->arg(1).val())) {
+                    if (TYPEOF(a->c()) == REALSXP && Rf_length(a->c()) == 1 &&
+                        REAL(a->c())[0] == (double)(int)REAL(a->c())[0]) {
+                        ip = bb->insert(ip, new LdConst((int)REAL(a->c())[0]));
+                        cl->arg(1).val() = *ip;
+                        ip++;
+                    }
+                }
+                next = ip + 1;
             }
 
             if (CallSafeBuiltin::Cast(i) || CallBuiltin::Cast(i)) {
@@ -303,6 +407,21 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             i->replaceUsesAndSwapWith(new LdConst(con->c()),
                                                       ip);
                         }
+                    }
+                } else if (builtinId == blt("is.vector") && nargs == 2) {
+                    // We could do better here but for now we just look
+                    // at the default mode "any"
+                    // Also, the names attribute is allowed but we approximate
+                    // by checking that there are no attributes
+                    auto argType = i->arg(0).val()->type;
+                    auto modeType = i->arg(1).val()->type;
+                    auto mode = LdConst::Cast(i->arg(1).val());
+                    if (!argType.maybeHasAttrs() &&
+                        argType.isA(PirType::vecs()) &&
+                        modeType.isA(PirType::simpleScalarString()) && mode &&
+                        staticStringEqual(CHAR(STRING_ELT(mode->c(), 0)),
+                                          "any")) {
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
                     }
                 } else if (builtinId == blt("is.function") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
@@ -423,6 +542,33 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     next = bb->remove(ip);
                 }
             }
+
+            if (auto colonInputEffects = ColonInputEffects::Cast(i)) {
+                auto lhs = colonInputEffects->arg<0>().val();
+                auto rhs = colonInputEffects->arg<1>().val();
+                if (!lhs->type.maybeHasAttrs() || !rhs->type.maybeHasAttrs()) {
+                    // We still need to keep the colonInputEffects because it
+                    // could raise warnings / errors
+                    colonInputEffects->replaceUsesWith(True::instance());
+                }
+            }
+
+            FOLD_UNARY(ColonCastLhs, [&](SEXP lhs) {
+                if (convertsToRealWithoutWarning(lhs)) {
+                    SEXP newLhs = colonCastLhs(lhs);
+                    LdConst* newLhsInstr = new LdConst(newLhs);
+                    i->replaceUsesAndSwapWith(newLhsInstr, ip);
+                }
+            });
+
+            FOLD_BINARY(ColonCastRhs, [&](SEXP newLhs, SEXP rhs) {
+                if (convertsToRealWithoutWarning(rhs) &&
+                    convertsToRealWithoutWarning(newLhs)) {
+                    SEXP newRhs = colonCastRhs(newLhs, rhs);
+                    LdConst* newRhsInstr = new LdConst(newRhs);
+                    i->replaceUsesAndSwapWith(newRhsInstr, ip);
+                }
+            });
 
             ip = next;
         }

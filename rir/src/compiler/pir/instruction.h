@@ -824,6 +824,14 @@ class FLI(ForSeqSize, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
+class FLI(XLength, 1, Effects::None()) {
+  public:
+    explicit XLength(Value* val)
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType::val()}}, {{val}}) {}
+    size_t gvnBase() const override { return tagHash(); }
+};
+
 class FLI(LdArg, 0, Effects::None()) {
   public:
     size_t id;
@@ -836,7 +844,7 @@ class FLI(LdArg, 0, Effects::None()) {
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 
-class FLIE(Missing, 1, Effects() | Effect::ReadsEnv) {
+class FLIE(Missing, 1, Effects() | Effect::ReadsEnv | Effect::Error) {
   public:
     SEXP varName;
     explicit Missing(SEXP varName, Value* env)
@@ -859,7 +867,7 @@ class FLI(ChkMissing, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(ChkClosure, 1, Effect::Warn) {
+class FLI(ChkClosure, 1, Effect::Error) {
   public:
     explicit ChkClosure(Value* in)
         : FixedLenInstruction(RType::closure, {{PirType::val()}}, {{in}}) {}
@@ -1042,6 +1050,7 @@ class FLIE(Force, 2, Effects::Any()) {
                 effects.reset(Effect::Reflection);
             }
         }
+        updateTypeAndEffects();
     }
     Value* input() const { return arg(0).val(); }
 
@@ -1134,17 +1143,62 @@ class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(AsInt, 1, Effect::Error) {
+class FLI(ColonInputEffects, 2, Effect::Error) {
   public:
-    bool ceil;
+    explicit ColonInputEffects(Value* lhs, Value* rhs, unsigned srcIdx)
+        : FixedLenInstruction(NativeType::test,
+                              {{PirType::val(), PirType::val()}}, {{lhs, rhs}},
+                              srcIdx) {}
 
-    explicit AsInt(Value* in, bool ceil_)
-        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
-                              {{PirType::any()}}, {{in}}),
-          ceil(ceil_) {}
+    Value* lhs() const { return arg<0>().val(); }
+    Value* rhs() const { return arg<1>().val(); }
 
-    size_t gvnBase() const override {
-        return hash_combine(hash_combine(0, Tag::AsInt), ceil);
+    Effects inferEffects(const GetType& getType) const override final {
+        if (getType(lhs()).isA(PirType::num().scalar()) &&
+            getType(rhs()).isA(PirType::num().scalar())) {
+            return Effects::None();
+        } else {
+            return effects;
+        }
+    }
+
+    int minReferenceCount() const override { return MAX_REFCOUNT; }
+};
+
+class FLI(ColonCastLhs, 1, Effect::Error) {
+  public:
+    explicit ColonCastLhs(Value* lhs, unsigned srcIdx)
+        : FixedLenInstruction(PirType::intReal().scalar().notNa(),
+                              {{PirType::val()}}, {{lhs}}, srcIdx) {}
+
+    Value* lhs() const { return arg<0>().val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        if (getType(lhs()).isA(RType::integer)) {
+            return PirType(RType::integer).scalar().notNa();
+        } else {
+            return type;
+        }
+    }
+};
+
+class FLI(ColonCastRhs, 2, Effect::Error) {
+  public:
+    explicit ColonCastRhs(Value* newLhs, Value* rhs, unsigned srcIdx)
+        : FixedLenInstruction(
+              PirType::intReal().scalar().notNa(),
+              {{PirType::intReal().scalar().notNa(), PirType::val()}},
+              {{newLhs, rhs}}, srcIdx) {}
+
+    Value* newLhs() const { return arg<0>().val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        // This is intended - lhs type determines rhs
+        if (getType(newLhs()).isA(RType::integer)) {
+            return PirType(RType::integer).scalar().notNa();
+        } else {
+            return type;
+        }
     }
 };
 
@@ -1405,15 +1459,6 @@ class FLI(Inc, 1, Effects::None()) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(Dec, 1, Effects::None()) {
-  public:
-    explicit Dec(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
-                              {{PirType(RType::integer).scalar().noAttribs()}},
-                              {{v}}) {}
-    size_t gvnBase() const override { return tagHash(); }
-};
-
 class FLI(Is, 1, Effects::None()) {
   public:
     Is(uint32_t sexpTag, Value* v)
@@ -1433,6 +1478,8 @@ class FLI(IsType, 1, Effects::None()) {
     IsType(PirType type, Value* v)
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
           typeTest(type) {}
+
+    TypeChecks typeChecks() const;
 
     void printArgs(std::ostream& out, bool tty) const override;
 
@@ -1461,6 +1508,22 @@ class FLI(Invisible, 0, Effect::Visibility) {
     VisibilityFlag visibilityFlag() const override {
         return VisibilityFlag::Off;
     }
+};
+
+class FLI(Names, 1, Effects::None()) {
+  public:
+    explicit Names(Value* v)
+        : FixedLenInstruction(PirType(RType::str) | RType::nil,
+                              {{PirType::val()}}, {{v}}) {}
+    size_t gvnBase() const override { return tagHash(); }
+};
+
+class FLI(SetNames, 2, Effect::Error) {
+  public:
+    explicit SetNames(Value* v, Value* names)
+        : FixedLenInstruction(v->type, {{PirType::val(), PirType::val()}},
+                              {{v, names}}) {}
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLI(PirCopy, 1, Effects::None()) {
@@ -1743,14 +1806,6 @@ ARITHMETIC_UNOP(Minus);
 #undef ARITHMETIC_UNOP
 #undef LOGICAL_UNOP
 
-class FLI(Length, 1, Effects::None()) {
-  public:
-    explicit Length(Value* v)
-        : FixedLenInstruction(PirType::simpleScalarInt(), {{PirType::val()}},
-                              {{v}}) {}
-    size_t gvnBase() const override { return tagHash(); }
-};
-
 struct RirStack {
   private:
     typedef std::deque<Value*> Stack;
@@ -1789,7 +1844,7 @@ class FLI(RecordDeoptReason, 1, Effects::Any()) {
   public:
     DeoptReason reason;
     RecordDeoptReason(const DeoptReason& r, Value* value)
-        : FixedLenInstruction(PirType::voyd(), {{PirType::any()}}, {{value}}),
+        : FixedLenInstruction(PirType::voyd(), {{value->type}}, {{value}}),
           reason(r) {}
 };
 
@@ -1890,9 +1945,17 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         assert(fs);
         pushArg(fs, NativeType::frameState);
         pushArg(fun, RType::closure);
+
+        // Calling builtins with names or ... is not supported by callBuiltin,
+        // that's why those calls go through the normall call BC.
+        auto argtype =
+            PirType(RType::prom) | RType::missing | RType::expandedDots;
+        if (auto con = LdConst::Cast(fun))
+            if (TYPEOF(con->c()) == BUILTINSXP)
+                argtype = argtype | PirType::val();
+
         for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], PirType(RType::prom) | RType::missing |
-                                 RType::expandedDots);
+            pushArg(args[i], argtype);
     }
 
     Closure* tryGetCls() const override final {
@@ -2279,18 +2342,17 @@ class VLI(Phi, Effects::None()) {
 
   public:
     Phi() : VarLenInstruction(PirType::any()) {}
-    Phi(const std::initializer_list<Value*>& vals,
-        const std::initializer_list<BB*>& inputs)
+    explicit Phi(const std::initializer_list<std::pair<BB*, Value*>>& inputs)
         : VarLenInstruction(PirType::any()) {
-        assert(vals.size() == inputs.size());
-        std::copy(inputs.begin(), inputs.end(), std::back_inserter(input));
-        for (auto a : vals)
-            VarLenInstruction::pushArg(a);
+        for (auto a : inputs)
+            addInput(a.first, a.second);
         assert(nargs() == inputs.size());
     }
     void printArgs(std::ostream& out, bool tty) const override;
     PirType inferType(const GetType& getType) const override final {
-        return mergedInputType(getType);
+        if (type.isRType())
+            return mergedInputType(getType);
+        return Instruction::inferType(getType);
     }
     void pushArg(Value* a, PirType t) override {
         assert(false && "use addInput");

@@ -59,6 +59,7 @@ struct NativeBuiltins {
     static NativeBuiltin ldvarForUpdate;
     static NativeBuiltin ldvarCacheMiss;
     static NativeBuiltin stvar;
+    static NativeBuiltin stvari;
     static NativeBuiltin defvar;
     static NativeBuiltin starg;
     static NativeBuiltin ldfun;
@@ -80,6 +81,7 @@ struct NativeBuiltins {
     static NativeBuiltin createClosure;
 
     static NativeBuiltin newInt;
+    static NativeBuiltin newIntDebug;
     static NativeBuiltin newLgl;
     static NativeBuiltin newReal;
     static NativeBuiltin newIntFromReal;
@@ -138,9 +140,6 @@ struct NativeBuiltins {
     static NativeBuiltin subassign22;
     static NativeBuiltin subassign13;
 
-    static NativeBuiltin asIntFloor;
-    static NativeBuiltin asIntCeil;
-
     static NativeBuiltin nativeCallTrampoline;
 
     static NativeBuiltin initClosureContext;
@@ -154,8 +153,19 @@ struct NativeBuiltins {
     static NativeBuiltin sumr;
     static NativeBuiltin prodr;
 
-    // static NativeBuiltin runValueProfiler;
+    static NativeBuiltin colonInputEffects;
+    static NativeBuiltin colonCastLhs;
+    static NativeBuiltin colonCastRhs;
+
+    static NativeBuiltin colon;
+
+    static NativeBuiltin names;
+    static NativeBuiltin setNames;
+    static NativeBuiltin xlength_;
+
+    static NativeBuiltin getAttrb;
 };
+
 }
 }
 

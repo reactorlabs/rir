@@ -495,7 +495,7 @@ LdConst::LdConst(SEXP c, PirType t)
 LdConst::LdConst(SEXP c)
     : FixedLenInstruction(PirType(c)), idx(Pool::insert(c)) {}
 LdConst::LdConst(int num)
-    : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs()),
+    : FixedLenInstruction(PirType(RType::integer).scalar().notNa()),
       idx(Pool::getInt(num)) {}
 
 SEXP LdConst::c() const { return Pool::get(idx); }
@@ -656,10 +656,58 @@ void Is::printArgs(std::ostream& out, bool tty) const {
     out << ", " << Rf_type2char(sexpTag);
 }
 
+TypeChecks IsType::typeChecks() const {
+    auto t = typeTest;
+    auto in = arg(0).val();
+    assert(!t.isVoid() && !t.maybeLazy());
+    if (t.isA(PirType(RType::logical).orAttribs())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+            return TypeChecks::LogicalSimpleScalar;
+        else
+            return TypeChecks::LogicalNonObject;
+    } else if (t.isA(PirType(RType::logical).orAttribs().orPromiseWrapped())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+            return TypeChecks::LogicalSimpleScalarWrapped;
+        else
+            return TypeChecks::LogicalNonObjectWrapped;
+    } else if (t.isA(PirType(RType::integer).orAttribs())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+            return TypeChecks::IntegerSimpleScalar;
+        else
+            return TypeChecks::IntegerNonObject;
+    } else if (t.isA(PirType(RType::integer).orAttribs().orPromiseWrapped())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+            return TypeChecks::IntegerSimpleScalarWrapped;
+        else
+            return TypeChecks::IntegerNonObjectWrapped;
+    } else if (t.isA(PirType(RType::real).orAttribs())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+            return TypeChecks::RealSimpleScalar;
+        else
+            return TypeChecks::RealNonObject;
+    } else if (t.isA(PirType(RType::real).orAttribs().orPromiseWrapped())) {
+        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar())
+            return TypeChecks::RealSimpleScalarWrapped;
+        else
+            return TypeChecks::RealNonObjectWrapped;
+    } else if (in->type.notMissing().notObject().isA(t)) {
+        return TypeChecks::NotObject;
+    } else if (in->type.notMissing().notPromiseWrapped().notObject().isA(t)) {
+        return TypeChecks::NotObjectWrapped;
+    } else if (in->type.notMissing().noAttribs().isA(t)) {
+        return TypeChecks::NoAttribsExceptDim;
+    } else if (in->type.notMissing().notPromiseWrapped().noAttribs().isA(t)) {
+        return TypeChecks::NoAttribsExceptDimWrapped;
+    } else {
+        t.print(std::cout);
+        assert(false && "IsType used for unsupported type check");
+    }
+}
+
 void IsType::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
-    out << " isA " << typeTest;
-}
+        out << " isA " << typeTest;
+    }
 
 void Phi::printArgs(std::ostream& out, bool tty) const {
     if (nargs() > 0) {
@@ -974,19 +1022,28 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
             given.numMissing(missing);
         }
     }
-    given.add(Assumption::NotTooManyArguments);
 
     // Make some optimistic assumptions, they might be reset below...
     given.add(Assumption::NoExplicitlyMissingArgs);
     given.add(Assumption::NoReflectiveArgument);
 
+    bool hasDotsArg = false;
     size_t i = 0;
     eachCallArg([&](Value* arg) {
         if (arg->type.maybe(RType::expandedDots))
-            given.remove(Assumption::CorrectOrderOfArguments);
-        writeArgTypeToAssumptions(given, arg, i);
+            hasDotsArg = true;
+        else
+            writeArgTypeToAssumptions(given, arg, i);
         ++i;
     });
+
+    if (hasDotsArg) {
+        given.remove(Assumption::CorrectOrderOfArguments);
+        given.remove(Assumption::NotTooManyArguments);
+        given.numMissing(0);
+        given.remove(Assumption::NoReflectiveArgument);
+    }
+
     return given;
 }
 
@@ -996,9 +1053,16 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
+
+    // Calling builtins with names or ... is not supported by callBuiltin,
+    // that's why those calls go through the normall call BC.
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    if (auto con = LdConst::Cast(fun))
+        if (TYPEOF(con->c()) == BUILTINSXP)
+            argtype = argtype | PirType::val();
+
     for (unsigned i = 0; i < args.size(); ++i) {
-        pushArg(args[i],
-                PirType(RType::prom) | RType::missing | RType::expandedDots);
+        pushArg(args[i], argtype);
         auto name = names_[i];
         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
         names.push_back(name);
@@ -1011,9 +1075,16 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
+
+    // Calling builtins with names or ... is not supported by callBuiltin,
+    // that's why those calls go through the normall call BC.
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    if (auto con = LdConst::Cast(fun))
+        if (TYPEOF(con->c()) == BUILTINSXP)
+            argtype = argtype | PirType::val();
+
     for (unsigned i = 0; i < args.size(); ++i) {
-        pushArg(args[i],
-                PirType(RType::prom) | RType::missing | RType::expandedDots);
+        pushArg(args[i], argtype);
         auto name = Pool::get(names_[i]);
         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
         names.push_back(name);
