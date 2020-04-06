@@ -2241,6 +2241,7 @@ NativeBuiltin NativeBuiltins::sumr = {
     (void*)sumrImpl,
 };
 
+/*
 void runValueProfilerImpl() {
     auto& ctx = R_GlobalContext;
     auto& stack = ctx->nodestack;
@@ -2270,5 +2271,6 @@ NativeBuiltin NativeBuiltins::runValueProfiler = {
     "runValueProfiler",
     (void*)runValueProfilerImpl,
 };
+*/
 }
 }

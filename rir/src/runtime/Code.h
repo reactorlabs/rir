@@ -82,19 +82,25 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     struct MetadataEntry {
-        Opcode* origin;
+        bool active;
+        size_t offset;
+	size_t sample_count;
+        bool ready_for_reopt;
         ObservedValues feedback;
     };
 
-    MetadataEntry* getValueProfilerMetadata() {
+    MetadataEntry* getValueProfilerMetadata()  {
         SEXP metadata = getEntry(1);
         if (!metadata)
             return nullptr;
         assert(TYPEOF(metadata) == RAWSXP);
         return reinterpret_cast<MetadataEntry*>(DATAPTR(metadata));
     }
+    const MetadataEntry* getValueProfilerMetadata() const {
+        return const_cast<Code*>(this)->getValueProfilerMetadata();
+    }
 
-    size_t getValueProfilerMetadataSize() {
+    size_t getValueProfilerMetadataSize() const {
         return XLENGTH(getEntry(1)) / sizeof(MetadataEntry);
     }
 

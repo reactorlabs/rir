@@ -498,32 +498,6 @@ void BC::print(std::ostream& out) const {
         bc != Opcode::record_test_)
         printOpcode(out);
 
-    auto printTypeFeedback = [&](const ObservedValues& prof) {
-        if (prof.numTypes) {
-            for (size_t i = 0; i < prof.numTypes; ++i) {
-                auto t = prof.seen[i];
-                out << Rf_type2char(t.sexptype) << "(" << (t.object ? "o" : "")
-                    << (t.attribs ? "a" : "") << (t.scalar ? "s" : "") << ")";
-                if (i != (unsigned)prof.numTypes - 1)
-                    out << ", ";
-            }
-            if (prof.stateBeforeLastForce !=
-                ObservedValues::StateBeforeLastForce::unknown) {
-                out << " | "
-                    << ((prof.stateBeforeLastForce ==
-                         ObservedValues::StateBeforeLastForce::value)
-                            ? "value"
-                            : (prof.stateBeforeLastForce ==
-                               ObservedValues::StateBeforeLastForce::
-                                   evaluatedPromise)
-                                  ? "evaluatedPromise"
-                                  : "promise");
-            }
-        } else {
-            out << "<?>";
-        }
-    };
-
     switch (bc) {
     case Opcode::invalid_:
     case Opcode::num_of:
@@ -740,7 +714,7 @@ void BC::print(std::ostream& out) const {
 
     case Opcode::record_type_: {
         out << "[ ";
-        printTypeFeedback(immediate.typeFeedback);
+        immediate.typeFeedback.print(out);
         out << " ]";
         break;
     }

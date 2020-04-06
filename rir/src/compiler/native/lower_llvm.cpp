@@ -3512,7 +3512,7 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::Return: {
-                call(NativeBuiltins::runValueProfiler, {});
+                //call(NativeBuiltins::runValueProfiler, {});
                 auto res = loadSxp(Return::Cast(i)->arg<0>().val());
                 if (numLocals > 0)
                     decStack(numLocals);
@@ -4843,7 +4843,7 @@ bool LowerFunctionLLVM::tryCompile() {
         // code->printCode(std::cout, true, true);
     }
 
-    std::map<size_t, Opcode*> variableMapping;
+    std::map<size_t, Instruction::TypeFeedback> variableMapping;
     for (auto& var : variables) {
         auto i = var.first;
         if (representationOf(i) != Representation::Sexp)
@@ -4852,7 +4852,7 @@ bool LowerFunctionLLVM::tryCompile() {
             continue;
         if (!var.second.initialized)
             continue;
-        variableMapping[var.second.idx] = i->typeFeedback.origin;
+        variableMapping[var.second.idx] = i->typeFeedback;
     }
     if (!variableMapping.empty()) {
         size_t size = sizeof(rir::Code::MetadataEntry) *
@@ -4864,7 +4864,10 @@ bool LowerFunctionLLVM::tryCompile() {
         for (auto& m : variableMapping) {
             assert((char*)&payload[m.first] <
                    ((char*)DATAPTR(metadata)) + size);
-            payload[m.first].origin = m.second;
+            payload[m.first].active = true;
+            auto& feedback = m.second;
+            auto& code = feedback.srcCode;
+            payload[m.first].offset = ((uintptr_t)feedback.origin - (uintptr_t)code->code());
         }
     }
 

@@ -365,7 +365,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (auto force = Force::Cast(i)) {
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
-                }
+                } // @@@@ override feedback in a second phase
             }
         }
         break;
