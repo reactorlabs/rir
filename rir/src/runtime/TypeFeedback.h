@@ -144,8 +144,7 @@ struct ObservedValues {
                 auto t = seen[i];
                 out << Rf_type2char(t.sexptype) << "(" << (t.object ? "o" : "")
                     << (t.attribs ? "a" : "") << (t.scalar ? "s" : "") << ")";
-                if (i != (unsigned)
-              numTypes - 1)
+                if (i != (unsigned)numTypes - 1)
                     out << ", ";
             }
             if (stateBeforeLastForce !=

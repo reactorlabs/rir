@@ -810,7 +810,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         // arguments might be off. But we want to force compiling a new version
         // exactly for this number of arguments, thus we need to add this as an
         // explicit assumption.
-        if (fun == table->baseline() || given != fun->signature().assumptions) { /// @@@@ add case for when to re-opt
+        if (fun == table->baseline() ||
+            given != fun->signature()
+                         .assumptions) { /// @@@@ add case for when to re-opt
             if (Assumptions(given).includes(
                     pir::Rir2PirCompiler::minimalAssumptions)) {
                 // More assumptions are available than this version uses. Let's
@@ -826,7 +828,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                 SEXP name = R_NilValue;
                 if (TYPEOF(lhs) == SYMSXP)
                     name = lhs;
-                ctx->closureOptimizer(call.callee, given, name); // @@@@ pass fun all the way down
+                ctx->closureOptimizer(call.callee, given,
+                                      name); // @@@@ pass fun all the way down
                 fun = dispatch(call, table);
             }
         }

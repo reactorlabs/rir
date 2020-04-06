@@ -13,9 +13,8 @@ class RuntimeProfiler {
     static void initProfiler();
     static RuntimeProfiler& instance();
     void sample(int);
-
 };
 
-}
+} // namespace rir
 
 #endif

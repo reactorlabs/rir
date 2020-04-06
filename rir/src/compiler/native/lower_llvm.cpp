@@ -3512,7 +3512,7 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::Return: {
-                //call(NativeBuiltins::runValueProfiler, {});
+                // call(NativeBuiltins::runValueProfiler, {});
                 auto res = loadSxp(Return::Cast(i)->arg<0>().val());
                 if (numLocals > 0)
                     decStack(numLocals);
@@ -4867,7 +4867,8 @@ bool LowerFunctionLLVM::tryCompile() {
             payload[m.first].active = true;
             auto& feedback = m.second;
             auto& code = feedback.srcCode;
-            payload[m.first].offset = ((uintptr_t)feedback.origin - (uintptr_t)code->code());
+            payload[m.first].offset =
+                ((uintptr_t)feedback.origin - (uintptr_t)code->code());
         }
     }
 

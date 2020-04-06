@@ -84,12 +84,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     struct MetadataEntry {
         bool active;
         size_t offset;
-	size_t sample_count;
+        size_t sample_count;
         bool ready_for_reopt;
         ObservedValues feedback;
     };
 
-    MetadataEntry* getValueProfilerMetadata()  {
+    MetadataEntry* getValueProfilerMetadata() {
         SEXP metadata = getEntry(1);
         if (!metadata)
             return nullptr;

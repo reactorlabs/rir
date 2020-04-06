@@ -40,7 +40,6 @@ void initializeRuntime() {
                          deserializeRir, serializeRir, materialize);
 
     RuntimeProfiler::initProfiler();
-
 }
 
 InterpreterInstance* globalContext() { return globalContext_; }

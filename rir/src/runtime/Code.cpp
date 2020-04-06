@@ -140,19 +140,20 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
-  auto md = getValueProfilerMetadata();
-  if (md) {
-    for (size_t i = 0; i < getValueProfilerMetadataSize(); ++i) {
-      if (md[i].active) {
-          auto feedback = md[i].feedback;
-          out << " " << md[i].offset << " : [";
-          feedback.print(out);
-          out << "] (" << md[i].sample_count << " records - "<< (md[i].ready_for_reopt ? "ready" : "not ready")  <<")\n";
-      }
+    auto md = getValueProfilerMetadata();
+    if (md) {
+        for (size_t i = 0; i < getValueProfilerMetadataSize(); ++i) {
+            if (md[i].active) {
+                auto feedback = md[i].feedback;
+                out << " " << md[i].offset << " : [";
+                feedback.print(out);
+                out << "] (" << md[i].sample_count << " records - "
+                    << (md[i].ready_for_reopt ? "ready" : "not ready") << ")\n";
+            }
+        }
+    } else {
+        out << "noFeedback\n";
     }
-  } else {
-    out << "noFeedback\n";
-  }
 
     Opcode* pc = code();
     size_t label = 0;
