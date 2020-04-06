@@ -50,10 +50,10 @@ class CodeEventCounters {
 
     struct DispatchTableInfo {
         std::string name;
-        unsigned size;
+        unsigned numClosuresEverAdded;
 
         DispatchTableInfo(const DispatchTable* dispatchTable,
-                          const std::string& name);
+                          const std::string& name, unsigned numRemoved);
     };
 
     // Names of the events. names.size() is the # of events
@@ -69,6 +69,9 @@ class CodeEventCounters {
     // Map of dispatch table's baseline's body's uid (more reliable than
     // address) to info about the entire table
     std::unordered_map<UUID, DispatchTableInfo> closureDispatchTables;
+    // Map of dispatch table's baseline's body's uid to # of removed deoptimized
+    // closures
+    std::unordered_map<UUID, unsigned> closureNumRemovedSiblings;
 
     CodeEventCounters() {}
 
@@ -84,6 +87,7 @@ class CodeEventCounters {
     void profileEnd(const Code* code, bool isBecauseOfContextJump = false);
     void countCallSite(const Function* callee, const Code* callerCode,
                        const void* address);
+    void countDeopt(const DispatchTable* dispatchTable);
     void updateDispatchTableInfo(SEXP dispatchTableSexp, SEXP name);
     void updateDispatchTableInfo(const DispatchTable* dispatchTable,
                                  const std::string& name);

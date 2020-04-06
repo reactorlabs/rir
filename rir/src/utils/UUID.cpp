@@ -6,6 +6,8 @@
 
 namespace rir {
 
+UUID UUID::null() { return UUID(); }
+
 // Generates a random UUID
 UUID UUID::random() {
     // Dumb algorithm

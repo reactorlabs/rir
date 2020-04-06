@@ -46,8 +46,8 @@ CodeEventCounters::InfoDuringProfile::InfoDuringProfile(Timestamp startTime)
 
 CodeEventCounters::CallSite::CallSite(const Code* callerCode,
                                       const void* address)
-    : callerCodeUid(callerCode->uid),
-      bytecodeOffset(address == nullptr
+    : callerCodeUid(callerCode == NULL ? UUID::null() : callerCode->uid),
+      bytecodeOffset(callerCode == NULL || address == nullptr
                          ? UNKNOWN_BYTECODE_OFFSET
                          : (ptrdiff_t)address - (ptrdiff_t)callerCode->code()) {
 }
@@ -58,8 +58,9 @@ bool CodeEventCounters::CallSite::operator==(const CallSite& other) const {
 }
 
 CodeEventCounters::DispatchTableInfo::DispatchTableInfo(
-    const DispatchTable* dispatchTable, const std::string& name)
-    : name(name), size(dispatchTable->size()) {}
+    const DispatchTable* dispatchTable, const std::string& name,
+    unsigned numRemoved)
+    : name(name), numClosuresEverAdded(dispatchTable->size() + numRemoved) {}
 
 unsigned CodeEventCounters::registerCounter(const std::string& name) {
 #ifndef MEASURE
@@ -156,6 +157,12 @@ void CodeEventCounters::countCallSite(const Function* callee,
     }
 }
 
+void CodeEventCounters::countDeopt(const DispatchTable* dispatchTable) {
+    UUID firstCodeUidWhichIdentifiesEntireTable =
+        dispatchTable->get(0)->body()->uid;
+    closureNumRemovedSiblings[firstCodeUidWhichIdentifiesEntireTable]++;
+}
+
 void CodeEventCounters::updateDispatchTableInfo(SEXP dispatchTableSexp,
                                                 SEXP name) {
     updateDispatchTableInfo(DispatchTable::unpack(BODY(dispatchTableSexp)),
@@ -172,8 +179,11 @@ void CodeEventCounters::updateDispatchTableButNotContainedFunctionInfo(
     const DispatchTable* dispatchTable, const std::string& name) {
     UUID firstCodeUidWhichIdentifiesEntireTable =
         dispatchTable->get(0)->body()->uid;
-    closureDispatchTables.emplace(firstCodeUidWhichIdentifiesEntireTable,
-                                  DispatchTableInfo(dispatchTable, name));
+    unsigned numRemoved =
+        closureNumRemovedSiblings[firstCodeUidWhichIdentifiesEntireTable];
+    closureDispatchTables.emplace(
+        firstCodeUidWhichIdentifiesEntireTable,
+        DispatchTableInfo(dispatchTable, name, numRemoved));
 }
 
 void CodeEventCounters::assignName(const DispatchTable* dispatchTable,
@@ -271,7 +281,8 @@ void CodeEventCounters::dumpNumClosureVersions() const {
          closureDispatchTables) {
         DispatchTableInfo info = dispatchTableFirstCodeUidAndInfo.second;
 
-        file << std::quoted(info.name) << ", " << info.size << "\n";
+        file << std::quoted(info.name) << ", " << info.numClosuresEverAdded
+             << "\n";
     }
 
     file.close();

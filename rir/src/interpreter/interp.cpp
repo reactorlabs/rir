@@ -853,9 +853,11 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         }
     }
 
-#ifdef MEASURE
-    CodeEventCounters::instance().countCallSite(fun, call.caller,
-                                                call.callSiteAddress);
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS) {
+        CodeEventCounters::instance().countCallSite(fun, call.caller,
+                                                    call.callSiteAddress);
+    }
 #endif
     fun->registerInvocationStart();
 
@@ -4074,9 +4076,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // remove the deoptimized function. Unless on deopt chaos,
                 // always recompiling would just blow testing time...
                 auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
-                // TODO: report deoptimization reason.
-                // For example if we deopt because of stubenv was materialized
-                // we should prevent pir from stubbing the env in the future.
+#ifdef ENABLE_EVENT_COUNTERS
+                if (ENABLE_EVENT_COUNTERS) {
+                    CodeEventCounters::instance().countDeopt(dt);
+                }
+#endif
                 dt->remove(c);
             }
             assert(m->numFrames >= 1);

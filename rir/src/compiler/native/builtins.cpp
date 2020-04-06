@@ -989,6 +989,11 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
             // remove the deoptimized function. Unless on deopt chaos,
             // always recompiling would just blow testing time...
             auto dt = DispatchTable::unpack(BODY(cls));
+#ifdef ENABLE_EVENT_COUNTERS
+            if (ENABLE_EVENT_COUNTERS) {
+                CodeEventCounters::instance().countDeopt(dt);
+            }
+#endif
             dt->remove(c);
         } else {
             // In some cases we don't know the callee here, so we can't properly

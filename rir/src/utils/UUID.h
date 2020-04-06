@@ -12,6 +12,7 @@ class UUID {
     UUID() {}
 
   public:
+    static UUID null();
     // Generates a random UUID
     static UUID random();
     static UUID deserialize(SEXP refTable, R_inpstream_t inp);
