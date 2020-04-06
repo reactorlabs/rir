@@ -88,6 +88,9 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     function->entry = bb;
     auto closure = version->owner();
 
+    // Create another BB to ensure that the entry BB has no predecessors.
+    createNextBB();
+
     auto& assumptions = version->assumptions();
     std::vector<Value*> args(closure->nargs());
     size_t nargs = closure->nargs() - assumptions.numMissing();
@@ -115,6 +118,10 @@ Builder::Builder(ClosureVersion* fun, Promise* prom)
     createNextBB();
     assert(!prom->entry);
     prom->entry = bb;
+
+    // Create another BB to ensure that the entry BB has no predecessors.
+    createNextBB();
+
     auto ldenv = new LdFunctionEnv();
     add(ldenv);
     this->env = ldenv;

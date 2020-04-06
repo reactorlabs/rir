@@ -459,12 +459,19 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                         Promise* prom = mkarg->prom();
                         BB* split =
                             BBTransform::split(code->nextBBId++, bb, ip, code);
+
+                        // Note that the entry block is empty and jumps to the
+                        // next block; this is to ensure that it has no
+                        // predecessors.
+                        auto entry = prom->entry;
+                        assert(entry->isEmpty() && entry->isJmp() &&
+                               !entry->next()->isEmpty());
                         BB* prom_copy =
-                            BBTransform::clone(prom->entry, code, code);
+                            BBTransform::clone(prom->entry->next(), code, code);
                         bb->overrideNext(prom_copy);
 
-                        // For now we assume every promise starts with a
-                        // LdFunctionEnv instruction. We replace it's
+                        // We assume that the (empty) entry's successor starts
+                        // with a LdFunctionEnv instruction. We replace its
                         // usages with the caller environment.
                         LdFunctionEnv* e =
                             LdFunctionEnv::Cast(*prom_copy->begin());

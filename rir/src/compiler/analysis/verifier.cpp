@@ -43,6 +43,11 @@ class TheVerifier {
             ok = false;
         }
 
+        if (f->entry->predecessors().size() > 0) {
+            std::cerr << "The entry bb has predecessors.\n";
+            ok = false;
+        }
+
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
             f->print(std::cerr, false);
