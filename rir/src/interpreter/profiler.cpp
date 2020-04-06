@@ -15,19 +15,12 @@
 namespace rir {
 
 RuntimeProfiler::RuntimeProfiler() {
-//    printf("### HELLO\n");
-    this->counter = 0;
-    this->counter2 = 0;
 }
 
 RuntimeProfiler::~RuntimeProfiler() {
-  //  printf("### BYE\nSignals: %d\nRecorded Feedback: %d\n", this->counter,
-    //       this->counter2);
 }
 
 void RuntimeProfiler::sample(int signal) {
-    this->counter++;
-
     auto& ctx = R_GlobalContext;
     auto& stack = ctx->nodestack;
     if (R_BCNodeStackTop == R_BCNodeStackBase)
@@ -44,23 +37,21 @@ void RuntimeProfiler::sample(int signal) {
     if (!md)
         return;
     for (size_t i = 0; i < code->getValueProfilerMetadataSize(); ++i) {
-        auto& metadata = md[i];
-        if (metadata.active) {
+        if (md[i].active) {
             auto slot = *(stack + i);
             assert(slot.tag == 0);
             if (slot.u.sxpval) {
-                metadata.feedback.record(slot.u.sxpval);
-                auto samples = ++(metadata.sample_count);
+                md[i].feedback.record(slot.u.sxpval);
+                auto samples = ++(md[i].sample_count);
                 if (samples == 10) {
-                    metadata.ready_for_reopt = true;
+                    md[i].ready_for_reopt = true;
                 }
                 if (samples > 100) {
-                    metadata.ready_for_reopt = false;
-                    metadata.sample_count = 0;
-                    std::memset(&(metadata.feedback), 0,
+                    md[i].ready_for_reopt = false;
+                    md[i].sample_count = 0;
+                    std::memset(&(md[i].feedback), 0,
                                 sizeof(struct ObservedValues));
                 }
-                this->counter2++;
             }
         }
     }
@@ -69,11 +60,9 @@ void RuntimeProfiler::sample(int signal) {
 static void handler(int signal) { RuntimeProfiler::instance().sample(signal); }
 
 void RuntimeProfiler::initProfiler() {
-//    printf("profiler?\n");
     bool ENABLE_PROFILER = true; // getenv("PIR_ENABLE_PROFILER") ? true :
                                  // false;
     if (!ENABLE_PROFILER) {
-  //      printf("no!\n");
         return;
     }
     struct sigaction recordAction;
@@ -81,7 +70,6 @@ void RuntimeProfiler::initProfiler() {
     struct itimerspec itime;
     timer_t timer_id;
 
-   // printf("registering profiler signal handler\n");
     recordAction.sa_handler = handler;
     sigfillset(&recordAction.sa_mask);
     recordAction.sa_flags = SA_RESTART;
