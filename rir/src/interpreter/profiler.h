@@ -6,8 +6,6 @@ namespace rir {
 class RuntimeProfiler {
 
   public:
-    int counter;
-    int counter2;
     RuntimeProfiler();
     ~RuntimeProfiler();
     static void initProfiler();
