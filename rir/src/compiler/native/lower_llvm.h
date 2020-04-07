@@ -17,7 +17,8 @@ class LowerLLVM {
     tryCompile(ClosureVersion* cls, Code* code,
                const std::unordered_map<Promise*, unsigned>&,
                const NeedsRefcountAdjustment& refcount,
-               const std::unordered_set<Instruction*>& needsLdVarForUpdate);
+               const std::unordered_set<Instruction*>& needsLdVarForUpdate,
+               LogStream& log);
 };
 
 } // namespace pir
