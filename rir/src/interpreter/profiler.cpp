@@ -60,6 +60,7 @@ void RuntimeProfiler::sample(int signal) {
 static void handler(int signal) { RuntimeProfiler::instance().sample(signal); }
 
 void RuntimeProfiler::initProfiler() {
+    #ifndef __APPLE__
     bool ENABLE_PROFILER = false; // getenv("PIR_ENABLE_PROFILER") ? true :
                                  // false;
     if (!ENABLE_PROFILER) {
@@ -90,6 +91,7 @@ void RuntimeProfiler::initProfiler() {
     /* 500 million nsecs = .5 secs */
     itime.it_interval.tv_nsec = 10000000;
     timer_settime(timer_id, 0, &itime, NULL);
+    #endif
 }
 
 RuntimeProfiler& RuntimeProfiler::instance() {
