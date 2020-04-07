@@ -375,7 +375,7 @@ class TheVerifier {
                     if ((iv->bb() == i->bb() &&
                          bb->indexOf(iv) > bb->indexOf(i)) ||
                         (iv->bb() != i->bb() && slow &&
-                         !dom(bb->owner).dominates(iv->bb(), bb))) {
+                         !dom(bb->owner).strictlyDominates(iv->bb(), bb))) {
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
                         std::cerr << "': input '";

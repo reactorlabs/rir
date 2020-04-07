@@ -194,7 +194,7 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
             for (auto can : g.second) {
                 if (auto cani = Instruction::Cast(can)) {
                     if (!firstInstr ||
-                        dom.dominates(cani->bb(), firstInstr->bb()))
+                        dom.strictlyDominates(cani->bb(), firstInstr->bb()))
                         firstInstr = cani;
                 }
             }

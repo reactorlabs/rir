@@ -421,13 +421,32 @@ bool testCfg() {
 
         DominanceGraph dom(&MockBB::code);
 
+        assert(dom.dominates(&A, &A));
+        assert(dom.dominates(&B, &B));
+        assert(dom.dominates(&C, &C));
+        assert(dom.dominates(&D, &D));
+        assert(dom.dominates(&F, &F));
+
+        assert(!dom.strictlyDominates(&A, &A));
+        assert(!dom.strictlyDominates(&B, &B));
+        assert(!dom.strictlyDominates(&C, &C));
+        assert(!dom.strictlyDominates(&D, &D));
+        assert(!dom.strictlyDominates(&F, &F));
+
         assert(dom.dominates(&A, &B));
         assert(dom.dominates(&A, &C));
         assert(dom.dominates(&A, &D));
         assert(dom.dominates(&A, &F));
+        assert(dom.dominates(&C, &D));
         assert(!dom.dominates(&B, &F));
         assert(!dom.dominates(&C, &F));
-        assert(dom.dominates(&C, &D));
+
+        assert(dom.strictlyDominates(&A, &B));
+        assert(dom.strictlyDominates(&A, &C));
+        assert(dom.strictlyDominates(&A, &D));
+        assert(dom.strictlyDominates(&A, &F));
+        assert(dom.strictlyDominates(&C, &D));
+
         assert(dom.immediatelyDominates(&A, &B));
         assert(dom.immediatelyDominates(&A, &C));
         assert(!dom.immediatelyDominates(&A, &D));
@@ -457,10 +476,27 @@ bool testCfg() {
         assert(cfg.isPredecessor(&C, &D));
 
         DominanceGraph dom(&MockBB::code);
+        assert(dom.dominates(&A, &A));
+        assert(dom.dominates(&B, &B));
+        assert(dom.dominates(&C, &C));
+        assert(dom.dominates(&D, &D));
+        assert(dom.dominates(&E, &E));
+
+        assert(!dom.strictlyDominates(&A, &A));
+        assert(!dom.strictlyDominates(&B, &B));
+        assert(!dom.strictlyDominates(&C, &C));
+        assert(!dom.strictlyDominates(&D, &D));
+        assert(!dom.strictlyDominates(&E, &E));
+
         assert(dom.dominates(&A, &B));
         assert(dom.dominates(&A, &C));
         assert(dom.dominates(&A, &D));
         assert(dom.dominates(&A, &E));
+
+        assert(dom.strictlyDominates(&A, &B));
+        assert(dom.strictlyDominates(&A, &C));
+        assert(dom.strictlyDominates(&A, &D));
+        assert(dom.strictlyDominates(&A, &E));
 
         assert(dom.immediatelyDominates(&A, &B));
         assert(dom.immediatelyDominates(&A, &C));
@@ -508,6 +544,18 @@ bool testCfg() {
         assert(cfg.isPredecessor(&C, &A));
 
         DominanceGraph dom(&MockBB::code);
+        assert(dom.dominates(&S, &S));
+        assert(dom.dominates(&A, &A));
+        assert(dom.dominates(&B, &B));
+        assert(dom.dominates(&C, &C));
+        assert(dom.dominates(&D, &D));
+
+        assert(!dom.strictlyDominates(&S, &S));
+        assert(!dom.strictlyDominates(&A, &A));
+        assert(!dom.strictlyDominates(&B, &B));
+        assert(!dom.strictlyDominates(&C, &C));
+        assert(!dom.strictlyDominates(&D, &D));
+
         assert(dom.dominates(&S, &A));
         assert(dom.dominates(&A, &B));
         assert(dom.dominates(&A, &C));
@@ -518,13 +566,19 @@ bool testCfg() {
         assert(!dom.dominates(&D, &A));
         assert(!dom.dominates(&C, &D));
 
+        assert(dom.strictlyDominates(&S, &A));
+        assert(dom.strictlyDominates(&A, &B));
+        assert(dom.strictlyDominates(&A, &C));
+        assert(dom.strictlyDominates(&A, &D));
+        assert(dom.strictlyDominates(&B, &D));
+
         assert(dom.immediatelyDominates(&S, &A));
         assert(dom.immediatelyDominates(&A, &B));
         assert(dom.immediatelyDominates(&A, &C));
         assert(dom.immediatelyDominates(&B, &D));
         assert(!dom.immediatelyDominates(&A, &D));
 
-        assert(dom.dominators(&B) == DominanceGraph::BBSet({&S, &A}));
+        assert(dom.dominators(&B) == DominanceGraph::BBSet({&S, &A, &B}));
 
         DominanceFrontier f(&MockBB::code, dom);
         assert(f.at(&S).empty());

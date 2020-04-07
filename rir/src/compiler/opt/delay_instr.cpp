@@ -59,7 +59,8 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                         auto& updateTargets =
                             udatePromiseTargets[updatePromise];
                         for (auto deoptTarget : deoptUses) {
-                            if (dom.dominates(updatePromise->bb(), deoptTarget))
+                            if (dom.strictlyDominates(updatePromise->bb(),
+                                                      deoptTarget))
                                 updateTargets.insert(deoptTarget);
                             else if (cfg.isPredecessor(updatePromise->bb(),
                                                        deoptTarget))

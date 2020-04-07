@@ -219,7 +219,7 @@ DominanceGraph::BBSet DominanceGraph::dominatedSet(Code* start,
 }
 
 bool DominanceGraph::dominates(BB* a, BB* b) const {
-    BB* dominator = idom[b->id];
+    BB* dominator = b;
     while (dominator != nullptr) {
         if (dominator == a) {
             return true;
@@ -227,6 +227,10 @@ bool DominanceGraph::dominates(BB* a, BB* b) const {
         dominator = idom[dominator->id];
     }
     return false;
+}
+
+bool DominanceGraph::strictlyDominates(BB* a, BB* b) const {
+    return a != b && dominates(a, b);
 }
 
 bool DominanceGraph::immediatelyDominates(BB* a, BB* b) const {
@@ -243,7 +247,7 @@ BB* DominanceGraph::immediateDominator(BB* bb) const {
 }
 
 const DominanceGraph::BBSet DominanceGraph::dominators(BB* bb) const {
-    BBSet result;
+    BBSet result{bb};
 
     BB* dominator = idom[bb->id];
     while (dominator != nullptr) {

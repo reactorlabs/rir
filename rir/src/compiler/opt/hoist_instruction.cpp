@@ -107,10 +107,10 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                 else if (target->isBranch())
                     // both branches dominate bb, then we should move target
                     // forward until they join again
-                    while (*target->successors().begin() != bb &&
-                           dom.dominates(*target->successors().begin(), bb) &&
+                    while (dom.strictlyDominates(*target->successors().begin(),
+                                                 bb) &&
                            (!target->isBranch() ||
-                            dom.dominates(target->falseBranch(), bb)))
+                            dom.strictlyDominates(target->falseBranch(), bb)))
                         target = *target->successors().begin();
             }
 
@@ -128,8 +128,8 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                         // We can only hoist effects over branches if both
                         // branch targets will trigger the effect
                         if (x->last()->branches()) {
-                            if (!dom.dominates(x->trueBranch(), bb) ||
-                                !dom.dominates(x->falseBranch(), bb))
+                            if (!dom.strictlyDominates(x->trueBranch(), bb) ||
+                                !dom.strictlyDominates(x->falseBranch(), bb))
                                 return false;
                         }
                     }
@@ -165,8 +165,8 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                         // branches does not need the value, then this will
                         // waste computation
                         if (x->last()->branches()) {
-                            if (!dom.dominates(x->trueBranch(), bb) ||
-                                !dom.dominates(x->falseBranch(), bb)) {
+                            if (!dom.strictlyDominates(x->trueBranch(), bb) ||
+                                !dom.strictlyDominates(x->falseBranch(), bb)) {
                                 if (exceptions == 0)
                                     return false;
                                 exceptions--;

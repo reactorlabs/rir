@@ -149,10 +149,11 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             continue;
                         auto bb1 = (*a)->bb();
                         auto bb2 = (*b)->bb();
-                        if (dom.dominates(bb1, bb2)) {
-                            if (dom.dominates(bb1->trueBranch(), bb2)) {
+                        if (dom.strictlyDominates(bb1, bb2)) {
+                            if (dom.strictlyDominates(bb1->trueBranch(), bb2)) {
                                 (*b)->arg(0).val() = True::instance();
-                            } else if (dom.dominates(bb1->falseBranch(), bb2)) {
+                            } else if (dom.strictlyDominates(bb1->falseBranch(),
+                                                             bb2)) {
                                 (*b)->arg(0).val() = False::instance();
                             } else {
 
@@ -162,7 +163,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                 BB* target = bb2;
 
                                 while (next != bb1) {
-                                    if (dom.dominates(next, bb2))
+                                    if (dom.strictlyDominates(next, bb2))
                                         target = next;
 
                                     next = dom.immediateDominator(next);
@@ -170,11 +171,11 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
 
                                 auto p = new Phi;
                                 for (auto pred : target->predecessors()) {
-                                    if (dom.dominates(bb1->trueBranch(),
-                                                      pred)) {
+                                    if (dom.strictlyDominates(bb1->trueBranch(),
+                                                              pred)) {
                                         p->addInput(pred, True::instance());
-                                    } else if (dom.dominates(bb1->falseBranch(),
-                                                             pred)) {
+                                    } else if (dom.strictlyDominates(
+                                                   bb1->falseBranch(), pred)) {
                                         p->addInput(pred, False::instance());
                                     } else {
                                         success = false;

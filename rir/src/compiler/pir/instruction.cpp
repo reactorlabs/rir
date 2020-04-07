@@ -317,7 +317,7 @@ void Instruction::replaceDominatedUses(Instruction* replace,
 
     auto stop = replace->bb() != bb() ? bb() : nullptr;
     Visitor::run(replace->bb(), stop, [&](BB* bb) {
-        if (bb != replace->bb() && !dom.dominates(replace->bb(), bb))
+        if (!dom.dominates(replace->bb(), bb))
             return;
         for (auto& i : *bb) {
             // First we need to find the position of the replacee, only after
