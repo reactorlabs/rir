@@ -12,7 +12,7 @@ LoopDetection::LoopDetection(Code* code, bool determineNesting) {
     // find back edges, i.e. edges tail->header where header dominates tail
     Visitor::run(code->entry, [&](BB* maybeHeader) {
         for (const auto& maybeTail : maybeHeader->predecessors()) {
-            if (dom.dominates(maybeHeader, maybeTail)) {
+            if (dom.strictlyDominates(maybeHeader, maybeTail)) {
                 if (tailNodes.count(maybeHeader)) {
                     tailNodes[maybeHeader].push_back(maybeTail);
                 } else {

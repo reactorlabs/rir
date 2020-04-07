@@ -40,6 +40,7 @@ class DominanceGraph {
     static BBSet dominatedSet(Code* start, const BBSet& bbs);
 
     bool dominates(BB* a, BB* b) const;
+    bool strictlyDominates(BB* a, BB* b) const;
     bool immediatelyDominates(BB* a, BB* b) const;
 
     bool hasImmediateDominator(BB* bb) const;
