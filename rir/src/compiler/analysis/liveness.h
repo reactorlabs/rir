@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../pir/bb.h"
 #include "../pir/pir.h"
 
 #include <unordered_map>
@@ -62,6 +63,7 @@ class LivenessIntervals {
     // This function cannot tell you if a value is live *before* the first
     // instruction of a BB; instead, use `liveAtBBEntry`.
     bool live(Instruction* where, Value* what) const;
+    bool live(const BB::Instrs::iterator& where, Value* what) const;
 
     // Two values interfere iff there is a BB where they are both live and their
     // intervals overlap.

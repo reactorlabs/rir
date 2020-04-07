@@ -195,6 +195,17 @@ bool LivenessIntervals::live(Instruction* where, Value* what) const {
     return bbLiveness.begin <= idx && idx < bbLiveness.end;
 }
 
+bool LivenessIntervals::live(const BB::Instrs::iterator& where,
+                             Value* what) const {
+    if (!what->isInstruction() || count(what) == 0)
+        return false;
+    const auto& bbLiveness = intervals.at(what)[(*where)->bb()->id];
+    if (!bbLiveness.live)
+        return false;
+    unsigned idx = where - (*where)->bb()->begin();
+    return bbLiveness.begin <= idx && idx < bbLiveness.end;
+}
+
 bool LivenessIntervals::interfere(Value* v1, Value* v2) const {
     const auto& l1 = intervals.at(v1);
     const auto& l2 = intervals.at(v2);
@@ -204,16 +215,21 @@ bool LivenessIntervals::interfere(Value* v1, Value* v2) const {
         const auto& int1 = l1[i];
         const auto& int2 = l2[i];
         if (int1.live && int2.live) {
-            if (int1.begin < int1.end) {
-                if (int2.begin < int2.end)
-                    return int1.begin < int2.end && int2.begin < int1.end;
-                else
-                    return int1.begin < int2.end || int2.begin < int1.end;
+            if (int1.begin <= int1.end) {
+                if (int2.begin <= int2.end) {
+                    if (int1.begin < int2.end && int2.begin < int1.end)
+                        return true;
+                } else {
+                    if (int1.begin < int2.end || int2.begin < int1.end)
+                        return true;
+                }
             } else {
-                if (int2.begin < int2.end)
-                    return int1.begin < int2.end || int2.begin < int1.end;
-                else
+                if (int2.begin <= int2.end) {
+                    if (int1.begin < int2.end || int2.begin < int1.end)
+                        return true;
+                } else {
                     return true;
+                }
             }
         }
     }
