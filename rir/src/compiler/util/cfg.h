@@ -29,18 +29,34 @@ class DominanceGraph {
     typedef std::unordered_set<BB*> BBSet;
 
   private:
+    // This array, indexed by BB id, represents the dominator tree. It stores
+    // the immediate dominator of each node, i.e., for a node `v`,
+    // `idom[v->id]` is the immediate dominator of `v`. The dominators of `v`
+    // can be found by walking through this array. E.g., `idom[v->id]`
+    // dominates `v`, `idom[idom[v->id]->id]` dominates `v`, and so on.
     BBList idom;
 
   public:
-    size_t size() const { return idom.size(); }
     explicit DominanceGraph(Code*);
+
+    size_t size() const { return idom.size(); }
 
     // Given a Code and a set of BBs, return the set of BBs dominated by the
     // input set.
     static BBSet dominatedSet(Code* start, const BBSet& bbs);
 
+    // `a` dominates `b` if every path from the entry node to `b` contains `a`.
+    // Note that a node dominates itself. Nodes may dominate multiple nodes,
+    // and be dominated by multiple nodes.
     bool dominates(BB* a, BB* b) const;
+
+    // `a` strictly dominates `b` if `a` dominates `b` and `a` does not equal
+    // `b`.
     bool strictlyDominates(BB* a, BB* b) const;
+
+    // `a` immediately dominates `b` if `a` strictly dominates `b`, but does not
+    // strictly dominate any other node that strictly dominates `b`. Every node,
+    // except for the entry node, has exactly one immediate dominator.
     bool immediatelyDominates(BB* a, BB* b) const;
 
     bool hasImmediateDominator(BB* bb) const;
@@ -58,6 +74,11 @@ class DominanceFrontier {
 
   public:
     DominanceFrontier(Code* code, const DominanceGraph&);
+
+    // The dominance frontier at node `bb` is the set of all nodes `n` such
+    // that `bb` dominates an immediate predecessor of `n`, but does not
+    // dominate `n`. I.e., the dominance frontier of `bb` is where the
+    // dominance of `bb` "stops."
     const BBList& at(BB* bb) const;
 };
 
