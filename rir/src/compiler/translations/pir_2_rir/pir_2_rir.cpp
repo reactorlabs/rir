@@ -293,7 +293,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     Visitor::run(code->entry,
                  [](Instruction* i) { i->updateTypeAndEffects(); });
 
-    SSAAllocator alloc(code, cls, log.out());
+    LivenessIntervals live(code, code->nextBBId);
+    SSAAllocator alloc(code, cls, live, true, log.out());
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
     alloc.verify();
 
@@ -367,7 +368,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             {
 
                 std::vector<bool> removedStackValues(
-                    alloc.sa.stackBefore(instr).size(), false);
+                    alloc.sa->stackBefore(instr).size(), false);
                 size_t pushedStackValues = 0;
 
                 auto debugAddVariableName = [&](Value* v) -> SEXP {
@@ -490,7 +491,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 };
 
                 // Remove values from the stack that are dead here
-                auto toDrop = alloc.sa.toDrop(instr);
+                auto toDrop = alloc.sa->toDrop(instr);
                 for (auto val : VisitorHelpers::reverse(toDrop)) {
                     // If not actually allocated on stack, do nothing
                     if (!alloc.onStack(val))
@@ -1109,7 +1110,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             // Store the result
-            if (alloc.sa.dead(instr)) {
+            if (alloc.sa->dead(instr)) {
                 cb.add(BC::pop());
             } else if (instr->producesRirResult()) {
                 if (!alloc.hasSlot(instr)) {

@@ -1,6 +1,7 @@
 #include "liveness.h"
 #include "../pir/bb.h"
 #include "../pir/instruction.h"
+#include "../util/cfg.h"
 #include "../util/visitor.h"
 
 #include <map>
@@ -14,6 +15,7 @@ LivenessIntervals::LivenessIntervals(Code* code, unsigned bbsSize) {
     // ordered set so we can use std::includes
     std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
+    DominanceGraph dom(code);
     // this is a backwards analysis, starting from CFG exits
     std::unordered_set<BB*> todo;
     Visitor::run(code->entry, [&](BB* bb) {
@@ -21,6 +23,7 @@ LivenessIntervals::LivenessIntervals(Code* code, unsigned bbsSize) {
             todo.insert(bb);
     });
 
+restart:
     while (!todo.empty()) {
         BB* bb = *todo.begin();
         todo.erase(todo.begin());
@@ -146,6 +149,15 @@ LivenessIntervals::LivenessIntervals(Code* code, unsigned bbsSize) {
         }
     }
 
+    Visitor::run(code->entry, [&](BB* bb) {
+        for (auto n : bb->succsessors()) {
+            if (!liveAtEnd.count(n))
+                todo.insert(n);
+        }
+    });
+    if (!todo.empty())
+        goto restart;
+
 #ifdef DEBUG_LIVENESS
     for (const auto& kv : intervals) {
         const auto& instr = Instruction::Cast(kv.first);
@@ -183,6 +195,17 @@ bool LivenessIntervals::live(Instruction* where, Value* what) const {
     return bbLiveness.begin <= idx && idx < bbLiveness.end;
 }
 
+bool LivenessIntervals::live(const BB::Instrs::iterator& where,
+                             Value* what) const {
+    if (!what->isInstruction() || count(what) == 0)
+        return false;
+    const auto& bbLiveness = intervals.at(what)[(*where)->bb()->id];
+    if (!bbLiveness.live)
+        return false;
+    unsigned idx = where - (*where)->bb()->begin();
+    return bbLiveness.begin <= idx && idx < bbLiveness.end;
+}
+
 bool LivenessIntervals::interfere(Value* v1, Value* v2) const {
     const auto& l1 = intervals.at(v1);
     const auto& l2 = intervals.at(v2);
@@ -192,16 +215,21 @@ bool LivenessIntervals::interfere(Value* v1, Value* v2) const {
         const auto& int1 = l1[i];
         const auto& int2 = l2[i];
         if (int1.live && int2.live) {
-            if (int1.begin < int1.end) {
-                if (int2.begin < int2.end)
-                    return int1.begin < int2.end && int2.begin < int1.end;
-                else
-                    return int1.begin < int2.end || int2.begin < int1.end;
+            if (int1.begin <= int1.end) {
+                if (int2.begin <= int2.end) {
+                    if (int1.begin < int2.end && int2.begin < int1.end)
+                        return true;
+                } else {
+                    if (int1.begin < int2.end || int2.begin < int1.end)
+                        return true;
+                }
             } else {
-                if (int2.begin < int2.end)
-                    return int1.begin < int2.end || int2.begin < int1.end;
-                else
+                if (int2.begin <= int2.end) {
+                    if (int1.begin < int2.end || int2.begin < int1.end)
+                        return true;
+                } else {
                     return true;
+                }
             }
         }
     }
