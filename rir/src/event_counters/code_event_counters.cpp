@@ -35,10 +35,10 @@ void CodeEventCounters::InfoDuringProfile::pushCall(
     const Code* myAssociatedCode) {
     frames.push({});
     RCNTXT& rContext = frames.top();
-    begincontext(&rContext, CTXT_CCODE, R_NilValue, R_BaseEnv, R_BaseEnv,
-                 R_NilValue, R_NilValue);
     rContext.cend = &rir::endProfileBecauseOfContextSwitch;
     rContext.cenddata = (void*)myAssociatedCode;
+    begincontext(&rContext, CTXT_CCODE, R_NilValue, R_BaseEnv, R_BaseEnv,
+                 R_NilValue, R_NilValue);
 }
 
 CodeEventCounters::InfoDuringProfile::InfoDuringProfile(Timestamp startTime)
