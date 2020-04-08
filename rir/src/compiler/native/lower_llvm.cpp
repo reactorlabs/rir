@@ -118,10 +118,13 @@ class NativeAllocator : public SSAAllocator {
                     const LivenessIntervals& livenessIntervals, LogStream& log)
         : SSAAllocator(code, cls, livenessIntervals, false, log) {}
 
-    bool needsASlot(Value* v) const override {
+    bool needsAVariable(Value* v) const {
         return v->producesRirResult() && !LdConst::Cast(v) &&
                !(CastType::Cast(v) &&
                  LdConst::Cast(CastType::Cast(v)->arg(0).val()));
+    }
+    bool needsASlot(Value* v) const override final {
+        return needsAVariable(v) && representationOf(v) == t::SEXP;
     }
 };
 
@@ -2215,6 +2218,7 @@ bool LowerFunctionLLVM::tryCompile() {
     {
         basepointer = nodestackPtr();
         NativeAllocator allocator(code, cls, liveness, log);
+        allocator.compute();
         allocator.verify();
         numLocals = allocator.slots();
 
@@ -2247,7 +2251,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
         Visitor::run(code->entry, [&](BB* bb) {
             for (auto i : *bb) {
-                if (!liveness.count(i) || !allocator.needsASlot(i))
+                if (!liveness.count(i) || !allocator.needsAVariable(i))
                     continue;
                 if (auto phi = Phi::Cast(i)) {
                     createVariable(phi, true);
@@ -2272,7 +2276,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 // Everything which is live at the Push context needs to be
                 // mutable, to be able to restore on restart
                 Visitor::run(code->entry, [&](Instruction* j) {
-                    if (allocator.needsASlot(j)) {
+                    if (allocator.needsAVariable(j)) {
                         if (representationOf(j) == t::SEXP &&
                             liveness.live(push, j)) {
                             contexts[push].savedSexpPos[j] = numLocals++;
@@ -2287,7 +2291,7 @@ bool LowerFunctionLLVM::tryCompile() {
             }
         });
         Visitor::run(code->entry, [&](Instruction* i) {
-            if (allocator.needsASlot(i) && liveness.count(i) &&
+            if (allocator.needsAVariable(i) && liveness.count(i) &&
                 !variables_.count(i))
                 createVariable(i, false);
         });

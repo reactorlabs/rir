@@ -296,6 +296,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     LivenessIntervals live(code, code->nextBBId);
     SSAAllocator alloc(code, cls, live, true, log.out());
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
+    alloc.compute();
     alloc.verify();
 
     // Create labels for all bbs
