@@ -590,6 +590,146 @@ bool testCfg() {
 
     {
         /*
+         * Example taken from:
+         * Appel, A. and Palsberg, J. Modern Compiler Implementation in Java,
+         * 2nd ed. Figure 19.8 (a), pg 411.
+         *
+         * Note that our algorithm traverses child nodes from right-to-left.
+         * To match the example from the book, we construct the CFG so that,
+         * e.g., A's first child is C and its second child is B. This ensures
+         * we visit B before C.
+         *
+         *              A
+         *            /   \
+         *           /     \
+         *     .--> B --+   \
+         *    /     |   | +-> C --+
+         *   /      D   | |   |   |
+         *  |     /   \ /  \- E   |
+         *  |    F     G       \ /
+         *  |  /   \    \       H
+         *  | /  .--+--- J      |
+         *  | |/    |          /
+         *  | I     K     +---+
+         *  |  \   /     /
+         *  +--- L      /
+         *         \   /
+         *          \ /
+         *           M
+         */
+
+        MockBB::reset();
+        MockBB A, B, C, D, E, F, G, H, I, J, K, L, M;
+        A.setBranch(&C, &B);
+        B.setBranch(&G, &D);
+        C.setBranch(&H, &E);
+        D.setBranch(&G, &F);
+        E.setBranch(&H, &C);
+        F.setBranch(&K, &I);
+        G.setNext(&J);
+        H.setNext(&M);
+        I.setNext(&L);
+        J.setNext(&I);
+        K.setNext(&L);
+        L.setBranch(&M, &B);
+
+        CFG cfg(&MockBB::code);
+        assert(cfg.isPredecessor(&A, &B));
+        assert(cfg.isPredecessor(&A, &C));
+        assert(cfg.isPredecessor(&B, &J));
+        assert(cfg.isPredecessor(&B, &L));
+        assert(cfg.isPredecessor(&B, &M));
+        assert(cfg.isPredecessor(&C, &H));
+        assert(cfg.isPredecessor(&C, &M));
+        assert(cfg.isPredecessor(&D, &B));
+        assert(cfg.isPredecessor(&E, &C));
+        assert(cfg.isPredecessor(&F, &L));
+        assert(cfg.isPredecessor(&F, &G));
+        assert(cfg.isPredecessor(&G, &F));
+        assert(cfg.isPredecessor(&H, &M));
+        assert(cfg.isPredecessor(&I, &B));
+        assert(cfg.isPredecessor(&I, &J));
+        assert(cfg.isPredecessor(&J, &B));
+        assert(cfg.isPredecessor(&J, &F));
+        assert(cfg.isPredecessor(&J, &G));
+        assert(cfg.isPredecessor(&K, &B));
+        assert(cfg.isPredecessor(&K, &F));
+        assert(cfg.isPredecessor(&K, &G));
+        assert(cfg.isPredecessor(&L, &M));
+
+        /*
+         * Dominator tree
+         *
+         *           A
+         *        /  |  \
+         *       B   M   C
+         *     // \\     | \
+         *    / / \ \    E  H
+         *   D  G I  L
+         *   |  |
+         *   F  J
+         *   |
+         *   K
+         *
+         */
+        DominanceGraph dom(&MockBB::code);
+        assert(dom.immediatelyDominates(&A, &B));
+        assert(dom.immediatelyDominates(&A, &M));
+        assert(dom.immediatelyDominates(&A, &C));
+        assert(dom.immediatelyDominates(&C, &E));
+        assert(dom.immediatelyDominates(&C, &H));
+        assert(dom.immediatelyDominates(&B, &D));
+        assert(dom.immediatelyDominates(&B, &G));
+        assert(dom.immediatelyDominates(&B, &I));
+        assert(dom.immediatelyDominates(&B, &L));
+        assert(dom.immediatelyDominates(&D, &F));
+        assert(dom.immediatelyDominates(&F, &K));
+        assert(dom.immediatelyDominates(&G, &J));
+
+        assert(dom.dominates(&A, &B));
+        assert(dom.dominates(&A, &M));
+        assert(dom.dominates(&A, &C));
+        assert(dom.dominates(&C, &E));
+        assert(dom.dominates(&C, &H));
+        assert(dom.dominates(&B, &D));
+        assert(dom.dominates(&B, &G));
+        assert(dom.dominates(&B, &I));
+        assert(dom.dominates(&B, &L));
+        assert(dom.dominates(&D, &F));
+        assert(dom.dominates(&F, &K));
+        assert(dom.dominates(&G, &J));
+
+        assert(dom.dominates(&A, &E));
+        assert(dom.dominates(&A, &H));
+        assert(dom.dominates(&A, &D));
+        assert(dom.dominates(&A, &G));
+        assert(dom.dominates(&A, &I));
+        assert(dom.dominates(&A, &L));
+        assert(dom.dominates(&A, &F));
+        assert(dom.dominates(&A, &J));
+        assert(dom.dominates(&A, &K));
+        assert(dom.dominates(&B, &F));
+        assert(dom.dominates(&B, &J));
+        assert(dom.dominates(&B, &K));
+
+        assert(!dom.dominates(&B, &A));
+        assert(!dom.dominates(&B, &M));
+        assert(!dom.dominates(&B, &C));
+        assert(!dom.dominates(&B, &E));
+        assert(!dom.dominates(&B, &H));
+        assert(!dom.dominates(&M, &A));
+        assert(!dom.dominates(&M, &B));
+        assert(!dom.dominates(&M, &C));
+        assert(!dom.dominates(&M, &D));
+        assert(!dom.dominates(&M, &E));
+        assert(!dom.dominates(&C, &M));
+        assert(!dom.dominates(&C, &I));
+        assert(!dom.dominates(&D, &C));
+        assert(!dom.dominates(&D, &G));
+    }
+
+    {
+        /*
          *    A
          *   / \
          *  B   C
