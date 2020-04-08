@@ -4,6 +4,7 @@
 #include "../../../utils/FormalArgs.h"
 #include "../../debugging/stream_logger.h"
 #include "../rir_compiler.h"
+#include "runtime/Function.h"
 #include <stack>
 
 namespace rir {

@@ -1407,7 +1407,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
-    if (fun->dead || !fun->body()->nativeCode)
+    if (fun->flags.contains(Function::Dead) || !fun->body()->nativeCode)
         return callImpl(fun->body(), astP, callee, env, nargs, available);
 
     auto missing = fun->signature().numArguments - nargs;

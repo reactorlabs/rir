@@ -806,12 +806,14 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!isDeoptimizing() && !fun->unoptimizable &&
-        fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-        ((fun != table->baseline() && fun->invocationCount() >= 2 &&
-          fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-         (fun->invocationCount() %
-          (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)) {
+    auto flags = fun->flags;
+    if (!isDeoptimizing() && !flags.contains(Function::NotOptimizable) &&
+        (flags.contains(Function::MarkOpt) ||
+         (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
+          ((fun != table->baseline() && fun->invocationCount() >= 2 &&
+            fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
+           (fun->invocationCount() %
+            (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)))) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -819,7 +821,10 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         // arguments might be off. But we want to force compiling a new version
         // exactly for this number of arguments, thus we need to add this as an
         // explicit assumption.
-        if (fun == table->baseline() || given != fun->signature().assumptions) {
+
+        fun->clearDisabledAssumptions(given);
+        if (flags.contains(Function::MarkOpt) || fun == table->baseline() ||
+            given != fun->signature().assumptions) {
             if (Assumptions(given).includes(
                     pir::Rir2PirCompiler::minimalAssumptions)) {
                 // More assumptions are available than this version uses. Let's
@@ -835,6 +840,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                 SEXP name = R_NilValue;
                 if (TYPEOF(lhs) == SYMSXP)
                     name = lhs;
+                if (flags.contains(Function::MarkOpt))
+                    fun->flags.reset(Function::MarkOpt);
                 ctx->closureOptimizer(call.callee, given, name);
                 fun = dispatch(call, table);
             }
@@ -929,7 +936,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     assert(result);
 
-    assert(!fun->deopt);
+    assert(!fun->flags.contains(Function::Deopt));
     return result;
 }
 
@@ -2627,10 +2634,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                              given, ctx);
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
-            bool dispatchFail = fun->dead || !matches(call, fun->signature());
+            auto flags = fun->flags;
+            bool dispatchFail = flags.contains(Function::Dead) ||
+                                !matches(call, fun->signature());
             fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));
-            if (!dispatchFail && !fun->unoptimizable &&
+            if (!dispatchFail && !flags.contains(Function::NotOptimizable) &&
                 fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
                 ((fun != dt->baseline() && fun->invocationCount() >= 2 &&
                   fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||

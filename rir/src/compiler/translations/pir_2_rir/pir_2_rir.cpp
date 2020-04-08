@@ -1348,6 +1348,8 @@ rir::Function* Pir2Rir::finalize() {
     auto body = compileCode(ctx, cls);
     log.finalPIR(cls);
     function.finalize(body, signature);
+
+    function.function()->inheritFlags(cls->owner()->rirFunction());
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());

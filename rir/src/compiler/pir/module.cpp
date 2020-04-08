@@ -27,7 +27,9 @@ Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
     // the real environemtn if this is not an inner function. When it is an
     // inner function, then the env is expected to change over time.
     auto id = Idx(f, getEnv(CLOENV(closure)));
-    auto env = f->innerFunction ? Env::notClosed() : getEnv(CLOENV(closure));
+    auto env = f->flags.contains(Function::InnerFunction)
+                   ? Env::notClosed()
+                   : getEnv(CLOENV(closure));
     if (!closures.count(id))
         closures[id] = new Closure(name, closure, f, env);
     assert(closures.at(id)->rirClosure() == closure);

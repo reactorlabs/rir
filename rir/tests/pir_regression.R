@@ -99,7 +99,7 @@ h <- pir.compile(h)
 stopifnot(h(3) == 3)
 
 
-if (Sys.getenv("PIR_ENABLE") == "" && Sys.getenv("RIR_SERIALIZE_CHAOS") == 0) {
+if (Sys.getenv("RIR_SERIALIZE_CHAOS") == 0) {
   require(compiler)
   old <- compiler::enableJIT(3)
   # test that we generate multiple versions
