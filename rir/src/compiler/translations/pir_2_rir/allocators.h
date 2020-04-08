@@ -115,12 +115,19 @@ class SSAAllocator {
         });
     }
 
+    bool interfere(Instruction* i, Instruction* j) const {
+        return livenessIntervals.interfere(i, j);
+    }
+
     void computeAllocation() {
-        std::unordered_map<SlotNumber, std::unordered_set<Value*>> reverseAlloc;
-        auto slotIsAvailable = [&](SlotNumber slot, Value* i) {
-            for (auto other : reverseAlloc[slot]) {
-                if (livenessIntervals.interfere(other, i))
-                    return false;
+        std::unordered_map<SlotNumber, std::unordered_set<Instruction*>>
+            reverseAlloc;
+        auto slotIsAvailable = [&](SlotNumber slot, Value* v) {
+            if (auto i = Instruction::Cast(v)) {
+                for (auto other : reverseAlloc[slot]) {
+                    if (interfere(other, i))
+                        return false;
+                }
             }
             return true;
         };
@@ -158,8 +165,9 @@ class SSAAllocator {
             reverseAlloc[slot].insert(i);
             p->eachArg([&](BB*, Value* v) {
                 allocation[v] = slot;
-                reverseAlloc[slot].insert(v);
                 auto j = Instruction::Cast(v);
+                if (j)
+                    reverseAlloc[slot].insert(j);
                 while (j) {
                     if (j->nargs() == 0)
                         break;

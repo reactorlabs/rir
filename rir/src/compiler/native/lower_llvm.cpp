@@ -27,6 +27,8 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace rir {
@@ -115,6 +117,7 @@ class NativeAllocator : public SSAAllocator {
     NativeAllocator(Code* code, ClosureVersion* cls,
                     const LivenessIntervals& livenessIntervals, LogStream& log)
         : SSAAllocator(code, cls, livenessIntervals, false, log) {}
+
     bool needsASlot(Value* v) const override {
         return v->producesRirResult() && !LdConst::Cast(v) &&
                !(CastType::Cast(v) &&
@@ -131,10 +134,10 @@ class LowerFunctionLLVM {
     const std::unordered_map<Promise*, unsigned>& promMap;
     const NeedsRefcountAdjustment& refcount;
     const std::unordered_set<Instruction*>& needsLdVarForUpdate;
-    LogStream& log;
     IRBuilder<> builder;
     MDBuilder MDB;
     LivenessIntervals liveness;
+    LogStream& log;
     size_t numLocals;
     size_t numTemps;
     constexpr static size_t MAX_TEMPS = 4;
@@ -170,13 +173,12 @@ class LowerFunctionLLVM {
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         LogStream& log)
         : cls(cls), code(code), promMap(promMap), refcount(refcount),
-          needsLdVarForUpdate(needsLdVarForUpdate), log(log), builder(C),
-          MDB(C), liveness(code, code->nextBBId), numLocals(0), numTemps(0),
+          needsLdVarForUpdate(needsLdVarForUpdate), builder(C), MDB(C),
+          liveness(code, code->nextBBId), log(log), numLocals(0), numTemps(0),
           branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)) {
-
         fun = JitLLVM::declare(cls, name, t::nativeFunction);
         // prevent Wunused
         this->cls->size();
@@ -197,6 +199,11 @@ class LowerFunctionLLVM {
     }
 
     struct Variable {
+        bool deadMove(const Variable& other) const {
+            return slot == other.slot ||
+                   (stackSlot != (size_t)-1 && stackSlot == other.stackSlot);
+        }
+
         enum Kind {
             MutableLocalRVariable,
             ImmutableLocalRVariable,
@@ -221,7 +228,7 @@ class LowerFunctionLLVM {
             assert(representationOf(i) == Representation::Sexp);
             auto ptr = builder.CreateGEP(basepointer, {c(pos), c(1)});
             ptr->setName(i->getRef());
-            return {ImmutableLocalRVariable, ptr, false};
+            return {ImmutableLocalRVariable, ptr, false, pos};
         }
 
         static Variable Mutable(Instruction* i, AllocaInst* location) {
@@ -229,14 +236,14 @@ class LowerFunctionLLVM {
             auto r = representationOf(i);
             assert(r != Representation::Sexp);
             location->setName(i->getRef());
-            return {MutablePrimitive, location, false};
+            return {MutablePrimitive, location, false, (size_t)-1};
         }
 
         static Variable Immutable(Instruction* i) {
             assert(i->producesRirResult());
             auto r = representationOf(i);
             assert(r != Representation::Sexp);
-            return {ImmutablePrimitive, nullptr, false};
+            return {ImmutablePrimitive, nullptr, false, (size_t)-1};
         }
 
         llvm::Value* get(IRBuilder<>& builder) {
@@ -289,6 +296,7 @@ class LowerFunctionLLVM {
 
         llvm::Value* slot;
         bool initialized;
+        size_t stackSlot;
     };
 
     class PhiBuilder {
@@ -489,6 +497,20 @@ class LowerFunctionLLVM {
     llvm::Value* sxpinfoPtr(llvm::Value*);
 
     void protectTemp(llvm::Value* v);
+
+    bool deadMove(Value* a, Instruction* bi) {
+        auto ai = Instruction::Cast(a);
+        auto av = variables_.find(ai);
+        if (av == variables_.end())
+            return false;
+        auto bv = variables_.find(bi);
+        if (bv == variables_.end())
+            return false;
+        auto dead = av->second.deadMove(bv->second);
+        if (dead)
+            bv->second.initialized = true;
+        return dead;
+    }
 
     void ensureNamed(llvm::Value* v);
     void ensureNamedIfNeeded(Instruction* i, llvm::Value* val = nullptr);
@@ -803,11 +825,13 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
                                      Representation needed) {
     llvm::Value* res;
     auto vali = Instruction::Cast(val);
+
     if (auto ct = CastType::Cast(val)) {
         if (LdConst::Cast(ct->arg(0).val())) {
             return load(ct->arg(0).val(), type, needed);
         }
     }
+
     if (vali && variables_.count(vali))
         res = getVariable(vali);
     else if (val == Env::elided())
@@ -2310,9 +2334,12 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             switch (i->tag) {
-            case Tag::ExpandDots:
-                setVal(i, load(i->arg(0).val()));
+            case Tag::ExpandDots: {
+                auto in = i->arg(0).val();
+                if (!deadMove(in, i))
+                    setVal(i, load(i->arg(0).val()));
                 break;
+            }
 
             case Tag::DotsList: {
                 auto mk = DotsList::Cast(i);
@@ -2352,16 +2379,17 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::CastType: {
-                if (LdConst::Cast(i->followCasts()))
-                    break;
                 auto in = i->arg(0).val();
+                if (LdConst::Cast(i->followCasts()) || deadMove(in, i))
+                    break;
                 setVal(i, load(in, i->type, representationOf(i)));
                 break;
             }
 
             case Tag::PirCopy: {
                 auto in = i->arg(0).val();
-                setVal(i, load(in, representationOf(i)));
+                if (!deadMove(in, i))
+                    setVal(i, load(in, representationOf(i)));
                 break;
             }
 
@@ -5019,7 +5047,8 @@ bool LowerFunctionLLVM::tryCompile() {
             assert(*currentInstr == i);
             assert(!variables_.count(i) || variables_.at(i).initialized);
             ++currentInstr;
-            ensureNamedIfNeeded(i);
+            if (!Phi::Cast(i))
+                ensureNamedIfNeeded(i);
 
             numTemps = 0;
         }
@@ -5028,14 +5057,11 @@ bool LowerFunctionLLVM::tryCompile() {
         for (auto i : *bb) {
             if (phis.count(i)) {
                 auto phi = phis.at(i);
+                if (deadMove(i, phi))
+                    continue;
                 auto r = representationOf(phi->type);
                 auto inpv = load(i, r);
-
-                // If we box this phi input we need to make sure that we are not
-                // missing an ensure named, because the original value would
-                // have gotten an ensureNamed if it weren't unboxed.
-                if (representationOf(i) != t::SEXP && r == t::SEXP)
-                    ensureNamedIfNeeded(i, inpv);
+                ensureNamedIfNeeded(phi, inpv);
                 updateVariable(phi, inpv);
             }
         }
