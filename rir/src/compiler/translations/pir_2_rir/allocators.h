@@ -132,9 +132,7 @@ class SSAAllocator {
                 return;
             if (!needsASlot(i))
                 return;
-            SlotNumber slot = unassignedSlot;
-            while (true) {
-                ++slot;
+            auto testSlot = [&](size_t slot) {
                 bool success = slotIsAvailable(slot, p);
                 if (success) {
                     p->eachArg([&](BB*, Value* v) {
@@ -142,14 +140,37 @@ class SSAAllocator {
                             success = false;
                     });
                 }
-                if (success)
-                    break;
+                return success;
+            };
+            SlotNumber slot = unassignedSlot;
+            auto h = hints.find(i);
+            if (h != hints.end() && testSlot(h->second)) {
+                slot = h->second;
+            } else {
+                while (true) {
+                    ++slot;
+                    if ((h == hints.end() || h->second != slot) &&
+                        testSlot(slot))
+                        break;
+                }
             }
             allocation[i] = slot;
             reverseAlloc[slot].insert(i);
             p->eachArg([&](BB*, Value* v) {
                 allocation[v] = slot;
                 reverseAlloc[slot].insert(v);
+                auto j = Instruction::Cast(v);
+                while (j) {
+                    if (j->nargs() == 0)
+                        break;
+                    // Backwards propagate the slot as a hint
+                    j = Instruction::Cast(j->arg(0).val());
+                    if (!j)
+                        break;
+                    if (hints.count(j))
+                        break;
+                    hints[j] = slot;
+                }
             });
         });
 
@@ -179,7 +200,10 @@ class SSAAllocator {
                 if (!allocation.count(i) && livenessIntervals.count(i)) {
                     // Try to reuse input slot, to reduce moving
                     SlotNumber hint = unassignedSlot;
-                    if (i->nargs() > 0) {
+                    auto h = hints.find(i);
+                    if (h != hints.end()) {
+                        hint = h->second;
+                    } else if (i->nargs() > 0) {
                         auto o = Instruction::Cast(i->arg(0).val());
                         if (o && allocation.count(o))
                             hint = allocation.at(o);
