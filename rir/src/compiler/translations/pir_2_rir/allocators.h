@@ -5,6 +5,7 @@
 #include "stack_use.h"
 #include <memory>
 #include <set>
+#include <unordered_map>
 
 namespace rir {
 namespace pir {
@@ -39,6 +40,7 @@ class SSAAllocator {
     const static SlotNumber stackSlot = -1;
 
     std::unordered_map<Value*, SlotNumber> allocation;
+    std::unordered_map<Instruction*, SlotNumber> hints;
 
     SSAAllocator(Code* code, ClosureVersion* cls,
                  const LivenessIntervals& livenessIntervals, bool enableStack,
@@ -67,10 +69,23 @@ class SSAAllocator {
     }
 
     void computeStackAllocation() {
-        static auto toStack = [](Instruction* i) -> bool {
-            if (MkEnv::Cast(i))
-                return false;
-            return true;
+        std::unordered_map<Instruction*, bool> twice;
+        Visitor::run(code->entry, [&](Instruction* i) {
+            i->eachArg([&](Value* v) {
+                if (auto j = Instruction::Cast(v)) {
+                    auto t = twice.find(j);
+                    if (t != twice.end() && !t->second)
+                        t->second = true;
+                    if (t == twice.end())
+                        twice[j] = false;
+                }
+            });
+        });
+        auto toStack = [&](Instruction* i) -> bool {
+            auto u = twice.find(i);
+            if (u == twice.end())
+                return true;
+            return !u->second;
         };
 
         std::unordered_set<Value*> phis;
