@@ -640,11 +640,9 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-static void addDynamicAssumptionsFromContext(CallContext& call) {
+static void addDynamicAssumptionsFromContext(CallContext& call,
+                                             InterpreterInstance* ctx) {
     Assumptions& given = call.givenAssumptions;
-
-    if (!call.hasNames())
-        given.add(Assumption::CorrectOrderOfArguments);
 
     given.add(Assumption::NoExplicitlyMissingArgs);
     given.add(Assumption::NoReflectiveArgument);
@@ -700,8 +698,17 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             given.setSimpleInt(i);
     };
 
+    given.add(Assumption::CorrectOrderOfArguments);
+
+    SEXP formals = FORMALS(call.callee);
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         testArg(i);
+        if (call.hasNames()) {
+            auto name = call.name(i, ctx);
+            if (name != R_NilValue && name != TAG(formals))
+                given.remove(Assumption::CorrectOrderOfArguments);
+            formals = CDR(formals);
+        }
     }
 }
 
@@ -802,7 +809,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
-    addDynamicAssumptionsFromContext(call);
+    addDynamicAssumptionsFromContext(call, ctx);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
@@ -2626,7 +2633,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1), env,
                              given, ctx);
             auto fun = Function::unpack(version);
-            addDynamicAssumptionsFromContext(call);
+            addDynamicAssumptionsFromContext(call, ctx);
             bool dispatchFail = fun->dead || !matches(call, fun->signature());
             fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));

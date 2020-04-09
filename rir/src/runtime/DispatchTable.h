@@ -83,7 +83,7 @@ struct DispatchTable
         }
         assert(!contains(fun->signature().assumptions));
         if (size() == capacity()) {
-#ifdef ENABLE_SLOWASSERT
+#ifdef DEBUG_DISPATCH
             std::cout << "Tried to insert into a full Dispatch table. Have: \n";
             for (size_t i = 0; i < size(); ++i) {
                 auto e = getEntry(i);
