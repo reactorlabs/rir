@@ -169,9 +169,11 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         if (dom.dominates(bb1, bb2)) {
                             // std::cerr << "action taken "
                             //          << "\n";
-                            if (dom.dominates(bb1->trueBranch(), bb2)) {
+                            if ((bb1->trueBranch() == bb2) ||
+                                dom.dominates(bb1->trueBranch(), bb2)) {
                                 (*b)->arg(0).val() = True::instance();
-                            } else if (dom.dominates(bb1->falseBranch(), bb2)) {
+                            } else if ((bb1->falseBranch() == bb2) ||
+                                       dom.dominates(bb1->falseBranch(), bb2)) {
                                 (*b)->arg(0).val() = False::instance();
                             } else {
                                 // assert(false && "hard case");
@@ -187,6 +189,11 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                         False::instance();
                                     auto pl = PhiPlacement(function, inputs,
                                                            dom, dfront);
+                                    if (pl.placement.size() == 0) {
+                                        std::cerr << "bb1: " << bb1->id
+                                                  << " bb2: " << bb2->id
+                                                  << "\n";
+                                    }
                                     assert(pl.placement.size() > 0 &&
                                            "error: 0 phis to place!!!");
                                     for (auto& placement : pl.placement) {
