@@ -126,6 +126,14 @@ class NativeAllocator : public SSAAllocator {
     bool needsASlot(Value* v) const override final {
         return needsAVariable(v) && representationOf(v) == t::SEXP;
     }
+    bool interfere(Instruction* a, Instruction* b) const override final {
+        // Ensure we preserve slots for variables with typefeedback to make them
+        // accessible to the runtime profiler.
+        // TODO: this needs to be replaced by proper mapping of slots.
+        if (a != b && (a->typeFeedback.origin || b->typeFeedback.origin))
+            return true;
+        return SSAAllocator::interfere(a, b);
+    }
 };
 
 class LowerFunctionLLVM {

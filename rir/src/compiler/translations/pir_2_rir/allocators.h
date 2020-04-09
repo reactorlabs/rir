@@ -122,7 +122,7 @@ class SSAAllocator {
         });
     }
 
-    bool interfere(Instruction* i, Instruction* j) const {
+    virtual bool interfere(Instruction* i, Instruction* j) const {
         return livenessIntervals.interfere(i, j);
     }
 
