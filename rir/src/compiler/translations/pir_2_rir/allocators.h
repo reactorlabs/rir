@@ -3,6 +3,7 @@
 
 #include "interpreter/cache.h"
 #include "stack_use.h"
+#include <memory>
 #include <set>
 
 namespace rir {
@@ -30,8 +31,8 @@ class SSAAllocator {
     Code* code;
     size_t bbsSize;
 
-    LivenessIntervals livenessIntervals;
-    StackUseAnalysis sa;
+    const LivenessIntervals& livenessIntervals;
+    std::unique_ptr<StackUseAnalysis> sa;
 
     typedef size_t SlotNumber;
     const static SlotNumber unassignedSlot = 0;
@@ -39,10 +40,16 @@ class SSAAllocator {
 
     std::unordered_map<Value*, SlotNumber> allocation;
 
-    explicit SSAAllocator(Code* code, ClosureVersion* cls, LogStream& log)
+    SSAAllocator(Code* code, ClosureVersion* cls,
+                 const LivenessIntervals& livenessIntervals, bool enableStack,
+                 LogStream& log)
         : dom(code), code(code), bbsSize(code->nextBBId),
-          livenessIntervals(code, bbsSize),
-          sa(cls, code, log, livenessIntervals) {
+          livenessIntervals(livenessIntervals) {
+
+        if (enableStack)
+            sa = std::make_unique<StackUseAnalysis>(cls, code, log,
+                                                    livenessIntervals);
+
 #ifdef DEBUG_LIVENESS
         std::cerr << "^^^^^^^^^^ "
                   << "SSAAllocator ran liveness analysis"
@@ -50,12 +57,16 @@ class SSAAllocator {
         code->printGraphCode(std::cerr, false);
 #endif
 
-        computeStackAllocation();
+        if (enableStack)
+            computeStackAllocation();
         computeAllocation();
     }
 
-    void computeStackAllocation() {
+    virtual bool needsASlot(Value* val) const {
+        return val->producesRirResult();
+    }
 
+    void computeStackAllocation() {
         static auto toStack = [](Instruction* i) -> bool {
             if (MkEnv::Cast(i))
                 return false;
@@ -67,6 +78,8 @@ class SSAAllocator {
         Visitor::run(code->entry, [&](Instruction* i) {
             auto p = Phi::Cast(i);
             if (!p || allocation.count(p))
+                return;
+            if (!needsASlot(i))
                 return;
             if (toStack(p)) {
                 allocation[p] = stackSlot;
@@ -90,9 +103,10 @@ class SSAAllocator {
     void computeAllocation() {
         std::unordered_map<SlotNumber, std::unordered_set<Value*>> reverseAlloc;
         auto slotIsAvailable = [&](SlotNumber slot, Value* i) {
-            for (auto other : reverseAlloc[slot])
+            for (auto other : reverseAlloc[slot]) {
                 if (livenessIntervals.interfere(other, i))
                     return false;
+            }
             return true;
         };
 
@@ -100,6 +114,8 @@ class SSAAllocator {
         Visitor::run(code->entry, [&](Instruction* i) {
             auto p = Phi::Cast(i);
             if (!p || allocation.count(p))
+                return;
+            if (!needsASlot(i))
                 return;
             SlotNumber slot = unassignedSlot;
             while (true) {
@@ -142,6 +158,9 @@ class SSAAllocator {
             for (auto i : *bb) {
                 ++pos;
 
+                if (!needsASlot(i))
+                    continue;
+
                 if (!allocation.count(i) && livenessIntervals.count(i)) {
                     // Try to reuse input slot, to reduce moving
                     SlotNumber hint = unassignedSlot;
@@ -164,14 +183,23 @@ class SSAAllocator {
 
     void print(std::ostream& out) {
         out << "Allocation\n";
-        for (auto a : allocation) {
-            out << "  ";
-            a.first->printRef(out);
-            out << ": ";
-            if (onStack(a.first))
+        std::unordered_set<size_t> done;
+        for (auto n : allocation) {
+            if (done.count(n.second)) {
+                continue;
+            }
+            if (n.second == stackSlot)
                 out << "stack";
             else
-                out << a.second;
+                out << n.second;
+            out << ": ";
+            done.insert(n.second);
+            for (auto a : allocation) {
+                if (a.second != n.second)
+                    continue;
+                a.first->printRef(out);
+                out << " ";
+            }
             out << "\n";
         }
         out << "  dead: ";
@@ -197,14 +225,15 @@ class SSAAllocator {
         VerifyBB verifyBB = [&](BB* pred, BB* bb, RegisterFile& reg,
                                 Stack& stack) {
             for (auto i : *bb) {
-                for (auto drop : sa.toDrop(i)) {
-                    for (auto it = stack.begin(); it != stack.end(); ++it) {
-                        if (drop == *it) {
-                            stack.erase(it);
-                            break;
+                if (sa)
+                    for (auto drop : sa->toDrop(i)) {
+                        for (auto it = stack.begin(); it != stack.end(); ++it) {
+                            if (drop == *it) {
+                                stack.erase(it);
+                                break;
+                            }
                         }
                     }
-                }
                 if (auto phi = Phi::Cast(i)) {
                     SlotNumber slot = allocation.at(phi);
                     phi->eachArg([&](BB*, Value* a) {
@@ -212,6 +241,7 @@ class SSAAllocator {
                         if (!ia)
                             return;
                         if (!allocation.count(ia)) {
+                            code->printCode(std::cout, true, false);
                             std::cerr << "REG alloc fail: ";
                             phi->printRef(std::cerr);
                             std::cerr << " needs ";
@@ -273,6 +303,7 @@ class SSAAllocator {
                             return;
                         }
                         if (!allocation.count(ia)) {
+                            code->printCode(std::cout, true, false);
                             std::cerr << "REG alloc fail: ";
                             i->printRef(std::cerr);
                             std::cerr << " needs ";
@@ -312,6 +343,7 @@ class SSAAllocator {
                                     assert(false);
                                 }
                                 if (reg.at(slot) != ia) {
+                                    code->printCode(std::cerr, true, false);
                                     std::cerr << "REG alloc fail: ";
                                     i->printRef(std::cerr);
                                     std::cerr << " needs ";
@@ -331,7 +363,7 @@ class SSAAllocator {
                 // Remember this instruction if it writes to a slot
                 if (allocation.count(i)) {
                     if (allocation.at(i) == stackSlot) {
-                        if (i->producesRirResult() && !sa.dead(i)) {
+                        if (i->producesRirResult() && !sa->dead(i)) {
                             stack.push_back(i);
                         }
                     } else {
@@ -345,6 +377,9 @@ class SSAAllocator {
                     std::cerr << "REG alloc fail: BB" << bb->id
                               << " tries to return with " << stack.size()
                               << " elements on the stack\n";
+                    for (auto& s : stack) {
+                        s->printRecursive(std::cout, 1);
+                    }
                     assert(false);
                 }
             }
@@ -387,14 +422,16 @@ class SSAAllocator {
         return max;
     }
 
-    bool onStack(Value* v) const { return allocation.at(v) == stackSlot; }
+    bool onStack(Value* v) const {
+        return allocation.at(v) == stackSlot;
+    }
 
     bool hasSlot(Value* v) const { return allocation.count(v); }
 
     size_t getStackOffset(Instruction* instr, std::vector<bool>& used,
                           Value* what, bool remove) const {
 
-        auto stack = sa.stackBefore(instr);
+        auto stack = sa->stackBefore(instr);
         assert(stack.size() == used.size());
 
         size_t offset = 0;
@@ -418,7 +455,7 @@ class SSAAllocator {
     }
 
     size_t stackPhiOffset(Instruction* instr, Phi* phi) const {
-        auto stack = sa.stackBefore(instr);
+        auto stack = sa->stackBefore(instr);
         size_t offset = 0;
         for (auto i = stack.rbegin(); i != stack.rend(); ++i) {
             if (*i == phi || phi->anyArg([&](Value* v) { return *i == v; }))
@@ -434,7 +471,7 @@ class SSAAllocator {
     bool lastUse(Instruction* instr, size_t argNumber) const {
         assert(argNumber < instr->nargs());
         Value* v = instr->arg(argNumber).val();
-        auto stack = sa.stackAfter(instr);
+        auto stack = sa->stackAfter(instr);
         for (auto i = stack.begin(); i != stack.end(); ++i)
             if (*i == v)
                 return false;

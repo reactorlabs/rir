@@ -1101,8 +1101,11 @@ class FLI(CastType, 1, Effects::None()) {
             hash_combine(hash_combine(tagHash(), type), arg<0>().type()), kind);
     }
     PirType inferType(const GetType& getType) const override final {
-        if (kind == Downcast)
-            return getType(arg(0).val()) & type;
+        if (kind == Downcast) {
+            auto t = getType(arg(0).val()) & type;
+            if (!t.isVoid()) // can happen in dead code
+                return t;
+        }
         return type;
     }
     void printArgs(std::ostream& out, bool tty) const override;
