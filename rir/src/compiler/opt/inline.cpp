@@ -30,6 +30,16 @@ class TheInliner {
         if (version->size() > Parameter::INLINER_MAX_SIZE)
             return;
 
+        auto dontInline = [](Closure* cls) {
+            if (cls->rirFunction()->flags.contains(
+                    rir::Function::DisableInline))
+                return true;
+            if (cls->rirFunction()->flags.contains(rir::Function::ForceInline))
+                return false;
+            return cls->rirFunction()->flags.contains(
+                rir::Function::NotInlineable);
+        };
+
         Visitor::run(version->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
@@ -48,7 +58,7 @@ class TheInliner {
                     if (!mkcls)
                         continue;
                     inlineeCls = mkcls->cls;
-                    if (inlineeCls->rirFunction()->uninlinable)
+                    if (dontInline(inlineeCls))
                         continue;
                     inlinee = call->tryDispatch(inlineeCls);
                     if (!inlinee)
@@ -69,7 +79,7 @@ class TheInliner {
                     callerFrameState = call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
                     inlineeCls = call->cls();
-                    if (inlineeCls->rirFunction()->uninlinable)
+                    if (dontInline(inlineeCls))
                         continue;
                     inlinee = call->tryDispatch();
                     if (!inlinee)
@@ -117,7 +127,7 @@ class TheInliner {
                     continue;
                 }
 
-                if (inlineeCls->rirFunction()->uninlinable)
+                if (dontInline(inlineeCls))
                     continue;
 
                 enum SafeToInline {
@@ -200,20 +210,27 @@ class TheInliner {
                 // No recursive inlining
                 if (inlinee->owner() == version->owner()) {
                     continue;
-                } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
-                    inlineeCls->rirFunction()->uninlinable = true;
+                } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE &&
+                           !inlineeCls->rirFunction()->flags.contains(
+                               rir::Function::ForceInline)) {
+                    inlineeCls->rirFunction()->flags.set(
+                        rir::Function::NotInlineable);
                     continue;
                 } else {
                     updateAllowInline(inlinee);
                     inlinee->eachPromise(
                         [&](Promise* p) { updateAllowInline(p); });
                     if (allowInline == SafeToInline::No) {
-                        inlineeCls->rirFunction()->uninlinable = true;
+                        inlineeCls->rirFunction()->flags.set(
+                            rir::Function::NotInlineable);
                         continue;
                     }
                 }
 
-                fuel--;
+                if (!inlineeCls->rirFunction()->flags.contains(
+                        rir::Function::ForceInline))
+                    fuel--;
+
                 version->inlinees++;
 
                 BB* split =
@@ -333,7 +350,8 @@ class TheInliner {
                 if (failedToInline) {
                     delete copy;
                     bb->overrideNext(split);
-                    inlineeCls->rirFunction()->uninlinable = true;
+                    inlineeCls->rirFunction()->flags.set(
+                        rir::Function::NotInlineable);
                 } else {
                     bb->overrideNext(copy);
 

@@ -55,15 +55,11 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     if (!t)
         Rf_error("Not a rir compiled code");
 
-    std::cout << "* closure " << what << " (vtable " << t << ", env "
-              << CLOENV(what) << ")\n";
+    std::cout << "== closure " << what << " (dispatch table " << t << ", env "
+              << CLOENV(what) << ") ==\n";
     for (size_t entry = 0; entry < t->size(); ++entry) {
         Function* f = t->get(entry);
-        std::cout << "= vtable slot <" << entry << "> (" << f << ", invoked "
-                  << f->invocationCount() << ") =\n";
-        std::cout << "# ";
-        f->signature().print(std::cout);
-        std::cout << "\n";
+        std::cout << "= version " << entry << " (" << f << ") =\n";
         f->disassemble(std::cout);
     }
 
@@ -89,28 +85,67 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env) {
     }
 }
 
-REXPORT SEXP rir_markOptimize(SEXP what) {
-    // TODO(mhyee): This is to mark a function for optimization.
-    // However, now that we have vtables, does this still make sense? Maybe it
-    // might be better to mark a specific version for optimization.
-    // For now, we just mark the first version in the vtable.
-    if (TYPEOF(what) != CLOSXP)
-        return R_NilValue;
+REXPORT SEXP rir_markFunction(SEXP what, SEXP which, SEXP reopt_,
+                              SEXP forceInline_, SEXP disableInline_,
+                              SEXP disableSpecialization_,
+                              SEXP disableArgumentTypeSpecialization_,
+                              SEXP disableNumArgumentSpecialization_) {
+    if (!isValidClosureSEXP(what))
+        Rf_error("Not rir compiled code");
+    if (TYPEOF(which) != INTSXP || LENGTH(which) != 1)
+        Rf_error("index not an integer");
+    auto i = INTEGER(which)[0];
     SEXP b = BODY(what);
     DispatchTable* dt = DispatchTable::unpack(b);
-    Function* fun = dt->baseline();
-    fun->markOpt = true;
+    if (i < 0 || (size_t)i > dt->size())
+        Rf_error("version with this number does not exist");
+
+    auto getBool = [](SEXP v) -> bool {
+        if (TYPEOF(v) != LGLSXP) {
+            Rf_warning("non-boolean flag");
+            return false;
+        }
+        if (LENGTH(v) == 0)
+            return false;
+        return LOGICAL(v)[0];
+    };
+
+    bool reopt = getBool(reopt_);
+    bool forceInline = getBool(forceInline_);
+    bool disableInline = getBool(disableInline_);
+    bool disableSpecialization = getBool(disableSpecialization_);
+    bool disableNumArgumentSpecialization =
+        getBool(disableNumArgumentSpecialization_);
+    bool disableArgumentTypeSpecialization =
+        getBool(disableArgumentTypeSpecialization_);
+
+    Function* fun = dt->get(i);
+    if (reopt) {
+        fun->flags.set(Function::MarkOpt);
+        fun->flags.reset(Function::NotOptimizable);
+    }
+    if (forceInline)
+        fun->flags.set(Function::ForceInline);
+    if (disableInline)
+        fun->flags.set(Function::DisableInline);
+    if (disableSpecialization)
+        fun->flags.set(Function::DisableAllSpecialization);
+    if (disableArgumentTypeSpecialization)
+        fun->flags.set(Function::DisableArgumentTypeSpecialization);
+    if (disableNumArgumentSpecialization)
+        fun->flags.set(Function::DisableNumArgumentsSepzialization);
+
     return R_NilValue;
 }
 
-REXPORT SEXP rir_eval(SEXP what, SEXP env) {
-    if (Function* f = Function::check(what))
-        return evalRirCodeExtCaller(f->body(), globalContext(), env);
-
-    if (isValidClosureSEXP(what))
-        return rirEval_f(BODY(what), env);
-
-    Rf_error("Not rir compiled code");
+REXPORT SEXP rir_functionVersions(SEXP what) {
+    if (!isValidClosureSEXP(what))
+        Rf_error("Not rir compiled code");
+    DispatchTable* dt = DispatchTable::unpack(BODY(what));
+    auto res = Rf_allocVector(INTSXP, dt->size());
+    for (size_t i = 0; i < dt->size(); ++i)
+        INTEGER(res)[i] = i;
+    return res;
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
@@ -257,7 +292,6 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
     return what;
 }
 
-// Used in test infrastructure for counting invocation of different versions
 REXPORT SEXP rir_invocation_count(SEXP what) {
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");

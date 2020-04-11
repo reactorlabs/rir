@@ -76,6 +76,13 @@ std::ostream& operator<<(std::ostream& out, const Assumptions& a) {
         if (i + 1 != a.flags.end())
             out << ",";
     }
+    if (!a.typeFlags.empty())
+        out << ";";
+    for (auto i = a.typeFlags.begin(); i != a.typeFlags.end(); ++i) {
+        out << *i;
+        if (i + 1 != a.typeFlags.end())
+            out << ",";
+    }
     if (a.missing > 0)
         out << " miss: " << (int)a.missing;
     return out;

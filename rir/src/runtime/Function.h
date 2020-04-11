@@ -48,9 +48,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               // GC area starts at &locals and goes to the end of defaultArg_
               sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
               NUM_PTRS + defaultArgs.size()),
-          size(functionSize), deopt(false), markOpt(false),
-          unoptimizable(false), uninlinable(false), dead(false),
-          innerFunction(false), numArgs(defaultArgs.size()),
+          size(functionSize), numArgs(defaultArgs.size()),
           signature_(signature) {
         for (size_t i = 0; i < numArgs; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
@@ -78,12 +76,44 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     unsigned size; /// Size, in bytes, of the function and its data
 
-    unsigned deopt : 1;
-    unsigned markOpt : 1;
-    unsigned unoptimizable : 1;
-    unsigned uninlinable : 1;
-    unsigned dead : 1;
-    unsigned innerFunction : 1;
+#define RIR_FUNCTION_FLAGS(V)                                                  \
+    V(Deopt)                                                                   \
+    V(MarkOpt)                                                                 \
+    V(ForceInline)                                                             \
+    V(DisableInline)                                                           \
+    V(NotOptimizable)                                                          \
+    V(NotInlineable)                                                           \
+    V(Dead)                                                                    \
+    V(InnerFunction)                                                           \
+    V(DisableAllSpecialization)                                                \
+    V(DisableArgumentTypeSpecialization)                                       \
+    V(DisableNumArgumentsSepzialization)
+
+    enum Flag {
+#define V(F) F,
+        RIR_FUNCTION_FLAGS(V)
+#undef V
+
+            FIRST = Deopt,
+        LAST = DisableNumArgumentsSepzialization
+    };
+    EnumSet<Flag> flags;
+
+    void inheritFlags(const Function* other) {
+        static Flag inherited[] = {ForceInline, DisableInline,
+                                   DisableAllSpecialization,
+                                   DisableArgumentTypeSpecialization,
+                                   DisableNumArgumentsSepzialization};
+        auto f = other->flags;
+        if (f.includes(DisableAllSpecialization))
+            assert(!signature().assumptions.includes(
+                Assumption::NoReflectiveArgument));
+        for (auto flag : inherited)
+            if (f.contains(flag))
+                flags.set(flag);
+    }
+
+    void clearDisabledAssumptions(Assumptions& given) const;
 
     unsigned numArgs;
 

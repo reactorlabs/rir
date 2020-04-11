@@ -8,5 +8,5 @@ f <- rir.compile(function(x) {
 
 tramp <- rir.compile(function(fun) fun())
 
-rir.markOptimize(f)
+rir.markFunction(f, Reopt=TRUE)
 stopifnot(tramp(f) == 42)

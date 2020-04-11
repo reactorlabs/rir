@@ -1,5 +1,6 @@
 #include "Function.h"
 #include "R/Serialize.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 
 namespace rir {
 
@@ -29,11 +30,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
         } else
             fun->setEntry(Function::NUM_PTRS + i, nullptr);
     }
-    fun->deopt = InChar(inp);
-    fun->markOpt = InChar(inp);
-    fun->unoptimizable = InChar(inp);
-    fun->uninlinable = InChar(inp);
-    fun->dead = InChar(inp);
+    fun->flags = EnumSet<Flag>(InInteger(inp));
     UNPROTECT(protectCount);
     return fun;
 }
@@ -50,15 +47,34 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
         if (arg != NULL)
             defaultArg(i)->serialize(refTable, out);
     }
-    OutChar(out, deopt ? 1 : 0);
-    OutChar(out, markOpt ? 1 : 0);
-    OutChar(out, unoptimizable ? 1 : 0);
-    OutChar(out, uninlinable ? 1 : 0);
-    OutChar(out, dead ? 1 : 0);
+    OutInteger(out, flags.to_i());
 }
 
 void Function::disassemble(std::ostream& out) {
+    std::cout << "[sigature] ";
+    signature().print(std::cout);
+    std::cout << "\n";
+    std::cout << "[flags]    ";
+#define V(F)                                                                   \
+    if (flags.includes(F))                                                     \
+        std::cout << #F << " ";
+    RIR_FUNCTION_FLAGS(V)
+#undef V
+    std::cout << "\n";
+    std::cout << "[stats]    ";
+    std::cout << "invoked: " << invocationCount()
+              << ", deopt: " << deoptCount();
+    std::cout << "\n";
     body()->disassemble(out);
+}
+
+void Function::clearDisabledAssumptions(Assumptions& given) const {
+    if (flags.contains(Function::DisableArgumentTypeSpecialization))
+        given.clearTypeFlags();
+    if (flags.contains(Function::DisableNumArgumentsSepzialization))
+        given.clearNargs();
+    if (flags.contains(Function::DisableAllSpecialization))
+        given.clearExcept(pir::Rir2PirCompiler::minimalAssumptions);
 }
 
 } // namespace rir
