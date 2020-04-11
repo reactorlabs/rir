@@ -210,11 +210,11 @@ class TheInliner {
                 // No recursive inlining
                 if (inlinee->owner() == version->owner()) {
                     continue;
-                } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE &&
-                           !inlineeCls->rirFunction()->flags.contains(
-                               rir::Function::ForceInline)) {
-                    inlineeCls->rirFunction()->flags.set(
-                        rir::Function::NotInlineable);
+                } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
+                    if (!inlineeCls->rirFunction()->flags.contains(
+                            rir::Function::ForceInline))
+                        inlineeCls->rirFunction()->flags.set(
+                            rir::Function::NotInlineable);
                     continue;
                 } else {
                     updateAllowInline(inlinee);

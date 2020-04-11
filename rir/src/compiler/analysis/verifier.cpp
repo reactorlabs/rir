@@ -334,6 +334,17 @@ class TheVerifier {
                 std::cerr << " framestate env cannot be elided\n";
                 ok = false;
             }
+            std::unordered_set<Value*> envs({fs->env()});
+            while (fs->next()) {
+                fs = fs->next();
+                if (envs.count(fs->env())) {
+                    std::cerr << "Error at instruction '";
+                    i->print(std::cerr);
+                    std::cerr << " same env occurs multiple times\n";
+                    ok = false;
+                }
+                envs.insert(fs->env());
+            }
         }
 
         static std::unordered_set<Tag> allowStub{
