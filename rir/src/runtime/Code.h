@@ -1,6 +1,7 @@
 #ifndef RIR_CODE_H
 #define RIR_CODE_H
 
+#include "PirRegisterMap.h"
 #include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
 #include "utils/UUID.h"
@@ -46,7 +47,7 @@ typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
     friend class CodeVerifier;
-    static constexpr size_t NumLocals = 1;
+    static constexpr size_t NumLocals = 2;
 
     static Code* withUid(UUID uid);
 
@@ -80,6 +81,15 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         if (deoptCount < UINT_MAX)
             deoptCount++;
     }
+
+    PirRegisterMap* pirRegisterMap() {
+        SEXP map = getEntry(1);
+        if (!map)
+            return nullptr;
+        return PirRegisterMap::unpack(map);
+    }
+
+    void pirRegisterMap(PirRegisterMap* map) { setEntry(1, map->container()); }
 
     // UID for persistence when serializing/deserializing
     UUID uid;

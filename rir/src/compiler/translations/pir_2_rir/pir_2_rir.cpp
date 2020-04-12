@@ -296,6 +296,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     LivenessIntervals live(code, code->nextBBId);
     SSAAllocator alloc(code, cls, live, true, log.out());
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
+    alloc.compute();
     alloc.verify();
 
     // Create labels for all bbs
@@ -1153,8 +1154,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     if (PIR_NATIVE_BACKEND) {
         LowerLLVM native;
         if (auto n = native.tryCompile(cls, code, promMap, refcount,
-                                       needsLdVarForUpdate)) {
+                                       needsLdVarForUpdate, log.out())) {
             res->nativeCode = (NativeCode)n;
+            if (native.registerMap)
+                res->pirRegisterMap(native.registerMap);
         }
     }
     return res;

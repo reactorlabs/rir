@@ -5,6 +5,7 @@
 #include "stack_use.h"
 #include <memory>
 #include <set>
+#include <unordered_map>
 
 namespace rir {
 namespace pir {
@@ -34,19 +35,22 @@ class SSAAllocator {
     const LivenessIntervals& livenessIntervals;
     std::unique_ptr<StackUseAnalysis> sa;
 
-    typedef size_t SlotNumber;
+    typedef unsigned SlotNumber;
     const static SlotNumber unassignedSlot = 0;
     const static SlotNumber stackSlot = -1;
 
     std::unordered_map<Value*, SlotNumber> allocation;
+    std::unordered_map<Instruction*, SlotNumber> hints;
+
+    bool computed = false;
+    bool useStack;
 
     SSAAllocator(Code* code, ClosureVersion* cls,
-                 const LivenessIntervals& livenessIntervals, bool enableStack,
+                 const LivenessIntervals& livenessIntervals, bool useStack,
                  LogStream& log)
         : dom(code), code(code), bbsSize(code->nextBBId),
-          livenessIntervals(livenessIntervals) {
-
-        if (enableStack)
+          livenessIntervals(livenessIntervals), useStack(useStack) {
+        if (useStack)
             sa = std::make_unique<StackUseAnalysis>(cls, code, log,
                                                     livenessIntervals);
 
@@ -56,10 +60,14 @@ class SSAAllocator {
                   << " ^^^^^^^^^^\n";
         code->printGraphCode(std::cerr, false);
 #endif
+    }
 
-        if (enableStack)
+    void compute() {
+        if (useStack)
             computeStackAllocation();
         computeAllocation();
+
+        computed = true;
     }
 
     virtual bool needsASlot(Value* val) const {
@@ -67,10 +75,24 @@ class SSAAllocator {
     }
 
     void computeStackAllocation() {
-        static auto toStack = [](Instruction* i) -> bool {
-            if (MkEnv::Cast(i))
-                return false;
-            return true;
+        needsASlot(*code->entry->begin());
+        std::unordered_map<Instruction*, bool> twice;
+        Visitor::run(code->entry, [&](Instruction* i) {
+            i->eachArg([&](Value* v) {
+                if (auto j = Instruction::Cast(v)) {
+                    auto t = twice.find(j);
+                    if (t != twice.end() && !t->second)
+                        t->second = true;
+                    if (t == twice.end())
+                        twice[j] = false;
+                }
+            });
+        });
+        auto toStack = [&](Instruction* i) -> bool {
+            auto u = twice.find(i);
+            if (u == twice.end())
+                return true;
+            return !u->second;
         };
 
         std::unordered_set<Value*> phis;
@@ -100,12 +122,19 @@ class SSAAllocator {
         });
     }
 
-    void computeAllocation() {
-        std::unordered_map<SlotNumber, std::unordered_set<Value*>> reverseAlloc;
-        auto slotIsAvailable = [&](SlotNumber slot, Value* i) {
-            for (auto other : reverseAlloc[slot]) {
-                if (livenessIntervals.interfere(other, i))
-                    return false;
+    virtual bool interfere(Instruction* i, Instruction* j) const {
+        return livenessIntervals.interfere(i, j);
+    }
+
+    virtual void computeAllocation() {
+        std::unordered_map<SlotNumber, std::unordered_set<Instruction*>>
+            reverseAlloc;
+        auto slotIsAvailable = [&](SlotNumber slot, Value* v) {
+            if (auto i = Instruction::Cast(v)) {
+                for (auto other : reverseAlloc[slot]) {
+                    if (interfere(other, i))
+                        return false;
+                }
             }
             return true;
         };
@@ -117,9 +146,7 @@ class SSAAllocator {
                 return;
             if (!needsASlot(i))
                 return;
-            SlotNumber slot = unassignedSlot;
-            while (true) {
-                ++slot;
+            auto testSlot = [&](size_t slot) {
                 bool success = slotIsAvailable(slot, p);
                 if (success) {
                     p->eachArg([&](BB*, Value* v) {
@@ -127,14 +154,38 @@ class SSAAllocator {
                             success = false;
                     });
                 }
-                if (success)
-                    break;
+                return success;
+            };
+            SlotNumber slot = unassignedSlot;
+            auto h = hints.find(i);
+            if (h != hints.end() && testSlot(h->second)) {
+                slot = h->second;
+            } else {
+                while (true) {
+                    ++slot;
+                    if ((h == hints.end() || h->second != slot) &&
+                        testSlot(slot))
+                        break;
+                }
             }
             allocation[i] = slot;
             reverseAlloc[slot].insert(i);
             p->eachArg([&](BB*, Value* v) {
                 allocation[v] = slot;
-                reverseAlloc[slot].insert(v);
+                auto j = Instruction::Cast(v);
+                if (j)
+                    reverseAlloc[slot].insert(j);
+                while (j) {
+                    if (j->nargs() == 0)
+                        break;
+                    // Backwards propagate the slot as a hint
+                    j = Instruction::Cast(j->arg(0).val());
+                    if (!j)
+                        break;
+                    if (hints.count(j))
+                        break;
+                    hints[j] = slot;
+                }
             });
         });
 
@@ -164,7 +215,10 @@ class SSAAllocator {
                 if (!allocation.count(i) && livenessIntervals.count(i)) {
                     // Try to reuse input slot, to reduce moving
                     SlotNumber hint = unassignedSlot;
-                    if (i->nargs() > 0) {
+                    auto h = hints.find(i);
+                    if (h != hints.end()) {
+                        hint = h->second;
+                    } else if (i->nargs() > 0) {
                         auto o = Instruction::Cast(i->arg(0).val());
                         if (o && allocation.count(o))
                             hint = allocation.at(o);
@@ -202,7 +256,7 @@ class SSAAllocator {
             }
             out << "\n";
         }
-        out << "  dead: ";
+        out << "dead: ";
         BreadthFirstVisitor::run(code->entry, [&](Instruction* i) {
             if (!hasSlot(i)) {
                 i->printRef(out);
@@ -210,11 +264,11 @@ class SSAAllocator {
             }
         });
         out << "\n"
-            << "  # slots: " << slots() << "\n";
+            << "# slots: " << slots() << "\n";
     }
 
     void verify() {
-
+        assert(computed);
         // Explore all possible traces and verify the allocation
         typedef std::pair<BB*, BB*> Jmp;
         typedef std::unordered_map<size_t, Instruction*> RegisterFile;
@@ -235,62 +289,66 @@ class SSAAllocator {
                         }
                     }
                 if (auto phi = Phi::Cast(i)) {
-                    SlotNumber slot = allocation.at(phi);
-                    phi->eachArg([&](BB*, Value* a) {
-                        auto ia = Instruction::Cast(a);
-                        if (!ia)
-                            return;
-                        if (!allocation.count(ia)) {
-                            code->printCode(std::cout, true, false);
-                            std::cerr << "REG alloc fail: ";
-                            phi->printRef(std::cerr);
-                            std::cerr << " needs ";
-                            ia->printRef(std::cerr);
-                            std::cerr << " but is not allocated\n";
-                            assert(false);
-                        } else if (allocation[ia] != slot) {
-                            std::cerr << "REG alloc fail: ";
-                            phi->printRef(std::cerr);
-                            std::cerr << " and it's input ";
-                            ia->printRef(std::cerr);
-                            std::cerr << " have different allocations: ";
-                            if (allocation[phi] == stackSlot)
-                                std::cerr << "stack";
-                            else
-                                std::cerr << allocation[phi];
-                            std::cerr << " vs ";
-                            if (allocation[ia] == stackSlot)
-                                std::cerr << "stack";
-                            else
-                                std::cerr << allocation[ia];
-                            std::cerr << "\n";
-                            assert(false);
-                        }
-                    });
-                    // Make sure the argument slot is initialized
-                    if (slot != stackSlot && reg.count(slot) == 0) {
-                        std::cerr << "REG alloc fail: phi ";
-                        phi->printRef(std::cerr);
-                        std::cerr << " is reading from an unititialized slot\n";
-                        assert(false);
-                    }
-                    if (slot == stackSlot) {
-                        bool found = false;
-                        for (auto it = stack.begin(); it != stack.end(); ++it) {
-                            phi->eachArg([&](BB* phiInput, Value* phiArg) {
-                                if (phiInput == pred && phiArg == *it) {
-                                    stack.erase(it);
-                                    found = true;
-                                }
-                            });
-                            if (found)
-                                break;
-                        }
-                        if (!found) {
+                    if (needsASlot(phi)) {
+                        SlotNumber slot = allocation.at(phi);
+                        phi->eachArg([&](BB*, Value* a) {
+                            auto ia = Instruction::Cast(a);
+                            if (!ia)
+                                return;
+                            if (!allocation.count(ia)) {
+                                code->printCode(std::cout, true, false);
+                                std::cerr << "REG alloc fail: ";
+                                phi->printRef(std::cerr);
+                                std::cerr << " needs ";
+                                ia->printRef(std::cerr);
+                                std::cerr << " but is not allocated\n";
+                                assert(false);
+                            } else if (allocation[ia] != slot) {
+                                std::cerr << "REG alloc fail: ";
+                                phi->printRef(std::cerr);
+                                std::cerr << " and it's input ";
+                                ia->printRef(std::cerr);
+                                std::cerr << " have different allocations: ";
+                                if (allocation[phi] == stackSlot)
+                                    std::cerr << "stack";
+                                else
+                                    std::cerr << allocation[phi];
+                                std::cerr << " vs ";
+                                if (allocation[ia] == stackSlot)
+                                    std::cerr << "stack";
+                                else
+                                    std::cerr << allocation[ia];
+                                std::cerr << "\n";
+                                assert(false);
+                            }
+                        });
+                        // Make sure the argument slot is initialized
+                        if (slot != stackSlot && reg.count(slot) == 0) {
                             std::cerr << "REG alloc fail: phi ";
                             phi->printRef(std::cerr);
-                            std::cerr << " input is missing on stack\n";
+                            std::cerr
+                                << " is reading from an unititialized slot\n";
                             assert(false);
+                        }
+                        if (slot == stackSlot) {
+                            bool found = false;
+                            for (auto it = stack.begin(); it != stack.end();
+                                 ++it) {
+                                phi->eachArg([&](BB* phiInput, Value* phiArg) {
+                                    if (phiInput == pred && phiArg == *it) {
+                                        stack.erase(it);
+                                        found = true;
+                                    }
+                                });
+                                if (found)
+                                    break;
+                            }
+                            if (!found) {
+                                std::cerr << "REG alloc fail: phi ";
+                                phi->printRef(std::cerr);
+                                std::cerr << " input is missing on stack\n";
+                                assert(false);
+                            }
                         }
                     }
                 } else {
@@ -298,7 +356,7 @@ class SSAAllocator {
                     size_t argNum = 0;
                     i->eachArg([&](Value* a) {
                         auto ia = Instruction::Cast(a);
-                        if (!ia || !ia->producesRirResult()) {
+                        if (!ia || !needsASlot(ia)) {
                             argNum++;
                             return;
                         }
@@ -427,6 +485,7 @@ class SSAAllocator {
     }
 
     bool hasSlot(Value* v) const { return allocation.count(v); }
+    unsigned getSlot(Value* v) const { return allocation.at(v); }
 
     size_t getStackOffset(Instruction* instr, std::vector<bool>& used,
                           Value* what, bool remove) const {

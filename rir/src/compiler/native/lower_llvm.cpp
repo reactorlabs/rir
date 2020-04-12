@@ -6,6 +6,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/MDBuilder.h"
 
+#include "../translations/pir_2_rir/allocators.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
@@ -26,6 +27,8 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace rir {
@@ -109,17 +112,43 @@ static Representation representationOf(Value* v) {
     return representationOf(v->type);
 }
 
+class NativeAllocator : public SSAAllocator {
+  public:
+    NativeAllocator(Code* code, ClosureVersion* cls,
+                    const LivenessIntervals& livenessIntervals, LogStream& log)
+        : SSAAllocator(code, cls, livenessIntervals, false, log) {}
+
+    bool needsAVariable(Value* v) const {
+        return v->producesRirResult() && !LdConst::Cast(v) &&
+               !(CastType::Cast(v) &&
+                 LdConst::Cast(CastType::Cast(v)->arg(0).val()));
+    }
+    bool needsASlot(Value* v) const override final {
+        return needsAVariable(v) && representationOf(v) == t::SEXP;
+    }
+    bool interfere(Instruction* a, Instruction* b) const override final {
+        // Ensure we preserve slots for variables with typefeedback to make them
+        // accessible to the runtime profiler.
+        // TODO: this needs to be replaced by proper mapping of slots.
+        if (a != b && (a->typeFeedback.origin || b->typeFeedback.origin))
+            return true;
+        return SSAAllocator::interfere(a, b);
+    }
+};
+
 class LowerFunctionLLVM {
 
     ClosureVersion* cls;
     Code* code;
-    Instruction* currentInstr = nullptr;
+    BB::Instrs::iterator currentInstr;
+    BB* currentBB = nullptr;
     const std::unordered_map<Promise*, unsigned>& promMap;
     const NeedsRefcountAdjustment& refcount;
     const std::unordered_set<Instruction*>& needsLdVarForUpdate;
     IRBuilder<> builder;
     MDBuilder MDB;
     LivenessIntervals liveness;
+    LogStream& log;
     size_t numLocals;
     size_t numTemps;
     constexpr static size_t MAX_TEMPS = 4;
@@ -146,21 +175,22 @@ class LowerFunctionLLVM {
     MDNode* branchMostlyFalse;
 
   public:
+    PirRegisterMap* registerMap = nullptr;
     llvm::Function* fun;
 
     LowerFunctionLLVM(
         const std::string& name, ClosureVersion* cls, Code* code,
         const std::unordered_map<Promise*, unsigned>& promMap,
         const NeedsRefcountAdjustment& refcount,
-        const std::unordered_set<Instruction*>& needsLdVarForUpdate)
+        const std::unordered_set<Instruction*>& needsLdVarForUpdate,
+        LogStream& log)
         : cls(cls), code(code), promMap(promMap), refcount(refcount),
           needsLdVarForUpdate(needsLdVarForUpdate), builder(C), MDB(C),
-          liveness(code, code->nextBBId), numLocals(0), numTemps(0),
+          liveness(code, code->nextBBId), log(log), numLocals(0), numTemps(0),
           branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)) {
-
         fun = JitLLVM::declare(cls, name, t::nativeFunction);
         // prevent Wunused
         this->cls->size();
@@ -181,6 +211,11 @@ class LowerFunctionLLVM {
     }
 
     struct Variable {
+        bool deadMove(const Variable& other) const {
+            return slot == other.slot ||
+                   (stackSlot != (size_t)-1 && stackSlot == other.stackSlot);
+        }
+
         enum Kind {
             MutableLocalRVariable,
             ImmutableLocalRVariable,
@@ -202,11 +237,10 @@ class LowerFunctionLLVM {
                                   llvm::Value* basepointer) {
             assert(i->producesRirResult());
             assert(!LdConst::Cast(i));
-            assert(!CastType::Cast(i));
             assert(representationOf(i) == Representation::Sexp);
             auto ptr = builder.CreateGEP(basepointer, {c(pos), c(1)});
             ptr->setName(i->getRef());
-            return {ImmutableLocalRVariable, ptr, false};
+            return {ImmutableLocalRVariable, ptr, false, pos};
         }
 
         static Variable Mutable(Instruction* i, AllocaInst* location) {
@@ -214,14 +248,14 @@ class LowerFunctionLLVM {
             auto r = representationOf(i);
             assert(r != Representation::Sexp);
             location->setName(i->getRef());
-            return {MutablePrimitive, location, false};
+            return {MutablePrimitive, location, false, (size_t)-1};
         }
 
         static Variable Immutable(Instruction* i) {
             assert(i->producesRirResult());
             auto r = representationOf(i);
             assert(r != Representation::Sexp);
-            return {ImmutablePrimitive, nullptr, false};
+            return {ImmutablePrimitive, nullptr, false, (size_t)-1};
         }
 
         llvm::Value* get(IRBuilder<>& builder) {
@@ -274,6 +308,7 @@ class LowerFunctionLLVM {
 
         llvm::Value* slot;
         bool initialized;
+        size_t stackSlot;
     };
 
     class PhiBuilder {
@@ -314,7 +349,50 @@ class LowerFunctionLLVM {
         return PhiBuilder(builder, type);
     }
 
-    std::unordered_map<Instruction*, Variable> variables;
+    std::unordered_map<Instruction*, Variable> variables_;
+    void setVariable(Instruction* variable, llvm::Value* val,
+                     bool volatile_ = false) {
+        // silently drop dead variables...
+        if (!liveness.count(variable))
+            return;
+        assert(liveness.live(currentInstr, variable));
+        variables_.at(variable).set(builder, val, volatile_);
+    }
+    void updateVariable(Instruction* variable, llvm::Value* val) {
+        // silently drop dead variables...
+        if (!liveness.count(variable))
+            return;
+
+        if (auto phi = Phi::Cast(variable)) {
+            bool isNext = false;
+            for (auto n : currentBB->succsessors())
+                if (n == phi->bb())
+                    isNext = true;
+            if (!isNext) {
+                currentBB->owner->printCode(std::cout, true, true);
+                phi->printRecursive(std::cout, 2);
+                (*currentInstr)->printRef(std::cout);
+                std::cout << "\n";
+            }
+            assert(isNext);
+        } else {
+            assert(liveness.live(currentInstr, variable));
+        }
+        variables_.at(variable).update(builder, val);
+    }
+    llvm::Value* getVariable(Instruction* variable) {
+        assert(liveness.count(variable));
+
+        if (Phi::Cast(variable)) {
+            assert(variable->bb() == currentBB);
+        } else {
+            if (currentInstr == currentBB->begin())
+                assert(liveness.liveAtBBEntry(currentBB, variable));
+            else
+                assert(liveness.live(currentInstr - 1, variable));
+        }
+        return variables_.at(variable).get(builder);
+    }
 
     llvm::Value* constant(SEXP co, llvm::Type* needed);
     llvm::Value* nodestackPtr();
@@ -430,9 +508,26 @@ class LowerFunctionLLVM {
     llvm::Value* isAltrep(llvm::Value*);
     llvm::Value* sxpinfoPtr(llvm::Value*);
 
+    llvm::Value* container(llvm::Value*);
+
     void protectTemp(llvm::Value* v);
 
+    bool deadMove(Value* a, Instruction* bi) {
+        auto ai = Instruction::Cast(a);
+        auto av = variables_.find(ai);
+        if (av == variables_.end())
+            return false;
+        auto bv = variables_.find(bi);
+        if (bv == variables_.end())
+            return false;
+        auto dead = av->second.deadMove(bv->second);
+        if (dead)
+            bv->second.initialized = true;
+        return dead;
+    }
+
     void ensureNamed(llvm::Value* v);
+    void ensureNamedIfNeeded(Instruction* i, llvm::Value* val = nullptr);
     llvm::Value* shared(llvm::Value* v);
     void assertNamed(llvm::Value* v);
     void ensureShared(llvm::Value* v);
@@ -743,37 +838,16 @@ llvm::Value* LowerFunctionLLVM::loadSxp(Value* v) {
 llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
                                      Representation needed) {
     llvm::Value* res;
-
-    if (auto cast = CastType::Cast(val)) {
-        auto arg = cast->arg(0).val();
-        if (cast->kind == CastType::Upcast && !cast->type.isA(type))
-            type = cast->type;
-        if (cast->kind == CastType::Downcast && !type.isA(cast->type))
-            type = cast->type;
-
-        return load(arg, type, needed);
-    }
-
-    if (auto cp = PirCopy::Cast(val)) {
-        if (!variables.count(cp))
-            return load(cp->arg(0).val(), type, needed);
-    }
-
-    //    if (representationOf(val->type) == t::Int && needed == t::SEXP) {
-    //        if (auto i = Instruction::Cast(val)) {
-    //            if (currentInstr && !currentInstr->bb()->isDeopt() &&
-    //                !LdConst::Cast(i)) {
-    //                i->print(std::cout);
-    //                std::cout << " for ";
-    //                currentInstr->print(std::cout);
-    //                std::cout << "\n";
-    //            }
-    //        }
-    //    }
-
     auto vali = Instruction::Cast(val);
-    if (vali && variables.count(vali))
-        res = variables.at(vali).get(builder);
+
+    if (auto ct = CastType::Cast(val)) {
+        if (LdConst::Cast(ct->arg(0).val())) {
+            return load(ct->arg(0).val(), type, needed);
+        }
+    }
+
+    if (vali && variables_.count(vali))
+        res = getVariable(vali);
     else if (val == Env::elided())
         res = constant(R_NilValue, needed);
     else if (auto e = Env::Cast(val)) {
@@ -965,7 +1039,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     // alloca'd buffer
     std::vector<std::pair<Instruction*, Variable>> savedLocals;
     {
-        for (auto& v : variables) {
+        for (auto& v : variables_) {
             auto& var = v.second;
             if (!var.initialized)
                 continue;
@@ -983,7 +1057,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
             }
         }
         for (auto& v : savedLocals)
-            v.second.set(builder, variables.at(v.first).get(builder));
+            v.second.set(builder, getVariable(v.first));
     }
 
     // Do a setjmp
@@ -1027,7 +1101,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         // execution
         builder.SetInsertPoint(longjmpRestart);
         for (auto& v : savedLocals)
-            variables.at(v.first).update(builder, v.second.get(builder));
+            updateVariable(v.first, v.second.get(builder));
 
         // Also clear all binding caches
         for (const auto& be : bindingsCache)
@@ -1220,14 +1294,12 @@ llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
 }
 
 void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
-    assert(i->producesRirResult() && !CastType::Cast(i) &&
-           !PushContext::Cast(i));
+    assert(i->producesRirResult() && !PushContext::Cast(i));
     val = convert(val, i->type, false);
     if (!val->hasName())
         val->setName(i->getRef());
 
-    variables.at(i).set(builder, val,
-                        inPushContext && escapesInlineContext.count(i));
+    setVariable(i, val, inPushContext && escapesInlineContext.count(i));
 }
 
 llvm::Value* LowerFunctionLLVM::isExternalsxp(llvm::Value* v, uint32_t magic) {
@@ -1482,6 +1554,25 @@ llvm::Value* LowerFunctionLLVM::shared(llvm::Value* v) {
     return builder.CreateICmpUGT(named, c(1ul));
 }
 
+void LowerFunctionLLVM::ensureNamedIfNeeded(Instruction* i, llvm::Value* val) {
+    if ((representationOf(i) == t::SEXP && variables_.count(i) &&
+         variables_.at(i).initialized)) {
+
+        auto adjust = refcount.atCreation.find(i);
+        if (adjust != refcount.atCreation.end()) {
+            if (adjust->second == NeedsRefcountAdjustment::SetShared) {
+                if (!val)
+                    val = load(i);
+                ensureShared(val);
+            } else if (adjust->second == NeedsRefcountAdjustment::EnsureNamed) {
+                if (!val)
+                    val = load(i);
+                ensureShared(val);
+            }
+        }
+    }
+}
+
 void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
@@ -1610,6 +1701,12 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.SetInsertPoint(ok);
 }
 
+llvm::Value* LowerFunctionLLVM::container(llvm::Value* v) {
+    auto casted = builder.CreatePtrToInt(v, t::i64);
+    auto container = builder.CreateSub(casted, c(sizeof(VECTOR_SEXPREC)));
+    return builder.CreateIntToPtr(container, t::SEXP);
+}
+
 llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
                                         const std::vector<llvm::Value*>& args) {
 #ifdef ENABLE_SLOWASSERT
@@ -1640,7 +1737,7 @@ llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
     if (v->getType() == t::Int) {
         if (false) {
             std::ostringstream dbg;
-            currentInstr->printRecursive(dbg, 2);
+            (*currentInstr)->printRecursive(dbg, 2);
             auto l = new std::string;
             l->append(dbg.str());
             return call(NativeBuiltins::newIntDebug,
@@ -1964,7 +2061,7 @@ bool LowerFunctionLLVM::compileDotcall(
     size_t pos = 0;
     calli->eachCallArg([&](Value* v) {
         if (auto exp = ExpandDots::Cast(v)) {
-            args.push_back(exp->arg(0).val());
+            args.push_back(exp);
             newNames.push_back(Pool::insert(R_DotsSymbol));
             seenDots = true;
         } else {
@@ -2095,6 +2192,15 @@ bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
 };
 
 bool LowerFunctionLLVM::tryCompile() {
+    {
+        auto arg = fun->arg_begin();
+        for (size_t i = 0; i < argNames.size(); ++i) {
+            args.push_back(arg);
+            args.back()->setName(argNames[i]);
+            arg++;
+        }
+    }
+
     std::unordered_map<BB*, BasicBlock*> blockMapping_;
     auto getBlock = [&](BB* bb) {
         auto b = blockMapping_.find(bb);
@@ -2109,6 +2215,11 @@ bool LowerFunctionLLVM::tryCompile() {
     builder.SetInsertPoint(entryBlock);
     nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop,
                                         PointerType::get(t::stackCellPtr, 0));
+    numLocals++;
+    // Store the code object as the first element of our frame, for the value
+    // profiler to find it.
+    incStack(1, false);
+    stack({container(paramCode())});
     {
         SmallSet<std::pair<Value*, SEXP>> bindings;
         Visitor::run(code->entry, [&](Instruction* i) {
@@ -2137,39 +2248,36 @@ bool LowerFunctionLLVM::tryCompile() {
     std::unordered_map<Instruction*, Instruction*> phis;
     {
         basepointer = nodestackPtr();
-        auto needsVariable = [](Instruction* v) {
-            return v->producesRirResult() && !LdConst::Cast(v) &&
-                   !CastType::Cast(v);
-        };
-        auto createVariable = [&](Instruction* i, bool mut) {
+        NativeAllocator allocator(code, cls, liveness, log);
+        allocator.compute();
+        allocator.verify();
+        auto numLocalsBase = numLocals;
+        numLocals += allocator.slots();
+
+        auto createVariable = [&](Instruction* i, bool mut) -> void {
             if (representationOf(i) == Representation::Sexp) {
                 if (mut)
-                    variables[i] = Variable::MutableRVariable(
-                        i, numLocals++, builder, basepointer);
+                    variables_[i] = Variable::MutableRVariable(
+                        i, allocator[i] + numLocalsBase, builder, basepointer);
                 else
-                    variables[i] = Variable::RVariable(i, numLocals++, builder,
-                                                       basepointer);
+                    variables_[i] = Variable::RVariable(
+                        i, allocator[i] + numLocalsBase, builder, basepointer);
             } else {
                 if (mut)
-                    variables[i] =
+                    variables_[i] =
                         Variable::Mutable(i, topAlloca(representationOf(i)));
                 else
-                    variables[i] = Variable::Immutable(i);
+                    variables_[i] = Variable::Immutable(i);
             }
         };
-
-        auto arg = fun->arg_begin();
-        for (size_t i = 0; i < argNames.size(); ++i) {
-            args.push_back(arg);
-            args.back()->setName(argNames[i]);
-            arg++;
-        }
 
         constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
         constantpool = builder.CreateGEP(constantpool, c(1));
 
         Visitor::run(code->entry, [&](BB* bb) {
             for (auto i : *bb) {
+                if (!liveness.count(i) || !allocator.needsAVariable(i))
+                    continue;
                 if (auto phi = Phi::Cast(i)) {
                     createVariable(phi, true);
                     phi->eachArg([&](BB*, Value* v) {
@@ -2193,14 +2301,14 @@ bool LowerFunctionLLVM::tryCompile() {
                 // Everything which is live at the Push context needs to be
                 // mutable, to be able to restore on restart
                 Visitor::run(code->entry, [&](Instruction* j) {
-                    if (needsVariable(j)) {
+                    if (allocator.needsAVariable(j)) {
                         if (representationOf(j) == t::SEXP &&
                             liveness.live(push, j)) {
                             contexts[push].savedSexpPos[j] = numLocals++;
                         }
                         if (!liveness.live(push, j) && liveness.live(pop, j))
                             escapesInlineContext.insert(j);
-                        if (!variables.count(j) &&
+                        if (!variables_.count(j) &&
                             (liveness.live(push, j) || liveness.live(pop, j)))
                             createVariable(j, true);
                     }
@@ -2208,19 +2316,21 @@ bool LowerFunctionLLVM::tryCompile() {
             }
         });
         Visitor::run(code->entry, [&](Instruction* i) {
-            if (needsVariable(i) && !variables.count(i))
+            if (allocator.needsAVariable(i) && liveness.count(i) &&
+                !variables_.count(i))
                 createVariable(i, false);
         });
     }
 
     numLocals += MAX_TEMPS;
-    if (numLocals > 0)
-        incStack(numLocals, true);
+    if (numLocals > 1)
+        incStack(numLocals - 1, true);
 
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
+        currentBB = bb;
         if (!success)
             return;
 
@@ -2228,28 +2338,37 @@ bool LowerFunctionLLVM::tryCompile() {
         inPushContext = blockInPushContext.at(bb);
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
+            currentInstr = it;
             auto i = *it;
             if (!success)
                 return;
 
-            auto needsAdjust = refcount.beforeUse.find(i);
-            if (needsAdjust != refcount.beforeUse.end()) {
-                for (auto& adjust : needsAdjust->second) {
-                    if (representationOf(adjust.first) == t::SEXP) {
-                        if (adjust.second == NeedsRefcountAdjustment::SetShared)
-                            ensureShared(load(adjust.first));
-                        else if (adjust.second ==
-                                 NeedsRefcountAdjustment::EnsureNamed)
-                            ensureNamed(load(adjust.first));
+            auto adjustRefcount = refcount.beforeUse.find(i);
+            if (adjustRefcount != refcount.beforeUse.end()) {
+                i->eachArg([&](Value* v) {
+                    if (representationOf(v) != t::SEXP)
+                        return;
+                    if (auto j = Instruction::Cast(v->followCasts())) {
+                        auto needed = adjustRefcount->second.find(j);
+                        if (needed != adjustRefcount->second.end()) {
+                            auto kind = needed->second;
+                            if (kind == NeedsRefcountAdjustment::SetShared)
+                                ensureShared(load(v));
+                            else if (kind ==
+                                     NeedsRefcountAdjustment::EnsureNamed)
+                                ensureNamed(load(v));
+                        }
                     }
-                }
+                });
             }
 
-            currentInstr = i;
             switch (i->tag) {
-            case Tag::ExpandDots:
-                // handled in calls
+            case Tag::ExpandDots: {
+                auto in = i->arg(0).val();
+                if (!deadMove(in, i))
+                    setVal(i, load(i->arg(0).val()));
                 break;
+            }
 
             case Tag::DotsList: {
                 auto mk = DotsList::Cast(i);
@@ -2288,10 +2407,17 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
+            case Tag::CastType: {
+                auto in = i->arg(0).val();
+                if (LdConst::Cast(i->followCasts()) || deadMove(in, i))
+                    break;
+                setVal(i, load(in, i->type, representationOf(i)));
+                break;
+            }
+
             case Tag::PirCopy: {
-                auto c = PirCopy::Cast(i);
-                auto in = c->arg<0>().val();
-                if (Phi::Cast(in))
+                auto in = i->arg(0).val();
+                if (!deadMove(in, i))
                     setVal(i, load(in, representationOf(i)));
                 break;
             }
@@ -3612,11 +3738,6 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
-            case Tag::CastType: {
-                // Scheduled on use
-                break;
-            }
-
             case Tag::Return: {
                 auto res = loadSxp(Return::Cast(i)->arg<0>().val());
                 if (numLocals > 0)
@@ -3821,8 +3942,6 @@ bool LowerFunctionLLVM::tryCompile() {
                 assert(representationOf(i) == Representation::Integer);
 
                 auto arg = i->arg(0).val();
-                if (auto lgl = AsLogical::Cast(arg))
-                    arg = lgl->arg(0).val();
 
                 if (representationOf(arg) == Representation::Sexp) {
                     auto a = loadSxp(arg);
@@ -4935,7 +5054,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
 
 #define V(Value) case Tag::Value:
-            COMPILER_VALUES(V)
+                COMPILER_VALUES(V)
 #undef V
                 assert(false && "Values should not occur in instructions");
                 success = false;
@@ -4951,45 +5070,29 @@ bool LowerFunctionLLVM::tryCompile() {
             if (!success)
                 return;
 
-            Instruction* origin = i;
-            llvm::Value* sexpResult = nullptr;
-
-            if (phis.count(i)) {
-                auto phi = phis.at(i);
-                auto r = representationOf(phi);
-                auto inp = PirCopy::Cast(i) ? i->arg(0).val() : i;
-                auto inpv = load(inp, r);
-
-                // If we box this phi input we need to make sure that we are not
-                // missing an ensure named, because the original value would
-                // have gotten an ensureNamed if it weren't unboxed.
-                if (representationOf(inp) != t::SEXP && r == t::SEXP) {
-                    if (auto ii = Instruction::Cast(inp->followCasts())) {
-                        sexpResult = inpv;
-                        origin = ii;
-                    }
-                }
-                variables.at(phi).update(builder, inpv);
-            }
-
-            if (sexpResult ||
-                (representationOf(origin) == t::SEXP &&
-                 variables.count(origin) && variables.at(origin).initialized)) {
-
-                auto adjust = refcount.atCreation.find(origin);
-                if (adjust != refcount.atCreation.end()) {
-                    if (!sexpResult)
-                        sexpResult = load(origin);
-
-                    if (adjust->second == NeedsRefcountAdjustment::SetShared)
-                        ensureShared(sexpResult);
-                    else if (adjust->second ==
-                             NeedsRefcountAdjustment::EnsureNamed)
-                        ensureNamed(sexpResult);
-                }
-            }
+            // Here we directly access the variable to bypass liveness
+            // checks when loading the variable. This is ok, since this is
+            // the current instructoin and we have already written to it...
+            assert(*currentInstr == i);
+            assert(!variables_.count(i) || variables_.at(i).initialized);
+            ++currentInstr;
+            if (!Phi::Cast(i))
+                ensureNamedIfNeeded(i);
 
             numTemps = 0;
+        }
+
+        // Copy of phi input values
+        for (auto i : *bb) {
+            if (phis.count(i)) {
+                auto phi = phis.at(i);
+                if (deadMove(i, phi))
+                    continue;
+                auto r = representationOf(phi->type);
+                auto inpv = load(i, r);
+                ensureNamedIfNeeded(phi, inpv);
+                updateVariable(phi, inpv);
+            }
         }
 
         if (bb->isJmp())
@@ -5009,6 +5112,42 @@ bool LowerFunctionLLVM::tryCompile() {
         // fun->dump();
         // code->printCode(std::cout, true, true);
     }
+
+    std::unordered_set<rir::Code*> codes;
+    std::unordered_map<size_t, std::pair<rir::Code*, Opcode*>> variableMapping;
+#ifdef DEBUG_REGISTER_MAP
+    std::unordered_set<size_t> usedSlots;
+#endif
+    for (auto& var : variables_) {
+        auto i = var.first;
+        if (representationOf(i) != Representation::Sexp)
+            continue;
+        if (!i->typeFeedback.origin)
+            continue;
+        if (!var.second.initialized)
+            continue;
+        if (var.second.stackSlot < PirRegisterMap::MAX_SLOT_IDX) {
+            codes.insert(i->typeFeedback.srcCode);
+            variableMapping[var.second.stackSlot] = {i->typeFeedback.srcCode,
+                                                     i->typeFeedback.origin};
+#ifdef DEBUG_REGISTER_MAP
+            assert(!usedSlots.count(var.second.stackSlot));
+            usedSlots.insert(var.second.stackSlot);
+#endif
+        }
+        if (variableMapping.size() == PirRegisterMap::MAX_SLOT_IDX)
+            break;
+    }
+    if (!variableMapping.empty()) {
+        registerMap = PirRegisterMap::New(codes, variableMapping);
+#ifdef DEBUG_REGISTER_MAP
+        for (auto m : variableMapping) {
+            auto origin = registerMap->getOriginOfSlot(m.first);
+            assert(origin == m.second.second);
+        }
+#endif
+    }
+
     return success;
 }
 
@@ -5024,15 +5163,16 @@ void* LowerLLVM::tryCompile(
     ClosureVersion* cls, Code* code,
     const std::unordered_map<Promise*, unsigned>& m,
     const NeedsRefcountAdjustment& refcount,
-    const std::unordered_set<Instruction*>& needsLdVarForUpdate) {
+    const std::unordered_set<Instruction*>& needsLdVarForUpdate,
+    LogStream& log) {
 
     JitLLVM::createModule();
     auto mangledName = JitLLVM::mangle(cls->name());
     LowerFunctionLLVM funCompiler(mangledName, cls, code, m, refcount,
-                                  needsLdVarForUpdate);
+                                  needsLdVarForUpdate, log);
     if (!funCompiler.tryCompile())
         return nullptr;
-
+    registerMap = funCompiler.registerMap;
     return JitLLVM::tryCompile(funCompiler.fun);
 }
 
