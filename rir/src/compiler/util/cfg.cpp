@@ -49,49 +49,114 @@ bool CFG::isPredecessor(BB* a, BB* b) const {
         std::bind(std::equal_to<BB*>(), std::placeholders::_1, a));
 }
 
-bool DominanceGraph::DomTree::merge(const DomTree& other) {
-    bool changed = false;
-    auto it = container.begin();
-    while (it != container.end()) {
-        if (std::find(other.container.begin(), other.container.end(), *it) ==
-            other.container.end()) {
-            it = container.erase(it);
-            changed = true;
-        } else {
-            it++;
-        }
-    }
-    return changed;
-}
+// TODO: fix bug, algorithm assumes start node has no predecessor...
+DominanceGraph::DominanceGraph(Code* start) : idom(start->nextBBId) {
+    int size = start->nextBBId;
+    int N = 0;
 
-DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
-    // Static Analysis computes the set of all dominating bb's, for every bb
-    // reachable from start. Runs until none of the sets grow anymore.
+    std::vector<SmallSet<BB*>> bucket(size);
+    std::vector<int> dfnum(size, -1);
+    BBList semi(size);
+    BBList ancestor(size);
+    BBList samedom(size);
+    BBList parent(size);
+    BBList best(size);
+    BBList vertex;
+    vertex.reserve(size); // can't assume BBs are contiguously numbered
 
-    std::stack<BB*> todo;
-    todo.push(start->entry);
+    std::function<void()> DFS = [&]() {
+        std::stack<BB*> nodes;
+        std::stack<BB*> parents;
+        nodes.push(start->entry);
+        parents.push(nullptr);
 
-    while (!todo.empty()) {
-        BB* cur = todo.top();
-        DomTree curState = dominating[cur->id];
-        curState.push_back(cur);
-        curState.seen = true;
+        while (!nodes.empty()) {
+            BB* n = nodes.top();
+            BB* p = parents.top();
+            nodes.pop();
+            parents.pop();
 
-        todo.pop();
+            if (dfnum[n->id] == -1) {
+                dfnum[n->id] = N;
+                vertex.push_back(n);
+                parent[n->id] = p;
+                N++;
 
-        auto apply = [&](BB* bb) {
-            auto& d = dominating[bb->id];
-            if (!d.seen) {
-                d = curState;
-                todo.push(bb);
-                return;
+                for (const auto& w : n->successors()) {
+                    nodes.push(w);
+                    parents.push(n);
+                }
             }
+        }
+    };
 
-            if (d.merge(curState))
-                todo.push(bb);
-        };
-        for (auto suc : cur->successors())
-            apply(suc);
+    std::function<BB*(BB*)> ancestorWithLowestSemi = [&](BB* v) {
+        BB* a = ancestor[v->id];
+        if (ancestor[a->id] != nullptr) {
+            BB* b = ancestorWithLowestSemi(a);
+            ancestor[v->id] = ancestor[a->id];
+            if (dfnum[semi[b->id]->id] < dfnum[semi[best[v->id]->id]->id]) {
+                best[v->id] = b;
+            }
+        }
+        return best[v->id];
+    };
+
+    std::function<void(BB*, BB*)> link = [&](BB* p, BB* n) {
+        ancestor[n->id] = p;
+        best[n->id] = n;
+    };
+
+    // Number nodes by depth-first number.
+    DFS();
+
+    // Iterate over nodes (skipping the root) in reverse DFS order.
+    for (int i = N - 1; i >= 1; --i) {
+        BB* n = vertex[i];
+        BB* p = parent[n->id];
+        BB* s = p;
+
+        // Calculate the semidominator of n, based on the Semidominator Theorem
+        for (const auto& v : n->predecessors()) {
+            BB* s1;
+            if (dfnum[v->id] <= dfnum[n->id]) {
+                s1 = v;
+            } else {
+                s1 = semi[ancestorWithLowestSemi(v)->id];
+            }
+            if (dfnum[s1->id] < dfnum[s->id]) {
+                s = s1;
+            }
+        }
+
+        // Calculation of n's dominator is deferred until the path from s to n
+        // has been linked into the forest.
+        semi[n->id] = s;
+        bucket[s->id].insert(n);
+        link(p, n);
+
+        // Now that the path from p to v has been linked into the spanning
+        // forest, calculate the dominator of v, based on the first clause of
+        // the Dominator Theorem, or else defer calculation until y's dominator
+        // is known.
+        for (const auto& v : bucket[p->id]) {
+            BB* y = ancestorWithLowestSemi(v);
+            if (semi[y->id] == semi[v->id]) {
+                idom[v->id] = p;
+            } else {
+                samedom[v->id] = y;
+            }
+        }
+        bucket[p->id].clear();
+    }
+
+    for (int i = 1; i < N; ++i) {
+        BB* n = vertex[i];
+        // Perform the deferred dominator calculations, based on the second
+        // clause of the Dominator THeorem.
+        if (samedom[n->id] != nullptr) {
+            idom[n->id] = idom[samedom[n->id]->id];
+        }
     }
 }
 
@@ -155,29 +220,39 @@ DominanceGraph::BBSet DominanceGraph::dominatedSet(Code* start,
 }
 
 bool DominanceGraph::dominates(BB* a, BB* b) const {
-    const auto& doms = dominating[b->id].container;
-    return std::find(doms.begin(), doms.end(), a) != doms.end();
+    BB* dominator = idom[b->id];
+    while (dominator != nullptr) {
+        if (dominator == a) {
+            return true;
+        }
+        dominator = idom[dominator->id];
+    }
+    return false;
 }
 
 bool DominanceGraph::immediatelyDominates(BB* a, BB* b) const {
-    const auto& doms = dominating[b->id].container;
-    if (doms.empty())
-        return false;
-    return doms[doms.size() - 1] == a;
+    return idom[b->id] == a;
 }
 
 bool DominanceGraph::hasImmediateDominator(BB* bb) const {
-    const auto& doms = dominating[bb->id].container;
-    return doms.size() > 0;
+    return idom[bb->id] != nullptr;
 }
 
 BB* DominanceGraph::immediateDominator(BB* bb) const {
-    const auto& doms = dominating[bb->id].container;
-    return doms[doms.size() - 1];
+    assert(idom[bb->id] != nullptr);
+    return idom[bb->id];
 }
 
-const DominanceGraph::BBList& DominanceGraph::dominators(BB* bb) const {
-    return dominating[bb->id].container;
+const DominanceGraph::BBSet DominanceGraph::dominators(BB* bb) const {
+    BBSet result;
+
+    BB* dominator = idom[bb->id];
+    while (dominator != nullptr) {
+        result.insert(dominator);
+        dominator = idom[dominator->id];
+    }
+
+    return result;
 }
 
 void DominanceGraph::dominatorTreeNext(
@@ -231,5 +306,5 @@ const UsesTree::DependenciesList& UsesTree::at(Instruction* i) const {
     else
         return empty;
 }
-}
-}
+} // namespace pir
+} // namespace rir
