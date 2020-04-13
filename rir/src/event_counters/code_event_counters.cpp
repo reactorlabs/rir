@@ -143,7 +143,12 @@ void CodeEventCounters::profileEnd(const Code* code,
 void CodeEventCounters::countCallSite(const Function* callee,
                                       const Code* callerCode,
                                       const void* address) {
-    const Code* calleeCode = callee->body();
+    countCallSite(callee->body(), callerCode, address);
+}
+
+void CodeEventCounters::countCallSite(const Code* calleeCode,
+                                      const Code* callerCode,
+                                      const void* address) {
     SmallSet<CallSite>& callSites = closureCallSites[calleeCode->uid];
     CallSite callSite(callerCode, address);
 

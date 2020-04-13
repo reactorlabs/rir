@@ -175,6 +175,8 @@ test_features_2:
   script:
     - cd /opt/rir/build/release
     - PIR_NATIVE_BACKEND=1 ./bin/gnur-make-tests check
+    - ENABLE_EVENT_COUNTERS=1 ./bin/tests
+    - ENABLE_EVENT_COUNTERS=1 PIR_NATIVE_BACKEND=1 ./bin/tests
 
 # Run ubsan and gc torture
 test_sanitize:

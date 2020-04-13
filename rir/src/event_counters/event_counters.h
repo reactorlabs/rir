@@ -71,10 +71,6 @@ class EventCounters {
 #define ENABLE_EVENT_COUNTERS EventCounters::isEnabled
 
 namespace events {
-static unsigned LlvmEvaled =
-    EventCounters::instance().registerCounter("LLVM evaled");
-static unsigned RirEvaled =
-    EventCounters::instance().registerCounter("RIR evaled");
 static unsigned PirOptimized =
     EventCounters::instance().registerCounter("PIR optimized");
 static unsigned Unoptimizable =

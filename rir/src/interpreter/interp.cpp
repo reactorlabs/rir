@@ -337,6 +337,12 @@ SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
                  R_bcstack_t*, BindingCache*);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
+#ifdef ENABLE_EVENT_COUNTERS
+    if (ENABLE_EVENT_COUNTERS) {
+        CodeEventCounters::instance().countCallSite(code, call.caller,
+                                                    call.callSiteAddress);
+    }
+#endif
     if ((SETJMP(cntxt.cjmpbuf))) {
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
@@ -1791,20 +1797,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     checkUserInterrupt();
     if (!initialPC && c->nativeCode) {
-#ifdef ENABLE_EVENT_COUNTERS
-        if (ENABLE_EVENT_COUNTERS) {
-            EventCounters::instance().count(events::LlvmEvaled);
-        }
-#endif
         return c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
                              env, callCtxt ? callCtxt->callee : nullptr);
     }
-
-#ifdef ENABLE_EVENT_COUNTERS
-    if (ENABLE_EVENT_COUNTERS && !initialPC) {
-        EventCounters::instance().count(events::RirEvaled);
-    }
-#endif
 
 #ifdef THREADED_CODE
     static void* opAddr[static_cast<uint8_t>(Opcode::num_of)] = {
