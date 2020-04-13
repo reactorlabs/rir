@@ -29,17 +29,10 @@ class DominanceGraph {
     typedef std::unordered_set<BB*> BBSet;
 
   private:
-    class DomTree {
-      public:
-        std::vector<BB*> container;
-        bool seen = false;
-        bool merge(const DomTree& other);
-        void push_back(BB* bb) { container.push_back(bb); }
-    };
-    std::vector<DomTree> dominating;
+    BBList idom;
 
   public:
-    size_t size() const { return dominating.size(); }
+    size_t size() const { return idom.size(); }
     explicit DominanceGraph(Code*);
 
     // Given a Code and a set of BBs, return the set of BBs dominated by the
@@ -51,7 +44,7 @@ class DominanceGraph {
 
     bool hasImmediateDominator(BB* bb) const;
     BB* immediateDominator(BB*) const;
-    const BBList& dominators(BB*) const;
+    const BBSet dominators(BB*) const;
     void dominatorTreeNext(BB* bb, const std::function<void(BB*)>&) const;
 };
 
