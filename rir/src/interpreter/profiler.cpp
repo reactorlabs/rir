@@ -14,6 +14,8 @@
 
 namespace rir {
 
+static RuntimeProfiler instance;
+
 RuntimeProfiler::RuntimeProfiler() {}
 
 RuntimeProfiler::~RuntimeProfiler() {}
@@ -52,7 +54,7 @@ void RuntimeProfiler::sample(int signal) {
     });
 }
 
-static void handler(int signal) { RuntimeProfiler::instance().sample(signal); }
+static void handler(int signal) { instance.sample(signal); }
 
 void RuntimeProfiler::initProfiler() {
 #ifndef __APPLE__
@@ -87,11 +89,6 @@ void RuntimeProfiler::initProfiler() {
     itime.it_interval.tv_nsec = 10000000;
     timer_settime(timer_id, 0, &itime, NULL);
 #endif
-}
-
-RuntimeProfiler& RuntimeProfiler::instance() {
-    static std::unique_ptr<RuntimeProfiler> singleton(new RuntimeProfiler);
-    return *singleton;
 }
 
 } // namespace rir

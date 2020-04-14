@@ -9,7 +9,6 @@ class RuntimeProfiler {
     RuntimeProfiler();
     ~RuntimeProfiler();
     static void initProfiler();
-    static RuntimeProfiler& instance();
     void sample(int);
 };
 
