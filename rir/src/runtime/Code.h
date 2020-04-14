@@ -82,7 +82,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
             deoptCount++;
     }
 
-    PirRegisterMap* pirRegisterMap() {
+    PirRegisterMap* pirRegisterMap() const {
         SEXP map = getEntry(1);
         if (!map)
             return nullptr;

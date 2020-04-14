@@ -23,14 +23,26 @@ PirRegisterMap::PirRegisterMap(
         setEntry(idx++, c->container());
 
     idx = 0;
+
+    std::unordered_map<Opcode*, size_t> reverseMapping;
+
     for (auto s : slots) {
         auto slot = s.first;
         auto origin = s.second;
         assert(slot < MAX_SLOT_IDX);
-        assert(codes.count(origin.first));
-        new (&mdEntries()[idx]) MDEntry;
-        mdEntries()[idx].origin = origin.second;
-        entry[slot] = idx++;
+
+        auto e = reverseMapping.find(origin.second);
+        if (e != reverseMapping.end()) {
+            entry[slot] = e->second;
+        } else {
+            assert(codes.count(origin.first));
+            new (&mdEntries()[idx]) MDEntry;
+            mdEntries()[idx].origin = origin.second;
+            mdEntries()[idx].offset =
+                ((uintptr_t)origin.second - (uintptr_t)origin.first->code());
+            reverseMapping[origin.second] = idx;
+            entry[slot] = idx++;
+        }
     }
 }
 
