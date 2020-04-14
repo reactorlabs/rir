@@ -150,7 +150,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
 
         int nargs = -1;
-        for (RCNTXT* cptr = R_GlobalContext; cptr != NULL;
+        for (RCNTXT* cptr = (RCNTXT*)R_GlobalContext; cptr != NULL;
              cptr = cptr->nextcontext) {
             if ((cptr->callflag & CTXT_FUNCTION) &&
                 cptr->cloenv == call.callerEnv) {

@@ -58,7 +58,7 @@ void printCBacktrace() {
 void printRBacktrace() {
     std::cerr << "\nR Backtrace\n\n";
 
-    RCNTXT* ctx = R_GlobalContext;
+    RCNTXT* ctx = (RCNTXT*)R_GlobalContext;
 
     auto toString = [&](SEXP v, size_t maxLen = 32) {
         rir::CaptureOut c;

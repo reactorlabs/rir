@@ -1389,9 +1389,10 @@ void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
        the generic as the sysparent of the method because the method
        is a straight substitution of the generic.  */
 
-    if (R_GlobalContext->callflag == CTXT_GENERIC)
-        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho,
-                        R_GlobalContext->sysparent, arglist, op);
+    auto global = (RCNTXT*)R_GlobalContext;
+    if (global->callflag == CTXT_GENERIC)
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, global->sysparent,
+                        arglist, op);
     else
         Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, sysparent, arglist, op);
 }
@@ -2175,9 +2176,10 @@ NativeBuiltin NativeBuiltins::forSeqSize = {"forSeqSize",
                                             (void*)&forSeqSizeImpl};
 
 void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op) {
-    if (R_GlobalContext->callflag == CTXT_GENERIC)
+    auto global = (RCNTXT*)R_GlobalContext;
+    if (global->callflag == CTXT_GENERIC)
         Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv,
-                        R_GlobalContext->sysparent, symbol::delayedArglist, op);
+                        global->sysparent, symbol::delayedArglist, op);
     else
         Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv, sysparent,
                         symbol::delayedArglist, op);
