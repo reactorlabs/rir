@@ -90,34 +90,46 @@ void PirType::merge(SEXPTYPE sexptype) {
     }
 }
 
-static bool containsNa(SEXP vector) {
-    for (int i = 0; i < Rf_length(vector); i++) {
-        switch (TYPEOF(vector)) {
-        case INTSXP:
-            if (INTEGER(vector)[i] == NA_INTEGER)
-                return true;
-            break;
-        case REALSXP:
-            if (R_IsNA(REAL(vector)[i]))
-                return true;
-            break;
-        case LGLSXP:
-            if (LOGICAL(vector)[i] == NA_LOGICAL)
-                return true;
-            break;
-        case CPLXSXP:
-            if (R_IsNA(COMPLEX(vector)[i].i))
-                return true;
-            break;
-        case STRSXP:
-            if (STRING_ELT(vector, i) == NA_STRING)
-                return true;
-            break;
-        default:
-            break;
+static bool maybeContainsNAOrNaN(SEXP vector) {
+    if (TYPEOF(vector) == CHARSXP) {
+        return vector == NA_STRING;
+    } else if (TYPEOF(vector) == INTSXP || TYPEOF(vector) == REALSXP ||
+               TYPEOF(vector) == LGLSXP || TYPEOF(vector) == CPLXSXP ||
+               TYPEOF(vector) == STRSXP) {
+        if (XLENGTH(vector) > MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK) {
+            return true;
         }
+        for (int i = 0; i < XLENGTH(vector); i++) {
+            switch (TYPEOF(vector)) {
+            case INTSXP:
+                if (INTEGER(vector)[i] == NA_INTEGER)
+                    return true;
+                break;
+            case REALSXP:
+                if (ISNAN(REAL(vector)[i]))
+                    return true;
+                break;
+            case LGLSXP:
+                if (LOGICAL(vector)[i] == NA_LOGICAL)
+                    return true;
+                break;
+            case CPLXSXP:
+                if (ISNAN(COMPLEX(vector)[i].i))
+                    return true;
+                break;
+            case STRSXP:
+                if (STRING_ELT(vector, i) == NA_STRING)
+                    return true;
+                break;
+            default:
+                assert(false);
+            }
+        }
+        return false;
+    } else {
+        // Not a type which can represent NaN
+        return true;
     }
-    return false;
 }
 
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
@@ -136,8 +148,8 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
             flags_.reset(TypeFlags::maybeNotScalar);
-        if (!containsNa(e))
-            flags_.reset(TypeFlags::maybeNa);
+        if (!maybeContainsNAOrNaN(e))
+            flags_.reset(TypeFlags::maybeNAOrNaN);
     }
 }
 
@@ -154,6 +166,7 @@ void PirType::merge(const ObservedValues& other) {
         flags_.set(TypeFlags::maybeObject);
         flags_.set(TypeFlags::maybeAttrib);
         flags_.set(TypeFlags::maybeNotScalar);
+        flags_.set(TypeFlags::maybeNAOrNaN);
         return;
     }
 
@@ -165,6 +178,7 @@ void PirType::merge(const ObservedValues& other) {
             flags_.set(TypeFlags::maybeAttrib);
         if (!record.scalar)
             flags_.set(TypeFlags::maybeNotScalar);
+        flags_.set(TypeFlags::maybeNAOrNaN);
 
         merge(record.sexptype);
     }
@@ -186,7 +200,7 @@ bool PirType::isInstance(SEXP val) const {
             return PirType(RType::env).isA(*this);
         return PirType(val).isA(*this);
     } else if (*this == NativeType::test) {
-        return IS_SIMPLE_SCALAR(val, LGLSXP) && *LOGICAL(val) != NA_LOGICAL;
+        return val == R_TrueValue || val == R_FalseValue;
     } else {
         std::cerr << "can't check val is instance of " << *this << ", value:\n";
         Rf_PrintValue(val);

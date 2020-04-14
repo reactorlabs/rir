@@ -100,7 +100,7 @@ completely disables the PIR optimizer. As follows are the different Options avai
 #### Type Annotations (aka type flags)
 
 * `$` : Is scalar
-* `#` : Is never NA, never contains NA values if a vector
+* `#` : Is never NA or NaN
 * `^` : May be lazy (and wrapped in a promise)
 * `~` : May be wrapped in a promise (but evaluated)
 * `?` : May be missing

@@ -212,6 +212,15 @@ static bool testEagerCallArgs(ClosureVersion* f) {
     return success;
 }
 
+static bool testAnAddIsNotNAOrNaN(ClosureVersion* f) {
+    bool success = false;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (Add::Cast(i) && !i->type.maybeNAOrNaN())
+            success = true;
+    });
+    return success;
+}
+
 PirCheck::Type PirCheck::parseType(const char* str) {
 #define V(Check)                                                               \
     if (strcmp(str, #Check) == 0)                                              \
