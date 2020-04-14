@@ -54,10 +54,10 @@ void RuntimeProfiler::sample(int signal) {
     });
 }
 
+#ifndef __APPLE__
 static void handler(int signal) { instance.sample(signal); }
 
 void RuntimeProfiler::initProfiler() {
-#ifndef __APPLE__
     bool ENABLE_PROFILER = true; // getenv("PIR_ENABLE_PROFILER") ? true :
                                  // false;
     if (!ENABLE_PROFILER) {
@@ -88,7 +88,9 @@ void RuntimeProfiler::initProfiler() {
     /* 500 million nsecs = .5 secs */
     itime.it_interval.tv_nsec = 10000000;
     timer_settime(timer_id, 0, &itime, NULL);
-#endif
 }
+#else
+void RuntimeProfiler::initProfiler() {}
+#endif
 
 } // namespace rir
