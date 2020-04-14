@@ -14,7 +14,6 @@
 #include <cassert>
 
 typedef struct RCNTXT RCNTXT;
-extern RCNTXT* R_GlobalContext;
 extern "C" SEXP R_syscall(int n, RCNTXT *cptr);
 extern "C" SEXP R_sysfunction(int n, RCNTXT *cptr);
 

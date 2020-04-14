@@ -134,7 +134,7 @@ static RCNTXT* deoptimizationStartedAt = nullptr;
 static bool isDeoptimizing() {
     if (!deoptimizationStartedAt)
         return false;
-    RCNTXT* cur = R_GlobalContext;
+    RCNTXT* cur = (RCNTXT*)R_GlobalContext;
     while (cur) {
         if (cur == deoptimizationStartedAt)
             return true;
@@ -143,7 +143,9 @@ static bool isDeoptimizing() {
     deoptimizationStartedAt = nullptr;
     return false;
 }
-static void startDeoptimizing() { deoptimizationStartedAt = R_GlobalContext; }
+static void startDeoptimizing() {
+    deoptimizationStartedAt = (RCNTXT*)R_GlobalContext;
+}
 static void endDeoptimizing() { deoptimizationStartedAt = nullptr; }
 
 void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
@@ -152,9 +154,10 @@ void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
        the generic as the sysparent of the method because the method
        is a straight substitution of the generic.  */
 
-    if (R_GlobalContext->callflag == CTXT_GENERIC)
-        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho,
-                        R_GlobalContext->sysparent, arglist, op);
+    auto global = (RCNTXT*)R_GlobalContext;
+    if (global->callflag == CTXT_GENERIC)
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, global->sysparent,
+                        arglist, op);
     else
         Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, sysparent, arglist, op);
 }
@@ -304,7 +307,7 @@ SEXP materialize(SEXP rirDataWrapper) {
         auto newEnv = createEnvironment(globalContext(), rirDataWrapper);
         Rf_setAttrib(newEnv, symbol::delayedEnv, rirDataWrapper);
         lazyEnv->clear();
-        RCNTXT* cur = R_GlobalContext;
+        RCNTXT* cur = (RCNTXT*)R_GlobalContext;
         while (cur) {
             if (cur->cloenv == rirDataWrapper)
                 cur->cloenv = newEnv;
@@ -1605,6 +1608,10 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
             SEXP ellipsis = arg;
             if (ellipsis == R_DotsSymbol)
                 ellipsis = Rf_findVar(R_DotsSymbol, env);
+
+            if (TYPEOF(ellipsis) == PROMSXP)
+                ellipsis = promiseValue(ellipsis, ctx);
+
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     auto arg = CAR(ellipsis);
@@ -1624,7 +1631,9 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                     args.push_back(R_MissingArg);
                     names.push_back(R_NilValue);
                 }
+            } else if (ellipsis == R_NilValue) {
             } else {
+                Rf_PrintValue(ellipsis);
                 assert(ellipsis == R_UnboundValue);
             }
         }
