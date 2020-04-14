@@ -60,7 +60,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     static Function* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
-    void disassemble(std::ostream&);
+    // Prints signature and other info
+    void printHeader(std::ostream&) const;
+    void disassemble(std::ostream&) const;
 
     Code* defaultArg(size_t i) const {
         assert(i < numArgs);
@@ -69,34 +71,27 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return Code::unpack(defaultArg_[i]);
     }
 
-    void registerInvocationStart() { body()->registerInvocationStart(); }
-    void registerInvocationEnd() { body()->registerInvocationEnd(); }
-    size_t invocationCount() { return body()->funInvocationCount; }
-    void registerDeopt() { body()->registerDeopt(); }
-    size_t deoptCount() { return body()->deoptCount; }
-
     unsigned size; /// Size, in bytes, of the function and its data
 
 #define RIR_FUNCTION_FLAGS(V)                                                  \
-    V(Deopt)                                                                   \
+    V(Dead)                                                                    \
     V(MarkOpt)                                                                 \
     V(ForceInline)                                                             \
     V(DisableInline)                                                           \
     V(NotOptimizable)                                                          \
     V(NotInlineable)                                                           \
-    V(Dead)                                                                    \
     V(InnerFunction)                                                           \
     V(DisableAllSpecialization)                                                \
     V(DisableArgumentTypeSpecialization)                                       \
-    V(DisableNumArgumentsSepzialization)
+    V(DisableNumArgumentsSerialization)
 
     enum Flag {
 #define V(F) F,
         RIR_FUNCTION_FLAGS(V)
 #undef V
 
-            FIRST = Deopt,
-        LAST = DisableNumArgumentsSepzialization
+            FIRST = Dead,
+        LAST = DisableNumArgumentsSerialization
     };
     EnumSet<Flag> flags;
 
@@ -104,7 +99,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         static Flag inherited[] = {ForceInline, DisableInline,
                                    DisableAllSpecialization,
                                    DisableArgumentTypeSpecialization,
-                                   DisableNumArgumentsSepzialization};
+                                   DisableNumArgumentsSerialization};
         auto f = other->flags;
         if (f.includes(DisableAllSpecialization))
             assert(!signature().assumptions.includes(
@@ -119,6 +114,26 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     unsigned numArgs;
 
     const FunctionSignature& signature() const { return signature_; }
+
+    void registerInvocationStart() {
+        body()->registerInvocationStart();
+#ifdef ENABLE_EVENT_COUNTERS
+        if (ENABLE_EVENT_COUNTERS) {
+            CodeEventCounters::instance().recordHeader(this);
+        }
+#endif
+    }
+    void registerInvocationEnd() { body()->registerInvocationEnd(); }
+    size_t invocationCount() const { return body()->funInvocationCount; }
+    void registerDeopt() {
+        body()->registerDeopt();
+#ifdef ENABLE_EVENT_COUNTERS
+        if (ENABLE_EVENT_COUNTERS) {
+            CodeEventCounters::instance().recordHeader(this);
+        }
+#endif
+    }
+    size_t deoptCount() const { return body()->deoptCount; }
 
   private:
     FunctionSignature signature_; /// pointer to this version's signature

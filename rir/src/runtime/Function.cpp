@@ -50,21 +50,24 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, flags.to_i());
 }
 
-void Function::disassemble(std::ostream& out) {
-    std::cout << "[sigature] ";
-    signature().print(std::cout);
-    std::cout << "\n";
-    std::cout << "[flags]    ";
+void Function::printHeader(std::ostream& out) const {
+    out << "[sigature] ";
+    signature().print(out);
+    out << "\n";
+    out << "[flags]    ";
 #define V(F)                                                                   \
     if (flags.includes(F))                                                     \
-        std::cout << #F << " ";
+        out << #F << " ";
     RIR_FUNCTION_FLAGS(V)
 #undef V
-    std::cout << "\n";
-    std::cout << "[stats]    ";
-    std::cout << "invoked: " << invocationCount()
-              << ", deopt: " << deoptCount();
-    std::cout << "\n";
+    out << "\n";
+    out << "[stats]    ";
+    out << "invoked: " << invocationCount() << ", deopt: " << deoptCount();
+}
+
+void Function::disassemble(std::ostream& out) const {
+    printHeader(out);
+    out << "\n";
     body()->disassemble(out);
 }
 
@@ -75,7 +78,7 @@ static int GLOBAL_SPECIALIZATION_LEVEL =
 void Function::clearDisabledAssumptions(Assumptions& given) const {
     if (flags.contains(Function::DisableArgumentTypeSpecialization))
         given.clearTypeFlags();
-    if (flags.contains(Function::DisableNumArgumentsSepzialization))
+    if (flags.contains(Function::DisableNumArgumentsSerialization))
         given.clearNargs();
     if (flags.contains(Function::DisableAllSpecialization))
         given.clearExcept(pir::Rir2PirCompiler::minimalAssumptions);

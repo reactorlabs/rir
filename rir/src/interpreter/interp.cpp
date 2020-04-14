@@ -951,9 +951,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         UNPROTECT(1);
 
     fun->registerInvocationEnd();
-    assert(result);
 
-    assert(!fun->flags.contains(Function::Deopt));
+    assert(result);
     return result;
 }
 
@@ -1482,7 +1481,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(ctx, stackHeight);
     auto code = f.code;
-    code->registerInvocationStart();
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
@@ -1571,8 +1569,11 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         ostack_pop(ctx);
         if (!innermostFrame)
             ostack_push(ctx, res);
-        return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr,
-                           nullptr);
+        code->registerInvocationStart();
+        SEXP returnValue = evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc,
+                                       nullptr, nullptr);
+        code->registerInvocationEnd();
+        return returnValue;
     };
 
     SEXP res = trampoline();
@@ -1587,8 +1588,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv, res);
         assert(false);
     }
-
-    code->registerInvocationEnd();
 
     ostack_push(ctx, res);
 }
@@ -4082,6 +4081,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             size_t stackHeight = 0;
             for (size_t i = 0; i < m->numFrames; ++i)
                 stackHeight += m->frames[i].stackSize + 1;
+
+#ifdef ENABLE_EVENT_COUNTERS
+            if (ENABLE_EVENT_COUNTERS) {
+                EventCounters::instance().count(events::Deopt);
+            }
+#endif
             m->frames[m->numFrames - 1].code->registerDeopt();
             c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,

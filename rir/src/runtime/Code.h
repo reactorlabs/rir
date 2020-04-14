@@ -95,11 +95,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     void registerDeopt() {
-#ifdef ENABLE_EVENT_COUNTERS
-        if (ENABLE_EVENT_COUNTERS) {
-            EventCounters::instance().count(events::Deopt);
-        }
-#endif
         if (deoptCount < UINT_MAX)
             deoptCount++;
     }

@@ -16,6 +16,7 @@
 namespace rir {
 
 struct DispatchTable;
+struct FunctionSignature;
 struct Function;
 struct Code;
 
@@ -50,10 +51,11 @@ class CodeEventCounters {
 
     struct DispatchTableInfo {
         std::string name;
-        unsigned numClosuresEverAdded;
+        unsigned size;
+        unsigned numDeopts;
 
         DispatchTableInfo(const DispatchTable* dispatchTable,
-                          const std::string& name, unsigned numRemoved);
+                          const std::string& name, unsigned numDeopts);
     };
 
     // Names of the events. names.size() is the # of events
@@ -64,14 +66,13 @@ class CodeEventCounters {
     std::unordered_map<UUID, std::vector<size_t>> counters;
     // Names inferred for closure code blocks
     std::unordered_map<UUID, std::string> closureNames;
-    // Map of closure code uids to RIR call sites so far
+    // Map of closure version code uid's to function header description
+    std::unordered_map<UUID, std::string> functionHeaders;
+    // Map of closure version code uids to RIR call sites so far
     std::unordered_map<UUID, SmallSet<CallSite>> closureCallSites;
     // Map of dispatch table's baseline's body's uid (more reliable than
     // address) to info about the entire table
     std::unordered_map<UUID, DispatchTableInfo> closureDispatchTables;
-    // Map of dispatch table's baseline's body's uid to # of removed deoptimized
-    // closures
-    std::unordered_map<UUID, unsigned> closureNumRemovedSiblings;
 
     CodeEventCounters() {}
 
@@ -87,6 +88,8 @@ class CodeEventCounters {
     void profileEnd(const Code* code, bool isBecauseOfContextJump = false);
     void countCallSite(const Function* callee, const Code* callerCode,
                        const void* address);
+    void countCallSite(const Code* calleeCode, const Code* callerCode,
+                       const void* address);
     void countDeopt(const DispatchTable* dispatchTable);
     void updateDispatchTableInfo(SEXP dispatchTableSexp, SEXP name);
     void updateDispatchTableInfo(const DispatchTable* dispatchTable,
@@ -97,6 +100,8 @@ class CodeEventCounters {
                     const std::string& name);
     void assignName(const Function* function, const std::string& name,
                     size_t version);
+    void recordContainedFunctionHeaders(const DispatchTable* dispatchTable);
+    void recordHeader(const Function* function);
     bool aCounterIsNonzero() const;
     bool hasADispatchTable() const;
     void dump() const;

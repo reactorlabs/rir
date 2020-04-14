@@ -59,8 +59,8 @@ bool CodeEventCounters::CallSite::operator==(const CallSite& other) const {
 
 CodeEventCounters::DispatchTableInfo::DispatchTableInfo(
     const DispatchTable* dispatchTable, const std::string& name,
-    unsigned numRemoved)
-    : name(name), numClosuresEverAdded(dispatchTable->size() + numRemoved) {}
+    unsigned numDeopts)
+    : name(name), size(dispatchTable->size()), numDeopts(numDeopts) {}
 
 unsigned CodeEventCounters::registerCounter(const std::string& name) {
 #ifndef MEASURE
@@ -165,7 +165,10 @@ void CodeEventCounters::countCallSite(const Code* calleeCode,
 void CodeEventCounters::countDeopt(const DispatchTable* dispatchTable) {
     UUID firstCodeUidWhichIdentifiesEntireTable =
         dispatchTable->get(0)->body()->uid;
-    closureNumRemovedSiblings[firstCodeUidWhichIdentifiesEntireTable]++;
+    DispatchTableInfo& info =
+        closureDispatchTables.at(firstCodeUidWhichIdentifiesEntireTable);
+    info.numDeopts++;
+    info.size = dispatchTable->size();
 }
 
 void CodeEventCounters::updateDispatchTableInfo(SEXP dispatchTableSexp,
@@ -178,31 +181,87 @@ void CodeEventCounters::updateDispatchTableInfo(
     const DispatchTable* dispatchTable, const std::string& name) {
     updateDispatchTableButNotContainedFunctionInfo(dispatchTable, name);
     assignName(dispatchTable, name);
+    recordContainedFunctionHeaders(dispatchTable);
 }
 
 void CodeEventCounters::updateDispatchTableButNotContainedFunctionInfo(
     const DispatchTable* dispatchTable, const std::string& name) {
     UUID firstCodeUidWhichIdentifiesEntireTable =
         dispatchTable->get(0)->body()->uid;
-    unsigned numRemoved =
-        closureNumRemovedSiblings[firstCodeUidWhichIdentifiesEntireTable];
+    unsigned numDeopts =
+        closureDispatchTables.count(firstCodeUidWhichIdentifiesEntireTable)
+            ? closureDispatchTables.at(firstCodeUidWhichIdentifiesEntireTable)
+                  .numDeopts
+            : 0;
     closureDispatchTables.emplace(
         firstCodeUidWhichIdentifiesEntireTable,
-        DispatchTableInfo(dispatchTable, name, numRemoved));
+        DispatchTableInfo(dispatchTable, name, numDeopts));
 }
 
 void CodeEventCounters::assignName(const DispatchTable* dispatchTable,
                                    const std::string& name) {
-    for (size_t i = 0; i < dispatchTable->size(); i++) {
+    // Go backwards to prevent conflicts when a new version is added
+    for (int i = dispatchTable->size() - 1; i >= 0; i--) {
         Function* function = dispatchTable->get(i);
         assignName(function, name, i);
     }
 }
 
+static bool
+closureNameConflicts(const std::unordered_map<UUID, std::string> closureNames,
+                     UUID& closureUid, const std::string& closureName) {
+    for (std::pair<UUID, std::string> aClosureUidAndName : closureNames) {
+        UUID aClosureUid = aClosureUidAndName.first;
+        std::string aClosureName = aClosureUidAndName.second;
+
+        if (aClosureUid != closureUid && aClosureName == closureName) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void CodeEventCounters::assignName(const Function* function,
                                    const std::string& name, size_t version) {
     UUID uid = function->body()->uid;
-    closureNames[uid] = name + "$" + std::to_string(version);
+    std::string nameWithVersion = name + "$" + std::to_string(version);
+
+    std::string fullName = nameWithVersion;
+    unsigned confilictResolvingSuffix = 0;
+    while (true) {
+        bool nameConflicts = closureNameConflicts(closureNames, uid, fullName);
+
+        if (!nameConflicts) {
+            break;
+        }
+
+        confilictResolvingSuffix++;
+        fullName =
+            nameWithVersion + "~" + std::to_string(confilictResolvingSuffix);
+    }
+
+    closureNames[uid] = fullName;
+}
+
+void CodeEventCounters::recordContainedFunctionHeaders(
+    const DispatchTable* dispatchTable) {
+    for (size_t i = 0; i < dispatchTable->size(); i++) {
+        Function* function = dispatchTable->get(i);
+        recordHeader(function);
+    }
+}
+
+static std::string getHeader(const Function* function) {
+    std::stringstream headerStream;
+    function->printHeader(headerStream);
+    std::string result = headerStream.str();
+    std::replace(result.begin(), result.end(), '\n', ';');
+    return result;
+}
+
+void CodeEventCounters::recordHeader(const Function* function) {
+    UUID uid = function->body()->uid;
+    functionHeaders[uid] = getHeader(function);
 }
 
 bool CodeEventCounters::aCounterIsNonzero() const { return !counters.empty(); }
@@ -226,6 +285,7 @@ void CodeEventCounters::dumpCodeCounters() const {
 
     // Heading
     file << "name";
+    file << ", function header";
     for (unsigned i = 0; i < names.size(); ++i) {
         file << ", " << names.at(i);
     }
@@ -260,7 +320,16 @@ void CodeEventCounters::dumpCodeCounters() const {
             }
         }
 
+        // Empty string if not a function
+        std::string functionHeaderOrEmpty;
+        if (functionHeaders.count(codeUid)) {
+            functionHeaderOrEmpty = functionHeaders.at(codeUid);
+        } else {
+            functionHeaderOrEmpty = "";
+        }
+
         file << std::quoted(codeName);
+        file << ", " << std::quoted(functionHeaderOrEmpty);
         for (unsigned i = 0; i < names.size(); ++i) {
             file << ", " << codeCounters.at(i);
         }
@@ -279,21 +348,24 @@ void CodeEventCounters::dumpNumClosureVersions() const {
     file.open("num_closures_per_table.csv");
 
     // Heading
-    file << "name, # versions\n";
+    file << "name, final size, # deopts\n";
 
     // Body
     for (std::pair<UUID, DispatchTableInfo> dispatchTableFirstCodeUidAndInfo :
          closureDispatchTables) {
         DispatchTableInfo info = dispatchTableFirstCodeUidAndInfo.second;
 
-        file << std::quoted(info.name) << ", " << info.numClosuresEverAdded
-             << "\n";
+        file << std::quoted(info.name) << ", " << info.size << ", "
+             << info.numDeopts << "\n";
     }
 
     file.close();
 }
 
-void CodeEventCounters::reset() { counters.clear(); }
+void CodeEventCounters::reset() {
+    counters.clear();
+    closureDispatchTables.clear();
+}
 
 void CodeEventCounters::flush() {
     dump();
