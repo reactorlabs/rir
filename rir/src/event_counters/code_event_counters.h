@@ -37,7 +37,7 @@ class CodeEventCounters {
 
         void pushCall(const Code* myAssociatedCode);
 
-        InfoDuringProfile(Timestamp startTime);
+        explicit InfoDuringProfile(const Timestamp& startTime);
     };
 
     struct CallSite {

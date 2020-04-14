@@ -43,7 +43,8 @@ f(6)
 f(7)
 
 # now we have weaker assumptions.
-# First we will optimize, but then we actually deoptimize once because of a type speculation failure (we expect real but get int; i = 1).
+# First we will optimize, but then we actually deoptimize once because of a type speculation failure
+# (we expect real because f was always called with real, but get int; i = 1).
 # Then we immediately optimize a version with fixed type feedback (i = 2..10)
 for (i in 1:10) {
   f(i)

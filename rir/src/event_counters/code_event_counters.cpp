@@ -43,7 +43,8 @@ void CodeEventCounters::InfoDuringProfile::pushCall(
     R_GlobalContext->cenddata = (void*)myAssociatedCode;
 }
 
-CodeEventCounters::InfoDuringProfile::InfoDuringProfile(Timestamp startTime)
+CodeEventCounters::InfoDuringProfile::InfoDuringProfile(
+    const Timestamp& startTime)
     : startTime(startTime) {}
 
 CodeEventCounters::CallSite::CallSite(const Code* callerCode,
@@ -210,7 +211,7 @@ void CodeEventCounters::assignName(const DispatchTable* dispatchTable,
 }
 
 static bool
-closureNameConflicts(const std::unordered_map<UUID, std::string> closureNames,
+closureNameConflicts(const std::unordered_map<UUID, std::string>& closureNames,
                      UUID& closureUid, const std::string& closureName) {
     for (std::pair<UUID, std::string> aClosureUidAndName : closureNames) {
         UUID aClosureUid = aClosureUidAndName.first;
