@@ -140,6 +140,18 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
+    if (auto map = pirRegisterMap()) {
+        map->forEachSlot([&](size_t i, PirRegisterMap::MDEntry& mdEntry) {
+            auto feedback = mdEntry.feedback;
+            out << " - slot #" << i << ": " << mdEntry.offset << " : [";
+            feedback.print(out);
+            out << "] (" << mdEntry.sampleCount << " records - "
+                << (mdEntry.readyForReopt ? "ready" : "not ready") << ")\n";
+        });
+    } else {
+        out << "no feedback\n";
+    }
+
     Opcode* pc = code();
     size_t label = 0;
     std::map<Opcode*, size_t> targets;

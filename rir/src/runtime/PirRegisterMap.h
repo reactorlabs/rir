@@ -49,13 +49,24 @@ struct PirRegisterMap
                sizeof(MDEntry) * entries;
     }
 
-  private:
     struct MDEntry {
         Opcode* origin;
         ObservedValues feedback;
+        size_t offset;
+        size_t sampleCount = 0;
+        bool readyForReopt = false;
     };
-    static_assert(sizeof(MDEntry) == 12, "");
 
+    void
+    forEachSlot(const std::function<void(size_t, MDEntry&)>& iterationBody) {
+        for (size_t id = 0; id < MAX_SLOT_IDX; id++) {
+            if (entry[id] < MAX_SLOT_IDX) {
+                iterationBody(id, getMDEntryOfSlot(id));
+            }
+        }
+    }
+
+  private:
     MDEntry& getMDEntryOfSlot(size_t slot) {
         assert(slot < MAX_SLOT_IDX);
         auto idx = entry[slot];
