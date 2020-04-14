@@ -1569,11 +1569,8 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         ostack_pop(ctx);
         if (!innermostFrame)
             ostack_push(ctx, res);
-        code->registerInvocationStart();
-        SEXP returnValue = evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc,
-                                       nullptr, nullptr);
-        code->registerInvocationEnd();
-        return returnValue;
+        return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr,
+                           nullptr);
     };
 
     SEXP res = trampoline();
@@ -2734,11 +2731,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             advanceImmediate();
 
-            fun->registerInvocationStart();
             if (fun->signature().envCreation ==
                 FunctionSignature::Environment::CallerProvided) {
                 res = rirCall(call, ctx);
             } else {
+                fun->registerInvocationStart();
                 ArgsLazyData lazyArgs(call.callee, call.suppliedArgs,
                                       call.stackArgs, call.names, ctx);
                 // Currently we cannot recreate the original arglist if we
@@ -2749,8 +2746,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 supplyMissingArgs(call, fun);
                 res = rirCallTrampoline(call, fun, symbol::delayedEnv,
                                         (SEXP)&lazyArgs, ctx);
+                fun->registerInvocationEnd();
             }
-            fun->registerInvocationEnd();
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 
@@ -4087,7 +4084,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 EventCounters::instance().count(events::Deopt);
             }
 #endif
-            m->frames[m->numFrames - 1].code->registerDeopt();
             c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
                                    m->numFrames - 1, stackHeight);
@@ -4339,7 +4335,10 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     // TODO: do we not need an RCNTXT here?
 
     if (auto code = Code::check(what)) {
-        return evalRirCodeExtCaller(code, globalContext(), env);
+        code->registerInvocationStart();
+        SEXP res = evalRirCodeExtCaller(code, globalContext(), env);
+        code->registerInvocationEnd();
+        return res;
     }
 
     Function* fun;

@@ -1015,7 +1015,6 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
         EventCounters::instance().count(events::Deopt);
     }
 #endif
-    m->frames[m->numFrames - 1].code->registerDeopt();
     c->registerDeopt();
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);

@@ -26,6 +26,7 @@ void CodeEventCounters::InfoDuringProfile::popCall(bool explicitlyEndContext) {
     assert(!frames.empty());
     if (explicitlyEndContext) {
         RCNTXT& rContext = frames.top();
+        assert(R_GlobalContext == &rContext);
         endcontext(&rContext);
     }
     frames.pop();
@@ -35,10 +36,11 @@ void CodeEventCounters::InfoDuringProfile::pushCall(
     const Code* myAssociatedCode) {
     frames.push({});
     RCNTXT& rContext = frames.top();
-    rContext.cend = &rir::endProfileBecauseOfContextSwitch;
-    rContext.cenddata = (void*)myAssociatedCode;
     begincontext(&rContext, CTXT_CCODE, R_NilValue, R_BaseEnv, R_BaseEnv,
                  R_NilValue, R_NilValue);
+    assert(R_GlobalContext == &rContext);
+    R_GlobalContext->cend = &rir::endProfileBecauseOfContextSwitch;
+    R_GlobalContext->cenddata = (void*)myAssociatedCode;
 }
 
 CodeEventCounters::InfoDuringProfile::InfoDuringProfile(Timestamp startTime)
