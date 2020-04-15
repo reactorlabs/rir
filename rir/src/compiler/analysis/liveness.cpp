@@ -23,7 +23,6 @@ LivenessIntervals::LivenessIntervals(Code* code, unsigned bbsSize) {
             todo.insert(bb);
     });
 
-    // restart:
     while (!todo.empty()) {
 
         while (!todo.empty()) {
