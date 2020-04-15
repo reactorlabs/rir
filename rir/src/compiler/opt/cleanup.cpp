@@ -229,11 +229,16 @@ class TheCleanup {
 
         std::unordered_map<BB*, BB*> toDel;
         Visitor::run(function->entry, [&](BB* bb) {
+            // Prevent this removal from merging the entry block with its
+            // successor. We always want an empty, separate entry block, so
+            // that it will never have predecessors.
+            if (function->entry == bb)
+                return;
             // If bb is a jump to non-merge block, we merge it with the next
             if (bb->isJmp() && bb->next()->hasSinglePred()) {
-                bool block = false;
                 // Prevent this removal from merging a phi input block with the
                 // block the phi resides in
+                bool block = false;
                 if (usedBB.count(bb))
                     for (auto phi : usedBB[bb]) {
                         phi->eachArg([&](BB* in, Value*) {
@@ -246,7 +251,7 @@ class TheCleanup {
                 BB* d = bb->next();
                 while (!d->isEmpty())
                     d->moveToEnd(d->begin(), bb);
-                bb->overrideSuccessors(d->succsessors());
+                bb->overrideSuccessors(d->successors());
                 d->deleteSuccessors();
                 fixupPhiInput(d, bb);
                 toDel[d] = nullptr;
@@ -255,13 +260,18 @@ class TheCleanup {
 
         // Merge blocks
         Visitor::runPostChange(function->entry, [&](BB* bb) {
+            // Prevent this removal from merging the entry block with its
+            // successor. We always want an empty, separate entry block, so
+            // that it will never have predecessors.
+            if (function->entry == bb)
+                return;
             if (bb->isJmp() && bb->hasSinglePred() &&
                 bb->next()->hasSinglePred()) {
                 BB* d = bb->next();
                 while (!d->isEmpty()) {
                     d->moveToEnd(d->begin(), bb);
                 }
-                bb->overrideSuccessors(d->succsessors());
+                bb->overrideSuccessors(d->successors());
                 d->deleteSuccessors();
                 fixupPhiInput(d, bb);
                 toDel[d] = nullptr;
@@ -285,18 +295,12 @@ class TheCleanup {
             }
         });
 
-        if (function->entry->isJmp() &&
-            function->entry->next()->hasSinglePred()) {
-            BB* bb = function->entry;
-            BB* d = bb->next();
-            while (!d->isEmpty()) {
-                d->moveToEnd(d->begin(), bb);
-            }
-            bb->overrideSuccessors(d->succsessors());
-            d->deleteSuccessors();
-            fixupPhiInput(d, bb);
-            toDel[d] = nullptr;
-        }
+        // There used to be code here to merge an entry block with its next
+        // block, if the entry had only one successor and the next block had
+        // only one predecessor. We want to avoid this kind of merge, because
+        // we want to ensure that there is always an empty, separate entry
+        // block with no predecessors.
+
         Visitor::run(function->entry, [&](BB* bb) {
             while (bb->isJmp() && toDel.count(bb->next()))
                 bb->overrideNext(toDel[bb->next()]);

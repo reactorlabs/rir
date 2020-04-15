@@ -54,7 +54,7 @@ function build_r {
     # other than just patching it.
     cd src/library/Recommended
     tar xzf Matrix_1.2-18.tar.gz
-    sed -i -e 's/^stopifnot((st <- system.time(show(M)))\[1\] < 1.0)/((st <- system.time(show(M)))[1] < 1.0);((st <- system.time(show(M)))[1] < 1.0);((st <- system.time(show(M)))[1] < 1.0);stopifnot((st <-  system.time(show(M)))[1] < 1.0)/' Matrix/man/printSpMatrix.Rd
+    sed -i -e 's/^stopifnot((st <- system.time(show(M)))\[1\] < 1.0)/((st <- system.time(show(M)))[1] < 1.0)/' Matrix/man/printSpMatrix.Rd
     rm Matrix_1.2-18.tar.gz
     tar czf Matrix_1.2-18.tar.gz Matrix
     rm -rf Matrix

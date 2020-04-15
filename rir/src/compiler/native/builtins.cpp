@@ -776,20 +776,6 @@ NativeBuiltin NativeBuiltins::binopEnv = {
     (void*)&binopEnvImpl,
 };
 
-static SEXP seq_int(int n1, int n2) {
-    int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
-    SEXP ans = Rf_allocVector(INTSXP, n);
-    int* data = INTEGER(ans);
-    if (n1 <= n2) {
-        while (n1 <= n2)
-            *data++ = n1++;
-    } else {
-        while (n1 >= n2)
-            *data++ = n1--;
-    }
-    return ans;
-}
-
 bool debugBinopImpl = false;
 static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
     SEXP res = nullptr;
@@ -1389,9 +1375,10 @@ void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
        the generic as the sysparent of the method because the method
        is a straight substitution of the generic.  */
 
-    if (R_GlobalContext->callflag == CTXT_GENERIC)
-        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho,
-                        R_GlobalContext->sysparent, arglist, op);
+    auto global = (RCNTXT*)R_GlobalContext;
+    if (global->callflag == CTXT_GENERIC)
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, global->sysparent,
+                        arglist, op);
     else
         Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, sysparent, arglist, op);
 }
@@ -1407,7 +1394,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
-    if (fun->dead || !fun->body()->nativeCode)
+    if (fun->flags.contains(Function::Dead) || !fun->body()->nativeCode)
         return callImpl(fun->body(), astP, callee, env, nargs, available);
 
     auto missing = fun->signature().numArguments - nargs;
@@ -2175,9 +2162,10 @@ NativeBuiltin NativeBuiltins::forSeqSize = {"forSeqSize",
                                             (void*)&forSeqSizeImpl};
 
 void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op) {
-    if (R_GlobalContext->callflag == CTXT_GENERIC)
+    auto global = (RCNTXT*)R_GlobalContext;
+    if (global->callflag == CTXT_GENERIC)
         Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv,
-                        R_GlobalContext->sysparent, symbol::delayedArglist, op);
+                        global->sysparent, symbol::delayedArglist, op);
     else
         Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv, sysparent,
                         symbol::delayedArglist, op);

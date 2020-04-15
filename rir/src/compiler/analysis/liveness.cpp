@@ -155,7 +155,7 @@ LivenessIntervals::LivenessIntervals(Code* code, unsigned bbsSize) {
         // to be processed on the next iteration
         for (auto p : liveAtEnd) {
             auto bb = p.first;
-            for (auto n : bb->succsessors()) {
+            for (auto n : bb->successors()) {
                 if (!liveAtEnd.count(n))
                     todo.insert(n);
             }

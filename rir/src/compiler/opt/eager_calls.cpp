@@ -181,6 +181,8 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 }
 
                 auto availableAssumptions = call->inferAvailableAssumptions();
+                cls->rirFunction()->clearDisabledAssumptions(
+                    availableAssumptions);
 
                 // We picked up more assumptions, let's compile a better
                 // version. Maybe we should limit this at some point, to avoid

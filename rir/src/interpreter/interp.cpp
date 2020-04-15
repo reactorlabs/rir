@@ -134,7 +134,7 @@ static RCNTXT* deoptimizationStartedAt = nullptr;
 static bool isDeoptimizing() {
     if (!deoptimizationStartedAt)
         return false;
-    RCNTXT* cur = R_GlobalContext;
+    RCNTXT* cur = (RCNTXT*)R_GlobalContext;
     while (cur) {
         if (cur == deoptimizationStartedAt)
             return true;
@@ -143,7 +143,9 @@ static bool isDeoptimizing() {
     deoptimizationStartedAt = nullptr;
     return false;
 }
-static void startDeoptimizing() { deoptimizationStartedAt = R_GlobalContext; }
+static void startDeoptimizing() {
+    deoptimizationStartedAt = (RCNTXT*)R_GlobalContext;
+}
 static void endDeoptimizing() { deoptimizationStartedAt = nullptr; }
 
 void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
@@ -152,9 +154,10 @@ void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
        the generic as the sysparent of the method because the method
        is a straight substitution of the generic.  */
 
-    if (R_GlobalContext->callflag == CTXT_GENERIC)
-        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho,
-                        R_GlobalContext->sysparent, arglist, op);
+    auto global = (RCNTXT*)R_GlobalContext;
+    if (global->callflag == CTXT_GENERIC)
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, global->sysparent,
+                        arglist, op);
     else
         Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, sysparent, arglist, op);
 }
@@ -304,7 +307,7 @@ SEXP materialize(SEXP rirDataWrapper) {
         auto newEnv = createEnvironment(globalContext(), rirDataWrapper);
         Rf_setAttrib(newEnv, symbol::delayedEnv, rirDataWrapper);
         lazyEnv->clear();
-        RCNTXT* cur = R_GlobalContext;
+        RCNTXT* cur = (RCNTXT*)R_GlobalContext;
         while (cur) {
             if (cur->cloenv == rirDataWrapper)
                 cur->cloenv = newEnv;
@@ -640,11 +643,9 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-static void addDynamicAssumptionsFromContext(CallContext& call) {
+static void addDynamicAssumptionsFromContext(CallContext& call,
+                                             InterpreterInstance* ctx) {
     Assumptions& given = call.givenAssumptions;
-
-    if (!call.hasNames())
-        given.add(Assumption::CorrectOrderOfArguments);
 
     given.add(Assumption::NoExplicitlyMissingArgs);
     given.add(Assumption::NoReflectiveArgument);
@@ -700,8 +701,17 @@ static void addDynamicAssumptionsFromContext(CallContext& call) {
             given.setSimpleInt(i);
     };
 
+    given.add(Assumption::CorrectOrderOfArguments);
+
+    SEXP formals = FORMALS(call.callee);
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         testArg(i);
+        if (call.hasNames()) {
+            auto name = call.name(i, ctx);
+            if (name != R_NilValue && name != TAG(formals))
+                given.remove(Assumption::CorrectOrderOfArguments);
+            formals = CDR(formals);
+        }
     }
 }
 
@@ -802,16 +812,18 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
-    addDynamicAssumptionsFromContext(call);
+    addDynamicAssumptionsFromContext(call, ctx);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!isDeoptimizing() && !fun->unoptimizable &&
-        fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-        ((fun != table->baseline() && fun->invocationCount() >= 2 &&
-          fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-         (fun->invocationCount() %
-          (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)) {
+    auto flags = fun->flags;
+    if (!isDeoptimizing() && !flags.contains(Function::NotOptimizable) &&
+        (flags.contains(Function::MarkOpt) ||
+         (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
+          ((fun != table->baseline() && fun->invocationCount() >= 2 &&
+            fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
+           (fun->invocationCount() %
+            (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)))) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -819,7 +831,10 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         // arguments might be off. But we want to force compiling a new version
         // exactly for this number of arguments, thus we need to add this as an
         // explicit assumption.
-        if (fun == table->baseline() || given != fun->signature().assumptions) {
+
+        fun->clearDisabledAssumptions(given);
+        if (flags.contains(Function::MarkOpt) || fun == table->baseline() ||
+            given != fun->signature().assumptions) {
             if (Assumptions(given).includes(
                     pir::Rir2PirCompiler::minimalAssumptions)) {
                 // More assumptions are available than this version uses. Let's
@@ -835,6 +850,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                 SEXP name = R_NilValue;
                 if (TYPEOF(lhs) == SYMSXP)
                     name = lhs;
+                if (flags.contains(Function::MarkOpt))
+                    fun->flags.reset(Function::MarkOpt);
                 ctx->closureOptimizer(call.callee, given, name);
                 fun = dispatch(call, table);
             }
@@ -929,7 +946,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     assert(result);
 
-    assert(!fun->deopt);
+    assert(!fun->flags.contains(Function::Deopt));
     return result;
 }
 
@@ -1390,16 +1407,18 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         BINOP_FALLBACK(#op);                                                   \
     } while (false)
 
-static SEXP seq_int(int n1, int n2) {
+SEXP seq_int(int n1, int n2) {
     int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
     SEXP ans = Rf_allocVector(INTSXP, n);
     int* data = INTEGER(ans);
-    if (n1 <= n2) {
-        while (n1 <= n2)
-            *data++ = n1++;
+    int64_t current = n1;
+    int64_t end = n2;
+    if (current <= end) {
+        while (current <= end)
+            *data++ = current++;
     } else {
-        while (n1 >= n2)
-            *data++ = n1--;
+        while (current >= end)
+            *data++ = current--;
     }
     return ans;
 }
@@ -1589,6 +1608,10 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
             SEXP ellipsis = arg;
             if (ellipsis == R_DotsSymbol)
                 ellipsis = Rf_findVar(R_DotsSymbol, env);
+
+            if (TYPEOF(ellipsis) == PROMSXP)
+                ellipsis = promiseValue(ellipsis, ctx);
+
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     auto arg = CAR(ellipsis);
@@ -1608,7 +1631,9 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                     args.push_back(R_MissingArg);
                     names.push_back(R_NilValue);
                 }
+            } else if (ellipsis == R_NilValue) {
             } else {
+                Rf_PrintValue(ellipsis);
                 assert(ellipsis == R_UnboundValue);
             }
         }
@@ -1635,7 +1660,7 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     return args.size();
 }
 
-static bool doubleCanBeCastedToInteger(double n) {
+bool doubleCanBeCastedToInteger(double n) {
     return n >= INT_MIN && n <= INT_MAX && (int)n == n;
 }
 
@@ -1643,7 +1668,28 @@ bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
     auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
 
     // 1. decide fastcase
-    bool fastcase = !inherits(lhs, "factor") || !inherits(rhs, "factor");
+    // In order for the fastcase 2 conditions must be met:
+    // - Both lhs and rhs must not be factors
+    // - rhs must not be coerced to INT_MIN or INT_MAX (because we expect lhs >
+    // rhs or lhs < rhs). To ensure this:
+    //   - lhs must not be a number which gets coerced into an integer
+    //   (implying, it can't be a real/complex which is integral)
+    //   - rhs must not be a number which gets coerced into INT_MIN or INT_MAX
+    //   (implying, it can't be the real/complex representation of INT_MIN or
+    //   INT_MAX)
+    bool fastcase =
+        (!inherits(lhs, "factor") || !inherits(rhs, "factor")) &&
+        !(XLENGTH(lhs) > 0 && XLENGTH(rhs) > 0 &&
+          (TYPEOF(lhs) == INTSXP || TYPEOF(lhs) == LGLSXP ||
+           (TYPEOF(lhs) == REALSXP && doubleCanBeCastedToInteger(*REAL(lhs))) ||
+           (TYPEOF(lhs) == CPLXSXP &&
+            doubleCanBeCastedToInteger(COMPLEX(lhs)->r))) &&
+          ((TYPEOF(rhs) == INTSXP &&
+            (*INTEGER(rhs) == INT_MIN || *INTEGER(rhs) == INT_MAX)) ||
+           (TYPEOF(rhs) == REALSXP &&
+            (*REAL(rhs) <= INT_MIN || *REAL(rhs) >= INT_MAX)) ||
+           (TYPEOF(rhs) == CPLXSXP &&
+            (COMPLEX(rhs)->r <= INT_MIN || COMPLEX(rhs)->r >= INT_MAX))));
 
     // 2. in fastcase, run type error effects
     if (fastcase) {
@@ -1694,6 +1740,9 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
     double newRhsNum = (newLhsNum <= rhsNum)
                            ? (newLhsNum + floor(rhsNum - newLhsNum) + 1)
                            : (newLhsNum - floor(newLhsNum - rhsNum) - 1);
+    // nan RHS - should've went to slowcase
+    assert(TYPEOF(newLhs) != INTSXP ||
+           (newRhsNum >= INT_MIN && newRhsNum <= INT_MAX));
     SEXP result = (TYPEOF(newLhs) == INTSXP) ? Rf_ScalarInteger((int)newRhsNum)
                                              : Rf_ScalarReal(newRhsNum);
     return result;
@@ -2626,11 +2675,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1), env,
                              given, ctx);
             auto fun = Function::unpack(version);
-            addDynamicAssumptionsFromContext(call);
-            bool dispatchFail = fun->dead || !matches(call, fun->signature());
+            addDynamicAssumptionsFromContext(call, ctx);
+            auto flags = fun->flags;
+            bool dispatchFail = flags.contains(Function::Dead) ||
+                                !matches(call, fun->signature());
             fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));
-            if (!dispatchFail && !fun->unoptimizable &&
+            if (!dispatchFail && !flags.contains(Function::NotOptimizable) &&
                 fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
                 ((fun != dt->baseline() && fun->invocationCount() >= 2 &&
                   fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
@@ -3344,6 +3395,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     val = PRVALUE(val);
                 res = fastVeceltOk(val);
                 break;
+
+            case TypeChecks::_START_:
+            case TypeChecks::_END_:
+                assert(false);
             }
             ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
 

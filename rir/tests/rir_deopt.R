@@ -44,7 +44,7 @@ rir.disassemble(f)
     g <- rir.compile(function() f(44,2));
     h <- function() g();
     h();
-    rir.markOptimize(g);
+    rir.markFunction(g, Reopt=TRUE);
     h();
     stopifnot(h() == 42);
     rir.disassemble(g);

@@ -73,8 +73,7 @@ class AvailableCheckpoints {
     Checkpoint* next(Instruction* i, Instruction* dependency,
                      const DominanceGraph& dom) {
         Checkpoint* res = next(i);
-        if (res && (dependency->bb() == res->bb() ||
-                    dom.dominates(dependency->bb(), res->bb())))
+        if (res && dom.dominates(dependency->bb(), res->bb()))
             return res;
         return nullptr;
     }

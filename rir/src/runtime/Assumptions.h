@@ -90,6 +90,8 @@ struct Assumptions {
         memcpy((void*)this, pos, sizeof(*this));
     }
     explicit Assumptions(unsigned long val) {
+        // Silence unused field warning
+        (void)unused2;
         memcpy((void*)this, &val, sizeof(*this));
     }
 
@@ -197,6 +199,22 @@ struct Assumptions {
 
     friend struct std::hash<rir::Assumptions>;
     friend std::ostream& operator<<(std::ostream& out, const Assumptions& a);
+
+    void clearExcept(const Flags& filter) {
+        flags = flags & filter;
+        typeFlags.reset();
+        missing = 0;
+    }
+
+    void clearTypeFlags() {
+        typeFlags.reset();
+        flags.reset(Assumption::NoReflectiveArgument);
+    }
+
+    void clearNargs() {
+        missing = 0;
+        flags.reset(Assumption::NoExplicitlyMissingArgs);
+    }
 
   private:
     Flags flags;

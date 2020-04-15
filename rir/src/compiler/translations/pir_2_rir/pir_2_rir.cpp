@@ -298,6 +298,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     LivenessIntervals live(code, code->nextBBId);
     SSAAllocator alloc(code, cls, live, true, log.out());
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
+    alloc.compute();
     alloc.verify();
 
     // Create labels for all bbs
@@ -1155,8 +1156,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     if (PIR_NATIVE_BACKEND) {
         LowerLLVM native;
         if (auto n = native.tryCompile(cls, code, promMap, refcount,
-                                       needsLdVarForUpdate)) {
+                                       needsLdVarForUpdate, log.out())) {
             res->nativeCode = (NativeCode)n;
+            if (native.registerMap)
+                res->pirRegisterMap(native.registerMap);
         }
     }
     return res;
@@ -1179,14 +1182,15 @@ void Pir2Rir::lower(Code* code) {
             if (auto b = CallSafeBuiltin::Cast(*it)) {
                 if (b->builtinId == blt("length") && next != bb->end()) {
                     if (auto t = IsType::Cast(*(it + 1))) {
-                        if (t->typeTest.isA(PirType::simpleScalarInt()) &&
+                        if (t->typeTest.isA(
+                                PirType::simpleScalarInt().notNAOrNaN()) &&
                             t->arg(0).val() == b) {
                             // Type test follows, let's cheat and load this as
                             // an integer already. this avoids boxing in the
                             // native backend. NOTE: don't move this to an
                             // earlier pass, since otherwise the check will be
                             // optimized away!
-                            b->type = PirType::simpleScalarInt();
+                            b->type = PirType::simpleScalarInt().notNAOrNaN();
                             break;
                         }
                     }
@@ -1406,6 +1410,8 @@ rir::Function* Pir2Rir::finalize() {
     auto body = compileCode(ctx, cls);
     log.finalPIR(cls);
     function.finalize(body, signature);
+
+    function.function()->inheritFlags(cls->owner()->rirFunction());
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());

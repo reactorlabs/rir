@@ -145,7 +145,8 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
                         "all",         "any"};
                     if (tests.count(name)) {
                         if (!getType(c->callArg(0).val()).maybeObj())
-                            inferred = PirType(RType::logical).scalar();
+                            inferred =
+                                PirType(RType::logical).scalar().notNAOrNaN();
                         else
                             inferred = i->inferType(getType);
                         break;

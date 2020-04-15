@@ -1,7 +1,34 @@
 # the following functions are intended for the API
 
-rir.markOptimize <- function(what) {
-    .Call("rir_markOptimize", what);
+rir.markFunction <- function(what, which,
+                             Reopt=FALSE,
+                             ForceInline=FALSE,
+                             DisableInline=FALSE,
+                             DisableAllSpecialization=FALSE,
+                             DisableArgumentTypeSpecialization=FALSE,
+                             DisableNumArgumentsSepzialization=FALSE) {
+    doIt = function(n) {
+        .Call("rir_markFunction", what, n,
+              Reopt,
+              ForceInline, DisableInline,
+              DisableAllSpecialization,
+              DisableArgumentTypeSpecialization,
+              DisableNumArgumentsSepzialization);
+    }
+    if (missing(which)) {
+        for (i in rir.functionVersions(what))
+            doIt(i)
+    } else {
+        doIt(which)
+    }
+}
+
+rir.functionVersions <- function(what) {
+    .Call("rir_functionVersions", what);
+}
+
+rir.functionInvocations <- function(what) {
+    .Call("rir_invocation_count", what);
 }
 
 # Returns TRUE if the argument is a rir-compiled closure.
@@ -12,15 +39,6 @@ rir.isValidFunction <- function(what) {
 # prints the disassembled rir function
 rir.disassemble <- function(what, verbose = FALSE) {
     invisible(.Call("rir_disassemble", what, verbose))
-}
-
-# prints how many times the (optimized) rir function was called
-rir.printInvocation <- function(what) {
-    slot <- 0
-    for (count in .Call("rir_invocation_count", what)) {
-      cat(paste("slot ", slot, " called   ", count, "\ttimes\n"))
-      slot <- slot+1
-    }
 }
 
 # compiles given closure, or expression and returns the compiled version.
@@ -139,20 +157,9 @@ pir.program <- function(file) {
     expr()
 }
 
-rir.eval <- function(what, env = globalenv()) {
-    .Call("rir_eval", what, env);
-}
-
 # returns the body of rir-compiled function. The body is the vector containing its ast maps and code objects
 rir.body <- function(f) {
     .Call("rir_body", f);
-}
-
-# prints invocation during evaluation
-# insert a call to .printInvocation()' in R code and the invocation count of the
-# enclosing function will be printed
-.printInvocation <- function() {
-    cat("Invocation count: 0 (not compiled)\n")
 }
 
 # breakpoint during evaluation

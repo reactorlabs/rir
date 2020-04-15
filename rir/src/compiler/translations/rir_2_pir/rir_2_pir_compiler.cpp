@@ -26,12 +26,14 @@ constexpr Assumptions::Flags Rir2PirCompiler::minimalAssumptions;
 constexpr Assumptions Rir2PirCompiler::defaultAssumptions;
 
 void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
-                                     const Assumptions& assumptions,
+                                     const Assumptions& assumptions_,
                                      MaybeCls success, Maybe fail) {
     assert(isValidClosureSEXP(closure));
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto fun = tbl->baseline();
+    Assumptions assumptions = assumptions_;
+    fun->clearDisabledAssumptions(assumptions);
 
     auto frame = RList(FRAME(CLOENV(closure)));
 
@@ -51,8 +53,10 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       const std::string& name, SEXP formals,
                                       SEXP srcRef,
-                                      const Assumptions& assumptions,
+                                      const Assumptions& assumptions_,
                                       MaybeCls success, Maybe fail) {
+    Assumptions assumptions = assumptions_;
+    srcFunction->clearDisabledAssumptions(assumptions);
     OptimizationContext context(assumptions);
     auto closure =
         module->getOrDeclareRirFunction(name, srcFunction, formals, srcRef);
@@ -81,13 +85,13 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     // support it in all cases
     if (!ctx.assumptions.includes(Assumption::StaticallyArgmatched) &&
         closure->formals().hasDots()) {
-        closure->rirFunction()->unoptimizable = true;
+        closure->rirFunction()->flags.set(Function::NotOptimizable);
         logger.warn("no support for ...");
         return fail();
     }
 
     if (closure->rirFunction()->body()->codeSize > Parameter::MAX_INPUT_SIZE) {
-        closure->rirFunction()->unoptimizable = true;
+        closure->rirFunction()->flags.set(Function::NotOptimizable);
         logger.warn("skipping huge function");
         return fail();
     }

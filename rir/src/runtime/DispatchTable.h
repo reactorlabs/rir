@@ -27,8 +27,8 @@ struct DispatchTable
         return Function::unpack(getEntry(i));
     }
 
-    Function* baseline() { return Function::unpack(getEntry(0)); }
-    Function* best() { return get(size() - 1); }
+    Function* baseline() const { return Function::unpack(getEntry(0)); }
+    Function* best() const { return get(size() - 1); }
 
     void baseline(Function* f) {
         assert(f->signature().optimization ==
@@ -53,7 +53,7 @@ struct DispatchTable
         }
         if (i == size())
             return;
-        get(i)->dead = true;
+        get(i)->flags.set(Function::Dead);
         for (; i < size() - 1; ++i) {
             setEntry(i, getEntry(i + 1));
         }
@@ -73,8 +73,11 @@ struct DispatchTable
             if (get(i)->signature().assumptions == assumptions) {
                 // If we override a version we should ensure that we don't call
                 // the old version anymore, or we might end up in a deopt loop.
-                get(i)->dead = true;
-                setEntry(i, fun->container());
+                if (i != 0) {
+                    get(i)->flags.set(Function::Dead);
+                    setEntry(i, fun->container());
+                    assert(get(i) == fun);
+                }
                 return;
             }
             if (!(get(i)->signature().assumptions < assumptions)) {
@@ -83,7 +86,7 @@ struct DispatchTable
         }
         assert(!contains(fun->signature().assumptions));
         if (size() == capacity()) {
-#ifdef ENABLE_SLOWASSERT
+#ifdef DEBUG_DISPATCH
             std::cout << "Tried to insert into a full Dispatch table. Have: \n";
             for (size_t i = 0; i < size(); ++i) {
                 auto e = getEntry(i);
@@ -118,6 +121,8 @@ struct DispatchTable
 
         for (size_t i = 0; i < size() - 1; ++i) {
             assert(get(i)->signature().assumptions <
+                   get(i + 1)->signature().assumptions);
+            assert(get(i)->signature().assumptions !=
                    get(i + 1)->signature().assumptions);
             assert(!(get(i + 1)->signature().assumptions <
                      get(i)->signature().assumptions));

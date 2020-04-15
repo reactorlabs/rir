@@ -199,8 +199,8 @@ class BB {
 
         size_t size() const { return end() - begin(); }
     };
-    const Successors nonDeoptSuccsessors() {
-        auto res = succsessors();
+    const Successors nonDeoptSuccessors() {
+        auto res = successors();
         if (isCheckpoint())
             res.next[1] = nullptr;
         for (auto i = 0; i < 2; ++i)
@@ -211,7 +211,7 @@ class BB {
             return {res.next[1], nullptr};
         return res;
     }
-    const Successors succsessors() { return {next0, next1}; }
+    const Successors successors() { return {next0, next1}; }
 
     void setSuccessors(const Successors& succ) {
         assert(!next0 && !next1);

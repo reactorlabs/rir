@@ -156,11 +156,9 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         auto bb2 = (*b)->bb();
                         if (dom.dominates(bb1, bb2)) {
 
-                            if ((bb1->trueBranch() == bb2) ||
-                                dom.dominates(bb1->trueBranch(), bb2)) {
+                            if (dom.dominates(bb1->trueBranch(), bb2)) {
                                 (*b)->arg(0).val() = True::instance();
-                            } else if ((bb1->falseBranch() == bb2) ||
-                                       dom.dominates(bb1->falseBranch(), bb2)) {
+                            } else if (dom.dominates(bb1->falseBranch(), bb2)) {
                                 (*b)->arg(0).val() = False::instance();
                             } else {
 
@@ -192,8 +190,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                 }
 
                                 for (auto phi : phis) {
-                                    if (phi->bb() == bb2 ||
-                                        dom.dominates(phi->bb(), bb2)) {
+                                    if (dom.dominates(phi->bb(), bb2)) {
                                         (*b)->arg(0).val() = phi;
 
                                         break;
@@ -462,6 +459,17 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
+                } else if ((builtinId == blt("is.na") ||
+                            builtinId == blt("is.nan")) &&
+                           nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    static PirType typeThatDoesntError =
+                        (PirType::num() | RType::chr | RType::str | RType::vec)
+                            .orAttribs();
+                    if (typeThatDoesntError.isA(t) && !t.maybeNAOrNaN()) {
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                    }
                 } else if (builtinId == blt("bodyCode") && nargs == 1) {
                     auto in = i->arg(0).val()->followCastsAndForce();
                     if (auto mk = MkFunCls::Cast(in)) {
@@ -543,7 +551,10 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             if (auto colonInputEffects = ColonInputEffects::Cast(i)) {
                 auto lhs = colonInputEffects->arg<0>().val();
                 auto rhs = colonInputEffects->arg<1>().val();
-                if (!lhs->type.maybeHasAttrs() || !rhs->type.maybeHasAttrs()) {
+                if ((!lhs->type.maybeHasAttrs() ||
+                     !rhs->type.maybeHasAttrs()) &&
+                    !(lhs->type.maybe(PirType::num()) &&
+                      rhs->type.maybe(PirType::num()))) {
                     // We still need to keep the colonInputEffects because it
                     // could raise warnings / errors
                     colonInputEffects->replaceUsesWith(True::instance());

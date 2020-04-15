@@ -394,7 +394,7 @@ class StaticAnalysis {
                     }
 
                     if (Forward)
-                        for (auto suc : bb->succsessors())
+                        for (auto suc : bb->successors())
                             mergeBranch(bb, suc, state, changed);
                     else
                         for (auto suc : bb->predecessors())

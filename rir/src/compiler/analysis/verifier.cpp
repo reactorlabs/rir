@@ -43,6 +43,11 @@ class TheVerifier {
             ok = false;
         }
 
+        if (f->entry->predecessors().size() > 0) {
+            std::cerr << "The entry bb has predecessors.\n";
+            ok = false;
+        }
+
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
             f->print(std::cerr, false);
@@ -92,7 +97,7 @@ class TheVerifier {
     }
 
     void verify(BB* bb, bool inPromise) {
-        for (auto suc : bb->succsessors()) {
+        for (auto suc : bb->successors()) {
             if (!suc->predecessors().count(bb)) {
                 std::cout << "BB" << bb->id << " points to BB" << suc->id
                           << " but that one is not pointing back\n";
@@ -101,9 +106,9 @@ class TheVerifier {
         }
         for (auto p : bb->predecessors()) {
             seenPreds.insert(p);
-            if (!p->succsessors().any([&](BB* suc) { return suc == bb; })) {
+            if (!p->successors().any([&](BB* suc) { return suc == bb; })) {
                 std::cout << "BB" << bb->id << " points back to BB" << p->id
-                          << " but that one does not have us as a succsessor\n";
+                          << " but that one does not have us as a successor\n";
                 ok = false;
             }
         }
@@ -163,23 +168,23 @@ class TheVerifier {
         } else {
             Instruction* last = bb->last();
             if (last->branches()) {
-                if (bb->succsessors().size() == 1) {
+                if (bb->successors().size() == 1) {
                     std::cerr << "split bb" << bb->id
                               << " must end in branch\n";
                     ok = false;
                 }
             } else if (last->exits()) {
-                if (bb->succsessors().size() > 0) {
+                if (bb->successors().size() > 0) {
                     std::cerr << "exit bb" << bb->id << " must end in return\n";
                     ok = false;
                 }
             } else {
-                if (bb->succsessors().size() > 1) {
+                if (bb->successors().size() > 1) {
                     std::cerr << "bb" << bb->id
                               << " has false branch but no branch instr\n";
                     ok = false;
                 }
-                if (bb->succsessors().size() == 0) {
+                if (bb->successors().size() == 0) {
                     std::cerr << "bb" << bb->id << " has no successor\n";
                     ok = false;
                 }
@@ -335,6 +340,17 @@ class TheVerifier {
                 std::cerr << " framestate env cannot be elided\n";
                 ok = false;
             }
+            std::unordered_set<Value*> envs({fs->env()});
+            while (fs->next()) {
+                fs = fs->next();
+                if (envs.count(fs->env())) {
+                    std::cerr << "Error at instruction '";
+                    i->print(std::cerr);
+                    std::cerr << " same env occurs multiple times\n";
+                    ok = false;
+                }
+                envs.insert(fs->env());
+            }
         }
 
         static std::unordered_set<Tag> allowStub{
@@ -361,7 +377,7 @@ class TheVerifier {
                     if ((iv->bb() == i->bb() &&
                          bb->indexOf(iv) > bb->indexOf(i)) ||
                         (iv->bb() != i->bb() && slow &&
-                         !dom(bb->owner).dominates(iv->bb(), bb))) {
+                         !dom(bb->owner).strictlyDominates(iv->bb(), bb))) {
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
                         std::cerr << "': input '";

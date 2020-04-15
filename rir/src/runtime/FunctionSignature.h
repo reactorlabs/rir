@@ -23,6 +23,8 @@ struct FunctionSignature {
         Contextual,
     };
 
+    // TODO: currently unused, since we track the types in the assumptions.
+    // What should we do with it.
     struct ArgumentType {
         bool isEvaluated = false;
         unsigned char type = PROMSXP;
@@ -64,27 +66,13 @@ struct FunctionSignature {
         }
     };
 
-    void pushDefaultArgument() {
-        if (numArguments < MAX_TRACKED_ARGS)
-            arguments[numArguments] = ArgumentType();
-        numArguments++;
-    }
-
-    void pushArgument(ArgumentType arg) {
-        if (numArguments < MAX_TRACKED_ARGS)
-            arguments[numArguments] = arg;
-        numArguments++;
-    }
-
     static FunctionSignature deserialize(SEXP refTable, R_inpstream_t inp) {
         Environment envc = (Environment)InInteger(inp);
         OptimizationLevel opt = (OptimizationLevel)InInteger(inp);
         const Assumptions as = Assumptions::deserialize(refTable, inp);
-        FunctionSignature sig(envc, opt, as);
         unsigned numArgs = InInteger(inp);
-        for (unsigned i = 0; i < numArgs; i++) {
-            sig.pushArgument(ArgumentType::deserialize(refTable, inp));
-        }
+        FunctionSignature sig(envc, opt, as);
+        sig.numArguments = numArgs;
         return sig;
     }
 
@@ -93,28 +81,13 @@ struct FunctionSignature {
         OutInteger(out, (int)optimization);
         assumptions.serialize(refTable, out);
         OutInteger(out, numArguments);
-        for (unsigned i = 0; i < numArguments; i++) {
-            ArgumentType arg =
-                (i < MAX_TRACKED_ARGS) ? arguments[i] : ArgumentType();
-            arg.serialize(refTable, out);
-        }
     }
 
+    void pushDefaultArgument() { numArguments++; }
+
+    void pushArgument(ArgumentType arg) { numArguments++; }
+
     void print(std::ostream& out = std::cout) const {
-        if (formalNargs() > 0) {
-            out << "argTypes: (";
-            for (unsigned i = 0; i != numArguments; i++) {
-                if (i < MAX_TRACKED_ARGS) {
-                    ArgumentType arg = arguments[i];
-                    arg.print(out);
-                } else {
-                    out << "[not tracked]";
-                }
-                if (i + 1 != numArguments)
-                    out << ", ";
-            }
-            out << ") ";
-        }
         if (optimization != OptimizationLevel::Baseline)
             out << "optimized code ";
         if (envCreation == Environment::CallerProvided)
@@ -138,10 +111,8 @@ struct FunctionSignature {
         return numArguments - assumptions.numMissing();
     }
 
-    static const unsigned MAX_TRACKED_ARGS = 4;
     const Environment envCreation;
     const OptimizationLevel optimization;
-    ArgumentType arguments[MAX_TRACKED_ARGS];
     unsigned numArguments = 0;
     const Assumptions assumptions;
 };

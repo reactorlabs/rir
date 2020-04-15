@@ -4,6 +4,7 @@
 #include "common.h"
 
 #include <R.h>
+#include <Rinterface.h>
 #define USE_RINTERNALS
 #include <Rinternals.h>
 

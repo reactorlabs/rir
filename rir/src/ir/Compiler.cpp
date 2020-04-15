@@ -10,6 +10,7 @@
 #include "R/r.h"
 
 #include "../interpreter/cache.h"
+#include "../interpreter/interp.h"
 #include "../interpreter/safe_force.h"
 #include "utils/Pool.h"
 
@@ -276,9 +277,23 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             // if (!colonInputEffects(m, n)) {
             cs << BC::colonInputEffects();
             cs.addSrc(seq);
+            // See interp.cpp for explanation on the conditions for fastcase
             bool staticFastcase =
-                (isConstant(start) && !inherits(start, "factor")) ||
-                (isConstant(end) && !inherits(end, "factor"));
+                (isConstant(start) && !inherits(start, "factor") &&
+                 TYPEOF(start) != INTSXP && TYPEOF(start) != LGLSXP &&
+                 (TYPEOF(start) != REALSXP ||
+                  !doubleCanBeCastedToInteger(*REAL(start))) &&
+                 (TYPEOF(start) != CPLXSXP ||
+                  !doubleCanBeCastedToInteger(COMPLEX(start)->r))) ||
+                (isConstant(end) && !inherits(end, "factor") &&
+                 ((TYPEOF(end) != INTSXP && TYPEOF(end) != REALSXP &&
+                   TYPEOF(end) != CPLXSXP) ||
+                  (TYPEOF(end) == INTSXP && *INTEGER(end) != INT_MIN &&
+                   *INTEGER(end) != INT_MAX) ||
+                  (TYPEOF(end) == REALSXP && *REAL(end) > INT_MIN &&
+                   *REAL(end) < INT_MAX) ||
+                  (TYPEOF(end) == CPLXSXP && COMPLEX(end)->r > INT_MIN &&
+                   COMPLEX(end)->r < INT_MAX)));
             if (staticFastcase) {
                 // We statically know that colonInputEffects is true, so we can
                 // just pop the result and don't need to compile the slowcase
@@ -410,7 +425,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             SEXP fun = Compiler::compileFunction(args[1], args[0]);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
-            DispatchTable::check(fun)->baseline()->innerFunction = true;
+            DispatchTable::check(fun)->baseline()->flags.set(
+                Function::InnerFunction);
             assert(TYPEOF(fun) == EXTERNALSXP);
             cs << BC::push(args[0]) << BC::push(fun) << BC::push(args[2])
                << BC::close();

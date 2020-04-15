@@ -234,8 +234,8 @@ class VisitorImplementation {
         struct Scheduler {
             BB::Successors operator()(BB* cur) const {
                 if (!VISIT_DEOPT_BRANCH)
-                    return cur->nonDeoptSuccsessors();
-                return cur->succsessors();
+                    return cur->nonDeoptSuccessors();
+                return cur->successors();
             }
         };
         const Scheduler scheduler;
