@@ -13,7 +13,7 @@
 namespace rir {
 namespace pir {
 
-void OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
+bool OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
                              LogStream& log) const {
     UnnecessaryContexts unnecessary(function, log);
 
@@ -34,7 +34,7 @@ void OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
     });
 
     if (toRemove.empty())
-        return;
+        return false;
 
     assert(toRemove.size() % 2 == 0);
 
@@ -57,6 +57,7 @@ void OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
     });
 
     assert(toRemove.size() == 0);
+    return true;
 }
 
 } // namespace pir

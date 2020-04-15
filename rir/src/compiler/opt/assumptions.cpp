@@ -149,7 +149,7 @@ struct AvailableAssumptions
     }
 };
 
-void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
+bool OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                                 LogStream& log) const {
     {
         Visitor::run(function->entry, [&](BB* bb) {
@@ -176,6 +176,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                        std::tuple<Instruction*, Checkpoint*, Assume*>>
         hoistAssume;
 
+    bool anyChange = false;
     Visitor::runPostChange(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -213,6 +214,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
 
             if (auto assume = Assume::Cast(instr)) {
                 if (assumptions.at(instr).includes(AAssumption(assume))) {
+                    anyChange = true;
                     next = bb->remove(ip);
                 } else {
                     // We are trying to group multiple assumes into the same
@@ -234,6 +236,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                             while (replaced.count(cp0))
                                 cp0 = replaced.at(cp0);
                             if (assume->checkpoint() != cp0) {
+                                anyChange = true;
                                 hoistAssume[guard] = {guard, cp0, assume};
                                 next = bb->remove(ip);
                             }
@@ -257,6 +260,7 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                         previousCP = replaced.at(previousCP);
                     replaced[cp] = previousCP;
 
+                    anyChange = true;
                     cp->replaceUsesWith(previousCP);
                     auto toDel = bb->deoptBranch();
                     bb->remove(bb->end() - 1);
@@ -280,10 +284,12 @@ void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                     std::get<2>(g)->feedbackOrigin.begin(),
                     std::get<2>(g)->feedbackOrigin.end());
                 ip = bb->insert(ip, assume);
+                anyChange = true;
             }
             ip++;
         }
     });
+    return anyChange;
 }
 
 } // namespace pir

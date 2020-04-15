@@ -8,7 +8,8 @@
 namespace rir {
 namespace pir {
 
-void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
+bool DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
+    bool anyChange = false;
     Visitor::run(function->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
         MkEnv* envInstr;
@@ -93,6 +94,7 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
             // mkenv.
             auto copyMkEnvToDeoptBranch = [&](BB* deoptBranch,
                                               BB* fastPathBranch) {
+                anyChange = true;
                 auto newEnvInstr = envInstr->clone();
                 deoptBranch->insert(deoptBranch->begin(), newEnvInstr);
                 envInstr->replaceUsesIn(newEnvInstr, deoptBranch);
@@ -112,6 +114,7 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
             }
         }
     });
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

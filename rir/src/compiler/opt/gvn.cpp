@@ -10,7 +10,7 @@
 namespace rir {
 namespace pir {
 
-void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
+bool GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<Value*, size_t> number;
     {
@@ -165,7 +165,7 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
                 it++;
         }
         if (reverseNumber.size() == 0)
-            return;
+            return false;
     }
 
     {
@@ -261,6 +261,11 @@ void GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
     // Remove dead instructions here, instead of deferring to the cleanup pass.
     // Sometimes a dead instruction will trip the verifier.
     BBTransform::removeDeadInstrs(cls, 1);
+
+    // The current implementation of GVN almost always finds something to
+    // change. We use the changed flag to determine when to stop optimizing and
+    // it is thus just too noisy.
+    return false;
 }
 
 } // namespace pir

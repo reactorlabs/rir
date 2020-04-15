@@ -13,10 +13,11 @@
 namespace rir {
 namespace pir {
 
-void OptimizeVisibility::apply(RirCompiler&, ClosureVersion* function,
+bool OptimizeVisibility::apply(RirCompiler&, ClosureVersion* function,
                                LogStream& log) const {
     VisibilityAnalysis visible(function, log);
 
+    bool anyChange = false;
     Visitor::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -25,14 +26,17 @@ void OptimizeVisibility::apply(RirCompiler&, ClosureVersion* function,
 
             if (auto vis = Visible::Cast(instr)) {
                 if (!visible.observed(vis)) {
+                    anyChange = true;
                     next = bb->remove(ip);
                 }
             } else if (auto vis = Invisible::Cast(instr)) {
                 if (!visible.observed(vis)) {
+                    anyChange = true;
                     next = bb->remove(ip);
                 }
             } else if (instr->effects.contains(Effect::Visibility)) {
                 if (!visible.observed(instr)) {
+                    anyChange = true;
                     instr->effects.reset(Effect::Visibility);
                 }
             }
@@ -40,6 +44,8 @@ void OptimizeVisibility::apply(RirCompiler&, ClosureVersion* function,
             ip = next;
         }
     });
+
+    return anyChange;
 }
 
 } // namespace pir

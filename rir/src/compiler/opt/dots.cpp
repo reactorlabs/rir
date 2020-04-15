@@ -17,8 +17,9 @@ namespace rir {
 namespace pir {
 
 // Search for ExpandDots(Dotlist(...)) pairs and statically expand them
-void DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
+bool DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
                        LogStream& log) const {
+    bool anyChange = false;
     Visitor::run(closure->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -107,6 +108,7 @@ void DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
                         }
                     }
 
+                    anyChange = true;
                     if (hasNames) {
                         Value* cls = nullptr;
                         if (auto c = Call::Cast(i)) {
@@ -152,6 +154,7 @@ void DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
             ip = next;
         }
     });
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

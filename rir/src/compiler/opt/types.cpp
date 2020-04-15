@@ -15,7 +15,7 @@
 namespace rir {
 namespace pir {
 
-void TypeInference::apply(RirCompiler&, ClosureVersion* function,
+bool TypeInference::apply(RirCompiler&, ClosureVersion* function,
                           LogStream& log) const {
 
     RangeAnalysis rangeAnalysis(function, log);
@@ -212,6 +212,8 @@ void TypeInference::apply(RirCompiler&, ClosureVersion* function,
         if (types.count(i))
             i->type = types.at(i);
     });
+
+    return false;
 }
 
 } // namespace pir

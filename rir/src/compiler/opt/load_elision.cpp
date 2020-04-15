@@ -92,9 +92,10 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
     }
 };
 
-void LoadElision::apply(RirCompiler&, ClosureVersion* function,
+bool LoadElision::apply(RirCompiler&, ClosureVersion* function,
                         LogStream& log) const {
     AvailableLoads loads(function, log);
+    bool anyChange = false;
 
     Visitor::runPostChange(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
@@ -105,6 +106,7 @@ void LoadElision::apply(RirCompiler&, ClosureVersion* function,
             if (LdVar::Cast(instr) || LdFun::Cast(instr)) {
                 auto domald = loads.get(instr);
                 if (auto domld = domald.origin) {
+                    anyChange = true;
                     domld->type = domald.type;
                     instr->replaceUsesWith(domld);
                     next = bb->remove(ip);
@@ -114,6 +116,7 @@ void LoadElision::apply(RirCompiler&, ClosureVersion* function,
             ip = next;
         }
     });
+    return anyChange;
 }
 
 } // namespace pir

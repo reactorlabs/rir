@@ -384,11 +384,12 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 namespace rir {
 namespace pir {
 
-void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
+bool ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                            LogStream& log) const {
     SmallSet<Force*> toInline;
     SmallSet<Force*> needsUpdate;
     SmallMap<Force*, Force*> dominatedBy;
+    bool anyChange = false;
 
     bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
     {
@@ -452,10 +453,12 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
             if (auto f = Force::Cast(*ip)) {
                 if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
                     if (mkarg->isEager()) {
+                        anyChange = true;
                         Value* eager = mkarg->eagerArg();
                         f->replaceUsesWith(eager);
                         next = bb->remove(ip);
                     } else if (toInline.count(f)) {
+                        anyChange = true;
                         Promise* prom = mkarg->prom();
                         BB* split =
                             BBTransform::split(code->nextBBId++, bb, ip, code);
@@ -520,6 +523,7 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
             } else if (auto cast = CastType::Cast(*ip)) {
                 if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
                     if (mk->isEager()) {
+                        anyChange = true;
                         auto eager = mk->eagerArg();
                         cast->replaceUsesWith(eager);
                         next = bb->remove(ip);
@@ -557,6 +561,8 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* code,
     for (auto m : forcedMkArg) {
         m.first->replaceDominatedUses(m.second);
     }
+
+    return anyChange;
 }
 
 size_t Parameter::PROMISE_INLINER_MAX_SIZE =

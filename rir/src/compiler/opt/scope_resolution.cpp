@@ -95,7 +95,8 @@ class TheScopeResolution {
     explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
         : function(function), dom(function), dfront(function, dom), log(log) {}
 
-    void operator()() {
+    bool operator()() {
+        bool anyChange = false;
         ScopeAnalysis analysis(function, log);
         analysis();
         auto& finalState = analysis.result();
@@ -315,6 +316,7 @@ class TheScopeResolution {
                             bb->replace(ip, r);
                             sts->replaceUsesWith(r);
                             replacedValue[sts] = r;
+                            anyChange = true;
                         }
                     }
                     ip = next;
@@ -340,6 +342,7 @@ class TheScopeResolution {
                                 auto theFalse = new LdConst(R_FalseValue);
                                 missing->replaceUsesAndSwapWith(theFalse, ip);
                                 replacedValue[missing] = theFalse;
+                                anyChange = true;
                             }
                         }
                     } else {
@@ -348,6 +351,7 @@ class TheScopeResolution {
                                 auto theTruth = new LdConst(R_TrueValue);
                                 missing->replaceUsesAndSwapWith(theTruth, ip);
                                 replacedValue[missing] = theTruth;
+                                anyChange = true;
                             }
                         });
                     }
@@ -413,6 +417,7 @@ class TheScopeResolution {
                                         ip++;
                                         next = ip + 1;
                                         mk->replaceDominatedUses(deoptEnv);
+                                        anyChange = true;
                                     });
                             }
                         }
@@ -444,6 +449,7 @@ class TheScopeResolution {
                                 assert(!val->type.maybePromiseWrapped() ||
                                        i->type.maybePromiseWrapped());
                                 next = bb->remove(ip);
+                                anyChange = true;
                                 return;
                             }
                         }
@@ -505,6 +511,7 @@ class TheScopeResolution {
                             assert(!val->type.maybePromiseWrapped() ||
                                    i->type.maybePromiseWrapped());
                             next = bb->remove(ip);
+                            anyChange = true;
                             return;
                         }
                     }
@@ -520,6 +527,7 @@ class TheScopeResolution {
                             assert(!r->type.maybePromiseWrapped() ||
                                    i->type.maybePromiseWrapped());
                             replacedValue[lds] = r;
+                            anyChange = true;
                         }
                         return;
                     }
@@ -560,6 +568,7 @@ class TheScopeResolution {
                                 ldfun->replaceUsesWith(guess);
                                 replacedValue[ldfun] = guess;
                                 next = bb->remove(ip);
+                                anyChange = true;
                                 return;
                             }
                         } else {
@@ -610,6 +619,7 @@ class TheScopeResolution {
                                                 auto con = new LdConst(value);
                                                 i->replaceUsesAndSwapWith(con,
                                                                           ip);
+                                                anyChange = true;
                                                 return;
                                             }
                                     }
@@ -647,12 +657,14 @@ class TheScopeResolution {
                         b->replaceUsesWith(safe);
                         bb->replace(ip, safe);
                         replacedValue[b] = safe;
+                        anyChange = true;
                     }
                 }
 
                 ip = next;
             }
         });
+        return anyChange;
     }
 };
 } // namespace
@@ -660,10 +672,10 @@ class TheScopeResolution {
 namespace rir {
 namespace pir {
 
-void ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
+bool ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
                             LogStream& log) const {
     TheScopeResolution s(function, log);
-    s();
+    auto res = s();
 
     // Scope resolution can sometimes generate dead phis, so we remove them
     // here, before they cause errors in later compiler passes. (Sometimes, the
@@ -680,6 +692,7 @@ void ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
     // none of the successor instructions needs that value. The problem is when
     // dead phis are malformed.
     BBTransform::removeDeadInstrs(function, 1);
+    return res;
 }
 
 } // namespace pir

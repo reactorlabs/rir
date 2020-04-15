@@ -8,9 +8,10 @@
 namespace rir {
 namespace pir {
 
-void PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
+bool PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
                             LogStream&) const {
 
+    bool anyChange = false;
     SmallSet<CastType*> candidates;
     SmallSet<Phi*> banned;
     SmallMap<MkArg*, CastType*> candidateProms;
@@ -77,6 +78,7 @@ void PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
     for (const auto& ct : toSplit) {
         auto mk = MkArg::Cast(ct->arg(0).val());
         for (const auto& u : uses.at(ct)) {
+            anyChange = true;
             // copy and insert right before use (or in case of phi, right at the
             // end of the input block)
             auto bb = u->bb();
@@ -104,6 +106,7 @@ void PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
         ct->eraseAndRemove();
         mk->eraseAndRemove();
     }
+    return anyChange;
 }
 
 } // namespace pir

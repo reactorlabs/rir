@@ -13,12 +13,14 @@ class PirTranslator {
   public:
     explicit PirTranslator(const std::string& name) : name(name) {}
 
-    virtual void apply(RirCompiler&, ClosureVersion* function,
+    virtual bool apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const = 0;
     std::string getName() const { return this->name; }
     virtual ~PirTranslator() {}
 
     virtual bool isPhaseMarker() const { return false; }
+
+    virtual unsigned cost() const { return 1; }
 
   protected:
     std::string name;
