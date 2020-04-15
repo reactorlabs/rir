@@ -11,7 +11,6 @@
 #include "interpreter/interp.h"
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
-//#include <set>
 #include <unordered_set>
 #include <list>
 #include <iterator>
@@ -105,12 +104,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                          LogStream&) const {
     std::unordered_map<BB*, bool> branchRemoval;
 
-    // static int iter = 0;
-    // if (iter % 500 == 0) {
-    // std::cerr << "------ iteration iter: " << iter
-    //          << " ------------------------"
-    //          << "\n";
-    //}
     DominanceGraph dom(function);
     DominanceFrontier dfront(function, dom);
     {
@@ -126,8 +119,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         // and even constantfold the `b` branch if either
         // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach
         std::unordered_map<Instruction*, std::vector<Branch*>> condition;
-        // DepthFirstVisitor::run(function->entry, [&](BB* bb) {
-        // Visitor::run(function->entry, [&](BB* bb) {
+
         DominatorTreeVisitor<>(dom).run(function->entry, [&](BB* bb) {
             if (bb->isEmpty())
                 return;
@@ -145,14 +137,10 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         std::unordered_set<Branch*> removed;
 
         for (auto& c : condition) {
-            // continue;
+
             removed.clear();
             auto& uses = c.second;
             if (uses.size() > 1) {
-                // std::cerr << "KEYYYY --------------------------- ";
-                // std::cin.get();
-
-                // std::cerr << "size uses: " << uses.size() << "\n";
 
                 for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
                     if (removed.count(*a))
@@ -167,8 +155,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         auto bb1 = (*a)->bb();
                         auto bb2 = (*b)->bb();
                         if (dom.dominates(bb1, bb2)) {
-                            // std::cerr << "action taken "
-                            //          << "\n";
+
                             if ((bb1->trueBranch() == bb2) ||
                                 dom.dominates(bb1->trueBranch(), bb2)) {
                                 (*b)->arg(0).val() = True::instance();
@@ -176,10 +163,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                        dom.dominates(bb1->falseBranch(), bb2)) {
                                 (*b)->arg(0).val() = False::instance();
                             } else {
-                                // assert(false && "hard case");
-                                // continue;
-                                // std::cerr << "hard case"
-                                //          << "\n";
+
                                 if (!phisPlaced) {
                                     // create and place phi
                                     std::unordered_map<BB*, Value*> inputs;
@@ -189,13 +173,9 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                         False::instance();
                                     auto pl = PhiPlacement(function, inputs,
                                                            dom, dfront);
-                                    if (pl.placement.size() == 0) {
-                                        std::cerr << "bb1: " << bb1->id
-                                                  << " bb2: " << bb2->id
-                                                  << "\n";
-                                    }
+
                                     assert(pl.placement.size() > 0 &&
-                                           "error: 0 phis to place!!!");
+                                           "0 phis to place");
                                     for (auto& placement : pl.placement) {
                                         auto targetForPhi = placement.first;
                                         auto phi = new Phi;
@@ -210,30 +190,15 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     }
                                     phisPlaced = true;
                                 }
-                                // std::cerr << "number of phis: " <<
-                                // phis.size()
-                                //          << "\n";
-                                auto count = 0;
-                                for (auto phi : phis) {
-                                    if (phi->bb() == bb2 ||
-                                        dom.dominates(phi->bb(), bb2)) {
-                                        count++;
-                                    }
-                                }
-                                assert(count == 1 &&
-                                       "more than one phi dominates!!");
-                                auto aa = false;
+
                                 for (auto phi : phis) {
                                     if (phi->bb() == bb2 ||
                                         dom.dominates(phi->bb(), bb2)) {
                                         (*b)->arg(0).val() = phi;
-                                        aa = true;
-                                        // std::cerr << "phi refereced at bb: "
-                                        //          << (*b)->id() << "\n";
+
                                         break;
                                     }
                                 }
-                                assert(aa && "phi not found");
                             }
                         }
                         removed.insert(*b);
@@ -241,7 +206,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             }
         }
-        // iter++;
      }
 
     Visitor::run(function->entry, [&](BB* bb) {
