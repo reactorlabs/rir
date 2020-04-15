@@ -33,6 +33,7 @@ static size_t oldMaxInput = 0;
 static size_t oldInlinerMax = 0;
 static bool oldPreserve = false;
 static unsigned oldSerializeChaos = false;
+static bool oldDeoptChaos = false;
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
@@ -340,16 +341,19 @@ REXPORT SEXP pir_check_warmup_begin(SEXP f, SEXP checksSxp, SEXP env) {
         oldMaxInput = pir::Parameter::MAX_INPUT_SIZE;
         oldInlinerMax = pir::Parameter::INLINER_MAX_SIZE;
         oldSerializeChaos = pir::Parameter::RIR_SERIALIZE_CHAOS;
+        oldDeoptChaos = pir::Parameter::DEOPT_CHAOS;
     }
     pir::Parameter::MAX_INPUT_SIZE = 3500;
     pir::Parameter::INLINER_MAX_SIZE = 4000;
     pir::Parameter::RIR_SERIALIZE_CHAOS = 0;
+    pir::Parameter::DEOPT_CHAOS = false;
     return R_NilValue;
 }
 REXPORT SEXP pir_check_warmup_end(SEXP f, SEXP checksSxp, SEXP env) {
     pir::Parameter::MAX_INPUT_SIZE = oldMaxInput;
     pir::Parameter::INLINER_MAX_SIZE = oldInlinerMax;
     pir::Parameter::RIR_SERIALIZE_CHAOS = oldSerializeChaos;
+    pir::Parameter::DEOPT_CHAOS = oldDeoptChaos;
     return R_NilValue;
 }
 
