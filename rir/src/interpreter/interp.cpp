@@ -1724,7 +1724,8 @@ bool doubleCanBeCastedToInteger(double n) {
            std::modf(n, &intpart) == 0.0;
 }
 
-bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
+// int because the llvm backend represents bools as int
+int colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
     auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
 
     // 1. decide fastcase
