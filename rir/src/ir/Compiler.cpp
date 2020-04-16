@@ -277,23 +277,10 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             // if (!colonInputEffects(m, n)) {
             cs << BC::colonInputEffects();
             cs.addSrc(seq);
-            // See interp.cpp for explanation on the conditions for fastcase
             bool staticFastcase =
-                (isConstant(start) && !inherits(start, "factor") &&
-                 TYPEOF(start) != INTSXP && TYPEOF(start) != LGLSXP &&
-                 (TYPEOF(start) != REALSXP ||
-                  !doubleCanBeCastedToInteger(*REAL(start))) &&
-                 (TYPEOF(start) != CPLXSXP ||
-                  !doubleCanBeCastedToInteger(COMPLEX(start)->r))) ||
-                (isConstant(end) && !inherits(end, "factor") &&
-                 ((TYPEOF(end) != INTSXP && TYPEOF(end) != REALSXP &&
-                   TYPEOF(end) != CPLXSXP) ||
-                  (TYPEOF(end) == INTSXP && *INTEGER(end) != INT_MIN &&
-                   *INTEGER(end) != INT_MAX) ||
-                  (TYPEOF(end) == REALSXP && *REAL(end) > INT_MIN &&
-                   *REAL(end) < INT_MAX) ||
-                  (TYPEOF(end) == CPLXSXP && COMPLEX(end)->r > INT_MIN &&
-                   COMPLEX(end)->r < INT_MAX)));
+                TYPEOF(start) != LANGSXP && TYPEOF(start) != SYMSXP &&
+                TYPEOF(end) != LANGSXP && TYPEOF(end) != SYMSXP &&
+                isColonFastcase(start, end);
             if (staticFastcase) {
                 // We statically know that colonInputEffects is true, so we can
                 // just pop the result and don't need to compile the slowcase

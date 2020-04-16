@@ -347,17 +347,17 @@ DEF_INSTR(asbool_, 0, 1, 1, 0)
  * Otherwise pushes true, and checks the lhs and rhs to throw errors which colon
  * would.
  */
-DEF_INSTR(colon_input_effects_, 0, 0, 1, 1)
+DEF_INSTR(colon_input_effects_, 0, 2, 3, 0)
 
 /**
  * colon_cast_lhs_ :: Converts lhs of colon for simple for loop
  */
-DEF_INSTR(colon_cast_lhs_, 0, 1, 1, 1)
+DEF_INSTR(colon_cast_lhs_, 0, 1, 1, 0)
 
 /**
  * colon_cast_rhs_ :: Converts rhs of colon for simple for loop
  */
-DEF_INSTR(colon_cast_rhs_, 0, 1, 1, 1)
+DEF_INSTR(colon_cast_rhs_, 0, 2, 2, 0)
 
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack

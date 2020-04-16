@@ -780,6 +780,7 @@ class FLI(LdConst, 0, Effects::None()) {
     LdConst(SEXP c, PirType t);
     explicit LdConst(SEXP c);
     explicit LdConst(int i);
+    explicit LdConst(double i);
     void printArgs(std::ostream& out, bool tty) const override;
     int minReferenceCount() const override { return MAX_REFCOUNT; }
     size_t gvnBase() const override { return tagHash(); }
@@ -1163,7 +1164,7 @@ class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(ColonInputEffects, 2, Effect::Error) {
+class FLI(ColonInputEffects, 2, Effects() | Effect::Error | Effect::Warn) {
   public:
     explicit ColonInputEffects(Value* lhs, Value* rhs, unsigned srcIdx)
         : FixedLenInstruction(NativeType::test,

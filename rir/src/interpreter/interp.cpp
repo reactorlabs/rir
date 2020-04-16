@@ -1660,16 +1660,9 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     return args.size();
 }
 
-bool doubleCanBeCastedToInteger(double n) {
-    return n >= INT_MIN && n <= INT_MAX && (int)n == n;
-}
-
-bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
-    auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
-
-    // 1. decide fastcase
+bool isColonFastcase(SEXP lhs, SEXP rhs) {
     // In order for the fastcase 2 conditions must be met:
-    // - Both lhs and rhs must not be factors
+    // - Either lhs or rhs must not be factors
     // - rhs must not be coerced to INT_MIN or INT_MAX (because we expect lhs >
     // rhs or lhs < rhs). To ensure this:
     //   - lhs must not be a number which gets coerced into an integer
@@ -1677,19 +1670,65 @@ bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
     //   - rhs must not be a number which gets coerced into INT_MIN or INT_MAX
     //   (implying, it can't be the real/complex representation of INT_MIN or
     //   INT_MAX)
-    bool fastcase =
-        (!inherits(lhs, "factor") || !inherits(rhs, "factor")) &&
-        !(XLENGTH(lhs) > 0 && XLENGTH(rhs) > 0 &&
-          (TYPEOF(lhs) == INTSXP || TYPEOF(lhs) == LGLSXP ||
-           (TYPEOF(lhs) == REALSXP && doubleCanBeCastedToInteger(*REAL(lhs))) ||
-           (TYPEOF(lhs) == CPLXSXP &&
-            doubleCanBeCastedToInteger(COMPLEX(lhs)->r))) &&
-          ((TYPEOF(rhs) == INTSXP &&
-            (*INTEGER(rhs) == INT_MIN || *INTEGER(rhs) == INT_MAX)) ||
-           (TYPEOF(rhs) == REALSXP &&
-            (*REAL(rhs) <= INT_MIN || *REAL(rhs) >= INT_MAX)) ||
-           (TYPEOF(rhs) == CPLXSXP &&
-            (COMPLEX(rhs)->r <= INT_MIN || COMPLEX(rhs)->r >= INT_MAX))));
+    if (inherits(lhs, "factor") && inherits(rhs, "factor"))
+        return false;
+
+    // TODO(o):
+    // I don't like this part of the condition. It prevents us from constant
+    // folding the colonEffects instruction. Can we do this differently?
+    if (XLENGTH(lhs) == 0 || XLENGTH(rhs) == 0)
+        return true;
+
+    switch (TYPEOF(lhs)) {
+    case INTSXP:
+    case LGLSXP:
+        break;
+    case REALSXP:
+        if (!doubleCanBeCastedToInteger(*REAL(lhs)))
+            return true;
+        break;
+    case CPLXSXP:
+        if (!doubleCanBeCastedToInteger(COMPLEX(lhs)->r))
+            return true;
+        break;
+    default:
+        break;
+    }
+
+    // This is the case where LHS might be an INTSXP
+    int coerced = 0;
+    switch (TYPEOF(rhs)) {
+    case INTSXP:
+    case LGLSXP:
+        coerced = *INTEGER(rhs);
+        break;
+    case REALSXP:
+        if (!doubleCanBeCastedToInteger(*REAL(rhs)))
+            return false;
+        coerced = (int)*REAL(rhs);
+        break;
+    case CPLXSXP:
+        if (!doubleCanBeCastedToInteger(COMPLEX(rhs)->r))
+            return false;
+        coerced = (int)COMPLEX(rhs)->r;
+        break;
+    default:
+        return true;
+    }
+    return coerced != INT_MAX;
+}
+
+bool doubleCanBeCastedToInteger(double n) {
+    double intpart;
+    return n > ((double)INT_MIN - 1) && n < ((double)INT_MAX + 1) &&
+           std::modf(n, &intpart) == 0.0;
+}
+
+bool colonInputEffects(SEXP lhs, SEXP rhs, unsigned srcIdx) {
+    auto getSrc = [&]() { return src_pool_at(globalContext(), srcIdx); };
+
+    // 1. decide fastcase
+    bool fastcase = isColonFastcase(lhs, rhs);
 
     // 2. in fastcase, run type error effects
     if (fastcase) {
