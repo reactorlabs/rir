@@ -17,7 +17,7 @@ void PassScheduler::add(std::unique_ptr<const PirTranslator>&& t) {
     auto name = t->getName();
     if (std::regex_match(name.begin(), name.end(), PIR_PASS_BLACKLIST))
         return;
-    schedule_.push_back(std::move(t));
+    currentPhase->passes.push_back(std::move(t));
 }
 
 PassScheduler::PassScheduler() {
@@ -53,38 +53,28 @@ PassScheduler::PassScheduler() {
         add<TypeInference>();
         add<Overflow>();
     };
-    auto addDefaultPrePhaseOpt = [&]() {
-    };
     auto addDefaultPostPhaseOpt = [&]() {
         add<HoistInstruction>();
         add<LoopInvariant>();
         add<LoadElision>();
     };
 
-    add<PhaseMarker>("Initial");
-
-    addDefaultPrePhaseOpt();
-    // ==== Phase 1) Run the default passes a couple of times
-    for (size_t i = 0; i < 2; ++i)
-        addDefaultOpt();
+    nextPhase("Initial", 50);
+    addDefaultOpt();
+    nextPhase("Initial post");
     addDefaultPostPhaseOpt();
-
-    add<PhaseMarker>("Phase 1");
 
     // ==== Phase 2) Speculate away environments
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
-    addDefaultPrePhaseOpt();
+    nextPhase("Speculation", 100);
     add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();
-    add<ElideEnvSpec>();
-    addDefaultOpt();
-    add<TypeSpeculation>();
-    addDefaultPostPhaseOpt();
 
-    add<PhaseMarker>("Phase 2: Env speculation");
+    nextPhase("Speculation post");
+    addDefaultPostPhaseOpt();
 
     // ==== Phase 3) Remove checkpoints we did not use
     //
@@ -93,11 +83,13 @@ PassScheduler::PassScheduler() {
     // Since for example even unused checkpoints keep variables live.
     //
     // After this phase it is no longer possible to add assumptions at any point
-    addDefaultPrePhaseOpt();
+    nextPhase("Remove CP");
     add<CleanupCheckpoints>();
-    for (size_t i = 0; i < 2; ++i) {
-        addDefaultOpt();
-    }
+    addDefaultPostPhaseOpt();
+
+    nextPhase("Intermediate 2", 50);
+    addDefaultOpt();
+    nextPhase("Intermediate 2 post");
     addDefaultPostPhaseOpt();
 
     // ==== Phase 3.1) Remove Framestates we did not use
@@ -106,22 +98,28 @@ PassScheduler::PassScheduler() {
     // dependency and the framestates will subsequently be cleaned.
     //
     // After this pass it is no longer possible to inline callees with deopts
+    nextPhase("Cleanup FS");
     add<CleanupFramestate>();
     add<CleanupCheckpoints>();
 
-    add<PhaseMarker>("Phase 3: Cleanup Checkpoints");
-
+    nextPhase("Final", 100);
     // ==== Phase 4) Final round of default opts
-    addDefaultPrePhaseOpt();
-    for (size_t i = 0; i < 4; ++i) {
-        addDefaultOpt();
-        add<ElideEnvSpec>();
-        add<CleanupCheckpoints>();
-    }
-    addDefaultPostPhaseOpt();
-
+    addDefaultOpt();
+    add<ElideEnvSpec>();
     add<CleanupCheckpoints>();
-    add<PhaseMarker>("Phase 4: finished");
+
+    nextPhase("Final post");
+    addDefaultPostPhaseOpt();
+    add<CleanupCheckpoints>();
+
+    nextPhase("done");
+}
+
+void PassScheduler::nextPhase(const std::string& name, unsigned budget) {
+    schedule_.phases.push_back(Phase(name, budget));
+    currentPhase = schedule_.phases.end() - 1;
+    currentPhase->passes.push_back(
+        std::unique_ptr<const PirTranslator>(new PhaseMarker(name)));
 }
 }
 }

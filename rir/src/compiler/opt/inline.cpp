@@ -24,11 +24,12 @@ class TheInliner {
     ClosureVersion* version;
     explicit TheInliner(ClosureVersion* version) : version(version) {}
 
-    void operator()() {
+    bool operator()() {
+        bool anyChange = false;
         size_t fuel = Parameter::INLINER_INITIAL_FUEL;
 
         if (version->size() > Parameter::INLINER_MAX_SIZE)
-            return;
+            return false;
 
         auto dontInline = [](Closure* cls) {
             if (cls->rirFunction()->flags.contains(
@@ -353,6 +354,7 @@ class TheInliner {
                     inlineeCls->rirFunction()->flags.set(
                         rir::Function::NotInlineable);
                 } else {
+                    anyChange = true;
                     bb->overrideNext(copy);
 
                     // Copy over promises used by the inner version
@@ -433,6 +435,7 @@ class TheInliner {
                     break;
             }
         });
+        return anyChange;
     }
 };
 
@@ -459,9 +462,9 @@ size_t Parameter::INLINER_INLINE_UNLIKELY =
         ? atoi(getenv("PIR_INLINER_INLINE_UNLIKELY"))
         : 0;
 
-void Inline::apply(RirCompiler&, ClosureVersion* version, LogStream&) const {
+bool Inline::apply(RirCompiler&, ClosureVersion* version, LogStream&) const {
     TheInliner s(version);
-    s();
+    return s();
 }
 } // namespace pir
 } // namespace rir

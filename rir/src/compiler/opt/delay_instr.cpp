@@ -6,8 +6,9 @@
 namespace rir {
 namespace pir {
 
-void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
+bool DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const {
+    bool anyChange = false;
 
     auto isTarget = [](Instruction* j) {
         if (CallSafeBuiltin::Cast(j))
@@ -23,6 +24,7 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
     const DominanceGraph dom(function);
     const CFG cfg(function);
     bool changed = true;
+
     while (changed) {
         changed = false;
         for (const auto& instructionUses : dataDependencies) {
@@ -101,6 +103,7 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
             if (usedOnlyInDeopt.count(instruction)) {
                 for (auto targetBB : usedOnlyInDeopt[instruction]) {
+                    anyChange = true;
                     auto insertPosition = targetBB->begin();
                     // ensure we don't insert any instruction before its
                     // arguments
@@ -145,6 +148,7 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
             ip = next;
         }
     });
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

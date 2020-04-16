@@ -14,7 +14,7 @@
 namespace rir {
 namespace pir {
 
-void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
+bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                          LogStream& log) const {
 
     constexpr bool debug = false;
@@ -30,6 +30,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         return false;
     };
 
+    bool anyChange = false;
     // Speculatively elide environments on instructions that only require them
     // in case any of the arguments is an object
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
@@ -92,6 +93,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                             [&]() { successful = false; });
                     });
                     if (successful) {
+                        anyChange = true;
                         if (auto blt = CallBuiltin::Cast(i)) {
                             std::vector<Value*> args;
                             blt->eachCallArg(
@@ -247,6 +249,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         auto targetBB = mkArg->bb();
                         if (!materialized.count(targetBB) ||
                             !materialized[targetBB].includes(env)) {
+                            anyChange = true;
                             Instruction* materialize = new MaterializeEnv(env);
                             env->replaceUsesIn(materialize, targetBB);
                             targetBB->insert(targetBB->begin(), materialize);
@@ -277,6 +280,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
             }
         }
     });
+
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

@@ -141,9 +141,10 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
     return false;
 }
 
-void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
+bool LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
                           LogStream& log) const {
     LoopDetection loops(function);
+    bool anyChange = false;
 
     for (auto& loop : loops) {
         std::unordered_map<Instruction*, BB*> loads;
@@ -185,11 +186,14 @@ void LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
                 // The replacement should happen in the case the loop was
                 // previously peeled
                 if (!replaceWithOuterLoopEquivalent(load, dom, targetBB)) {
+                    anyChange = true;
                     bb->moveToEnd(bb->atPosition(load), targetBB);
                 }
             }
         }
     }
+
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

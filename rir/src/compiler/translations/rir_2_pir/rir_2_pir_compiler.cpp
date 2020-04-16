@@ -217,16 +217,18 @@ std::unique_ptr<CompilerPerf> PERF = std::unique_ptr<CompilerPerf>(
 void Rir2PirCompiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
-    for (const auto& translation : PassScheduler::instance()) {
+    PassScheduler::instance().run([&](const PirTranslator* translation) {
+        bool changed = false;
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
                 auto log = logger.get(v).forPass(passnr);
-                log.pirOptimizationsHeader(translation.get());
+                log.pirOptimizationsHeader(translation);
 
                 if (MEASURE_COMPILER_PERF)
                     startTime = std::chrono::high_resolution_clock::now();
 
-                translation->apply(*this, v, log.out());
+                if (translation->apply(*this, v, log.out()))
+                    changed = true;
                 if (MEASURE_COMPILER_PERF) {
                     endTime = std::chrono::high_resolution_clock::now();
                     std::chrono::duration<double> passDuration =
@@ -234,7 +236,7 @@ void Rir2PirCompiler::optimizeModule() {
                     PERF->addTime(translation->getName(), passDuration.count());
                 }
 
-                log.pirOptimizations(translation.get());
+                log.pirOptimizations(translation);
                 log.flush();
 
 #ifdef FULLVERIFIER
@@ -248,7 +250,8 @@ void Rir2PirCompiler::optimizeModule() {
             });
         });
         passnr++;
-    }
+        return changed;
+    });
     if (MEASURE_COMPILER_PERF)
         startTime = std::chrono::high_resolution_clock::now();
 

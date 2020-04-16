@@ -7,9 +7,10 @@
 namespace rir {
 namespace pir {
 
-void CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
+bool CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
                                LogStream&) const {
-    auto apply = [](Code* code) {
+    bool anyChange = false;
+    auto apply = [&](Code* code) {
         std::unordered_set<Checkpoint*> used;
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto a = Assume::Cast(i)) {
@@ -31,6 +32,8 @@ void CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
                 }
             }
         });
+        if (!toDelete.empty())
+            anyChange = true;
         // Deopt blocks are exit blocks. They have no other predecessors and
         // are not phi inputs. We can delete without further checks.
         for (auto bb : toDelete)
@@ -38,6 +41,7 @@ void CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
     };
     apply(function);
     function->eachPromise([&](Promise* p) { apply(p); });
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

@@ -12,7 +12,7 @@
 namespace rir {
 namespace pir {
 
-void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
+bool TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
                             LogStream& log) const {
 
     AvailableCheckpoints checkpoint(function, function, log);
@@ -99,6 +99,7 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             []() {});
     });
 
+    bool anyChange = false;
     Visitor::run(function->entry, [&](BB* bb) {
         if (!speculate.count(bb))
             return;
@@ -121,8 +122,10 @@ void TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             cast->effects.set(Effect::DependsOnAssume);
             bb->insert(ip, cast);
             i->replaceDominatedUses(cast);
+            anyChange = true;
         }
     });
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

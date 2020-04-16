@@ -4,13 +4,14 @@
 namespace rir {
 namespace pir {
 
-void DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* function,
+bool DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* function,
                              LogStream& log) const {
     bool noStores = Visitor::check(
         function->entry, [&](Instruction* i) { return !StVar::Cast(i); });
     if (noStores)
-        return;
+        return false;
 
+    bool anyChange = false;
     {
         DeadStoreAnalysis analysis(function, log);
 
@@ -19,8 +20,10 @@ void DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* function,
             while (ip != bb->end()) {
                 auto next = ip + 1;
                 if (auto st = StVar::Cast(*ip)) {
-                    if (analysis.isDead(st)) 
+                    if (analysis.isDead(st)) {
                         next = bb->remove(ip);
+                        anyChange = true;
+                    }
                 }
                 ip = next;
             }
@@ -40,6 +43,7 @@ void DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* function,
                                 copied.insert(instruction->bb());
                             }
                         }
+                        anyChange = true;
                         next = bb->remove(ip);
                         continue;
                     }
@@ -48,6 +52,7 @@ void DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* function,
             }
         });
     }
+    return anyChange;
 }
 
 } // namespace pir

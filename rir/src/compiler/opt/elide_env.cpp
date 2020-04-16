@@ -9,7 +9,8 @@
 namespace rir {
 namespace pir {
 
-void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
+bool ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
+    bool anyChange = false;
     std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
@@ -59,18 +60,23 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
         while (ip != bb->end()) {
             Instruction* i = *ip;
             if (Env::isPirEnv(i)) {
-                if (envNeeded.find(i) == envNeeded.end())
+                if (envNeeded.find(i) == envNeeded.end()) {
                     ip = bb->remove(ip);
-                else
+                    anyChange = true;
+                } else {
                     ip++;
+                }
             } else if (i->hasEnv() && Env::isPirEnv(i->env()) &&
                        envNeeded.find(i->env()) == envNeeded.end()) {
                 ip = bb->remove(ip);
+                anyChange = true;
             } else {
                 ip++;
             }
         }
     });
+
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

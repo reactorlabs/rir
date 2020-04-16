@@ -19,13 +19,15 @@ class TheCleanup {
   public:
     explicit TheCleanup(ClosureVersion* function) : function(function) {}
     ClosureVersion* function;
-    void operator()() {
+    bool operator()() {
         std::unordered_set<size_t> used_p;
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
         std::deque<Promise*> todo;
 
         DeadInstructions dead(function, 3, Effect::Visibility,
                               DeadInstructions::IgnoreUpdatePromise);
+
+        bool anyChange = false;
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -160,6 +162,8 @@ class TheCleanup {
 
                 if (!removed) {
                     i->updateTypeAndEffects();
+                } else {
+                    anyChange = true;
                 }
                 ip = next;
             }
@@ -301,6 +305,9 @@ class TheCleanup {
         // we want to ensure that there is always an empty, separate entry
         // block with no predecessors.
 
+        if (!toDel.empty())
+            anyChange = true;
+
         Visitor::run(function->entry, [&](BB* bb) {
             while (bb->isJmp() && toDel.count(bb->next()))
                 bb->overrideNext(toDel[bb->next()]);
@@ -314,6 +321,7 @@ class TheCleanup {
         BBTransform::renumber(function);
         function->eachPromise(BBTransform::renumber);
 
+        return anyChange;
     }
 };
 } // namespace
@@ -321,9 +329,9 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
+bool Cleanup::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
     TheCleanup s(function);
-    s();
+    return s();
 }
 
 } // namespace pir

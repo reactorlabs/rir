@@ -7,7 +7,7 @@
 namespace rir {
 namespace pir {
 
-void Overflow::apply(RirCompiler&, ClosureVersion* closure, LogStream&) const {
+bool Overflow::apply(RirCompiler&, ClosureVersion* closure, LogStream&) const {
     UsesTree uses(closure);
 
     auto willDefinitelyNotOverflow = [&](Instruction* instr) {
@@ -87,6 +87,8 @@ void Overflow::apply(RirCompiler&, ClosureVersion* closure, LogStream&) const {
         // so we set the result type to non-NA
         instr->type = instr->type.notNAOrNaN();
     });
+
+    return false;
 }
 
 } // namespace pir
