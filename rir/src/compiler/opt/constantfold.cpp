@@ -135,7 +135,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             }
         });
         std::unordered_set<Branch*> removed;
-        std::unordered_map<BB*, Phi*> thePhis;
+
         for (auto& c : condition) {
 
             removed.clear();
@@ -146,8 +146,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     if (removed.count(*a))
                         continue;
                     auto phisPlaced = false;
-                    std::unordered_set<Phi*> phis;
-                    phis.clear();
+                    std::unordered_map<BB*, Phi*> newPhisByBB;
+                    newPhisByBB.clear();
                     for (auto b = a + 1; b != uses.end(); b++) {
 
                         if (removed.count(*b))
@@ -177,31 +177,24 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
 
                                     for (auto& placement : pl.placement) {
                                         auto targetForPhi = placement.first;
-                                        thePhis[targetForPhi] = new Phi;
+                                        newPhisByBB[targetForPhi] = new Phi;
                                     }
 
                                     for (auto& placement : pl.placement) {
                                         auto targetForPhi = placement.first;
-                                        auto phi = thePhis[targetForPhi];
-
-                                        phis.insert(phi);
+                                        auto phi = newPhisByBB[targetForPhi];
 
                                         for (auto& input : placement.second) {
 
-                                            // assert(input.aValue &&
-                                            //        "aValue null");
-
-                                            // phi->addInput(input.inputBlock,
-                                            //              input.aValue);
                                             if (input.aValue)
                                                 phi->addInput(input.inputBlock,
                                                               input.aValue);
                                             else {
-                                                assert(input.otherPhi &&
-                                                       "otherPhi null");
+
                                                 phi->addInput(
                                                     input.inputBlock,
-                                                    thePhis.at(input.otherPhi));
+                                                    newPhisByBB.at(
+                                                        input.otherPhi));
                                             }
                                         }
                                         phi->type = NativeType::test;
@@ -211,20 +204,10 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     phisPlaced = true;
                                 }
 
-                                auto count = 0;
-                                for (auto phi : phis) {
-                                    if (phi->bb() == bb2 ||
-                                        dom.dominates(phi->bb(), bb2)) {
-                                        count++;
-                                    }
-                                }
-                                assert(count == 1 &&
-                                       "more than one phi dominates!!");
-
-                                for (auto phi : phis) {
+                                for (auto p : newPhisByBB) {
+                                    auto phi = p.second;
                                     if (dom.dominates(phi->bb(), bb2)) {
                                         (*b)->arg(0).val() = phi;
-
                                         break;
                                     }
                                 }
