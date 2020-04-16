@@ -135,7 +135,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             }
         });
         std::unordered_set<Branch*> removed;
-
+        std::unordered_map<BB*, Phi*> thePhis;
         for (auto& c : condition) {
 
             removed.clear();
@@ -174,18 +174,35 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
 
                                     assert(pl.placement.size() > 0 &&
                                            "0 phis to place");
+
                                     for (auto& placement : pl.placement) {
                                         auto targetForPhi = placement.first;
-                                        auto phi = new Phi;
-                                        phis.insert(phi);
-                                        for (auto& input : placement.second) {
-                                            assert(input.inputBlock &&
-                                                   "inputblock null");
-                                            assert(input.aValue &&
-                                                   "aValue null");
+                                        thePhis[targetForPhi] = new Phi;
+                                    }
 
-                                            phi->addInput(input.inputBlock,
-                                                          input.aValue);
+                                    for (auto& placement : pl.placement) {
+                                        auto targetForPhi = placement.first;
+                                        auto phi = thePhis[targetForPhi];
+
+                                        phis.insert(phi);
+
+                                        for (auto& input : placement.second) {
+
+                                            // assert(input.aValue &&
+                                            //        "aValue null");
+
+                                            // phi->addInput(input.inputBlock,
+                                            //              input.aValue);
+                                            if (input.aValue)
+                                                phi->addInput(input.inputBlock,
+                                                              input.aValue);
+                                            else {
+                                                assert(input.otherPhi &&
+                                                       "otherPhi null");
+                                                phi->addInput(
+                                                    input.inputBlock,
+                                                    thePhis.at(input.otherPhi));
+                                            }
                                         }
                                         phi->type = NativeType::test;
                                         targetForPhi->insert(
