@@ -1274,61 +1274,8 @@ void Pir2Rir::lower(Code* code) {
             bb->append(new Nop());
     });
 
-    // Change cyclic empty nodes to fake conditional nodes
-    // ***************************
-    // after modf
-    // dominance adentro de funcion
-    // new bb
-    // loop consigo mismo
-    // dominates no funciona para detectar ciclos
-    // chequeo cond
-    // toDrop
-    // ************
-    /*
-        std::vector<BB*> headBBs;
-        DominanceGraph dom(code);
-
-        Visitor::run(code->entry, [&](BB* bb) {
-            if (isInfiniteLoopHead(bb, dom)) {
-                headBBs.push_back(bb);
-            }
-        });
-
-        for (auto bb : headBBs) {
-
-            auto fakeFalseBranch = new BB(code, code->nextBBId++);
-
-            auto nilConst = new LdConst(R_NilValue);
-            auto ret = new Return(nilConst);
-
-            fakeFalseBranch->append(nilConst);
-            fakeFalseBranch->append(ret);
-
-            auto oldTrueBranch = bb->next();
-
-            auto fakeTrueBranch = new BB(code, code->nextBBId++);
-            bb->overrideNext(fakeTrueBranch);
-            fakeTrueBranch->setNext(oldTrueBranch);
-
-            bb->setFalseBranch(fakeFalseBranch);
-            auto branch = new Branch(True::instance());
-            bb->append(branch);
-        }
-        */
 }
 
-// bool Pir2Rir::isInfiniteLoopHead(BB* bb, const DominanceGraph& dom) {
-
-//     return false;
-//     if (!bb->isJmp())
-//         return false;
-//     return bb == bb->next() &&
-//            (bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last())));
-
-//     // return bb->isJmp() && (bb == bb->next() || (/*bb->next()->isJmp() &&
-
-//     // dom.dominates(bb->next(), bb)));
-// }
 
 void Pir2Rir::toCSSA(Code* code) {
 

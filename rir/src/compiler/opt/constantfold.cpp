@@ -179,6 +179,11 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                         auto phi = new Phi;
                                         phis.insert(phi);
                                         for (auto& input : placement.second) {
+                                            assert(input.inputBlock &&
+                                                   "inputblock null");
+                                            assert(input.aValue &&
+                                                   "aValue null");
+
                                             phi->addInput(input.inputBlock,
                                                           input.aValue);
                                         }
@@ -188,6 +193,16 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     }
                                     phisPlaced = true;
                                 }
+
+                                auto count = 0;
+                                for (auto phi : phis) {
+                                    if (phi->bb() == bb2 ||
+                                        dom.dominates(phi->bb(), bb2)) {
+                                        count++;
+                                    }
+                                }
+                                assert(count == 1 &&
+                                       "more than one phi dominates!!");
 
                                 for (auto phi : phis) {
                                     if (dom.dominates(phi->bb(), bb2)) {
