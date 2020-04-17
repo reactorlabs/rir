@@ -39,8 +39,8 @@ void CodeEventCounters::InfoDuringProfile::pushCall(
     begincontext(&rContext, CTXT_CCODE, R_NilValue, R_BaseEnv, R_BaseEnv,
                  R_NilValue, R_NilValue);
     assert(R_GlobalContext == &rContext);
-    R_GlobalContext->cend = &rir::endProfileBecauseOfContextSwitch;
-    R_GlobalContext->cenddata = (void*)myAssociatedCode;
+    ((RCNTXT*)R_GlobalContext)->cend = &rir::endProfileBecauseOfContextSwitch;
+    ((RCNTXT*)R_GlobalContext)->cenddata = (void*)myAssociatedCode;
 }
 
 CodeEventCounters::InfoDuringProfile::InfoDuringProfile(
