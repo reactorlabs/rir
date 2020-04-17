@@ -64,6 +64,10 @@ class CodeEventCounters {
     // Each entry counts events for one rir code block - the key is the
     // code's uid, the value contains the events aligned with names
     std::unordered_map<UUID, std::vector<size_t>> counters;
+    // Map of closure version to timestamps when it's called
+    std::unordered_map<UUID, std::vector<Timestamp>> invocationTakenTimestamps;
+    // Map of closure version to timestamps a sibling is called
+    std::unordered_map<UUID, std::vector<Timestamp>> invocationMissedTimestamps;
     // Names inferred for closure code blocks
     std::unordered_map<UUID, std::string> closureNames;
     // Map of closure version code uid's to function header description
@@ -84,6 +88,8 @@ class CodeEventCounters {
     unsigned registerCounter(const std::string& name);
     void count(SEXP calleeSexp, unsigned counter, size_t n = 1);
     void count(const Code* code, unsigned counter, size_t n = 1);
+    void countClosureCall(const DispatchTable* closure,
+                          const Function* takenVersion);
     void profileStart(const Code* code);
     void profileEnd(const Code* code, bool isBecauseOfContextJump = false);
     void countCallSite(const Function* callee, const Code* callerCode,
