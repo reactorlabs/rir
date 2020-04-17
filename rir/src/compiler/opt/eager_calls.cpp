@@ -16,7 +16,7 @@
 namespace rir {
 namespace pir {
 
-void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
+bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                        LogStream& log) const {
     auto code = closure->entry;
     AvailableCheckpoints checkpoint(closure, closure, log);
@@ -63,8 +63,9 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
         return ip;
     };
 
-    auto replaceCallWithCallBuiltin = [](BB* bb, BB::Instrs::iterator ip,
-                                         Call* call, SEXP builtin) {
+    bool anyChange = false;
+    auto replaceCallWithCallBuiltin = [&](BB* bb, BB::Instrs::iterator ip,
+                                          Call* call, SEXP builtin) {
         std::vector<Value*> args;
         call->eachCallArg([&](Value* a) {
             if (auto mk = MkArg::Cast(a->followCasts())) {
@@ -87,6 +88,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 args.push_back(a);
             }
         });
+        anyChange = true;
         auto bt =
             BuiltinCallFactory::New(call->env(), builtin, args, call->srcIdx);
         call->replaceUsesWith(bt);
@@ -298,6 +300,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
 
                 auto newVersion = cls->cloneWithAssumptions(
                     version, newAssumptions, [&](ClosureVersion* newCls) {
+                        anyChange = true;
                         Visitor::run(newCls->entry, [&](Instruction* i) {
                             if (auto ld = LdArg::Cast(i)) {
                                 if (eager.count(ld->id)) {
@@ -333,6 +336,8 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
             }
         }
     });
+
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

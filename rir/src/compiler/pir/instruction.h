@@ -780,6 +780,7 @@ class FLI(LdConst, 0, Effects::None()) {
     LdConst(SEXP c, PirType t);
     explicit LdConst(SEXP c);
     explicit LdConst(int i);
+    explicit LdConst(double i);
     void printArgs(std::ostream& out, bool tty) const override;
     int minReferenceCount() const override { return MAX_REFCOUNT; }
     size_t gvnBase() const override { return tagHash(); }
@@ -1163,7 +1164,7 @@ class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(ColonInputEffects, 2, Effect::Error) {
+class FLI(ColonInputEffects, 2, Effects() | Effect::Error | Effect::Warn) {
   public:
     explicit ColonInputEffects(Value* lhs, Value* rhs, unsigned srcIdx)
         : FixedLenInstruction(NativeType::test,
@@ -1957,6 +1958,7 @@ class CallInstruction {
     virtual const InstrArg& callArg(size_t pos) const = 0;
     virtual InstrArg& callArg(size_t pos) = 0;
     virtual void clearFrameState(){};
+    virtual bool hasFrameState() = 0;
     virtual Closure* tryGetCls() const { return nullptr; }
     virtual Assumptions inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
@@ -2016,6 +2018,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
 
     FrameState* frameState() const { return FrameState::Cast(arg(0).val()); }
     void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
+    bool hasFrameState() override { return frameState(); }
 
     Value* callerEnv() { return env(); }
 
@@ -2035,6 +2038,7 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
     }
 
     bool hasNamedArgs() const override { return true; }
+    bool hasFrameState() override { return false; }
 
     NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
               const std::vector<SEXP>& names_, unsigned srcIdx);
@@ -2107,6 +2111,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
 
     FrameState* frameState() const { return FrameState::Cast(arg(0).val()); }
     void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
+    bool hasFrameState() override { return frameState(); }
 
     Value* runtimeClosure() const { return arg(1).val(); }
 
@@ -2154,6 +2159,7 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     Value* callerEnv() { return env(); }
 
     VisibilityFlag visibilityFlag() const override;
+    bool hasFrameState() override { return false; }
 
   private:
     CallBuiltin(Value * callerEnv, SEXP builtin,
@@ -2189,6 +2195,7 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
                     unsigned srcIdx);
 
     VisibilityFlag visibilityFlag() const override;
+    bool hasFrameState() override { return false; }
 };
 
 class BuiltinCallFactory {

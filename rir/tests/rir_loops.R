@@ -2,6 +2,7 @@ compileAndTest <- function(f, expected, msg) {
     print(msg)
     pir.compile(rir.compile(f))
     res <- f()
+    print(res)
     stopifnot(!is.null(res))
     stopifnot(!is.na(res))
     stopifnot(res == expected)

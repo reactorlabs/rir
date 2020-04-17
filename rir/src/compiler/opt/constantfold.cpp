@@ -11,9 +11,11 @@
 #include "interpreter/interp.h"
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
-#include <unordered_set>
-#include <list>
+
+#include <cmath>
 #include <iterator>
+#include <list>
+#include <unordered_set>
 namespace {
 using namespace rir::pir;
 static LdConst* isConst(Value* instr) {
@@ -32,6 +34,7 @@ static LdConst* isConst(Value* instr) {
                         Rf_lang3(Operation, lhs->c(), rhs->c()), R_BaseEnv);   \
                     cmp.preserve(res);                                         \
                     auto resi = new LdConst(res);                              \
+                    anyChange = true;                                          \
                     instr->replaceUsesWith(resi);                              \
                     bb->replace(ip, resi);                                     \
                 }                                                              \
@@ -41,9 +44,8 @@ static LdConst* isConst(Value* instr) {
 #define FOLD_UNARY(Instruction, Operation)                                     \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
-            if (auto arg = isConst(instr->arg<0>().val())) {                   \
+            if (auto arg = isConst(instr->arg<0>().val()))                     \
                 Operation(arg->c());                                           \
-            }                                                                  \
         }                                                                      \
     } while (false)
 #define FOLD_BINARY(Instruction, Operation)                                    \
@@ -100,8 +102,11 @@ static bool convertsToLogicalWithoutWarning(SEXP arg) {
 } // namespace
 namespace rir {
 namespace pir {
-void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
+
+bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                          LogStream&) const {
+    bool anyChange = false;
+
     std::unordered_map<BB*, bool> branchRemoval;
 
     DominanceGraph dom(function);
@@ -155,14 +160,16 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         auto bb1 = (*a)->bb();
                         auto bb2 = (*b)->bb();
                         if (dom.dominates(bb1, bb2)) {
-
                             if (dom.dominates(bb1->trueBranch(), bb2)) {
+                                anyChange = true;
                                 (*b)->arg(0).val() = True::instance();
                             } else if (dom.dominates(bb1->falseBranch(), bb2)) {
+                                anyChange = true;
                                 (*b)->arg(0).val() = False::instance();
                             } else {
 
                                 if (!phisPlaced) {
+                                    anyChange = true;
                                     // create and place phi
                                     std::unordered_map<BB*, Value*> inputs;
                                     inputs[bb1->trueBranch()] =
@@ -204,6 +211,19 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     phisPlaced = true;
                                 }
 
+                                ///////// assert for debug
+                                int countDominates = 0;
+                                for (auto p : newPhisByBB) {
+                                    auto phi = p.second;
+                                    if (dom.dominates(phi->bb(), bb2)) {
+                                        countDominates++;
+                                    }
+                                }
+
+                                assert(countDominates == 1 &&
+                                       "countDominates != 1!");
+                                ////////
+
                                 for (auto p : newPhisByBB) {
                                     auto phi = p.second;
                                     if (dom.dominates(phi->bb(), bb2)) {
@@ -233,16 +253,19 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     varg->type.isA(PirType::simpleScalarLogical())) {
                     int larg = *LOGICAL(carg);
                     if (larg == (int)isEq) {
+                        anyChange = true;
                         i->replaceUsesWith(varg);
                         next = bb->remove(ip);
                     } else if (larg == (int)!isEq) {
                         auto res = new Not(varg, i->env(), i->srcIdx);
                         // Guarenteed, and required by replaceUsesWith
                         res->type = PirType::simpleScalarLogical();
+                        anyChange = true;
                         i->replaceUsesWith(res);
                         bb->replace(ip, res);
                     } else if (larg == NA_LOGICAL) {
                         // Even NA == NA (and NA != NA) yield NA
+                        anyChange = true;
                         i->replaceUsesWith(NaLogical::instance());
                         next = bb->remove(ip);
                     } else {
@@ -255,6 +278,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             };
             if (LOr::Cast(i) || LAnd::Cast(i)) {
                 if (i->arg(0).val() == i->arg(1).val()) {
+                    anyChange = true;
                     i->replaceUsesWith(i->arg(0).val());
                     next = bb->remove(ip);
                 }
@@ -284,6 +308,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     auto c = new LdConst(Rf_ScalarLogical(res));
                     i->replaceUsesWith(c);
                     bb->replace(ip, c);
+                    anyChange = true;
                 }
             });
             FOLD_UNARY(AsTest, [&](SEXP arg) {
@@ -294,6 +319,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesWith(res ? (Value*)True::instance()
                                                : (Value*)False::instance());
                         next = bb->remove(ip);
+                        anyChange = true;
                     }
                 }
             });
@@ -302,14 +328,17 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 // evaluation after inlining
                 if (i->arg(1).val() == MissingArg::instance()) {
                     if (i->arg(0).val() == MissingArg::instance()) {
+                        anyChange = true;
                         i->replaceUsesWith(True::instance());
                         next = bb->remove(ip);
                     } else if (!i->arg(0).val()->type.maybeMissing()) {
+                        anyChange = true;
                         i->replaceUsesWith(False::instance());
                         next = bb->remove(ip);
                     }
                 } else {
                     FOLD_BINARY(Identical, [&](SEXP a, SEXP b) {
+                        anyChange = true;
                         i->replaceUsesWith(a == b ? (Value*)True::instance()
                                                   : (Value*)False::instance());
                         next = bb->remove(ip);
@@ -319,25 +348,31 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             if (auto isTest = IsType::Cast(i)) {
                 auto arg = isTest->arg<0>().val();
                 if (arg->type.isA(isTest->typeTest)) {
+                    anyChange = true;
                     i->replaceUsesWith(True::instance());
                     next = bb->remove(ip);
                 } else if (!arg->type.maybe(isTest->typeTest)) {
+                    anyChange = true;
                     i->replaceUsesWith(False::instance());
                     next = bb->remove(ip);
                 }
             }
             if (auto assume = Assume::Cast(i)) {
                 if (assume->arg<0>().val() == True::instance() &&
-                    assume->assumeTrue)
+                    assume->assumeTrue) {
+                    anyChange = true;
                     next = bb->remove(ip);
-                else if (assume->arg<0>().val() == False::instance() &&
-                         !assume->assumeTrue)
+                } else if (assume->arg<0>().val() == False::instance() &&
+                           !assume->assumeTrue) {
+                    anyChange = true;
                     next = bb->remove(ip);
+                }
             }
             if (auto cl = Colon::Cast(i)) {
                 if (auto a = isConst(cl->arg(0).val())) {
                     if (TYPEOF(a->c()) == REALSXP && Rf_length(a->c()) == 1 &&
                         REAL(a->c())[0] == (double)(int)REAL(a->c())[0]) {
+                        anyChange = true;
                         ip = bb->insert(ip, new LdConst((int)REAL(a->c())[0]));
                         cl->arg(0).val() = *ip;
                         ip++;
@@ -346,6 +381,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 if (auto a = isConst(cl->arg(1).val())) {
                     if (TYPEOF(a->c()) == REALSXP && Rf_length(a->c()) == 1 &&
                         REAL(a->c())[0] == (double)(int)REAL(a->c())[0]) {
+                        anyChange = true;
                         ip = bb->insert(ip, new LdConst((int)REAL(a->c())[0]));
                         cl->arg(1).val() = *ip;
                         ip++;
@@ -375,11 +411,13 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         auto nargsC = new LdConst(ScalarInteger(
                             function->nargs() -
                             function->assumptions().numMissing()));
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(nargsC, ip);
                     }
                 } else if (builtinId == blt("length") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(PirType::simpleScalar())) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(1), ip);
                     }
                 } else if (builtinId == blt("as.character") && nargs == 1) {
@@ -387,6 +425,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     if (t.isA(PirType(RType::str)
                                   .notPromiseWrapped()
                                   .notObject())) {
+                        anyChange = true;
                         i->replaceUsesWith(i->arg(0).val());
                         next = bb->remove(ip);
                     } else if (auto con = isConst(i->arg(0).val())) {
@@ -395,6 +434,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             auto res = Rf_eval(
                                 Rf_lang2(Rf_install("as.character"), con->c()),
                                 R_BaseEnv);
+                            anyChange = true;
                             i->replaceUsesAndSwapWith(new LdConst(res), ip);
                         }
                     }
@@ -403,18 +443,22 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     if (t.isA(PirType(RType::integer)
                                   .notPromiseWrapped()
                                   .notObject())) {
+                        anyChange = true;
                         i->replaceUsesWith(i->arg(0).val());
                         next = bb->remove(ip);
                     } else if (auto con = isConst(i->arg(0).val())) {
                         if (IS_SIMPLE_SCALAR(con->c(), REALSXP)) {
                             if (REAL(con->c())[0] == REAL(con->c())[0]) {
+                                anyChange = true;
                                 i->replaceUsesAndSwapWith(
                                     new LdConst((int)REAL(con->c())[0]), ip);
                             } else {
+                                anyChange = true;
                                 i->replaceUsesAndSwapWith(
                                     new LdConst(NA_INTEGER), ip);
                             }
                         } else if (IS_SIMPLE_SCALAR(con->c(), INTSXP)) {
+                            anyChange = true;
                             i->replaceUsesAndSwapWith(new LdConst(con->c()),
                                                       ip);
                         }
@@ -432,27 +476,36 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         modeType.isA(PirType::simpleScalarString()) && mode &&
                         staticStringEqual(CHAR(STRING_ELT(mode->c(), 0)),
                                           "any")) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
                     }
                 } else if (builtinId == blt("is.function") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
-                    if (t.isA(RType::closure))
+                    if (t.isA(RType::closure)) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
-                    else if (!t.maybe(RType::closure))
+                    } else if (!t.maybe(RType::closure)) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
+                    }
                 } else if (builtinId == blt("is.complex") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
-                    if (t.isA(RType::cplx))
+                    if (t.isA(RType::cplx)) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
-                    else if (!t.maybe(RType::cplx))
+                    } else if (!t.maybe(RType::cplx)) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
+                    }
                 } else if (builtinId == blt("is.character") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::str)) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
                     } else if (!t.maybe(RType::str)) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
@@ -463,14 +516,17 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         RType::integer | RType::real | RType::cplx |
                         RType::str | RType::raw;
                     if (t.isA(atomicType)) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
                     } else if (!t.maybe(atomicType)) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
                 } else if (builtinId == blt("is.object") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (!t.maybeObj()) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
@@ -482,15 +538,18 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         (PirType::num() | RType::chr | RType::str | RType::vec)
                             .orAttribs();
                     if (typeThatDoesntError.isA(t) && !t.maybeNAOrNaN()) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
                 } else if (builtinId == blt("bodyCode") && nargs == 1) {
                     auto in = i->arg(0).val()->followCastsAndForce();
                     if (auto mk = MkFunCls::Cast(in)) {
+                        anyChange = true;
                         i->replaceUsesAndSwapWith(
                             new LdConst(mk->originalBody->container()), ip);
                     } else if (auto mk = MkCls::Cast(in)) {
+                        anyChange = true;
                         i->replaceUsesWith(mk->code());
                     } else if (auto mk = MkArg::Cast(in)) {
                         // This can happen after inlining, since we use
@@ -503,6 +562,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                         CastType::Cast(cast->arg(0).val())) {
                                     if (cast2 != in &&
                                         cast2->kind == CastType::Upcast) {
+                                        anyChange = true;
                                         cast->replaceUsesAndSwapWith(
                                             new Force(cast2, mk->env()),
                                             cast->bb()->atPosition(cast));
@@ -514,8 +574,10 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 } else if (builtinId == blt("environment") && nargs == 1) {
                     auto in = i->arg(0).val()->followCastsAndForce();
                     if (auto mk = MkFunCls::Cast(in)) {
+                        anyChange = true;
                         i->replaceUsesWith(mk->lexicalEnv());
                     } else if (auto mk = MkCls::Cast(in)) {
+                        anyChange = true;
                         i->replaceUsesWith(mk->lexicalEnv());
                     }
                 }
@@ -550,6 +612,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             negArg = NA_LOGICAL;
                         else
                             negArg = 0;
+                        anyChange = true;
                         auto rep = new LdConst(Rf_ScalarLogical(negArg));
                         i->replaceUsesWith(rep);
                         bb->replace(ip, rep);
@@ -558,46 +621,105 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     // Double negation
                     // not2 might still be used, if not then it will be removed
                     // in a later pass
+                    anyChange = true;
                     Value* rep = not2->arg<0>().val();
                     i->replaceUsesWith(rep);
                     next = bb->remove(ip);
                 }
             }
             if (auto colonInputEffects = ColonInputEffects::Cast(i)) {
-                auto lhs = colonInputEffects->arg<0>().val();
-                auto rhs = colonInputEffects->arg<1>().val();
-                if ((!lhs->type.maybeHasAttrs() ||
-                     !rhs->type.maybeHasAttrs()) &&
-                    !(lhs->type.maybe(PirType::num()) &&
-                      rhs->type.maybe(PirType::num()))) {
-                    // We still need to keep the colonInputEffects because it
-                    // could raise warnings / errors
-                    colonInputEffects->replaceUsesWith(True::instance());
+                bool done = false;
+
+                FOLD_BINARY(ColonInputEffects, [&](SEXP lhs, SEXP rhs) {
+                    if (isColonFastcase(lhs, rhs)) {
+                        i->replaceUsesWith(True::instance());
+                        if (convertsToRealWithoutWarning(lhs) &&
+                            convertsToRealWithoutWarning(rhs)) {
+                            if (XLENGTH(lhs) == 1 && XLENGTH(rhs) == 1) {
+                                anyChange = true;
+                                done = true;
+                                next = bb->remove(ip);
+                            }
+                        }
+                    }
+                });
+
+                if (!done) {
+                    auto lhs = colonInputEffects->arg<0>().val();
+                    auto rhs = colonInputEffects->arg<1>().val();
+                    auto notFactor = !lhs->type.maybeHasAttrs() ||
+                                     !rhs->type.maybeHasAttrs();
+                    // TODO this condition needs to go! see isColonFastcase in
+                    // interp.cpp
+                    auto cannotCauseCoercionProblems =
+                        !lhs->type.maybe(PirType::num()) ||
+                        !rhs->type.maybe(PirType::num());
+                    if (notFactor && cannotCauseCoercionProblems) {
+                        colonInputEffects->replaceUsesWith(True::instance());
+                        anyChange = true;
+                    }
                 }
             }
-            FOLD_UNARY(ColonCastLhs, [&](SEXP lhs) {
-                if (convertsToRealWithoutWarning(lhs)) {
-                    SEXP newLhs = colonCastLhs(lhs);
-                    LdConst* newLhsInstr = new LdConst(newLhs);
-                    i->replaceUsesAndSwapWith(newLhsInstr, ip);
+
+            if (auto castLhs = ColonCastLhs::Cast(i)) {
+                bool done = false;
+                FOLD_UNARY(ColonCastLhs, [&](SEXP lhs) {
+                    if (convertsToRealWithoutWarning(lhs)) {
+                        double lhsNum = Rf_asReal(lhs);
+                        if (!std::isnan(lhsNum)) {
+                            SEXP newLhs = colonCastLhs(lhs);
+                            LdConst* newLhsInstr = new LdConst(newLhs);
+                            done = true;
+                            anyChange = true;
+                            i->replaceUsesAndSwapWith(newLhsInstr, ip);
+                        }
+                    }
+                });
+
+                if (!done && castLhs->arg(0).val()->type.isA(
+                                 PirType(RType::integer).notNAOrNaN())) {
+                    anyChange = true;
+                    i->replaceUsesWith(castLhs->arg(0).val());
+                    next = bb->remove(ip);
                 }
-            });
-            FOLD_BINARY(ColonCastRhs, [&](SEXP newLhs, SEXP rhs) {
-                if (convertsToRealWithoutWarning(rhs) &&
-                    convertsToRealWithoutWarning(newLhs)) {
-                    SEXP newRhs = colonCastRhs(newLhs, rhs);
-                    LdConst* newRhsInstr = new LdConst(newRhs);
-                    i->replaceUsesAndSwapWith(newRhsInstr, ip);
+            }
+
+            if (auto castRhs = ColonCastRhs::Cast(i)) {
+                bool done = false;
+                FOLD_BINARY(ColonCastRhs, [&](SEXP newLhs, SEXP rhs) {
+                    if (convertsToRealWithoutWarning(rhs) &&
+                        convertsToRealWithoutWarning(newLhs)) {
+                        double rhsNum = Rf_asReal(rhs);
+                        if (!std::isnan(rhsNum)) {
+                            done = true;
+                            anyChange = true;
+                            SEXP newRhs = colonCastRhs(newLhs, rhs);
+                            LdConst* newRhsInstr = new LdConst(newRhs);
+                            i->replaceUsesAndSwapWith(newRhsInstr, ip);
+                        }
+                    }
+                });
+
+                if (!done &&
+                    castRhs->arg(0).val()->type.isA(
+                        PirType(RType::integer).notNAOrNaN()) &&
+                    castRhs->arg(1).val()->type.isA(
+                        PirType(RType::integer).notNAOrNaN())) {
+                    anyChange = true;
+                    i->replaceUsesWith(castRhs->arg(0).val());
+                    next = bb->remove(ip);
                 }
-            });
+            }
             ip = next;
         }
         if (!bb->isEmpty())
             if (auto branch = Branch::Cast(bb->last())) {
                 auto condition = branch->arg<0>().val();
                 if (condition == True::instance()) {
+                    anyChange = true;
                     branchRemoval.emplace(bb, true);
                 } else if (condition == False::instance()) {
+                    anyChange = true;
                     branchRemoval.emplace(bb, false);
                 }
             }
@@ -628,6 +750,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         bb->deleteSuccessors();
     for (const auto& bb : toDelete)
         delete bb;
+
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

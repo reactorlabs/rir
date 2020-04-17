@@ -7,17 +7,22 @@
 namespace rir {
 namespace pir {
 
-void CleanupFramestate::apply(RirCompiler&, ClosureVersion* function,
+bool CleanupFramestate::apply(RirCompiler&, ClosureVersion* function,
                               LogStream&) const {
-    auto apply = [](Code* code) {
+    bool anyChange = false;
+    auto apply = [&](Code* code) {
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto call = CallInstruction::CastCall(i)) {
-                call->clearFrameState();
+                if (call->hasFrameState()) {
+                    anyChange = true;
+                    call->clearFrameState();
+                }
             }
         });
     };
     apply(function);
     function->eachPromise([&](Promise* p) { apply(p); });
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir

@@ -13,8 +13,9 @@
 namespace rir {
 namespace pir {
 
-void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
+bool HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                              LogStream&) const {
+    bool anyChange = false;
     DominanceGraph dom(function);
 
     VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
@@ -184,8 +185,10 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
             else if (i->cost() > 0)
                 success = noUnneccessaryComputation(target, 1);
 
-            if (success)
+            if (success) {
                 next = bb->moveToLast(ip, target);
+                anyChange = true;
+            }
 
             ip = next;
         }
@@ -220,7 +223,6 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
 
             while (it1 != bb1->end() && it1 - bb1->begin() < SEARCH) {
                 if (auto f1 = Force::Cast(*it1)) {
-                    bool replaced = false;
                     while (it2 != bb2->end() && it2 - bb2->begin() < SEARCH) {
                         if (auto f2 = Force::Cast(*it2)) {
                             if (f1->input() == f2->input()) {
@@ -230,6 +232,7 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                                                        ? f1->env()
                                                        : Env::elided());
                                 bb->insert(it, f);
+                                anyChange = true;
                                 f1->replaceUsesWith(f);
                                 f2->replaceUsesWith(f);
                                 it2 = bb2->remove(it2);
@@ -241,8 +244,6 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
                             break;
                         it2++;
                     }
-                    if (replaced)
-                        it1 = bb1->remove(it1);
                 }
                 if ((*it1)->hasObservableEffects())
                     break;
@@ -252,6 +253,7 @@ void HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
             }
         }
     });
+    return anyChange;
 }
 } // namespace pir
 } // namespace rir
