@@ -169,7 +169,6 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             } else {
 
                                 if (!phisPlaced) {
-                                    anyChange = true;
                                     // create and place phi
                                     std::unordered_map<BB*, Value*> inputs;
                                     inputs[bb1->trueBranch()] =
@@ -178,57 +177,71 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                         False::instance();
                                     auto pl = PhiPlacement(function, inputs,
                                                            dom, dfront);
+                                    if (pl.placement.size() > 0) {
+                                        anyChange = true;
 
-                                    assert(pl.placement.size() > 0 &&
-                                           "0 phis to place");
-
-                                    for (auto& placement : pl.placement) {
-                                        auto targetForPhi = placement.first;
-                                        newPhisByBB[targetForPhi] = new Phi;
-                                    }
-
-                                    for (auto& placement : pl.placement) {
-                                        auto targetForPhi = placement.first;
-                                        auto phi = newPhisByBB[targetForPhi];
-
-                                        for (auto& input : placement.second) {
-
-                                            if (input.aValue)
-                                                phi->addInput(input.inputBlock,
-                                                              input.aValue);
-                                            else {
-
-                                                phi->addInput(
-                                                    input.inputBlock,
-                                                    newPhisByBB.at(
-                                                        input.otherPhi));
-                                            }
+                                        if (pl.placement.size() == 0) {
+                                            std::cerr << "bb1: " << bb1->id;
+                                            std::cerr << "bb2: " << bb2->id;
                                         }
-                                        phi->type = NativeType::test;
-                                        targetForPhi->insert(
-                                            targetForPhi->begin(), phi);
+
+                                        assert(pl.placement.size() > 0 &&
+                                               "0 phis to place");
+
+                                        for (auto& placement : pl.placement) {
+                                            auto targetForPhi = placement.first;
+                                            newPhisByBB[targetForPhi] = new Phi;
+                                        }
+
+                                        for (auto& placement : pl.placement) {
+                                            auto targetForPhi = placement.first;
+                                            auto phi =
+                                                newPhisByBB[targetForPhi];
+
+                                            for (auto& input :
+                                                 placement.second) {
+
+                                                if (input.aValue)
+                                                    phi->addInput(
+                                                        input.inputBlock,
+                                                        input.aValue);
+                                                else {
+
+                                                    phi->addInput(
+                                                        input.inputBlock,
+                                                        newPhisByBB.at(
+                                                            input.otherPhi));
+                                                }
+                                            }
+                                            phi->type = NativeType::test;
+                                            targetForPhi->insert(
+                                                targetForPhi->begin(), phi);
+                                        }
+                                        phisPlaced = true;
                                     }
-                                    phisPlaced = true;
                                 }
 
-                                ///////// assert for debug
-                                int countDominates = 0;
-                                for (auto p : newPhisByBB) {
-                                    auto phi = p.second;
-                                    if (dom.dominates(phi->bb(), bb2)) {
-                                        countDominates++;
+                                if (phisPlaced) {
+
+                                    ///////// assert for debug
+                                    int countDominates = 0;
+                                    for (auto p : newPhisByBB) {
+                                        auto phi = p.second;
+                                        if (dom.dominates(phi->bb(), bb2)) {
+                                            countDominates++;
+                                        }
                                     }
-                                }
 
-                                assert(countDominates == 1 &&
-                                       "countDominates != 1!");
-                                ////////
+                                    assert(countDominates == 1 &&
+                                           "countDominates != 1!");
+                                    ////////
 
-                                for (auto p : newPhisByBB) {
-                                    auto phi = p.second;
-                                    if (dom.dominates(phi->bb(), bb2)) {
-                                        (*b)->arg(0).val() = phi;
-                                        break;
+                                    for (auto p : newPhisByBB) {
+                                        auto phi = p.second;
+                                        if (dom.dominates(phi->bb(), bb2)) {
+                                            (*b)->arg(0).val() = phi;
+                                            break;
+                                        }
                                     }
                                 }
                             }
