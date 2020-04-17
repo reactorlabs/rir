@@ -68,7 +68,6 @@ class EventCounters {
 };
 
 #ifdef MEASURE
-#define ENABLE_EVENT_COUNTERS EventCounters::isEnabled
 
 namespace events {
 static unsigned PirOptimized =

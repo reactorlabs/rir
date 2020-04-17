@@ -989,8 +989,8 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
             // remove the deoptimized function. Unless on deopt chaos,
             // always recompiling would just blow testing time...
             auto dt = DispatchTable::unpack(BODY(cls));
-#ifdef ENABLE_EVENT_COUNTERS
-            if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+            if (EventCounters::isEnabled) {
                 CodeEventCounters::instance().countDeopt(dt);
             }
 #endif
@@ -1010,8 +1010,8 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
         stackHeight += m->frames[i].stackSize + 1;
     }
 
-#ifdef ENABLE_EVENT_COUNTERS
-    if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+    if (EventCounters::isEnabled) {
         EventCounters::instance().count(events::Deopt);
     }
 #endif

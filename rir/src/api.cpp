@@ -490,7 +490,7 @@ REXPORT SEXP rirDisableLoopPeeling() {
 }
 
 REXPORT SEXP rirEnableEventCounters() {
-#ifndef ENABLE_EVENT_COUNTERS
+#ifndef MEASURE
     Rf_error("RIR must be compiled with event counters to support this");
 #else
     EventCounters::isEnabled = true;
@@ -499,7 +499,7 @@ REXPORT SEXP rirEnableEventCounters() {
 }
 
 REXPORT SEXP rirDisableEventCounters() {
-#ifndef ENABLE_EVENT_COUNTERS
+#ifndef MEASURE
     Rf_error("RIR must be compiled with event counters to support this");
 #else
     EventCounters::isEnabled = false;
@@ -508,7 +508,7 @@ REXPORT SEXP rirDisableEventCounters() {
 }
 
 REXPORT SEXP rirResetEventCounters() {
-#ifndef ENABLE_EVENT_COUNTERS
+#ifndef MEASURE
     Rf_error("RIR must be compiled with event counters to support this");
 #else
     EventCounters::instance().reset();
@@ -518,7 +518,7 @@ REXPORT SEXP rirResetEventCounters() {
 }
 
 REXPORT SEXP rirFlushEventCounters() {
-#ifndef ENABLE_EVENT_COUNTERS
+#ifndef MEASURE
     Rf_error("RIR must be compiled with event counters to support this");
 #else
     EventCounters::instance().flush();
@@ -528,7 +528,7 @@ REXPORT SEXP rirFlushEventCounters() {
 }
 
 REXPORT SEXP rirFlushEventCountersIfEnabled() {
-#ifndef ENABLE_EVENT_COUNTERS
+#ifndef MEASURE
     return R_NilValue;
 #else
     EventCounters::instance().flush();

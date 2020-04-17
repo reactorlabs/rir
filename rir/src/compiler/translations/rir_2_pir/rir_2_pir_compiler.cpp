@@ -70,14 +70,14 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                                      rir::Function* optFunction,
                                      const OptimizationContext& ctx,
                                      MaybeCls success, Maybe fail) {
-#ifdef ENABLE_EVENT_COUNTERS
+#ifdef MEASURE
     MaybeCls originalSuccess = success;
     Maybe originalFail = fail;
-    success = ENABLE_EVENT_COUNTERS ? [&](ClosureVersion* result) {
+    success = EventCounters::isEnabled ? [&](ClosureVersion* result) {
         EventCounters::instance().count(events::PirOptimized);
         originalSuccess(result);
     } : originalSuccess;
-    fail = ENABLE_EVENT_COUNTERS ? [&]() {
+    fail = EventCounters::isEnabled ? [&]() {
         EventCounters::instance().count(events::Unoptimizable);
         originalFail();
     } : originalFail;

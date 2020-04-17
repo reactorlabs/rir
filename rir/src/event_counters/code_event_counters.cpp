@@ -292,7 +292,7 @@ void CodeEventCounters::dump() const {
     dumpNumClosureVersions();
 }
 
-static std::string printTimestampVector(const std::vector<Timestamp> vector) {
+static std::string printTimestampVector(const std::vector<Timestamp>& vector) {
     std::stringstream result;
     for (auto it = vector.begin(); it != vector.end(); ++it) {
         Timestamp timestamp = *it;

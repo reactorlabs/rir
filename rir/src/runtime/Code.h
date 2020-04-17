@@ -76,8 +76,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     void registerInvocationStart() {
-#ifdef ENABLE_EVENT_COUNTERS
-        if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+        if (EventCounters::isEnabled) {
             CodeEventCounters::instance().count(this, codeEvents::Invocations);
             CodeEventCounters::instance().profileStart(this);
         }
@@ -87,8 +87,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     void registerInvocationEnd() {
-#ifdef ENABLE_EVENT_COUNTERS
-        if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+        if (EventCounters::isEnabled) {
             CodeEventCounters::instance().profileEnd(this);
         }
 #endif

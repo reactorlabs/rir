@@ -117,8 +117,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     void registerInvocationStart() {
         body()->registerInvocationStart();
-#ifdef ENABLE_EVENT_COUNTERS
-        if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+        if (EventCounters::isEnabled) {
             CodeEventCounters::instance().recordHeader(this);
         }
 #endif
@@ -127,8 +127,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     size_t invocationCount() const { return body()->funInvocationCount; }
     void registerDeopt() {
         body()->registerDeopt();
-#ifdef ENABLE_EVENT_COUNTERS
-        if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+        if (EventCounters::isEnabled) {
             CodeEventCounters::instance().recordHeader(this);
         }
 #endif

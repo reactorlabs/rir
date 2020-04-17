@@ -337,8 +337,8 @@ SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
                  R_bcstack_t*, BindingCache*);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
-#ifdef ENABLE_EVENT_COUNTERS
-    if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+    if (EventCounters::isEnabled) {
         CodeEventCounters::instance().countCallSite(code, call.caller,
                                                     call.callSiteAddress);
     }
@@ -859,8 +859,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         }
     }
 
-#ifdef ENABLE_EVENT_COUNTERS
-    if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+    if (EventCounters::isEnabled) {
+        CodeEventCounters::instance().countClosureCall(table, fun);
         CodeEventCounters::instance().countCallSite(fun, call.caller,
                                                     call.callSiteAddress);
     }
@@ -4067,8 +4068,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // remove the deoptimized function. Unless on deopt chaos,
                 // always recompiling would just blow testing time...
                 auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
-#ifdef ENABLE_EVENT_COUNTERS
-                if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+                if (EventCounters::isEnabled) {
                     CodeEventCounters::instance().countDeopt(dt);
                 }
 #endif
@@ -4079,8 +4080,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             for (size_t i = 0; i < m->numFrames; ++i)
                 stackHeight += m->frames[i].stackSize + 1;
 
-#ifdef ENABLE_EVENT_COUNTERS
-            if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+            if (EventCounters::isEnabled) {
                 EventCounters::instance().count(events::Deopt);
             }
 #endif

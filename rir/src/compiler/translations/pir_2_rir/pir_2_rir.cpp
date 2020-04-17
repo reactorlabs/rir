@@ -1344,8 +1344,8 @@ rir::Function* Pir2Rir::finalize() {
                                        globalContext());
 #endif
     log.finalRIR(function.function());
-#ifdef ENABLE_EVENT_COUNTERS
-    if (ENABLE_EVENT_COUNTERS) {
+#ifdef MEASURE
+    if (EventCounters::isEnabled) {
         int numClosuresCompiled = cls->inlinees + 1;
         EventCounters::instance().count(body->nativeCode ? events::LlvmLowered
                                                          : events::RirLowered,
