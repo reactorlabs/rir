@@ -11,6 +11,7 @@
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
 
+#include <cmath>
 #include <unordered_set>
 
 namespace {
@@ -605,38 +606,88 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             }
 
             if (auto colonInputEffects = ColonInputEffects::Cast(i)) {
-                auto lhs = colonInputEffects->arg<0>().val();
-                auto rhs = colonInputEffects->arg<1>().val();
-                if ((!lhs->type.maybeHasAttrs() ||
-                     !rhs->type.maybeHasAttrs()) &&
-                    !(lhs->type.maybe(PirType::num()) &&
-                      rhs->type.maybe(PirType::num()))) {
-                    // We still need to keep the colonInputEffects because it
-                    // could raise warnings / errors
-                    anyChange = true;
-                    colonInputEffects->replaceUsesWith(True::instance());
+                bool done = false;
+
+                FOLD_BINARY(ColonInputEffects, [&](SEXP lhs, SEXP rhs) {
+                    if (isColonFastcase(lhs, rhs)) {
+                        i->replaceUsesWith(True::instance());
+                        if (convertsToRealWithoutWarning(lhs) &&
+                            convertsToRealWithoutWarning(rhs)) {
+                            if (XLENGTH(lhs) == 1 && XLENGTH(rhs) == 1) {
+                                anyChange = true;
+                                done = true;
+                                next = bb->remove(ip);
+                            }
+                        }
+                    }
+                });
+
+                if (!done) {
+                    auto lhs = colonInputEffects->arg<0>().val();
+                    auto rhs = colonInputEffects->arg<1>().val();
+                    auto notFactor = !lhs->type.maybeHasAttrs() ||
+                                     !rhs->type.maybeHasAttrs();
+                    // TODO this condition needs to go! see isColonFastcase in
+                    // interp.cpp
+                    auto cannotCauseCoercionProblems =
+                        !lhs->type.maybe(PirType::num()) ||
+                        !rhs->type.maybe(PirType::num());
+                    if (notFactor && cannotCauseCoercionProblems) {
+                        colonInputEffects->replaceUsesWith(True::instance());
+                        anyChange = true;
+                    }
                 }
             }
 
-            FOLD_UNARY(ColonCastLhs, [&](SEXP lhs) {
-                if (convertsToRealWithoutWarning(lhs)) {
-                    anyChange = true;
-                    SEXP newLhs = colonCastLhs(lhs);
-                    LdConst* newLhsInstr = new LdConst(newLhs);
-                    i->replaceUsesAndSwapWith(newLhsInstr, ip);
-                }
-            });
+            if (auto castLhs = ColonCastLhs::Cast(i)) {
+                bool done = false;
+                FOLD_UNARY(ColonCastLhs, [&](SEXP lhs) {
+                    if (convertsToRealWithoutWarning(lhs)) {
+                        double lhsNum = Rf_asReal(lhs);
+                        if (!std::isnan(lhsNum)) {
+                            SEXP newLhs = colonCastLhs(lhs);
+                            LdConst* newLhsInstr = new LdConst(newLhs);
+                            done = true;
+                            anyChange = true;
+                            i->replaceUsesAndSwapWith(newLhsInstr, ip);
+                        }
+                    }
+                });
 
-            FOLD_BINARY(ColonCastRhs, [&](SEXP newLhs, SEXP rhs) {
-                if (convertsToRealWithoutWarning(rhs) &&
-                    convertsToRealWithoutWarning(newLhs)) {
+                if (!done && castLhs->arg(0).val()->type.isA(
+                                 PirType(RType::integer).notNAOrNaN())) {
                     anyChange = true;
-                    SEXP newRhs = colonCastRhs(newLhs, rhs);
-                    LdConst* newRhsInstr = new LdConst(newRhs);
-                    i->replaceUsesAndSwapWith(newRhsInstr, ip);
+                    i->replaceUsesWith(castLhs->arg(0).val());
+                    next = bb->remove(ip);
                 }
-            });
+            }
 
+            if (auto castRhs = ColonCastRhs::Cast(i)) {
+                bool done = false;
+                FOLD_BINARY(ColonCastRhs, [&](SEXP newLhs, SEXP rhs) {
+                    if (convertsToRealWithoutWarning(rhs) &&
+                        convertsToRealWithoutWarning(newLhs)) {
+                        double rhsNum = Rf_asReal(rhs);
+                        if (!std::isnan(rhsNum)) {
+                            done = true;
+                            anyChange = true;
+                            SEXP newRhs = colonCastRhs(newLhs, rhs);
+                            LdConst* newRhsInstr = new LdConst(newRhs);
+                            i->replaceUsesAndSwapWith(newRhsInstr, ip);
+                        }
+                    }
+                });
+
+                if (!done &&
+                    castRhs->arg(0).val()->type.isA(
+                        PirType(RType::integer).notNAOrNaN()) &&
+                    castRhs->arg(1).val()->type.isA(
+                        PirType(RType::integer).notNAOrNaN())) {
+                    anyChange = true;
+                    i->replaceUsesWith(castRhs->arg(0).val());
+                    next = bb->remove(ip);
+                }
+            }
             ip = next;
         }
 

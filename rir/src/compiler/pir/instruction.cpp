@@ -497,6 +497,9 @@ LdConst::LdConst(SEXP c)
 LdConst::LdConst(int num)
     : FixedLenInstruction(PirType(RType::integer).scalar().notNAOrNaN()),
       idx(Pool::getInt(num)) {}
+LdConst::LdConst(double num)
+    : FixedLenInstruction(PirType(RType::integer).scalar().notNAOrNaN()),
+      idx(Pool::getNum(num)) {}
 
 SEXP LdConst::c() const { return Pool::get(idx); }
 

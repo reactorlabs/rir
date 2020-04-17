@@ -314,6 +314,20 @@ class StaticReferenceCount
                     }
                 }
             }
+            if (i->type.maybe(RType::vec)) {
+                if (auto j =
+                        Instruction::Cast(i->arg(0).val()->followCasts())) {
+                    if (j->minReferenceCount() < 1) {
+                        auto taint = state.isTainted(j);
+                        assert(!taint ||
+                               taint->kind >= AbstractValueTaint::Taint::Reuse);
+                        if (!taint) {
+                            state.taint(j, AbstractValueTaint::Taint::Reuse, i);
+                            res.update();
+                        }
+                    }
+                }
+            }
             break;
 
         // Default: instructions which might update in-place, if named
