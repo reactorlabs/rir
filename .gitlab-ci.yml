@@ -71,6 +71,11 @@ test_release_1:
     - RIR_CHECK_PIR_TYPES=1 bin/tests
     - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-devel
     - ../../tools/check-gnur-make-tests-error
+  artifacts:
+    paths:
+    - external/custom-r/tests/*/*check.log
+    when: on_failure
+    expire_in: 1 week
 
 test_release_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -85,6 +90,11 @@ test_release_2:
     - cd /opt/rir/build/release
     - bin/gnur-make-tests check-recommended
     - ../../tools/check-gnur-make-tests-error
+  artifacts:
+    paths:
+    - external/custom-r/tests/*/*check.log
+    when: on_failure
+    expire_in: 1 week
 
 # Run some tests in the debug mode
 tests_debug:
@@ -105,6 +115,11 @@ tests_debug:
     - PIR_ENABLE=force ./bin/tests
     - ./bin/gnur-make-tests check-devel
     - ../../tools/check-gnur-make-tests-error
+  artifacts:
+    paths:
+    - external/custom-r/tests/*/*check.log
+    when: on_failure
+    expire_in: 1 week
 
 # Run some tests in the full verify (release) mode
 tests_fullverify:
@@ -119,6 +134,11 @@ tests_fullverify:
     - bin/tests
     - bin/gnur-make-tests check-devel
     - ../../tools/check-gnur-make-tests-error
+  artifacts:
+    paths:
+    - external/custom-r/tests/*/*check.log
+    when: on_failure
+    expire_in: 1 week
 
 # Test particular features, like deoptimization and serialization
 test_features_1:
