@@ -83,7 +83,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     V(InnerFunction)                                                           \
     V(DisableAllSpecialization)                                                \
     V(DisableArgumentTypeSpecialization)                                       \
-    V(DisableNumArgumentsSerialization)
+    V(DisableNumArgumentsSpecialization)
 
     enum Flag {
 #define V(F) F,
@@ -91,7 +91,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 #undef V
 
             FIRST = Dead,
-        LAST = DisableNumArgumentsSerialization
+        LAST = DisableNumArgumentsSpecialization
     };
     EnumSet<Flag> flags;
 
@@ -99,7 +99,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         static Flag inherited[] = {ForceInline, DisableInline,
                                    DisableAllSpecialization,
                                    DisableArgumentTypeSpecialization,
-                                   DisableNumArgumentsSerialization};
+                                   DisableNumArgumentsSpecialization};
         auto f = other->flags;
         if (f.includes(DisableAllSpecialization))
             assert(!signature().assumptions.includes(

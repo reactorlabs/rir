@@ -168,7 +168,7 @@ REXPORT SEXP rir_markFunction(SEXP what, SEXP which, SEXP reopt_,
     if (disableArgumentTypeSpecialization)
         fun->flags.set(Function::DisableArgumentTypeSpecialization);
     if (disableNumArgumentSpecialization)
-        fun->flags.set(Function::DisableNumArgumentsSerialization);
+        fun->flags.set(Function::DisableNumArgumentsSpecialization);
 
     return R_NilValue;
 }

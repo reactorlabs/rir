@@ -78,7 +78,7 @@ static int GLOBAL_SPECIALIZATION_LEVEL =
 void Function::clearDisabledAssumptions(Assumptions& given) const {
     if (flags.contains(Function::DisableArgumentTypeSpecialization))
         given.clearTypeFlags();
-    if (flags.contains(Function::DisableNumArgumentsSerialization))
+    if (flags.contains(Function::DisableNumArgumentsSpecialization))
         given.clearNargs();
     if (flags.contains(Function::DisableAllSpecialization))
         given.clearExcept(pir::Rir2PirCompiler::minimalAssumptions);
