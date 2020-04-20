@@ -101,6 +101,7 @@ class BB {
     bool isBranch() const { return next0 && next1; }
     bool isCheckpoint() const;
     bool isMerge() const { return predecessors().size() > 1; }
+    bool isNonLocalReturn() const;
 
     void setTrueBranch(BB* trueBranch) {
         assert(!next0);

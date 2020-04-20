@@ -969,6 +969,16 @@ class Branch
     void printGraphBranches(std::ostream& out, size_t bbId) const override;
 };
 
+class NonLocalReturn
+    : public FixedLenInstructionWithEnvSlot<Tag::NonLocalReturn, NonLocalReturn,
+                                            2, Effects::AnyI(), HasEnvSlot::Yes,
+                                            Controlflow::Exit> {
+  public:
+    explicit NonLocalReturn(Value* ret, Value* env)
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
+                                         {{ret}}, env) {}
+};
+
 class Return
     : public FixedLenInstruction<Tag::Return, Return, 1, Effects::NoneI(),
                                  HasEnvSlot::No, Controlflow::Exit> {

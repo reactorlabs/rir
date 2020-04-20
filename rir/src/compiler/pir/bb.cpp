@@ -97,6 +97,9 @@ bool BB::isDeopt() const {
 }
 
 bool BB::isCheckpoint() const { return isBranch() && Checkpoint::Cast(last()); }
+bool BB::isNonLocalReturn() const {
+    return isExit() && NonLocalReturn::Cast(last());
+}
 
 BB::~BB() {
     gc();

@@ -444,6 +444,7 @@ bool ForceDominance::apply(RirCompiler&, ClosureVersion* code,
 
     std::unordered_map<Force*, Value*> inlinedPromise;
     std::unordered_map<Instruction*, MkArg*> forcedMkArg;
+    std::unordered_set<BB*> dead;
 
     // 1. Inline dominating promises
     Visitor::runPostChange(code->entry, [&](BB* bb) {
@@ -498,8 +499,9 @@ bool ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                         }
 
                         // Create a return value phi of the promise
-                        Value* promRes =
-                            BBTransform::forInline(prom_copy, split).first;
+                        auto promRet =
+                            BBTransform::forInline(prom_copy, split, f->env());
+                        auto promRes = promRet.first;
 
                         assert(!promRes->type.maybePromiseWrapped());
                         f = Force::Cast(*split->begin());
@@ -517,6 +519,8 @@ bool ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                             next = split->insert(
                                 next, new UpdatePromise(mkarg, promRes));
 
+                        if (promRet.second->isNonLocalReturn())
+                            dead.insert(split);
                         break;
                     }
                 }
@@ -562,6 +566,8 @@ bool ForceDominance::apply(RirCompiler&, ClosureVersion* code,
         m.first->replaceDominatedUses(m.second);
     }
 
+    // 4. remove BB's that became dead due to non local return
+    BBTransform::removeDeadBlocks(code, dead);
     return anyChange;
 }
 

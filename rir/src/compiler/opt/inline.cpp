@@ -41,6 +41,7 @@ class TheInliner {
                 rir::Function::NotInlineable);
         };
 
+        std::unordered_set<BB*> dead;
         Visitor::run(version->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
@@ -233,6 +234,7 @@ class TheInliner {
                     fuel--;
 
                 version->inlinees++;
+                auto context = (*it)->env();
 
                 BB* split =
                     BBTransform::split(version->nextBBId++, bb, it, version);
@@ -390,7 +392,10 @@ class TheInliner {
                         }
                     });
 
-                    auto inlineeRet = BBTransform::forInline(copy, split);
+                    auto inlineeRet =
+                        BBTransform::forInline(copy, split, context);
+                    if (inlineeRet.second->isNonLocalReturn())
+                        dead.insert(inlineeRet.second);
                     Value* inlineeRes = inlineeRet.first;
                     BB* inlineeReturnblock = inlineeRet.second;
                     if (allowInline == SafeToInline::NeedsContext) {
@@ -435,6 +440,8 @@ class TheInliner {
                     break;
             }
         });
+
+        BBTransform::removeDeadBlocks(version, dead);
         return anyChange;
     }
 };

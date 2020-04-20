@@ -3764,6 +3764,13 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
             }
 
+            case Tag::NonLocalReturn: {
+                call(NativeBuiltins::nonLocalReturn,
+                     {loadSxp(i->arg(0).val()), loadSxp(i->env())});
+                builder.CreateUnreachable();
+                break;
+            }
+
             case Tag::IsEnvStub: {
                 auto arg = loadSxp(i->arg(0).val());
                 auto env = MkEnv::Cast(i->env());

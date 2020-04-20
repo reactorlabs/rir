@@ -164,6 +164,8 @@ struct NativeBuiltins {
     static NativeBuiltin xlength_;
 
     static NativeBuiltin getAttrb;
+
+    static NativeBuiltin nonLocalReturn;
 };
 
 }

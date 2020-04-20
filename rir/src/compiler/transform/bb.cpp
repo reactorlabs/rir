@@ -121,9 +121,11 @@ void BBTransform::splitCriticalEdges(Code* fun) {
     }
 }
 
-std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
+std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice,
+                                              Value* context) {
     Value* found = nullptr;
-    Return* ret;
+    Instruction* ret;
+    BB* retBlock = nullptr;
     Visitor::run(inlinee, [&](BB* bb) {
         if (!bb->isExit())
             return;
@@ -131,20 +133,38 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
         if (bb->isDeopt())
             return;
 
-        ret = Return::Cast(bb->last());
+        // non-local returns become local returs through inlining only if the
+        // caller context matches the context of the non-local return.
+        // (contexts are identified by envs)
+        auto nlr = NonLocalReturn::Cast(bb->last());
+        if (nlr) {
+            if (nlr->env() == context) {
+                ret = nlr;
+            } else {
+                retBlock = bb;
+                return;
+            }
+        } else {
+            ret = Return::Cast(bb->last());
+        }
         assert(ret);
+        retBlock = bb;
 
         // This transformation assumes that we have just one reachable return.
         // Assert that we do not find a second one.
         assert(!found);
 
-        found = ret->arg<0>().val();
+        found = ret->arg(0).val();
         assert(ret->bb() == bb);
         bb->setNext(splice);
         bb->remove(bb->end() - 1);
     });
+    if (!found) {
+        // can happen if we have only non local returns
+        return {Nil::instance(), retBlock};
+    }
     assert(found);
-    return {found, ret->bb()};
+    return {found, retBlock};
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
@@ -414,6 +434,34 @@ void BBTransform::removeDeadInstrs(Code* fun, uint8_t maxBurstSize) {
         if (isDeadPhi(phi)) {
             phi->bb()->remove(phi);
         }
+    }
+}
+
+void BBTransform::removeDeadBlocks(Code* fun,
+                                   const std::unordered_set<BB*>& dead) {
+    if (dead.empty())
+        return;
+    {
+        std::unordered_set<BB*> toDelete;
+        CFG cfg(fun);
+        for (auto d : dead) {
+            if (toDelete.count(d))
+                continue;
+            toDelete.insert(d);
+            Visitor::run(d, [&](BB* bb) {
+                if (!cfg.isPredecessor(fun->entry, bb))
+                    toDelete.insert(bb);
+            });
+        }
+        Visitor::run(fun->entry, [&](Instruction* i) {
+            if (auto phi = Phi::Cast(i)) {
+                phi->removeInputs(toDelete);
+            }
+        });
+        for (const auto& bb : toDelete)
+            bb->deleteSuccessors();
+        for (const auto& bb : toDelete)
+            delete bb;
     }
 }
 
