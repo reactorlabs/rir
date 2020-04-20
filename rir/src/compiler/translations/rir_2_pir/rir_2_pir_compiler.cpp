@@ -32,6 +32,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto fun = tbl->baseline();
+
     Assumptions assumptions = assumptions_;
     fun->clearDisabledAssumptions(assumptions);
 
@@ -47,23 +48,26 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
     }
     auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun);
     OptimizationContext context(assumptions);
-    compileClosure(pirClosure, context, success, fail);
+    compileClosure(pirClosure, tbl->dispatch(assumptions), context, success,
+                   fail);
 }
 
-void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
+void Rir2PirCompiler::compileFunction(rir::DispatchTable* src,
                                       const std::string& name, SEXP formals,
                                       SEXP srcRef,
                                       const Assumptions& assumptions_,
                                       MaybeCls success, Maybe fail) {
     Assumptions assumptions = assumptions_;
+    auto srcFunction = src->baseline();
     srcFunction->clearDisabledAssumptions(assumptions);
     OptimizationContext context(assumptions);
     auto closure =
         module->getOrDeclareRirFunction(name, srcFunction, formals, srcRef);
-    compileClosure(closure, context, success, fail);
+    compileClosure(closure, src->dispatch(assumptions), context, success, fail);
 }
 
 void Rir2PirCompiler::compileClosure(Closure* closure,
+                                     rir::Function* optFunction,
                                      const OptimizationContext& ctx,
                                      MaybeCls success, Maybe fail) {
 
@@ -99,10 +103,10 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     if (auto existing = closure->findCompatibleVersion(ctx))
         return success(existing);
 
-    auto version = closure->declareVersion(ctx);
+    auto version = closure->declareVersion(ctx, optFunction);
     Builder builder(version, closure->closureEnv());
     auto& log = logger.begin(version);
-    Rir2Pir rir2pir(*this, closure->rirFunction(), log, closure->name());
+    Rir2Pir rir2pir(*this, version, log, closure->name());
 
     auto& assumptions = version->assumptions();
 

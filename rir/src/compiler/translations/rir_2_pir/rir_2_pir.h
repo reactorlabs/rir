@@ -14,13 +14,11 @@ struct RirStack;
 
 class Rir2Pir {
   public:
-    Rir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction,
-            ClosureStreamLogger& log, const std::string& name)
-        : compiler(cmp), srcFunction(srcFunction), log(log), name(name) {}
+    Rir2Pir(Rir2PirCompiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
+            const std::string& name)
+        : compiler(cmp), cls(cls), log(log), name(name) {}
 
-    bool tryCompile(Builder& insert) __attribute__((warn_unused_result)) {
-        return tryCompile(srcFunction->body(), insert);
-    }
+    bool tryCompile(Builder& insert) __attribute__((warn_unused_result));
 
     Value* tryCreateArg(rir::Code* prom, Builder& insert, bool eager) const
         __attribute__((warn_unused_result));
@@ -44,7 +42,7 @@ class Rir2Pir {
     bool finalized = false;
 
     Rir2PirCompiler& compiler;
-    rir::Function* srcFunction;
+    ClosureVersion* cls;
     ClosureStreamLogger& log;
     std::string name;
 
@@ -60,15 +58,14 @@ class Rir2Pir {
     Checkpoint* addCheckpoint(rir::Code* srcCode, Opcode* pos,
                               const RirStack& stack, Builder& insert) const;
 
-  private:
     bool inPromise_ = false;
 };
 
 class PromiseRir2Pir : public Rir2Pir {
   public:
-    PromiseRir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction,
+    PromiseRir2Pir(Rir2PirCompiler& cmp, ClosureVersion* cls,
                    ClosureStreamLogger& log, const std::string& name)
-        : Rir2Pir(cmp, srcFunction, log, name) {}
+        : Rir2Pir(cmp, cls, log, name) {}
 
   private:
     bool inPromise() const override final { return true; }

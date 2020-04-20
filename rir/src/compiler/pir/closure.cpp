@@ -64,11 +64,12 @@ Closure::findCompatibleVersion(const OptimizationContext& ctx) const {
 }
 
 ClosureVersion*
-Closure::declareVersion(const OptimizationContext& optimizationContext) {
+Closure::declareVersion(const OptimizationContext& optimizationContext,
+                        rir::Function* optFunction) {
     assert(!versions.count(optimizationContext));
     versions[optimizationContext] = nullptr;
     auto entry = versions.find(optimizationContext);
-    auto v = new ClosureVersion(this, entry->first);
+    auto v = new ClosureVersion(this, optFunction, entry->first);
     entry->second = v;
     return v;
 }

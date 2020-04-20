@@ -63,7 +63,8 @@ class Closure {
         return out;
     }
 
-    ClosureVersion* declareVersion(const OptimizationContext&);
+    ClosureVersion* declareVersion(const OptimizationContext&,
+                                   rir::Function* optFunction);
     void erase(const OptimizationContext& ctx) { versions.erase(ctx); }
 
     bool existsVersion(const OptimizationContext& ctx) {
