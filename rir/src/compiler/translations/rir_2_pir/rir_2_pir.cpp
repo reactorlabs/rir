@@ -1274,6 +1274,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
         if (bc.isExit()) {
             Value* tos = cur.stack.top();
+            bool localReturn = true;
             switch (bc.bc) {
             case Opcode::ret_:
                 cur.stack.pop();
@@ -1282,8 +1283,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 // Return bytecode as top-level statement cannot cause non-local
                 // return. Therefore we can treat it as normal local return
                 // instruction. We just need to make sure to empty the stack.
-                if (inPromise())
+                if (inPromise()) {
                     insert(new NonLocalReturn(cur.stack.pop(), insert.env));
+                    localReturn = false;
+                }
                 cur.stack.clear();
                 break;
             case Opcode::deopt_:
@@ -1293,7 +1296,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 assert(false);
             }
             assert(cur.stack.empty());
-            results.push_back(ReturnSite(insert.getCurrentBB(), tos));
+            if (localReturn)
+                results.push_back(ReturnSite(insert.getCurrentBB(), tos));
             // Setting the position to end, will either terminate the loop, or
             // pop from the worklist
             finger = end;
