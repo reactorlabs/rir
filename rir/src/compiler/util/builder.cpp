@@ -106,7 +106,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
 
     auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
     auto rirCode = version->owner()->rirFunction()->body();
-    if (rirCode->needsFullEnv)
+    if (rirCode->flags.contains(rir::Code::NeedsFullEnv))
         mkenv->neverStub = true;
     mkenv->typeFeedback.srcCode = rirCode;
     add(mkenv);

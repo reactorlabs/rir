@@ -13,6 +13,8 @@
 #include <functional>
 #include <stdint.h>
 
+#include "runtime/Function.h"
+
 namespace rir {
 
 /** Compiler API. Given a language object, compiles it and returns the

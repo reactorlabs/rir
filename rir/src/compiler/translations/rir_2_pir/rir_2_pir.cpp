@@ -360,6 +360,19 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (bc.immediate.typeFeedback.numTypes) {
             auto feedback = bc.immediate.typeFeedback;
             if (auto i = Instruction::Cast(at(0))) {
+                if (cls->optFunction) {
+                    if (auto sample =
+                            cls->optFunction->body()->pirRegisterMap()) {
+                        // TODO: implement with a find method on register map
+                        sample->forEachSlot(
+                            [&](size_t i, PirRegisterMap::MDEntry& mdEntry) {
+                                if (mdEntry.origin == pos &&
+                                    mdEntry.readyForReopt) {
+                                    feedback = mdEntry.feedback;
+                                }
+                            });
+                    }
+                }
                 // TODO: deal with multiple locations
                 i->typeFeedback.type.merge(feedback);
                 i->typeFeedback.srcCode = srcCode;
@@ -368,11 +381,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
                 }
-            }
-        }
-        if (cls->optFunction) {
-            if (auto sample = cls->optFunction->body()->pirRegisterMap()) {
-                // TODO use sampled stuff
             }
         }
         break;

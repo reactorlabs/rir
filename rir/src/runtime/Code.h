@@ -99,7 +99,15 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     unsigned funInvocationCount;
     unsigned deoptCount;
 
-    unsigned needsFullEnv : 1;
+    enum Flag {
+        NeedsFullEnv,
+        Reoptimise,
+
+        FIRST = NeedsFullEnv,
+        LAST = Reoptimise
+    };
+
+    EnumSet<Flag> flags;
 
     unsigned src; /// AST of the function (or promise) represented by the code
 

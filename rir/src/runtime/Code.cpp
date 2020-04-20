@@ -22,9 +22,9 @@ Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
           // GC area has only 1 pointer
           NumLocals),
       nativeCode(nullptr), uid(UUID::random()), funInvocationCount(0),
-      deoptCount(0), needsFullEnv(false), src(src), stackLength(0),
-      localsCount(localsCnt), bindingCacheSize(bindingsCnt), codeSize(cs),
-      srcLength(sourceLength), extraPoolSize(0) {
+      deoptCount(0), src(src), stackLength(0), localsCount(localsCnt),
+      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
     allCodes.emplace(uid, this);
 }
