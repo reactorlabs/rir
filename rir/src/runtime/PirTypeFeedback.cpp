@@ -1,11 +1,11 @@
-#include "PirRegisterMap.h"
+#include "PirTypeFeedback.h"
 #include "Code.h"
 
 namespace rir {
 
-const size_t PirRegisterMap::MAX_SLOT_IDX;
+const size_t PirTypeFeedback::MAX_SLOT_IDX;
 
-PirRegisterMap::PirRegisterMap(
+PirTypeFeedback::PirTypeFeedback(
     const std::unordered_set<Code*>& codes,
     const std::unordered_map<size_t, std::pair<Code*, Opcode*>>& slots)
     : RirRuntimeObject(sizeof(*this), codes.size()) {

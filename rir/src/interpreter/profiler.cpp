@@ -34,11 +34,11 @@ void RuntimeProfiler::sample(int signal) {
     auto code = Code::check(tos);
     if (!code)
         return;
-    auto md = code->pirRegisterMap();
+    auto md = code->pirTypeFeedback();
     if (!md)
         return;
 
-    md->forEachSlot([&](size_t i, PirRegisterMap::MDEntry& mdEntry) {
+    md->forEachSlot([&](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
         auto slot = *(stack + i);
         assert(slot.tag == 0);
         if (auto sxpval = slot.u.sxpval) {

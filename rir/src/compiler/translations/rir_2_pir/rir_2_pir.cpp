@@ -362,10 +362,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (auto i = Instruction::Cast(at(0))) {
                 if (cls->optFunction) {
                     if (auto sample =
-                            cls->optFunction->body()->pirRegisterMap()) {
+                            cls->optFunction->body()->pirTypeFeedback()) {
                         // TODO: implement with a find method on register map
                         sample->forEachSlot(
-                            [&](size_t i, PirRegisterMap::MDEntry& mdEntry) {
+                            [&](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
                                 if (mdEntry.origin == pos &&
                                     mdEntry.readyForReopt) {
                                     feedback = mdEntry.feedback;

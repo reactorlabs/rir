@@ -13,26 +13,26 @@ namespace rir {
 #pragma pack(push)
 #pragma pack(1)
 
-constexpr static size_t PIR_REGISTER_MAP_MAGIC = 0x31573;
+constexpr static size_t PIR_TYPE_FEEDBACK_MAGIC = 0x31573;
 
 struct Code;
 
-struct PirRegisterMap
-    : public RirRuntimeObject<PirRegisterMap, PIR_REGISTER_MAP_MAGIC> {
+struct PirTypeFeedback
+    : public RirRuntimeObject<PirTypeFeedback, PIR_TYPE_FEEDBACK_MAGIC> {
   public:
     constexpr static size_t MAX_SLOT_IDX = 64;
 
-    static PirRegisterMap*
+    static PirTypeFeedback*
     New(const std::unordered_set<Code*>& origins,
         const std::unordered_map<size_t, std::pair<Code*, Opcode*>>& slots) {
         SEXP cont = Rf_allocVector(EXTERNALSXP,
                                    requiredSize(origins.size(), slots.size()));
-        PirRegisterMap* res =
-            new (DATAPTR(cont)) PirRegisterMap(origins, slots);
+        PirTypeFeedback* res =
+            new (DATAPTR(cont)) PirTypeFeedback(origins, slots);
         return res;
     }
 
-    PirRegisterMap(
+    PirTypeFeedback(
         const std::unordered_set<Code*>& codes,
         const std::unordered_map<size_t, std::pair<Code*, Opcode*>>& slots);
 
@@ -45,7 +45,7 @@ struct PirRegisterMap
     }
 
     static size_t requiredSize(size_t origins, size_t entries) {
-        return sizeof(PirRegisterMap) + sizeof(SEXP) * origins +
+        return sizeof(PirTypeFeedback) + sizeof(SEXP) * origins +
                sizeof(MDEntry) * entries;
     }
 

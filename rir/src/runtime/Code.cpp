@@ -140,8 +140,8 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
-    if (auto map = pirRegisterMap()) {
-        map->forEachSlot([&](size_t i, PirRegisterMap::MDEntry& mdEntry) {
+    if (auto map = pirTypeFeedback()) {
+        map->forEachSlot([&](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
             auto feedback = mdEntry.feedback;
             out << " - slot #" << i << ": " << mdEntry.offset << " : [";
             feedback.print(out);
