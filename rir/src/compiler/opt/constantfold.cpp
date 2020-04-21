@@ -180,14 +180,6 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     if (pl.placement.size() > 0) {
                                         anyChange = true;
 
-                                        if (pl.placement.size() == 0) {
-                                            std::cerr << "bb1: " << bb1->id;
-                                            std::cerr << "bb2: " << bb2->id;
-                                        }
-
-                                        assert(pl.placement.size() > 0 &&
-                                               "0 phis to place");
-
                                         for (auto& placement : pl.placement) {
                                             auto targetForPhi = placement.first;
                                             newPhisByBB[targetForPhi] = new Phi;
@@ -222,19 +214,6 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                 }
 
                                 if (phisPlaced) {
-
-                                    ///////// assert for debug
-                                    int countDominates = 0;
-                                    for (auto p : newPhisByBB) {
-                                        auto phi = p.second;
-                                        if (dom.dominates(phi->bb(), bb2)) {
-                                            countDominates++;
-                                        }
-                                    }
-
-                                    assert(countDominates == 1 &&
-                                           "countDominates != 1!");
-                                    ////////
 
                                     for (auto p : newPhisByBB) {
                                         auto phi = p.second;

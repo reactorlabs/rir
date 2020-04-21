@@ -65,8 +65,6 @@ class Pir2Rir {
     rir::Function* finalize();
 
   private:
-    // bool isInfiniteLoopHead(BB* bb, const DominanceGraph& dom);
-
     Pir2RirCompiler& compiler;
     ClosureVersion* cls;
     std::unordered_map<Promise*, rir::Code*> promises;

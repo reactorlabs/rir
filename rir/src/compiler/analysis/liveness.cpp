@@ -149,12 +149,6 @@ restart:
         }
     }
 
-    // Visitor::run(code->entry, [&](BB* bb) {
-    //     for (auto n : bb->successors()) {
-    //         if (!liveAtEnd.count(n))
-    //             todo.insert(n);
-    //     }
-    // });
     // enqueue nodes that are alive and have a non-live successor
     // to be processed on the next iteration
     for (auto p : liveAtEnd) {
