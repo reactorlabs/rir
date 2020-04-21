@@ -22,9 +22,9 @@ Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
           // GC area has only 1 pointer
           NumLocals),
       nativeCode(nullptr), uid(UUID::random()), funInvocationCount(0),
-      deoptCount(0), needsFullEnv(false), src(src), stackLength(0),
-      localsCount(localsCnt), bindingCacheSize(bindingsCnt), codeSize(cs),
-      srcLength(sourceLength), extraPoolSize(0) {
+      deoptCount(0), src(src), stackLength(0), localsCount(localsCnt),
+      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
     allCodes.emplace(uid, this);
 }
@@ -140,6 +140,17 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
+    if (auto map = pirTypeFeedback()) {
+        map->forEachSlot([&](size_t i, PirTypeFeedback::MDEntry& mdEntry,
+                             Opcode*) {
+            auto feedback = mdEntry.feedback;
+            out << " - slot #" << i << ": " << mdEntry.offset << " : [";
+            feedback.print(out);
+            out << "] (" << mdEntry.sampleCount << " records - "
+                << (mdEntry.readyForReopt ? "ready" : "not ready") << ")\n";
+        });
+    }
+
     Opcode* pc = code();
     size_t label = 0;
     std::map<Opcode*, size_t> targets;

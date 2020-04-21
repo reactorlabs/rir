@@ -30,6 +30,14 @@ struct DispatchTable
     Function* baseline() const { return Function::unpack(getEntry(0)); }
     Function* best() const { return get(size() - 1); }
 
+    Function* dispatch(Assumptions a) const {
+        for (int i = size() - 1; i >= 0; --i) {
+            if (get(i)->signature().assumptions.subtype(a))
+                return get(i);
+        }
+        return baseline();
+    }
+
     void baseline(Function* f) {
         assert(f->signature().optimization ==
                FunctionSignature::OptimizationLevel::Baseline);

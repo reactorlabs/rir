@@ -440,7 +440,7 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         break;
     }
     case DeoptReason::EnvStubMaterialized: {
-        reason.srcCode->needsFullEnv = true;
+        reason.srcCode->flags.set(Code::NeedsFullEnv);
         break;
     }
     case DeoptReason::None:
@@ -834,7 +834,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
         fun->clearDisabledAssumptions(given);
         if (flags.contains(Function::MarkOpt) || fun == table->baseline() ||
-            given != fun->signature().assumptions) {
+            given != fun->signature().assumptions ||
+            fun->body()->flags.contains(Code::Reoptimise)) {
             if (Assumptions(given).includes(
                     pir::Rir2PirCompiler::minimalAssumptions)) {
                 // More assumptions are available than this version uses. Let's

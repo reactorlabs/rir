@@ -175,7 +175,7 @@ class LowerFunctionLLVM {
     MDNode* branchMostlyFalse;
 
   public:
-    PirRegisterMap* registerMap = nullptr;
+    PirTypeFeedback* pirTypeFeedback = nullptr;
     llvm::Function* fun;
 
     LowerFunctionLLVM(
@@ -5151,7 +5151,7 @@ bool LowerFunctionLLVM::tryCompile() {
             continue;
         if (!var.second.initialized)
             continue;
-        if (var.second.stackSlot < PirRegisterMap::MAX_SLOT_IDX) {
+        if (var.second.stackSlot < PirTypeFeedback::MAX_SLOT_IDX) {
             codes.insert(i->typeFeedback.srcCode);
             variableMapping[var.second.stackSlot] = {i->typeFeedback.srcCode,
                                                      i->typeFeedback.origin};
@@ -5160,11 +5160,11 @@ bool LowerFunctionLLVM::tryCompile() {
             usedSlots.insert(var.second.stackSlot);
 #endif
         }
-        if (variableMapping.size() == PirRegisterMap::MAX_SLOT_IDX)
+        if (variableMapping.size() == PirTypeFeedback::MAX_SLOT_IDX)
             break;
     }
     if (!variableMapping.empty()) {
-        registerMap = PirRegisterMap::New(codes, variableMapping);
+        pirTypeFeedback = PirTypeFeedback::New(codes, variableMapping);
 #ifdef DEBUG_REGISTER_MAP
         for (auto m : variableMapping) {
             auto origin = registerMap->getOriginOfSlot(m.first);
@@ -5197,7 +5197,7 @@ void* LowerLLVM::tryCompile(
                                   needsLdVarForUpdate, log);
     if (!funCompiler.tryCompile())
         return nullptr;
-    registerMap = funCompiler.registerMap;
+    pirTypeFeedback = funCompiler.pirTypeFeedback;
     return JitLLVM::tryCompile(funCompiler.fun);
 }
 

@@ -5,6 +5,7 @@
 #include "common.h"
 #include <array>
 #include <cstdint>
+#include <iostream>
 
 namespace rir {
 
@@ -123,6 +124,34 @@ struct ObservedValues {
     ObservedValues()
         : numTypes(0), stateBeforeLastForce(StateBeforeLastForce::unknown),
           unused(0) {}
+
+    void reset() { *this = ObservedValues(); }
+
+    void print(std::ostream& out) const {
+        if (numTypes) {
+            for (size_t i = 0; i < numTypes; ++i) {
+                auto t = seen[i];
+                out << Rf_type2char(t.sexptype) << "(" << (t.object ? "o" : "")
+                    << (t.attribs ? "a" : "") << (t.scalar ? "s" : "") << ")";
+                if (i != (unsigned)numTypes - 1)
+                    out << ", ";
+            }
+            if (stateBeforeLastForce !=
+                ObservedValues::StateBeforeLastForce::unknown) {
+                out << " | "
+                    << ((stateBeforeLastForce ==
+                         ObservedValues::StateBeforeLastForce::value)
+                            ? "value"
+                            : (stateBeforeLastForce ==
+                               ObservedValues::StateBeforeLastForce::
+                                   evaluatedPromise)
+                                  ? "evaluatedPromise"
+                                  : "promise");
+            }
+        } else {
+            out << "<?>";
+        }
+    };
 
     RIR_INLINE void record(SEXP e) {
         ObservedType type(e);

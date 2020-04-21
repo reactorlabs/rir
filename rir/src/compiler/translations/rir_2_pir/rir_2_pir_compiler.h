@@ -4,10 +4,9 @@
 #include "../../../utils/FormalArgs.h"
 #include "../../debugging/stream_logger.h"
 #include "../rir_compiler.h"
-#include "runtime/Function.h"
 #include <stack>
-
 namespace rir {
+struct DispatchTable;
 namespace pir {
 
 class Rir2PirCompiler : public RirCompiler {
@@ -29,23 +28,24 @@ class Rir2PirCompiler : public RirCompiler {
     }
     void compileClosure(SEXP, const std::string& name, const Assumptions& ctx,
                         MaybeCls success, Maybe fail);
-    void compileFunction(rir::Function* f, const std::string& name,
+    void compileFunction(rir::DispatchTable* f, const std::string& name,
                          SEXP formals, SEXP srcRef, MaybeCls success,
                          Maybe fail) {
         compileFunction(f, name, formals, srcRef, defaultAssumptions, success,
                         fail);
     }
-    void compileFunction(rir::Function*, const std::string& name, SEXP formals,
-                         SEXP srcRef, const Assumptions& ctx, MaybeCls success,
-                         Maybe fail);
+    void compileFunction(rir::DispatchTable*, const std::string& name,
+                         SEXP formals, SEXP srcRef, const Assumptions& ctx,
+                         MaybeCls success, Maybe fail);
     void optimizeModule();
 
     bool seenC = false;
 
   private:
     StreamLogger& logger;
-    void compileClosure(Closure* closure, const OptimizationContext& ctx,
-                        MaybeCls success, Maybe fail);
+    void compileClosure(Closure* closure, rir::Function* optFunction,
+                        const OptimizationContext& ctx, MaybeCls success,
+                        Maybe fail);
 };
 
 } // namespace pir

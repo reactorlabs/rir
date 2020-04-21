@@ -13,7 +13,7 @@ namespace pir {
 
 class LowerLLVM {
   public:
-    PirRegisterMap* registerMap;
+    PirTypeFeedback* pirTypeFeedback;
     void*
     tryCompile(ClosureVersion* cls, Code* code,
                const std::unordered_map<Promise*, unsigned>&,

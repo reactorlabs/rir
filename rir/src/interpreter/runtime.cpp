@@ -1,5 +1,6 @@
 #include "api.h"
 #include "interp.h"
+#include "profiler.h"
 
 #include <iomanip>
 
@@ -37,6 +38,7 @@ void initializeRuntime() {
     globalContext_ = context_create();
     registerExternalCode(rirEval_f, rirApplyClosure, rir_compile, rirDecompile,
                          deserializeRir, serializeRir, materialize);
+    RuntimeProfiler::initProfiler();
 }
 
 InterpreterInstance* globalContext() { return globalContext_; }

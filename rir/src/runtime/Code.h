@@ -1,7 +1,7 @@
 #ifndef RIR_CODE_H
 #define RIR_CODE_H
 
-#include "PirRegisterMap.h"
+#include "PirTypeFeedback.h"
 #include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
 #include "utils/UUID.h"
@@ -82,14 +82,15 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
             deoptCount++;
     }
 
-    PirRegisterMap* pirRegisterMap() {
+    PirTypeFeedback* pirTypeFeedback() const {
         SEXP map = getEntry(1);
         if (!map)
             return nullptr;
-        return PirRegisterMap::unpack(map);
+        return PirTypeFeedback::unpack(map);
     }
-
-    void pirRegisterMap(PirRegisterMap* map) { setEntry(1, map->container()); }
+    void pirTypeFeedback(PirTypeFeedback* map) {
+        setEntry(1, map->container());
+    }
 
     // UID for persistence when serializing/deserializing
     UUID uid;
@@ -99,7 +100,15 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     unsigned funInvocationCount;
     unsigned deoptCount;
 
-    unsigned needsFullEnv : 1;
+    enum Flag {
+        NeedsFullEnv,
+        Reoptimise,
+
+        FIRST = NeedsFullEnv,
+        LAST = Reoptimise
+    };
+
+    EnumSet<Flag> flags;
 
     unsigned src; /// AST of the function (or promise) represented by the code
 

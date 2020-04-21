@@ -40,6 +40,8 @@ class ClosureVersion : public Code {
 
     size_t inlinees = 0;
 
+    rir::Function* optFunction;
+
   private:
     Closure* owner_;
     std::vector<Promise*> promises_;
@@ -47,7 +49,7 @@ class ClosureVersion : public Code {
 
     std::string name_;
     std::string nameSuffix_;
-    ClosureVersion(Closure* closure,
+    ClosureVersion(Closure* closure, rir::Function* optFunction,
                    const OptimizationContext& optimizationContext,
                    const Properties& properties = Properties());
 

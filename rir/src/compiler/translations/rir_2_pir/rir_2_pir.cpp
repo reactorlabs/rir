@@ -360,6 +360,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (bc.immediate.typeFeedback.numTypes) {
             auto feedback = bc.immediate.typeFeedback;
             if (auto i = Instruction::Cast(at(0))) {
+                if (cls->optFunction) {
+                    if (auto sample =
+                            cls->optFunction->body()->pirTypeFeedback()) {
+                        // TODO: implement with a find method on register map
+                        sample->forEachSlot(
+                            [&](size_t i, PirTypeFeedback::MDEntry& mdEntry,
+                                Opcode*) {
+                                auto origin = sample->getOriginOfSlot(i);
+                                if (origin == pos && mdEntry.readyForReopt) {
+                                    feedback = mdEntry.feedback;
+                                }
+                            });
+                    }
+                }
                 // TODO: deal with multiple locations
                 i->typeFeedback.type.merge(feedback);
                 i->typeFeedback.srcCode = srcCode;
@@ -512,9 +526,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 monomorphicBuiltin = false;
         }
 
-        Function* target = nullptr;
+        DispatchTable* target = nullptr;
         if (monomorphicClosure || monomorphicInnerFunction) {
-            target = DispatchTable::unpack(BODY(monomorphic))->baseline();
+            target = DispatchTable::unpack(BODY(monomorphic));
         }
 
         if (target) {
@@ -528,7 +542,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // such that we can restore it in createLegaxyArgsList in the
             // interpreter. At the moment however this will just result in
             // an assert.
-            if (Query::needsPromargs(target))
+            if (Query::needsPromargs(target->baseline()))
                 monomorphicClosure = false;
         }
 
@@ -1123,6 +1137,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     return true;
 } // namespace pir
 
+bool Rir2Pir::tryCompile(Builder& insert) {
+    return tryCompile(cls->owner()->rirFunction()->body(), insert);
+}
+
 bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
     if (auto mk = MkEnv::Cast(insert.env)) {
         mk->eachLocalVar([&](SEXP name, Value*, bool) {
@@ -1138,12 +1156,11 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
 }
 
 bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) const {
-    return PromiseRir2Pir(compiler, srcFunction, log, name)
-        .tryCompile(prom, insert);
+    return PromiseRir2Pir(compiler, cls, log, name).tryCompile(prom, insert);
 }
 
 Value* Rir2Pir::tryTranslatePromise(rir::Code* srcCode, Builder& insert) const {
-    return PromiseRir2Pir(compiler, srcFunction, log, name)
+    return PromiseRir2Pir(compiler, cls, log, name)
         .tryTranslate(srcCode, insert);
 }
 
@@ -1322,7 +1339,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             SEXP srcRef = ldsrc.immediateConst();
 
             DispatchTable* dt = DispatchTable::unpack(code);
-            rir::Function* function = dt->baseline();
 
             std::stringstream inner;
             inner << name;
@@ -1340,7 +1356,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 }
             }
             inner << "@";
-            if (srcCode != srcFunction->body()) {
+            if (srcCode != cls->owner()->rirFunction()->body()) {
                 size_t i = 0;
                 for (auto c : insert.function->promises()) {
                     if (c == insert.code) {
@@ -1353,7 +1369,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             inner << (pos - srcCode->code());
 
             compiler.compileFunction(
-                function, inner.str(), formals, srcRef,
+                dt, inner.str(), formals, srcRef,
                 [&](ClosureVersion* innerF) {
                     cur.stack.push(
                         insert(new MkFunCls(innerF->owner(), dt, insert.env)));
