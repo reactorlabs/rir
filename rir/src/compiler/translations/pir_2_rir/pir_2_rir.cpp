@@ -1024,6 +1024,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 return;
             }
 
+            case Tag::NonLocalReturn:
+                cb.add(BC::return_());
+                return;
+
             case Tag::Return: {
                 cb.add(BC::ret());
                 // end of this BB

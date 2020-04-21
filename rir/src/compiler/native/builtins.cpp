@@ -2304,5 +2304,14 @@ NativeBuiltin NativeBuiltins::getAttrb = {
     "getAttrib",
     (void*)&getAttribImpl,
 };
+
+void nonLocalReturnImpl(SEXP res, SEXP env) {
+    Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
+}
+
+NativeBuiltin NativeBuiltins::nonLocalReturn = {
+    "nonLocalReturn",
+    (void*)&nonLocalReturnImpl,
+};
 }
 }

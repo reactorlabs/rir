@@ -1274,19 +1274,19 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
         if (bc.isExit()) {
             Value* tos = cur.stack.top();
+            bool localReturn = true;
             switch (bc.bc) {
             case Opcode::ret_:
                 cur.stack.pop();
                 break;
             case Opcode::return_:
-                if (inPromise()) {
-                    log.warn("Cannot compile Function. Unsupported return bc "
-                             "in promise");
-                    return nullptr;
-                }
                 // Return bytecode as top-level statement cannot cause non-local
                 // return. Therefore we can treat it as normal local return
                 // instruction. We just need to make sure to empty the stack.
+                if (inPromise()) {
+                    insert(new NonLocalReturn(cur.stack.pop(), insert.env));
+                    localReturn = false;
+                }
                 cur.stack.clear();
                 break;
             case Opcode::deopt_:
@@ -1296,7 +1296,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 assert(false);
             }
             assert(cur.stack.empty());
-            results.push_back(ReturnSite(insert.getCurrentBB(), tos));
+            if (localReturn)
+                results.push_back(ReturnSite(insert.getCurrentBB(), tos));
             // Setting the position to end, will either terminate the loop, or
             // pop from the worklist
             finger = end;
@@ -1506,9 +1507,9 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
         });
     }
 
-    // Return in promise can lead to non-local return, which currently needs env
-    // to find the context to return to.
-    insert(new Return(ret));
+    if (insert.getCurrentBB()->isEmpty() ||
+        !NonLocalReturn::Cast(insert.getCurrentBB()->last()))
+        insert(new Return(ret));
 
     InsertCast c(insert.code, insert.env);
     c();

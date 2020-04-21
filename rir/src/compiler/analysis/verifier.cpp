@@ -97,6 +97,11 @@ class TheVerifier {
     }
 
     void verify(BB* bb, bool inPromise) {
+        if (bb->id >= bb->owner->nextBBId) {
+            std::cout << "BB" << bb->id << " id is bigger than max ("
+                      << bb->owner->nextBBId << ")\n";
+            ok = false;
+        }
         for (auto suc : bb->successors()) {
             if (!suc->predecessors().count(bb)) {
                 std::cout << "BB" << bb->id << " points to BB" << suc->id
@@ -267,8 +272,9 @@ class TheVerifier {
         if (i->branchOrExit())
             if (i != bb->last()) {
                 std::cerr
+                    << "At BB" << bb->id << "\n"
                     << "PIR Verifier: Only last instruction of BB can have "
-                       "controlflow";
+                       "controlflow\n";
                 ok = false;
             }
 

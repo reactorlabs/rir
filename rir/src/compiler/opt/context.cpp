@@ -15,6 +15,21 @@ namespace pir {
 
 bool OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
                              LogStream& log) const {
+    bool anyChange = false;
+    Visitor::run(function->entry, [&](BB* bb) {
+        for (auto it = bb->begin(); it != bb->end(); ++it) {
+            if (auto ret = NonLocalReturn::Cast(*it)) {
+                if (auto env = MkEnv::Cast(ret->env())) {
+                    if (env->context == 1) {
+                        anyChange = true;
+                        ret->replaceUsesAndSwapWith(
+                            new Return(ret->arg<0>().val()), it);
+                    }
+                }
+            }
+        }
+    });
+
     UnnecessaryContexts unnecessary(function, log);
 
     std::unordered_set<Instruction*> toRemove;
@@ -34,7 +49,7 @@ bool OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
     });
 
     if (toRemove.empty())
-        return false;
+        return anyChange;
 
     assert(toRemove.size() % 2 == 0);
 

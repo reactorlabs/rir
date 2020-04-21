@@ -22,7 +22,8 @@ class BBTransform {
     static BB* split(size_t next_id, BB* src, BB::Instrs::iterator,
                      Code* target);
     static void splitCriticalEdges(Code* fun);
-    static std::pair<Value*, BB*> forInline(BB* inlinee, BB* cont);
+    static std::pair<Value*, BB*> forInline(BB* inlinee, BB* cont,
+                                            Value* context);
     static BB* lowerExpect(Code* closure, BB* src,
                            BB::Instrs::iterator position, Assume* assume,
                            bool condition, BB* deoptBlock,
@@ -46,6 +47,9 @@ class BBTransform {
     // Note that a phi is dead if it is not used by any instruction, or it is
     // used only by dead phis.
     static void removeDeadInstrs(Code* fun, uint8_t maxBurstSize);
+
+    static void removeDeadBlocks(Code* fun,
+                                 const std::unordered_set<BB*>& dead);
 };
 
 } // namespace pir

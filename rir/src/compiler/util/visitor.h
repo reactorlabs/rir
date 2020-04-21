@@ -275,7 +275,8 @@ class VisitorImplementation {
                     bool deoptBranch =
                         !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());
                     bool returnBranch =
-                        !bb->isEmpty() && Return::Cast(bb->last());
+                        !bb->isEmpty() && (NonLocalReturn::Cast(bb->last()) ||
+                                           Return::Cast(bb->last()));
                     if (deoptBranch) {
                         delayed.push_back(bb);
                     } else if (returnBranch) {

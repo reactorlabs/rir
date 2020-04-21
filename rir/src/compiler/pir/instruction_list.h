@@ -58,6 +58,7 @@
     V(ColonCastRhs)                                                            \
     V(IsEnvStub)                                                               \
     V(Return)                                                                  \
+    V(NonLocalReturn)                                                          \
     V(MkArg)                                                                   \
     V(UpdatePromise)                                                           \
     V(MkFunCls)                                                                \

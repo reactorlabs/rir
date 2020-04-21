@@ -253,7 +253,7 @@ DominanceGraph::DominanceGraph(Code* start) : idom(start->nextBBId) {
         parents.pop();
 
         // We haven't visited or numbered `n` yet.
-        if (dfnum[n->id] == 0) {
+        if (dfnum.at(n->id) == 0) {
             dfnum[n->id] = N;
             vertex[N] = n;
             parent[n->id] = p;
@@ -471,6 +471,7 @@ DominanceFrontier::DominanceFrontier(Code* code, const DominanceGraph& dom) {
     // http://www.hipersoft.rice.edu/grads/publications/dom14.pdf
     frontier.resize(code->nextBBId);
     Visitor::run(code->entry, [&](BB* n) {
+        assert(code->nextBBId > n->id);
         // Nodes in dominance frontier represent join points, so skip if there
         // is only one predecessor.
         if (n->predecessors().size() < 2) {
