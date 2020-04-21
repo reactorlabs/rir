@@ -3,6 +3,7 @@
 
 #include "compiler/translations/pir_translator.h"
 #include <set>
+#include <unordered_map>
 
 namespace rir {
 namespace pir {
@@ -29,21 +30,34 @@ class PassScheduler {
     }
 
     void run(const std::function<bool(const PirTranslator*)>& apply) const {
+        size_t counter = 0;
+        size_t lastChange = 1;
+        lastPassRun.clear();
         for (auto& phase : schedule_.phases) {
             auto budget = phase.budget;
             bool changed = false;
             do {
                 changed = false;
                 for (auto& pass : phase.passes) {
+                    counter++;
                     if (!phase.once) {
-                        if (budget < pass->cost()) {
+                        if (budget <= pass->cost()) {
                             budget = 0;
                             break;
                         }
+                        // We assume that if no change occured since last
+                        // running this pass, we may safely skip it (if the last
+                        // change was done by this pass, we skip too - the pass
+                        // should do everything in a single invocation)
+                        if (lastChange <= lastPassRun[pass->getName()]) {
+                            continue;
+                        }
                         budget -= pass->cost();
                     }
+                    lastPassRun[pass->getName()] = counter;
                     if (apply(pass.get())) {
                         changed = true;
+                        lastChange = counter;
                     }
                 }
             } while (changed && budget && !phase.once);
@@ -55,6 +69,8 @@ class PassScheduler {
 
     Schedule schedule_;
     Schedule::Phases::iterator currentPhase;
+
+    mutable std::unordered_map<std::string, size_t> lastPassRun;
 
     void add(std::unique_ptr<const PirTranslator>&&);
 
