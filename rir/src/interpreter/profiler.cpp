@@ -38,36 +38,37 @@ void RuntimeProfiler::sample(int signal) {
     if (!md)
         return;
 
-    md->forEachSlot([&](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
-        auto slot = *(stack + i);
-        assert(slot.tag == 0);
-        if (auto sxpval = slot.u.sxpval) {
-            mdEntry.feedback.record(sxpval);
-            auto samples = ++(mdEntry.sampleCount);
-            if (samples == 10) {
-                mdEntry.readyForReopt = true;
+    md->forEachSlot(
+        [&](size_t i, PirTypeFeedback::MDEntry& mdEntry, Opcode* origin) {
+            auto slot = *(stack + i);
+            assert(slot.tag == 0);
+            if (auto sxpval = slot.u.sxpval) {
+                mdEntry.feedback.record(sxpval);
+                auto samples = ++(mdEntry.sampleCount);
+                if (samples == 10) {
+                    mdEntry.readyForReopt = true;
 
-                auto bc = BC::decodeShallow(md->getOriginOfSlot(i));
-                auto opcode = bc.bc;
-                assert(opcode == Opcode::record_type_);
-                auto oldFeedback = bc.immediate.typeFeedback;
-                pir::PirType before;
-                pir::PirType after;
-                before.merge(oldFeedback);
-                after.merge(mdEntry.feedback);
-                after.isA(before);
-                if (!before.isA(after)) {
-                    // set global re-opt flag
-                    code->flags.set(Code::Reoptimise);
+                    auto bc = BC::decodeShallow(origin);
+                    auto opcode = bc.bc;
+                    assert(opcode == Opcode::record_type_);
+                    auto oldFeedback = bc.immediate.typeFeedback;
+                    pir::PirType before;
+                    pir::PirType after;
+                    before.merge(oldFeedback);
+                    after.merge(mdEntry.feedback);
+                    after.isA(before);
+                    if (!before.isA(after)) {
+                        // set global re-opt flag
+                        code->flags.set(Code::Reoptimise);
+                    }
+                }
+                if (samples > 100) {
+                    mdEntry.readyForReopt = false;
+                    mdEntry.sampleCount = 0;
+                    mdEntry.feedback.reset();
                 }
             }
-            if (samples > 100) {
-                mdEntry.readyForReopt = false;
-                mdEntry.sampleCount = 0;
-                mdEntry.feedback.reset();
-            }
-        }
-    });
+        });
 }
 
 #ifndef __APPLE__
