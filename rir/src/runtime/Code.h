@@ -88,7 +88,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
             return nullptr;
         return PirTypeFeedback::unpack(map);
     }
-
     void pirTypeFeedback(PirTypeFeedback* map) {
         setEntry(1, map->container());
     }

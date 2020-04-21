@@ -47,7 +47,7 @@ void RuntimeProfiler::sample(int signal) {
             if (samples == 10) {
                 mdEntry.readyForReopt = true;
 
-                auto bc = BC::decodeShallow(mdEntry.origin);
+                auto bc = BC::decodeShallow(md->getOriginOfSlot(i));
                 auto opcode = bc.bc;
                 assert(opcode == Opcode::record_type_);
                 auto oldFeedback = bc.immediate.typeFeedback;

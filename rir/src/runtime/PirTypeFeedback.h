@@ -39,10 +39,11 @@ struct PirTypeFeedback
     ObservedValues& getSampleOfSlot(size_t slot) {
         return getMDEntryOfSlot(slot).feedback;
     }
-
-    Opcode* getOriginOfSlot(size_t slot) {
-        return getMDEntryOfSlot(slot).origin;
+    unsigned getBCOffsetOfSlot(size_t slot) {
+        return getMDEntryOfSlot(slot).offset;
     }
+    Code* getSrcCodeOfSlot(size_t slot);
+    Opcode* getOriginOfSlot(size_t slot);
 
     static size_t requiredSize(size_t origins, size_t entries) {
         return sizeof(PirTypeFeedback) + sizeof(SEXP) * origins +
@@ -50,10 +51,10 @@ struct PirTypeFeedback
     }
 
     struct MDEntry {
-        Opcode* origin;
+        uint8_t srcCode;
+        unsigned offset;
         ObservedValues feedback;
-        size_t offset;
-        size_t sampleCount = 0;
+        unsigned sampleCount = 0;
         bool readyForReopt = false;
     };
 

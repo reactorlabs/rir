@@ -148,8 +148,6 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
             out << "] (" << mdEntry.sampleCount << " records - "
                 << (mdEntry.readyForReopt ? "ready" : "not ready") << ")\n";
         });
-    } else {
-        out << "no feedback\n";
     }
 
     Opcode* pc = code();
