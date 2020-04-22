@@ -384,9 +384,8 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                             return !PushContext::Cast(i);
                         });
                     if (notInlined) {
-                        auto nargsC = new LdConst(ScalarInteger(
-                            function->nargs() -
-                            function->assumptions().numMissing()));
+                        auto nargsC = new LdConst(
+                            ScalarInteger(function->effectiveNArgs()));
                         anyChange = true;
                         i->replaceUsesAndSwapWith(nargsC, ip);
                     }

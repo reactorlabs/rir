@@ -387,6 +387,7 @@ static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
+    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
     return res;
 };
 
@@ -405,6 +406,7 @@ static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
+    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
     return res;
 };
 
@@ -418,7 +420,7 @@ static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                          unsigned long available) {
     auto ctx = globalContext();
     auto given = Assumptions(available);
-    auto toPop = nargs;
+    int pushed = 0;
 
     if (TYPEOF(callee) != SPECIALSXP) {
         nargs = expandDotDotDotCallArgs(
@@ -429,7 +431,7 @@ static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
             names = nullptr;
         else
             names = (Immediate*)DATAPTR(namesStore);
-        toPop = nargs + 1;
+        pushed = 1;
     }
 
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
@@ -438,7 +440,7 @@ static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
-    ostack_popn(ctx, toPop);
+    ostack_popn(ctx, call.passedArgs + pushed);
     return res;
 };
 
@@ -1394,14 +1396,17 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
-    if (fun->flags.contains(Function::Dead) || !fun->body()->nativeCode)
+    auto missing = fun->signature().numArguments - nargs;
+    auto fail = missing && fun->signature().assumptions.includes(
+                               Assumption::NoExplicitlyMissingArgs);
+    if (fun->flags.contains(Function::Dead) || !fun->body()->nativeCode || fail)
         return callImpl(fun->body(), astP, callee, env, nargs, available);
 
-    auto missing = fun->signature().numArguments - nargs;
+    auto t = R_BCNodeStackTop;
+
     for (size_t i = 0; i < missing; ++i)
         ostack_push(globalContext(), R_MissingArg);
 
-    auto t = R_BCNodeStackTop;
     R_bcstack_t* args = ostack_cell_at(ctx, nargs + missing - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
@@ -1431,9 +1436,9 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
     R_ReturnedValue = R_NilValue;
 
     UNPROTECT(2);
-    assert(t == R_BCNodeStackTop);
-
     ostack_popn(globalContext(), missing);
+
+    assert(t == R_BCNodeStackTop);
     return result;
 }
 
