@@ -99,7 +99,7 @@ function build_r {
     fi
 
     echo "-> building $NAME"
-    make
+    make -j8
 }
 
 build_r custom-r
