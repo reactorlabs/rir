@@ -969,6 +969,12 @@ ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
         std::cout << inferAvailableAssumptions() << "\n";
     }
 #endif
+    if (res) {
+        if (res->assumptions().includes(Assumption::NoExplicitlyMissingArgs))
+            assert(res->effectiveNArgs() == nCallArgs());
+        else
+            assert(res->effectiveNArgs() >= nCallArgs());
+    }
     return res;
 }
 
@@ -1041,11 +1047,11 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
             auto missing = cls->nargs() - nCallArgs();
             given.numMissing(missing);
         }
-    }
 
-    // Make some optimistic assumptions, they might be reset below...
-    given.add(Assumption::NoExplicitlyMissingArgs);
-    given.add(Assumption::NoReflectiveArgument);
+        // Make some optimistic assumptions, they might be reset below...
+        given.add(Assumption::NoExplicitlyMissingArgs);
+        given.add(Assumption::NoReflectiveArgument);
+    }
 
     bool hasDotsArg = false;
     size_t i = 0;

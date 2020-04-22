@@ -157,6 +157,16 @@ struct Assumptions {
         return Assumptions(other.flags | flags, other.typeFlags | typeFlags,
                            missing);
     }
+    constexpr Assumptions operator&(const Assumptions& other) const {
+        if (missing != other.missing) {
+            auto min = missing > other.missing ? other.missing : missing;
+            return Assumptions(other.flags & flags &
+                                   ~Flags(Assumption::NoExplicitlyMissingArgs),
+                               other.typeFlags & typeFlags, min);
+        }
+        return Assumptions(other.flags & flags, other.typeFlags & typeFlags,
+                           missing);
+    }
 
     RIR_INLINE bool operator<(const Assumptions& other) const {
         // Order by number of assumptions! Important for dispatching.
@@ -190,7 +200,31 @@ struct Assumptions {
     }
 
     RIR_INLINE bool subtype(const Assumptions& other) const {
-        return missing == other.missing && other.flags.includes(flags) &&
+        bool tooManyPassed =
+            !other.flags.contains(Assumption::NotTooManyArguments);
+        bool requireNotTooMany =
+            flags.contains(Assumption::NotTooManyArguments);
+        // The callsite passed more args than formals and the callee does not
+        // support surplus arguments.
+        if (tooManyPassed && requireNotTooMany)
+            return false;
+
+        // argdiff positive = "more than expected", negative = "less than"
+        long argdiff = (long)missing - (long)other.missing;
+
+        // The callsite passed more args than expected
+        if (argdiff > 0 && requireNotTooMany)
+            return false;
+
+        // Negative argdiff is padded with missing on call. This only works if
+        // the callee expects passed arguments to be missing.
+        bool requireNoExplicitlyMissing =
+            flags.contains(Assumption::NoExplicitlyMissingArgs);
+        if (requireNoExplicitlyMissing && argdiff < 0)
+            return false;
+
+        // Check the rest of the flags
+        return other.flags.includes(flags) &&
                other.typeFlags.includes(typeFlags);
     }
 

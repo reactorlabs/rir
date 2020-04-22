@@ -183,6 +183,8 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 }
 
                 auto availableAssumptions = call->inferAvailableAssumptions();
+                assert(version->assumptions().numMissing() <=
+                       availableAssumptions.numMissing());
                 cls->rirFunction()->clearDisabledAssumptions(
                     availableAssumptions);
 

@@ -65,9 +65,7 @@ class TheInliner {
                     inlinee = call->tryDispatch(inlineeCls);
                     if (!inlinee)
                         continue;
-                    if (inlinee->nargs() -
-                            inlinee->assumptions().numMissing() !=
-                        call->nCallArgs())
+                    if (inlinee->effectiveNArgs() != call->nCallArgs())
                         continue;
                     bool hasDotArgs = false;
                     call->eachCallArg([&](Value* v) {
@@ -86,9 +84,7 @@ class TheInliner {
                     inlinee = call->tryDispatch();
                     if (!inlinee)
                         continue;
-                    if (inlinee->nargs() -
-                            inlinee->assumptions().numMissing() !=
-                        call->nCallArgs())
+                    if (inlinee->effectiveNArgs() != call->nCallArgs())
                         continue;
                     // if we don't know the closure of the inlinee, we can't
                     // inline.

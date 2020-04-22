@@ -148,7 +148,7 @@ Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
 }
 
 Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
-                             bool eager) const {
+                             bool eager) {
     Promise* prom = insert.function->createProm(promiseCode);
     {
         Builder promiseBuilder(insert.function, prom);
@@ -177,7 +177,7 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
 
 bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         rir::Code* srcCode, RirStack& stack, Builder& insert,
-                        CallTargetFeedback& callTargetFeedback) const {
+                        CallTargetFeedback& callTargetFeedback) {
     Value* env = insert.env;
 
     unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
@@ -755,6 +755,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     insert.env, f->owner(), given, matchedArgs, fs, ast,
                     monomorphicClosure ? Tombstone::closure()
                                        : guardedCallee)));
+                auto innerc = MkFunCls::Cast(callee);
+                if (!innerc)
+                    return;
+                auto delayed = delayedCompilation.find(innerc);
+                if (delayed == delayedCompilation.end())
+                    return;
+                delayed->first->cls = f->owner();
+                delayedCompilation.erase(delayed);
             };
 
             if (monomorphicClosure) {
@@ -1155,16 +1163,16 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
     return false;
 }
 
-bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) const {
+bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) {
     return PromiseRir2Pir(compiler, cls, log, name).tryCompile(prom, insert);
 }
 
-Value* Rir2Pir::tryTranslatePromise(rir::Code* srcCode, Builder& insert) const {
+Value* Rir2Pir::tryTranslatePromise(rir::Code* srcCode, Builder& insert) {
     return PromiseRir2Pir(compiler, cls, log, name)
         .tryTranslate(srcCode, insert);
 }
 
-Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
+Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     assert(!finalized);
 
     CallTargetFeedback callTargetFeedback;
@@ -1368,22 +1376,15 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
             inner << (pos - srcCode->code());
 
-            compiler.compileFunction(
-                dt, inner.str(), formals, srcRef,
-                [&](ClosureVersion* innerF) {
-                    cur.stack.push(
-                        insert(new MkFunCls(innerF->owner(), dt, insert.env)));
+            auto mk = insert(new MkFunCls(nullptr, dt, insert.env));
+            cur.stack.push(mk);
 
-                    // Skip those instructions
-                    finger = pc;
-                    skip = true;
-                },
-                []() {
-                    // If the closure does not compile, we
-                    // can still call the unoptimized
-                    // version (which is what happens on
-                    // `tryRunCurrentBC` below)
-                });
+            delayedCompilation[mk] = {
+                dt,     inner.str(), formals,
+                srcRef, false,       Rir2PirCompiler::defaultAssumptions};
+
+            finger = pc;
+            skip = true;
         });
 
         if (!skip) {
@@ -1451,6 +1452,47 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
         log.warn("Aborting, it looks like this function has an infinite loop");
         return nullptr;
     }
+
+    Visitor::run(insert.code->entry, [&](Instruction* i) {
+        Value* callee = nullptr;
+        Assumptions asmpt;
+        if (auto ci = Call::Cast(i)) {
+            callee = ci->cls();
+            asmpt = ci->inferAvailableAssumptions();
+        } else if (auto ci = NamedCall::Cast(i)) {
+            callee = ci->cls();
+            asmpt = ci->inferAvailableAssumptions();
+        }
+        if (!callee)
+            return;
+        auto innerFCallee = MkFunCls::Cast(callee);
+        auto f = delayedCompilation.find(innerFCallee);
+        if (f == delayedCompilation.end())
+            return;
+        auto& d = f->second;
+        if (d.seen) {
+            d.assumptions = d.assumptions & asmpt;
+        } else {
+            d.seen = true;
+            d.assumptions = asmpt;
+        }
+    });
+
+    bool failedToCompileInnerFun = false;
+    for (auto& delayed : delayedCompilation) {
+        auto d = delayed.second;
+        compiler.compileFunction(
+            d.dt, d.name, d.formals, d.srcRef, d.assumptions,
+            [&](ClosureVersion* innerF) {
+                delayed.first->cls = innerF->owner();
+            },
+            [&]() {
+                failedToCompileInnerFun = true;
+                log.warn("Aborting. Failed to compile inner function" + name);
+            });
+    }
+    if (failedToCompileInnerFun)
+        return nullptr;
 
     Value* res;
     if (results.size() == 1) {
