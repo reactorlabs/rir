@@ -3371,52 +3371,51 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::Add:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA
-                        return builder.CreateAdd(a, b, "", false, true);
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFAdd(a, b);
-                    },
-                    BinopKind::ADD);
+                compileBinop(i,
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 // TODO: Check NA
+                                 return builder.CreateAdd(a, b, "", false,
+                                                          true);
+                             },
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 return builder.CreateFAdd(a, b);
+                             },
+                             BinopKind::ADD);
                 break;
             case Tag::Sub:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA
-                        return builder.CreateSub(a, b, "", false, true);
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFSub(a, b);
-                    },
-                    BinopKind::SUB);
+                compileBinop(i,
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 // TODO: Check NA
+                                 return builder.CreateSub(a, b, "", false,
+                                                          true);
+                             },
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 return builder.CreateFSub(a, b);
+                             },
+                             BinopKind::SUB);
                 break;
             case Tag::Mul:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA
-                        return builder.CreateMul(a, b, "", false, true);
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFMul(a, b);
-                    },
-                    BinopKind::MUL);
+                compileBinop(i,
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 // TODO: Check NA
+                                 return builder.CreateMul(a, b, "", false,
+                                                          true);
+                             },
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 return builder.CreateFMul(a, b);
+                             },
+                             BinopKind::MUL);
                 break;
             case Tag::Div:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA
-                        return builder.CreateSDiv(a, b);
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFDiv(a, b);
-                    },
-                    BinopKind::DIV);
+                compileBinop(i,
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 // TODO: Check NA
+                                 return builder.CreateSDiv(a, b);
+                             },
+                             [&](llvm::Value* a, llvm::Value* b) {
+                                 return builder.CreateFDiv(a, b);
+                             },
+                             BinopKind::DIV);
                 break;
             case Tag::Pow:
                 compileBinop(

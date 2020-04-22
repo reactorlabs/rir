@@ -1275,7 +1275,9 @@ void Pir2Rir::lower(Code* code) {
         if (bb->isEmpty())
             bb->append(new Nop());
     });
+
 }
+
 
 void Pir2Rir::toCSSA(Code* code) {
 
