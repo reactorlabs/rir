@@ -503,27 +503,32 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
         auto& val = entry.second;
         if (val.isUnknown())
             return;
-        bool seenMissingFlagSet = false;
-        bool seenMissingFlagOverride = false;
+        bool isInitiallyMissing = false;
+        bool maybeInitiallyMissing = false;
+        bool maybeSkippesStarg = false;
         val.eachSource([&](const ValOrig& src) {
             if (!src.origin) {
             } else if (auto mk = MkEnv::Cast(src.origin)) {
                 mk->eachLocalVar([&](SEXP n, Value* v, bool miss) {
-                    if (name == n)
+                    if (name == n) {
                         if (miss)
-                            seenMissingFlagSet = true;
+                            maybeInitiallyMissing = isInitiallyMissing = true;
+                        else if (!closure->assumptions().includes(
+                                     Assumption::NoExplicitlyMissingArgs))
+                            maybeInitiallyMissing = true;
+                    }
                 });
             } else if (auto st = StVar::Cast(src.origin)) {
-                if (!st->isStArg)
-                    seenMissingFlagOverride = true;
+                if (st->isStArg)
+                    maybeSkippesStarg = true;
             } else {
-                seenMissingFlagOverride = true;
+                maybeSkippesStarg = true;
             }
         });
         // Ambiguous, we don't know if missing is set or not
-        if (seenMissingFlagSet && seenMissingFlagOverride)
+        if (maybeInitiallyMissing && maybeSkippesStarg)
             return;
-        theEnv[name] = {val, seenMissingFlagSet};
+        theEnv[name] = {val, isInitiallyMissing};
     };
 
     action(theEnv);
