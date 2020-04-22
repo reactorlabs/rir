@@ -29,7 +29,7 @@ struct LazyEnvironment
         : RirRuntimeObject(sizeof(LazyEnvironment) + sizeof(char) * nargs,
                            nargs + ArgOffset),
           nargs(nargs), names(names) {
-        memset(notMissing, 0, sizeof(char) * nargs);
+        memset(missing, 0, sizeof(char) * nargs);
     }
 
     SEXP materialized() { return getEntry(0); }
@@ -42,7 +42,7 @@ struct LazyEnvironment
     void setArg(size_t i, SEXP val, bool overrideMissing) {
         setEntry(i + ArgOffset, val);
         if (overrideMissing)
-            notMissing[i] = true;
+            missing[i] = false;
     }
 
     SEXP getParent() { return getEntry(1); }
@@ -66,19 +66,23 @@ struct LazyEnvironment
         return le;
     }
 
-    static LazyEnvironment* New(SEXP parent, size_t nargs, Immediate* names) {
+    static LazyEnvironment* New(SEXP parent, size_t nargs, Immediate* names,
+                                InterpreterInstance* ctx) {
         auto le = BasicNew(parent, nargs, names);
         for (long i = nargs - 1; i >= 0; --i) {
             auto v = ostack_pop(ctx);
             INCREMENT_NAMED(v);
             le->setArg(i, v, false);
+            if (v == R_MissingArg ||
+                TYPEOF(cp_pool_at(ctx, names[i])) == LISTSXP)
+                le->missing[i] = true;
         }
         return le;
     }
 
     // This byteset remembers which slots have been overwritten, such that they
     // should not be considered missing anymore.
-    char notMissing[];
+    char missing[];
 };
 
 } // namespace rir

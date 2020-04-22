@@ -428,6 +428,7 @@ class LowerFunctionLLVM {
     void envStubSet(llvm::Value* x, int i, llvm::Value* y, size_t size,
                     bool setNotMissing);
     void envStubSetNotMissing(llvm::Value* x, int i);
+    void envStubSetMissing(llvm::Value* x, int i);
 
     void setVisible(int i);
 
@@ -2129,6 +2130,15 @@ void LowerFunctionLLVM::envStubSetNotMissing(llvm::Value* x, int i) {
     auto missingBits =
         builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::i8ptr);
     auto pos = builder.CreateGEP(missingBits, c(i));
+    builder.CreateStore(c(0, 8), pos);
+}
+
+void LowerFunctionLLVM::envStubSetMissing(llvm::Value* x, int i) {
+    auto le = builder.CreateBitCast(dataPtr(x, false),
+                                    PointerType::get(t::LazyEnvironment, 0));
+    auto missingBits =
+        builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::i8ptr);
+    auto pos = builder.CreateGEP(missingBits, c(i));
     builder.CreateStore(c(1, 8), pos);
 }
 
@@ -2163,7 +2173,7 @@ void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y,
         auto missingBits =
             builder.CreateBitCast(builder.CreateGEP(le, c(1)), t::i8ptr);
         auto pos = builder.CreateGEP(missingBits, c(i));
-        builder.CreateStore(c(1, 8), pos);
+        builder.CreateStore(c(0, 8), pos);
     }
 }
 
@@ -3332,7 +3342,10 @@ bool LowerFunctionLLVM::tryCompile() {
                     size_t pos = 0;
                     mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
                         auto vn = loadSxp(v);
-                        envStubSet(env, pos++, vn, mkenv->nLocals(), false);
+                        envStubSet(env, pos, vn, mkenv->nLocals(), false);
+                        if (miss)
+                            envStubSetMissing(env, pos);
+                        pos++;
                         incrementNamed(vn);
                     });
                     setVal(i, env);
