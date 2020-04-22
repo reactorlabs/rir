@@ -129,7 +129,7 @@ class ScopeAnalysis
                   LogStream& log)
         : StaticAnalysis("Scope", cls, cls, initialState, globalState, log),
           depth(depth), staticClosureEnv(staticClosureEnv) {
-        assert(args.size() == cls->nargs());
+        assert(args.size() == cls->effectiveNArgs());
     }
 
     // For interprocedural analysis of a promise

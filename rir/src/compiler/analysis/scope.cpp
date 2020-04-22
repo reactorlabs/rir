@@ -334,6 +334,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
 
             std::vector<Value*> args;
             calli->eachCallArg([&](Value* v) { args.push_back(v); });
+            while (args.size() < version->effectiveNArgs())
+                args.push_back(MissingArg::instance());
             ScopeAnalysis nextFun(version, args, lexicalEnv, state, globalState,
                                   depth + 1, log);
             nextFun();
@@ -351,13 +353,19 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                     target = result.singleValue().val->followCastsAndForce();
             });
             assert(target);
+            bool anyDots = false;
+            calli->eachCallArg(
+                [&](Value* v) { anyDots = anyDots || ExpandDots::Cast(v); });
             if (auto mk = MkFunCls::Cast(target))
-                if (mk->cls->nargs() == calli->nCallArgs())
+                if (!anyDots)
                     if (auto trg = call->tryDispatch(mk->cls))
                         interProceduralAnalysis(trg, mk->lexicalEnv());
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();
-            if (target && target->nargs() == calli->nCallArgs())
+            bool anyDots = false;
+            calli->eachCallArg(
+                [&](Value* v) { anyDots = anyDots || ExpandDots::Cast(v); });
+            if (target && !anyDots)
                 if (auto trg = call->tryDispatch())
                     interProceduralAnalysis(trg, target->closureEnv());
         } else {
