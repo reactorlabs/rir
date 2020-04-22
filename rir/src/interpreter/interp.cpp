@@ -861,7 +861,6 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
 #ifdef MEASURE
     if (EventCounters::isEnabled) {
-        CodeEventCounters::instance().countClosureCall(table, fun);
         CodeEventCounters::instance().countCallSite(fun, call.caller,
                                                     call.callSiteAddress);
     }

@@ -95,20 +95,6 @@ void CodeEventCounters::count(const Code* code, unsigned counter, size_t n) {
     counters.at(code->uid).at(counter) += n;
 }
 
-void CodeEventCounters::countClosureCall(const DispatchTable* closure,
-                                         const Function* takenVersion) {
-    UUID codeUid = takenVersion->body()->uid;
-    Timestamp time = Clock::now();
-    for (size_t i = 0; i < closure->size(); i++) {
-        Function* aVersion = closure->get(i);
-        if (aVersion == takenVersion) {
-            invocationTakenTimestamps[codeUid].push_back(time);
-        } else {
-            invocationMissedTimestamps[codeUid].push_back(time);
-        }
-    }
-}
-
 void CodeEventCounters::profileStart(const Code* code) {
     if (!codesBeingProfiled.count(code->uid)) {
         Timestamp startTime = Clock::now();
@@ -292,22 +278,6 @@ void CodeEventCounters::dump() const {
     dumpNumClosureVersions();
 }
 
-static std::string printTimestampVector(const std::vector<Timestamp>& vector) {
-    std::stringstream result;
-    for (auto it = vector.begin(); it != vector.end(); ++it) {
-        Timestamp timestamp = *it;
-        size_t timestampMicros =
-            std::chrono::time_point_cast<std::chrono::microseconds>(timestamp)
-                .time_since_epoch()
-                .count();
-        result << std::to_string(timestampMicros);
-        if (it + 1 != vector.end()) {
-            result << "; ";
-        }
-    }
-    return result.str();
-}
-
 void CodeEventCounters::dumpCodeCounters() const {
     if (!aCounterIsNonzero()) {
         return;
@@ -363,16 +333,7 @@ void CodeEventCounters::dumpCodeCounters() const {
         }
 
         file << std::quoted(codeName);
-        file << ", " << std::quoted(functionHeaderOrEmpty) << ", "
-             << (invocationTakenTimestamps.count(codeUid)
-                     ? printTimestampVector(
-                           invocationTakenTimestamps.at(codeUid))
-                     : "")
-             << ", "
-             << (invocationMissedTimestamps.count(codeUid)
-                     ? printTimestampVector(
-                           invocationMissedTimestamps.at(codeUid))
-                     : "");
+        file << ", " << std::quoted(functionHeaderOrEmpty);
         for (unsigned i = 0; i < names.size(); ++i) {
             file << ", " << codeCounters.at(i);
         }
