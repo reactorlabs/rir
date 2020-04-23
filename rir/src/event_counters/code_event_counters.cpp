@@ -292,8 +292,7 @@ void CodeEventCounters::dumpCodeCounters() const {
 
     // Heading
     file << "name";
-    file << ", function header, timestamps when invoked, timestamps when a "
-            "sibling version is invoked";
+    file << ", function header";
     for (unsigned i = 0; i < names.size(); ++i) {
         file << ", " << names.at(i);
     }
