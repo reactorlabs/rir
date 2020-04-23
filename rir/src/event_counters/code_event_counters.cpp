@@ -9,6 +9,9 @@ namespace rir {
 using Clock = std::chrono::system_clock;
 using Timestamp = Clock::time_point;
 
+static bool onlyTrackClosures =
+    !(getenv("ONLY_TRACK_CLOSURES") && *getenv("ONLY_TRACK_CLOSURES") == '0');
+
 const std::string ANONYMOUS_DEALLOCATED = "<anonymous deallocated>";
 const ptrdiff_t UNKNOWN_BYTECODE_OFFSET = -1;
 
@@ -302,6 +305,11 @@ void CodeEventCounters::dumpCodeCounters() const {
         UUID codeUid = codeUidAndCodeCounters.first;
         std::vector<size_t> codeCounters = codeUidAndCodeCounters.second;
         Code* code = Code::withUidIfExists(codeUid);
+
+        bool isAClosure = closureNames.count(codeUid);
+        if (onlyTrackClosures && !isAClosure) {
+            continue;
+        }
 
         std::string codeName;
         if (closureNames.count(codeUid)) {
