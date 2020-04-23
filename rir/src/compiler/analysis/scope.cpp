@@ -334,6 +334,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
 
             std::vector<Value*> args;
             calli->eachCallArg([&](Value* v) { args.push_back(v); });
+            while (args.size() < version->effectiveNArgs())
+                args.push_back(MissingArg::instance());
             ScopeAnalysis nextFun(version, args, lexicalEnv, state, globalState,
                                   depth + 1, log);
             nextFun();
@@ -351,13 +353,19 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                     target = result.singleValue().val->followCastsAndForce();
             });
             assert(target);
+            bool anyDots = false;
+            calli->eachCallArg(
+                [&](Value* v) { anyDots = anyDots || ExpandDots::Cast(v); });
             if (auto mk = MkFunCls::Cast(target))
-                if (mk->cls->nargs() == calli->nCallArgs())
+                if (!anyDots)
                     if (auto trg = call->tryDispatch(mk->cls))
                         interProceduralAnalysis(trg, mk->lexicalEnv());
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();
-            if (target && target->nargs() == calli->nCallArgs())
+            bool anyDots = false;
+            calli->eachCallArg(
+                [&](Value* v) { anyDots = anyDots || ExpandDots::Cast(v); });
+            if (target && !anyDots)
                 if (auto trg = call->tryDispatch())
                     interProceduralAnalysis(trg, target->closureEnv());
         } else {
@@ -495,27 +503,32 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
         auto& val = entry.second;
         if (val.isUnknown())
             return;
-        bool seenMissingFlagSet = false;
-        bool seenMissingFlagOverride = false;
+        bool isInitiallyMissing = false;
+        bool maybeInitiallyMissing = false;
+        bool maybeSkippesStarg = false;
         val.eachSource([&](const ValOrig& src) {
             if (!src.origin) {
             } else if (auto mk = MkEnv::Cast(src.origin)) {
                 mk->eachLocalVar([&](SEXP n, Value* v, bool miss) {
-                    if (name == n)
+                    if (name == n) {
                         if (miss)
-                            seenMissingFlagSet = true;
+                            maybeInitiallyMissing = isInitiallyMissing = true;
+                        else if (!closure->assumptions().includes(
+                                     Assumption::NoExplicitlyMissingArgs))
+                            maybeInitiallyMissing = true;
+                    }
                 });
             } else if (auto st = StVar::Cast(src.origin)) {
-                if (!st->isStArg)
-                    seenMissingFlagOverride = true;
+                if (st->isStArg)
+                    maybeSkippesStarg = true;
             } else {
-                seenMissingFlagOverride = true;
+                maybeSkippesStarg = true;
             }
         });
         // Ambiguous, we don't know if missing is set or not
-        if (seenMissingFlagSet && seenMissingFlagOverride)
+        if (maybeInitiallyMissing && maybeSkippesStarg)
             return;
-        theEnv[name] = {val, seenMissingFlagSet};
+        theEnv[name] = {val, isInitiallyMissing};
     };
 
     action(theEnv);

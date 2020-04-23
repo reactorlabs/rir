@@ -284,12 +284,10 @@ SEXP materialize(SEXP rirDataWrapper) {
             if (val == R_UnboundValue)
                 continue;
             SEXP name = cp_pool_at(ctx, names[i]);
-            bool isMissing = val == R_MissingArg;
+            bool isMissing = wrapper->missing[i];
             if (TYPEOF(name) == LISTSXP) {
-                isMissing = true;
                 name = CAR(name);
             }
-            isMissing = isMissing && !wrapper->notMissing[i];
             arglist = CONS_NR(val, arglist);
             SET_TAG(arglist, name);
             SET_MISSING(arglist, isMissing ? 2 : 0);
@@ -2036,7 +2034,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                    "Non-environment used as environment parent.");
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            SEXP wrapper = LazyEnvironment::New(parent, n, names)->container();
+            SEXP wrapper =
+                LazyEnvironment::New(parent, n, names, ctx)->container();
 
             ostack_push(ctx, wrapper);
             if (contextPos > 0) {
@@ -2431,8 +2430,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             } else {
                 ENSURE_NAMED(val);
             }
-            if (le->getArg(pos) != val || !le->notMissing[pos]) {
+            if (le->getArg(pos) != val) {
                 le->setArg(pos, val, true);
+            } else if (le->missing[pos]) {
+                le->missing[pos] = false;
             }
             ostack_pop(ctx);
             NEXT();

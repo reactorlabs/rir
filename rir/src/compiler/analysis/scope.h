@@ -88,7 +88,7 @@ class ScopeAnalysis
     const std::vector<Value*> args;
 
     static constexpr size_t MAX_DEPTH = 2;
-    static constexpr size_t MAX_SIZE = 1000;
+    static constexpr size_t MAX_SIZE = 200;
     static constexpr size_t MAX_RESULTS = 1000;
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
@@ -129,7 +129,7 @@ class ScopeAnalysis
                   LogStream& log)
         : StaticAnalysis("Scope", cls, cls, initialState, globalState, log),
           depth(depth), staticClosureEnv(staticClosureEnv) {
-        assert(args.size() == cls->nargs());
+        assert(args.size() == cls->effectiveNArgs());
     }
 
     // For interprocedural analysis of a promise
