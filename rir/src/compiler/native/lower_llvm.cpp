@@ -2224,6 +2224,8 @@ bool LowerFunctionLLVM::tryCompile() {
     builder.SetInsertPoint(entryBlock);
     nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop,
                                         PointerType::get(t::stackCellPtr, 0));
+    basepointer = nodestackPtr();
+
     numLocals++;
     // Store the code object as the first element of our frame, for the value
     // profiler to find it.
@@ -2256,7 +2258,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
     std::unordered_map<Instruction*, Instruction*> phis;
     {
-        basepointer = nodestackPtr();
         NativeAllocator allocator(code, cls, liveness, log);
         allocator.compute();
         allocator.verify();
