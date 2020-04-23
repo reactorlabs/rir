@@ -258,6 +258,7 @@ static std::string getHeader(const Function* function) {
     std::stringstream headerStream;
     function->printHeader(headerStream);
     std::string result = headerStream.str();
+    std::replace(result.begin(), result.end(), ',', ' ');
     std::replace(result.begin(), result.end(), '\n', ';');
     return result;
 }
