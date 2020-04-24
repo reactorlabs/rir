@@ -80,7 +80,8 @@ void RuntimeProfiler::sample(int signal) {
         }
     });
 
-    // only trigger reopt if at least 50% of all slots have enough samples and at least one slot justifies re-opt.
+    // only trigger reopt if at least 50% of all slots have enough samples and
+    // at least one slot justifies re-opt.
     if (goodValues >= (slotCount / 2) && needReopt) {
         // set global re-opt flag
         code->flags.set(Code::Reoptimise);
