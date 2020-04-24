@@ -73,7 +73,6 @@ bool SafeBuiltinsList::always(int builtin) {
         blt("is.expression"),
         blt("is.raw"),
         blt("is.object"),
-        blt("is.atomic"),
         blt("isS4"),
 
         blt("which"),
@@ -103,6 +102,10 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         return true;
 
     static int safeBuiltins[] = {
+        // TODO: this should be always safe, but something breaks if it is
+        // moved. Need to investigate what!
+        blt("is.atomic"),
+
         // Those are not always safe, due to coerceVector, which can be
         // overwritten by objects
         blt("vector"),
