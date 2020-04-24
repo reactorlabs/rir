@@ -73,6 +73,7 @@ bool SafeBuiltinsList::always(int builtin) {
         blt("is.expression"),
         blt("is.raw"),
         blt("is.object"),
+        blt("is.atomic"),
         blt("isS4"),
 
         blt("which"),
@@ -282,7 +283,6 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("is.numeric"),
         blt("is.matrix"),
         blt("is.array"),
-        blt("is.atomic"),
         blt("is.recursive"),
         blt("is.call"),
         blt("is.language"),
@@ -305,6 +305,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("rep.int"),
 
         blt("inherits"),
+        blt("anyNA")
     };
 
     for (auto i : safeBuiltins)

@@ -2763,6 +2763,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         break;
                     }
                     case blt("as.integer"):
+                    case blt("as.logical"):
                         if (irep == Representation::Integer &&
                             orep == Representation::Integer) {
                             setVal(i, a);
@@ -2831,6 +2832,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
+                    case blt("anyNA"):
                     case blt("is.na"):
                         if (irep == Representation::Integer) {
                             setVal(i,
@@ -3030,7 +3032,6 @@ bool LowerFunctionLLVM::tryCompile() {
                         break;
                     }
                 }
-
                 if (b->builtinId == blt("c")) {
                     bool allInt = true;
                     bool allReal = true;
