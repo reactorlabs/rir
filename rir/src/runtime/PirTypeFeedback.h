@@ -56,6 +56,7 @@ struct PirTypeFeedback
         ObservedValues feedback;
         unsigned sampleCount = 0;
         bool readyForReopt = false;
+        bool needReopt = false;
     };
 
     void forEachSlot(

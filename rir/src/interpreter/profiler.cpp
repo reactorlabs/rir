@@ -38,37 +38,53 @@ void RuntimeProfiler::sample(int signal) {
     if (!md)
         return;
 
-    md->forEachSlot(
-        [&](size_t i, PirTypeFeedback::MDEntry& mdEntry, Opcode* origin) {
-            auto slot = *(stack + i);
-            assert(slot.tag == 0);
-            if (auto sxpval = slot.u.sxpval) {
-                mdEntry.feedback.record(sxpval);
-                auto samples = ++(mdEntry.sampleCount);
-                if (samples == 10) {
-                    mdEntry.readyForReopt = true;
+    bool needReopt = false;
+    size_t goodValues = 0;
+    size_t slotCount = 0;
 
-                    auto bc = BC::decodeShallow(origin);
-                    auto opcode = bc.bc;
-                    assert(opcode == Opcode::record_type_);
-                    auto oldFeedback = bc.immediate.typeFeedback;
-                    pir::PirType before;
-                    pir::PirType after;
-                    before.merge(oldFeedback);
-                    after.merge(mdEntry.feedback);
-                    after.isA(before);
-                    if (!before.isA(after)) {
-                        // set global re-opt flag
-                        code->flags.set(Code::Reoptimise);
-                    }
-                }
-                if (samples > 100) {
-                    mdEntry.readyForReopt = false;
-                    mdEntry.sampleCount = 0;
-                    mdEntry.feedback.reset();
+    md->forEachSlot([&](size_t i, PirTypeFeedback::MDEntry& mdEntry, Opcode* opcode) {
+        auto slot = *(stack + i);
+        assert(slot.tag == 0);
+        if (auto sxpval = slot.u.sxpval) {
+            mdEntry.feedback.record(sxpval);
+            auto samples = ++(mdEntry.sampleCount);
+            slotCount++;
+            if (samples == 10) {
+                mdEntry.readyForReopt = true;
+                // check if this feedback justifies a reopt
+                auto bc = BC::decodeShallow(opcode);
+                auto opcode = bc.bc;
+                assert(opcode == Opcode::record_type_);
+                auto oldFeedback = bc.immediate.typeFeedback;
+                pir::PirType before;
+                pir::PirType after;
+                before.merge(oldFeedback);
+                after.merge(mdEntry.feedback);
+                after.isA(before);
+                if (!before.isA(after)) {
+                    // mark slot as good for reopt
+                    mdEntry.needReopt = true;
                 }
             }
-        });
+            if (samples >= 10) {
+                goodValues++;
+                if (mdEntry.needReopt) {
+                    needReopt = true;
+                }
+            }
+            if (samples > 100) {
+                mdEntry.readyForReopt = false;
+                mdEntry.sampleCount = 0;
+                mdEntry.feedback.reset();
+            }
+        }
+    });
+
+    // only trigger reopt if at least 50% of all slots have enough samples and at least one slot justifies re-opt.
+    if (goodValues >= (slotCount / 2) && needReopt) {
+        // set global re-opt flag
+        code->flags.set(Code::Reoptimise);
+    }
 }
 
 #ifndef __APPLE__
@@ -99,10 +115,10 @@ void RuntimeProfiler::initProfiler() {
 
     itime.it_value.tv_sec = 0;
     /* 500 million nsecs = .5 secs */
-    itime.it_value.tv_nsec = 10000000;
+    itime.it_value.tv_nsec = 1000000;
     itime.it_interval.tv_sec = 0;
     /* 500 million nsecs = .5 secs */
-    itime.it_interval.tv_nsec = 10000000;
+    itime.it_interval.tv_nsec = 1000000;
     timer_settime(timer_id, 0, &itime, NULL);
 }
 #else
