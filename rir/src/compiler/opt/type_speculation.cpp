@@ -29,7 +29,7 @@ bool TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
         Instruction* speculateOn = nullptr;
         Checkpoint* guardPos = nullptr;
-        Instruction::TypeFeedback feedback;
+        TypeFeedback feedback;
         BB* typecheckPos = nullptr;
 
         if (auto force = Force::Cast(i)) {

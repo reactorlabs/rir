@@ -52,16 +52,9 @@ void RuntimeProfiler::sample(int signal) {
             if (samples == 10) {
                 mdEntry.readyForReopt = true;
                 // check if this feedback justifies a reopt
-                auto bc = BC::decodeShallow(opcode);
-                auto opcode = bc.bc;
-                assert(opcode == Opcode::record_type_);
-                auto oldFeedback = bc.immediate.typeFeedback;
-                pir::PirType before;
                 pir::PirType after;
-                before.merge(oldFeedback);
                 after.merge(mdEntry.feedback);
-                after.isA(before);
-                if (!before.isA(after)) {
+                if (!mdEntry.previousType.isA(after)) {
                     // mark slot as good for reopt
                     mdEntry.needReopt = true;
                 }
