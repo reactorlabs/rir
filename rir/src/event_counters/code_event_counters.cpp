@@ -117,7 +117,8 @@ void CodeEventCounters::profileEnd(const Code* code,
 
         std::cerr << "CodeEventCounters: tried to finish profiling code "
                   << codeName << " but it's not being profiled";
-        assert(false);
+        // assert(false);
+        return;
     }
 
     CodeEventCounters::InfoDuringProfile& info =

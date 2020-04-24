@@ -481,11 +481,13 @@ REXPORT SEXP rir_deserialize(SEXP fileSexp) {
 
 REXPORT SEXP rirEnableLoopPeeling() {
     Compiler::loopPeelingEnabled = true;
+    R_Visible = (Rboolean) false;
     return R_NilValue;
 }
 
 REXPORT SEXP rirDisableLoopPeeling() {
     Compiler::loopPeelingEnabled = false;
+    R_Visible = (Rboolean) false;
     return R_NilValue;
 }
 
@@ -495,15 +497,18 @@ REXPORT SEXP rirEnableEventCounters() {
 #else
     EventCounters::isEnabled = true;
 #endif
+    R_Visible = (Rboolean) false;
     return R_NilValue;
 }
 
 REXPORT SEXP rirDisableEventCounters() {
+    R_Visible = (Rboolean) false;
 #ifndef MEASURE
     Rf_error("RIR must be compiled with event counters to support this");
 #else
     EventCounters::isEnabled = false;
 #endif
+    R_Visible = (Rboolean) false;
     return R_NilValue;
 }
 
@@ -514,6 +519,7 @@ REXPORT SEXP rirResetEventCounters() {
     EventCounters::instance().reset();
     CodeEventCounters::instance().reset();
 #endif
+    R_Visible = (Rboolean) false;
     return R_NilValue;
 }
 
@@ -524,16 +530,19 @@ REXPORT SEXP rirFlushEventCounters() {
     EventCounters::instance().flush();
     CodeEventCounters::instance().flush();
 #endif
+    R_Visible = (Rboolean) false;
     return R_NilValue;
 }
 
 REXPORT SEXP rirFlushEventCountersIfEnabled() {
 #ifndef MEASURE
+    R_Visible = (Rboolean) false;
     return R_NilValue;
 #else
     EventCounters::instance().flush();
     CodeEventCounters::instance().flush();
 #endif
+    R_Visible = (Rboolean) false;
     return R_NilValue;
 }
 
@@ -561,6 +570,7 @@ REXPORT SEXP rirPrintBuiltinIds() {
     }
     std::cout << "    else\n        errorWrongBuiltin();\n";
     std::cout << "    return -1;\n}\n} // namespace rir\n#endif\n";
+    R_Visible = (Rboolean) false;
     return R_NilValue;
 }
 
