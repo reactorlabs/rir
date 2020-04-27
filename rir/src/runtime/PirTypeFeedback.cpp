@@ -42,7 +42,7 @@ PirTypeFeedback::PirTypeFeedback(
         auto e = reverseMapping.find(typeFeedback.origin);
         if (e != reverseMapping.end()) {
             entry[slot] = e->second;
-            assert(mdEntries()[e->second].previousType == typeFeedback.type);
+            // assert(mdEntries()[e->second].previousType == typeFeedback.type);
         } else {
             assert(codes.count(typeFeedback.srcCode));
             new (&mdEntries()[idx]) MDEntry;
