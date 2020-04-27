@@ -815,15 +815,15 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     addDynamicAssumptionsFromContext(
         call, table->baseline()->signature().formalNargs(), ctx);
     Function* fun = dispatch(call, table);
-    size_t nextFunInvocationCount = fun->invocationCount() + 1;
+    fun->registerInvocation();
 
     auto flags = fun->flags;
     if (!isDeoptimizing() && !flags.contains(Function::NotOptimizable) &&
         (flags.contains(Function::MarkOpt) ||
          (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-          ((fun != table->baseline() && nextFunInvocationCount >= 2 &&
-            nextFunInvocationCount <= pir::Parameter::RIR_WARMUP) ||
-           (nextFunInvocationCount %
+          ((fun != table->baseline() && fun->invocationCount() >= 2 &&
+            fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
+           (fun->invocationCount() %
             (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)))) {
         Assumptions given = call.givenAssumptions;
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -1481,6 +1481,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(ctx, stackHeight);
     auto code = f.code;
+    code->registerInvocation();
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
@@ -2710,13 +2711,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto flags = fun->flags;
             bool dispatchFail = flags.contains(Function::Dead) ||
                                 !matches(assumptions, fun->signature());
-            size_t nextInvocationCount = fun->invocationCount() + 1;
+            fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));
             if (!dispatchFail && !flags.contains(Function::NotOptimizable) &&
                 fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-                ((fun != dt->baseline() && nextInvocationCount >= 2 &&
-                  nextInvocationCount <= pir::Parameter::RIR_WARMUP) ||
-                 (nextInvocationCount %
+                ((fun != dt->baseline() && fun->invocationCount() >= 2 &&
+                  fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
+                 (fun->invocationCount() %
                       ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
                   0))) {
                 if (assumptions != fun->signature().assumptions)
@@ -4084,6 +4085,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 EventCounters::instance().count(events::Deopt);
             }
 #endif
+            m->frames[m->numFrames - 1].code->registerDeopt();
             c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
                                    m->numFrames - 1, stackHeight);
@@ -4346,8 +4348,10 @@ SEXP rirEval_f(SEXP what, SEXP env) {
         // TODO: add an adapter frame to be able to call something else than
         // the baseline version!
         fun = table->baseline();
+        fun->registerInvocation();
     } else if ((fun = Function::check(what))) {
         // fun gets set in the condition
+        fun->registerInvocation();
     } else {
         assert(false && "Expected a code object or a dispatch table");
     }

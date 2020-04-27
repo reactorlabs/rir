@@ -75,6 +75,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
     }
 
+    void registerInvocation() {
+        if (funInvocationCount < UINT_MAX)
+            funInvocationCount++;
+    }
+
     void registerInvocationStart() {
 #ifdef MEASURE
         if (EventCounters::isEnabled) {
@@ -82,8 +87,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
             CodeEventCounters::instance().profileStart(this);
         }
 #endif
-        if (funInvocationCount < UINT_MAX)
-            funInvocationCount++;
     }
 
     void registerInvocationEnd() {

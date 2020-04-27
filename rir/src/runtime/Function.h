@@ -115,6 +115,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     const FunctionSignature& signature() const { return signature_; }
 
+    void registerInvocation() { body()->registerInvocation(); }
+
     void registerInvocationStart() {
         body()->registerInvocationStart();
 #ifdef MEASURE
@@ -125,14 +127,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
     void registerInvocationEnd() { body()->registerInvocationEnd(); }
     size_t invocationCount() const { return body()->funInvocationCount; }
-    void registerDeopt() {
-        body()->registerDeopt();
-#ifdef MEASURE
-        if (EventCounters::isEnabled) {
-            CodeEventCounters::instance().recordHeader(this);
-        }
-#endif
-    }
+    void registerDeopt() { body()->registerDeopt(); }
     size_t deoptCount() const { return body()->deoptCount; }
 
   private:

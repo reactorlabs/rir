@@ -1367,11 +1367,13 @@ NativeBuiltin NativeBuiltins::extract22rr = {
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
                                SEXP env, SEXP callee) {
+    code->registerInvocation();
     code->registerInvocationStart();
     if ((SETJMP(cntxt.cjmpbuf))) {
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
+            code->registerInvocation();
             code->registerInvocationStart();
             SEXP res = code->nativeCode(code, args, env, callee);
             code->registerInvocationEnd();
