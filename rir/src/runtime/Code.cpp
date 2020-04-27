@@ -146,7 +146,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
             out << " - slot #" << i << ": " << mdEntry.offset << " : [";
             feedback.print(out);
             out << "] (" << mdEntry.sampleCount << " records - "
-                << (mdEntry.readyForReopt ? "ready" : "not ready") << ")\n";
+                << (mdEntry.readyForReopt ? "ready" : "not ready")
+                << ") prev: " << mdEntry.previousType << "\n";
         });
     }
 

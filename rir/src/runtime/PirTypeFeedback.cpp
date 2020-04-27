@@ -1,6 +1,7 @@
 #include "PirTypeFeedback.h"
 #include "Code.h"
 #include "compiler/pir/instruction.h"
+#include <iostream>
 #include <unordered_map>
 
 namespace rir {

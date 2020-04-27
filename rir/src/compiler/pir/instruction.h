@@ -142,6 +142,7 @@ struct TypeFeedback {
     Value* value = nullptr;
     rir::Code* srcCode = nullptr;
     Opcode* origin = nullptr;
+    bool used = false;
 };
 
 class DominanceGraph;
