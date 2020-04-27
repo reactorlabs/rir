@@ -672,14 +672,16 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg) {
 }
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
-    static std::unordered_set<SEXP> eternal = {R_TrueValue,  R_NilValue,
-                                               R_FalseValue, R_UnboundValue,
-                                               R_MissingArg, R_GlobalEnv};
+    static std::unordered_set<SEXP> eternal = {
+        R_TrueValue,  R_NilValue,  R_FalseValue,    R_UnboundValue,
+        R_MissingArg, R_GlobalEnv, R_LogicalNAValue};
     if (needed == t::Int) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP)
             return llvm::ConstantInt::get(C, llvm::APInt(32, INTEGER(co)[0]));
         if (TYPEOF(co) == REALSXP) {
+            if (std::isnan(REAL(co)[0]))
+                return llvm::ConstantInt::get(C, llvm::APInt(32, NA_INTEGER));
             return llvm::ConstantInt::get(C, llvm::APInt(32, (int)REAL(co)[0]));
         }
         if (TYPEOF(co) == LGLSXP)
@@ -688,11 +690,19 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
 
     if (needed == t::Double) {
         assert(Rf_length(co) == 1);
-        if (TYPEOF(co) == INTSXP)
+        if (TYPEOF(co) == INTSXP) {
+            if (INTEGER(co)[0] == NA_INTEGER)
+                return llvm::ConstantFP::get(C, llvm::APFloat(R_NaN));
             return llvm::ConstantFP::get(C,
                                          llvm::APFloat((double)INTEGER(co)[0]));
+        }
         if (TYPEOF(co) == REALSXP)
             return llvm::ConstantFP::get(C, llvm::APFloat(REAL(co)[0]));
+        if (TYPEOF(co) == LGLSXP) {
+            if (LOGICAL(co)[0] == NA_LOGICAL)
+                return llvm::ConstantFP::get(C, llvm::APFloat(R_NaN));
+            return llvm::ConstantInt::get(C, llvm::APInt(32, LOGICAL(co)[0]));
+        }
     }
 
     assert(needed == t::SEXP);
@@ -2762,6 +2772,31 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
+                    case blt("as.logical"):
+                        if (irep == Representation::Integer &&
+                            orep == Representation::Integer) {
+                            setVal(i,
+                                   builder.CreateSelect(
+                                       builder.CreateICmpEQ(a, c(NA_INTEGER)),
+                                       constant(R_LogicalNAValue, orep),
+                                       builder.CreateSelect(
+                                           builder.CreateICmpEQ(a, c(0)),
+                                           constant(R_FalseValue, orep),
+                                           constant(R_TrueValue, orep))));
+                        } else if (irep == Representation::Real &&
+                                   (orep == Representation::Integer ||
+                                    orep == Representation::Real)) {
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpUNE(a, a),
+                                          constant(R_LogicalNAValue, orep),
+                                          builder.CreateSelect(
+                                              builder.CreateFCmpOEQ(a, c(0.0)),
+                                              constant(R_FalseValue, orep),
+                                              constant(R_TrueValue, orep))));
+                        } else {
+                            done = false;
+                        }
+                        break;
                     case blt("as.integer"):
                         if (irep == Representation::Integer &&
                             orep == Representation::Integer) {
@@ -2831,6 +2866,7 @@ bool LowerFunctionLLVM::tryCompile() {
                         }
                         break;
                     }
+                    case blt("anyNA"):
                     case blt("is.na"):
                         if (irep == Representation::Integer) {
                             setVal(i,
@@ -3030,7 +3066,6 @@ bool LowerFunctionLLVM::tryCompile() {
                         break;
                     }
                 }
-
                 if (b->builtinId == blt("c")) {
                     bool allInt = true;
                     bool allReal = true;

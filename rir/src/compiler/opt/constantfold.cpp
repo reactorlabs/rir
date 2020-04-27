@@ -480,6 +480,46 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);
                     }
+                } else if (builtinId == blt("is.character") && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(RType::str)) {
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                    } else if (!t.maybe(RType::str)) {
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                    }
+                } else if (builtinId == blt("is.logical") && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(RType::logical)) {
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                    } else if (!t.maybe(RType::logical)) {
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                    }
+                } else if (builtinId == blt("is.double") && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(RType::real)) {
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                    } else if (!t.maybe(RType::real)) {
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                    }
+                } else if (builtinId == blt("is.integer") && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(PirType(RType::integer).noAttribs())) {
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                    } else if (!t.maybe(RType::integer)) {
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                    }
                 } else if (builtinId == blt("is.complex") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::cplx)) {
@@ -510,6 +550,13 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                         anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
                     } else if (!t.maybe(atomicType)) {
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
+                                                  ip);
+                    }
+                } else if (builtinId == blt("anyNA") && nargs == 1) {
+                    auto t = i->arg(0).val()->type;
+                    if (!t.maybeNAOrNaN()) {
                         anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
                                                   ip);

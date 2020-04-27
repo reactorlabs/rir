@@ -102,6 +102,10 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         return true;
 
     static int safeBuiltins[] = {
+        // TODO: this should be always safe, but something breaks if it is
+        // moved. Need to investigate what!
+        blt("is.atomic"),
+
         // Those are not always safe, due to coerceVector, which can be
         // overwritten by objects
         blt("vector"),
@@ -282,7 +286,6 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("is.numeric"),
         blt("is.matrix"),
         blt("is.array"),
-        blt("is.atomic"),
         blt("is.recursive"),
         blt("is.call"),
         blt("is.language"),
@@ -305,6 +308,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("rep.int"),
 
         blt("inherits"),
+        blt("anyNA")
     };
 
     for (auto i : safeBuiltins)
