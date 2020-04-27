@@ -65,11 +65,11 @@ struct PirTypeFeedback
         bool needReopt = false;
     };
 
-    void forEachSlot(
-        const std::function<void(size_t, MDEntry&, Opcode*)>& iterationBody) {
+    void
+    forEachSlot(const std::function<void(size_t, MDEntry&)>& iterationBody) {
         for (size_t id = 0; id < MAX_SLOT_IDX; id++) {
             if (entry[id] < MAX_SLOT_IDX) {
-                iterationBody(id, getMDEntryOfSlot(id), getOriginOfSlot(id));
+                iterationBody(id, getMDEntryOfSlot(id));
             }
         }
     }

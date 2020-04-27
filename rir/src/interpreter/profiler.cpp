@@ -21,9 +21,14 @@ RuntimeProfiler::RuntimeProfiler() {}
 
 RuntimeProfiler::~RuntimeProfiler() {}
 
+static bool needReopt = false;
+static size_t goodValues = 0;
+static size_t slotCount = 0;
+static R_bcstack_t* stack;
+
 void RuntimeProfiler::sample(int signal) {
     auto ctx = (RCNTXT*)R_GlobalContext;
-    auto& stack = ctx->nodestack;
+    stack = ctx->nodestack;
     if (R_BCNodeStackTop == R_BCNodeStackBase)
         return;
     if ((stack)->tag != 0)
@@ -38,11 +43,11 @@ void RuntimeProfiler::sample(int signal) {
     if (!md)
         return;
 
-    bool needReopt = false;
-    size_t goodValues = 0;
-    size_t slotCount = 0;
+    needReopt = false;
+    goodValues = 0;
+    slotCount = 0;
 
-    md->forEachSlot([&](size_t i, PirTypeFeedback::MDEntry& mdEntry, Opcode* opcode) {
+    md->forEachSlot([](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
         auto slot = *(stack + i);
         assert(slot.tag == 0);
         if (auto sxpval = slot.u.sxpval) {
@@ -109,10 +114,10 @@ void RuntimeProfiler::initProfiler() {
 
     itime.it_value.tv_sec = 0;
     /* 500 million nsecs = .5 secs */
-    itime.it_value.tv_nsec = 1000000;
+    itime.it_value.tv_nsec = 10000000;
     itime.it_interval.tv_sec = 0;
     /* 500 million nsecs = .5 secs */
-    itime.it_interval.tv_nsec = 1000000;
+    itime.it_interval.tv_nsec = 10000000;
     timer_settime(timer_id, 0, &itime, NULL);
 }
 #else
