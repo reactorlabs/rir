@@ -1072,6 +1072,162 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
     }
 
+    if (fun == symbol::Switch) {
+        std::vector<std::vector<SEXP>> names;
+        std::vector<SEXP> expressions;
+        std::vector<BC::Label> labels;
+        BC::Label dfltBr = cs.mkLabel();
+        BC::Label contBr = cs.mkLabel();
+
+        SEXP dflt = nullptr;
+        names.push_back({});
+
+        for (RListIter arg = args.begin() + 1; arg != args.end(); ++arg) {
+            if (!arg.hasTag()) {
+                if (dflt)
+                    return false;
+                dflt = *arg;
+                continue;
+            }
+            names.back().push_back(arg.tag());
+            if (*arg != R_MissingArg) {
+                expressions.push_back(*arg);
+                names.push_back({});
+                labels.push_back(cs.mkLabel());
+            }
+        }
+
+        compileExpr(ctx, args[0]);
+        for (size_t i = 0; i < expressions.size(); ++i) {
+            for (auto& n : names[i]) {
+                cs << BC::dup() << BC::push(n) << BC::eq();
+                cs.addSrc(R_NilValue);
+                cs << BC::asbool() << BC::recordTest() << BC::brtrue(labels[i]);
+            }
+        }
+        cs << BC::br(dfltBr);
+
+        cs << dfltBr;
+        if (dflt)
+            compileExpr(ctx, dflt);
+        else
+            cs << BC::push(R_NilValue);
+        cs << BC::br(contBr);
+
+        for (size_t i = 0; i < expressions.size(); ++i) {
+            cs << labels[i];
+            compileExpr(ctx, expressions[i]);
+            cs << BC::br(contBr);
+        }
+
+        cs << contBr;
+        cs << BC::swap() << BC::pop();
+        if (voidContext)
+            cs << BC::pop();
+        return true;
+    }
+
+    if (fun == symbol::forceAndCall && args.length() >= 2 &&
+        isRegularArg(args.begin()) && isRegularArg(args.begin() + 1) &&
+        (TYPEOF(args[0]) == INTSXP || TYPEOF(args[0]) == REALSXP) &&
+        Rf_length(args[0]) == 1) {
+
+        int toForce = Rf_asInteger(args[0]);
+        {
+            int idx = 0;
+            for (auto a = args.begin() + 2; a != args.end(); ++a) {
+                if (idx == toForce)
+                    break;
+                if (!isRegularArg(a))
+                    return false;
+                idx++;
+            }
+        }
+
+        Rf_PrintValue(ast);
+        emitGuardForNamePrimitive(cs, fun);
+
+        Match(args[1]) {
+            Case(SYMSXP) { cs << BC::ldfun(args[1]); }
+            Else({
+                compileExpr(ctx, args[1]);
+                cs << BC::checkClosure();
+            });
+        }
+        cs << BC::recordCall();
+
+        Assumptions assumptions;
+        std::vector<SEXP> names;
+
+        bool hasNames = false;
+        bool hasDots = false;
+        int i = 0;
+        for (RListIter arg = args.begin() + 2; arg != args.end(); ++i, ++arg) {
+            if (i < toForce) {
+                assert(isRegularArg(arg));
+                compileExpr(ctx, *arg);
+                names.push_back(R_NilValue);
+                continue;
+            }
+
+            if (*arg == R_DotsSymbol) {
+                cs << BC::push(R_DotsSymbol);
+                names.push_back(R_DotsSymbol);
+                hasDots = true;
+                continue;
+            }
+            if (*arg == R_MissingArg) {
+                cs << BC::push(R_MissingArg);
+                names.push_back(R_NilValue);
+                continue;
+            }
+
+            // (1) Arguments are wrapped as Promises:
+            //     create a new Code object for the promise
+            Code* prom = compilePromise(ctx, *arg);
+            size_t idx = cs.addPromise(prom);
+
+            // (2) remember if the argument had a name associated
+            names.push_back(arg.tag());
+            if (arg.tag() != R_NilValue)
+                hasNames = true;
+
+            // (3) "safe force" the argument to get static assumptions
+            SEXP known = safeEval(*arg, nullptr);
+            // TODO: If we add more assumptions should probably abstract with
+            // testArg in interp.cpp. For now they're both much different though
+            if (known != R_UnboundValue) {
+                assumptions.setEager(i);
+                if (!isObject(known)) {
+                    assumptions.setNotObj(i);
+                    if (IS_SIMPLE_SCALAR(known, REALSXP))
+                        assumptions.setSimpleReal(i);
+                    if (IS_SIMPLE_SCALAR(known, INTSXP))
+                        assumptions.setSimpleInt(i);
+                }
+                cs << BC::push(known);
+                cs << BC::mkEagerPromise(idx);
+            } else {
+                cs << BC::mkPromise(idx);
+            }
+        }
+
+        if (hasDots) {
+            cs << BC::callDots(i, names, ast, assumptions);
+        } else if (hasNames) {
+            cs << BC::call(i, names, ast, assumptions);
+        } else {
+            assumptions.add(Assumption::CorrectOrderOfArguments);
+            cs << BC::call(i, ast, assumptions);
+        }
+        if (voidContext)
+            cs << BC::pop();
+        else if (Compiler::profile)
+            cs << BC::recordType();
+
+        return true;
+    }
+
     if (fun == symbol::Internal) {
         SEXP inAst = args[0];
         SEXP args_ = CDR(inAst);

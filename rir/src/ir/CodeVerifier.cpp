@@ -264,6 +264,8 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
             i.advance(code, pushContextStackHeight);
             max.updateMax(i);
             if (cur.isExit()) {
+                if (i.ostack != 0)
+                    code->print(std::cout);
                 i.checkClear();
                 break;
             } else if (cur.bc == Opcode::br_) {

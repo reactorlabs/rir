@@ -11,6 +11,7 @@
 #include "interpreter/interp.h"
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
+#include "utils/Pool.h"
 
 #include <cmath>
 #include <iterator>
@@ -748,6 +749,49 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     next = bb->remove(ip);
                 }
             }
+
+            if (auto c = Call::Cast(i)) {
+                if (auto ld = LdFun::Cast(c->cls())) {
+                    if (c->nCallArgs() == 1 &&
+                        ld->varName == Rf_install("match.arg")) {
+                        auto ast = Pool::get(c->srcIdx);
+                        SEXP argName = CADR(ast);
+                        if (TYPEOF(argName) == SYMSXP) {
+                            auto& formals = function->owner()->formals();
+                            auto f = std::find(formals.names().begin(),
+                                               formals.names().end(), argName);
+                            if (f != formals.names().end()) {
+                                auto pos = f - formals.names().begin();
+                                if (formals.hasDefaultArgs() &&
+                                    formals.defaultArgs()[pos] != R_NilValue) {
+                                    auto options = formals.defaultArgs()[pos];
+                                    if (TYPEOF(options) == LANGSXP) {
+                                        if (CAR(options) == symbol::c) {
+                                            bool allStrings = true;
+                                            for (auto c : RList(CDR(options))) {
+                                                if (TYPEOF(c) != STRSXP)
+                                                    allStrings = false;
+                                            }
+                                            if (allStrings) {
+                                                auto optionList = Rf_eval(
+                                                    options, R_GlobalEnv);
+                                                ip = bb->insert(
+                                                    ip,
+                                                    new LdConst(optionList));
+                                                auto opt = *ip;
+                                                c->pushArg(opt);
+                                                c->printRecursive(std::cout, 2);
+                                                next = ip + 2;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             ip = next;
         }
         if (!bb->isEmpty())
