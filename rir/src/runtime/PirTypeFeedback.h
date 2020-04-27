@@ -82,7 +82,7 @@ struct PirTypeFeedback
         return mdEntries()[idx];
     }
 
-    MDEntry* mdEntries() {
+    MDEntry* mdEntries() const {
         return reinterpret_cast<MDEntry*>((uintptr_t)this + info.gc_area_start +
                                           sizeof(SEXP) * info.gc_area_length);
     }
