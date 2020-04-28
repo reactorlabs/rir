@@ -1163,13 +1163,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         bool hasDots = false;
         int i = 0;
         for (RListIter arg = args.begin() + 2; arg != args.end(); ++i, ++arg) {
-            if (i < toForce) {
-                assert(isRegularArg(arg));
-                compileExpr(ctx, *arg);
-                names.push_back(R_NilValue);
-                continue;
-            }
-
             if (*arg == R_DotsSymbol) {
                 cs << BC::push(R_DotsSymbol);
                 names.push_back(R_DotsSymbol);
@@ -1192,23 +1185,29 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             if (arg.tag() != R_NilValue)
                 hasNames = true;
 
-            // (3) "safe force" the argument to get static assumptions
-            SEXP known = safeEval(*arg, nullptr);
-            // TODO: If we add more assumptions should probably abstract with
-            // testArg in interp.cpp. For now they're both much different though
-            if (known != R_UnboundValue) {
-                assumptions.setEager(i);
-                if (!isObject(known)) {
-                    assumptions.setNotObj(i);
-                    if (IS_SIMPLE_SCALAR(known, REALSXP))
-                        assumptions.setSimpleReal(i);
-                    if (IS_SIMPLE_SCALAR(known, INTSXP))
-                        assumptions.setSimpleInt(i);
-                }
-                cs << BC::push(known);
+            if (i < toForce) {
+                assert(isRegularArg(arg));
+                compileExpr(ctx, *arg);
                 cs << BC::mkEagerPromise(idx);
             } else {
-                cs << BC::mkPromise(idx);
+                // (3) "safe force" the argument to get static assumptions
+                SEXP known = safeEval(*arg, nullptr);
+                // TODO: If we add more assumptions should probably abstract with
+                // testArg in interp.cpp. For now they're both much different though
+                if (known != R_UnboundValue) {
+                    assumptions.setEager(i);
+                    if (!isObject(known)) {
+                        assumptions.setNotObj(i);
+                        if (IS_SIMPLE_SCALAR(known, REALSXP))
+                            assumptions.setSimpleReal(i);
+                        if (IS_SIMPLE_SCALAR(known, INTSXP))
+                            assumptions.setSimpleInt(i);
+                    }
+                    cs << BC::push(known);
+                    cs << BC::mkEagerPromise(idx);
+                } else {
+                    cs << BC::mkPromise(idx);
+                }
             }
         }
 
