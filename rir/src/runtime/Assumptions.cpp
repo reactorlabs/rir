@@ -1,5 +1,6 @@
 #include "Assumptions.h"
 #include "R/Serialize.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 
 namespace rir {
 
@@ -96,5 +97,56 @@ constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
     Assumptions::SimpleIntAssumptions;
 constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
     Assumptions::SimpleRealAssumptions;
+
+void Assumptions::setSpecializationLevel(int level) {
+    static Flags preserve = pir::Rir2PirCompiler::minimalAssumptions |
+                            Assumption::StaticallyArgmatched;
+
+    switch (level) {
+    // All Specialization Disabled
+    case 0:
+        flags = flags & preserve;
+        typeFlags.reset();
+        missing = 0;
+        break;
+
+    // Eager Args
+    case 1:
+        flags = flags & preserve;
+        typeFlags = typeFlags & allEagerArgsFlags();
+        missing = 0;
+        break;
+
+    // + not Reflective
+    case 2:
+        flags.reset(Assumption::NoExplicitlyMissingArgs);
+        typeFlags = typeFlags & allEagerArgsFlags();
+        missing = 0;
+        break;
+
+    // + not Object
+    case 3:
+        flags.reset(Assumption::NoExplicitlyMissingArgs);
+        typeFlags = typeFlags & (allEagerArgsFlags() | allNonObjArgsFlags());
+        missing = 0;
+        break;
+
+    // + arg Types
+    case 4:
+        flags.reset(Assumption::NoExplicitlyMissingArgs);
+        missing = 0;
+        break;
+
+    // + nargs
+    case 5:
+        flags.reset(Assumption::NoExplicitlyMissingArgs);
+        break;
+
+    // + no explicitly missing
+    // all
+    default:
+        break;
+    }
+}
 
 } // namespace rir
