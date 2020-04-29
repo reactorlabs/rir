@@ -59,7 +59,7 @@ PassScheduler::PassScheduler() {
         add<LoadElision>();
     };
 
-    nextPhase("Initial", 50);
+    nextPhase("Initial", 80);
     addDefaultOpt();
     nextPhase("Initial post");
     addDefaultPostPhaseOpt();

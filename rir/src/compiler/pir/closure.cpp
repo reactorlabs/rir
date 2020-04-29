@@ -57,7 +57,7 @@ Closure::findCompatibleVersion(const OptimizationContext& ctx) const {
     for (auto c = versions.rbegin(); c != versions.rend(); c++) {
         const auto& candidate = *c;
         const auto& candidateCtx = candidate.first;
-        if (candidateCtx.subtype(OptimizationContext(ctx.assumptions)))
+        if (candidateCtx.subtype(ctx))
             return candidate.second;
     }
     return nullptr;

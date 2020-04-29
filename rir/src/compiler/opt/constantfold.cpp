@@ -273,6 +273,13 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                     anyChange = true;
                     i->replaceUsesWith(i->arg(0).val());
                     next = bb->remove(ip);
+                } else {
+                    auto lhs = LdConst::Cast(i->arg(0).val());
+                    auto rhs = LdConst::Cast(i->arg(1).val());
+                    if (lhs && rhs && lhs->c() == rhs->c()) {
+                        i->replaceUsesWith(i->arg(0).val());
+                        next = bb->remove(ip);
+                    }
                 }
             }
             // Constantfolding of some common operations
