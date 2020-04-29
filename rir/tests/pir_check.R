@@ -4,6 +4,9 @@ jitOn <- jitOn && (Sys.getenv("PIR_ENABLE", unset="on") == "on")
 if (!jitOn)
   quit()
 
+if (Sys.getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL") != "")
+  q()
+
 # Sanity check for loop peeling, and testing that enabling/disabling works
 # These loop peeling tests may be a bit brittle.
 # Loop peeling should be enabled by default

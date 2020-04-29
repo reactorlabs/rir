@@ -68,6 +68,10 @@ void Function::disassemble(std::ostream& out) {
     body()->disassemble(out);
 }
 
+static int GLOBAL_SPECIALIZATION_LEVEL =
+    getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL")
+        ? atoi(getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL"))
+        : 100;
 void Function::clearDisabledAssumptions(Assumptions& given) const {
     if (flags.contains(Function::DisableArgumentTypeSpecialization))
         given.clearTypeFlags();
@@ -75,6 +79,9 @@ void Function::clearDisabledAssumptions(Assumptions& given) const {
         given.clearNargs();
     if (flags.contains(Function::DisableAllSpecialization))
         given.clearExcept(pir::Rir2PirCompiler::minimalAssumptions);
+
+    if (GLOBAL_SPECIALIZATION_LEVEL < 100)
+        given.setSpecializationLevel(GLOBAL_SPECIALIZATION_LEVEL);
 }
 
 } // namespace rir

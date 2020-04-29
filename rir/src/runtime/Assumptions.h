@@ -131,6 +131,19 @@ struct Assumptions {
     TYPE_ASSUMPTIONS(SimpleReal);
 #undef TYPE_ASSUMPTIONS
 
+    static TypeFlags allEagerArgsFlags() {
+        Assumptions a;
+        for (size_t i = 0; i < NUM_TYPED_ARGS_SPECULATE; ++i)
+            a.setEager(i);
+        return a.typeFlags;
+    }
+    static TypeFlags allNonObjArgsFlags() {
+        Assumptions a;
+        for (size_t i = 0; i < NUM_TYPED_ARGS_SPECULATE; ++i)
+            a.setNotObj(i);
+        return a.typeFlags;
+    }
+
     RIR_INLINE uint8_t numMissing() const { return missing; }
 
     RIR_INLINE void numMissing(long i) {
@@ -249,6 +262,8 @@ struct Assumptions {
         missing = 0;
         flags.reset(Assumption::NoExplicitlyMissingArgs);
     }
+
+    void setSpecializationLevel(int level);
 
   private:
     Flags flags;
