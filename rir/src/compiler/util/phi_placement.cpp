@@ -72,23 +72,72 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         });
     }
 
+    // for (auto ci = placement.begin(); ci != placement.end(); ci++) {
+
+    //     auto& inputs = ci->second;
+    //     for (auto ii = inputs.begin(); ii != inputs.end(); ii++) {
+    //         if (ii->otherPhi && !placement.count(ii->otherPhi)) {
+    //             assert(false && "inputs pointing to dead phis!");
+    //         }
+    //     }
+    // }
+
+    //  for (auto& i : placement) {
+    //     // if (i.second.size() != i.first->predecessors().size()) {
+    //     //     assert(false && "wrong size!");
+    //     //  }
+
+    //     if (i.second.size()  == 1 && i.first->predecessors().size() == 1 ) {
+    //         assert(false && "size 1!");
+    //      }
+
+    // }
+
+    // Cleanup the resulting phi graph
+    // bool changed = true;
+    // auto cleanup = [&]() {
+    //     for (auto ci = placement.begin(); ci != placement.end();) {
+    //         // Remove dead inputs
+    //         auto& inputs = ci->second;
+    //         for (auto ii = inputs.begin(); ii != inputs.end();) {
+    //             if (ii->otherPhi && !placement.count(ii->otherPhi)) {
+    //                 ii = inputs.erase(ii);
+    //                 changed = true;
+    //             } else {
+    //                 ii++;
+    //             }
+    //         }
+    //         if (ci->second.size() == 0) {
+    //             ci = placement.erase(ci);
+    //         } else if (ci->second.size() == 1) {
+    //             // Remove single input phis
+    //             auto input1 = *ci->second.begin();
+    //             if (input1.otherPhi != ci->first) {
+    //                 dominatingPhi[ci->first] = input1.otherPhi;
+    //                 // update all other phis which have us as input
+    //                 for (auto& c : placement) {
+    //                     for (auto& in : c.second) {
+    //                         if (in.otherPhi == ci->first) {
+    //                             in.otherPhi = input1.otherPhi;
+    //                             in.aValue = input1.aValue;
+    //                             changed = true;
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //             ci = placement.erase(ci);
+    //         } else {
+    //             ci++;
+    //         }
+    //     }
+    // };
+
     // Cleanup the resulting phi graph
     bool changed = true;
-    auto cleanup = [&]() {
+    auto cleanupRemoveOneInputs = [&]() {
         for (auto ci = placement.begin(); ci != placement.end();) {
-            // Remove dead inputs
-            auto& inputs = ci->second;
-            for (auto ii = inputs.begin(); ii != inputs.end();) {
-                if (ii->otherPhi && !placement.count(ii->otherPhi)) {
-                    ii = inputs.erase(ii);
-                    changed = true;
-                } else {
-                    ii++;
-                }
-            }
-            if (ci->second.size() == 0) {
-                ci = placement.erase(ci);
-            } else if (ci->second.size() == 1) {
+
+            if (ci->second.size() == 1) {
                 // Remove single input phis
                 auto input1 = *ci->second.begin();
                 if (input1.otherPhi != ci->first) {
@@ -110,20 +159,58 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
             }
         }
     };
+
     while (changed) {
         changed = false;
-        cleanup();
+        cleanupRemoveOneInputs();
+    }
+
+    // Remove ill formed phis
+    for (auto ci = placement.begin(); ci != placement.end();) {
+        if (ci->second.size() != ci->first->predecessors().size()) {
+            ci = placement.erase(ci);
+        } else {
+            ci++;
+        }
+    }
+
+    // Remove Broken phis (a broken phi is a phi which has an input pointing to
+    // a phi that no longer exists)
+    auto cleanupRemoveBrokenPhis = [&]() {
+        for (auto ci = placement.begin(); ci != placement.end();) {
+            auto& inputs = ci->second;
+
+            auto isBroken = false;
+            for (auto ii = inputs.begin(); ii != inputs.end();) {
+                if (ii->otherPhi && !placement.count(ii->otherPhi)) {
+                    isBroken = true;
+                    break;
+                }
+            }
+
+            if (isBroken) {
+                ci = placement.erase(ci);
+                changed = true;
+            } else {
+                ci++;
+            }
+        }
+    };
+
+    while (changed) {
+        changed = false;
+        cleanupRemoveBrokenPhis();
     }
 
     // Fail if not all phis are well formed
-    for (auto& i : placement) {
-        if (i.second.size() != i.first->predecessors().size()) {
-            // TODO figure out why this happens
-            placement.clear();
-            dominatingPhi.clear();
-            break;
-        }
-    }
+    // for (auto& i : placement) {
+    //     if (i.second.size() != i.first->predecessors().size()) {
+    //         // TODO figure out why this happens
+    //         placement.clear();
+    //         dominatingPhi.clear();
+    //         break;
+    //     }
+    // }
 }
 
 } // namespace pir
