@@ -111,14 +111,20 @@ bool DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
                     anyChange = true;
                     if (hasNames) {
                         Value* cls = nullptr;
+                        Value* fs = Tombstone::framestate();
                         if (auto c = Call::Cast(i)) {
                             cls = c->cls();
+                            fs = c->frameState();
                         } else if (auto c = NamedCall::Cast(i)) {
                             cls = c->cls();
+                            fs = c->frameState();
                         }
                         assert(cls);
-                        auto nc = new NamedCall(i->env(), cls, args, names,
+                        if (!fs)
+                            fs = Tombstone::framestate();
+                        auto nc = new NamedCall(i->env(), cls, args, names, fs,
                                                 i->srcIdx);
+                        nc->type = i->type;
                         i->replaceUsesAndSwapWith(nc, ip);
                     } else {
                         if (auto c = Call::Cast(i)) {
@@ -127,19 +133,25 @@ bool DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
                                 fs = Tombstone::framestate();
                             auto nc = new Call(i->env(), c->cls(), args, fs,
                                                i->srcIdx);
+                            nc->type = i->type;
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else if (auto c = NamedCall::Cast(i)) {
-                            auto nc =
-                                new Call(i->env(), c->cls(), args,
-                                         Tombstone::framestate(), i->srcIdx);
+                            Value* fs = c->frameState();
+                            if (!fs)
+                                fs = Tombstone::framestate();
+                            auto nc = new Call(i->env(), c->cls(), args, fs,
+                                               i->srcIdx);
+                            nc->type = i->type;
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else if (auto b = CallBuiltin::Cast(i)) {
                             auto nc = BuiltinCallFactory::New(i->env(), b->blt,
                                                               args, i->srcIdx);
+                            nc->type = i->type;
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else if (auto b = CallSafeBuiltin::Cast(i)) {
                             auto nc = BuiltinCallFactory::New(
                                 Env::elided(), b->blt, args, i->srcIdx);
+                            nc->type = i->type;
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else {
                             assert(false);

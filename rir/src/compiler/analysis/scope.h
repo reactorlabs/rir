@@ -144,7 +144,7 @@ class ScopeAnalysis
 
   public:
     // Lookup what the analysis knows about the result of executing
-    // instruction i. This recursively queries all available ressources,
+    // instruction i. This recursively queries all available resources,
     // such as binding structure, inter-procedural return values, function
     // arguments and so on.
     void lookup(Value*, const LoadMaybe&,

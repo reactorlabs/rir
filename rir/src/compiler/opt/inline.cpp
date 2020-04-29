@@ -77,6 +77,29 @@ class TheInliner {
                         continue;
                     staticEnv = mkcls->lexicalEnv();
                     callerFrameState = call->frameState();
+                } else if (auto call = NamedCall::Cast(*it)) {
+                    auto mkcls =
+                        MkFunCls::Cast(call->cls()->followCastsAndForce());
+                    if (!mkcls)
+                        continue;
+                    inlineeCls = mkcls->cls;
+                    if (dontInline(inlineeCls))
+                        continue;
+                    inlinee = call->tryDispatch(inlineeCls);
+                    if (!inlinee)
+                        continue;
+                    if (inlinee->effectiveNArgs() != call->nCallArgs())
+                        continue;
+                    bool hasDotArgs = false;
+                    call->eachCallArg([&](Value* v) {
+                        if (ExpandDots::Cast(v))
+                            hasDotArgs = true;
+                    });
+                    // TODO do some argument matching
+                    if (hasDotArgs)
+                        continue;
+                    staticEnv = mkcls->lexicalEnv();
+                    callerFrameState = call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
                     inlineeCls = call->cls();
                     if (dontInline(inlineeCls))

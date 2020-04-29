@@ -956,9 +956,10 @@ Effects StaticCall::inferEffects(const GetType& getType) const {
     return effects;
 }
 
-ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
+ClosureVersion* CallInstruction::tryDispatch(Closure* cls,
+                                             const ArgsList& argsList) const {
     auto res = cls->findCompatibleVersion(
-        OptimizationContext(inferAvailableAssumptions()));
+        OptimizationContext(inferAvailableAssumptions(cls, argsList)));
 #ifdef WARN_DISPATCH_FAIL
     if (!res) {
         std::cout << "DISPATCH FAILED! Available versions: \n";
@@ -966,14 +967,14 @@ ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
             std::cout << "* " << v->assumptions() << "\n";
         });
         std::cout << "Available assumptions at callsite: \n ";
-        std::cout << inferAvailableAssumptions() << "\n";
+        std::cout << inferAvailableAssumptions(cls, argsList) << "\n";
     }
 #endif
     if (res) {
         if (res->assumptions().includes(Assumption::NoExplicitlyMissingArgs))
-            assert(res->effectiveNArgs() == nCallArgs());
+            assert(res->effectiveNArgs() == argsList.nargs());
         else
-            assert(res->effectiveNArgs() >= nCallArgs());
+            assert(res->effectiveNArgs() >= argsList.nargs());
     }
     return res;
 }
@@ -1037,14 +1038,80 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
     return nullptr;
 }
 
-Assumptions CallInstruction::inferAvailableAssumptions() const {
+void CallInstruction::ArgsList::pushArg(Value* a, SEXP name) {
+    if (ExpandDots::Cast(a)) {
+        dots = true;
+    }
+    args.push_back(a);
+    names.push_back(name);
+}
+
+CallInstruction::ArgsList
+CallInstruction::buildArgsList(const ResolveLdDots& resolve) const {
+    ArgsList res;
+    size_t i = 0;
+    eachCallArg([&](Value* arg) {
+        if (auto ed = ExpandDots::Cast(arg)) {
+            auto dots = ed->arg(0).val();
+            if (dots == MissingArg::instance()) {
+                // nothing
+            } else if (auto dl = DotsList::Cast(dots)) {
+                dl->eachElement([&](SEXP name, Value* v) {
+                    assert(!ExpandDots::Cast(v));
+                    res.pushArg(v, name);
+                });
+            } else if (auto ld = LdDots::Cast(dots)) {
+                auto val = resolve(ld);
+                if (val == MissingArg::instance()) {
+                    // nothing
+                } else if (auto dl = DotsList::Cast(val)) {
+                    dl->eachElement([&](SEXP name, Value* v) {
+                        assert(!ExpandDots::Cast(v));
+                        res.pushArg(v, name);
+                    });
+                } else {
+                    res.pushArg(arg, argName(i));
+                }
+            } else {
+                res.pushArg(arg, argName(i));
+            }
+        } else {
+            res.pushArg(arg, argName(i));
+        }
+        i++;
+    });
+    return res;
+}
+
+Assumptions
+CallInstruction::inferAvailableAssumptions(Closure* cls,
+                                           const ArgsList& args) const {
     Assumptions given;
-    if (!hasNamedArgs())
-        given.add(Assumption::CorrectOrderOfArguments);
-    if (auto cls = tryGetCls()) {
-        if (cls->nargs() >= nCallArgs()) {
+
+    // We cannot say much when there is a `...` argument
+    if (!args.dots && cls) {
+
+        if (hasNamedArgs() && cls->nargs() == args.nargs()) {
+            auto formalNames = cls->formals().names();
+            bool namesMatch = true;
+            for (size_t i = 0; i < args.nargs(); i++) {
+                if (args.names[i] != R_NilValue &&
+                    args.names[i] != formalNames[i])
+                    namesMatch = false;
+            }
+            if (namesMatch)
+                given.add(Assumption::CorrectOrderOfArguments);
+        } else {
+            given.add(Assumption::CorrectOrderOfArguments);
+        }
+
+        // Dots as a formal argument means we can pass any number of args
+        if (cls->formals().hasDots()) {
             given.add(Assumption::NotTooManyArguments);
-            auto missing = cls->nargs() - nCallArgs();
+        }
+        if (cls->nargs() >= args.nargs()) {
+            given.add(Assumption::NotTooManyArguments);
+            auto missing = cls->nargs() - args.nargs();
             given.numMissing(missing);
         }
 
@@ -1053,31 +1120,21 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
         given.add(Assumption::NoReflectiveArgument);
     }
 
-    bool hasDotsArg = false;
     size_t i = 0;
-    eachCallArg([&](Value* arg) {
-        if (arg->type.maybe(RType::expandedDots))
-            hasDotsArg = true;
-        else
-            writeArgTypeToAssumptions(given, arg, i);
-        ++i;
-    });
-
-    if (hasDotsArg) {
-        given.remove(Assumption::CorrectOrderOfArguments);
-        given.remove(Assumption::NotTooManyArguments);
-        given.numMissing(0);
-        given.remove(Assumption::NoReflectiveArgument);
-    }
+    for (auto arg : args.args)
+        writeArgTypeToAssumptions(given, arg, i++);
 
     return given;
 }
 
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
-                     const std::vector<SEXP>& names_, unsigned srcIdx)
+                     const std::vector<SEXP>& names_, Value* fs,
+                     unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
+    assert(fs);
+    pushArg(fs, NativeType::frameState);
     pushArg(fun, RType::closure);
 
     // Calling builtins with names or ... is not supported by callBuiltin,
@@ -1097,9 +1154,12 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
-                     const std::vector<BC::PoolIdx>& names_, unsigned srcIdx)
+                     const std::vector<BC::PoolIdx>& names_, Value* fs,
+                     unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
+    assert(fs);
+    pushArg(fs, NativeType::frameState);
     pushArg(fun, RType::closure);
 
     // Calling builtins with names or ... is not supported by callBuiltin,
@@ -1140,6 +1200,10 @@ void NamedCall::printArgs(std::ostream& out, bool tty) const {
         i++;
     });
     out << ") ";
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
+    }
 }
 
 FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }

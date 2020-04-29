@@ -1952,6 +1952,49 @@ class VLIE(FrameState, Effects(Effect::LeaksEnv) | Effect::ReadsEnv) {
     void printEnv(std::ostream& out, bool tty) const override final{};
 };
 
+class FLIE(LdDots, 1, Effect::ReadsEnv) {
+  public:
+    std::vector<SEXP> names;
+    explicit LdDots(Value* env)
+        : FixedLenInstructionWithEnvSlot(PirType::dotsArg(), {}, {}, env) {}
+};
+
+class FLI(ExpandDots, 1, Effects::None()) {
+  public:
+    std::vector<SEXP> names;
+    explicit ExpandDots(Value* dots)
+        : FixedLenInstruction(RType::expandedDots, {{PirType::dotsArg()}},
+                              {{dots}}) {}
+};
+
+class VLI(DotsList, Effects::None()) {
+  public:
+    std::vector<SEXP> names;
+    DotsList() : VarLenInstruction(RType::dots) {}
+
+    void addInput(SEXP name, Value* val) {
+        names.push_back(name);
+        VarLenInstruction::pushArg(val, val->type);
+    }
+
+    void pushArg(Value* a, PirType t) override {
+        assert(false && "use addInput");
+    }
+    void pushArg(Value* a) override { assert(false && "use addInput"); }
+
+    void printArgs(std::ostream& out, bool tty) const override;
+
+    typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
+    RIR_INLINE void eachElement(LocalVarIt it) const {
+        for (unsigned i = 0; i < nargs(); ++i)
+            it(names[i], arg(i).val());
+    }
+    RIR_INLINE void eachElementRev(LocalVarIt it) const {
+        for (long i = nargs() - 1; i >= 0; --i)
+            it(names[i], arg(i).val());
+    }
+};
+
 // Common interface to all call instructions
 class CallInstruction {
   public:
@@ -1967,12 +2010,34 @@ class CallInstruction {
     eachCallArg(const Instruction::MutableArgumentIterator& it) = 0;
     virtual const InstrArg& callArg(size_t pos) const = 0;
     virtual InstrArg& callArg(size_t pos) = 0;
+
+    struct ArgsList {
+        std::vector<Value*> args;
+        std::vector<SEXP> names;
+        bool dots = false;
+        void pushArg(Value* a, SEXP name);
+        size_t nargs() const { return args.size(); }
+    };
+    typedef std::function<Value*(LdDots*)> ResolveLdDots;
+    ArgsList buildArgsList(const ResolveLdDots& = [](LdDots* ld) {
+        return ld;
+    }) const;
+
     virtual void clearFrameState(){};
     virtual bool hasFrameState() = 0;
     virtual Closure* tryGetCls() const { return nullptr; }
-    virtual Assumptions inferAvailableAssumptions() const;
+    virtual Assumptions inferAvailableAssumptions(Closure*,
+                                                  const ArgsList&) const;
+    virtual Assumptions inferAvailableAssumptions() const {
+        return inferAvailableAssumptions(tryGetCls(), buildArgsList());
+    }
+
     virtual bool hasNamedArgs() const { return false; }
-    ClosureVersion* tryDispatch(Closure*) const;
+    virtual SEXP argName(size_t i) const { return R_NilValue; }
+    ClosureVersion* tryDispatch(Closure*, const ArgsList&) const;
+    ClosureVersion* tryDispatch(Closure* cls) const {
+        return tryDispatch(cls, buildArgsList());
+    }
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
@@ -2039,7 +2104,7 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
   public:
     std::vector<SEXP> names;
 
-    Value* cls() const { return arg(0).val(); }
+    Value* cls() const { return arg(1).val(); }
 
     Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
@@ -2047,32 +2112,40 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
         return nullptr;
     }
 
+    SEXP argName(size_t i) const override final {
+        assert(i < names.size());
+        return names[i];
+    }
     bool hasNamedArgs() const override { return true; }
-    bool hasFrameState() override { return false; }
 
     NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
-              const std::vector<SEXP>& names_, unsigned srcIdx);
+              const std::vector<SEXP>& names_, Value* fs, unsigned srcIdx);
     NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
-              const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
+              const std::vector<BC::PoolIdx>& names_, Value* fs,
+              unsigned srcIdx);
 
-    size_t nCallArgs() const override { return nargs() - 2; };
+    size_t nCallArgs() const override { return nargs() - 3; };
     void eachCallArg(const Instruction::ArgumentValueIterator& it)
         const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 1).val());
+            it(arg(i + 2).val());
     }
     void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 1));
+            it(arg(i + 2));
     }
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
-        return arg(pos + 1);
+        return arg(pos + 2);
     }
     InstrArg& callArg(size_t pos) override final {
         assert(pos < nCallArgs());
-        return arg(pos + 1);
+        return arg(pos + 2);
     }
+
+    FrameState* frameState() const { return FrameState::Cast(arg(0).val()); }
+    void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
+    bool hasFrameState() override { return frameState(); }
 
     Value* callerEnv() { return env(); }
     void printArgs(std::ostream & out, bool tty) const override;
@@ -2132,6 +2205,11 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
 
     ClosureVersion* tryOptimisticDispatch() const;
 
+    Assumptions inferAvailableAssumptions(Closure * cls, const ArgsList& args)
+        const override final {
+        return CallInstruction::inferAvailableAssumptions(cls, args) |
+               givenAssumptions;
+    }
     Assumptions inferAvailableAssumptions() const override final {
         return CallInstruction::inferAvailableAssumptions() | givenAssumptions;
     }
@@ -2332,45 +2410,6 @@ class FLI(PopContext, 2, Effect::ChangesContexts) {
 
     PirType inferType(const GetType& getType) const override final {
         return getType(result());
-    }
-};
-
-class FLIE(LdDots, 1, Effect::ReadsEnv) {
-  public:
-    std::vector<SEXP> names;
-    explicit LdDots(Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::dotsArg(), {}, {}, env) {}
-};
-
-class FLI(ExpandDots, 1, Effects::None()) {
-  public:
-    std::vector<SEXP> names;
-    explicit ExpandDots(Value* dots)
-        : FixedLenInstruction(RType::expandedDots, {{PirType::dotsArg()}},
-                              {{dots}}) {}
-};
-
-class VLI(DotsList, Effects::None()) {
-  public:
-    std::vector<SEXP> names;
-    DotsList() : VarLenInstruction(RType::dots) {}
-
-    void addInput(SEXP name, Value* val) {
-        names.push_back(name);
-        VarLenInstruction::pushArg(val, val->type);
-    }
-
-    void pushArg(Value* a, PirType t) override {
-        assert(false && "use addInput");
-    }
-    void pushArg(Value* a) override { assert(false && "use addInput"); }
-
-    void printArgs(std::ostream& out, bool tty) const override;
-
-    typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
-    RIR_INLINE void eachElementRev(LocalVarIt it) const {
-        for (long i = nargs() - 1; i >= 0; --i)
-            it(names[i], arg(i).val());
     }
 };
 

@@ -709,15 +709,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
             popn(toPop);
+            Value* fs = nullptr;
+            if (inPromise())
+                fs = Tombstone::framestate();
+            else
+                fs = insert.registerFrameState(srcCode, nextPos, stack);
             if (namedArguments) {
                 push(insert(new NamedCall(env, callee, args, callArgumentNames,
-                                          bc.immediate.callFixedArgs.ast)));
+                                          fs, bc.immediate.callFixedArgs.ast)));
             } else {
-                Value* fs = nullptr;
-                if (inPromise())
-                    fs = Tombstone::framestate();
-                else
-                    fs = insert.registerFrameState(srcCode, nextPos, stack);
                 push(insert(new Call(env, callee, args, fs,
                                      bc.immediate.callFixedArgs.ast)));
             }
@@ -739,12 +739,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             {
                 size_t i = 0;
                 for (const auto& arg : matchedArgs) {
-                    if (arg == MissingArg::instance()) {
-                        given.remove(Assumption::NoExplicitlyMissingArgs);
-                        i++;
-                    } else {
-                        writeArgTypeToAssumptions(given, arg, i++);
-                    }
+                    writeArgTypeToAssumptions(given, arg, i++);
                 }
             }
 

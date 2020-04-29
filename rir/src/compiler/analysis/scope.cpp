@@ -311,9 +311,9 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             effect.taint();
         }
     } else if (CallInstruction::CastCall(i)) {
-        auto calli = CallInstruction::CastCall(i);
 
         auto interProceduralAnalysis = [&](ClosureVersion* version,
+                                           CallInstruction::ArgsList& argsList,
                                            Value* lexicalEnv) {
             if (depth == 0 && version == closure) {
                 // At depth 0 we are sure that no contextual information is
@@ -332,12 +332,10 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             if (version->size() > MAX_SIZE)
                 return;
 
-            std::vector<Value*> args;
-            calli->eachCallArg([&](Value* v) { args.push_back(v); });
-            while (args.size() < version->effectiveNArgs())
-                args.push_back(MissingArg::instance());
-            ScopeAnalysis nextFun(version, args, lexicalEnv, state, globalState,
-                                  depth + 1, log);
+            while (argsList.nargs() < version->effectiveNArgs())
+                argsList.pushArg(MissingArg::instance(), R_NilValue);
+            ScopeAnalysis nextFun(version, argsList.args, lexicalEnv, state,
+                                  globalState, depth + 1, log);
             nextFun();
             state.mergeCall(code, nextFun.result());
             updateReturnValue(nextFun.result().returnValue);
@@ -346,6 +344,11 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             effect.update();
         };
 
+        auto resolveDots = [&](LdDots* ld) -> Value* {
+            auto res = load(state, R_DotsSymbol, ld->env());
+            return res.result.isSingleValue() ? res.result.singleValue().val
+                                              : ld;
+        };
         if (auto call = Call::Cast(i)) {
             auto target = call->cls()->followCastsAndForce();
             lookup(target, [&](const AbstractPirValue& result) {
@@ -353,21 +356,24 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                     target = result.singleValue().val->followCastsAndForce();
             });
             assert(target);
-            bool anyDots = false;
-            calli->eachCallArg(
-                [&](Value* v) { anyDots = anyDots || ExpandDots::Cast(v); });
-            if (auto mk = MkFunCls::Cast(target))
-                if (!anyDots)
-                    if (auto trg = call->tryDispatch(mk->cls))
-                        interProceduralAnalysis(trg, mk->lexicalEnv());
+            if (auto mk = MkFunCls::Cast(target)) {
+                auto argsList = call->buildArgsList(resolveDots);
+                if (!argsList.dots) {
+                    if (auto trg = call->tryDispatch(mk->cls, argsList)) {
+                        interProceduralAnalysis(trg, argsList,
+                                                mk->lexicalEnv());
+                    }
+                }
+            }
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();
-            bool anyDots = false;
-            calli->eachCallArg(
-                [&](Value* v) { anyDots = anyDots || ExpandDots::Cast(v); });
-            if (target && !anyDots)
-                if (auto trg = call->tryDispatch())
-                    interProceduralAnalysis(trg, target->closureEnv());
+            auto argsList = call->buildArgsList(resolveDots);
+            if (target && !argsList.dots) {
+                if (auto trg = call->tryDispatch()) {
+                    interProceduralAnalysis(trg, argsList,
+                                            target->closureEnv());
+                }
+            }
         } else {
             // TODO: support for NamedCall
             assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||

@@ -33,6 +33,13 @@ void writeArgTypeToAssumptions(Assumptions& assumptions, Value* arg, int i) {
         }
         if (!mk->noReflection)
             assumptions.remove(Assumption::NoReflectiveArgument);
+    } else if (ExpandDots::Cast(arg)) {
+        assumptions.remove(Assumption::CorrectOrderOfArguments);
+        assumptions.remove(Assumption::NoExplicitlyMissingArgs);
+        assumptions.remove(Assumption::NoReflectiveArgument);
+        assumptions.remove(Assumption::NotTooManyArguments);
+        assumptions.remove(Assumption::StaticallyArgmatched);
+        assumptions.numMissing(0);
     } else {
         Value* value = arg->followCastsAndForce();
         if (value == MissingArg::instance()) {
