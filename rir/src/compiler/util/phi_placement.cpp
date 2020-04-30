@@ -75,99 +75,56 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         });
     }
 
-    auto printPhis = [&]() {
-        std::stringstream str("");
+    // auto printPhis = [&]() {
+    //     std::stringstream str("");
 
-        str << " PLACEMENTS: ("
-            << "\n";
-        for (auto ci = placement.begin(); ci != placement.end(); ci++) {
+    //     str << " PLACEMENTS: ("
+    //         << "\n";
+    //     for (auto ci = placement.begin(); ci != placement.end(); ci++) {
 
-            str << "PHI \n[";
-            str << "target: " << ci->first->id;
-            str << "\n";
-            auto& inputs = ci->second;
+    //         str << "PHI \n[";
+    //         str << "target: " << ci->first->id;
+    //         str << "\n";
+    //         auto& inputs = ci->second;
 
-            for (auto ii = inputs.begin(); ii != inputs.end(); ii++) {
-                str << "\t{";
-                str << "input: " << ii->inputBlock->id;
-                str << ", otherPhi: ";
-                if (ii->otherPhi != nullptr)
-                    str << ii->otherPhi->id;
-                str << "}";
-                str << "\n";
-            }
-            str << "]";
-            str << " \n\n";
-        }
+    //         for (auto ii = inputs.begin(); ii != inputs.end(); ii++) {
+    //             str << "\t{";
+    //             str << "input: " << ii->inputBlock->id;
+    //             str << ", otherPhi: ";
+    //             if (ii->otherPhi != nullptr)
+    //                 str << ii->otherPhi->id;
+    //             str << "}";
+    //             str << "\n";
+    //         }
+    //         str << "]";
+    //         str << " \n\n";
+    //     }
 
-        str << ")"
-            << "\n";
+    //     str << ")"
+    //         << "\n";
 
-        return str.str();
-    };
+    //     return str.str();
+    // };
 
-    auto phisInitial = printPhis();
+    // auto phisInitial = printPhis();
 
     // Cleanup the resulting phi graph
-    bool changed = true;
-    auto cleanup = [&]() {
-        for (auto ci = placement.begin(); ci != placement.end();) {
-            // Remove dead inputs
-            auto& inputs = ci->second;
-            for (auto ii = inputs.begin(); ii != inputs.end();) {
-                if (ii->otherPhi && !placement.count(ii->otherPhi)) {
-                    ii = inputs.erase(ii);
-                    changed = true;
-                } else {
-                    ii++;
-                }
-            }
-            if (ci->second.size() == 0) {
-                ci = placement.erase(ci);
-            } else if (ci->second.size() == 1) {
-                // Remove single input phis
-                auto input1 = *ci->second.begin();
-                if (input1.otherPhi != ci->first) {
-                    dominatingPhi[ci->first] = input1.otherPhi;
-                    // update all other phis which have us as input
-                    for (auto& c : placement) {
-                        for (auto& in : c.second) {
-                            if (in.otherPhi == ci->first) {
-                                in.otherPhi = input1.otherPhi;
-                                in.aValue = input1.aValue;
-                                changed = true;
-                            }
-                        }
-                    }
-                }
-                ci = placement.erase(ci);
-            } else {
-                ci++;
-            }
-        }
-    };
-
-    while (changed) {
-        changed = false;
-        cleanup();
-    }
-
-    // Fail if not all phis are well formed
-    for (auto& i : placement) {
-        if (i.second.size() != i.first->predecessors().size()) {
-            // TODO figure out why this happens
-            placement.clear();
-            dominatingPhi.clear();
-            break;
-        }
-    }
-
-    // // Remove one-input phis and relink
     // bool changed = true;
-    // auto cleanupRemoveOneInputs = [&]() {
+    // auto cleanup = [&]() {
     //     for (auto ci = placement.begin(); ci != placement.end();) {
-
-    //         if (ci->second.size() == 1) {
+    //         // Remove dead inputs
+    //         auto& inputs = ci->second;
+    //         for (auto ii = inputs.begin(); ii != inputs.end();) {
+    //             if (ii->otherPhi && !placement.count(ii->otherPhi)) {
+    //                 ii = inputs.erase(ii);
+    //                 changed = true;
+    //             } else {
+    //                 ii++;
+    //             }
+    //         }
+    //         if (ci->second.size() == 0) {
+    //             ci = placement.erase(ci);
+    //         } else if (ci->second.size() == 1) {
     //             // Remove single input phis
     //             auto input1 = *ci->second.begin();
     //             if (input1.otherPhi != ci->first) {
@@ -183,10 +140,6 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
     //                     }
     //                 }
     //             }
-
-    //             std::cerr << "---------- " << "id failed: " << ci->first->id
-    //             << "\n";
-    //             //assert(false);
     //             ci = placement.erase(ci);
     //         } else {
     //             ci++;
@@ -196,82 +149,108 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
 
     // while (changed) {
     //     changed = false;
-    //     cleanupRemoveOneInputs();
+    //     cleanup();
     // }
 
-    // // Remove ill formed phis
-    // for (auto ci = placement.begin(); ci != placement.end();) {
-    //     if (ci->second.size() != ci->first->predecessors().size()) {
-    //         assert(false);
-    //         ci = placement.erase(ci);
-
-    //     } else {
-    //         ci++;
+    // Fail if not all phis are well formed
+    // for (auto& i : placement) {
+    //     if (i.second.size() != i.first->predecessors().size()) {
+    //         // TODO figure out why this happens
+    //         placement.clear();
+    //         dominatingPhi.clear();
+    //         break;
     //     }
     // }
 
-    // // Remove Broken phis (a broken phi is a phi which has an input pointing
-    // to
-    // // a phi that no longer exists)
-    // auto cleanupRemoveBrokenPhis = [&]() {
-    //     for (auto ci = placement.begin(); ci != placement.end();) {
-    //         auto& inputs = ci->second;
+    // Remove one-input phis and relink
+    bool changed = true;
+    auto cleanupRemoveOneInputs = [&]() {
+        for (auto ci = placement.begin(); ci != placement.end();) {
 
-    //         auto isBroken = false;
-    //         for (auto ii = inputs.begin(); ii != inputs.end();) {
-    //             if (ii->otherPhi && !placement.count(ii->otherPhi)) {
-    //                 isBroken = true;
-    //                 break;
-    //             }
-    //         }
+            if (ci->second.size() ==
+                1 /*&& ci->first->predecessors().size() == 1*/) {
+                // assert(false && "1 and 1!");
+                // Remove single input phis
+                auto input1 = *ci->second.begin();
+                if (input1.otherPhi != ci->first) {
+                    dominatingPhi[ci->first] = input1.otherPhi;
+                    // update all other phis which have us as input
+                    for (auto& c : placement) {
+                        for (auto& in : c.second) {
+                            if (in.otherPhi == ci->first) {
+                                in.otherPhi = input1.otherPhi;
+                                in.aValue = input1.aValue;
+                                changed = true;
+                            }
+                        }
+                    }
+                }
 
-    //         if (isBroken) {
-    //             ci = placement.erase(ci);
-    //             assert(false);
-    //             changed = true;
-    //         } else {
-    //             ci++;
-    //         }
-    //     }
-    // };
-
-    // while (changed) {
-    //     changed = false;
-    //     cleanupRemoveBrokenPhis();
-    // }
-
-    Visitor::run(cls->entry, [&](BB* cur) {
-        auto count = 0;
-        std::stringstream strDom("Dom: ");
-        for (auto ci = placement.begin(); ci != placement.end(); ci++) {
-            if (dom.strictlyDominates(ci->first, cur)) {
-                strDom << ci->first->id << " -> " << cur->id << "\n";
-
-                count++;
+                ci = placement.erase(ci);
+            } else {
+                ci++;
             }
         }
+    };
 
-        if (count > 1) {
-            // cls->print(std::cerr, true);
-            std::cerr << "\n\n" << strDom.str();
-            std::cerr << "\n\n";
-            cls->printBBGraph(std::cerr, true);
+    while (changed) {
+        changed = false;
+        cleanupRemoveOneInputs();
+    }
 
-            std::cerr << "phis initial: "
-                      << "\n";
-            std::cerr << phisInitial;
+    // Remove ill formed phis
+    for (auto ci = placement.begin(); ci != placement.end();) {
+        if (ci->second.size() != ci->first->predecessors().size()) {
+            ci = placement.erase(ci);
 
-            std::cerr << "\n";
-            auto phisFinal = printPhis();
-
-            std::cerr << "phis final: "
-                      << "\n";
-            std::cerr << phisFinal;
-            std::cerr << "\n";
+        } else {
+            ci++;
         }
-        std::cerr << "count: " << count;
-        assert(count <= 1 && "count more than 1");
+    }
+
+    // Remove Broken phis (a broken phi is a phi which has an input pointing to
+    // a phi that no longer exists)
+    auto cleanupRemoveBrokenPhis = [&]() {
+        for (auto ci = placement.begin(); ci != placement.end();) {
+            auto& inputs = ci->second;
+
+            auto isBroken = false;
+            for (auto ii = inputs.begin(); ii != inputs.end();) {
+                if (ii->otherPhi && !placement.count(ii->otherPhi)) {
+                    isBroken = true;
+                    break;
+                }
+            }
+
+            if (isBroken) {
+                ci = placement.erase(ci);
+                changed = true;
+            } else {
+                ci++;
+            }
+        }
+    };
+
+    while (changed) {
+        changed = false;
+        cleanupRemoveBrokenPhis();
+    }
+
+    // recompute dominatingPhi
+    dominatingPhi.clear();
+    Visitor::run(cls->entry, [&](BB* cur) {
+        BB* next = cur;
+        while (next != cls->entry) {
+
+            if (placement.count(next)) {
+                dominatingPhi[cur] = next;
+                break;
+            }
+            next = dom.immediateDominator(next);
+        }
     });
+
+    assert(dominatingPhi.size() > placement.size());
 }
 
 } // namespace pir

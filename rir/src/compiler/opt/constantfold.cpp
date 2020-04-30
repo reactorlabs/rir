@@ -142,15 +142,18 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         std::unordered_set<Branch*> removed;
 
         for (auto& c : condition) {
-            continue;
+            // continue;
 
             removed.clear();
             auto& uses = c.second;
             if (uses.size() > 1) {
 
                 for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
+
                     if (removed.count(*a))
                         continue;
+
+                    PhiPlacement* pl = nullptr;
                     auto phisPlaced = false;
                     std::unordered_map<BB*, Phi*> newPhisByBB;
                     newPhisByBB.clear();
@@ -176,17 +179,19 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                         True::instance();
                                     inputs[bb1->falseBranch()] =
                                         False::instance();
-                                    auto pl = PhiPlacement(function, inputs,
-                                                           dom, dfront);
-                                    if (pl.placement.size() > 0) {
+                                    pl = new PhiPlacement(function, inputs, dom,
+                                                          dfront);
+
+                                    assert(pl->placement.size() > 0);
+                                    if (pl->placement.size() > 0) {
                                         anyChange = true;
 
-                                        for (auto& placement : pl.placement) {
+                                        for (auto& placement : pl->placement) {
                                             auto targetForPhi = placement.first;
                                             newPhisByBB[targetForPhi] = new Phi;
                                         }
 
-                                        for (auto& placement : pl.placement) {
+                                        for (auto& placement : pl->placement) {
                                             auto targetForPhi = placement.first;
                                             auto phi =
                                                 newPhisByBB[targetForPhi];
@@ -216,17 +221,36 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
 
                                 if (phisPlaced) {
 
-                                    for (auto p : newPhisByBB) {
-                                        auto phi = p.second;
-                                        if (dom.dominates(phi->bb(), bb2)) {
-                                            (*b)->arg(0).val() = phi;
-                                            break;
-                                        }
+                                    assert(pl->dominatingPhi.size() > 0);
+
+                                    if (pl->dominatingPhi.count(bb2) == 0) {
+                                        std::cerr << "dom phi: "
+                                                  << pl->dominatingPhi.size();
+
+                                        assert(false && "count 0!!");
                                     }
+
+                                    auto phi = newPhisByBB.at(
+                                        pl->dominatingPhi.at(bb2));
+
+                                    (*b)->arg(0).val() = phi;
+
+                                    // for (auto p : newPhisByBB) {
+                                    //     auto phi = p.second;
+                                    //     if (dom.dominates(phi->bb(), bb2)) {
+                                    //         (*b)->arg(0).val() = phi;
+                                    //         break;
+                                    //     }
+                                    // }
                                 }
                             }
                         }
                         removed.insert(*b);
+                    }
+
+                    if (pl != nullptr) {
+                        delete pl;
+                        pl = nullptr;
                     }
                 }
             }
