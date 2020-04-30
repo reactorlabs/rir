@@ -182,7 +182,7 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     pl = new PhiPlacement(function, inputs, dom,
                                                           dfront);
 
-                                    assert(pl->placement.size() > 0);
+                                    // assert(pl->placement.size() > 0);
                                     if (pl->placement.size() > 0) {
                                         anyChange = true;
 
