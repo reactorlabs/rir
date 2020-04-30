@@ -162,41 +162,42 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
     //     }
     // }
 
-    // Remove one-input phis and relink
     bool changed = true;
-    auto cleanupRemoveOneInputs = [&]() {
-        for (auto ci = placement.begin(); ci != placement.end();) {
 
-            if (ci->second.size() ==
-                1 /*&& ci->first->predecessors().size() == 1*/) {
-                // assert(false && "1 and 1!");
-                // Remove single input phis
-                auto input1 = *ci->second.begin();
-                if (input1.otherPhi != ci->first) {
-                    dominatingPhi[ci->first] = input1.otherPhi;
-                    // update all other phis which have us as input
-                    for (auto& c : placement) {
-                        for (auto& in : c.second) {
-                            if (in.otherPhi == ci->first) {
-                                in.otherPhi = input1.otherPhi;
-                                in.aValue = input1.aValue;
-                                changed = true;
-                            }
-                        }
-                    }
-                }
+    // Remove one-input phis and relink
+    // auto cleanupRemoveOneInputs = [&]() {
+    //     for (auto ci = placement.begin(); ci != placement.end();) {
 
-                ci = placement.erase(ci);
-            } else {
-                ci++;
-            }
-        }
-    };
+    //         if (ci->second.size() ==
+    //             1 /*&& ci->first->predecessors().size() == 1*/) {
+    //             // assert(false && "1 and 1!");
+    //             // Remove single input phis
+    //             auto input1 = *ci->second.begin();
+    //             if (input1.otherPhi != ci->first) {
+    //                 dominatingPhi[ci->first] = input1.otherPhi;
+    //                 // update all other phis which have us as input
+    //                 for (auto& c : placement) {
+    //                     for (auto& in : c.second) {
+    //                         if (in.otherPhi == ci->first) {
+    //                             in.otherPhi = input1.otherPhi;
+    //                             in.aValue = input1.aValue;
+    //                             changed = true;
+    //                         }
+    //                     }
+    //                 }
+    //             }
 
-    while (changed) {
-        changed = false;
-        cleanupRemoveOneInputs();
-    }
+    //             ci = placement.erase(ci);
+    //         } else {
+    //             ci++;
+    //         }
+    //     }
+    // };
+
+    // while (changed) {
+    //     changed = false;
+    //     cleanupRemoveOneInputs();
+    // }
 
     // Remove ill formed phis
     for (auto ci = placement.begin(); ci != placement.end();) {
@@ -215,7 +216,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
             auto& inputs = ci->second;
 
             auto isBroken = false;
-            for (auto ii = inputs.begin(); ii != inputs.end();) {
+            for (auto ii = inputs.begin(); ii != inputs.end(); ii++) {
                 if (ii->otherPhi && !placement.count(ii->otherPhi)) {
                     isBroken = true;
                     break;
@@ -231,6 +232,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         }
     };
 
+    changed = true;
     while (changed) {
         changed = false;
         cleanupRemoveBrokenPhis();
