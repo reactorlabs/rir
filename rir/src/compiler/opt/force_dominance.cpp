@@ -331,11 +331,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                 if (arg->type.maybeLazy()) {
                     if (state.forcedAt(arg, f))
                         res.update();
-                    if (!state.ambiguousForceOrder &&
-                        !state.maybeForced(arg->id)) {
-                        state.argumentForceOrder.push_back(arg->id);
-                        res.update();
-                    }
+                }
+                if (!state.ambiguousForceOrder && !state.maybeForced(arg->id)) {
+                    state.argumentForceOrder.push_back(arg->id);
+                    res.update();
                 }
             } else {
                 auto instruction =
