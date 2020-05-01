@@ -65,8 +65,6 @@ class TheInliner {
                     inlinee = call->tryDispatch(inlineeCls);
                     if (!inlinee)
                         continue;
-                    if (inlinee->effectiveNArgs() != call->nCallArgs())
-                        continue;
                     bool hasDotArgs = false;
                     call->eachCallArg([&](Value* v) {
                         if (ExpandDots::Cast(v))
@@ -83,8 +81,6 @@ class TheInliner {
                         continue;
                     inlinee = call->tryDispatch();
                     if (!inlinee)
-                        continue;
-                    if (inlinee->effectiveNArgs() != call->nCallArgs())
                         continue;
                     // if we don't know the closure of the inlinee, we can't
                     // inline.
@@ -307,7 +303,9 @@ class TheInliner {
                         }
 
                         if (ld) {
-                            Value* a = arguments[ld->id];
+                            Value* a = (ld->id < arguments.size())
+                                           ? arguments[ld->id]
+                                           : MissingArg::instance();
                             if (auto mk = MkArg::Cast(a)) {
                                 if (!ld->type.maybePromiseWrapped()) {
                                     // This load already expects to load an

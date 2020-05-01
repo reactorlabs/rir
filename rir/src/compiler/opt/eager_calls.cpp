@@ -245,18 +245,18 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                         // TODO: support reordering of the evaluation
                         if (count != a)
                             return nullptr;
-                        i++;
                         // We found the argument in the list of certainly forced
                         // promises
                         if (a == i)
                             return mk;
+                        i++;
                     }
                     return nullptr;
                 };
 
                 bool noMissing = true;
                 call->eachCallArg([&](Value* v) {
-                    if (!MkArg::Cast(v))
+                    if (MissingArg::instance() == v)
                         noMissing = false;
                 });
                 if (!noMissing) {
@@ -299,6 +299,7 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                     if (!newAssumptions.isNotObj(i) &&
                         newAssumptions.isEager(i))
                         newAssumptions.setNotObj(i);
+                cls->rirFunction()->clearDisabledAssumptions(newAssumptions);
 
                 auto newVersion = cls->cloneWithAssumptions(
                     version, newAssumptions, [&](ClosureVersion* newCls) {
