@@ -101,40 +101,64 @@ REXPORT SEXP rir_markFunction(SEXP what, SEXP which, SEXP reopt_,
     if (i < 0 || (size_t)i > dt->size())
         Rf_error("version with this number does not exist");
 
-    auto getBool = [](SEXP v) -> bool {
+    auto getBool = [](SEXP v) {
         if (TYPEOF(v) != LGLSXP) {
             Rf_warning("non-boolean flag");
-            return false;
+            return NA_LOGICAL;
         }
         if (LENGTH(v) == 0)
-            return false;
+            return NA_LOGICAL;
         return LOGICAL(v)[0];
     };
 
-    bool reopt = getBool(reopt_);
-    bool forceInline = getBool(forceInline_);
-    bool disableInline = getBool(disableInline_);
-    bool disableSpecialization = getBool(disableSpecialization_);
-    bool disableNumArgumentSpecialization =
+    auto reopt = getBool(reopt_);
+    auto forceInline = getBool(forceInline_);
+    auto disableInline = getBool(disableInline_);
+    auto disableSpecialization = getBool(disableSpecialization_);
+    auto disableNumArgumentSpecialization =
         getBool(disableNumArgumentSpecialization_);
-    bool disableArgumentTypeSpecialization =
+    auto disableArgumentTypeSpecialization =
         getBool(disableArgumentTypeSpecialization_);
 
     Function* fun = dt->get(i);
-    if (reopt) {
-        fun->flags.set(Function::MarkOpt);
-        fun->flags.reset(Function::NotOptimizable);
+    if (reopt != NA_LOGICAL) {
+        if (reopt) {
+            fun->flags.set(Function::MarkOpt);
+            fun->flags.reset(Function::NotOptimizable);
+        } else {
+            fun->flags.reset(Function::MarkOpt);
+        }
     }
-    if (forceInline)
-        fun->flags.set(Function::ForceInline);
-    if (disableInline)
-        fun->flags.set(Function::DisableInline);
-    if (disableSpecialization)
-        fun->flags.set(Function::DisableAllSpecialization);
-    if (disableArgumentTypeSpecialization)
-        fun->flags.set(Function::DisableArgumentTypeSpecialization);
-    if (disableNumArgumentSpecialization)
-        fun->flags.set(Function::DisableNumArgumentsSepzialization);
+    if (forceInline != NA_LOGICAL) {
+        if (forceInline)
+            fun->flags.set(Function::ForceInline);
+        else
+            fun->flags.reset(Function::ForceInline);
+    }
+    if (disableInline != NA_LOGICAL) {
+        if (disableInline)
+            fun->flags.set(Function::DisableInline);
+        else
+            fun->flags.reset(Function::DisableInline);
+    }
+    if (disableSpecialization != NA_LOGICAL) {
+        if (disableSpecialization)
+            fun->flags.set(Function::DisableAllSpecialization);
+        else
+            fun->flags.reset(Function::DisableAllSpecialization);
+    }
+    if (disableArgumentTypeSpecialization != NA_LOGICAL) {
+        if (disableArgumentTypeSpecialization)
+            fun->flags.set(Function::DisableArgumentTypeSpecialization);
+        else
+            fun->flags.reset(Function::DisableArgumentTypeSpecialization);
+    }
+    if (disableNumArgumentSpecialization != NA_LOGICAL) {
+        if (disableNumArgumentSpecialization)
+            fun->flags.set(Function::DisableNumArgumentsSepzialization);
+        else
+            fun->flags.reset(Function::DisableNumArgumentsSepzialization);
+    }
 
     return R_NilValue;
 }

@@ -1,19 +1,19 @@
 # the following functions are intended for the API
 
 rir.markFunction <- function(what, which,
-                             Reopt=FALSE,
-                             ForceInline=FALSE,
-                             DisableInline=FALSE,
-                             DisableAllSpecialization=FALSE,
-                             DisableArgumentTypeSpecialization=FALSE,
-                             DisableNumArgumentsSepzialization=FALSE) {
+                             Reopt=NA,
+                             ForceInline=NA,
+                             DisableInline=NA,
+                             DisableAllSpecialization=NA,
+                             DisableArgumentTypeSpecialization=NA,
+                             DisableNumArgumentsSepcialization=NA) {
     doIt = function(n) {
         .Call("rir_markFunction", what, n,
               Reopt,
               ForceInline, DisableInline,
               DisableAllSpecialization,
               DisableArgumentTypeSpecialization,
-              DisableNumArgumentsSepzialization);
+              DisableNumArgumentsSepcialization);
     }
     if (missing(which)) {
         for (i in rir.functionVersions(what))
