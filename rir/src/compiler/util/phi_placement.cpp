@@ -75,8 +75,20 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         });
     }
 
+    auto initialPlacementSize = placement.size();
+
     // auto printPhis = [&]() {
     //     std::stringstream str("");
+
+    //     str << " \n WRITES: (";
+
+    //     for (auto wi = writes.begin(); wi != writes.end(); wi++) {
+    //         str << wi->first->id;
+    //         str << " , ";
+
+    //     }
+
+    //     str << ") \n\n";
 
     //     str << " PLACEMENTS: ("
     //         << "\n";
@@ -105,8 +117,6 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
 
     //     return str.str();
     // };
-
-    // auto phisInitial = printPhis();
 
     // Cleanup the resulting phi graph
     // bool changed = true;
@@ -164,7 +174,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
 
     bool changed = true;
 
-    // Remove one-input phis and relink
+    // // Remove one-input phis and relink
     // auto cleanupRemoveOneInputs = [&]() {
     //     for (auto ci = placement.begin(); ci != placement.end();) {
 
@@ -194,9 +204,31 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
     //     }
     // };
 
+    // changed = true;
     // while (changed) {
     //     changed = false;
     //     cleanupRemoveOneInputs();
+    // }
+
+    // for (auto ci = placement.begin(); ci != placement.end();ci++) {
+    //     auto& inputs = ci->second;
+    //     for (auto ii = inputs.begin(); ii != inputs.end(); ii++) {
+    //         if (ci->first && ci->first ==  ii->otherPhi ) {
+
+    //             std::cerr << "\n\n\n\n";
+    //             std::cerr << "count input:" << inputs.size();
+    //             std::cerr << "\n";
+    //             std::cerr << "count pred:" <<
+    //             ci->first->predecessors().size();
+
+    //             std::cerr << printPhis();
+    //             std::cerr << "\n\n\n\n";
+    //             cls->print(std::cerr, true);
+    //             //cls->printBBGraph(std::cerr, true);
+
+    //             assert(false && "self referenced phi!");
+    //         }
+    //     }
     // }
 
     // Remove ill formed phis
@@ -252,7 +284,12 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         }
     });
 
-    assert(dominatingPhi.size() > placement.size());
+    allPhisPlaced = (initialPlacementSize == placement.size());
+
+    if (!allPhisPlaced) {
+        placement.clear();
+        dominatingPhi.clear();
+    }
 }
 
 } // namespace pir

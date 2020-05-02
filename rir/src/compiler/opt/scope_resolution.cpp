@@ -171,6 +171,8 @@ class TheScopeResolution {
 
             auto pl = PhiPlacement(function, inputs, dom, dfront);
             BB* targetPhiPosition = nullptr;
+            // if (!pl.allPhisPlaced)
+            //     return nullptr;
             if (pl.placement.count(bb))
                 targetPhiPosition = bb;
             else if (pl.dominatingPhi.count(bb))
