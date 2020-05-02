@@ -105,5 +105,6 @@
     "utility": "cpp",
     "future": "cpp",
     "memory_resource": "cpp"
-  }
+  },
+  "restructuredtext.workspaceRoot": "/Users/jakob/Desktop/Projects/rir"
 }

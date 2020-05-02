@@ -155,20 +155,10 @@ REXPORT SEXP rir_markFunction(SEXP what, SEXP which, SEXP reopt_,
     }
     if (disableNumArgumentSpecialization != NA_LOGICAL) {
         if (disableNumArgumentSpecialization)
-            fun->flags.set(Function::DisableNumArgumentsSepzialization);
+            fun->flags.set(Function::DisableNumArgumentsSpecialization);
         else
-            fun->flags.reset(Function::DisableNumArgumentsSepzialization);
+            fun->flags.reset(Function::DisableNumArgumentsSpecialization);
     }
-    if (forceInline)
-        fun->flags.set(Function::ForceInline);
-    if (disableInline)
-        fun->flags.set(Function::DisableInline);
-    if (disableSpecialization)
-        fun->flags.set(Function::DisableAllSpecialization);
-    if (disableArgumentTypeSpecialization)
-        fun->flags.set(Function::DisableArgumentTypeSpecialization);
-    if (disableNumArgumentSpecialization)
-        fun->flags.set(Function::DisableNumArgumentsSpecialization);
 
     return R_NilValue;
 }
