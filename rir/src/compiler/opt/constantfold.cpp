@@ -109,162 +109,144 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
 
     std::unordered_map<BB*, bool> branchRemoval;
 
-    // DominanceGraph dom(function);
-    // DominanceFrontier dfront(function, dom);
-    // {
-    //     // Branch Elimination
-    //     //
-    //     // Given branch `a` and `b`, where both have the same
-    //     // condition and `a` dominates `b`, we can replace the condition of
-    //     `b`
-    //     // by
-    //     //
-    //     //     c' = Phi([TRUE, a->trueBranch()], [FALSE, a->falseBranch()])
-    //     //     b  = Branch(c')
-    //     //
-    //     // and even constantfold the `b` branch if either
-    //     // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach
-    //     std::unordered_map<Instruction*, std::vector<Branch*>> condition;
+    DominanceGraph dom(function);
+    DominanceFrontier dfront(function, dom);
+    {
+        // Branch Elimination
+        //
+        // Given branch `a` and `b`, where both have the same
+        // condition and `a` dominates `b`, we can replace the condition of
+        // `b` by
+        //
+        //     c' = Phi([TRUE, a->trueBranch()], [FALSE, a->falseBranch()])
+        //     b  = Branch(c')
+        //
+        // and even constantfold the `b` branch if either
+        // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach
+        std::unordered_map<Instruction*, std::vector<Branch*>> condition;
 
-    //     DominatorTreeVisitor<>(dom).run(function->entry, [&](BB* bb) {
-    //         if (bb->isEmpty())
-    //             return;
-    //         auto branch = Branch::Cast(bb->last());
-    //         if (!branch)
-    //             return;
-    //         if (auto i = Instruction::Cast(branch->arg(0).val())) {
+        DominatorTreeVisitor<>(dom).run(function->entry, [&](BB* bb) {
+            if (bb->isEmpty())
+                return;
+            auto branch = Branch::Cast(bb->last());
+            if (!branch)
+                return;
+            if (auto i = Instruction::Cast(branch->arg(0).val())) {
 
-    //             auto ii = branch->arg(0).val();
-    //             if (ii != True::instance() && ii != False::instance()) {
-    //                 condition[i].push_back(branch);
-    //             }
-    //         }
-    //     });
-    //     std::unordered_set<Branch*> removed;
+                auto ii = branch->arg(0).val();
+                if (ii != True::instance() && ii != False::instance()) {
+                    condition[i].push_back(branch);
+                }
+            }
+        });
+        std::unordered_set<Branch*> removed;
 
-    //     for (auto& c : condition) {
-    //         // continue;
+        for (auto& c : condition) {
 
-    //         removed.clear();
-    //         auto& uses = c.second;
-    //         if (uses.size() > 1) {
+            removed.clear();
+            auto& uses = c.second;
+            if (uses.size() > 1) {
 
-    //             for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
+                for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
 
-    //                 if (removed.count(*a))
-    //                     continue;
+                    if (removed.count(*a))
+                        continue;
 
-    //                 PhiPlacement* pl = nullptr;
-    //                 auto phisPlaced = false;
-    //                 std::unordered_map<BB*, Phi*> newPhisByBB;
-    //                 newPhisByBB.clear();
-    //                 for (auto b = a + 1; b != uses.end(); b++) {
+                    PhiPlacement* pl = nullptr;
+                    auto phisPlaced = false;
+                    std::unordered_map<BB*, Phi*> newPhisByBB;
+                    newPhisByBB.clear();
+                    for (auto b = a + 1; b != uses.end(); b++) {
 
-    //                     if (removed.count(*b))
-    //                         continue;
-    //                     auto bb1 = (*a)->bb();
-    //                     auto bb2 = (*b)->bb();
-    //                     if (dom.dominates(bb1, bb2)) {
-    //                         if (dom.dominates(bb1->trueBranch(), bb2)) {
-    //                             anyChange = true;
-    //                             (*b)->arg(0).val() = True::instance();
-    //                         } else if (dom.dominates(bb1->falseBranch(),
-    //                         bb2)) {
-    //                             anyChange = true;
-    //                             (*b)->arg(0).val() = False::instance();
-    //                         } else {
+                        if (removed.count(*b))
+                            continue;
+                        auto bb1 = (*a)->bb();
+                        auto bb2 = (*b)->bb();
+                        if (dom.dominates(bb1, bb2)) {
+                            if (dom.dominates(bb1->trueBranch(), bb2)) {
+                                anyChange = true;
+                                (*b)->arg(0).val() = True::instance();
+                            } else if (dom.dominates(bb1->falseBranch(), bb2)) {
+                                anyChange = true;
+                                (*b)->arg(0).val() = False::instance();
+                            } else {
 
-    //                             if (!phisPlaced) {
-    //                                 // create and place phi
-    //                                 std::unordered_map<BB*, Value*> inputs;
-    //                                 inputs[bb1->trueBranch()] =
-    //                                     True::instance();
-    //                                 inputs[bb1->falseBranch()] =
-    //                                     False::instance();
-    //                                 pl = new PhiPlacement(function, inputs,
-    //                                 dom,
-    //                                                       dfront);
+                                if (!phisPlaced) {
+                                    // create and place phi
+                                    std::unordered_map<BB*, Value*> inputs;
+                                    inputs[bb1->trueBranch()] =
+                                        True::instance();
+                                    inputs[bb1->falseBranch()] =
+                                        False::instance();
+                                    pl = new PhiPlacement(function, inputs, dom,
+                                                          dfront);
 
-    //                                 assert(pl->placement.size() > 0);
-    //                                 if (pl->placement.size() > 0) {
-    //                                     anyChange = true;
+                                    assert(pl->placement.size() > 0);
+                                    if (pl->placement.size() > 0) {
+                                        anyChange = true;
 
-    //                                     for (auto& placement : pl->placement)
-    //                                     {
-    //                                         auto targetForPhi =
-    //                                         placement.first;
-    //                                         newPhisByBB[targetForPhi] = new
-    //                                         Phi;
-    //                                     }
+                                        for (auto& placement : pl->placement) {
+                                            auto targetForPhi = placement.first;
+                                            newPhisByBB[targetForPhi] = new Phi;
+                                        }
 
-    //                                     for (auto& placement : pl->placement)
-    //                                     {
-    //                                         auto targetForPhi =
-    //                                         placement.first; auto phi =
-    //                                             newPhisByBB[targetForPhi];
+                                        for (auto& placement : pl->placement) {
+                                            auto targetForPhi = placement.first;
+                                            auto phi =
+                                                newPhisByBB[targetForPhi];
 
-    //                                         for (auto& input :
-    //                                              placement.second) {
+                                            for (auto& input :
+                                                 placement.second) {
 
-    //                                             if (input.aValue)
-    //                                                 phi->addInput(
-    //                                                     input.inputBlock,
-    //                                                     input.aValue);
-    //                                             else {
+                                                if (input.aValue)
+                                                    phi->addInput(
+                                                        input.inputBlock,
+                                                        input.aValue);
+                                                else {
 
-    //                                                 phi->addInput(
-    //                                                     input.inputBlock,
-    //                                                     newPhisByBB.at(
-    //                                                         input.otherPhi));
-    //                                             }
-    //                                         }
-    //                                         phi->type = NativeType::test;
-    //                                         targetForPhi->insert(
-    //                                             targetForPhi->begin(), phi);
-    //                                     }
-    //                                     phisPlaced = true;
-    //                                 }
-    //                             }
+                                                    phi->addInput(
+                                                        input.inputBlock,
+                                                        newPhisByBB.at(
+                                                            input.otherPhi));
+                                                }
+                                            }
+                                            phi->type = NativeType::test;
+                                            targetForPhi->insert(
+                                                targetForPhi->begin(), phi);
+                                        }
+                                        phisPlaced = true;
+                                    }
+                                }
 
-    //                             if (phisPlaced) {
+                                if (phisPlaced) {
 
-    //                                 assert(pl->dominatingPhi.size() > 0);
+                                    assert(pl->dominatingPhi.size() > 0);
 
-    //                                 if (pl->dominatingPhi.count(bb2) == 0) {
-    //                                     std::cerr << "dom phi: "
-    //                                               <<
-    //                                               pl->dominatingPhi.size();
+                                    if (pl->dominatingPhi.count(bb2) == 0) {
+                                        std::cerr << "dom phi: "
+                                                  << pl->dominatingPhi.size();
 
-    //                                     assert(false && "count 0!!");
-    //                                 }
+                                        assert(false && "count 0!!");
+                                    }
 
-    //                                 auto phi = newPhisByBB.at(
-    //                                     pl->dominatingPhi.at(bb2));
+                                    auto phi = newPhisByBB.at(
+                                        pl->dominatingPhi.at(bb2));
 
-    //                                 (*b)->arg(0).val() = phi;
+                                    (*b)->arg(0).val() = phi;
+                                }
+                            }
+                        }
+                        removed.insert(*b);
+                    }
 
-    //                                 // for (auto p : newPhisByBB) {
-    //                                 //     auto phi = p.second;
-    //                                 //     if (dom.dominates(phi->bb(), bb2))
-    //                                 {
-    //                                 //         (*b)->arg(0).val() = phi;
-    //                                 //         break;
-    //                                 //     }
-    //                                 // }
-    //                             }
-    //                         }
-    //                     }
-    //                     removed.insert(*b);
-    //                 }
-
-    //                 if (pl != nullptr) {
-    //                     delete pl;
-    //                     pl = nullptr;
-    //                 }
-    //             }
-    //         }
-    //     }
-    //  }
+                    if (pl != nullptr) {
+                        delete pl;
+                        pl = nullptr;
+                    }
+                }
+            }
+        }
+    }
 
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())

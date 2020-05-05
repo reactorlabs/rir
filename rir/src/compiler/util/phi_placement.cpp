@@ -43,8 +43,8 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
             PhiInput input = {nullptr, nullptr, nullptr};
             if (pendingInput.count(cur)) {
                 input = pendingInput.at(cur);
-                if (!phis.includes(cur))
-                    dominatingPhi[cur] = pendingInput.at(cur).otherPhi;
+                //     if (!phis.includes(cur))
+                //         dominatingPhi[cur] = pendingInput.at(cur).otherPhi;
             }
 
             if (phis.includes(cur)) {
