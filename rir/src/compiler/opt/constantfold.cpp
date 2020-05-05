@@ -182,53 +182,40 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                                           dfront);
 
                                     assert(pl->placement.size() > 0);
-                                    if (pl->placement.size() > 0) {
-                                        anyChange = true;
 
-                                        for (auto& placement : pl->placement) {
-                                            auto targetForPhi = placement.first;
-                                            newPhisByBB[targetForPhi] = new Phi;
-                                        }
+                                    anyChange = true;
 
-                                        for (auto& placement : pl->placement) {
-                                            auto targetForPhi = placement.first;
-                                            auto phi =
-                                                newPhisByBB[targetForPhi];
-
-                                            for (auto& input :
-                                                 placement.second) {
-
-                                                if (input.aValue)
-                                                    phi->addInput(
-                                                        input.inputBlock,
-                                                        input.aValue);
-                                                else {
-
-                                                    phi->addInput(
-                                                        input.inputBlock,
-                                                        newPhisByBB.at(
-                                                            input.otherPhi));
-                                                }
-                                            }
-                                            phi->type = NativeType::test;
-                                            targetForPhi->insert(
-                                                targetForPhi->begin(), phi);
-                                        }
-                                        phisPlaced = true;
+                                    for (auto& placement : pl->placement) {
+                                        auto targetForPhi = placement.first;
+                                        newPhisByBB[targetForPhi] = new Phi;
                                     }
+
+                                    for (auto& placement : pl->placement) {
+                                        auto targetForPhi = placement.first;
+                                        auto phi = newPhisByBB[targetForPhi];
+
+                                        for (auto& input : placement.second) {
+
+                                            if (input.aValue)
+                                                phi->addInput(input.inputBlock,
+                                                              input.aValue);
+                                            else {
+
+                                                phi->addInput(
+                                                    input.inputBlock,
+                                                    newPhisByBB.at(
+                                                        input.otherPhi));
+                                            }
+                                        }
+                                        phi->type = NativeType::test;
+                                        targetForPhi->insert(
+                                            targetForPhi->begin(), phi);
+                                    }
+                                    phisPlaced = true;
                                 }
 
                                 if (phisPlaced) {
-
-                                    assert(pl->dominatingPhi.size() > 0);
-
-                                    if (pl->dominatingPhi.count(bb2) == 0) {
-                                        std::cerr << "dom phi: "
-                                                  << pl->dominatingPhi.size();
-
-                                        assert(false && "count 0!!");
-                                    }
-
+                                    assert(pl->dominatingPhi.count(bb2) > 0);
                                     auto phi = newPhisByBB.at(
                                         pl->dominatingPhi.at(bb2));
 

@@ -73,63 +73,6 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         });
     }
 
-    // // Cleanup the resulting phi graph
-    // bool changed = true;
-    // auto cleanup = [&]() {
-    //     for (auto ci = placement.begin(); ci != placement.end();) {
-    //         // Remove dead inputs
-    //         auto& inputs = ci->second;
-    //         for (auto ii = inputs.begin(); ii != inputs.end();) {
-    //             if (ii->otherPhi && !placement.count(ii->otherPhi)) {
-    //                 ii = inputs.erase(ii);
-    //                 changed = true;
-    //             } else {
-    //                 ii++;
-    //             }
-    //         }
-    //         if (ci->second.size() == 0) {
-    //             ci = placement.erase(ci);
-    //         } else if (ci->second.size() == 1) {
-
-    //             // Remove single input phis
-    //             auto input1 = *ci->second.begin();
-    //             if (input1.otherPhi != ci->first) {
-    //                 dominatingPhi[ci->first] = input1.otherPhi;
-    //                 // update all other phis which have us as input
-    //                 for (auto& c : placement) {
-    //                     for (auto& in : c.second) {
-    //                         if (in.otherPhi == ci->first) {
-
-    //                             in.otherPhi = input1.otherPhi;
-    //                             in.aValue = input1.aValue;
-    //                             changed = true;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //             ci = placement.erase(ci);
-    //         } else {
-    //             ci++;
-    //         }
-    //     }
-    // };
-
-    // while (changed) {
-    //     changed = false;
-    //     cleanup();
-    // }
-
-    // // Fail if not all phis are well formed
-    // for (auto& i : placement) {
-    //     if (i.second.size() != i.first->predecessors().size()) {
-    //         // TODO figure out why this happens
-
-    //         placement.clear();
-    //         dominatingPhi.clear();
-    //         break;
-    //     }
-    // }
-
     bool changed;
 
     // Remove ill formed phis
