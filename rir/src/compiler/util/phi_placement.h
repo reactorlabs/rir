@@ -31,7 +31,6 @@ class PhiPlacement {
 
     Phis placement;
     std::unordered_map<BB*, BB*> dominatingPhi;
-    bool allPhisPlaced;
 };
 
 } // namespace pir

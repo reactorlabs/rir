@@ -75,50 +75,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         });
     }
 
-    auto initialPlacementSize = placement.size();
-
-    // auto printPhis = [&]() {
-    //     std::stringstream str("");
-
-    //     str << " \n WRITES: (";
-
-    //     for (auto wi = writes.begin(); wi != writes.end(); wi++) {
-    //         str << wi->first->id;
-    //         str << " , ";
-
-    //     }
-
-    //     str << ") \n\n";
-
-    //     str << " PLACEMENTS: ("
-    //         << "\n";
-    //     for (auto ci = placement.begin(); ci != placement.end(); ci++) {
-
-    //         str << "PHI \n[";
-    //         str << "target: " << ci->first->id;
-    //         str << "\n";
-    //         auto& inputs = ci->second;
-
-    //         for (auto ii = inputs.begin(); ii != inputs.end(); ii++) {
-    //             str << "\t{";
-    //             str << "input: " << ii->inputBlock->id;
-    //             str << ", otherPhi: ";
-    //             if (ii->otherPhi != nullptr)
-    //                 str << ii->otherPhi->id;
-    //             str << "}";
-    //             str << "\n";
-    //         }
-    //         str << "]";
-    //         str << " \n\n";
-    //     }
-
-    //     str << ")"
-    //         << "\n";
-
-    //     return str.str();
-    // };
-
-    // Cleanup the resulting phi graph
+    // // Cleanup the resulting phi graph
     // bool changed = true;
     // auto cleanup = [&]() {
     //     for (auto ci = placement.begin(); ci != placement.end();) {
@@ -135,6 +92,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
     //         if (ci->second.size() == 0) {
     //             ci = placement.erase(ci);
     //         } else if (ci->second.size() == 1) {
+
     //             // Remove single input phis
     //             auto input1 = *ci->second.begin();
     //             if (input1.otherPhi != ci->first) {
@@ -143,6 +101,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
     //                 for (auto& c : placement) {
     //                     for (auto& in : c.second) {
     //                         if (in.otherPhi == ci->first) {
+
     //                             in.otherPhi = input1.otherPhi;
     //                             in.aValue = input1.aValue;
     //                             changed = true;
@@ -162,74 +121,18 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
     //     cleanup();
     // }
 
-    // Fail if not all phis are well formed
+    // // Fail if not all phis are well formed
     // for (auto& i : placement) {
     //     if (i.second.size() != i.first->predecessors().size()) {
     //         // TODO figure out why this happens
+
     //         placement.clear();
     //         dominatingPhi.clear();
     //         break;
     //     }
     // }
 
-    bool changed = true;
-
-    // // Remove one-input phis and relink
-    // auto cleanupRemoveOneInputs = [&]() {
-    //     for (auto ci = placement.begin(); ci != placement.end();) {
-
-    //         if (ci->second.size() ==
-    //             1 /*&& ci->first->predecessors().size() == 1*/) {
-    //             // assert(false && "1 and 1!");
-    //             // Remove single input phis
-    //             auto input1 = *ci->second.begin();
-    //             if (input1.otherPhi != ci->first) {
-    //                 dominatingPhi[ci->first] = input1.otherPhi;
-    //                 // update all other phis which have us as input
-    //                 for (auto& c : placement) {
-    //                     for (auto& in : c.second) {
-    //                         if (in.otherPhi == ci->first) {
-    //                             in.otherPhi = input1.otherPhi;
-    //                             in.aValue = input1.aValue;
-    //                             changed = true;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-
-    //             ci = placement.erase(ci);
-    //         } else {
-    //             ci++;
-    //         }
-    //     }
-    // };
-
-    // changed = true;
-    // while (changed) {
-    //     changed = false;
-    //     cleanupRemoveOneInputs();
-    // }
-
-    // for (auto ci = placement.begin(); ci != placement.end();ci++) {
-    //     auto& inputs = ci->second;
-    //     for (auto ii = inputs.begin(); ii != inputs.end(); ii++) {
-    //         if (ci->first && ci->first ==  ii->otherPhi ) {
-
-    //             std::cerr << "\n\n\n\n";
-    //             std::cerr << "count input:" << inputs.size();
-    //             std::cerr << "\n";
-    //             std::cerr << "count pred:" <<
-    //             ci->first->predecessors().size();
-
-    //             std::cerr << printPhis();
-    //             std::cerr << "\n\n\n\n";
-    //             cls->print(std::cerr, true);
-    //             //cls->printBBGraph(std::cerr, true);
-
-    //             assert(false && "self referenced phi!");
-    //         }
-    //     }
-    // }
+    bool changed;
 
     // Remove ill formed phis
     for (auto ci = placement.begin(); ci != placement.end();) {
@@ -284,12 +187,6 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         }
     });
 
-    allPhisPlaced = (initialPlacementSize == placement.size());
-
-    if (!allPhisPlaced) {
-        placement.clear();
-        dominatingPhi.clear();
-    }
 }
 
 } // namespace pir
