@@ -116,7 +116,7 @@ void CodeEventCounters::profileEnd(const Code* code,
         std::string codeName = dumpSexp(codeAst);
 
         std::cerr << "CodeEventCounters: tried to finish profiling code "
-                  << codeName << " but it's not being profiled";
+                  << codeName << " but it's not being profiled\n";
         // assert(false);
         return;
     }
