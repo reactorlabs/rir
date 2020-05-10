@@ -57,8 +57,8 @@ enum class TypeAssumption {
 
 enum class Assumption {
     NoExplicitlyMissingArgs, // Explicitly missing, e.g. f(,,)
-    CorrectOrderOfArguments, // Ie. the args are not named
     NotTooManyArguments,     // The number of args supplied is <= nargs
+    CorrectOrderOfArguments, // Ie. the args are not named
     NoReflectiveArgument,    // Argument promises are not reflective
     StaticallyArgmatched,    // Arguments are statically matched
 
@@ -213,24 +213,18 @@ struct Assumptions {
     }
 
     RIR_INLINE bool subtype(const Assumptions& other) const {
-        bool tooManyPassed =
-            !other.flags.contains(Assumption::NotTooManyArguments);
         bool requireNotTooMany =
             flags.contains(Assumption::NotTooManyArguments);
-        // The callsite passed more args than formals and the callee does not
-        // support surplus arguments.
-        if (tooManyPassed && requireNotTooMany)
-            return false;
 
         // argdiff positive = "more than expected", negative = "less than"
-        long argdiff = (long)missing - (long)other.missing;
+        int argdiff = (int)missing - (int)other.missing;
 
-        // The callsite passed more args than expected
+        // The caller passed more args than expected
         if (argdiff > 0 && requireNotTooMany)
             return false;
 
-        // Negative argdiff is padded with missing on call. This only works if
-        // the callee expects passed arguments to be missing.
+        // Negative argdiff can be padded with missing, but only if the caller
+        // supports more missing args, than just trailing missing.
         bool requireNoExplicitlyMissing =
             flags.contains(Assumption::NoExplicitlyMissingArgs);
         if (requireNoExplicitlyMissing && argdiff < 0)
