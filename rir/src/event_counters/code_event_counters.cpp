@@ -65,8 +65,10 @@ bool CodeEventCounters::CallSite::operator==(const CallSite& other) const {
 
 CodeEventCounters::DispatchTableInfo::DispatchTableInfo(
     const DispatchTable* dispatchTable, const std::string& name,
-    unsigned numDeopts)
-    : name(name), size(dispatchTable->size()), numDeopts(numDeopts) {}
+    size_t prevSize, unsigned numDeopts)
+    : name(name),
+      size(prevSize > dispatchTable->size() ? prevSize : dispatchTable->size()),
+      numDeopts(numDeopts) {}
 
 unsigned CodeEventCounters::registerCounter(const std::string& name) {
 #ifndef MEASURE
@@ -195,6 +197,11 @@ void CodeEventCounters::updateDispatchTableButNotContainedFunctionInfo(
     const DispatchTable* dispatchTable, const std::string& name) {
     UUID firstCodeUidWhichIdentifiesEntireTable =
         dispatchTable->get(0)->body()->uid;
+    size_t prevSize =
+        closureDispatchTables.count(firstCodeUidWhichIdentifiesEntireTable)
+            ? closureDispatchTables.at(firstCodeUidWhichIdentifiesEntireTable)
+                  .size
+            : 0;
     unsigned numDeopts =
         closureDispatchTables.count(firstCodeUidWhichIdentifiesEntireTable)
             ? closureDispatchTables.at(firstCodeUidWhichIdentifiesEntireTable)
@@ -202,7 +209,7 @@ void CodeEventCounters::updateDispatchTableButNotContainedFunctionInfo(
             : 0;
     closureDispatchTables.emplace(
         firstCodeUidWhichIdentifiesEntireTable,
-        DispatchTableInfo(dispatchTable, name, numDeopts));
+        DispatchTableInfo(dispatchTable, name, prevSize, numDeopts));
 }
 
 void CodeEventCounters::assignName(const DispatchTable* dispatchTable,
@@ -377,7 +384,12 @@ void CodeEventCounters::dumpNumClosureVersions() const {
 
 void CodeEventCounters::reset() {
     counters.clear();
-    closureDispatchTables.clear();
+    closureCallSites.clear();
+    for (std::pair<UUID, DispatchTableInfo> dispatchTableFirstCodeUidAndInfo :
+         closureDispatchTables) {
+        UUID firstCode = dispatchTableFirstCodeUidAndInfo.first;
+        closureDispatchTables.at(firstCode).numDeopts = 0;
+    }
 }
 
 void CodeEventCounters::flush() {

@@ -43,9 +43,8 @@ f(6)
 f(7)
 
 # now we have weaker assumptions.
-# First we will optimize, but then we actually deoptimize once because of a type speculation failure
-# (we expect real because f was always called with real, but get int; i = 1).
-# Then we immediately optimize a version with fixed type feedback (i = 2..10)
+# First we call the baseline again (i = 1..2)
+# Then we immediately optimize a version with fixed type feedback (i = 3..10)
 for (i in 1:10) {
   f(i)
 }
@@ -70,15 +69,14 @@ deopt(lhs, rhs)
 rhs <- 1
 # we deopt here and compile a new version because we reversed the loop counter,
 # which causes a different branch, and we speculated on the old branch
+# sometime in the next few lines we optimize one more time
 deopt(lhs, rhs)
-# optimize again
 deopt(lhs, rhs)
 deopt(lhs, rhs)
 lhs <- factor(lhs)
 rhs <- factor(rhs)
-# we deopt again, because lhs and rhs are factors so we skip the fastcase
 deopt(lhs, rhs)
-# optimize again
+# optimize again (I think)
 deopt(lhs, rhs)
 deopt(lhs, rhs)
 
@@ -103,34 +101,32 @@ events <- as.data.frame(read.csv("events.csv", header = TRUE))
 codeEvents <- as.data.frame(read.csv("code_events.csv", header = TRUE))
 numClosuresPerTable <- as.data.frame(read.csv("num_closures_per_table.csv", header = TRUE))
 
-stopifnot(getCell(codeEvents, "X..invocations", "f$0") == 2)
-stopifnot(getCell(codeEvents, "X..invocations", "f$1") == 1)
-stopifnot(getCell(codeEvents, "X..invocations", "f$1~1") == 9)
+stopifnot(getCell(codeEvents, "X..invocations", "f$0") == 4)
+stopifnot(getCell(codeEvents, "X..invocations", "f$1") == 8)
 # when we have different assumptions, we compile a new version but keep the old one
 stopifnot(getCell(codeEvents, "X..invocations", "f$2") == 5)
 # g's invocation counts are weird. In the baseline of f, we call the baseline of g twice,
 # then optimize and call 18 more times (since we call the baseline of f 2 times, we call g 20 times total).
 # Then we optimize f and inline g, so it's no longer called.
-# Except we end up calling the baseline of f one more time (because of a deopt) after calling an inlined g once,
-# and this causes us to call g one more time (in the for loop in f, when i = 2), deoptimize,
-# and then compile another version of g, which we call 8 times (i = 3..10).
-stopifnot(getCell(codeEvents, "X..invocations", "g$0") == 2)
+# Except we end up calling the baseline of f one more time,
+# and this causes us to call baseline g 3 more times,
+# and then compile another version of g, which we call 16 times (total = 40, for 4 calls to baseline f)
+stopifnot(getCell(codeEvents, "X..invocations", "g$0") == 5)
 stopifnot(getCell(codeEvents, "X..invocations", "g$1") == 19)
-stopifnot(getCell(codeEvents, "X..invocations", "g$1~1") == 8)
+stopifnot(getCell(codeEvents, "X..invocations", "g$1~1") == 16)
 
 # We can't really track callsites to f and deopt because they are called from the REPL. We also can't accurately track in the native backend
 if (!usesNativeBackend) {
   # There are 2 callsites to g because of loop peeling. Except g$1~1 only has one callsite because when it's compiled we have already entered the loop
   stopifnot(getCell(codeEvents, "X..distinct.callsites", "g$0") == 2)
   stopifnot(getCell(codeEvents, "X..distinct.callsites", "g$1") == 2)
-  stopifnot(getCell(codeEvents, "X..distinct.callsites", "g$1~1") == 1)
+  stopifnot(getCell(codeEvents, "X..distinct.callsites", "g$1~1") == 2)
 }
 
-stopifnot(getCell(codeEvents, "X..invocations", "deopt$0") == 2)
+stopifnot(getCell(codeEvents, "X..invocations", "deopt$0") == 5)
 stopifnot(getCell(codeEvents, "X..invocations", "deopt$1") == 5)
 # when we have deoptimize, we remove the old version (hence the $1 because there are still only 2 versions total)
-stopifnot(getCell(codeEvents, "X..invocations", "deopt$1~1") == 3)
-stopifnot(getCell(codeEvents, "X..invocations", "deopt$1~2") == 2)
+stopifnot(getCell(codeEvents, "X..invocations", "deopt$1~1") == 2)
 
 profiledTimeInCsv <- getCell(codeEvents, "total.execution.time..µs.", "profiled$0") / 1000000
 profiledTimeDiff <- abs(profiledTimeInR - profiledTimeInCsv)
@@ -138,13 +134,13 @@ profiledTimeDiff <- abs(profiledTimeInR - profiledTimeInCsv)
 stopifnot(profiledTimeDiff < 0.001)
 
 stopifnot(getCell(numClosuresPerTable, "final.size", "f") == 3)
-stopifnot(getCell(numClosuresPerTable, "X..deopts", "f") == 1)
+stopifnot(getCell(numClosuresPerTable, "X..deopts", "f") == 0)
 stopifnot(getCell(numClosuresPerTable, "final.size", "g") == 2)
 stopifnot(getCell(numClosuresPerTable, "X..deopts", "g") == 1)
 stopifnot(getCell(numClosuresPerTable, "final.size", "deopt") == 2)
-stopifnot(getCell(numClosuresPerTable, "X..deopts", "deopt") == 2)
+stopifnot(getCell(numClosuresPerTable, "X..deopts", "deopt") == 1)
 
-stopifnot(getEventCell(events, "deopt") == 4)
+stopifnot(getEventCell(events, "deopt") == 2)
 # summary is unoptimizable (it's a generic with ... arguments), all other functions are optimizable
 stopifnot(getEventCell(events, "unoptimizable") == 1)
 

@@ -884,6 +884,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                             assert(originalClosure &&
                                    "Cannot compile synthetic closure");
                             dt->insert(fun);
+
+#ifdef MEASURE
+                            CodeEventCounters::instance()
+                                .updateDispatchTableInfo(dt,
+                                                         call->cls()->name());
+#endif
                         }
                         auto bc = BC::staticCall(
                             call->nCallArgs(), Pool::get(call->srcIdx),
