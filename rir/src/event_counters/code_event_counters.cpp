@@ -65,10 +65,8 @@ bool CodeEventCounters::CallSite::operator==(const CallSite& other) const {
 
 CodeEventCounters::DispatchTableInfo::DispatchTableInfo(
     const DispatchTable* dispatchTable, const std::string& name,
-    size_t prevSize, unsigned numDeopts)
-    : name(name),
-      size(prevSize > dispatchTable->size() ? prevSize : dispatchTable->size()),
-      numDeopts(numDeopts) {}
+    unsigned numDeopts)
+    : name(name), size(dispatchTable->size()), numDeopts(numDeopts) {}
 
 unsigned CodeEventCounters::registerCounter(const std::string& name) {
 #ifndef MEASURE
@@ -197,19 +195,17 @@ void CodeEventCounters::updateDispatchTableButNotContainedFunctionInfo(
     const DispatchTable* dispatchTable, const std::string& name) {
     UUID firstCodeUidWhichIdentifiesEntireTable =
         dispatchTable->get(0)->body()->uid;
-    size_t prevSize =
-        closureDispatchTables.count(firstCodeUidWhichIdentifiesEntireTable)
-            ? closureDispatchTables.at(firstCodeUidWhichIdentifiesEntireTable)
-                  .size
-            : 0;
     unsigned numDeopts =
         closureDispatchTables.count(firstCodeUidWhichIdentifiesEntireTable)
             ? closureDispatchTables.at(firstCodeUidWhichIdentifiesEntireTable)
                   .numDeopts
             : 0;
+    if (closureDispatchTables.count(firstCodeUidWhichIdentifiesEntireTable)) {
+        closureDispatchTables.erase(firstCodeUidWhichIdentifiesEntireTable);
+    }
     closureDispatchTables.emplace(
         firstCodeUidWhichIdentifiesEntireTable,
-        DispatchTableInfo(dispatchTable, name, prevSize, numDeopts));
+        DispatchTableInfo(dispatchTable, name, numDeopts));
 }
 
 void CodeEventCounters::assignName(const DispatchTable* dispatchTable,
