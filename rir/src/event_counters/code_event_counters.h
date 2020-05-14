@@ -53,6 +53,7 @@ class CodeEventCounters {
         std::string name;
         unsigned size;
         unsigned numDeopts;
+        const DispatchTable* dispatchTable;
 
         DispatchTableInfo(const DispatchTable* dispatchTable,
                           const std::string& name, unsigned numDeopts);

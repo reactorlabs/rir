@@ -66,7 +66,8 @@ bool CodeEventCounters::CallSite::operator==(const CallSite& other) const {
 CodeEventCounters::DispatchTableInfo::DispatchTableInfo(
     const DispatchTable* dispatchTable, const std::string& name,
     unsigned numDeopts)
-    : name(name), size(dispatchTable->size()), numDeopts(numDeopts) {}
+    : name(name), size(dispatchTable->size()), numDeopts(numDeopts),
+      dispatchTable(dispatchTable) {}
 
 unsigned CodeEventCounters::registerCounter(const std::string& name) {
 #ifndef MEASURE
@@ -370,6 +371,18 @@ void CodeEventCounters::dumpNumClosureVersions() const {
     for (std::pair<UUID, DispatchTableInfo> dispatchTableFirstCodeUidAndInfo :
          closureDispatchTables) {
         DispatchTableInfo info = dispatchTableFirstCodeUidAndInfo.second;
+
+        const DispatchTable* table = info.dispatchTable;
+        bool aVersionHasInvocations = false;
+        for (size_t i = 0; i < table->size(); i++) {
+            const Function* function = table->get(i);
+            if (function->body()->funInvocationCount > 0) {
+                aVersionHasInvocations = true;
+                break;
+            }
+        }
+        if (!aVersionHasInvocations)
+            continue;
 
         file << std::quoted(info.name) << ", " << info.size << ", "
              << info.numDeopts << "\n";
