@@ -17,6 +17,9 @@ namespace rir {
 
 static RuntimeProfiler instance;
 
+static volatile size_t samples = 0;
+static volatile size_t hits = 0;
+
 RuntimeProfiler::RuntimeProfiler() {}
 
 RuntimeProfiler::~RuntimeProfiler() {}
@@ -27,6 +30,7 @@ static size_t slotCount = 0;
 static R_bcstack_t* stack;
 
 void RuntimeProfiler::sample(int signal) {
+    samples++;
     auto ctx = (RCNTXT*)R_GlobalContext;
     stack = ctx->nodestack;
     if (R_BCNodeStackTop == R_BCNodeStackBase)
@@ -43,6 +47,7 @@ void RuntimeProfiler::sample(int signal) {
     if (!md)
         return;
 
+    hits++;
     needReopt = false;
     goodValues = 0;
     slotCount = 0;
@@ -70,11 +75,11 @@ void RuntimeProfiler::sample(int signal) {
                     needReopt = true;
                 }
             }
-            if (samples > 100) {
+            /*if (samples > 100) {
                 mdEntry.readyForReopt = false;
                 mdEntry.sampleCount = 0;
                 mdEntry.feedback.reset();
-            }
+            }*/
         }
     });
 
@@ -89,11 +94,18 @@ void RuntimeProfiler::sample(int signal) {
 #ifndef __APPLE__
 static void handler(int signal) { instance.sample(signal); }
 
+static void dump() {
+    std::cout << "\nsamples: " << samples << ", hits: " << hits << "\n";
+}
+
 void RuntimeProfiler::initProfiler() {
     bool ENABLE_PROFILER = getenv("PIR_ENABLE_PROFILER") ? true : false;
     if (!ENABLE_PROFILER) {
         return;
     }
+
+    std::atexit(dump);
+
     struct sigaction recordAction;
     struct sigevent sev;
     struct itimerspec itime;
