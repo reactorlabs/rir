@@ -33,8 +33,6 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto fun = tbl->baseline();
 
-    Assumptions assumptions = assumptions_;
-    fun->clearDisabledAssumptions(assumptions);
 
     auto frame = RList(FRAME(CLOENV(closure)));
 
@@ -47,6 +45,13 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
         }
     }
     auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun);
+
+    Assumptions assumptions = assumptions_;
+    fun->clearDisabledAssumptions(assumptions);
+    // This flag is only relevant for ...
+    if (!pirClosure->formals().hasDots())
+        assumptions.remove(Assumption::StaticallyArgmatched);
+
     OptimizationContext context(assumptions);
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, success,
                    fail);
@@ -59,10 +64,13 @@ void Rir2PirCompiler::compileFunction(rir::DispatchTable* src,
                                       MaybeCls success, Maybe fail) {
     Assumptions assumptions = assumptions_;
     auto srcFunction = src->baseline();
-    srcFunction->clearDisabledAssumptions(assumptions);
-    OptimizationContext context(assumptions);
     auto closure =
         module->getOrDeclareRirFunction(name, srcFunction, formals, srcRef);
+    srcFunction->clearDisabledAssumptions(assumptions);
+    // This flag is only relevant for ...
+    if (!closure->formals().hasDots())
+        assumptions.remove(Assumption::StaticallyArgmatched);
+    OptimizationContext context(assumptions);
     compileClosure(closure, src->dispatch(assumptions), context, success, fail);
 }
 

@@ -66,6 +66,8 @@ enum class Assumption {
     LAST = StaticallyArgmatched,
 };
 
+struct DispatchTable;
+
 #pragma pack(push)
 #pragma pack(1)
 struct Assumptions {
@@ -211,6 +213,9 @@ struct Assumptions {
         return flags == other.flags && typeFlags == other.typeFlags &&
                missing == other.missing;
     }
+
+    bool substantiallyBetter(DispatchTable* table,
+                             const Assumptions& other) const;
 
     RIR_INLINE bool subtype(const Assumptions& other) const {
         bool tooManyPassed =

@@ -1,6 +1,7 @@
 #include "Assumptions.h"
 #include "R/Serialize.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
+#include "runtime/DispatchTable.h"
 
 namespace rir {
 
@@ -147,6 +148,23 @@ void Assumptions::setSpecializationLevel(int level) {
     default:
         break;
     }
+}
+
+bool Assumptions::substantiallyBetter(DispatchTable* table,
+                                      const Assumptions& other) const {
+    assert(this->subtype(other));
+    Assumptions a = *this;
+    Assumptions b = other;
+    auto& sign = table->baseline()->signature();
+    if (!sign.hasDotsArgs) {
+        a.add(Assumption::StaticallyArgmatched);
+        b.add(Assumption::StaticallyArgmatched);
+    }
+    if (!sign.hasDefaultArgs) {
+        a.add(Assumption::NoExplicitlyMissingArgs);
+        b.add(Assumption::NoExplicitlyMissingArgs);
+    }
+    return a != b;
 }
 
 } // namespace rir

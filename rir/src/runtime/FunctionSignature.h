@@ -83,9 +83,13 @@ struct FunctionSignature {
         OutInteger(out, numArguments);
     }
 
-    void pushDefaultArgument() { numArguments++; }
-
-    void pushArgument(ArgumentType arg) { numArguments++; }
+    void pushArgument(SEXP name, SEXP expr) {
+        numArguments++;
+        if (name == R_DotsSymbol)
+            hasDotsArgs = true;
+        if (expr != R_MissingArg)
+            hasDefaultArgs = true;
+    }
 
     void print(std::ostream& out = std::cout) const {
         if (optimization != OptimizationLevel::Baseline)
@@ -115,6 +119,8 @@ struct FunctionSignature {
     const OptimizationLevel optimization;
     unsigned numArguments = 0;
     const Assumptions assumptions;
+    bool hasDotsArgs = false;
+    bool hasDefaultArgs = false;
 };
 
 } // namespace rir

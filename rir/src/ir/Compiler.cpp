@@ -1408,7 +1408,7 @@ SEXP Compiler::finalize() {
             Code* compiled = compilePromise(ctx, *arg);
             function.addDefaultArg(compiled);
         }
-        signature.pushDefaultArgument();
+        signature.pushArgument(arg.tag(), *arg);
     }
 
     ctx.push(exp, closureEnv);

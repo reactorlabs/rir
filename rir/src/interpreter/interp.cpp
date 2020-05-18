@@ -28,6 +28,20 @@ extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
 }
 
+#define RECOMPILE_HEURISTIC(table, fun, flags)                                 \
+    (!isDeoptimizing() && !flags.contains(Function::NotOptimizable) &&         \
+     (flags.contains(Function::MarkOpt) ||                                     \
+      (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&                    \
+       ((fun != table->baseline() && fun->invocationCount() >= 2 &&            \
+         fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||              \
+        (fun->invocationCount() %                                              \
+         (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0))))
+
+#define RECOMPILE_CONDITION(table, fun, flags, given)                          \
+    (flags.contains(Function::MarkOpt) || fun == table->baseline() ||          \
+     fun->signature().assumptions.substantiallyBetter(table, given) ||         \
+     fun->body()->flags.contains(Code::Reoptimise))
+
 namespace rir {
 
 // #define PRINT_INTERP
@@ -811,13 +825,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     fun->registerInvocation();
 
     auto flags = fun->flags;
-    if (!isDeoptimizing() && !flags.contains(Function::NotOptimizable) &&
-        (flags.contains(Function::MarkOpt) ||
-         (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-          ((fun != table->baseline() && fun->invocationCount() >= 2 &&
-            fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-           (fun->invocationCount() %
-            (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)))) {
+    if (RECOMPILE_HEURISTIC(table, fun, flags)) {
         Assumptions given = call.givenAssumptions;
         // addDynamicAssumptionForOneTarget compares arguments with the
         // signature of the current dispatch target. There the number of
@@ -826,9 +834,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         // explicit assumption.
 
         fun->clearDisabledAssumptions(given);
-        if (flags.contains(Function::MarkOpt) || fun == table->baseline() ||
-            given != fun->signature().assumptions ||
-            fun->body()->flags.contains(Code::Reoptimise)) {
+        if (RECOMPILE_CONDITION(table, fun, flags, given)) {
             if (Assumptions(given).includes(
                     pir::Rir2PirCompiler::minimalAssumptions)) {
                 // More assumptions are available than this version uses. Let's
@@ -846,6 +852,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                     name = lhs;
                 if (flags.contains(Function::MarkOpt))
                     fun->flags.reset(Function::MarkOpt);
+
                 ctx->closureOptimizer(call.callee, given, name);
                 fun = dispatch(call, table);
             }
@@ -2718,16 +2725,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                                 !matches(assumptions, fun->signature());
             fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));
-            if (!dispatchFail && !flags.contains(Function::NotOptimizable) &&
-                fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-                ((fun != dt->baseline() && fun->invocationCount() >= 2 &&
-                  fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-                 (fun->invocationCount() %
-                      ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
-                  0))) {
-                if (assumptions != fun->signature().assumptions)
+            if (!dispatchFail && RECOMPILE_HEURISTIC(dt, fun, flags)) {
+                fun->clearDisabledAssumptions(assumptions);
+                if (RECOMPILE_CONDITION(dt, fun, flags, assumptions)) {
                     // We have more assumptions available, let's recompile
                     dispatchFail = true;
+                }
             }
 
             if (dispatchFail) {

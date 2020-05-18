@@ -1348,10 +1348,11 @@ rir::Function* Pir2Rir::finalize() {
                                 FunctionSignature::OptimizationLevel::Optimized,
                                 cls->assumptions());
 
-    // PIR does not support default args currently.
+    auto& formals = cls->owner()->formals();
     for (size_t i = 0; i < cls->nargs(); ++i) {
+        // PIR handles default args internally
         function.addArgWithoutDefault();
-        signature.pushDefaultArgument();
+        signature.pushArgument(formals.names()[i], formals.defaultArgs()[i]);
     }
 
     assert(signature.formalNargs() == cls->nargs());

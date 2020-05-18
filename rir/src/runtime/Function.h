@@ -50,8 +50,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), numArgs(defaultArgs.size()),
           signature_(signature) {
-        for (size_t i = 0; i < numArgs; ++i)
+        for (size_t i = 0; i < numArgs; ++i) {
             setEntry(NUM_PTRS + i, defaultArgs[i]);
+        }
         body(body_);
     }
 
