@@ -1390,20 +1390,19 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
+// TODO: some way of updating fun if we re-dispatch!
 static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
                                      Immediate astP, SEXP env, size_t nargs,
                                      unsigned long available) {
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
-    auto missing = fun->signature().numArguments - nargs;
-    auto fail = missing && fun->signature().assumptions.includes(
-                               Assumption::NoExplicitlyMissingArgs);
-    if (fun->flags.contains(Function::Dead) || !fun->body()->nativeCode || fail)
+    if (fun->flags.contains(Function::Dead) || !fun->body()->nativeCode)
         return callImpl(fun->body(), astP, callee, env, nargs, available);
 
     auto t = R_BCNodeStackTop;
 
+    auto missing = fun->signature().numArguments - nargs;
     for (size_t i = 0; i < missing; ++i)
         ostack_push(globalContext(), R_MissingArg);
 

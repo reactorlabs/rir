@@ -5,6 +5,8 @@
 #include "../../debugging/stream_logger.h"
 #include "../rir_compiler.h"
 #include <stack>
+#include <unordered_map>
+#include <unordered_set>
 namespace rir {
 struct DispatchTable;
 namespace pir {
@@ -18,6 +20,8 @@ class Rir2PirCompiler : public RirCompiler {
         Assumptions(Assumptions::Flags(Assumption::CorrectOrderOfArguments) |
                         Assumption::NotTooManyArguments,
                     0);
+
+    static std::unordered_set<Assumptions> equivalentAssumptions(Function* fun);
 
     Rir2PirCompiler(Module* module, StreamLogger& logger)
         : RirCompiler(module), logger(logger){};

@@ -25,6 +25,35 @@ namespace pir {
 constexpr Assumptions::Flags Rir2PirCompiler::minimalAssumptions;
 constexpr Assumptions Rir2PirCompiler::defaultAssumptions;
 
+std::unordered_set<Assumptions>
+Rir2PirCompiler::equivalentAssumptions(Function* fun) {
+    std::unordered_set<Assumptions> asmt = {fun->signature().assumptions};
+    std::unordered_set<Assumptions> asmt1 = asmt;
+    if (!fun->signature().hasDotsArgs) {
+        for (auto a : asmt1) {
+            a.remove(Assumption::StaticallyArgmatched);
+            asmt.insert(a);
+            a.add(Assumption::StaticallyArgmatched);
+            asmt.insert(a);
+        }
+    }
+    asmt1 = asmt;
+    if (!fun->signature().hasDefaultArgs) {
+        for (auto a : asmt1) {
+            a.remove(Assumption::NoExplicitlyMissingArgs);
+            asmt.insert(a);
+            a.add(Assumption::NoExplicitlyMissingArgs);
+            asmt.insert(a);
+        }
+    }
+    asmt1.clear();
+    for (auto a : asmt) {
+        fun->clearDisabledAssumptions(a);
+        asmt1.insert(a);
+    }
+    return asmt1;
+}
+
 void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                                      const Assumptions& assumptions_,
                                      MaybeCls success, Maybe fail) {
@@ -48,12 +77,9 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
 
     Assumptions assumptions = assumptions_;
     fun->clearDisabledAssumptions(assumptions);
-    // This flag is only relevant for ...
-    if (!pirClosure->formals().hasDots())
-        assumptions.remove(Assumption::StaticallyArgmatched);
 
     OptimizationContext context(assumptions);
-    compileClosure(pirClosure, tbl->dispatch(assumptions), context, success,
+    compileClosure(pirClosure, tbl->dispatchFun(assumptions), context, success,
                    fail);
 }
 
@@ -67,11 +93,9 @@ void Rir2PirCompiler::compileFunction(rir::DispatchTable* src,
     auto closure =
         module->getOrDeclareRirFunction(name, srcFunction, formals, srcRef);
     srcFunction->clearDisabledAssumptions(assumptions);
-    // This flag is only relevant for ...
-    if (!closure->formals().hasDots())
-        assumptions.remove(Assumption::StaticallyArgmatched);
     OptimizationContext context(assumptions);
-    compileClosure(closure, src->dispatch(assumptions), context, success, fail);
+    compileClosure(closure, src->dispatchFun(assumptions), context, success,
+                   fail);
 }
 
 void Rir2PirCompiler::compileClosure(Closure* closure,

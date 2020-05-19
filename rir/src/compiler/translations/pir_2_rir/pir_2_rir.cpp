@@ -5,6 +5,7 @@
 #include "../../transform/bb.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "../rir_2_pir/rir_2_pir_compiler.h"
 #include "R/BuiltinIds.h"
 #include "allocators.h"
 #include "compiler/analysis/reference_count.h"
@@ -905,7 +906,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                             Protect p(funCont);
                             assert(originalClosure &&
                                    "Cannot compile synthetic closure");
-                            dt->insert(fun);
+                            dt->insert(
+                                fun,
+                                Rir2PirCompiler::equivalentAssumptions(fun));
                         }
                         auto bc = BC::staticCall(
                             call->nCallArgs(), Pool::get(call->srcIdx),

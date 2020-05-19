@@ -4,6 +4,12 @@
 
 namespace rir {
 
+Function* Function::Proxy(Function* f, const FunctionSignature& signature) {
+    SEXP store = Rf_allocVector(EXTERNALSXP, sizeof(Function));
+    Function* fun = new (DATAPTR(store)) Function(f, signature);
+    return fun;
+}
+
 Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     size_t functionSize = InInteger(inp);
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);

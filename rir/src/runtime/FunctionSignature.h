@@ -109,6 +109,11 @@ struct FunctionSignature {
                       const Assumptions& assumptions)
         : envCreation(envCreation), optimization(optimization),
           assumptions(assumptions) {}
+    FunctionSignature(FunctionSignature& other, const Assumptions& assumptions)
+        : envCreation(other.envCreation), optimization(other.optimization),
+          numArguments(other.numArguments), assumptions(assumptions),
+          hasDotsArgs(other.hasDotsArgs), hasDefaultArgs(other.hasDefaultArgs) {
+    }
 
     size_t formalNargs() const { return numArguments; }
     size_t expectedNargs() const {

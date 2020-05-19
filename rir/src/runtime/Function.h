@@ -56,6 +56,13 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         body(body_);
     }
 
+    // Empty function objects are used as proxies only! in the dispatch table
+    static Function* Proxy(Function* f, const FunctionSignature& signature);
+    Function(Function* f, const FunctionSignature& signature)
+        : Function(0, f->container(), {}, signature) {}
+    bool isProxy() { return size == 0; }
+    Function* unproxy() { return Function::unpack(getEntry(0)); }
+
     Code* body() const { return Code::unpack(getEntry(0)); }
     void body(SEXP body) { setEntry(0, body); }
 

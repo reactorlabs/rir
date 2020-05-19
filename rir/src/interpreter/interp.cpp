@@ -37,9 +37,9 @@ extern Rboolean R_Visible;
         (fun->invocationCount() %                                              \
          (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0))))
 
-#define RECOMPILE_CONDITION(table, fun, flags, given)                          \
+#define RECOMPILE_CONDITION(table, fun, flags, used, given)                    \
     (flags.contains(Function::MarkOpt) || fun == table->baseline() ||          \
-     fun->signature().assumptions.substantiallyBetter(table, given) ||         \
+     used.substantiallyBetter(table, given) ||                                 \
      fun->body()->flags.contains(Code::Reoptimise))
 
 namespace rir {
@@ -779,22 +779,6 @@ static RIR_INLINE void supplyMissingArgs(CallContext& call,
     }
 }
 
-static Function* dispatch(const CallContext& call, DispatchTable* vt) {
-    // Find the most specific version of the function that can be called given
-    // the current call context.
-    Function* fun = nullptr;
-    for (int i = vt->size() - 1; i >= 0; i--) {
-        auto candidate = vt->get(i);
-        if (matches(call.givenAssumptions, candidate->signature())) {
-            fun = candidate;
-            break;
-        }
-    }
-    assert(fun);
-
-    return fun;
-};
-
 unsigned pir::Parameter::RIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
 unsigned pir::Parameter::DEOPT_ABANDON =
@@ -821,7 +805,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     addDynamicAssumptionsFromContext(
         call, table->baseline()->signature().formalNargs(), ctx);
-    Function* fun = dispatch(call, table);
+    size_t idx = table->dispatch(call.givenAssumptions);
+    auto fun = table->getFunction(idx);
+
     fun->registerInvocation();
 
     auto flags = fun->flags;
@@ -833,8 +819,10 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         // exactly for this number of arguments, thus we need to add this as an
         // explicit assumption.
 
+        auto used = table->getAssumptions(idx);
         fun->clearDisabledAssumptions(given);
-        if (RECOMPILE_CONDITION(table, fun, flags, given)) {
+        fun->clearDisabledAssumptions(used);
+        if (RECOMPILE_CONDITION(table, fun, flags, used, given)) {
             if (Assumptions(given).includes(
                     pir::Rir2PirCompiler::minimalAssumptions)) {
                 // More assumptions are available than this version uses. Let's
@@ -854,7 +842,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                     fun->flags.reset(Function::MarkOpt);
 
                 ctx->closureOptimizer(call.callee, given, name);
-                fun = dispatch(call, table);
+                fun = table->dispatchFun(call.givenAssumptions);
             }
         }
     }
@@ -2709,34 +2697,41 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
-            Assumptions given(pc);
+            Assumptions givenStatic(pc);
             pc += sizeof(Assumptions);
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
             CallContext call(c, callee, n, ast,
-                             ostack_cell_at(ctx, (long)n - 1), env, given, ctx);
+                             ostack_cell_at(ctx, (long)n - 1), env, givenStatic,
+                             ctx);
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(
                 call, fun->signature().formalNargs(), ctx);
-            Assumptions assumptions = call.givenAssumptions;
+            Assumptions given = call.givenAssumptions;
             auto flags = fun->flags;
             bool dispatchFail = flags.contains(Function::Dead) ||
-                                !matches(assumptions, fun->signature());
+                                !matches(given, fun->signature());
             fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));
             if (!dispatchFail && RECOMPILE_HEURISTIC(dt, fun, flags)) {
-                fun->clearDisabledAssumptions(assumptions);
-                if (RECOMPILE_CONDITION(dt, fun, flags, assumptions)) {
-                    // We have more assumptions available, let's recompile
+                if (RECOMPILE_CONDITION(dt, fun, flags, given, given)) {
+                    // New dispatch only happens on mark reopt or deopt. Since
+                    // the dt has aliases we can't detect if we have more
+                    // assumptions than when we compiled. This case is only
+                    // handled in native now...
                     dispatchFail = true;
                 }
             }
 
             if (dispatchFail) {
-                fun = dispatch(call, dt);
-                // Patch inline cache
-                (*(Immediate*)pc) = Pool::insert(fun->container());
+                auto idx = dt->dispatch(given);
+                auto newfun = dt->getFunction(idx);
+                if (newfun != fun) {
+                    // Patch inline cache
+                    (*(Immediate*)pc) = Pool::insert(fun->container());
+                    fun = newfun;
+                }
             }
             advanceImmediate();
 
@@ -2749,7 +2744,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // Currently we cannot recreate the original arglist if we
                 // statically reordered arguments. TODO this needs to be fixed
                 // by remembering the original order.
-                if (assumptions.includes(Assumption::StaticallyArgmatched))
+                if (given.includes(Assumption::StaticallyArgmatched))
                     lazyArgs.content.args = nullptr;
                 supplyMissingArgs(call, fun);
                 res = rirCallTrampoline(call, fun, symbol::delayedEnv,

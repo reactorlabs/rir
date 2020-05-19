@@ -41,7 +41,7 @@ for (i in 1:100)
   f4(x)
 
 rir.disassemble(add_noinline1)
-stopifnot(sum(rir.functionInvocations(add_noinline1)) == 10)
+stopifnot(sum(rir.functionInvocations(add_noinline1)) >= 10)
 stopifnot(sum(rir.functionInvocations(add_nospecial)) > 10)
 stopifnot(sum(rir.functionInvocations(add_forceinline)) <= 3)
 stopifnot(length(rir.functionInvocations(add_nospecial)) == 2)

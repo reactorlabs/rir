@@ -22,20 +22,41 @@ struct DispatchTable
 
     size_t size() const { return size_; }
 
-    Function* get(size_t i) const {
+    Function* getFunction(size_t i) const {
         assert(i < capacity());
-        return Function::unpack(getEntry(i));
+        auto f = Function::unpack(getEntry(i));
+        if (f->isProxy())
+            return f->unproxy();
+        return f;
+    }
+
+    const FunctionSignature& getSignature(size_t i) const {
+        assert(i < capacity());
+        auto f = Function::unpack(getEntry(i));
+        return f->signature();
+    }
+
+    Assumptions getAssumptions(size_t i) const {
+        return getSignature(i).assumptions;
+    }
+
+    bool isProxy(size_t i) const {
+        return Function::unpack(getEntry(i))->isProxy();
     }
 
     Function* baseline() const { return Function::unpack(getEntry(0)); }
-    Function* best() const { return get(size() - 1); }
+    Function* best() const { return getFunction(size() - 1); }
 
-    Function* dispatch(Assumptions a) const {
+    Function* dispatchFun(Assumptions a) const {
+        return getFunction(dispatch(a));
+    }
+
+    size_t dispatch(Assumptions a) const {
         for (int i = size() - 1; i >= 0; --i) {
-            if (get(i)->signature().assumptions.subtype(a))
-                return get(i);
+            if (getAssumptions(i).subtype(a))
+                return i;
         }
-        return baseline();
+        return 0;
     }
 
     void baseline(Function* f) {
@@ -48,7 +69,7 @@ struct DispatchTable
 
     bool contains(const Assumptions& assumptions) {
         for (size_t i = 1; i < size(); ++i)
-            if (get(i)->signature().assumptions == assumptions)
+            if (getAssumptions(i) == assumptions)
                 return true;
         return false;
     }
@@ -56,17 +77,29 @@ struct DispatchTable
     void remove(Code* funCode) {
         size_t i = 1;
         for (; i < size(); ++i) {
-            if (get(i)->body() == funCode)
+            if (getFunction(i)->body() == funCode)
                 break;
         }
         if (i == size())
             return;
-        get(i)->flags.set(Function::Dead);
+        if (!isProxy(i))
+            getFunction(i)->flags.set(Function::Dead);
         for (; i < size() - 1; ++i) {
             setEntry(i, getEntry(i + 1));
         }
         setEntry(i, nullptr);
         size_--;
+    }
+
+    void insert(Function* fun, std::unordered_set<Assumptions> assumptions) {
+        insert(fun);
+        auto sig = fun->signature();
+        for (auto a : assumptions) {
+            if (a != fun->signature().assumptions) {
+                FunctionSignature s(sig, a);
+                insert(Function::Proxy(fun, s));
+            }
+        }
     }
 
     // insert function ordered by increasing number of assumptions
@@ -78,21 +111,24 @@ struct DispatchTable
         auto assumptions = fun->signature().assumptions;
         size_t i = 1;
         for (; i < size(); ++i) {
-            if (get(i)->signature().assumptions == assumptions) {
+            if (getAssumptions(i) == assumptions) {
                 // If we override a version we should ensure that we don't call
                 // the old version anymore, or we might end up in a deopt loop.
                 if (i != 0) {
-                    get(i)->flags.set(Function::Dead);
+                    if (isProxy(i))
+                        getFunction(i)->flags.set(Function::Dead);
                     setEntry(i, fun->container());
-                    assert(get(i) == fun);
+                    assert(
+                        (fun->isProxy() && getFunction(i) == fun->unproxy()) ||
+                        getFunction(i) == fun);
                 }
                 return;
             }
-            if (!(get(i)->signature().assumptions < assumptions)) {
+            if (!(getAssumptions(i) < assumptions)) {
                 break;
             }
         }
-        assert(!contains(fun->signature().assumptions));
+        assert(!contains(assumptions));
         if (size() == capacity()) {
 #ifdef DEBUG_DISPATCH
             std::cout << "Tried to insert into a full Dispatch table. Have: \n";
@@ -128,12 +164,9 @@ struct DispatchTable
         std::cout << "\n";
 
         for (size_t i = 0; i < size() - 1; ++i) {
-            assert(get(i)->signature().assumptions <
-                   get(i + 1)->signature().assumptions);
-            assert(get(i)->signature().assumptions !=
-                   get(i + 1)->signature().assumptions);
-            assert(!(get(i + 1)->signature().assumptions <
-                     get(i)->signature().assumptions));
+            assert(getAssumptions(i) < getAssumptions(i + 1));
+            assert(getAssumptions(i) != getAssumptions(i + 1));
+            assert(!(getAssumptions(i + 1) < getAssumptions(i)));
         }
         assert(contains(fun->signature().assumptions));
 #endif
@@ -165,7 +198,7 @@ struct DispatchTable
         HashAdd(container(), refTable);
         OutInteger(out, size());
         for (size_t i = 0; i < size(); i++) {
-            get(i)->serialize(refTable, out);
+            Function::unpack(getEntry(i))->serialize(refTable, out);
         }
     }
 

@@ -3209,9 +3209,8 @@ bool LowerFunctionLLVM::tryCompile() {
                     assert(cls);
                     rir::Function* nativeTarget = nullptr;
                     for (size_t i = 0; i < dt->size(); i++) {
-                        auto entry = dt->get(i);
-                        if (entry->signature().assumptions ==
-                                target->assumptions() &&
+                        auto entry = dt->getFunction(i);
+                        if (dt->getAssumptions(i) == target->assumptions() &&
                             entry->signature().numArguments >= args.size()) {
                             nativeTarget = entry;
                         }

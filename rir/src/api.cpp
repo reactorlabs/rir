@@ -59,7 +59,16 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     std::cout << "== closure " << what << " (dispatch table " << t << ", env "
               << CLOENV(what) << ") ==\n";
     for (size_t entry = 0; entry < t->size(); ++entry) {
-        Function* f = t->get(entry);
+        if (t->isProxy(entry)) {
+            std::cout << "= version " << entry << " = \n";
+            std::cout << "[signature] ";
+            t->getSignature(entry).print(std::cout);
+            std::cout << "\n   Proxy -> ";
+            t->getFunction(entry)->signature().print(std::cout);
+            std::cout << "\n";
+            continue;
+        }
+        Function* f = t->getFunction(entry);
         std::cout << "= version " << entry << " (" << f << ") =\n";
         f->disassemble(std::cout);
     }
@@ -120,7 +129,7 @@ REXPORT SEXP rir_markFunction(SEXP what, SEXP which, SEXP reopt_,
     auto disableArgumentTypeSpecialization =
         getBool(disableArgumentTypeSpecialization_);
 
-    Function* fun = dt->get(i);
+    Function* fun = dt->getFunction(i);
     if (reopt != NA_LOGICAL) {
         if (reopt) {
             fun->flags.set(Function::MarkOpt);
@@ -305,7 +314,10 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
                                return;
 
                            Protect p(fun->container());
-                           DispatchTable::unpack(BODY(what))->insert(fun);
+                           auto dt = DispatchTable::unpack(BODY(what));
+                           dt->insert(
+                               fun, pir::Rir2PirCompiler::equivalentAssumptions(
+                                        fun));
                        },
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
@@ -326,7 +338,7 @@ REXPORT SEXP rir_invocation_count(SEXP what) {
 
     SEXP res = Rf_allocVector(INTSXP, dt->size());
     for (size_t i = 0; i < dt->size(); ++i)
-        INTEGER(res)[i] = dt->get(i)->invocationCount();
+        INTEGER(res)[i] = dt->getFunction(i)->invocationCount();
 
     return res;
 }
