@@ -2221,6 +2221,30 @@ bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
 };
 
 bool LowerFunctionLLVM::tryCompile() {
+
+    //   auto createSelect2 = [&] (llvm::Value* cond, llvm::Value* trueValue,
+    //   llvm::Value* falseValue ) {
+
+    //     auto trueBranch = BasicBlock::Create(C, "", fun);
+    //     auto falseBranch = BasicBlock::Create(C, "", fun);
+    //     auto next = BasicBlock::Create(C, "", fun);
+    //     builder.CreateCondBr(cond, trueBranch, falseBranch);
+    //     PhiBuilder res(builder, t::SEXP);
+
+    //     builder.SetInsertPoint(trueBranch);
+    //     res.addInput(trueValue);
+    //     builder.CreateBr(next);
+
+    //     builder.SetInsertPoint(falseBranch);
+    //     res.addInput(falseValue);
+    //     builder.CreateBr(next);
+
+    //     builder.SetInsertPoint(next);
+    //     auto r = res();
+    //     return r;
+
+    // };
+
     {
         auto arg = fun->arg_begin();
         for (size_t i = 0; i < argNames.size(); ++i) {
@@ -2661,7 +2685,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     switch (b->builtinId) {
                     case blt("length"):
                         if (irep == t::SEXP) {
-                            errs() << *a;
+
                             llvm::Value* r = call(NativeBuiltins::length, {a});
                             if (orep == t::SEXP) {
                                 // r = builder.CreateSelect(
@@ -2690,6 +2714,12 @@ bool LowerFunctionLLVM::tryCompile() {
 
                                 builder.SetInsertPoint(next);
                                 r = res();
+
+                                // r =  createSelect2(
+                                //     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
+                                //     boxReal(builder.CreateUIToFP(r,t::Double)),
+                                //     boxInt(builder.CreateTrunc(r, t::Int))
+                                //     );
 
                             } else if (orep == t::Double) {
                                 r = builder.CreateUIToFP(r, t::Double);
