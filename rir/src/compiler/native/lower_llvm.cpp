@@ -2222,28 +2222,26 @@ bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
 
 bool LowerFunctionLLVM::tryCompile() {
 
-    //   auto createSelect2 = [&] (llvm::Value* cond, llvm::Value* trueValue,
-    //   llvm::Value* falseValue ) {
+    auto createSelect2 = [&](llvm::Value* cond, llvm::Value* trueValue,
+                             llvm::Value* falseValue) {
+        auto trueBranch = BasicBlock::Create(C, "", fun);
+        auto falseBranch = BasicBlock::Create(C, "", fun);
+        auto next = BasicBlock::Create(C, "", fun);
+        builder.CreateCondBr(cond, trueBranch, falseBranch);
+        PhiBuilder res(builder, t::SEXP);
 
-    //     auto trueBranch = BasicBlock::Create(C, "", fun);
-    //     auto falseBranch = BasicBlock::Create(C, "", fun);
-    //     auto next = BasicBlock::Create(C, "", fun);
-    //     builder.CreateCondBr(cond, trueBranch, falseBranch);
-    //     PhiBuilder res(builder, t::SEXP);
+        builder.SetInsertPoint(trueBranch);
+        res.addInput(trueValue);
+        builder.CreateBr(next);
 
-    //     builder.SetInsertPoint(trueBranch);
-    //     res.addInput(trueValue);
-    //     builder.CreateBr(next);
+        builder.SetInsertPoint(falseBranch);
+        res.addInput(falseValue);
+        builder.CreateBr(next);
 
-    //     builder.SetInsertPoint(falseBranch);
-    //     res.addInput(falseValue);
-    //     builder.CreateBr(next);
-
-    //     builder.SetInsertPoint(next);
-    //     auto r = res();
-    //     return r;
-
-    // };
+        builder.SetInsertPoint(next);
+        auto r = res();
+        return r;
+    };
 
     {
         auto arg = fun->arg_begin();
@@ -2694,32 +2692,31 @@ bool LowerFunctionLLVM::tryCompile() {
                                 //     t::Double)),
                                 //     boxInt(builder.CreateTrunc(r, t::Int)));
 
-                                auto needsDouble =
-                                    builder.CreateICmpUGT(r, c(INT_MAX, 64));
-                                auto dbl = BasicBlock::Create(C, "", fun);
-                                auto iint = BasicBlock::Create(C, "", fun);
-                                auto next = BasicBlock::Create(C, "", fun);
-                                builder.CreateCondBr(needsDouble, dbl, iint);
-                                PhiBuilder res(builder, t::SEXP);
+                                // auto needsDouble =
+                                //     builder.CreateICmpUGT(r, c(INT_MAX, 64));
+                                // auto dbl = BasicBlock::Create(C, "", fun);
+                                // auto iint = BasicBlock::Create(C, "", fun);
+                                // auto next = BasicBlock::Create(C, "", fun);
+                                // builder.CreateCondBr(needsDouble, dbl, iint);
+                                // PhiBuilder res(builder, t::SEXP);
 
-                                builder.SetInsertPoint(dbl);
-                                res.addInput(boxReal(
-                                    builder.CreateUIToFP(r, t::Double)));
-                                builder.CreateBr(next);
+                                // builder.SetInsertPoint(dbl);
+                                // res.addInput(boxReal(
+                                //     builder.CreateUIToFP(r, t::Double)));
+                                // builder.CreateBr(next);
 
-                                builder.SetInsertPoint(iint);
-                                res.addInput(
+                                // builder.SetInsertPoint(iint);
+                                // res.addInput(
+                                //     boxInt(builder.CreateTrunc(r, t::Int)));
+                                // builder.CreateBr(next);
+
+                                // builder.SetInsertPoint(next);
+                                // r = res();
+
+                                r = createSelect2(
+                                    builder.CreateICmpUGT(r, c(INT_MAX, 64)),
+                                    boxReal(builder.CreateUIToFP(r, t::Double)),
                                     boxInt(builder.CreateTrunc(r, t::Int)));
-                                builder.CreateBr(next);
-
-                                builder.SetInsertPoint(next);
-                                r = res();
-
-                                // r =  createSelect2(
-                                //     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
-                                //     boxReal(builder.CreateUIToFP(r,t::Double)),
-                                //     boxInt(builder.CreateTrunc(r, t::Int))
-                                //     );
 
                             } else if (orep == t::Double) {
                                 r = builder.CreateUIToFP(r, t::Double);
