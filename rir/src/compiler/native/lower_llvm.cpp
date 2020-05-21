@@ -2661,12 +2661,36 @@ bool LowerFunctionLLVM::tryCompile() {
                     switch (b->builtinId) {
                     case blt("length"):
                         if (irep == t::SEXP) {
+                            errs() << *a;
                             llvm::Value* r = call(NativeBuiltins::length, {a});
                             if (orep == t::SEXP) {
-                                r = builder.CreateSelect(
-                                    builder.CreateICmpUGT(r, c(INT_MAX, 64)),
-                                    boxReal(builder.CreateUIToFP(r, t::Double)),
+                                // r = builder.CreateSelect(
+                                //     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
+                                //     boxReal(builder.CreateUIToFP(r,
+                                //     t::Double)),
+                                //     boxInt(builder.CreateTrunc(r, t::Int)));
+
+                                auto needsDouble =
+                                    builder.CreateICmpUGT(r, c(INT_MAX, 64));
+                                auto dbl = BasicBlock::Create(C, "", fun);
+                                auto iint = BasicBlock::Create(C, "", fun);
+                                auto next = BasicBlock::Create(C, "", fun);
+                                builder.CreateCondBr(needsDouble, dbl, iint);
+                                PhiBuilder res(builder, t::SEXP);
+
+                                builder.SetInsertPoint(dbl);
+                                res.addInput(boxReal(
+                                    builder.CreateUIToFP(r, t::Double)));
+                                builder.CreateBr(next);
+
+                                builder.SetInsertPoint(iint);
+                                res.addInput(
                                     boxInt(builder.CreateTrunc(r, t::Int)));
+                                builder.CreateBr(next);
+
+                                builder.SetInsertPoint(next);
+                                r = res();
+
                             } else if (orep == t::Double) {
                                 r = builder.CreateUIToFP(r, t::Double);
                             } else {
