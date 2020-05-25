@@ -16,6 +16,7 @@
     "**/*.ts": true,
     "**/*.o": true
   },
+  "cmake.buildDirectory" : "${workspaceRoot}/build/${buildType}",
   "files.associations": {
     "*.ml": "ocaml",
     "*.mli": "ocaml",

@@ -1,0 +1,19 @@
+buildType:
+  default: debugopt
+  choices:
+    debugopt:
+      short: debugopt
+      long: Emit debug information, -O2
+      buildType: debugopt
+    release:
+      short: release
+      long: Optimize generated code
+      buildType: release
+    debug:
+      short: debug
+      long: Emit debug information, -O0
+      buildType: debug
+    fullverifier:
+      short: fullverifier
+      long: Verify PIR after every pass (slow)
+      buildType: fullverifier
