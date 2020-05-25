@@ -5,6 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "preLaunchTask": "compile debugopt",
             "name": "(gdb) R debugopt",
             "type": "cppdbg",
             "request": "launch",
