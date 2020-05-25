@@ -10,7 +10,7 @@
             "command": "cmake --build .",
             "options": {
                 "cwd": "${workspaceRoot}/build/debugopt"
-              }
+              } 
            
         }
     ]
