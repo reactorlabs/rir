@@ -768,9 +768,10 @@ static RIR_INLINE void supplyMissingArgs(CallContext& call,
     auto signature = fun->signature();
     assert(signature.expectedNargs() >= call.suppliedArgs ||
            !signature.assumptions.includes(Assumption::NotTooManyArguments));
-    assert(
-        signature.expectedNargs() == call.suppliedArgs ||
-        !signature.assumptions.includes(Assumption::NoExplicitlyMissingArgs));
+    // TODO: due to proxy functions, this can actually happen... we need a
+    // better story here... assert(
+    //     signature.expectedNargs() == call.suppliedArgs ||
+    //     !signature.assumptions.includes(Assumption::NoExplicitlyMissingArgs));
     if (signature.expectedNargs() > call.suppliedArgs) {
         for (size_t i = 0; i < signature.expectedNargs() - call.suppliedArgs;
              ++i)
