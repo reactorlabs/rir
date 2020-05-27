@@ -209,9 +209,25 @@ rir.flushEventCounters <- function() {
     .Call("rirFlushEventCounters")
 }
 
+rir.logEvent <- function(message) {
+    .Call("rirLogUserEvent", message)
+}
+
+rir.resetEventStream <- function() {
+    .Call("rirResetEventStream")
+}
+
 # Will silently do nothing if event counters aren't actually enabled
 .rir.flushEventCountersIfEnabled <- function() {
     .Call("rirFlushEventCountersIfEnabled")
 }
 
-.Last <- .rir.flushEventCountersIfEnabled
+# Will silently do nothing if event streams aren't actually enabled
+.rir.flushEventStreamIfEnabled <- function() {
+    .Call("rirFlushEventStreamIfEnabled")
+}
+
+.Last <- function() {
+    .rir.flushEventCountersIfEnabled()
+    .rir.flushEventStreamIfEnabled()
+}

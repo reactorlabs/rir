@@ -26,4 +26,19 @@ SEXP ObservedCallees::getTarget(const Code* code, size_t pos) const {
     return code->getExtraPoolEntry(targets[pos]);
 }
 
+std::string getDeoptReasonExplanation(DeoptReason::Reason reason) {
+    switch (reason) {
+    case DeoptReason::None:
+        assert(false);
+    case DeoptReason::Typecheck:
+        return "a typecheck failed";
+    case DeoptReason::Calltarget:
+        return "actual call target didn't match the assumed one";
+    case DeoptReason::EnvStubMaterialized:
+        return "we materialized a stub environment";
+    case DeoptReason::DeadBranchReached:
+        return "we reached a branch that we speculated was dead";
+    }
+}
+
 } // namespace rir

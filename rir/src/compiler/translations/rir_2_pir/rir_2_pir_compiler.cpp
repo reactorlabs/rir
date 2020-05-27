@@ -4,6 +4,7 @@
 #include "rir_2_pir.h"
 
 #include "compiler/parameter.h"
+#include "event_counters/event_stream.h"
 
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
@@ -19,6 +20,9 @@
 
 namespace rir {
 namespace pir {
+
+using Clock = std::chrono::system_clock;
+using Timestamp = Clock::time_point;
 
 // Currently PIR optimized functions cannot handle too many arguments or
 // mis-ordered arguments. The caller needs to take care.
@@ -71,16 +75,37 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                                      const OptimizationContext& ctx,
                                      MaybeCls success, Maybe fail) {
 #ifdef MEASURE
+    if (EventStream::isEnabled) {
+        EventStream::instance().setNameOf(optFunction, closure->name());
+        EventStream::instance().recordEvent(
+            new EventStream::StartedPirCompiling(optFunction, ctx.assumptions));
+    }
+
     MaybeCls originalSuccess = success;
     Maybe originalFail = fail;
     success = EventCounters::isEnabled ? [&](ClosureVersion* result) {
-        EventCounters::instance().count(events::PirOptimized);
+        if (EventCounters::isEnabled) {
+            EventCounters::instance().count(events::PirOptimized);
+        }
         originalSuccess(result);
     } : originalSuccess;
     fail = EventCounters::isEnabled ? [&]() {
-        EventCounters::instance().count(events::Unoptimizable);
+        if (EventCounters::isEnabled) {
+            EventCounters::instance().count(events::Unoptimizable);
+        }
         originalFail();
     } : originalFail;
+
+    Timestamp startTime = Clock::now();
+    auto finishProfiling = [&]() {
+        Timestamp endTime = Clock::now();
+        Timestamp::duration duration = endTime - startTime;
+        size_t durationMicros =
+            (size_t)std::chrono::duration_cast<std::chrono::microseconds>(
+                duration)
+                .count();
+        return durationMicros;
+    };
 #endif
 
     if (!ctx.assumptions.includes(minimalAssumptions)) {
@@ -89,6 +114,18 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                 std::stringstream as;
                 as << "Missing minimal assumption " << a;
                 logger.warn(as.str());
+
+#ifdef MEASURE
+                size_t totalDuration = finishProfiling();
+                if (EventStream::isEnabled) {
+                    std::stringstream messageBuf;
+                    messageBuf << "it's missing minimal assumption " << a;
+                    EventStream::instance().recordEvent(
+                        new EventStream::FailedPirCompiling(
+                            optFunction, totalDuration, messageBuf.str()));
+                }
+#endif
+
                 return fail();
             }
         }
@@ -103,17 +140,46 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         closure->formals().hasDots()) {
         closure->rirFunction()->flags.set(Function::NotOptimizable);
         logger.warn("no support for ...");
+
+#ifdef MEASURE
+        size_t totalDuration = finishProfiling();
+        if (EventStream::isEnabled) {
+            EventStream::instance().recordEvent(
+                new EventStream::FailedPirCompiling(optFunction, totalDuration,
+                                                    "it has '...'"));
+        }
+#endif
+
         return fail();
     }
 
     if (closure->rirFunction()->body()->codeSize > Parameter::MAX_INPUT_SIZE) {
         closure->rirFunction()->flags.set(Function::NotOptimizable);
         logger.warn("skipping huge function");
+
+#ifdef MEASURE
+        size_t totalDuration = finishProfiling();
+        if (EventStream::isEnabled) {
+            EventStream::instance().recordEvent(
+                new EventStream::FailedPirCompiling(optFunction, totalDuration,
+                                                    "it's too big"));
+        }
+#endif
+
         return fail();
     }
 
-    if (auto existing = closure->findCompatibleVersion(ctx))
+    if (auto existing = closure->findCompatibleVersion(ctx)) {
+#ifdef MEASURE
+        size_t totalDuration = finishProfiling();
+        if (EventStream::isEnabled) {
+            EventStream::instance().recordEvent(
+                new EventStream::ReusedPirCompiled(optFunction, totalDuration));
+        }
+#endif
+
         return success(existing);
+    }
 
     auto version = closure->declareVersion(ctx, optFunction);
     Builder builder(version, closure->closureEnv());
@@ -201,6 +267,17 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         logger.warn("Failed to compile default arg");
         logger.close(version);
         closure->erase(ctx);
+
+#ifdef MEASURE
+        size_t totalDuration = finishProfiling();
+        if (EventStream::isEnabled) {
+            EventStream::instance().recordEvent(
+                new EventStream::FailedPirCompiling(
+                    optFunction, totalDuration,
+                    "we couldn't compile a default argument"));
+        }
+#endif
+
         return fail();
     }
 
@@ -214,6 +291,16 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 #endif
 #endif
         log.flush();
+
+#ifdef MEASURE
+        size_t totalDuration = finishProfiling();
+        if (EventStream::isEnabled) {
+            EventStream::instance().recordEvent(
+                new EventStream::SucceededPirCompiling(optFunction,
+                                                       totalDuration));
+        }
+#endif
+
         return success(version);
     }
 
@@ -221,6 +308,15 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     log.flush();
     logger.close(version);
     closure->erase(ctx);
+
+#ifdef MEASURE
+    size_t totalDuration = finishProfiling();
+    if (EventStream::isEnabled) {
+        EventStream::instance().recordEvent(new EventStream::FailedPirCompiling(
+            optFunction, totalDuration, "of an issue encountered in rir2pir"));
+    }
+#endif
+
     return fail();
 }
 

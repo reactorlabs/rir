@@ -217,6 +217,8 @@ struct DeoptReason {
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");
 
+std::string getDeoptReasonExplanation(DeoptReason::Reason reason);
+
 #pragma pack(pop)
 
 } // namespace rir

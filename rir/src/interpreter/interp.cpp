@@ -9,6 +9,7 @@
 #include "compiler/parameter.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "event_counters/code_event_counters.h"
+#include "event_counters/event_stream.h"
 #include "ir/Deoptimization.h"
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
@@ -29,6 +30,8 @@ extern Rboolean R_Visible;
 }
 
 namespace rir {
+
+DeoptReason::Reason lastDeoptReason = DeoptReason::None;
 
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
@@ -415,6 +418,7 @@ void checkUserInterrupt() {
 
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
+    lastDeoptReason = reason.reason;
     switch (reason.reason) {
     case DeoptReason::DeadBranchReached: {
         assert(*pos == Opcode::record_test_);
@@ -4083,6 +4087,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 #ifdef MEASURE
             if (EventCounters::isEnabled) {
                 EventCounters::instance().count(events::Deopt);
+            }
+            if (EventStream::isEnabled) {
+                Function* function =
+                    DispatchTable::unpack(BODY(callCtxt->callee))->baseline();
+                EventStream::instance().recordEvent(
+                    new EventStream::Deoptimized(function, lastDeoptReason));
             }
 #endif
             m->frames[m->numFrames - 1].code->registerDeopt();

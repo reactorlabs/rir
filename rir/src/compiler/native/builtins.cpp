@@ -1,6 +1,7 @@
 #include "builtins.h"
 
 #include "compiler/parameter.h"
+#include "event_counters/event_stream.h"
 #include "interpreter/ArgsLazyData.h"
 #include "interpreter/LazyEnvironment.h"
 #include "interpreter/cache.h"
@@ -1013,6 +1014,11 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
 #ifdef MEASURE
     if (EventCounters::isEnabled) {
         EventCounters::instance().count(events::Deopt);
+    }
+    if (EventStream::isEnabled) {
+        Function* function = DispatchTable::unpack(BODY(cls))->baseline();
+        EventStream::instance().recordEvent(
+            new EventStream::Deoptimized(function, lastDeoptReason));
     }
 #endif
     c->registerDeopt();
