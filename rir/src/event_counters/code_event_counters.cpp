@@ -365,7 +365,7 @@ void CodeEventCounters::dumpNumClosureVersions() const {
     file.open("num_closures_per_table.csv");
 
     // Heading
-    file << "name, final size, # deopts\n";
+    file << "name, # invocations, final size, # deopts\n";
 
     // Body
     for (std::pair<UUID, DispatchTableInfo> dispatchTableFirstCodeUidAndInfo :
@@ -373,19 +373,20 @@ void CodeEventCounters::dumpNumClosureVersions() const {
         DispatchTableInfo info = dispatchTableFirstCodeUidAndInfo.second;
 
         const DispatchTable* table = info.dispatchTable;
-        bool aVersionHasInvocations = false;
+        std::string allNumInvocations = "";
+        bool aClosureHasInvocations = false;
         for (size_t i = 0; i < table->size(); i++) {
             const Function* function = table->get(i);
-            if (function->body()->funInvocationCount > 0) {
-                aVersionHasInvocations = true;
-                break;
-            }
+            size_t versionNumInvocations = function->body()->funInvocationCount;
+            allNumInvocations += std::to_string(versionNumInvocations) + " ";
+            aClosureHasInvocations =
+                aClosureHasInvocations || versionNumInvocations > 0;
         }
-        if (!aVersionHasInvocations)
+        if (!aClosureHasInvocations)
             continue;
 
-        file << std::quoted(info.name) << ", " << info.size << ", "
-             << info.numDeopts << "\n";
+        file << std::quoted(info.name) << ", " << allNumInvocations << ", "
+             << info.size << ", " << info.numDeopts << "\n";
     }
 
     file.close();

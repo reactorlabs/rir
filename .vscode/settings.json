@@ -104,7 +104,19 @@
     "typeinfo": "cpp",
     "utility": "cpp",
     "future": "cpp",
-    "memory_resource": "cpp"
+    "memory_resource": "cpp",
+    "csetjmp": "cpp",
+    "csignal": "cpp",
+    "coroutine": "cpp",
+    "scoped_allocator": "cpp",
+    "strstream": "cpp",
+    "typeindex": "cpp",
+    "valarray": "cpp",
+    "variant": "cpp",
+    "*.ipp": "cpp",
+    "rope": "cpp",
+    "slist": "cpp",
+    "cfenv": "cpp"
   },
   "restructuredtext.workspaceRoot": "/Users/jakob/Desktop/Projects/rir"
 }
