@@ -34,63 +34,57 @@ class EventStream {
     struct UserEvent : public Event {
         const std::string message;
 
-        explicit UserEvent(const std::string& message) : message(message) {}
+        explicit UserEvent(const std::string& message);
 
         void print(std::ostream& out) override;
     };
 
     struct StartedPirCompiling : public Event {
-        const Function* rirFunction;
+        const UUID rirFunctionUid;
         const Assumptions assumptions;
 
         StartedPirCompiling(const Function* rirFunction,
-                            const Assumptions& assumptions)
-            : rirFunction(rirFunction), assumptions(assumptions) {}
+                            const Assumptions& assumptions);
 
         void print(std::ostream& out) override;
     };
 
     struct ReusedPirCompiled : public Event {
-        const Function* rirFunction;
+        const UUID rirFunctionUid;
         const size_t durationMicros;
 
-        ReusedPirCompiled(const Function* rirFunction, size_t durationMicros)
-            : rirFunction(rirFunction), durationMicros(durationMicros) {}
+        ReusedPirCompiled(const Function* rirFunction, size_t durationMicros);
 
         void print(std::ostream& out) override;
     };
 
     struct SucceededPirCompiling : public Event {
-        const Function* rirFunction;
+        const UUID rirFunctionUid;
         const size_t durationMicros;
 
         SucceededPirCompiling(const Function* rirFunction,
-                              size_t durationMicros)
-            : rirFunction(rirFunction), durationMicros(durationMicros) {}
+                              size_t durationMicros);
 
         void print(std::ostream& out) override;
     };
 
     struct FailedPirCompiling : public Event {
-        const Function* rirFunction;
+        const UUID rirFunctionUid;
         const size_t durationMicros;
         const std::string explanation;
 
         FailedPirCompiling(const Function* rirFunction, size_t durationMicros,
-                           const std::string& explanation)
-            : rirFunction(rirFunction), durationMicros(durationMicros),
-              explanation(explanation) {}
+                           const std::string& explanation);
 
         void print(std::ostream& out) override;
     };
 
     struct Deoptimized : public Event {
-        const Function* baselineFunction;
+        const UUID baselineFunctionUid;
         const DeoptReason::Reason deoptReason;
 
         Deoptimized(const Function* baselineFunction,
-                    DeoptReason::Reason deoptReason)
-            : baselineFunction(baselineFunction), deoptReason(deoptReason) {}
+                    DeoptReason::Reason deoptReason);
 
         void print(std::ostream& out) override;
     };
@@ -101,7 +95,7 @@ class EventStream {
         return c;
     }
 
-    std::string getNameOf(const Function* function);
+    std::string getNameOf(const UUID& functionUid);
     void setNameOf(const Function* function, std::string name);
 
     void recordEvent(Event* event);
