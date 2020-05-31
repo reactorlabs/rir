@@ -213,6 +213,14 @@ rir.logEvent <- function(message) {
     .Call("rirLogUserEvent", message)
 }
 
+rir.enableEventStream <- function() {
+    .Call("rirEnableEventStream")
+}
+
+rir.disableEventStream <- function() {
+    .Call("rirDisableEventStream")
+}
+
 rir.resetEventStream <- function() {
     .Call("rirResetEventStream")
 }

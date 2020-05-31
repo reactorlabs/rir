@@ -23,7 +23,7 @@ void EventStream::ReusedPirCompiled::print(std::ostream& out) {
     out << "avoided PIR-compiling "
         << EventStream::instance().getNameOf(rirFunction)
         << " because we could reuse an existing version (spent "
-        << durationMicros << " figuring this out)" << std::endl;
+        << durationMicros << "µs figuring this out)" << std::endl;
 }
 
 void EventStream::SucceededPirCompiling::print(std::ostream& out) {
@@ -44,7 +44,11 @@ void EventStream::Deoptimized::print(std::ostream& out) {
 }
 
 std::string EventStream::getNameOf(const Function* function) {
-    return versionNames.at(function->body()->uid);
+    if (function == NULL || !versionNames.count(function->body()->uid)) {
+        return "<unknown>";
+    } else {
+        return versionNames.at(function->body()->uid);
+    }
 }
 void EventStream::setNameOf(const Function* function, std::string name) {
     versionNames[function->body()->uid] = name;
@@ -70,7 +74,7 @@ void EventStream::printToFile() {
     }
 
     std::ofstream file;
-    file.open("event_stream.csv");
+    file.open("event_stream.log");
     print(file);
     file.close();
 }

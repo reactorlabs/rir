@@ -546,6 +546,27 @@ REXPORT SEXP rirLogUserEvent(SEXP eventMessageSexp) {
     return R_NilValue;
 }
 
+REXPORT SEXP rirEnableEventStream() {
+#ifndef MEASURE
+    Rf_error("RIR must be compiled with the MEASURE macro to support this");
+#else
+    EventStream::isEnabled = true;
+#endif
+    R_Visible = (Rboolean) false;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirDisableEventStream() {
+    R_Visible = (Rboolean) false;
+#ifndef MEASURE
+    Rf_error("RIR must be compiled with the MEASURE macro to support this");
+#else
+    EventStream::isEnabled = false;
+#endif
+    R_Visible = (Rboolean) false;
+    return R_NilValue;
+}
+
 REXPORT SEXP rirResetEventStream() {
 #ifndef MEASURE
     Rf_error("RIR must be compiled with the MEASURE macro to support this");
