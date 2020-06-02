@@ -2239,37 +2239,47 @@ bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
 
 //     auto trueBranch = BasicBlock::Create(C, "", fun);
 //     auto falseBranch = BasicBlock::Create(C, "", fun);
-//     auto next = BasicBlock::Create(C, "", fun);
 
 //     auto intialInsertionPoint = builder.GetInsertBlock();
 
 //     builder.SetInsertPoint(trueBranch);
 //     auto trueValue = trueValueAction();
 //     auto trueBranchIsEmpty = trueBranch->empty();
-//     PhiBuilder res(builder, trueValue->getType()); // review ****************
-//     res.addInput(trueValue);
-//     builder.CreateBr(next);
+//     auto truePred = builder.GetInsertBlock();
 
 //     builder.SetInsertPoint(falseBranch);
 //     auto falseValue = falseValueAction();
 //     auto falseBranchIsEmpty = falseBranch->empty();
-//     res.addInput(falseValue);
-//     builder.CreateBr(next);
-
-//     builder.SetInsertPoint(intialInsertionPoint);
+//     auto falsePred = builder.GetInsertBlock();
 
 //     if (trueBranchIsEmpty && falseBranchIsEmpty) {
-//         //delete trueBranch;
-//         //delete falseBranch;
-//         //delete next;
+//         trueBranch->removeFromParent();
+//         falseBranch->removeFromParent();
+
+//         delete trueBranch;
+//         delete falseBranch;
+
+//         builder.SetInsertPoint(intialInsertionPoint);
 //         return builder.CreateSelect(cond, trueValue, falseValue);
 //     }
 
+//     auto next = BasicBlock::Create(C, "", fun);
+
+//     PhiBuilder res(builder, trueValue->getType());
+
+//     builder.SetInsertPoint(truePred);
+//     builder.CreateBr(next);
+//     res.addInput(trueValue);
+
+//     builder.SetInsertPoint(falsePred);
+//     builder.CreateBr(next);
+//     res.addInput(falseValue);
+
+//     builder.SetInsertPoint(intialInsertionPoint);
 //     builder.CreateCondBr(cond, trueBranch, falseBranch);
+
 //     builder.SetInsertPoint(next);
 //     auto r = res();
-
-//     // isarray
 
 //     return r;
 // };
@@ -2278,54 +2288,62 @@ llvm::Value* LowerFunctionLLVM::createSelect2(
     llvm::Value* cond, std::function<llvm::Value*()> trueValueAction,
     std::function<llvm::Value*()> falseValueAction) {
 
-    // auto xx = BasicBlock::Create(C, "");
-    // delete xx;
-
-    auto trueBranch = BasicBlock::Create(C, "", fun);
-    auto falseBranch = BasicBlock::Create(C, "", fun);
-
     auto intialInsertionPoint = builder.GetInsertBlock();
 
+    auto trueBranch = BasicBlock::Create(C, "", fun);
+    auto truePred = intialInsertionPoint;
     builder.SetInsertPoint(trueBranch);
     auto trueValue = trueValueAction();
     auto trueBranchIsEmpty = trueBranch->empty();
-    auto truePred = builder.GetInsertBlock();
+    if (trueBranchIsEmpty) {
+        trueBranch->removeFromParent();
+        delete trueBranch;
+    } else {
+        truePred = builder.GetInsertBlock();
+    }
 
+    auto falseBranch = BasicBlock::Create(C, "", fun);
+    auto falsePred = intialInsertionPoint;
     builder.SetInsertPoint(falseBranch);
     auto falseValue = falseValueAction();
     auto falseBranchIsEmpty = falseBranch->empty();
-    auto falsePred = builder.GetInsertBlock();
+    if (falseBranchIsEmpty) {
+        falseBranch->removeFromParent();
+        delete falseBranch;
+    } else {
+        falsePred = builder.GetInsertBlock();
+    }
 
     if (trueBranchIsEmpty && falseBranchIsEmpty) {
-        trueBranch->removeFromParent();
-        falseBranch->removeFromParent();
-
-        delete trueBranch;
-        delete falseBranch;
-
         builder.SetInsertPoint(intialInsertionPoint);
         return builder.CreateSelect(cond, trueValue, falseValue);
     }
 
     auto next = BasicBlock::Create(C, "", fun);
 
-    PhiBuilder res(builder, trueValue->getType()); // review    ****************
+    PhiBuilder res(builder, trueValue->getType());
 
+    auto trueBranchForCond = trueBranch;
     builder.SetInsertPoint(truePred);
-    builder.CreateBr(next);
+    if (!trueBranchIsEmpty)
+        builder.CreateBr(next);
+    else
+        trueBranchForCond = next;
     res.addInput(trueValue);
 
+    auto falseBranchForCond = falseBranch;
     builder.SetInsertPoint(falsePred);
-    builder.CreateBr(next);
+    if (!falseBranchIsEmpty)
+        builder.CreateBr(next);
+    else
+        falseBranchForCond = next;
     res.addInput(falseValue);
 
     builder.SetInsertPoint(intialInsertionPoint);
-    builder.CreateCondBr(cond, trueBranch, falseBranch);
+    builder.CreateCondBr(cond, trueBranchForCond, falseBranchForCond);
 
     builder.SetInsertPoint(next);
     auto r = res();
-
-    // isarray
 
     return r;
 };
