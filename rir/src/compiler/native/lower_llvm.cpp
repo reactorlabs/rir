@@ -3218,11 +3218,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                     if (nativeTarget) {
                         llvm::Value* trg = JitLLVM::get(target);
-                        auto nativeCode = nativeTarget->body()->nativeCode;
-                        if (!trg && nativeCode) {
-                            trg = builder.CreateIntToPtr(c((void*)nativeCode),
-                                                         t::nativeFunctionPtr);
-                        }
                         if (trg &&
                             target->properties.includes(
                                 ClosureVersion::Property::NoReflection)) {
@@ -3240,12 +3235,13 @@ bool LowerFunctionLLVM::tryCompile() {
 
                         assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));
+                        auto idx = Pool::makeSpace();
+                        Pool::patch(idx, nativeTarget->container());
                         auto res = withCallFrame(args, [&]() {
                             return call(NativeBuiltins::nativeCallTrampoline,
                                         {
                                             constant(callee, t::SEXP),
-                                            builder.CreateIntToPtr(
-                                                c(nativeTarget), t::voidPtr),
+                                            c(idx),
                                             c(calli->srcIdx),
                                             loadSxp(calli->env()),
                                             c(args.size()),
