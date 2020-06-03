@@ -602,6 +602,10 @@ class LowerFunctionLLVM {
 
     bool tryInlineBuiltin(int builtin);
 
+    llvm::Value* createSelect2(llvm::Value* cond,
+                               std::function<llvm::Value*()> trueValueAction,
+                               std::function<llvm::Value*()> falseValueAction);
+
   private:
     bool vectorTypeSupport(Value* v);
     llvm::Value* vectorPositionPtr(llvm::Value* vector, llvm::Value* position,
@@ -2220,6 +2224,70 @@ bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
     return false;
 };
 
+llvm::Value* LowerFunctionLLVM::createSelect2(
+    llvm::Value* cond, std::function<llvm::Value*()> trueValueAction,
+    std::function<llvm::Value*()> falseValueAction) {
+
+    auto intialInsertionPoint = builder.GetInsertBlock();
+
+    auto trueBranch = BasicBlock::Create(C, "", fun);
+    auto truePred = intialInsertionPoint;
+    builder.SetInsertPoint(trueBranch);
+    auto trueValue = trueValueAction();
+    auto trueBranchIsEmpty = trueBranch->empty();
+    if (trueBranchIsEmpty) {
+        trueBranch->removeFromParent();
+        delete trueBranch;
+    } else {
+        truePred = builder.GetInsertBlock();
+    }
+
+    auto falseBranch = BasicBlock::Create(C, "", fun);
+    auto falsePred = intialInsertionPoint;
+    builder.SetInsertPoint(falseBranch);
+    auto falseValue = falseValueAction();
+    auto falseBranchIsEmpty = falseBranch->empty();
+    if (falseBranchIsEmpty) {
+        falseBranch->removeFromParent();
+        delete falseBranch;
+    } else {
+        falsePred = builder.GetInsertBlock();
+    }
+
+    if (trueBranchIsEmpty && falseBranchIsEmpty) {
+        builder.SetInsertPoint(intialInsertionPoint);
+        return builder.CreateSelect(cond, trueValue, falseValue);
+    }
+
+    auto next = BasicBlock::Create(C, "", fun);
+
+    PhiBuilder res(builder, trueValue->getType());
+
+    auto trueBranchForCond = trueBranch;
+    builder.SetInsertPoint(truePred);
+    if (!trueBranchIsEmpty)
+        builder.CreateBr(next);
+    else
+        trueBranchForCond = next;
+    res.addInput(trueValue);
+
+    auto falseBranchForCond = falseBranch;
+    builder.SetInsertPoint(falsePred);
+    if (!falseBranchIsEmpty)
+        builder.CreateBr(next);
+    else
+        falseBranchForCond = next;
+    res.addInput(falseValue);
+
+    builder.SetInsertPoint(intialInsertionPoint);
+    builder.CreateCondBr(cond, trueBranchForCond, falseBranchForCond);
+
+    builder.SetInsertPoint(next);
+    auto r = res();
+
+    return r;
+};
+
 bool LowerFunctionLLVM::tryCompile() {
     {
         auto arg = fun->arg_begin();
@@ -2663,10 +2731,23 @@ bool LowerFunctionLLVM::tryCompile() {
                         if (irep == t::SEXP) {
                             llvm::Value* r = call(NativeBuiltins::length, {a});
                             if (orep == t::SEXP) {
-                                r = builder.CreateSelect(
+                                // r = builder.CreateSelect(
+                                //     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
+                                //     boxReal(builder.CreateUIToFP(r,
+                                //     t::Double)),
+                                //     boxInt(builder.CreateTrunc(r, t::Int)));
+
+                                r = createSelect2(
                                     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
-                                    boxReal(builder.CreateUIToFP(r, t::Double)),
-                                    boxInt(builder.CreateTrunc(r, t::Int)));
+                                    [&]() {
+                                        return boxReal(
+                                            builder.CreateUIToFP(r, t::Double));
+                                    },
+                                    [&]() {
+                                        return boxInt(
+                                            builder.CreateTrunc(r, t::Int));
+                                    });
+
                             } else if (orep == t::Double) {
                                 r = builder.CreateUIToFP(r, t::Double);
                             } else {
