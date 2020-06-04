@@ -8,6 +8,8 @@
 #include <sstream>
 #include <string>
 
+#include <list>
+
 namespace rir {
 namespace pir {
 
@@ -37,6 +39,8 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         }
     }
 
+    std::unordered_map<BB*, std::list<BB*>> dominatedByPhi;
+
     {
         std::unordered_map<BB*, PhiInput> pendingInput;
         DominatorTreeVisitor<>(dom).run(cls->entry, [&](BB* cur) {
@@ -56,6 +60,14 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
             }
             input.inputBlock = cur;
 
+            if (!phis.includes(cur)) {
+                if (input.otherPhi)
+                    dominatingPhi[cur] = input.otherPhi;
+
+            } else {
+                dominatingPhi[cur] = cur;
+            }
+
             auto apply = [&](BB* next) {
                 if (!next)
                     return;
@@ -64,8 +76,17 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
 
                 if (phis.includes(next)) {
                     placement[next].insert(input);
-                } else
+
+                    // dominatingPhi[next] = next;
+
+                } else {
                     pendingInput[next] = input;
+
+                    // if  (input.otherPhi)
+                    //     dominatingPhi[next] = input.otherPhi;
+                }
+                    
+                
             };
 
             for (auto suc : cur->successors())
@@ -75,9 +96,24 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
 
     bool changed;
 
+    for (auto it = dominatingPhi.begin(); it != dominatingPhi.end(); it++) {
+        auto& l = dominatedByPhi[it->second];
+        l.push_back(it->first);
+    }
+
+    auto updateDominatingPhisOnDeletion = [&](BB* deletedPhiNode) {
+        auto& l = dominatedByPhi[deletedPhiNode];
+        for (auto it = l.begin(); it != l.end(); it++) {
+            dominatingPhi.erase(*it);
+        }
+
+        dominatedByPhi.erase(deletedPhiNode);
+    };
+
     // Remove ill formed phis
     for (auto ci = placement.begin(); ci != placement.end();) {
         if (ci->second.size() != ci->first->predecessors().size()) {
+            updateDominatingPhisOnDeletion(ci->first);
             ci = placement.erase(ci);
 
         } else {
@@ -100,6 +136,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
             }
 
             if (isBroken) {
+                updateDominatingPhisOnDeletion(ci->first);
                 ci = placement.erase(ci);
                 changed = true;
             } else {
@@ -115,19 +152,18 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
     }
 
     // recompute dominatingPhi
-    dominatingPhi.clear();
-    Visitor::run(cls->entry, [&](BB* cur) {
-        BB* next = cur;
-        while (next != cls->entry) {
+    // dominatingPhi.clear();
+    // Visitor::run(cls->entry, [&](BB* cur) {
+    //     BB* next = cur;
+    //     while (next != cls->entry) {
 
-            if (placement.count(next)) {
-                dominatingPhi[cur] = next;
-                break;
-            }
-            next = dom.immediateDominator(next);
-        }
-    });
-
+    //         if (placement.count(next)) {
+    //             dominatingPhi[cur] = next;
+    //             break;
+    //         }
+    //         next = dom.immediateDominator(next);
+    //     }
+    // });
 }
 
 } // namespace pir
