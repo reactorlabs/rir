@@ -5,6 +5,7 @@
 #include "call_context.h"
 #include "instance.h"
 
+#include "compiler/parameter.h"
 #include "interp_incl.h"
 #include "ir/Deoptimization.h"
 
@@ -46,6 +47,70 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     }
     return nullptr;
 }
+
+inline bool RecompileHeuristic(DispatchTable* table, Function* fun,
+                               unsigned factor = 1) {
+    auto& flags = fun->flags;
+    return (!flags.contains(Function::NotOptimizable) &&
+            (flags.contains(Function::MarkOpt) ||
+             flags.contains(Function::Dead) ||
+             (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
+              ((fun != table->baseline() && fun->invocationCount() >= 2 &&
+                fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
+               (fun->invocationCount() %
+                (factor * (fun->deoptCount() + pir::Parameter::RIR_WARMUP))) ==
+                   0))));
+}
+
+inline bool RecompileCondition(DispatchTable* table, Function* fun,
+                               const Assumptions& context) {
+    return (fun->flags.contains(Function::MarkOpt) ||
+            fun->flags.contains(Function::Dead) || fun == table->baseline() ||
+            context != fun->signature().assumptions ||
+            fun->body()->flags.contains(Code::Reoptimise));
+}
+
+inline bool matches(Assumptions given, const FunctionSignature& signature) {
+    // TODO: look at the arguments of the function signature and not just at the
+    // global assumptions list. This only becomes relevant as soon as we want to
+    // optimize based on argument types.
+
+    // Baseline always matches!
+    if (signature.optimization ==
+        FunctionSignature::OptimizationLevel::Baseline) {
+#ifdef DEBUG_DISPATCH
+        std::cout << "BL\n";
+#endif
+        return true;
+    }
+
+    assert(signature.envCreation ==
+           FunctionSignature::Environment::CalleeCreated);
+
+#ifdef DEBUG_DISPATCH
+    std::cout << "have   " << given << "\n";
+    std::cout << "trying " << signature.assumptions << "\n";
+    std::cout << " -> " << signature.assumptions.subtype(given) << "\n";
+#endif
+    // Check if given assumptions match required assumptions
+    return signature.assumptions.subtype(given);
+}
+
+inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
+    // Find the most specific version of the function that can be called given
+    // the current call context.
+    Function* fun = nullptr;
+    for (int i = vt->size() - 1; i >= 0; i--) {
+        auto candidate = vt->get(i);
+        if (matches(call.givenAssumptions, candidate->signature())) {
+            fun = candidate;
+            break;
+        }
+    }
+    assert(fun);
+
+    return fun;
+};
 
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx);
 SEXP doCall(CallContext& call, InterpreterInstance* ctx);

@@ -72,6 +72,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
     }
 
+    void unregisterInvocation() {
+        if (funInvocationCount > 0)
+            funInvocationCount--;
+    }
+
     void registerInvocation() {
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;

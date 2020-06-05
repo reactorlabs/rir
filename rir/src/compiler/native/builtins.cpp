@@ -378,8 +378,9 @@ NativeBuiltin NativeBuiltins::callBuiltin = {
     (void*)&callBuiltinImpl,
 };
 
-static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                     size_t nargs, unsigned long available) {
+static SEXP callImplCached(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
+                           size_t nargs, unsigned long available,
+                           Immediate cache) {
     auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
                      Assumptions(available), ctx);
@@ -387,8 +388,17 @@ static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
+    if (cache != 0) {
+        auto trg = dispatch(call, DispatchTable::unpack(BODY(callee)));
+        Pool::patch(cache, trg->container());
+    }
     ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
     return res;
+};
+
+static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
+                     size_t nargs, unsigned long available) {
+    return callImplCached(c, ast, callee, env, nargs, available, 0);
 };
 
 NativeBuiltin NativeBuiltins::call = {
@@ -1357,7 +1367,6 @@ NativeBuiltin NativeBuiltins::extract22rr = {
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
                                SEXP env, SEXP callee) {
-    code->registerInvocation();
     if ((SETJMP(cntxt.cjmpbuf))) {
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
@@ -1390,17 +1399,29 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
-static SEXP nativeCallTrampolineImpl(SEXP callee, rir::Function* fun,
+static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
                                      Immediate astP, SEXP env, size_t nargs,
                                      unsigned long available) {
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
+    auto fun = Function::unpack(Pool::get(target));
     auto missing = fun->signature().numArguments - nargs;
     auto fail = missing && fun->signature().assumptions.includes(
                                Assumption::NoExplicitlyMissingArgs);
-    if (fun->flags.contains(Function::Dead) || !fun->body()->nativeCode || fail)
-        return callImpl(fun->body(), astP, callee, env, nargs, available);
+
+    auto dt = DispatchTable::unpack(BODY(callee));
+    fail = fail || !fun->body()->nativeCode;
+
+    fun->registerInvocation();
+    if (fail || RecompileHeuristic(dt, fun, 3)) {
+        if (fail || RecompileCondition(dt, fun, Assumptions(available))) {
+            fun->unregisterInvocation();
+            auto res = callImplCached(fun->body(), astP, callee, env, nargs,
+                                      available, target);
+            return res;
+        }
+    }
 
     auto t = R_BCNodeStackTop;
 

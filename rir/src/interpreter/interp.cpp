@@ -719,33 +719,6 @@ static void addDynamicAssumptionsFromContext(CallContext& call,
     }
 }
 
-static RIR_INLINE bool matches(Assumptions given,
-                               const FunctionSignature& signature) {
-    // TODO: look at the arguments of the function signature and not just at the
-    // global assumptions list. This only becomes relevant as soon as we want to
-    // optimize based on argument types.
-
-    // Baseline always matches!
-    if (signature.optimization ==
-        FunctionSignature::OptimizationLevel::Baseline) {
-#ifdef DEBUG_DISPATCH
-        std::cout << "BL\n";
-#endif
-        return true;
-    }
-
-    assert(signature.envCreation ==
-           FunctionSignature::Environment::CalleeCreated);
-
-#ifdef DEBUG_DISPATCH
-    std::cout << "have   " << given << "\n";
-    std::cout << "trying " << signature.assumptions << "\n";
-    std::cout << " -> " << signature.assumptions.subtype(given) << "\n";
-#endif
-    // Check if given assumptions match required assumptions
-    return signature.assumptions.subtype(given);
-}
-
 // Watch out: this changes call.nargs! To clean up after the call, you need to
 // pop call.nargs number of arguments (which now might be more than the number
 // of actually supplied arguments).
@@ -764,22 +737,6 @@ static RIR_INLINE void supplyMissingArgs(CallContext& call,
         call.passedArgs = signature.expectedNargs();
     }
 }
-
-static Function* dispatch(const CallContext& call, DispatchTable* vt) {
-    // Find the most specific version of the function that can be called given
-    // the current call context.
-    Function* fun = nullptr;
-    for (int i = vt->size() - 1; i >= 0; i--) {
-        auto candidate = vt->get(i);
-        if (matches(call.givenAssumptions, candidate->signature())) {
-            fun = candidate;
-            break;
-        }
-    }
-    assert(fun);
-
-    return fun;
-};
 
 unsigned pir::Parameter::RIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
@@ -811,13 +768,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     fun->registerInvocation();
 
     auto flags = fun->flags;
-    if (!isDeoptimizing() && !flags.contains(Function::NotOptimizable) &&
-        (flags.contains(Function::MarkOpt) ||
-         (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-          ((fun != table->baseline() && fun->invocationCount() >= 2 &&
-            fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-           (fun->invocationCount() %
-            (fun->deoptCount() + pir::Parameter::RIR_WARMUP)) == 0)))) {
+    if (!isDeoptimizing() && RecompileHeuristic(table, fun)) {
         Assumptions given = call.givenAssumptions;
         // addDynamicAssumptionForOneTarget compares arguments with the
         // signature of the current dispatch target. There the number of
@@ -826,9 +777,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         // explicit assumption.
 
         fun->clearDisabledAssumptions(given);
-        if (flags.contains(Function::MarkOpt) || fun == table->baseline() ||
-            given != fun->signature().assumptions ||
-            fun->body()->flags.contains(Code::Reoptimise)) {
+        if (RecompileCondition(table, fun, given)) {
             if (Assumptions(given).includes(
                     pir::Rir2PirCompiler::minimalAssumptions)) {
                 // More assumptions are available than this version uses. Let's
@@ -2718,16 +2667,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                                 !matches(assumptions, fun->signature());
             fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));
-            if (!dispatchFail && !flags.contains(Function::NotOptimizable) &&
-                fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-                ((fun != dt->baseline() && fun->invocationCount() >= 2 &&
-                  fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-                 (fun->invocationCount() %
-                      ((fun->deoptCount() + 1) * pir::Parameter::RIR_WARMUP) ==
-                  0))) {
-                if (assumptions != fun->signature().assumptions)
-                    // We have more assumptions available, let's recompile
-                    dispatchFail = true;
+            if (!isDeoptimizing() && !dispatchFail &&
+                RecompileHeuristic(dt, fun, 3) &&
+                RecompileCondition(dt, fun, assumptions)) {
+                // We have more assumptions available, let's recompile
+                dispatchFail = true;
             }
 
             if (dispatchFail) {

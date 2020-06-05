@@ -38,7 +38,6 @@ class Pool {
     }
 
     static void patch(BC::PoolIdx idx, SEXP e) {
-        assert(get(idx) == R_NilValue || get(idx) == e);
         SET_NAMED(e, 2);
         cp_pool_set(globalContext(), idx, e);
         if (!contents.count(e))
