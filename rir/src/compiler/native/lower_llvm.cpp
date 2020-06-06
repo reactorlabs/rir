@@ -1297,22 +1297,14 @@ llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
         return box(val, toType, protect);
 
     if (from == t::Int && to == t::Double) {
-        // return builder.CreateSelect(builder.CreateICmpEQ(val, c(NA_INTEGER)),
-        //                             c(NA_REAL),
-        //                             builder.CreateSIToFP(val, t::Double));
-
-        return createSelect2(
-            builder.CreateICmpEQ(val, c(NA_INTEGER)),
-            [&]() { return c(NA_REAL); },
-            [&]() { return builder.CreateSIToFP(val, t::Double); });
+        return builder.CreateSelect(builder.CreateICmpEQ(val, c(NA_INTEGER)),
+                                    c(NA_REAL),
+                                    builder.CreateSIToFP(val, t::Double));
     }
     if (from == t::Double && to == t::Int) {
-        // return builder.CreateSelect(builder.CreateFCmpUNE(val, val),
-        //                             c(NA_INTEGER),
-        //                             builder.CreateFPToSI(val, t::Int));
-        return createSelect2(
-            builder.CreateFCmpUNE(val, val), [&]() { return c(NA_INTEGER); },
-            [&]() { return builder.CreateFPToSI(val, t::Int); });
+        return builder.CreateSelect(builder.CreateFCmpUNE(val, val),
+                                    c(NA_INTEGER),
+                                    builder.CreateFPToSI(val, t::Int));
     }
 
     std::cout << "\nFailed to convert a " << val->getType() << " to " << toType
@@ -1794,9 +1786,9 @@ llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v, bool protect) {
 }
 llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v, bool protect) {
     assert(v->getType() == t::Int);
-    return createSelect2(builder.CreateICmpNE(v, c(0)),
-                         [&]() { return constant(R_TrueValue, t::SEXP); },
-                         [&]() { return constant(R_FalseValue, t::SEXP); });
+    return builder.CreateSelect(builder.CreateICmpNE(v, c(0)),
+                                constant(R_TrueValue, t::SEXP),
+                                constant(R_FalseValue, t::SEXP));
 }
 
 void LowerFunctionLLVM::protectTemp(llvm::Value* val) {
@@ -2233,99 +2225,66 @@ bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
     return false;
 };
 
-// llvm::Value* LowerFunctionLLVM::createSelect2(
-//     llvm::Value* cond, std::function<llvm::Value*()> trueValueAction,
-//     std::function<llvm::Value*()> falseValueAction) {
-
-//     auto trueBranch = BasicBlock::Create(C, "", fun);
-//     auto falseBranch = BasicBlock::Create(C, "", fun);
-//     auto next = BasicBlock::Create(C, "", fun);
-
-//     auto intialInsertionPoint = builder.GetInsertBlock();
-
-//     builder.SetInsertPoint(trueBranch);
-//     auto trueValue = trueValueAction();
-//     auto trueBranchIsEmpty = trueBranch->empty();
-//     PhiBuilder res(builder, trueValue->getType()); // review ****************
-//     res.addInput(trueValue);
-//     builder.CreateBr(next);
-
-//     builder.SetInsertPoint(falseBranch);
-//     auto falseValue = falseValueAction();
-//     auto falseBranchIsEmpty = falseBranch->empty();
-//     res.addInput(falseValue);
-//     builder.CreateBr(next);
-
-//     builder.SetInsertPoint(intialInsertionPoint);
-
-//     if (trueBranchIsEmpty && falseBranchIsEmpty) {
-//         //delete trueBranch;
-//         //delete falseBranch;
-//         //delete next;
-//         return builder.CreateSelect(cond, trueValue, falseValue);
-//     }
-
-//     builder.CreateCondBr(cond, trueBranch, falseBranch);
-//     builder.SetInsertPoint(next);
-//     auto r = res();
-
-//     // isarray
-
-//     return r;
-// };
-
 llvm::Value* LowerFunctionLLVM::createSelect2(
     llvm::Value* cond, std::function<llvm::Value*()> trueValueAction,
     std::function<llvm::Value*()> falseValueAction) {
 
-    // auto xx = BasicBlock::Create(C, "");
-    // delete xx;
-
-    auto trueBranch = BasicBlock::Create(C, "", fun);
-    auto falseBranch = BasicBlock::Create(C, "", fun);
-
     auto intialInsertionPoint = builder.GetInsertBlock();
 
+    auto trueBranch = BasicBlock::Create(C, "", fun);
+    auto truePred = intialInsertionPoint;
     builder.SetInsertPoint(trueBranch);
     auto trueValue = trueValueAction();
     auto trueBranchIsEmpty = trueBranch->empty();
-    auto truePred = builder.GetInsertBlock();
+    if (trueBranchIsEmpty) {
+        trueBranch->removeFromParent();
+        delete trueBranch;
+    } else {
+        truePred = builder.GetInsertBlock();
+    }
 
+    auto falseBranch = BasicBlock::Create(C, "", fun);
+    auto falsePred = intialInsertionPoint;
     builder.SetInsertPoint(falseBranch);
     auto falseValue = falseValueAction();
     auto falseBranchIsEmpty = falseBranch->empty();
-    auto falsePred = builder.GetInsertBlock();
+    if (falseBranchIsEmpty) {
+        falseBranch->removeFromParent();
+        delete falseBranch;
+    } else {
+        falsePred = builder.GetInsertBlock();
+    }
 
     if (trueBranchIsEmpty && falseBranchIsEmpty) {
-        trueBranch->removeFromParent();
-        falseBranch->removeFromParent();
-
-        delete trueBranch;
-        delete falseBranch;
-
         builder.SetInsertPoint(intialInsertionPoint);
         return builder.CreateSelect(cond, trueValue, falseValue);
     }
 
     auto next = BasicBlock::Create(C, "", fun);
 
-    PhiBuilder res(builder, trueValue->getType()); // review    ****************
+    PhiBuilder res(builder, trueValue->getType());
 
+    auto trueBranchForCond = trueBranch;
     builder.SetInsertPoint(truePred);
-    builder.CreateBr(next);
+    if (!trueBranchIsEmpty)
+        builder.CreateBr(next);
+    else
+        trueBranchForCond = next;
     res.addInput(trueValue);
 
+    auto falseBranchForCond = falseBranch;
     builder.SetInsertPoint(falsePred);
-    builder.CreateBr(next);
+    if (!falseBranchIsEmpty)
+        builder.CreateBr(next);
+    else
+        falseBranchForCond = next;
     res.addInput(falseValue);
 
     builder.SetInsertPoint(intialInsertionPoint);
-    builder.CreateCondBr(cond, trueBranch, falseBranch);
+    builder.CreateCondBr(cond, trueBranchForCond, falseBranchForCond);
 
     builder.SetInsertPoint(next);
     auto r = res();
-
-    // isarray
 
     return r;
 };
@@ -2759,22 +2718,11 @@ bool LowerFunctionLLVM::tryCompile() {
 
                     auto doTypetest = [&](int type) {
                         if (irep == t::SEXP) {
-                            // setVal(i, builder.CreateSelect(
-                            //               builder.CreateICmpEQ(sexptype(a),
-                            //                                    c(type)),
-                            //               constant(R_TrueValue, orep),
-                            //               constant(R_FalseValue, orep)));
-
-                            setVal(
-                                i,
-                                createSelect2(
-                                    builder.CreateICmpEQ(sexptype(a), c(type)),
-                                    [&]() {
-                                        return constant(R_TrueValue, orep);
-                                    },
-                                    [&]() {
-                                        return constant(R_FalseValue, orep);
-                                    }));
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateICmpEQ(sexptype(a),
+                                                               c(type)),
+                                          constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
 
                         } else {
                             setVal(i, constant(R_FalseValue, orep));
@@ -2787,32 +2735,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
                             llvm::Value* r = call(NativeBuiltins::length, {a});
                             if (orep == t::SEXP) {
-                                // r = builder.CreateSelect(
-                                //     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
-                                //     boxReal(builder.CreateUIToFP(r,
-                                //     t::Double)),
-                                //     boxInt(builder.CreateTrunc(r, t::Int)));
-
-                                // auto needsDouble =
-                                //     builder.CreateICmpUGT(r, c(INT_MAX, 64));
-                                // auto dbl = BasicBlock::Create(C, "", fun);
-                                // auto iint = BasicBlock::Create(C, "", fun);
-                                // auto next = BasicBlock::Create(C, "", fun);
-                                // builder.CreateCondBr(needsDouble, dbl, iint);
-                                // PhiBuilder res(builder, t::SEXP);
-
-                                // builder.SetInsertPoint(dbl);
-                                // res.addInput(boxReal(
-                                //     builder.CreateUIToFP(r, t::Double)));
-                                // builder.CreateBr(next);
-
-                                // builder.SetInsertPoint(iint);
-                                // res.addInput(
-                                //     boxInt(builder.CreateTrunc(r, t::Int)));
-                                // builder.CreateBr(next);
-
-                                // builder.SetInsertPoint(next);
-                                // r = res();
 
                                 r = createSelect2(
                                     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
@@ -2877,28 +2799,17 @@ bool LowerFunctionLLVM::tryCompile() {
                     case blt("abs"): {
                         if (irep == Representation::Integer) {
                             assert(orep == irep);
-                            // setVal(i, builder.CreateSelect(
-                            //               builder.CreateICmpSGE(a, c(0)), a,
-                            //               builder.CreateNeg(a)));
-                            setVal(i,
-                                   createSelect2(
-                                       builder.CreateICmpSGE(a, c(0)),
-                                       [&]() { return a; },
-                                       [&]() { return builder.CreateNeg(a); }));
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateICmpSGE(a, c(0)), a,
+                                          builder.CreateNeg(a)));
 
                         } else if (irep == Representation::Real) {
                             assert(orep == irep);
-                            // review ********************
-                            // setVal(i, builder.CreateSelect(
-                            //               builder.CreateFCmpOGE(a, c(0.0)),
-                            //               a, builder.CreateFNeg(a)));
 
-                            setVal(i, createSelect2(
-                                          builder.CreateFCmpOGE(a, c(0.0)),
-                                          [&]() { return a; },
-                                          [&]() {
-                                              return builder.CreateFNeg(a);
-                                          }));
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpOGE(a, c(0.0)), a,
+                                          builder.CreateFNeg(a)));
+
                         } else {
                             done = false;
                         }
@@ -2947,68 +2858,26 @@ bool LowerFunctionLLVM::tryCompile() {
                     case blt("as.logical"):
                         if (irep == Representation::Integer &&
                             orep == Representation::Integer) {
-                            // setVal(i,
-                            //        builder.CreateSelect(
-                            //            builder.CreateICmpEQ(a,
-                            //            c(NA_INTEGER)),
-                            //            constant(R_LogicalNAValue, orep),
-                            //            builder.CreateSelect(
-                            //                builder.CreateICmpEQ(a, c(0)),
-                            //                constant(R_FalseValue, orep),
-                            //                constant(R_TrueValue, orep))));
-
                             setVal(i,
-                                   createSelect2(
+                                   builder.CreateSelect(
                                        builder.CreateICmpEQ(a, c(NA_INTEGER)),
-                                       [&]() {
-                                           return constant(R_LogicalNAValue,
-                                                           orep);
-                                       },
-                                       [&]() {
-                                           return createSelect2(
-                                               builder.CreateICmpEQ(a, c(0)),
-                                               [&]() {
-                                                   return constant(R_FalseValue,
-                                                                   orep);
-                                               },
-                                               [&]() {
-                                                   return constant(R_TrueValue,
-                                                                   orep);
-                                               });
-                                       }));
+                                       constant(R_LogicalNAValue, orep),
+                                       builder.CreateSelect(
+                                           builder.CreateICmpEQ(a, c(0)),
+                                           constant(R_FalseValue, orep),
+                                           constant(R_TrueValue, orep))));
 
                         } else if (irep == Representation::Real &&
                                    (orep == Representation::Integer ||
                                     orep == Representation::Real)) {
 
-                            // setVal(i, builder.CreateSelect(
-                            //               builder.CreateFCmpUNE(a, a),
-                            //               constant(R_LogicalNAValue, orep),
-                            //               builder.CreateSelect(
-                            //                   builder.CreateFCmpOEQ(a,
-                            //                   c(0.0)), constant(R_FalseValue,
-                            //                   orep), constant(R_TrueValue,
-                            //                   orep))));
-                            // review
-                            setVal(i,
-                                   createSelect2(
-                                       builder.CreateFCmpUNE(a, a),
-                                       [&]() {
-                                           return constant(R_LogicalNAValue,
-                                                           orep);
-                                       },
-                                       [&]() {
-                                           return createSelect2(
-                                               builder.CreateFCmpOEQ(a, c(0.0)),
-                                               [&]() {
-                                                   return constant(R_FalseValue,
-                                                                   orep);
-                                               },
-                                               [&]() {
-                                                   return constant(R_TrueValue,
-                                                                   orep);
-                                               });
-                                       }));
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpUNE(a, a),
+                                          constant(R_LogicalNAValue, orep),
+                                          builder.CreateSelect(
+                                              builder.CreateFCmpOEQ(a, c(0.0)),
+                                              constant(R_FalseValue, orep),
+                                              constant(R_TrueValue, orep))));
 
                         } else {
                             done = false;
@@ -3020,25 +2889,13 @@ bool LowerFunctionLLVM::tryCompile() {
                             setVal(i, a);
                         } else if (irep == Representation::Real &&
                                    orep == Representation::Integer) {
-                            // setVal(i, builder.CreateSelect(
-                            //               builder.CreateFCmpUNE(a, a),
-                            //               c(NA_INTEGER),
-                            //               builder.CreateFPToSI(a, t::Int)));
-                            setVal(i, createSelect2(
+                            setVal(i, builder.CreateSelect(
                                           builder.CreateFCmpUNE(a, a),
-                                          [&]() { return c(NA_INTEGER); },
-                                          [&]() {
-                                              return builder.CreateFPToSI(
-                                                  a, t::Int);
-                                          }));
+                                          c(NA_INTEGER),
+                                          builder.CreateFPToSI(a, t::Int)));
 
                         } else if (irep == Representation::Real &&
                                    orep == Representation::Real) {
-                            // setVal(i, builder.CreateSelect(
-                            //               builder.CreateFCmpUNE(a, a), a,
-                            //               builder.CreateIntrinsic(
-                            //                   Intrinsic::floor,
-                            //                   {a->getType()}, {a})));
 
                             setVal(i, createSelect2(
                                           builder.CreateFCmpUNE(a, a),
@@ -3054,12 +2911,6 @@ bool LowerFunctionLLVM::tryCompile() {
                                 builder.CreateICmpEQ(
                                     attr(a), constant(R_NilValue, t::SEXP)),
                                 builder.CreateICmpEQ(sexptype(a), c(INTSXP)));
-                            // review *******************
-
-                            // setVal(i, builder.CreateSelect(isSimpleInt,
-                            //                                convert(a,
-                            //                                i->type),
-                            //                                callTheBuiltin()));
 
                             setVal(i, createSelect2(
                                           isSimpleInt,
@@ -3102,15 +2953,9 @@ bool LowerFunctionLLVM::tryCompile() {
                                 builder.CreateOr(
                                     builder.CreateICmpEQ(t, c(BUILTINSXP)),
                                     builder.CreateICmpEQ(t, c(SPECIALSXP))));
-                            setVal(i, createSelect2(is,
-                                                    [&]() {
-                                                        return constant(
-                                                            R_TrueValue, orep);
-                                                    },
-                                                    [&]() {
-                                                        return constant(
-                                                            R_FalseValue, orep);
-                                                    }));
+                            setVal(i, builder.CreateSelect(
+                                          is, constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
 
                         } else {
                             setVal(i, constant(R_FalseValue, orep));
@@ -3121,54 +2966,34 @@ bool LowerFunctionLLVM::tryCompile() {
                     case blt("is.na"):
                         if (irep == Representation::Integer) {
                             setVal(i,
-                                   createSelect2(
+                                   builder.CreateSelect(
                                        builder.CreateICmpEQ(a, c(NA_INTEGER)),
-                                       [&]() {
-                                           return constant(R_TrueValue, orep);
-                                       },
-                                       [&]() {
-                                           return constant(R_FalseValue, orep);
-                                       }));
+                                       constant(R_TrueValue, orep),
+                                       constant(R_FalseValue, orep)));
                         } else if (irep == Representation::Real) {
-                            setVal(i, createSelect2(builder.CreateFCmpUNE(a, a),
-                                                    [&]() {
-                                                        return constant(
-                                                            R_TrueValue, orep);
-                                                    },
-                                                    [&]() {
-                                                        return constant(
-                                                            R_FalseValue, orep);
-                                                    }));
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpUNE(a, a),
+                                          constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
                         } else {
                             done = false;
                         }
                         break;
                     case blt("is.object"):
                         if (irep == Representation::Sexp) {
-                            setVal(i, createSelect2(isObj(a),
-                                                    [&]() {
-                                                        return constant(
-                                                            R_TrueValue, orep);
-                                                    },
-                                                    [&]() {
-                                                        return constant(
-                                                            R_FalseValue, orep);
-                                                    }));
+                            setVal(i, builder.CreateSelect(
+                                          isObj(a), constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
                         } else {
                             setVal(i, constant(R_FalseValue, orep));
                         }
                         break;
                     case blt("is.array"):
                         if (irep == Representation::Sexp) {
-                            setVal(i, createSelect2(isArray(a),
-                                                    [&]() {
-                                                        return constant(
-                                                            R_TrueValue, orep);
-                                                    },
-                                                    [&]() {
-                                                        return constant(
-                                                            R_FalseValue, orep);
-                                                    }));
+                            setVal(i,
+                                   builder.CreateSelect(
+                                       isArray(a), constant(R_TrueValue, orep),
+                                       constant(R_FalseValue, orep)));
                         } else {
                             setVal(i, constant(R_FalseValue, orep));
                         }
@@ -3196,15 +3021,10 @@ bool LowerFunctionLLVM::tryCompile() {
                                                         builder.CreateICmpEQ(
                                                             t,
                                                             c(RAWSXP)))))))));
-                            setVal(i, createSelect2(isatomic,
-                                                    [&]() {
-                                                        return constant(
-                                                            R_TrueValue, orep);
-                                                    },
-                                                    [&]() {
-                                                        return constant(
-                                                            R_FalseValue, orep);
-                                                    }));
+                            setVal(i, builder.CreateSelect(
+                                          isatomic, constant(R_TrueValue, orep),
+
+                                          constant(R_FalseValue, orep)));
                         } else {
                             setVal(i, constant(R_TrueValue, orep));
                         }
@@ -3326,17 +3146,12 @@ bool LowerFunctionLLVM::tryCompile() {
                                 auto kind = STRING_ELT(cnst->c(), 0);
                                 if (std::string("any") == CHAR(kind)) {
                                     if (arep == Representation::Sexp) {
-                                        setVal(i,
-                                               createSelect2(
-                                                   isVector(aval),
-                                                   [&]() {
-                                                       return constant(
-                                                           R_TrueValue, orep);
-                                                   },
-                                                   [&]() {
-                                                       return constant(
-                                                           R_FalseValue, orep);
-                                                   }));
+                                        setVal(
+                                            i,
+                                            builder.CreateSelect(
+                                                isVector(aval),
+                                                constant(R_TrueValue, orep),
+                                                constant(R_FalseValue, orep)));
                                     } else {
                                         setVal(i, constant(R_TrueValue, orep));
                                     }
@@ -3503,11 +3318,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                     if (nativeTarget) {
                         llvm::Value* trg = JitLLVM::get(target);
-                        auto nativeCode = nativeTarget->body()->nativeCode;
-                        if (!trg && nativeCode) {
-                            trg = builder.CreateIntToPtr(c((void*)nativeCode),
-                                                         t::nativeFunctionPtr);
-                        }
                         if (trg &&
                             target->properties.includes(
                                 ClosureVersion::Property::NoReflection)) {
@@ -3525,12 +3335,13 @@ bool LowerFunctionLLVM::tryCompile() {
 
                         assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));
+                        auto idx = Pool::makeSpace();
+                        Pool::patch(idx, nativeTarget->container());
                         auto res = withCallFrame(args, [&]() {
                             return call(NativeBuiltins::nativeCallTrampoline,
                                         {
                                             constant(callee, t::SEXP),
-                                            builder.CreateIntToPtr(
-                                                c(nativeTarget), t::voidPtr),
+                                            c(idx),
                                             c(calli->srcIdx),
                                             loadSxp(calli->env()),
                                             c(args.size()),
@@ -4445,15 +4256,6 @@ bool LowerFunctionLLVM::tryCompile() {
                         envStubGet(e, env->indexOf(varName), env->nLocals());
                     if (env->argNamed(varName).val() ==
                         UnboundValue::instance()) {
-                        // review ***************************
-                        // res = builder.CreateSelect(
-                        //     builder.CreateICmpEQ(
-                        //         res, constant(R_UnboundValue, t::SEXP)),
-                        //     // if unsassigned in the stub, fall through
-                        //     call(NativeBuiltins::ldvar,
-                        //          {constant(varName, t::SEXP),
-                        //           envStubGet(e, -1, env->nLocals())}),
-                        //     res);
 
                         res = createSelect2(
                             builder.CreateICmpEQ(

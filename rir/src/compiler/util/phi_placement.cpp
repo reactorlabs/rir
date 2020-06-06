@@ -76,17 +76,10 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
 
                 if (phis.includes(next)) {
                     placement[next].insert(input);
-
-                    // dominatingPhi[next] = next;
-
                 } else {
                     pendingInput[next] = input;
-
-                    // if  (input.otherPhi)
-                    //     dominatingPhi[next] = input.otherPhi;
                 }
-                    
-                
+                                
             };
 
             for (auto suc : cur->successors())
@@ -150,20 +143,6 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         changed = false;
         cleanupRemoveBrokenPhis();
     }
-
-    // recompute dominatingPhi
-    // dominatingPhi.clear();
-    // Visitor::run(cls->entry, [&](BB* cur) {
-    //     BB* next = cur;
-    //     while (next != cls->entry) {
-
-    //         if (placement.count(next)) {
-    //             dominatingPhi[cur] = next;
-    //             break;
-    //         }
-    //         next = dom.immediateDominator(next);
-    //     }
-    // });
 }
 
 } // namespace pir
