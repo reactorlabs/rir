@@ -115,8 +115,8 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         // Branch Elimination
         //
         // Given branch `a` and `b`, where both have the same
-        // condition and `a` dominates `b`, we can replace the condition of `b`
-        // by
+        // condition and `a` dominates `b`, we can replace the condition of
+        // `b` by
         //
         //     c' = Phi([TRUE, a->trueBranch()], [FALSE, a->falseBranch()])
         //     b  = Branch(c')
@@ -148,8 +148,11 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
             if (uses.size() > 1) {
 
                 for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
+
                     if (removed.count(*a))
                         continue;
+
+                    PhiPlacement* pl = nullptr;
                     auto phisPlaced = false;
                     std::unordered_map<BB*, Phi*> newPhisByBB;
                     newPhisByBB.clear();
@@ -175,62 +178,62 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                         True::instance();
                                     inputs[bb1->falseBranch()] =
                                         False::instance();
-                                    auto pl = PhiPlacement(function, inputs,
-                                                           dom, dfront);
-                                    if (pl.placement.size() > 0) {
-                                        anyChange = true;
+                                    pl = new PhiPlacement(function, inputs, dom,
+                                                          dfront);
 
-                                        for (auto& placement : pl.placement) {
-                                            auto targetForPhi = placement.first;
-                                            newPhisByBB[targetForPhi] = new Phi;
-                                        }
+                                    assert(pl->placement.size() > 0);
 
-                                        for (auto& placement : pl.placement) {
-                                            auto targetForPhi = placement.first;
-                                            auto phi =
-                                                newPhisByBB[targetForPhi];
+                                    anyChange = true;
 
-                                            for (auto& input :
-                                                 placement.second) {
-
-                                                if (input.aValue)
-                                                    phi->addInput(
-                                                        input.inputBlock,
-                                                        input.aValue);
-                                                else {
-
-                                                    phi->addInput(
-                                                        input.inputBlock,
-                                                        newPhisByBB.at(
-                                                            input.otherPhi));
-                                                }
-                                            }
-                                            phi->type = NativeType::test;
-                                            targetForPhi->insert(
-                                                targetForPhi->begin(), phi);
-                                        }
-                                        phisPlaced = true;
+                                    for (auto& placement : pl->placement) {
+                                        auto targetForPhi = placement.first;
+                                        newPhisByBB[targetForPhi] = new Phi;
                                     }
+
+                                    for (auto& placement : pl->placement) {
+                                        auto targetForPhi = placement.first;
+                                        auto phi = newPhisByBB[targetForPhi];
+
+                                        for (auto& input : placement.second) {
+
+                                            if (input.aValue)
+                                                phi->addInput(input.inputBlock,
+                                                              input.aValue);
+                                            else {
+
+                                                phi->addInput(
+                                                    input.inputBlock,
+                                                    newPhisByBB.at(
+                                                        input.otherPhi));
+                                            }
+                                        }
+                                        phi->type = NativeType::test;
+                                        targetForPhi->insert(
+                                            targetForPhi->begin(), phi);
+                                    }
+                                    phisPlaced = true;
                                 }
 
                                 if (phisPlaced) {
+                                    assert(pl->dominatingPhi.count(bb2) > 0);
+                                    auto phi = newPhisByBB.at(
+                                        pl->dominatingPhi.at(bb2));
 
-                                    for (auto p : newPhisByBB) {
-                                        auto phi = p.second;
-                                        if (dom.dominates(phi->bb(), bb2)) {
-                                            (*b)->arg(0).val() = phi;
-                                            break;
-                                        }
-                                    }
+                                    (*b)->arg(0).val() = phi;
                                 }
                             }
                         }
                         removed.insert(*b);
                     }
+
+                    if (pl != nullptr) {
+                        delete pl;
+                        pl = nullptr;
+                    }
                 }
             }
         }
-     }
+    }
 
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
