@@ -5,11 +5,6 @@
 
 #include "utils/Set.h"
 
-#include <sstream>
-#include <string>
-
-#include <list>
-
 namespace rir {
 namespace pir {
 
@@ -39,14 +34,14 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         }
     }
 
-    std::unordered_map<BB*, std::list<BB*>> dominatedByPhi;
-
     {
         std::unordered_map<BB*, PhiInput> pendingInput;
         DominatorTreeVisitor<>(dom).run(cls->entry, [&](BB* cur) {
             PhiInput input = {nullptr, nullptr, nullptr};
             if (pendingInput.count(cur)) {
                 input = pendingInput.at(cur);
+                if (!phis.includes(cur))
+                    dominatingPhi[cur] = pendingInput.at(cur).otherPhi;
             }
 
             if (phis.includes(cur)) {
@@ -60,14 +55,6 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
             }
             input.inputBlock = cur;
 
-            if (!phis.includes(cur)) {
-                if (input.otherPhi)
-                    dominatingPhi[cur] = input.otherPhi;
-
-            } else {
-                dominatingPhi[cur] = cur;
-            }
-
             auto apply = [&](BB* next) {
                 if (!next)
                     return;
@@ -76,10 +63,8 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
 
                 if (phis.includes(next)) {
                     placement[next].insert(input);
-                } else {
+                } else
                     pendingInput[next] = input;
-                }
-                                
             };
 
             for (auto suc : cur->successors())
@@ -87,61 +72,57 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
         });
     }
 
-    bool changed;
-
-    for (auto it = dominatingPhi.begin(); it != dominatingPhi.end(); it++) {
-        auto& l = dominatedByPhi[it->second];
-        l.push_back(it->first);
-    }
-
-    auto updateDominatingPhisOnDeletion = [&](BB* deletedPhiNode) {
-        auto& l = dominatedByPhi[deletedPhiNode];
-        for (auto it = l.begin(); it != l.end(); it++) {
-            dominatingPhi.erase(*it);
-        }
-
-        dominatedByPhi.erase(deletedPhiNode);
-    };
-
-    // Remove ill formed phis
-    for (auto ci = placement.begin(); ci != placement.end();) {
-        if (ci->second.size() != ci->first->predecessors().size()) {
-            updateDominatingPhisOnDeletion(ci->first);
-            ci = placement.erase(ci);
-
-        } else {
-            ci++;
-        }
-    }
-
-    // Remove Broken phis (a broken phi is a phi which has an input pointing to
-    // a phi that no longer exists)
-    auto cleanupRemoveBrokenPhis = [&]() {
+    // Cleanup the resulting phi graph
+    bool changed = true;
+    auto cleanup = [&]() {
         for (auto ci = placement.begin(); ci != placement.end();) {
+            // Remove dead inputs
             auto& inputs = ci->second;
-
-            auto isBroken = false;
-            for (auto ii = inputs.begin(); ii != inputs.end(); ii++) {
+            for (auto ii = inputs.begin(); ii != inputs.end();) {
                 if (ii->otherPhi && !placement.count(ii->otherPhi)) {
-                    isBroken = true;
-                    break;
+                    ii = inputs.erase(ii);
+                    changed = true;
+                } else {
+                    ii++;
                 }
             }
-
-            if (isBroken) {
-                updateDominatingPhisOnDeletion(ci->first);
+            if (ci->second.size() == 0) {
                 ci = placement.erase(ci);
-                changed = true;
+            } else if (ci->second.size() == 1) {
+                // Remove single input phis
+                auto input1 = *ci->second.begin();
+                if (input1.otherPhi != ci->first) {
+                    dominatingPhi[ci->first] = input1.otherPhi;
+                    // update all other phis which have us as input
+                    for (auto& c : placement) {
+                        for (auto& in : c.second) {
+                            if (in.otherPhi == ci->first) {
+                                in.otherPhi = input1.otherPhi;
+                                in.aValue = input1.aValue;
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+                ci = placement.erase(ci);
             } else {
                 ci++;
             }
         }
     };
-
-    changed = true;
     while (changed) {
         changed = false;
-        cleanupRemoveBrokenPhis();
+        cleanup();
+    }
+
+    // Fail if not all phis are well formed
+    for (auto& i : placement) {
+        if (i.second.size() != i.first->predecessors().size()) {
+            // TODO figure out why this happens
+            placement.clear();
+            dominatingPhi.clear();
+            break;
+        }
     }
 }
 
