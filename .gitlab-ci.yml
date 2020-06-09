@@ -177,7 +177,7 @@ test_features_2:
     - PIR_NATIVE_BACKEND=1 ./bin/gnur-make-tests check
 
 # Run ubsan and gc torture
-test_sanitize:
+test_sanitize1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -187,8 +187,33 @@ test_sanitize:
   script:
     - cd /opt/rir/build/sanitize
     - ENABLE_VALGRIND=1 ./bin/tests
+  
+# Run ubsan and gc torture
+test_sanitize2:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+  stage: Run tests
+  except:
+    - schedules
+  script:
+    - cd /opt/rir/build/sanitize
     - R_GCTORTURE=500 bin/tests
+
+# Run ubsan and gc torture
+test_sanitize3:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+  stage: Run tests
+  except:
+    - schedules
+  script:
+    - cd /opt/rir/build/sanitize
     - R_GCTORTURE=20000 ./bin/gnur-make-tests check
+
+
+
 
 # Test with inlining big functions
 test_big_inline:
