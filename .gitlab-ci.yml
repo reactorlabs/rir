@@ -187,21 +187,11 @@ test_sanitize1:
   script:
     - cd /opt/rir/build/sanitize
     - ENABLE_VALGRIND=1 ./bin/tests
-  
-# Run ubsan and gc torture
-test_sanitize2:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-  stage: Run tests
-  except:
-    - schedules
-  script:
-    - cd /opt/rir/build/sanitize
     - R_GCTORTURE=500 bin/tests
+  
 
 # Run ubsan and gc torture
-test_sanitize3:
+test_sanitize2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
