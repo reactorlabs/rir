@@ -182,7 +182,6 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                                           dfront);
 
                                     assert(pl->placement.size() > 0);
-
                                     anyChange = true;
 
                                     for (auto& placement : pl->placement) {
