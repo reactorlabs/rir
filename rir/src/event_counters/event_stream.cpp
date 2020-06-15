@@ -37,39 +37,98 @@ EventStream::Deoptimized::Deoptimized(const Function* baselineFunction,
     : baselineFunctionUid(baselineFunction->body()->uid),
       deoptReason(deoptReason) {}
 
-void EventStream::UserEvent::print(std::ostream& out) {
+void EventStream::UserEvent::print(
+    std::ostream& out, const std::vector<Event*>::const_iterator& rest,
+    const std::vector<Event*>::const_iterator& end) {
     out << message << std::endl;
 }
 
-void EventStream::StartedPirCompiling::print(std::ostream& out) {
-    out << "started PIR-compiling "
-        << EventStream::instance().getNameOf(rirFunctionUid)
-        << " with assumptions " << assumptions << std::endl;
+bool EventStream::UserEvent::thisPrintsItself() { return true; }
+
+bool EventStream::UserEvent::isEndOfCompiling(const UUID& rirFunctionId) {
+    return false;
 }
 
-void EventStream::ReusedPirCompiled::print(std::ostream& out) {
-    out << "avoided PIR-compiling "
-        << EventStream::instance().getNameOf(rirFunctionUid)
-        << " because we could reuse an existing version (spent "
-        << durationMicros << "µs figuring this out)" << std::endl;
+void EventStream::StartedPirCompiling::print(
+    std::ostream& out, const std::vector<Event*>::const_iterator& rest,
+    const std::vector<Event*>::const_iterator& end) {
+    // Print this event itself
+    out << EventStream::instance().getNameOf(rirFunctionUid) << " compile ("
+        << assumptions << ") => ";
+
+    // Find and print the end-compiling event
+    for (std::vector<Event*>::const_iterator it = rest; it != end; it++) {
+        Event* event = *it;
+        if (event->isEndOfCompiling(rirFunctionUid)) {
+            // This is the end-compiling event, print it (it prints the trailing
+            // newline)
+            event->print(out, it, end);
+            return;
+        }
+    }
+
+    // There is no end-compiling event (not expected behavior)
+    out << "... unfinished" << std::endl;
 }
 
-void EventStream::SucceededPirCompiling::print(std::ostream& out) {
-    out << "succeeded PIR-compiling "
-        << EventStream::instance().getNameOf(rirFunctionUid) << " in "
-        << durationMicros << "µs" << std::endl;
+bool EventStream::StartedPirCompiling::thisPrintsItself() { return true; }
+
+bool EventStream::StartedPirCompiling::isEndOfCompiling(
+    const UUID& rirFunctionId) {
+    return false;
 }
 
-void EventStream::FailedPirCompiling::print(std::ostream& out) {
-    out << "failed PIR-compiling "
-        << EventStream::instance().getNameOf(rirFunctionUid) << " wasting "
-        << durationMicros << "µs because " << explanation << std::endl;
+void EventStream::ReusedPirCompiled::print(
+    std::ostream& out, const std::vector<Event*>::const_iterator& rest,
+    const std::vector<Event*>::const_iterator& end) {
+    out << "avoided and reused [" << durationMicros << "µs]" << std::endl;
 }
 
-void EventStream::Deoptimized::print(std::ostream& out) {
-    out << "deoptimized "
-        << EventStream::instance().getNameOf(baselineFunctionUid) << " because "
-        << getDeoptReasonExplanation(deoptReason) << std::endl;
+bool EventStream::ReusedPirCompiled::thisPrintsItself() { return false; }
+
+bool EventStream::ReusedPirCompiled::isEndOfCompiling(
+    const UUID& rirFunctionId) {
+    return true;
+}
+
+void EventStream::SucceededPirCompiling::print(
+    std::ostream& out, const std::vector<Event*>::const_iterator& rest,
+    const std::vector<Event*>::const_iterator& end) {
+    out << "succeeded [" << durationMicros << "µs]" << std::endl;
+}
+
+bool EventStream::SucceededPirCompiling::thisPrintsItself() { return false; }
+
+bool EventStream::SucceededPirCompiling::isEndOfCompiling(
+    const UUID& rirFunctionId) {
+    return true;
+}
+
+void EventStream::FailedPirCompiling::print(
+    std::ostream& out, const std::vector<Event*>::const_iterator& rest,
+    const std::vector<Event*>::const_iterator& end) {
+    out << "failed (" << explanation << ") [" << durationMicros << "µs]"
+        << std::endl;
+}
+
+bool EventStream::FailedPirCompiling::thisPrintsItself() { return false; }
+
+bool EventStream::FailedPirCompiling::isEndOfCompiling(
+    const UUID& rirFunctionId) {
+    return true;
+}
+
+void EventStream::Deoptimized::print(
+    std::ostream& out, const std::vector<Event*>::const_iterator& rest,
+    const std::vector<Event*>::const_iterator& end) {
+    out << EventStream::instance().getNameOf(baselineFunctionUid) << " deopt ("
+        << getDeoptReasonExplanation(deoptReason) << ")" << std::endl;
+}
+
+bool EventStream::Deoptimized::thisPrintsItself() { return true; }
+
+bool EventStream::Deoptimized::isEndOfCompiling(const UUID& rirFunctionId) {
+    return false;
 }
 
 std::string EventStream::getNameOf(const UUID& functionUid) {
@@ -93,10 +152,16 @@ void EventStream::reset() {
 }
 
 void EventStream::print(std::ostream& out) {
-    for (Event* event : events) {
-        event->print(out);
+    std::vector<Event*>::const_iterator end = events.end();
+    for (std::vector<Event*>::const_iterator it = events.begin(); it != end;
+         it++) {
+        Event* event = *it;
+        if (event->thisPrintsItself()) {
+            event->print(out, it, end);
+        }
     }
 }
+
 void EventStream::printToFile() {
     if (!hasEvents()) {
         return;

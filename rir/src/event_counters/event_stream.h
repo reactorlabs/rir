@@ -22,7 +22,11 @@ class EventStream {
     struct Event {
         virtual ~Event();
 
-        virtual void print(std::ostream& out) = 0;
+        virtual void print(std::ostream& out,
+                           const std::vector<Event*>::const_iterator& rest,
+                           const std::vector<Event*>::const_iterator& end) = 0;
+        virtual bool thisPrintsItself() = 0;
+        virtual bool isEndOfCompiling(const UUID& rirFunctionId) = 0;
     };
 
   private:
@@ -36,7 +40,11 @@ class EventStream {
 
         explicit UserEvent(const std::string& message);
 
-        void print(std::ostream& out) override;
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        bool isEndOfCompiling(const UUID& rirFunctionId) override;
     };
 
     struct StartedPirCompiling : public Event {
@@ -46,7 +54,11 @@ class EventStream {
         StartedPirCompiling(const Function* rirFunction,
                             const Assumptions& assumptions);
 
-        void print(std::ostream& out) override;
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        bool isEndOfCompiling(const UUID& rirFunctionId) override;
     };
 
     struct ReusedPirCompiled : public Event {
@@ -55,7 +67,11 @@ class EventStream {
 
         ReusedPirCompiled(const Function* rirFunction, size_t durationMicros);
 
-        void print(std::ostream& out) override;
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        bool isEndOfCompiling(const UUID& rirFunctionId) override;
     };
 
     struct SucceededPirCompiling : public Event {
@@ -65,7 +81,11 @@ class EventStream {
         SucceededPirCompiling(const Function* rirFunction,
                               size_t durationMicros);
 
-        void print(std::ostream& out) override;
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        bool isEndOfCompiling(const UUID& rirFunctionId) override;
     };
 
     struct FailedPirCompiling : public Event {
@@ -76,7 +96,11 @@ class EventStream {
         FailedPirCompiling(const Function* rirFunction, size_t durationMicros,
                            const std::string& explanation);
 
-        void print(std::ostream& out) override;
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        bool isEndOfCompiling(const UUID& rirFunctionId) override;
     };
 
     struct Deoptimized : public Event {
@@ -86,7 +110,11 @@ class EventStream {
         Deoptimized(const Function* baselineFunction,
                     DeoptReason::Reason deoptReason);
 
-        void print(std::ostream& out) override;
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        bool isEndOfCompiling(const UUID& rirFunctionId) override;
     };
 
     static bool isEnabled;

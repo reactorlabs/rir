@@ -1,5 +1,6 @@
 #include "code_event_counters.h"
 #include "R/Printing.h"
+#include "R/r.h"
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"

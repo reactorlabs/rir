@@ -116,7 +116,8 @@
     "*.ipp": "cpp",
     "rope": "cpp",
     "slist": "cpp",
-    "cfenv": "cpp"
+    "cfenv": "cpp",
+    "*.inc": "cpp"
   },
   "restructuredtext.workspaceRoot": "/Users/jakob/Desktop/Projects/rir"
 }

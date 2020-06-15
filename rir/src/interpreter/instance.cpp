@@ -47,7 +47,9 @@ InterpreterInstance* context_create() {
     c->closureCompiler = [](SEXP closure, SEXP name) {
         SEXP rir = rir_compile(closure, R_NilValue);
 #ifdef MEASURE
-        CodeEventCounters::instance().updateDispatchTableInfo(rir, name);
+        if (EventCounters::isEnabled) {
+            CodeEventCounters::instance().updateDispatchTableInfo(rir, name);
+        }
 #endif
         return rir;
     };
@@ -60,7 +62,10 @@ InterpreterInstance* context_create() {
             SEXP rir = rir_compile(f, R_NilValue);
             rir = rirOptDefaultOpts(rir, Assumptions(), name);
 #ifdef MEASURE
-            CodeEventCounters::instance().updateDispatchTableInfo(rir, name);
+            if (EventCounters::isEnabled) {
+                CodeEventCounters::instance().updateDispatchTableInfo(rir,
+                                                                      name);
+            }
 #endif
             return rir;
         };
@@ -69,7 +74,10 @@ InterpreterInstance* context_create() {
             SEXP rir = rir_compile(f, R_NilValue);
             rir = rirOptDefaultOptsDryrun(rir, Assumptions(), name);
 #ifdef MEASURE
-            CodeEventCounters::instance().updateDispatchTableInfo(rir, name);
+            if (EventCounters::isEnabled) {
+                CodeEventCounters::instance().updateDispatchTableInfo(rir,
+                                                                      name);
+            }
 #endif
             return rir;
         };

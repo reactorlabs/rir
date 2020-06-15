@@ -312,8 +312,11 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
                            dispatchTable->insert(fun);
 
 #ifdef MEASURE
-                           CodeEventCounters::instance()
-                               .updateDispatchTableInfo(dispatchTable, name);
+                           if (EventCounters::isEnabled) {
+                               CodeEventCounters::instance()
+                                   .updateDispatchTableInfo(dispatchTable,
+                                                            name);
+                           }
 #endif
 
                        },

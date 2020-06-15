@@ -886,9 +886,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                             dt->insert(fun);
 
 #ifdef MEASURE
-                            CodeEventCounters::instance()
-                                .updateDispatchTableInfo(dt,
-                                                         call->cls()->name());
+                            if (EventCounters::isEnabled) {
+                                CodeEventCounters::instance()
+                                    .updateDispatchTableInfo(
+                                        dt, call->cls()->name());
+                            }
 #endif
                         }
                         auto bc = BC::staticCall(
