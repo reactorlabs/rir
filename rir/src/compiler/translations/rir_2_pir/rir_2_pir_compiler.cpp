@@ -115,6 +115,8 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                 as << "Missing minimal assumption " << a;
                 logger.warn(as.str());
 
+                fail();
+
 #ifdef MEASURE
                 size_t totalDuration = finishProfiling();
                 if (EventStream::isEnabled) {
@@ -125,8 +127,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                             optFunction, totalDuration, messageBuf.str()));
                 }
 #endif
-
-                return fail();
             }
         }
     }
@@ -141,6 +141,8 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         closure->rirFunction()->flags.set(Function::NotOptimizable);
         logger.warn("no support for ...");
 
+        fail();
+
 #ifdef MEASURE
         size_t totalDuration = finishProfiling();
         if (EventStream::isEnabled) {
@@ -150,12 +152,14 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         }
 #endif
 
-        return fail();
+        return;
     }
 
     if (closure->rirFunction()->body()->codeSize > Parameter::MAX_INPUT_SIZE) {
         closure->rirFunction()->flags.set(Function::NotOptimizable);
         logger.warn("skipping huge function");
+
+        fail();
 
 #ifdef MEASURE
         size_t totalDuration = finishProfiling();
@@ -166,10 +170,12 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         }
 #endif
 
-        return fail();
+        return;
     }
 
     if (auto existing = closure->findCompatibleVersion(ctx)) {
+        success(existing);
+
 #ifdef MEASURE
         size_t totalDuration = finishProfiling();
         if (EventStream::isEnabled) {
@@ -178,7 +184,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         }
 #endif
 
-        return success(existing);
+        return;
     }
 
     auto version = closure->declareVersion(ctx, optFunction);
@@ -268,6 +274,8 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         logger.close(version);
         closure->erase(ctx);
 
+        fail();
+
 #ifdef MEASURE
         size_t totalDuration = finishProfiling();
         if (EventStream::isEnabled) {
@@ -278,7 +286,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         }
 #endif
 
-        return fail();
+        return;
     }
 
     if (rir2pir.tryCompile(builder)) {
@@ -292,6 +300,8 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 #endif
         log.flush();
 
+        success(version);
+
 #ifdef MEASURE
         size_t totalDuration = finishProfiling();
         if (EventStream::isEnabled) {
@@ -301,13 +311,15 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         }
 #endif
 
-        return success(version);
+        return;
     }
 
     log.failed("rir2pir aborted");
     log.flush();
     logger.close(version);
     closure->erase(ctx);
+
+    fail();
 
 #ifdef MEASURE
     size_t totalDuration = finishProfiling();
@@ -316,8 +328,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
             optFunction, totalDuration, "of an issue encountered in rir2pir"));
     }
 #endif
-
-    return fail();
 }
 
 bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
