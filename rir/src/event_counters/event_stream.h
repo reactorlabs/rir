@@ -31,6 +31,7 @@ class EventStream {
 
   private:
     std::unordered_map<UUID, std::string> versionNames;
+    std::unordered_map<std::string, unsigned> numVersionsWithName;
     std::vector<Event*> events;
     EventStream() {}
 

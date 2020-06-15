@@ -138,7 +138,14 @@ std::string EventStream::getNameOf(const UUID& functionUid) {
         return versionNames.at(functionUid);
     }
 }
+
 void EventStream::setNameOf(const Function* function, std::string name) {
+    std::string nonCollidingName =
+        numVersionsWithName.count(name)
+            ? name + "@" + std::to_string(numVersionsWithName.at(name))
+            : name;
+    numVersionsWithName[name]++;
+
     versionNames[function->body()->uid] = name;
 }
 
