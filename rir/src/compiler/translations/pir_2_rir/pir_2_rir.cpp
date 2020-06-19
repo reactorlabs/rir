@@ -12,6 +12,7 @@
 #include "compiler/native/lower_llvm.h"
 #include "compiler/parameter.h"
 #include "event_counters/code_event_counters.h"
+#include "event_counters/event_stream.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -29,6 +30,9 @@
 
 namespace rir {
 namespace pir {
+
+using Clock = std::chrono::system_clock;
+using Timestamp = Clock::time_point;
 
 namespace {
 
@@ -257,6 +261,19 @@ static int PIR_NATIVE_BACKEND =
     getenv("PIR_NATIVE_BACKEND") ? atoi(getenv("PIR_NATIVE_BACKEND")) : 0;
 
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
+#ifdef MEASURE
+    Timestamp startTime = Clock::now();
+    auto finishProfiling = [&]() {
+        Timestamp endTime = Clock::now();
+        Timestamp::duration duration = endTime - startTime;
+        size_t durationMicros =
+            (size_t)std::chrono::duration_cast<std::chrono::microseconds>(
+                duration)
+                .count();
+        return durationMicros;
+    };
+#endif
+
     lower(code);
     toCSSA(code);
 #ifdef FULLVERIFIER
@@ -1141,6 +1158,16 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto localsCnt = alloc.slots();
     auto res = ctx.finalizeCode(localsCnt, cache.size());
+
+#ifdef MEASURE
+    if (EventStream::isEnabled) {
+        Function* baselineFunction = cls->owner()->rirFunction();
+        size_t totalDuration = finishProfiling();
+        EventStream::instance().recordEvent(
+            new EventStream::LoweredPir2Rir(baselineFunction, totalDuration));
+    }
+#endif
+
     if (PIR_NATIVE_BACKEND) {
         LowerLLVM native;
         if (auto n = native.tryCompile(cls, code, promMap, refcount,

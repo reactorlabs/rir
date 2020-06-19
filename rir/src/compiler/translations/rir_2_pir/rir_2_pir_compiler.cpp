@@ -300,14 +300,23 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 #endif
         log.flush();
 
-        success(version);
-
 #ifdef MEASURE
         size_t totalDuration = finishProfiling();
         if (EventStream::isEnabled) {
             EventStream::instance().recordEvent(
-                new EventStream::SucceededPirCompiling(optFunction,
-                                                       totalDuration));
+                new EventStream::SucceededRir2Pir(optFunction, totalDuration,
+                                                  version->size()));
+        }
+#endif
+
+        success(version);
+
+#ifdef MEASURE
+        totalDuration = finishProfiling();
+        if (EventStream::isEnabled) {
+            EventStream::instance().recordEvent(
+                new EventStream::FinishedCompiling(optFunction, totalDuration,
+                                                   version->size()));
         }
 #endif
 
@@ -335,6 +344,35 @@ std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
 std::chrono::time_point<std::chrono::high_resolution_clock> endTime;
 std::unique_ptr<CompilerPerf> PERF = std::unique_ptr<CompilerPerf>(
     MEASURE_COMPILER_PERF ? new CompilerPerf : nullptr);
+
+void Rir2PirCompiler::optimizeModuleFor(const ClosureVersion* version) {
+#ifdef MEASURE
+    Timestamp startTime = Clock::now();
+    auto finishProfiling = [&]() {
+        Timestamp endTime = Clock::now();
+        Timestamp::duration duration = endTime - startTime;
+        size_t durationMicros =
+            (size_t)std::chrono::duration_cast<std::chrono::microseconds>(
+                duration)
+                .count();
+        return durationMicros;
+    };
+#endif
+
+    // Silence any unused warning, the argument is passed because we need it
+    // when MEASURE is enabled, but otherwise it's unused
+    (void)version;
+    optimizeModule();
+
+#ifdef MEASURE
+    if (EventStream::isEnabled) {
+        Function* baselineFunction = version->owner()->rirFunction();
+        size_t totalDuration = finishProfiling();
+        EventStream::instance().recordEvent(new EventStream::OptimizedPir(
+            baselineFunction, totalDuration, version->size()));
+    }
+#endif
+}
 
 void Rir2PirCompiler::optimizeModule() {
     logger.flush();

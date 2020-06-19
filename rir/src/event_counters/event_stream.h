@@ -19,6 +19,12 @@ struct Function;
 // Records events in a stream or timeline
 class EventStream {
   public:
+    enum class CompileEventAssociation {
+        NotAssociated,
+        IsIntermediateCompileEvent,
+        IsEndCompileEvent
+    };
+
     struct Event {
         virtual ~Event();
 
@@ -26,7 +32,8 @@ class EventStream {
                            const std::vector<Event*>::const_iterator& rest,
                            const std::vector<Event*>::const_iterator& end) = 0;
         virtual bool thisPrintsItself() = 0;
-        virtual bool isEndOfCompiling(const UUID& rirFunctionId) = 0;
+        virtual CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) = 0;
     };
 
   private:
@@ -45,7 +52,8 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        bool isEndOfCompiling(const UUID& rirFunctionId) override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
     };
 
     struct StartedPirCompiling : public Event {
@@ -59,7 +67,8 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        bool isEndOfCompiling(const UUID& rirFunctionId) override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
     };
 
     struct ReusedPirCompiled : public Event {
@@ -72,21 +81,84 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        bool isEndOfCompiling(const UUID& rirFunctionId) override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
     };
 
-    struct SucceededPirCompiling : public Event {
+    struct SucceededRir2Pir : public Event {
         const UUID rirFunctionUid;
         const size_t durationMicros;
+        const size_t pirClosureSize;
 
-        SucceededPirCompiling(const Function* rirFunction,
-                              size_t durationMicros);
+        SucceededRir2Pir(const Function* rirFunction, size_t durationMicros,
+                         size_t pirClosureSize);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        bool isEndOfCompiling(const UUID& rirFunctionId) override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
+    };
+
+    struct OptimizedPir : public Event {
+        const UUID rirFunctionUid;
+        const size_t durationMicros;
+        const size_t pirClosureSize;
+
+        OptimizedPir(const Function* rirFunction, size_t durationMicros,
+                     size_t pirClosureSize);
+
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
+    };
+
+    struct LoweredPir2Rir : public Event {
+        const UUID rirFunctionUid;
+        const size_t durationMicros;
+
+        LoweredPir2Rir(const Function* rirFunction, size_t durationMicros);
+
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
+    };
+
+    struct LoweredLLVM : public Event {
+        const UUID rirFunctionUid;
+        const size_t durationMicros;
+
+        LoweredLLVM(const Function* rirFunction, size_t durationMicros);
+
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
+    };
+
+    struct FinishedCompiling : public Event {
+        const UUID rirFunctionUid;
+        const size_t durationMicros;
+        const size_t pirClosureSize;
+
+        FinishedCompiling(const Function* rirFunction, size_t durationMicros,
+                          size_t pirClosureSize);
+
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        bool thisPrintsItself() override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
     };
 
     struct FailedPirCompiling : public Event {
@@ -101,7 +173,8 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        bool isEndOfCompiling(const UUID& rirFunctionId) override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
     };
 
     struct Deoptimized : public Event {
@@ -115,7 +188,8 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        bool isEndOfCompiling(const UUID& rirFunctionId) override;
+        CompileEventAssociation
+        getAssociationWith(const UUID& rirFunctionId) override;
     };
 
     static bool isEnabled;
