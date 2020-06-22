@@ -236,7 +236,7 @@ void EventStream::setNameOf(const Function* function, std::string name) {
                 : name;
         numVersionsWithName[name] = numVersionsWithName[name] + 1;
 
-        versionNames[functionUid] = name;
+        versionNames[functionUid] = nonCollidingName;
     }
 }
 
