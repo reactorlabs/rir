@@ -68,6 +68,11 @@ class Pir2Rir {
     void toCSSA(Code* code);
     rir::Function* finalize();
 
+#ifdef MEASURE
+    size_t totalDurationCompilingPir2Rir = 0;
+    size_t totalDurationCompilingLlvm = 0;
+#endif
+
   private:
     Pir2RirCompiler& compiler;
     ClosureVersion* cls;
@@ -1161,14 +1166,20 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
 #ifdef MEASURE
     if (EventStream::isEnabled) {
-        Function* baselineFunction = cls->owner()->rirFunction();
         size_t totalDuration = finishProfiling();
-        EventStream::instance().recordEvent(
-            new EventStream::LoweredPir2Rir(baselineFunction, totalDuration));
+        totalDurationCompilingPir2Rir += totalDuration;
     }
 #endif
 
     if (PIR_NATIVE_BACKEND) {
+#ifdef MEASURE
+        if (EventStream::isEnabled) {
+            // Will profilie the following if the code is successfully compiled
+            // into LLVM
+            startTime = Clock::now();
+        }
+#endif
+
         LowerLLVM native;
         if (auto n = native.tryCompile(cls, code, promMap, refcount,
                                        needsLdVarForUpdate, log.out())) {
@@ -1176,6 +1187,15 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             if (native.pirTypeFeedback)
                 res->pirTypeFeedback(native.pirTypeFeedback);
         }
+
+        // Even if we failed to actually compile, we want to record the time we
+        // spent failing because it might be significant
+#ifdef MEASURE
+        if (EventStream::isEnabled) {
+            size_t totalDuration = finishProfiling();
+            totalDurationCompilingLlvm += totalDuration;
+        }
+#endif
     }
     return res;
 }
@@ -1405,6 +1425,24 @@ rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, bool dryRun) {
             Pool::patch(idx, fun->container());
         fixup.erase(fixups);
     }
+
+#ifdef MEASURE
+    if (EventStream::isEnabled) {
+        Function* baselineFunction = cls->owner()->rirFunction();
+        // We will always compile into rir, but just to be safe, don't record if
+        // we don't
+        if (pir2rir.totalDurationCompilingPir2Rir > 0) {
+            EventStream::instance().recordEvent(new EventStream::LoweredPir2Rir(
+                baselineFunction, pir2rir.totalDurationCompilingPir2Rir));
+        }
+        // Don't record this event if we never actually compiled into LLVM
+        if (pir2rir.totalDurationCompilingLlvm > 0) {
+            EventStream::instance().recordEvent(new EventStream::LoweredLLVM(
+                baselineFunction, pir2rir.totalDurationCompilingLlvm));
+        }
+    }
+#endif
+
     return fun;
 }
 

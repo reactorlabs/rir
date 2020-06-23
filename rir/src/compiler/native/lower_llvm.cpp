@@ -5227,14 +5227,10 @@ bool LowerFunctionLLVM::tryCompile() {
 } // namespace pir
 } // namespace rir
 
-#include "event_counters/event_stream.h"
 #include "lower_llvm.h"
 
 namespace rir {
 namespace pir {
-
-using Clock = std::chrono::system_clock;
-using Timestamp = Clock::time_point;
 
 void* LowerLLVM::tryCompile(
     ClosureVersion* cls, Code* code,
@@ -5242,19 +5238,6 @@ void* LowerLLVM::tryCompile(
     const NeedsRefcountAdjustment& refcount,
     const std::unordered_set<Instruction*>& needsLdVarForUpdate,
     LogStream& log) {
-#ifdef MEASURE
-    Timestamp startTime = Clock::now();
-    auto finishProfiling = [&]() {
-        Timestamp endTime = Clock::now();
-        Timestamp::duration duration = endTime - startTime;
-        size_t durationMicros =
-            (size_t)std::chrono::duration_cast<std::chrono::microseconds>(
-                duration)
-                .count();
-        return durationMicros;
-    };
-#endif
-
     JitLLVM::createModule();
     auto mangledName = JitLLVM::mangle(cls->name());
     LowerFunctionLLVM funCompiler(mangledName, cls, code, m, refcount,
@@ -5263,15 +5246,6 @@ void* LowerLLVM::tryCompile(
         return nullptr;
     pirTypeFeedback = funCompiler.pirTypeFeedback;
     void* resultCode = JitLLVM::tryCompile(funCompiler.fun);
-
-#ifdef MEASURE
-    if (EventStream::isEnabled) {
-        Function* baselineFunction = cls->owner()->rirFunction();
-        size_t totalDuration = finishProfiling();
-        EventStream::instance().recordEvent(
-            new EventStream::LoweredLLVM(baselineFunction, totalDuration));
-    }
-#endif
 
     return resultCode;
 }
