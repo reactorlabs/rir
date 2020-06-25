@@ -1428,17 +1428,16 @@ rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, bool dryRun) {
 
 #ifdef MEASURE
     if (EventStream::isEnabled) {
-        Function* baselineFunction = cls->owner()->rirFunction();
         // We will always compile into rir, but just to be safe, don't record if
         // we don't
         if (pir2rir.totalDurationCompilingPir2Rir > 0) {
             EventStream::instance().recordEvent(new EventStream::LoweredPir2Rir(
-                baselineFunction, pir2rir.totalDurationCompilingPir2Rir));
+                cls, pir2rir.totalDurationCompilingPir2Rir));
         }
         // Don't record this event if we never actually compiled into LLVM
         if (pir2rir.totalDurationCompilingLlvm > 0) {
             EventStream::instance().recordEvent(new EventStream::LoweredLLVM(
-                baselineFunction, pir2rir.totalDurationCompilingLlvm));
+                cls, pir2rir.totalDurationCompilingLlvm));
         }
     }
 #endif

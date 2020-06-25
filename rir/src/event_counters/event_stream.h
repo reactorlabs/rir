@@ -14,6 +14,10 @@
 
 namespace rir {
 
+namespace pir {
+class ClosureVersion;
+}
+
 struct Function;
 
 // Records events in a stream or timeline
@@ -32,8 +36,7 @@ class EventStream {
                            const std::vector<Event*>::const_iterator& rest,
                            const std::vector<Event*>::const_iterator& end) = 0;
         virtual bool thisPrintsItself() = 0;
-        virtual CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) = 0;
+        virtual CompileEventAssociation getAssociationWith(const UUID& uid) = 0;
     };
 
   private:
@@ -52,144 +55,140 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct StartedPirCompiling : public Event {
-        const UUID rirFunctionUid;
+        const UUID versionUid;
         const Assumptions assumptions;
 
-        StartedPirCompiling(const Function* rirFunction,
+        StartedPirCompiling(const pir::ClosureVersion* version,
                             const Assumptions& assumptions);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct ReusedPirCompiled : public Event {
-        const UUID rirFunctionUid;
+        const UUID versionUid;
         const size_t durationMicros;
 
-        ReusedPirCompiled(const Function* rirFunction, size_t durationMicros);
+        ReusedPirCompiled(const pir::ClosureVersion* version,
+                          size_t durationMicros);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct SucceededRir2Pir : public Event {
-        const UUID rirFunctionUid;
+        const UUID versionUid;
+        const size_t pirVersionSize;
         const size_t durationMicros;
-        const size_t pirClosureSize;
 
-        SucceededRir2Pir(const Function* rirFunction, size_t durationMicros,
-                         size_t pirClosureSize);
+        SucceededRir2Pir(const pir::ClosureVersion* version,
+                         size_t durationMicros);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct OptimizedPir : public Event {
-        const UUID rirFunctionUid;
+        const UUID versionUid;
+        const size_t pirVersionSize;
         const size_t durationMicros;
-        const size_t pirClosureSize;
 
-        OptimizedPir(const Function* rirFunction, size_t durationMicros,
-                     size_t pirClosureSize);
+        OptimizedPir(const pir::ClosureVersion* version, size_t durationMicros);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct LoweredPir2Rir : public Event {
-        const UUID rirFunctionUid;
+        const UUID versionUid;
         const size_t durationMicros;
 
-        LoweredPir2Rir(const Function* rirFunction, size_t durationMicros);
+        LoweredPir2Rir(const pir::ClosureVersion* version,
+                       size_t durationMicros);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct LoweredLLVM : public Event {
-        const UUID rirFunctionUid;
+        const UUID versionUid;
         const size_t durationMicros;
 
-        LoweredLLVM(const Function* rirFunction, size_t durationMicros);
+        LoweredLLVM(const pir::ClosureVersion* version, size_t durationMicros);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct FinishedCompiling : public Event {
-        const UUID rirFunctionUid;
+        const UUID versionUid;
+        const size_t pirVersionSize;
         const size_t durationMicros;
-        const size_t pirClosureSize;
 
-        FinishedCompiling(const Function* rirFunction, size_t durationMicros,
-                          size_t pirClosureSize);
+        FinishedCompiling(const pir::ClosureVersion* version,
+                          size_t durationMicros);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct FailedPirCompiling : public Event {
-        const UUID rirFunctionUid;
+        const UUID uid;
+        const bool isPirVersion;
         const size_t durationMicros;
         const std::string explanation;
 
-        FailedPirCompiling(const Function* rirFunction, size_t durationMicros,
+        FailedPirCompiling(const rir::Function* baselineFunction,
+                           size_t durationMicros,
+                           const std::string& explanation);
+        FailedPirCompiling(const pir::ClosureVersion* version,
+                           size_t durationMicros,
                            const std::string& explanation);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct Deoptimized : public Event {
-        const UUID baselineFunctionUid;
+        const UUID deoptimizedFunctionUid;
         const DeoptReason::Reason deoptReason;
 
-        Deoptimized(const Function* baselineFunction,
+        Deoptimized(const Code* deoptimizedFunctionCode,
                     DeoptReason::Reason deoptReason);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation
-        getAssociationWith(const UUID& rirFunctionId) override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     static bool isEnabled;
@@ -199,7 +198,9 @@ class EventStream {
     }
 
     std::string getNameOf(const UUID& functionUid);
-    void setNameOf(const Function* function, std::string name);
+    void setNameOf(const UUID& uid, const std::string& name);
+    void setNameOf(const Function* function, const std::string& name);
+    void setNameOf(const pir::ClosureVersion* version);
 
     void recordEvent(Event* event);
     bool hasEvents();

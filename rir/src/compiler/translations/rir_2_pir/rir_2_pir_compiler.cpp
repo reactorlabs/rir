@@ -77,8 +77,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 #ifdef MEASURE
     if (EventStream::isEnabled) {
         EventStream::instance().setNameOf(optFunction, closure->name());
-        EventStream::instance().recordEvent(
-            new EventStream::StartedPirCompiling(optFunction, ctx.assumptions));
     }
 
     MaybeCls originalSuccess = success;
@@ -180,7 +178,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         size_t totalDuration = finishProfiling();
         if (EventStream::isEnabled) {
             EventStream::instance().recordEvent(
-                new EventStream::ReusedPirCompiled(optFunction, totalDuration));
+                new EventStream::ReusedPirCompiled(existing, totalDuration));
         }
 #endif
 
@@ -191,6 +189,14 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     Builder builder(version, closure->closureEnv());
     auto& log = logger.begin(version);
     Rir2Pir rir2pir(*this, version, log, closure->name());
+
+#ifdef MEASURE
+    if (EventStream::isEnabled) {
+        EventStream::instance().setNameOf(version);
+        EventStream::instance().recordEvent(
+            new EventStream::StartedPirCompiling(version, ctx.assumptions));
+    }
+#endif
 
     auto& assumptions = version->assumptions();
 
@@ -281,7 +287,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         if (EventStream::isEnabled) {
             EventStream::instance().recordEvent(
                 new EventStream::FailedPirCompiling(
-                    optFunction, totalDuration,
+                    version, totalDuration,
                     "we couldn't compile a default argument"));
         }
 #endif
@@ -304,8 +310,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         size_t totalDuration = finishProfiling();
         if (EventStream::isEnabled) {
             EventStream::instance().recordEvent(
-                new EventStream::SucceededRir2Pir(optFunction, totalDuration,
-                                                  version->size()));
+                new EventStream::SucceededRir2Pir(version, totalDuration));
         }
 #endif
 
@@ -315,8 +320,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         totalDuration = finishProfiling();
         if (EventStream::isEnabled) {
             EventStream::instance().recordEvent(
-                new EventStream::FinishedCompiling(optFunction, totalDuration,
-                                                   version->size()));
+                new EventStream::FinishedCompiling(version, totalDuration));
         }
 #endif
 
@@ -334,7 +338,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     size_t totalDuration = finishProfiling();
     if (EventStream::isEnabled) {
         EventStream::instance().recordEvent(new EventStream::FailedPirCompiling(
-            optFunction, totalDuration, "of an issue encountered in rir2pir"));
+            version, totalDuration, "of an issue encountered in rir2pir"));
     }
 #endif
 }
@@ -366,10 +370,9 @@ void Rir2PirCompiler::optimizeModuleFor(const ClosureVersion* version) {
 
 #ifdef MEASURE
     if (EventStream::isEnabled) {
-        Function* baselineFunction = version->owner()->rirFunction();
         size_t totalDuration = finishProfiling();
-        EventStream::instance().recordEvent(new EventStream::OptimizedPir(
-            baselineFunction, totalDuration, version->size()));
+        EventStream::instance().recordEvent(
+            new EventStream::OptimizedPir(version, totalDuration));
     }
 #endif
 }

@@ -4089,10 +4089,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 EventCounters::instance().count(events::Deopt);
             }
             if (EventStream::isEnabled) {
-                Function* function =
-                    DispatchTable::unpack(BODY(callCtxt->callee))->baseline();
+                Code* functionCode = m->frames[m->numFrames - 1].code;
                 EventStream::instance().recordEvent(
-                    new EventStream::Deoptimized(function, lastDeoptReason));
+                    new EventStream::Deoptimized(functionCode,
+                                                 lastDeoptReason));
             }
 #endif
             m->frames[m->numFrames - 1].code->registerDeopt();

@@ -1,5 +1,6 @@
 #include "event_stream.h"
 
+#include "compiler/pir/closure_version.h"
 #include "runtime/Function.h"
 
 namespace rir {
@@ -13,51 +14,51 @@ EventStream::UserEvent::UserEvent(const std::string& message)
     : message(message) {}
 
 EventStream::StartedPirCompiling::StartedPirCompiling(
-    const Function* rirFunction, const Assumptions& assumptions)
-    : rirFunctionUid(rirFunction->body()->uid), assumptions(assumptions) {}
+    const pir::ClosureVersion* version, const Assumptions& assumptions)
+    : versionUid(version->uid), assumptions(assumptions) {}
 
-EventStream::ReusedPirCompiled::ReusedPirCompiled(const Function* rirFunction,
-                                                  size_t durationMicros)
-    : rirFunctionUid(rirFunction->body()->uid), durationMicros(durationMicros) {
-}
+EventStream::ReusedPirCompiled::ReusedPirCompiled(
+    const pir::ClosureVersion* version, size_t durationMicros)
+    : versionUid(version->uid), durationMicros(durationMicros) {}
 
-EventStream::SucceededRir2Pir::SucceededRir2Pir(const Function* rirFunction,
-                                                size_t durationMicros,
-                                                size_t pirClosureSize)
-    : rirFunctionUid(rirFunction->body()->uid), durationMicros(durationMicros),
-      pirClosureSize(pirClosureSize) {}
+EventStream::SucceededRir2Pir::SucceededRir2Pir(
+    const pir::ClosureVersion* version, size_t durationMicros)
+    : versionUid(version->uid), pirVersionSize(version->size()),
+      durationMicros(durationMicros) {}
 
-EventStream::OptimizedPir::OptimizedPir(const Function* rirFunction,
-                                        size_t durationMicros,
-                                        size_t pirClosureSize)
-    : rirFunctionUid(rirFunction->body()->uid), durationMicros(durationMicros),
-      pirClosureSize(pirClosureSize) {}
+EventStream::OptimizedPir::OptimizedPir(const pir::ClosureVersion* version,
+                                        size_t durationMicros)
+    : versionUid(version->uid), pirVersionSize(version->size()),
+      durationMicros(durationMicros) {}
 
-EventStream::LoweredPir2Rir::LoweredPir2Rir(const Function* rirFunction,
+EventStream::LoweredPir2Rir::LoweredPir2Rir(const pir::ClosureVersion* version,
                                             size_t durationMicros)
-    : rirFunctionUid(rirFunction->body()->uid), durationMicros(durationMicros) {
-}
+    : versionUid(version->uid), durationMicros(durationMicros) {}
 
-EventStream::LoweredLLVM::LoweredLLVM(const Function* rirFunction,
+EventStream::LoweredLLVM::LoweredLLVM(const pir::ClosureVersion* version,
                                       size_t durationMicros)
-    : rirFunctionUid(rirFunction->body()->uid), durationMicros(durationMicros) {
-}
+    : versionUid(version->uid), durationMicros(durationMicros) {}
 
-EventStream::FinishedCompiling::FinishedCompiling(const Function* rirFunction,
-                                                  size_t durationMicros,
-                                                  size_t pirClosureSize)
-    : rirFunctionUid(rirFunction->body()->uid), durationMicros(durationMicros),
-      pirClosureSize(pirClosureSize) {}
+EventStream::FinishedCompiling::FinishedCompiling(
+    const pir::ClosureVersion* version, size_t durationMicros)
+    : versionUid(version->uid), pirVersionSize(version->size()),
+      durationMicros(durationMicros) {}
 
 EventStream::FailedPirCompiling::FailedPirCompiling(
-    const Function* rirFunction, size_t durationMicros,
+    const rir::Function* baselineFunction, size_t durationMicros,
     const std::string& explanation)
-    : rirFunctionUid(rirFunction->body()->uid), durationMicros(durationMicros),
+    : uid(baselineFunction->body()->uid), isPirVersion(false),
+      durationMicros(durationMicros), explanation(explanation) {}
+
+EventStream::FailedPirCompiling::FailedPirCompiling(
+    const pir::ClosureVersion* version, size_t durationMicros,
+    const std::string& explanation)
+    : uid(version->uid), isPirVersion(true), durationMicros(durationMicros),
       explanation(explanation) {}
 
-EventStream::Deoptimized::Deoptimized(const Function* baselineFunction,
+EventStream::Deoptimized::Deoptimized(const Code* deoptimizedFunctionCode,
                                       DeoptReason::Reason deoptReason)
-    : baselineFunctionUid(baselineFunction->body()->uid),
+    : deoptimizedFunctionUid(deoptimizedFunctionCode->uid),
       deoptReason(deoptReason) {}
 
 void EventStream::UserEvent::print(
@@ -69,7 +70,7 @@ void EventStream::UserEvent::print(
 bool EventStream::UserEvent::thisPrintsItself() { return true; }
 
 EventStream::CompileEventAssociation
-EventStream::UserEvent::getAssociationWith(const UUID& rirFunctionId) {
+EventStream::UserEvent::getAssociationWith(const UUID& uid) {
     return EventStream::CompileEventAssociation::NotAssociated;
 }
 
@@ -77,13 +78,13 @@ void EventStream::StartedPirCompiling::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
     // Print this event itself
-    out << EventStream::instance().getNameOf(rirFunctionUid) << " compile ("
+    out << EventStream::instance().getNameOf(versionUid) << " compile ("
         << assumptions << ") => ";
 
     // Find and print the end-compiling event
     for (std::vector<Event*>::const_iterator it = rest; it != end; it++) {
         Event* event = *it;
-        switch (event->getAssociationWith(rirFunctionUid)) {
+        switch (event->getAssociationWith(versionUid)) {
         case EventStream::CompileEventAssociation::NotAssociated:
             break;
         case EventStream::CompileEventAssociation::IsIntermediateCompileEvent:
@@ -105,50 +106,56 @@ void EventStream::StartedPirCompiling::print(
 bool EventStream::StartedPirCompiling::thisPrintsItself() { return true; }
 
 EventStream::CompileEventAssociation
-EventStream::StartedPirCompiling::getAssociationWith(
-    const UUID& rirFunctionId) {
+EventStream::StartedPirCompiling::getAssociationWith(const UUID& uid) {
     return EventStream::CompileEventAssociation::NotAssociated;
 }
 
 void EventStream::ReusedPirCompiled::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
-    out << "avoided and reused [" << durationMicros << "µs]" << std::endl;
+    out << EventStream::instance().getNameOf(versionUid) << " reused ["
+        << durationMicros << "µs]" << std::endl;
 }
 
 bool EventStream::ReusedPirCompiled::thisPrintsItself() { return false; }
 
 EventStream::CompileEventAssociation
-EventStream::ReusedPirCompiled::getAssociationWith(const UUID& rirFunctionId) {
-    return EventStream::CompileEventAssociation::IsEndCompileEvent;
+EventStream::ReusedPirCompiled::getAssociationWith(const UUID& uid) {
+    return EventStream::CompileEventAssociation::NotAssociated;
 }
 
 void EventStream::SucceededRir2Pir::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
-    out << "rir2pir [" << durationMicros << "µs] [" << pirClosureSize
+    out << "rir2pir [" << durationMicros << "µs] [" << pirVersionSize
         << "instr]; ";
 }
 
 bool EventStream::SucceededRir2Pir::thisPrintsItself() { return false; }
 
 EventStream::CompileEventAssociation
-EventStream::SucceededRir2Pir::getAssociationWith(const UUID& rirFunctionId) {
-    return EventStream::CompileEventAssociation::IsIntermediateCompileEvent;
+EventStream::SucceededRir2Pir::getAssociationWith(const UUID& uid) {
+    return (versionUid == uid)
+               ? EventStream::CompileEventAssociation::
+                     IsIntermediateCompileEvent
+               : EventStream::CompileEventAssociation::NotAssociated;
 }
 
 void EventStream::OptimizedPir::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
-    out << "optimized [" << durationMicros << "µs] [" << pirClosureSize
+    out << "optimized [" << durationMicros << "µs] [" << pirVersionSize
         << "instr]; ";
 }
 
 bool EventStream::OptimizedPir::thisPrintsItself() { return false; }
 
 EventStream::CompileEventAssociation
-EventStream::OptimizedPir::getAssociationWith(const UUID& rirFunctionId) {
-    return EventStream::CompileEventAssociation::IsIntermediateCompileEvent;
+EventStream::OptimizedPir::getAssociationWith(const UUID& uid) {
+    return (versionUid == uid)
+               ? EventStream::CompileEventAssociation::
+                     IsIntermediateCompileEvent
+               : EventStream::CompileEventAssociation::NotAssociated;
 }
 
 void EventStream::LoweredPir2Rir::print(
@@ -160,8 +167,11 @@ void EventStream::LoweredPir2Rir::print(
 bool EventStream::LoweredPir2Rir::thisPrintsItself() { return false; }
 
 EventStream::CompileEventAssociation
-EventStream::LoweredPir2Rir::getAssociationWith(const UUID& rirFunctionId) {
-    return EventStream::CompileEventAssociation::IsIntermediateCompileEvent;
+EventStream::LoweredPir2Rir::getAssociationWith(const UUID& uid) {
+    return (versionUid == uid)
+               ? EventStream::CompileEventAssociation::
+                     IsIntermediateCompileEvent
+               : EventStream::CompileEventAssociation::NotAssociated;
 }
 
 void EventStream::LoweredLLVM::print(
@@ -173,49 +183,62 @@ void EventStream::LoweredLLVM::print(
 bool EventStream::LoweredLLVM::thisPrintsItself() { return false; }
 
 EventStream::CompileEventAssociation
-EventStream::LoweredLLVM::getAssociationWith(const UUID& rirFunctionId) {
-    return EventStream::CompileEventAssociation::IsIntermediateCompileEvent;
+EventStream::LoweredLLVM::getAssociationWith(const UUID& uid) {
+    return (versionUid == uid)
+               ? EventStream::CompileEventAssociation::
+                     IsIntermediateCompileEvent
+               : EventStream::CompileEventAssociation::NotAssociated;
 }
 
 void EventStream::FinishedCompiling::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
-    out << "done [" << durationMicros << "µs] [" << pirClosureSize << "instr]"
+    out << "done [" << durationMicros << "µs] [" << pirVersionSize << "instr]"
         << std::endl;
 }
 
 bool EventStream::FinishedCompiling::thisPrintsItself() { return false; }
 
 EventStream::CompileEventAssociation
-EventStream::FinishedCompiling::getAssociationWith(const UUID& rirFunctionId) {
-    return EventStream::CompileEventAssociation::IsEndCompileEvent;
+EventStream::FinishedCompiling::getAssociationWith(const UUID& uid) {
+    return (versionUid == uid)
+               ? EventStream::CompileEventAssociation::IsEndCompileEvent
+               : EventStream::CompileEventAssociation::NotAssociated;
 }
 
 void EventStream::FailedPirCompiling::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
+    if (!isPirVersion) {
+        out << EventStream::instance().getNameOf(uid) << " compile ";
+    }
     out << "failed (" << explanation << ") [" << durationMicros << "µs]"
         << std::endl;
 }
 
-bool EventStream::FailedPirCompiling::thisPrintsItself() { return false; }
+bool EventStream::FailedPirCompiling::thisPrintsItself() {
+    return !isPirVersion;
+}
 
 EventStream::CompileEventAssociation
-EventStream::FailedPirCompiling::getAssociationWith(const UUID& rirFunctionId) {
-    return EventStream::CompileEventAssociation::IsEndCompileEvent;
+EventStream::FailedPirCompiling::getAssociationWith(const UUID& uid) {
+    return (this->uid == uid)
+               ? EventStream::CompileEventAssociation::IsEndCompileEvent
+               : EventStream::CompileEventAssociation::NotAssociated;
 }
 
 void EventStream::Deoptimized::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
-    out << EventStream::instance().getNameOf(baselineFunctionUid) << " deopt ("
-        << getDeoptReasonExplanation(deoptReason) << ")" << std::endl;
+    out << EventStream::instance().getNameOf(deoptimizedFunctionUid)
+        << " deopt (" << getDeoptReasonExplanation(deoptReason) << ")"
+        << std::endl;
 }
 
 bool EventStream::Deoptimized::thisPrintsItself() { return true; }
 
 EventStream::CompileEventAssociation
-EventStream::Deoptimized::getAssociationWith(const UUID& rirFunctionId) {
+EventStream::Deoptimized::getAssociationWith(const UUID& uid) {
     return EventStream::CompileEventAssociation::NotAssociated;
 }
 
@@ -227,17 +250,24 @@ std::string EventStream::getNameOf(const UUID& functionUid) {
     }
 }
 
-void EventStream::setNameOf(const Function* function, std::string name) {
-    UUID functionUid = function->body()->uid;
-    if (!versionNames.count(functionUid)) {
+void EventStream::setNameOf(const UUID& uid, const std::string& name) {
+    if (!versionNames.count(uid)) {
         std::string nonCollidingName =
             numVersionsWithName.count(name)
-                ? name + "@" + std::to_string(numVersionsWithName.at(name))
+                ? name + "~" + std::to_string(numVersionsWithName.at(name))
                 : name;
         numVersionsWithName[name] = numVersionsWithName[name] + 1;
 
-        versionNames[functionUid] = nonCollidingName;
+        versionNames[uid] = nonCollidingName;
     }
+}
+
+void EventStream::setNameOf(const Function* function, const std::string& name) {
+    setNameOf(function->body()->uid, name);
+}
+
+void EventStream::setNameOf(const pir::ClosureVersion* version) {
+    setNameOf(version->uid, version->name());
 }
 
 void EventStream::recordEvent(Event* event) { events.push_back(event); }

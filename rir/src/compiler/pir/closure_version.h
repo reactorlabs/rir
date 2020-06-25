@@ -56,6 +56,8 @@ class ClosureVersion : public Code {
     friend class Closure;
 
   public:
+    const UUID uid;
+
     ClosureVersion* clone(const Assumptions& newAssumptions);
 
     const Assumptions& assumptions() const {

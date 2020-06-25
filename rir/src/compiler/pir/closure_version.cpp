@@ -122,7 +122,8 @@ ClosureVersion::ClosureVersion(Closure* closure, rir::Function* optFunction,
                                const OptimizationContext& optimizationContext,
                                const Properties& properties)
     : optFunction(optFunction), owner_(closure),
-      optimizationContext_(optimizationContext), properties(properties) {
+      optimizationContext_(optimizationContext), uid(UUID::random()),
+      properties(properties) {
     auto id = std::stringstream();
     id << closure->name() << "[" << this << "]";
     name_ = id.str();
