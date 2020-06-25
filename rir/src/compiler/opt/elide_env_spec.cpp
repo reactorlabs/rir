@@ -50,7 +50,7 @@ bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                         }
                         auto argi = Instruction::Cast(arg);
                         assert(!arg->type.maybePromiseWrapped());
-                        Instruction::TypeFeedback seen;
+                        TypeFeedback seen;
                         if (argi)
                             seen = argi->typeFeedback;
                         if (auto j = Instruction::Cast(arg->followCasts()))

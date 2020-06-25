@@ -15,7 +15,7 @@ class TypeTest {
         rir::Code* srcCode;
         Opcode* origin;
     };
-    static void Create(Value* i, const Instruction::TypeFeedback& feedback,
+    static void Create(Value* i, const TypeFeedback& feedback,
                        const PirType& suggested, const PirType& required,
                        const std::function<void(Info)>& action,
                        const std::function<void()>& failed) {

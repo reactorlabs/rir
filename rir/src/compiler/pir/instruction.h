@@ -137,6 +137,14 @@ enum class VisibilityFlag : uint8_t {
     Unknown,
 };
 
+struct TypeFeedback {
+    PirType type = PirType::optimistic();
+    Value* value = nullptr;
+    rir::Code* srcCode = nullptr;
+    Opcode* origin = nullptr;
+    bool used = false;
+};
+
 class DominanceGraph;
 class MkEnv;
 class Instruction : public Value {
@@ -163,12 +171,6 @@ class Instruction : public Value {
         return effects.contains(Effect::Reflection);
     }
 
-    struct TypeFeedback {
-        PirType type = PirType::optimistic();
-        Value* value = nullptr;
-        rir::Code* srcCode = nullptr;
-        Opcode* origin = nullptr;
-    };
     TypeFeedback typeFeedback;
 
     Effects getObservableEffects() const {

@@ -5297,7 +5297,7 @@ bool LowerFunctionLLVM::tryCompile() {
     }
 
     std::unordered_set<rir::Code*> codes;
-    std::unordered_map<size_t, std::pair<rir::Code*, Opcode*>> variableMapping;
+    std::unordered_map<size_t, const pir::TypeFeedback&> variableMapping;
 #ifdef DEBUG_REGISTER_MAP
     std::unordered_set<size_t> usedSlots;
 #endif
@@ -5311,8 +5311,7 @@ bool LowerFunctionLLVM::tryCompile() {
             continue;
         if (var.second.stackSlot < PirTypeFeedback::MAX_SLOT_IDX) {
             codes.insert(i->typeFeedback.srcCode);
-            variableMapping[var.second.stackSlot] = {i->typeFeedback.srcCode,
-                                                     i->typeFeedback.origin};
+            variableMapping.emplace(var.second.stackSlot, i->typeFeedback);
 #ifdef DEBUG_REGISTER_MAP
             assert(!usedSlots.count(var.second.stackSlot));
             usedSlots.insert(var.second.stackSlot);

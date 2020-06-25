@@ -2,6 +2,7 @@
 #define RIR_RIR_REGISTER_MAP_H
 
 #include "RirRuntimeObject.h"
+#include "compiler/pir/type.h"
 #include "runtime/TypeFeedback.h"
 
 #include <iostream>
@@ -17,6 +18,10 @@ constexpr static size_t PIR_TYPE_FEEDBACK_MAGIC = 0x31573;
 
 struct Code;
 
+namespace pir {
+struct TypeFeedback;
+}
+
 struct PirTypeFeedback
     : public RirRuntimeObject<PirTypeFeedback, PIR_TYPE_FEEDBACK_MAGIC> {
   public:
@@ -24,7 +29,7 @@ struct PirTypeFeedback
 
     static PirTypeFeedback*
     New(const std::unordered_set<Code*>& origins,
-        const std::unordered_map<size_t, std::pair<Code*, Opcode*>>& slots) {
+        const std::unordered_map<size_t, const pir::TypeFeedback&>& slots) {
         SEXP cont = Rf_allocVector(EXTERNALSXP,
                                    requiredSize(origins.size(), slots.size()));
         PirTypeFeedback* res =
@@ -34,7 +39,7 @@ struct PirTypeFeedback
 
     PirTypeFeedback(
         const std::unordered_set<Code*>& codes,
-        const std::unordered_map<size_t, std::pair<Code*, Opcode*>>& slots);
+        const std::unordered_map<size_t, const pir::TypeFeedback&>& slots);
 
     ObservedValues& getSampleOfSlot(size_t slot) {
         return getMDEntryOfSlot(slot).feedback;
@@ -54,15 +59,17 @@ struct PirTypeFeedback
         uint8_t srcCode;
         unsigned offset;
         ObservedValues feedback;
+        pir::PirType previousType;
         unsigned sampleCount = 0;
         bool readyForReopt = false;
+        bool needReopt = false;
     };
 
-    void forEachSlot(
-        const std::function<void(size_t, MDEntry&, Opcode*)>& iterationBody) {
+    void
+    forEachSlot(const std::function<void(size_t, MDEntry&)>& iterationBody) {
         for (size_t id = 0; id < MAX_SLOT_IDX; id++) {
             if (entry[id] < MAX_SLOT_IDX) {
-                iterationBody(id, getMDEntryOfSlot(id), getOriginOfSlot(id));
+                iterationBody(id, getMDEntryOfSlot(id));
             }
         }
     }
@@ -75,7 +82,7 @@ struct PirTypeFeedback
         return mdEntries()[idx];
     }
 
-    MDEntry* mdEntries() {
+    MDEntry* mdEntries() const {
         return reinterpret_cast<MDEntry*>((uintptr_t)this + info.gc_area_start +
                                           sizeof(SEXP) * info.gc_area_length);
     }

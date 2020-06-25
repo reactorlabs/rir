@@ -1,5 +1,7 @@
 #include "PirTypeFeedback.h"
 #include "Code.h"
+#include "compiler/pir/instruction.h"
+#include <iostream>
 #include <unordered_map>
 
 namespace rir {
@@ -8,7 +10,7 @@ const size_t PirTypeFeedback::MAX_SLOT_IDX;
 
 PirTypeFeedback::PirTypeFeedback(
     const std::unordered_set<Code*>& codes,
-    const std::unordered_map<size_t, std::pair<Code*, Opcode*>>& slots)
+    const std::unordered_map<size_t, const pir::TypeFeedback&>& slots)
     : RirRuntimeObject(sizeof(*this), codes.size()) {
     assert((size_t)XLENGTH(container()) >=
            requiredSize(codes.size(), slots.size()));
@@ -34,18 +36,21 @@ PirTypeFeedback::PirTypeFeedback(
 
     for (auto s : slots) {
         auto slot = s.first;
-        auto origin = s.second;
+        auto typeFeedback = s.second;
         assert(slot < MAX_SLOT_IDX);
 
-        auto e = reverseMapping.find(origin.second);
+        auto e = reverseMapping.find(typeFeedback.origin);
         if (e != reverseMapping.end()) {
             entry[slot] = e->second;
+            assert(mdEntries()[e->second].previousType == typeFeedback.type);
         } else {
-            assert(codes.count(origin.first));
+            assert(codes.count(typeFeedback.srcCode));
             new (&mdEntries()[idx]) MDEntry;
-            mdEntries()[idx].srcCode = srcCodeMap.at(origin.first);
-            mdEntries()[idx].offset = origin.second - origin.first->code();
-            reverseMapping[origin.second] = idx;
+            mdEntries()[idx].srcCode = srcCodeMap.at(typeFeedback.srcCode);
+            mdEntries()[idx].offset =
+                typeFeedback.origin - typeFeedback.srcCode->code();
+            mdEntries()[idx].previousType = typeFeedback.type;
+            reverseMapping[typeFeedback.origin] = idx;
             entry[slot] = idx++;
         }
     }

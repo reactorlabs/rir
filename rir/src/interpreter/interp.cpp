@@ -795,6 +795,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                     name = lhs;
                 if (flags.contains(Function::MarkOpt))
                     fun->flags.reset(Function::MarkOpt);
+                if (fun->signature().assumptions.includes(
+                        Assumption::StaticallyArgmatched))
+                    given.add(Assumption::StaticallyArgmatched);
                 ctx->closureOptimizer(call.callee, given, name);
                 fun = dispatch(call, table);
             }

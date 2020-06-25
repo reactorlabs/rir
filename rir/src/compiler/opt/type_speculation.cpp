@@ -24,12 +24,13 @@ bool TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
 
     auto dom = DominanceGraph(function);
     Visitor::run(function->entry, [&](Instruction* i) {
-        if (i->typeFeedback.type.isVoid() || i->type.isA(i->typeFeedback.type))
+        if (i->typeFeedback.used || i->typeFeedback.type.isVoid() ||
+            i->type.isA(i->typeFeedback.type))
             return;
 
         Instruction* speculateOn = nullptr;
         Checkpoint* guardPos = nullptr;
-        Instruction::TypeFeedback feedback;
+        TypeFeedback feedback;
         BB* typecheckPos = nullptr;
 
         if (auto force = Force::Cast(i)) {
@@ -94,7 +95,9 @@ bool TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
             [&](TypeTest::Info info) {
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
                 // Prevent redundant speculation
-                speculateOn->typeFeedback.type = PirType::bottom();
+                speculateOn->typeFeedback.used = true;
+                //                speculateOn->typeFeedback.type =
+                //                PirType::bottom();
             },
             []() {});
     });

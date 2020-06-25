@@ -17,13 +17,22 @@ namespace rir {
 
 static RuntimeProfiler instance;
 
+static volatile size_t samples = 0;
+static volatile size_t hits = 0;
+
 RuntimeProfiler::RuntimeProfiler() {}
 
 RuntimeProfiler::~RuntimeProfiler() {}
 
+static bool needReopt = false;
+static size_t goodValues = 0;
+static size_t slotCount = 0;
+static R_bcstack_t* stack;
+
 void RuntimeProfiler::sample(int signal) {
+    samples++;
     auto ctx = (RCNTXT*)R_GlobalContext;
-    auto& stack = ctx->nodestack;
+    stack = ctx->nodestack;
     if (R_BCNodeStackTop == R_BCNodeStackBase)
         return;
     if ((stack)->tag != 0)
@@ -38,47 +47,65 @@ void RuntimeProfiler::sample(int signal) {
     if (!md)
         return;
 
-    md->forEachSlot(
-        [&](size_t i, PirTypeFeedback::MDEntry& mdEntry, Opcode* origin) {
-            auto slot = *(stack + i);
-            assert(slot.tag == 0);
-            if (auto sxpval = slot.u.sxpval) {
-                mdEntry.feedback.record(sxpval);
-                auto samples = ++(mdEntry.sampleCount);
-                if (samples == 10) {
-                    mdEntry.readyForReopt = true;
+    hits++;
+    needReopt = false;
+    goodValues = 0;
+    slotCount = 0;
 
-                    auto bc = BC::decodeShallow(origin);
-                    auto opcode = bc.bc;
-                    assert(opcode == Opcode::record_type_);
-                    auto oldFeedback = bc.immediate.typeFeedback;
-                    pir::PirType before;
-                    pir::PirType after;
-                    before.merge(oldFeedback);
-                    after.merge(mdEntry.feedback);
-                    after.isA(before);
-                    if (!before.isA(after)) {
-                        // set global re-opt flag
-                        code->flags.set(Code::Reoptimise);
-                    }
-                }
-                if (samples > 100) {
-                    mdEntry.readyForReopt = false;
-                    mdEntry.sampleCount = 0;
-                    mdEntry.feedback.reset();
+    md->forEachSlot([](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
+        auto slot = *(stack + i);
+        assert(slot.tag == 0);
+        if (auto sxpval = slot.u.sxpval) {
+            mdEntry.feedback.record(sxpval);
+            auto samples = ++(mdEntry.sampleCount);
+            slotCount++;
+            if (samples == 10) {
+                mdEntry.readyForReopt = true;
+                // check if this feedback justifies a reopt
+                pir::PirType after;
+                after.merge(mdEntry.feedback);
+                if (!mdEntry.previousType.isA(after)) {
+                    // mark slot as good for reopt
+                    mdEntry.needReopt = true;
                 }
             }
-        });
+            if (samples >= 10) {
+                goodValues++;
+                if (mdEntry.needReopt) {
+                    needReopt = true;
+                }
+            }
+            /*if (samples > 100) {
+                mdEntry.readyForReopt = false;
+                mdEntry.sampleCount = 0;
+                mdEntry.feedback.reset();
+            }*/
+        }
+    });
+
+    // only trigger reopt if at least 50% of all slots have enough samples and
+    // at least one slot justifies re-opt.
+    if (goodValues >= (slotCount / 2) && needReopt) {
+        // set global re-opt flag
+        code->flags.set(Code::Reoptimise);
+    }
 }
 
 #ifndef __APPLE__
 static void handler(int signal) { instance.sample(signal); }
+
+static void dump() {
+    std::cout << "\nsamples: " << samples << ", hits: " << hits << "\n";
+}
 
 void RuntimeProfiler::initProfiler() {
     bool ENABLE_PROFILER = getenv("PIR_ENABLE_PROFILER") ? true : false;
     if (!ENABLE_PROFILER) {
         return;
     }
+
+    std::atexit(dump);
+
     struct sigaction recordAction;
     struct sigevent sev;
     struct itimerspec itime;
