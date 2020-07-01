@@ -27,7 +27,6 @@ class Rir2PirCompiler : public RirCompiler {
     void compileFunction(rir::DispatchTable*, const std::string& name,
                          SEXP formals, SEXP srcRef, const Assumptions& ctx,
                          MaybeCls success, Maybe fail);
-    void optimizeModuleFor(const ClosureVersion* version);
     void optimizeModule();
 
     bool seenC = false;

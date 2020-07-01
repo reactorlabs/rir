@@ -6,6 +6,7 @@
 #include <iostream>
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "../../runtime/Function.h"
@@ -29,9 +30,13 @@ class Module {
                                     rir::Function* f);
 
     typedef std::function<void(pir::Closure*)> PirClosureIterator;
+    typedef std::function<void(const pir::ClosureVersion*)>
+        PirClosureVersionConstIterator;
     typedef std::function<void(pir::ClosureVersion*)> PirClosureVersionIterator;
     void eachPirClosure(PirClosureIterator it);
+    void eachPirClosureVersion(PirClosureVersionConstIterator it) const;
     void eachPirClosureVersion(PirClosureVersionIterator it);
+    std::unordered_set<UUID> getClosureVersionUids() const;
 
     ~Module();
   private:

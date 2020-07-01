@@ -6,6 +6,7 @@
 #include <iostream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "runtime/Assumptions.h"
@@ -15,6 +16,7 @@
 namespace rir {
 
 namespace pir {
+class Module;
 class ClosureVersion;
 }
 
@@ -26,7 +28,7 @@ class EventStream {
     enum class CompileEventAssociation {
         NotAssociated,
         IsIntermediateCompileEvent,
-        IsEndCompileEvent
+        IsStartCompileEvent
     };
 
     struct Event {
@@ -36,6 +38,7 @@ class EventStream {
                            const std::vector<Event*>::const_iterator& rest,
                            const std::vector<Event*>::const_iterator& end) = 0;
         virtual bool thisPrintsItself() = 0;
+        virtual size_t getDuration() = 0;
         virtual CompileEventAssociation getAssociationWith(const UUID& uid) = 0;
     };
 
@@ -55,6 +58,7 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
+        size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
@@ -69,6 +73,7 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
+        size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
@@ -83,6 +88,7 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
+        size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
@@ -98,25 +104,27 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
+        size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct OptimizedPir : public Event {
-        const UUID versionUid;
-        const size_t pirVersionSize;
+        const std::unordered_set<UUID> versionUids;
         const size_t durationMicros;
 
-        OptimizedPir(const pir::ClosureVersion* version, size_t durationMicros);
+        OptimizedPir(const pir::Module* module, size_t durationMicros);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
+        size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
     struct LoweredPir2Rir : public Event {
         const UUID versionUid;
+        const size_t pirVersionSize;
         const size_t durationMicros;
 
         LoweredPir2Rir(const pir::ClosureVersion* version,
@@ -126,6 +134,7 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
+        size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
@@ -139,21 +148,7 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
-        CompileEventAssociation getAssociationWith(const UUID& uid) override;
-    };
-
-    struct FinishedCompiling : public Event {
-        const UUID versionUid;
-        const size_t pirVersionSize;
-        const size_t durationMicros;
-
-        FinishedCompiling(const pir::ClosureVersion* version,
-                          size_t durationMicros);
-
-        void print(std::ostream& out,
-                   const std::vector<Event*>::const_iterator& rest,
-                   const std::vector<Event*>::const_iterator& end) override;
-        bool thisPrintsItself() override;
+        size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
@@ -174,6 +169,7 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
+        size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
@@ -188,6 +184,7 @@ class EventStream {
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
         bool thisPrintsItself() override;
+        size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 

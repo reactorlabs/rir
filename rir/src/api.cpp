@@ -295,7 +295,7 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
     cmp.compileClosure(what, name, assumptions,
                        [&](pir::ClosureVersion* c) {
                            logger.flush();
-                           cmp.optimizeModuleFor(c);
+                           cmp.optimizeModule();
 
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);

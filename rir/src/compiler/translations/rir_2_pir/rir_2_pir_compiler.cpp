@@ -316,14 +316,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 
         success(version);
 
-#ifdef MEASURE
-        totalDuration = finishProfiling();
-        if (EventStream::isEnabled) {
-            EventStream::instance().recordEvent(
-                new EventStream::FinishedCompiling(version, totalDuration));
-        }
-#endif
-
         return;
     }
 
@@ -349,12 +341,12 @@ std::chrono::time_point<std::chrono::high_resolution_clock> endTime;
 std::unique_ptr<CompilerPerf> PERF = std::unique_ptr<CompilerPerf>(
     MEASURE_COMPILER_PERF ? new CompilerPerf : nullptr);
 
-void Rir2PirCompiler::optimizeModuleFor(const ClosureVersion* version) {
+void Rir2PirCompiler::optimizeModule() {
 #ifdef MEASURE
-    Timestamp startTime = Clock::now();
+    Timestamp startTime2 = Clock::now();
     auto finishProfiling = [&]() {
-        Timestamp endTime = Clock::now();
-        Timestamp::duration duration = endTime - startTime;
+        Timestamp endTime2 = Clock::now();
+        Timestamp::duration duration = endTime2 - startTime2;
         size_t durationMicros =
             (size_t)std::chrono::duration_cast<std::chrono::microseconds>(
                 duration)
@@ -363,21 +355,6 @@ void Rir2PirCompiler::optimizeModuleFor(const ClosureVersion* version) {
     };
 #endif
 
-    // Silence any unused warning, the argument is passed because we need it
-    // when MEASURE is enabled, but otherwise it's unused
-    (void)version;
-    optimizeModule();
-
-#ifdef MEASURE
-    if (EventStream::isEnabled) {
-        size_t totalDuration = finishProfiling();
-        EventStream::instance().recordEvent(
-            new EventStream::OptimizedPir(version, totalDuration));
-    }
-#endif
-}
-
-void Rir2PirCompiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
     PassScheduler::instance().run([&](const PirTranslator* translation) {
@@ -438,6 +415,14 @@ void Rir2PirCompiler::optimizeModule() {
     }
 
     logger.flush();
+
+#ifdef MEASURE
+    if (EventStream::isEnabled) {
+        size_t totalDuration = finishProfiling();
+        EventStream::instance().recordEvent(
+            new EventStream::OptimizedPir(module, totalDuration));
+    }
+#endif
 }
 
 size_t Parameter::MAX_INPUT_SIZE =

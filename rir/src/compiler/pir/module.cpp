@@ -41,9 +41,21 @@ void Module::eachPirClosure(PirClosureIterator it) {
         it(c.second);
 }
 
+void Module::eachPirClosureVersion(PirClosureVersionConstIterator it) const {
+    for (auto& c : closures)
+        c.second->eachVersion(it);
+}
+
 void Module::eachPirClosureVersion(PirClosureVersionIterator it) {
     for (auto& c : closures)
         c.second->eachVersion(it);
+}
+
+std::unordered_set<UUID> Module::getClosureVersionUids() const {
+    std::unordered_set<UUID> uids;
+    eachPirClosureVersion(
+        [&](const ClosureVersion* version) { uids.insert(version->uid); });
+    return uids;
 }
 
 Env* Module::getEnv(SEXP rho) {
