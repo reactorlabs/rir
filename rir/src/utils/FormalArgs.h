@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../R/RList.h"
+#include "../runtime/Function.h"
 
 #include <vector>
 
@@ -16,16 +17,27 @@ class FormalArgs {
     FormalArgs(const FormalArgs&) = delete;
     FormalArgs& operator=(const FormalArgs&) = delete;
 
-    explicit FormalArgs(SEXP formals)
+    FormalArgs(rir::Function* function, SEXP formals)
         : hasDefaultArgs_(false), hasDots_(false), original_(formals) {
-        for (auto it = RList(formals).begin(); it != RList::end(); ++it) {
+        unsigned i = 0;
+        for (auto it = RList(formals).begin(); it != RList::end(); ++it, ++i) {
             names_.push_back(it.tag());
-            defaultArgs_.push_back(*it);
 
             if (it.tag() == R_DotsSymbol)
                 hasDots_ = true;
-            if (*it != R_MissingArg)
+
+            auto arg = function->defaultArg(i);
+            if (*it != R_MissingArg) {
+                assert(arg != nullptr && "Rir compiled function is missing a "
+                                         "compiled default argument");
                 hasDefaultArgs_ = true;
+                defaultArgs_.push_back(arg->container());
+            } else {
+                assert(arg == nullptr &&
+                       "Rir compiled function has a default argument that is "
+                       "not in the formals list");
+                defaultArgs_.push_back(R_MissingArg);
+            }
         }
     }
 

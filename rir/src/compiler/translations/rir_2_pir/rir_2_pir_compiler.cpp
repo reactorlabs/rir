@@ -119,28 +119,18 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         }
 
         auto arg = closure->formals().defaultArgs()[idx];
-        Value* res = nullptr;
-        if (TYPEOF(arg) != EXTERNALSXP) {
-            // A bit of a hack to compile default args, which somehow
-            // are not compiled.
-            // TODO: why are they sometimes not compiled??
-            auto funexp = rir::Compiler::compileExpression(arg);
-            preserve_(funexp);
-            arg = Function::unpack(funexp)->body()->container();
+        assert(rir::Code::check(arg) && "Default arg not compiled");
+        auto code = rir::Code::unpack(arg);
+        auto res = rir2pir.tryCreateArg(code, builder, false);
+        if (!res) {
+            failedToCompileDefaultArgs = true;
+            return;
         }
-        if (rir::Code::check(arg)) {
-            auto code = rir::Code::unpack(arg);
-            res = rir2pir.tryCreateArg(code, builder, false);
-            if (!res) {
-                failedToCompileDefaultArgs = true;
-                return;
-            }
-            if (MkArg::Cast(res)) {
-                // Need to cast promise-as-a-value to lazy-value, to make
-                // it evaluate on access
-                res = builder(new CastType(res, CastType::Upcast, RType::prom,
-                                           PirType::any()));
-            }
+        if (MkArg::Cast(res)) {
+            // Need to cast promise-as-a-value to lazy-value, to make
+            // it evaluate on access
+            res = builder(new CastType(res, CastType::Upcast, RType::prom,
+                                       PirType::any()));
         }
 
         builder(new StArg(closure->formals().names()[idx], res, builder.env));
