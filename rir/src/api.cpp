@@ -310,7 +310,8 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
                                std::cerr << "Compilation failed\n";
-                       });
+                       },
+                       {});
 
     delete m;
     UNPROTECT(1);
