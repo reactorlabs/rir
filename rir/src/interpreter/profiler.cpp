@@ -11,12 +11,13 @@
 #include "compiler/pir/type.h"
 #include "profiler.h"
 
-#include <time.h>
-
+#ifndef __APPLE__
 #include <asm/unistd.h>
 #include <fcntl.h>
 #include <linux/perf_event.h>
 #include <sys/ioctl.h>
+#include <time.h>
+#endif
 
 long perf_event_open(struct perf_event_attr* event_attr, pid_t pid, int cpu,
                      int group_fd, unsigned long flags) {
