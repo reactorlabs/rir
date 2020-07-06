@@ -17,8 +17,8 @@ class MkFunCls;
 class Rir2Pir {
   public:
     Rir2Pir(Rir2PirCompiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
-            const std::string& name)
-        : compiler(cmp), cls(cls), log(log), name(name) {}
+            const std::string& name,
+            const std::list<PirTypeFeedback*>& outerFeedback);
 
     bool tryCompile(Builder& insert) __attribute__((warn_unused_result));
 
@@ -47,6 +47,7 @@ class Rir2Pir {
     ClosureVersion* cls;
     ClosureStreamLogger& log;
     std::string name;
+    std::list<PirTypeFeedback*> outerFeedback;
 
     struct DelayedCompilation {
         DispatchTable* dt;
@@ -76,8 +77,9 @@ class Rir2Pir {
 class PromiseRir2Pir : public Rir2Pir {
   public:
     PromiseRir2Pir(Rir2PirCompiler& cmp, ClosureVersion* cls,
-                   ClosureStreamLogger& log, const std::string& name)
-        : Rir2Pir(cmp, cls, log, name) {}
+                   ClosureStreamLogger& log, const std::string& name,
+                   const std::list<PirTypeFeedback*>& outerFeedback)
+        : Rir2Pir(cmp, cls, log, name, outerFeedback) {}
 
   private:
     bool inPromise() const override final { return true; }

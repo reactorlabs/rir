@@ -72,7 +72,7 @@ ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
                                [&](pir::ClosureVersion* cls) {
                                    results[CHAR(PRINTNAME(f.tag()))] = cls;
                                },
-                               []() { assert(false); });
+                               []() { assert(false); }, {});
         }
     }
 

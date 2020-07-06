@@ -38,7 +38,7 @@ static ClosureVersion* recompilePir(SEXP f, Module* m) {
     ClosureVersion* res = nullptr;
     cmp.compileClosure(
         f, "pir_check", assumptions, [&](ClosureVersion* r) { res = r; },
-        []() { Rf_warning("pir check failed: couldn't compile"); });
+        []() { Rf_warning("pir check failed: couldn't compile"); }, {});
 
     if (!res)
         return nullptr;

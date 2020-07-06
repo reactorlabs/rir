@@ -137,6 +137,16 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
+Rir2Pir::Rir2Pir(Rir2PirCompiler& cmp, ClosureVersion* cls,
+                 ClosureStreamLogger& log, const std::string& name,
+                 const std::list<PirTypeFeedback*>& outerFeedback)
+    : compiler(cmp), cls(cls), log(log), name(name),
+      outerFeedback(outerFeedback) {
+    if (cls->optFunction && cls->optFunction->body()->pirTypeFeedback())
+        this->outerFeedback.push_back(
+            cls->optFunction->body()->pirTypeFeedback());
+}
+
 Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
                                    const RirStack& stack,
                                    Builder& insert) const {
@@ -360,18 +370,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (bc.immediate.typeFeedback.numTypes) {
             auto feedback = bc.immediate.typeFeedback;
             if (auto i = Instruction::Cast(at(0))) {
-                if (cls->optFunction) {
-                    if (auto sample =
-                            cls->optFunction->body()->pirTypeFeedback()) {
-                        // TODO: implement with a find method on register map
-                        sample->forEachSlot(
-                            [&](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
-                                auto origin = sample->getOriginOfSlot(i);
-                                if (origin == pos && mdEntry.readyForReopt) {
-                                    feedback = mdEntry.feedback;
-                                }
-                            });
-                    }
+                // Search for the most specific feedabck for this location
+                for (auto fb : outerFeedback) {
+                    bool found = false;
+                    // TODO: implement with a find method on register map
+                    fb->forEachSlot(
+                        [&](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
+                            found = true;
+                            auto origin = fb->getOriginOfSlot(i);
+                            if (origin == pos && mdEntry.readyForReopt) {
+                                feedback = mdEntry.feedback;
+                            }
+                        });
+                    if (found)
+                        break;
                 }
                 // TODO: deal with multiple locations
                 i->typeFeedback.type.merge(feedback);
@@ -766,12 +778,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
             if (monomorphicClosure) {
                 compiler.compileClosure(monomorphic, name, given, apply,
-                                        insertGenericCall);
+                                        insertGenericCall, outerFeedback);
             } else {
                 compiler.compileFunction(
                     target, name, FORMALS(monomorphic),
                     Rf_getAttrib(monomorphic, symbol::srcref), given, apply,
-                    insertGenericCall);
+                    insertGenericCall, outerFeedback);
             }
         } else if (monomorphicBuiltin) {
             popn(toPop);
@@ -1163,11 +1175,12 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
 }
 
 bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) {
-    return PromiseRir2Pir(compiler, cls, log, name).tryCompile(prom, insert);
+    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback)
+        .tryCompile(prom, insert);
 }
 
 Value* Rir2Pir::tryTranslatePromise(rir::Code* srcCode, Builder& insert) {
-    return PromiseRir2Pir(compiler, cls, log, name)
+    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback)
         .tryTranslate(srcCode, insert);
 }
 
@@ -1488,7 +1501,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             [&]() {
                 failedToCompileInnerFun = true;
                 log.warn("Aborting. Failed to compile inner function" + name);
-            });
+            },
+            outerFeedback);
     }
     if (failedToCompileInnerFun)
         return nullptr;

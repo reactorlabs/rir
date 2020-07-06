@@ -4,7 +4,9 @@
 #include "../../../utils/FormalArgs.h"
 #include "../../debugging/stream_logger.h"
 #include "../rir_compiler.h"
+#include <list>
 #include <stack>
+
 namespace rir {
 struct DispatchTable;
 namespace pir {
@@ -23,10 +25,12 @@ class Rir2PirCompiler : public RirCompiler {
         : RirCompiler(module), logger(logger){};
 
     void compileClosure(SEXP, const std::string& name, const Assumptions& ctx,
-                        MaybeCls success, Maybe fail);
+                        MaybeCls success, Maybe fail,
+                        std::list<PirTypeFeedback*> outerFeedback);
     void compileFunction(rir::DispatchTable*, const std::string& name,
                          SEXP formals, SEXP srcRef, const Assumptions& ctx,
-                         MaybeCls success, Maybe fail);
+                         MaybeCls success, Maybe fail,
+                         std::list<PirTypeFeedback*> outerFeedback);
     void optimizeModule();
 
     bool seenC = false;
@@ -35,7 +39,7 @@ class Rir2PirCompiler : public RirCompiler {
     StreamLogger& logger;
     void compileClosure(Closure* closure, rir::Function* optFunction,
                         const OptimizationContext& ctx, MaybeCls success,
-                        Maybe fail);
+                        Maybe fail, std::list<PirTypeFeedback*> outerFeedback);
 };
 
 } // namespace pir
