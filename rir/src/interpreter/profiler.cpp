@@ -100,7 +100,6 @@ void RuntimeProfiler::sample(int signal) {
         // set global re-opt flag
         code->flags.set(Code::Reoptimise);
         compilations++;
-        std::cout << "rec\n";
     }
 }
 
