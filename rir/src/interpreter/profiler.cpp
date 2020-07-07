@@ -73,7 +73,7 @@ void RuntimeProfiler::sample(int signal) {
             if (samples == 10) {
                 mdEntry.readyForReopt = true;
                 // check if this feedback justifies a reopt
-                pir::PirType after;
+                pir::PirType after = pir::PirType::optimistic();
                 after.merge(mdEntry.feedback);
                 if (!mdEntry.previousType.isA(after)) {
                     // mark slot as good for reopt
@@ -100,6 +100,7 @@ void RuntimeProfiler::sample(int signal) {
         // set global re-opt flag
         code->flags.set(Code::Reoptimise);
         compilations++;
+        std::cout << "rec\n";
     }
 }
 
