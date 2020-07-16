@@ -1277,10 +1277,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
             if (condition) {
                 BB* deopt = nullptr;
-                if (condition->typeFeedback.value == True::instance())
-                    deopt = insert.getCurrentBB()->falseBranch();
-                else if (condition->typeFeedback.value == False::instance())
-                    deopt = insert.getCurrentBB()->trueBranch();
+                if (!inPromise()) {
+                    if (condition->typeFeedback.value == True::instance())
+                        deopt = insert.getCurrentBB()->falseBranch();
+                    else if (condition->typeFeedback.value == False::instance())
+                        deopt = insert.getCurrentBB()->trueBranch();
+                }
 
                 if (deopt) {
                     insert.enterBB(deopt);
