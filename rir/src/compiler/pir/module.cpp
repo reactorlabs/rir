@@ -24,7 +24,7 @@ Closure* Module::getOrDeclareRirFunction(const std::string& name,
 Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
                                         rir::Function* f) {
     // For Identification we use the real env, but for optimization we only use
-    // the real environemtn if this is not an inner function. When it is an
+    // the real environment if this is not an inner function. When it is an
     // inner function, then the env is expected to change over time.
     auto id = Idx(f, getEnv(CLOENV(closure)));
     auto env = f->flags.contains(Function::InnerFunction)
