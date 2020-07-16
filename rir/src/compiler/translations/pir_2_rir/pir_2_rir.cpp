@@ -1344,9 +1344,9 @@ rir::Function* Pir2Rir::finalize() {
     FunctionWriter function;
     Context ctx(function);
 
-    FunctionSignature signature(FunctionSignature::Environment::CalleeCreated,
-                                FunctionSignature::OptimizationLevel::Optimized,
-                                cls->assumptions());
+    FunctionSignature signature(
+        FunctionSignature::Environment::CalleeCreated,
+        FunctionSignature::OptimizationLevel::Optimized);
 
     // PIR does not support default args currently.
     for (size_t i = 0; i < cls->nargs(); ++i) {
@@ -1358,7 +1358,7 @@ rir::Function* Pir2Rir::finalize() {
     ctx.push(R_NilValue);
     auto body = compileCode(ctx, cls);
     log.finalPIR(cls);
-    function.finalize(body, signature);
+    function.finalize(body, signature, cls->context());
 
     function.function()->inheritFlags(cls->owner()->rirFunction());
 #ifdef ENABLE_SLOWASSERT

@@ -22,10 +22,10 @@ namespace rir {
 struct CallContext {
     CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
                 R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
-                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
+                const Context& givenContext, InterpreterInstance* ctx)
         : caller(c), suppliedArgs(nargs), passedArgs(nargs),
           stackArgs(stackArgs), names(names), callerEnv(callerEnv), ast(ast),
-          callee(callee), givenAssumptions(givenAssumptions) {
+          callee(callee), givenContext(givenContext) {
         assert(callerEnv);
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
@@ -38,16 +38,16 @@ struct CallContext {
     // cppcheck-suppress uninitMemberVar
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
-                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
+                const Context& givenContext, InterpreterInstance* ctx)
         : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), stackArgs, names,
-                      callerEnv, givenAssumptions, ctx) {}
+                      callerEnv, givenContext, ctx) {}
 
     // cppcheck-suppress uninitMemberVar
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, SEXP callerEnv,
-                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
+                const Context& givenContext, InterpreterInstance* ctx)
         : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
-                      nullptr, callerEnv, givenAssumptions, ctx) {}
+                      nullptr, callerEnv, givenContext, ctx) {}
 
     const Code* caller;
     const size_t suppliedArgs;
@@ -57,7 +57,7 @@ struct CallContext {
     SEXP callerEnv;
     const SEXP ast;
     const SEXP callee;
-    Assumptions givenAssumptions;
+    Context givenContext;
     SEXP arglist = nullptr;
 
     bool hasEagerCallee() const { return TYPEOF(callee) == BUILTINSXP; }

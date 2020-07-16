@@ -230,7 +230,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::call_dots_: {
             i.callFixedArgs.nargs = InInteger(inp);
             i.callFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
-            InBytes(inp, &i.callFixedArgs.given, sizeof(Assumptions));
+            InBytes(inp, &i.callFixedArgs.given, sizeof(Context));
             Opcode* c = code + 1 + sizeof(CallFixedArgs);
             // Read implicit promise argument offsets
             // Read named arguments
@@ -250,7 +250,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::static_call_:
             i.callFixedArgs.nargs = InInteger(inp);
             i.callFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
-            InBytes(inp, &i.callFixedArgs.given, sizeof(Assumptions));
+            InBytes(inp, &i.callFixedArgs.given, sizeof(Context));
             i.staticCallFixedArgs.targetClosure =
                 Pool::insert(ReadItem(refTable, inp));
             i.staticCallFixedArgs.versionHint =
@@ -374,7 +374,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::named_call_:
             OutInteger(out, i.callFixedArgs.nargs);
             WriteItem(Pool::get(i.callFixedArgs.ast), refTable, out);
-            OutBytes(out, &i.callFixedArgs.given, sizeof(Assumptions));
+            OutBytes(out, &i.callFixedArgs.given, sizeof(Context));
             // Write named arguments
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
@@ -390,7 +390,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::static_call_:
             OutInteger(out, i.staticCallFixedArgs.nargs);
             WriteItem(Pool::get(i.staticCallFixedArgs.ast), refTable, out);
-            OutBytes(out, &i.staticCallFixedArgs.given, sizeof(Assumptions));
+            OutBytes(out, &i.staticCallFixedArgs.given, sizeof(Context));
             WriteItem(Pool::get(i.staticCallFixedArgs.targetClosure), refTable,
                       out);
             WriteItem(Pool::get(i.staticCallFixedArgs.versionHint), refTable,

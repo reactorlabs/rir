@@ -296,7 +296,7 @@ BC BC::put(uint32_t i) {
     im.i = i;
     return BC(Opcode::put_, im);
 }
-BC BC::call(size_t nargs, SEXP ast, const Assumptions& given) {
+BC BC::call(size_t nargs, SEXP ast, const Context& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = nargs;
     im.callFixedArgs.ast = Pool::insert(ast);
@@ -304,7 +304,7 @@ BC BC::call(size_t nargs, SEXP ast, const Assumptions& given) {
     return BC(Opcode::call_, im);
 }
 BC BC::callDots(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
-                const Assumptions& given) {
+                const Context& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = nargs;
     im.callFixedArgs.ast = Pool::insert(ast);
@@ -317,7 +317,7 @@ BC BC::callDots(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
     return cur;
 }
 BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
-            const Assumptions& given) {
+            const Context& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = nargs;
     im.callFixedArgs.ast = Pool::insert(ast);
@@ -330,7 +330,7 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
     return cur;
 }
 BC BC::staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
-                  SEXP targetVersion, const Assumptions& given) {
+                  SEXP targetVersion, const Context& given) {
     assert(!targetVersion || Function::unpack(targetVersion));
     assert(TYPEOF(targetClosure) == CLOSXP);
     auto target =

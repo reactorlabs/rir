@@ -2,7 +2,6 @@
 #include "pir_impl.h"
 
 #include "../analysis/query.h"
-#include "../util/ConvertAssumptions.h"
 #include "../util/cfg.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
@@ -957,20 +956,19 @@ Effects StaticCall::inferEffects(const GetType& getType) const {
 }
 
 ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
-    auto res = cls->findCompatibleVersion(
-        OptimizationContext(inferAvailableAssumptions()));
+    auto res = cls->findCompatibleVersion(inferAvailableAssumptions());
 #ifdef WARN_DISPATCH_FAIL
     if (!res) {
         std::cout << "DISPATCH FAILED! Available versions: \n";
         cls->eachVersion([&](ClosureVersion* v) {
-            std::cout << "* " << v->assumptions() << "\n";
+            std::cout << "* " << v->context() << "\n";
         });
         std::cout << "Available assumptions at callsite: \n ";
         std::cout << inferAvailableAssumptions() << "\n";
     }
 #endif
     if (res) {
-        if (res->assumptions().includes(Assumption::NoExplicitlyMissingArgs))
+        if (res->context().includes(Assumption::NoExplicitlyMissingArgs))
             assert(res->effectiveNArgs() == nCallArgs());
         else
             assert(res->effectiveNArgs() >= nCallArgs());
@@ -990,17 +988,14 @@ ClosureVersion* StaticCall::tryOptimisticDispatch() const {
     if (!dispatch)
         return nullptr;
 
-    return (hint->optimizationContext() < dispatch->optimizationContext())
-               ? dispatch
-               : hint;
+    return (hint->context() < dispatch->context()) ? dispatch : hint;
 }
 
-StaticCall::StaticCall(Value* callerEnv, Closure* cls,
-                       Assumptions givenAssumptions,
+StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
                        const std::vector<Value*>& args, FrameState* fs,
                        unsigned srcIdx, Value* runtimeClosure)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls), givenAssumptions(givenAssumptions) {
+      cls_(cls), givenContext(givenContext) {
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
@@ -1037,8 +1032,8 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
     return nullptr;
 }
 
-Assumptions CallInstruction::inferAvailableAssumptions() const {
-    Assumptions given;
+Context CallInstruction::inferAvailableAssumptions() const {
+    Context given;
     if (!hasNamedArgs())
         given.add(Assumption::CorrectOrderOfArguments);
     if (auto cls = tryGetCls()) {
@@ -1059,7 +1054,7 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
         if (arg->type.maybe(RType::expandedDots))
             hasDotsArg = true;
         else
-            writeArgTypeToAssumptions(given, arg, i);
+            arg->typeToContext(given, i);
         ++i;
     });
 

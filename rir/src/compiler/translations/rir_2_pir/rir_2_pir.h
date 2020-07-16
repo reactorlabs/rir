@@ -55,7 +55,7 @@ class Rir2Pir {
         SEXP formals;
         SEXP srcRef;
         bool seen;
-        Assumptions assumptions;
+        Context context;
     };
     std::unordered_map<MkFunCls*, DelayedCompilation> delayedCompilation;
 

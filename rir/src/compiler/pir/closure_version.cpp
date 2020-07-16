@@ -87,9 +87,8 @@ ClosureVersion::~ClosureVersion() {
     }
 }
 
-ClosureVersion* ClosureVersion::clone(const Assumptions& newAssumptions) {
-    auto ctx = optimizationContext_;
-    ctx.assumptions = ctx.assumptions | newAssumptions;
+ClosureVersion* ClosureVersion::clone(const Context& newAssumptions) {
+    auto ctx = optimizationContext_ | newAssumptions;
     auto c = owner_->declareVersion(ctx, optFunction);
     c->properties = properties;
     c->entry = BBTransform::clone(entry, c, c);
@@ -115,11 +114,11 @@ size_t ClosureVersion::size() const {
 
 size_t ClosureVersion::nargs() const { return owner_->nargs(); }
 size_t ClosureVersion::effectiveNArgs() const {
-    return owner_->nargs() - optimizationContext_.assumptions.numMissing();
+    return owner_->nargs() - optimizationContext_.numMissing();
 }
 
 ClosureVersion::ClosureVersion(Closure* closure, rir::Function* optFunction,
-                               const OptimizationContext& optimizationContext,
+                               const Context& optimizationContext,
                                const Properties& properties)
     : optFunction(optFunction), owner_(closure),
       optimizationContext_(optimizationContext), properties(properties) {

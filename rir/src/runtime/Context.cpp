@@ -1,17 +1,17 @@
-#include "Assumptions.h"
+#include "Context.h"
 #include "R/Serialize.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 
 namespace rir {
 
-Assumptions Assumptions::deserialize(SEXP refTable, R_inpstream_t inp) {
-    Assumptions as;
-    InBytes(inp, &as, sizeof(Assumptions));
+Context Context::deserialize(SEXP refTable, R_inpstream_t inp) {
+    Context as;
+    InBytes(inp, &as, sizeof(Context));
     return as;
 }
 
-void Assumptions::serialize(SEXP refTable, R_outpstream_t out) const {
-    OutBytes(out, this, sizeof(Assumptions));
+void Context::serialize(SEXP refTable, R_outpstream_t out) const {
+    OutBytes(out, this, sizeof(Context));
 }
 
 std::ostream& operator<<(std::ostream& out, Assumption a) {
@@ -71,7 +71,7 @@ std::ostream& operator<<(std::ostream& out, TypeAssumption a) {
     return out;
 };
 
-std::ostream& operator<<(std::ostream& out, const Assumptions& a) {
+std::ostream& operator<<(std::ostream& out, const Context& a) {
     for (auto i = a.flags.begin(); i != a.flags.end(); ++i) {
         out << *i;
         if (i + 1 != a.flags.end())
@@ -89,18 +89,18 @@ std::ostream& operator<<(std::ostream& out, const Assumptions& a) {
     return out;
 }
 
-constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
-    Assumptions::EagerAssumptions;
-constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
-    Assumptions::NotObjAssumptions;
-constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
-    Assumptions::SimpleIntAssumptions;
-constexpr std::array<TypeAssumption, Assumptions::NUM_TYPED_ARGS>
-    Assumptions::SimpleRealAssumptions;
+constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
+    Context::EagerContext;
+constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
+    Context::NotObjContext;
+constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
+    Context::SimpleIntContext;
+constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
+    Context::SimpleRealContext;
 
-void Assumptions::setSpecializationLevel(int level) {
-    static Flags preserve = pir::Rir2PirCompiler::minimalAssumptions |
-                            Assumption::StaticallyArgmatched;
+void Context::setSpecializationLevel(int level) {
+    static Flags preserve =
+        pir::Rir2PirCompiler::minimalContext | Assumption::StaticallyArgmatched;
 
     switch (level) {
     // All Specialization Disabled

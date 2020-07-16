@@ -3,8 +3,6 @@
 #include "R/Serialize.h"
 #include "R/r.h"
 
-#include "runtime/Assumptions.h"
-
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -69,9 +67,8 @@ struct FunctionSignature {
     static FunctionSignature deserialize(SEXP refTable, R_inpstream_t inp) {
         Environment envc = (Environment)InInteger(inp);
         OptimizationLevel opt = (OptimizationLevel)InInteger(inp);
-        const Assumptions as = Assumptions::deserialize(refTable, inp);
         unsigned numArgs = InInteger(inp);
-        FunctionSignature sig(envc, opt, as);
+        FunctionSignature sig(envc, opt);
         sig.numArguments = numArgs;
         return sig;
     }
@@ -79,7 +76,6 @@ struct FunctionSignature {
     void serialize(SEXP refTable, R_outpstream_t out) const {
         OutInteger(out, (int)envCreation);
         OutInteger(out, (int)optimization);
-        assumptions.serialize(refTable, out);
         OutInteger(out, numArguments);
     }
 
@@ -92,29 +88,18 @@ struct FunctionSignature {
             out << "optimized code ";
         if (envCreation == Environment::CallerProvided)
             out << "needsEnv ";
-        if (!assumptions.empty()) {
-            out << "| assumptions: [" << assumptions << "]";
-        }
     }
 
   public:
     FunctionSignature() = delete;
     FunctionSignature(Environment envCreation, OptimizationLevel optimization)
         : envCreation(envCreation), optimization(optimization) {}
-    FunctionSignature(Environment envCreation, OptimizationLevel optimization,
-                      const Assumptions& assumptions)
-        : envCreation(envCreation), optimization(optimization),
-          assumptions(assumptions) {}
 
     size_t formalNargs() const { return numArguments; }
-    size_t expectedNargs() const {
-        return numArguments - assumptions.numMissing();
-    }
 
     const Environment envCreation;
     const OptimizationLevel optimization;
     unsigned numArguments = 0;
-    const Assumptions assumptions;
 };
 
 } // namespace rir

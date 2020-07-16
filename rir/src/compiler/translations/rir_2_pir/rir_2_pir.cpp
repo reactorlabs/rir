@@ -3,7 +3,6 @@
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
 #include "../../transform/insert_cast.h"
-#include "../../util/ConvertAssumptions.h"
 #include "../../util/arg_match.h"
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
@@ -739,7 +738,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
 
-            Assumptions given;
+            Context given;
             // Make some optimistic assumptions, they might be reset below...
             given.add(Assumption::NoExplicitlyMissingArgs);
             given.numMissing(missingArgs);
@@ -754,7 +753,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         given.remove(Assumption::NoExplicitlyMissingArgs);
                         i++;
                     } else {
-                        writeArgTypeToAssumptions(given, arg, i++);
+                        arg->typeToContext(given, i++);
                     }
                 }
             }
@@ -1391,9 +1390,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             auto mk = insert(new MkFunCls(nullptr, dt, insert.env));
             cur.stack.push(mk);
 
-            delayedCompilation[mk] = {
-                dt,     inner.str(), formals,
-                srcRef, false,       Rir2PirCompiler::defaultAssumptions};
+            delayedCompilation[mk] = {dt,      inner.str(),
+                                      formals, srcRef,
+                                      false,   Rir2PirCompiler::defaultContext};
 
             finger = pc;
             skip = true;
@@ -1467,7 +1466,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
     Visitor::run(insert.code->entry, [&](Instruction* i) {
         Value* callee = nullptr;
-        Assumptions asmpt;
+        Context asmpt;
         if (auto ci = Call::Cast(i)) {
             callee = ci->cls();
             asmpt = ci->inferAvailableAssumptions();
@@ -1483,10 +1482,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             return;
         auto& d = f->second;
         if (d.seen) {
-            d.assumptions = d.assumptions & asmpt;
+            d.context = d.context & asmpt;
         } else {
             d.seen = true;
-            d.assumptions = asmpt;
+            d.context = asmpt;
         }
     });
 
@@ -1494,7 +1493,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     for (auto& delayed : delayedCompilation) {
         auto d = delayed.second;
         compiler.compileFunction(
-            d.dt, d.name, d.formals, d.srcRef, d.assumptions,
+            d.dt, d.name, d.formals, d.srcRef, d.context,
             [&](ClosureVersion* innerF) {
                 delayed.first->cls = innerF->owner();
             },

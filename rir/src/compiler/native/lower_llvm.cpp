@@ -2098,7 +2098,7 @@ bool LowerFunctionLLVM::compileDotcall(
     });
     if (!seenDots)
         return false;
-    Assumptions asmpt = calli->inferAvailableAssumptions();
+    Context asmpt = calli->inferAvailableAssumptions();
     auto namesConst = c(newNames);
     auto namesStore = globalConst(namesConst);
 
@@ -3249,7 +3249,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
-                Assumptions asmpt = b->inferAvailableAssumptions();
+                Context asmpt = b->inferAvailableAssumptions();
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(NativeBuiltins::call,
                                        {paramCode(), c(b->srcIdx),
@@ -3267,7 +3267,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
-                Assumptions asmpt = b->inferAvailableAssumptions();
+                Context asmpt = b->inferAvailableAssumptions();
 
                 std::vector<BC::PoolIdx> names;
                 for (size_t i = 0; i < b->names.size(); ++i)
@@ -3298,7 +3298,7 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto bestTarget = calli->tryOptimisticDispatch();
                 std::vector<Value*> args;
                 calli->eachCallArg([&](Value* v) { args.push_back(v); });
-                Assumptions asmpt = calli->inferAvailableAssumptions();
+                Context asmpt = calli->inferAvailableAssumptions();
 
                 if (!target->owner()->hasOriginClosure()) {
                     setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
@@ -3319,8 +3319,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     rir::Function* nativeTarget = nullptr;
                     for (size_t i = 0; i < dt->size(); i++) {
                         auto entry = dt->get(i);
-                        if (entry->signature().assumptions ==
-                                target->assumptions() &&
+                        if (entry->context() == target->context() &&
                             entry->signature().numArguments >= args.size()) {
                             nativeTarget = entry;
                         }

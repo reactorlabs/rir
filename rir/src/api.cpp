@@ -274,8 +274,8 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     return R_NilValue;
 }
 
-SEXP pirCompile(SEXP what, const Assumptions& assumptions,
-                const std::string& name, const pir::DebugOptions& debug) {
+SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
+                const pir::DebugOptions& debug) {
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
     }
@@ -352,8 +352,7 @@ REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags,
             Rf_error("pir_compile - given unknown debug style");
         }
     }
-    return pirCompile(what, rir::pir::Rir2PirCompiler::defaultAssumptions, n,
-                      opts);
+    return pirCompile(what, rir::pir::Rir2PirCompiler::defaultContext, n, opts);
 }
 
 REXPORT SEXP pir_tests() {
@@ -407,8 +406,7 @@ REXPORT SEXP pir_check(SEXP f, SEXP checksSxp, SEXP env) {
     return res ? R_TrueValue : R_FalseValue;
 }
 
-SEXP rirOptDefaultOpts(SEXP closure, const Assumptions& assumptions,
-                       SEXP name) {
+SEXP rirOptDefaultOpts(SEXP closure, const Context& assumptions, SEXP name) {
     std::string n = "";
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
@@ -419,7 +417,7 @@ SEXP rirOptDefaultOpts(SEXP closure, const Assumptions& assumptions,
         return closure;
 }
 
-SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
+SEXP rirOptDefaultOptsDryrun(SEXP closure, const Context& assumptions,
                              SEXP name) {
     std::string n = "";
     if (TYPEOF(name) == SYMSXP)

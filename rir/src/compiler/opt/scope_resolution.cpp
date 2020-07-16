@@ -40,9 +40,9 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
                 auto v = vo.val->followCastsAndForce();
                 if (v->type.maybeLazy()) {
                     if (auto ld = LdArg::Cast(v))
-                        if (cls->assumptions().includes(
+                        if (cls->context().includes(
                                 rir::Assumption::NoReflectiveArgument) ||
-                            cls->assumptions().isEager(ld->id))
+                            cls->context().isEager(ld->id))
                             return;
                     maybe = true;
                 }
@@ -280,7 +280,7 @@ class TheScopeResolution {
 
                 // If no reflective argument is passed to us, then forcing an
                 // argument cannot see our environment
-                if (function->assumptions().includes(
+                if (function->context().includes(
                         rir::Assumption::NoReflectiveArgument)) {
                     if (auto force = Force::Cast(i)) {
                         if (force->hasEnv()) {

@@ -1,11 +1,10 @@
 #ifndef COMPILER_CLOSURE_VERSION_H
 #define COMPILER_CLOSURE_VERSION_H
 
-#include "../../runtime/Function.h"
 #include "../debugging/debugging.h"
 #include "code.h"
-#include "optimization_context.h"
 #include "pir.h"
+#include "runtime/Function.h"
 #include <functional>
 #include <sstream>
 #include <unordered_map>
@@ -45,25 +44,20 @@ class ClosureVersion : public Code {
   private:
     Closure* owner_;
     std::vector<Promise*> promises_;
-    const OptimizationContext& optimizationContext_;
+    const Context& optimizationContext_;
 
     std::string name_;
     std::string nameSuffix_;
     ClosureVersion(Closure* closure, rir::Function* optFunction,
-                   const OptimizationContext& optimizationContext,
+                   const Context& optimizationContext,
                    const Properties& properties = Properties());
 
     friend class Closure;
 
   public:
-    ClosureVersion* clone(const Assumptions& newAssumptions);
+    ClosureVersion* clone(const Context& newContext);
 
-    const Assumptions& assumptions() const {
-        return optimizationContext_.assumptions;
-    }
-    const OptimizationContext& optimizationContext() const {
-        return optimizationContext_;
-    }
+    const Context& context() const { return optimizationContext_; }
 
     Properties properties;
 

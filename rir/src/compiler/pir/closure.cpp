@@ -38,10 +38,9 @@ Closure::~Closure() {
 }
 
 ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
-                                              const Assumptions& asmpt,
+                                              const Context& asmpt,
                                               const MaybeClsVersion& change) {
-    auto newCtx = version->optimizationContext();
-    newCtx.assumptions = newCtx.assumptions | asmpt;
+    auto newCtx = version->context() | asmpt;
     if (versions.count(newCtx))
         return versions.at(newCtx);
 
@@ -51,21 +50,19 @@ ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
     return copy;
 }
 
-ClosureVersion*
-Closure::findCompatibleVersion(const OptimizationContext& ctx) const {
+ClosureVersion* Closure::findCompatibleVersion(const Context& ctx) const {
     // ordered by number of assumptions
     for (auto c = versions.rbegin(); c != versions.rend(); c++) {
         const auto& candidate = *c;
         const auto& candidateCtx = candidate.first;
-        if (candidateCtx.subtype(OptimizationContext(ctx.assumptions)))
+        if (candidateCtx.subtype(ctx))
             return candidate.second;
     }
     return nullptr;
 }
 
-ClosureVersion*
-Closure::declareVersion(const OptimizationContext& optimizationContext,
-                        rir::Function* optFunction) {
+ClosureVersion* Closure::declareVersion(const Context& optimizationContext,
+                                        rir::Function* optFunction) {
     assert(!versions.count(optimizationContext));
     versions[optimizationContext] = nullptr;
     auto entry = versions.find(optimizationContext);

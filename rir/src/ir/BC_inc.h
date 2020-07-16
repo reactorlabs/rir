@@ -14,7 +14,7 @@
 #include <array>
 #include <vector>
 
-#include "runtime/Assumptions.h"
+#include "runtime/Context.h"
 #include "runtime/TypeFeedback.h"
 
 #include "BC_noarg_list.h"
@@ -90,12 +90,12 @@ class BC {
     struct CallFixedArgs {
         NumArgs nargs;
         Immediate ast;
-        Assumptions given;
+        Context given;
     };
     struct StaticCallFixedArgs {
         NumArgs nargs;
         Immediate ast;
-        Assumptions given;
+        Context given;
         Immediate targetClosure;
         Immediate versionHint;
     };
@@ -408,13 +408,13 @@ BC_NOARGS(V, _)
     inline static BC is(uint32_t);
     inline static BC isType(TypeChecks);
     inline static BC deopt(SEXP);
-    inline static BC call(size_t nargs, SEXP ast, const Assumptions& given);
+    inline static BC call(size_t nargs, SEXP ast, const Context& given);
     inline static BC callDots(size_t nargs, const std::vector<SEXP>& names,
-                              SEXP ast, const Assumptions& given);
+                              SEXP ast, const Context& given);
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
-                          SEXP ast, const Assumptions& given);
+                          SEXP ast, const Context& given);
     inline static BC staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
-                                SEXP targetVersion, const Assumptions& given);
+                                SEXP targetVersion, const Context& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            const std::vector<bool>& missing,

@@ -304,10 +304,9 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
                 size_t bodyPromIdx = cs.addPromise(bodyProm);
 
                 // 3) Add the function, arguments, and call
-                Assumptions assumptions = Assumptions() |
-                                          TypeAssumption::Arg0IsEager_ |
-                                          Assumption::CorrectOrderOfArguments |
-                                          Assumption::NotTooManyArguments;
+                Context assumptions = Context() | TypeAssumption::Arg0IsEager_ |
+                                      Assumption::CorrectOrderOfArguments |
+                                      Assumption::NotTooManyArguments;
                 cs << BC::ldfun(symbol::For) << BC::swap()
                    << BC::mkEagerPromise(seqPromIdx)
                    << BC::mkPromise(bodyPromIdx)
@@ -1113,8 +1112,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 }
 
                 if (hasDots) {
-                    cs << BC::callDots(args.length(), names, inAst,
-                                       Assumptions());
+                    cs << BC::callDots(args.length(), names, inAst, Context());
                 } else {
                     cs << BC::callBuiltin(args.length(), inAst, internal);
                 }
@@ -1257,7 +1255,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     // Process arguments:
     // Arguments can be optionally named
     std::vector<SEXP> names;
-    Assumptions assumptions;
+    Context assumptions;
 
     bool hasNames = false;
     bool hasDots = false;
@@ -1415,7 +1413,7 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
-    function.finalize(body, signature);
+    function.finalize(body, signature, Context());
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),

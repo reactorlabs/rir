@@ -207,5 +207,25 @@ bool PirType::isInstance(SEXP val) const {
         assert(false);
     }
 }
+
+void PirType::fromContext(const Context& assumptions, unsigned arg) {
+    auto& type = *this;
+    auto i = arg;
+    if (assumptions.isEager(i))
+        type = type.notLazy().notMissing();
+    if (assumptions.isNotObj(i))
+        type.setNotObject();
+    if (assumptions.isSimpleReal(i)) {
+        assert(assumptions.isEager(i) && assumptions.isNotObj(i));
+        type.setScalar(RType::real);
+        type.setNoAttribs();
+    }
+    if (assumptions.isSimpleInt(i)) {
+        assert(assumptions.isEager(i) && assumptions.isNotObj(i) &&
+               !assumptions.isSimpleReal(i));
+        type.setScalar(RType::integer);
+        type.setNoAttribs();
+    }
+}
 }
 }

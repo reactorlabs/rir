@@ -68,7 +68,7 @@ enum class Assumption {
 
 #pragma pack(push)
 #pragma pack(1)
-struct Assumptions {
+struct Context {
     typedef EnumSet<TypeAssumption, uint32_t> TypeFlags;
     typedef EnumSet<Assumption, uint8_t> Flags;
 
@@ -77,19 +77,17 @@ struct Assumptions {
     constexpr static size_t NUM_TYPED_ARGS = 8;
     constexpr static size_t NUM_TYPED_ARGS_SPECULATE = 8;
 
-    Assumptions() = default;
-    Assumptions(const Assumptions&) noexcept = default;
+    Context() = default;
+    Context(const Context&) noexcept = default;
 
-    explicit constexpr Assumptions(const Flags& flags) : flags(flags) {}
-    constexpr Assumptions(const Flags& flags, uint8_t missing)
+    explicit constexpr Context(const Flags& flags) : flags(flags) {}
+    constexpr Context(const Flags& flags, uint8_t missing)
         : flags(flags), missing(missing) {}
-    constexpr Assumptions(const Flags& flags, const TypeFlags& typeFlags,
-                          uint8_t missing)
+    constexpr Context(const Flags& flags, const TypeFlags& typeFlags,
+                      uint8_t missing)
         : flags(flags), typeFlags(typeFlags), missing(missing) {}
-    explicit Assumptions(void* pos) {
-        memcpy((void*)this, pos, sizeof(*this));
-    }
-    explicit Assumptions(unsigned long val) {
+    explicit Context(void* pos) { memcpy((void*)this, pos, sizeof(*this)); }
+    explicit Context(unsigned long val) {
         // Silence unused field warning
         (void)unused2;
         memcpy((void*)this, &val, sizeof(*this));
@@ -109,7 +107,7 @@ struct Assumptions {
 
 #define TYPE_ASSUMPTIONS(Type)                                                 \
     static constexpr std::array<TypeAssumption, NUM_TYPED_ARGS>                \
-        Type##Assumptions = {                                                  \
+        Type##Context = {                                                      \
             {TypeAssumption::Arg0Is##Type##_, TypeAssumption::Arg1Is##Type##_, \
              TypeAssumption::Arg2Is##Type##_, TypeAssumption::Arg3Is##Type##_, \
              TypeAssumption::Arg4Is##Type##_, TypeAssumption::Arg5Is##Type##_, \
@@ -117,13 +115,13 @@ struct Assumptions {
              TypeAssumption::Arg7Is##Type##_}};                                \
     RIR_INLINE bool is##Type(size_t i) const {                                 \
         if (i < NUM_TYPED_ARGS_SPECULATE)                                      \
-            if (typeFlags.includes(Type##Assumptions[i]))                      \
+            if (typeFlags.includes(Type##Context[i]))                          \
                 return true;                                                   \
         return false;                                                          \
     }                                                                          \
     RIR_INLINE void set##Type(size_t i) {                                      \
         if (i < NUM_TYPED_ARGS_SPECULATE)                                      \
-            typeFlags.set(Type##Assumptions[i]);                               \
+            typeFlags.set(Type##Context[i]);                                   \
     }
     TYPE_ASSUMPTIONS(Eager);
     TYPE_ASSUMPTIONS(NotObj);
@@ -132,13 +130,13 @@ struct Assumptions {
 #undef TYPE_ASSUMPTIONS
 
     static TypeFlags allEagerArgsFlags() {
-        Assumptions a;
+        Context a;
         for (size_t i = 0; i < NUM_TYPED_ARGS_SPECULATE; ++i)
             a.setEager(i);
         return a.typeFlags;
     }
     static TypeFlags allNonObjArgsFlags() {
-        Assumptions a;
+        Context a;
         for (size_t i = 0; i < NUM_TYPED_ARGS_SPECULATE; ++i)
             a.setNotObj(i);
         return a.typeFlags;
@@ -159,29 +157,29 @@ struct Assumptions {
         return flags.count() + typeFlags.count();
     }
 
-    constexpr Assumptions operator|(const Flags& other) const {
-        return Assumptions(other | flags, typeFlags, missing);
+    constexpr Context operator|(const Flags& other) const {
+        return Context(other | flags, typeFlags, missing);
     }
-    constexpr Assumptions operator|(const TypeFlags& other) const {
-        return Assumptions(flags, other | typeFlags, missing);
+    constexpr Context operator|(const TypeFlags& other) const {
+        return Context(flags, other | typeFlags, missing);
     }
-    constexpr Assumptions operator|(const Assumptions& other) const {
+    constexpr Context operator|(const Context& other) const {
         assert(missing == other.missing);
-        return Assumptions(other.flags | flags, other.typeFlags | typeFlags,
-                           missing);
+        return Context(other.flags | flags, other.typeFlags | typeFlags,
+                       missing);
     }
-    constexpr Assumptions operator&(const Assumptions& other) const {
+    constexpr Context operator&(const Context& other) const {
         if (missing != other.missing) {
             auto min = missing > other.missing ? other.missing : missing;
-            return Assumptions(other.flags & flags &
-                                   ~Flags(Assumption::NoExplicitlyMissingArgs),
-                               other.typeFlags & typeFlags, min);
+            return Context(other.flags & flags &
+                               ~Flags(Assumption::NoExplicitlyMissingArgs),
+                           other.typeFlags & typeFlags, min);
         }
-        return Assumptions(other.flags & flags, other.typeFlags & typeFlags,
-                           missing);
+        return Context(other.flags & flags, other.typeFlags & typeFlags,
+                       missing);
     }
 
-    RIR_INLINE bool operator<(const Assumptions& other) const {
+    RIR_INLINE bool operator<(const Context& other) const {
         // Order by number of assumptions! Important for dispatching.
         if (*this != other) {
             if (subtype(other))
@@ -202,17 +200,17 @@ struct Assumptions {
         return typeFlags.to_i() < other.typeFlags.to_i();
     }
 
-    RIR_INLINE bool operator!=(const Assumptions& other) const {
+    RIR_INLINE bool operator!=(const Context& other) const {
         return flags != other.flags || typeFlags != other.typeFlags ||
                missing != other.missing;
     }
 
-    RIR_INLINE bool operator==(const Assumptions& other) const {
+    RIR_INLINE bool operator==(const Context& other) const {
         return flags == other.flags && typeFlags == other.typeFlags &&
                missing == other.missing;
     }
 
-    RIR_INLINE bool subtype(const Assumptions& other) const {
+    RIR_INLINE bool subtype(const Context& other) const {
         bool tooManyPassed =
             !other.flags.contains(Assumption::NotTooManyArguments);
         bool requireNotTooMany =
@@ -241,11 +239,11 @@ struct Assumptions {
                other.typeFlags.includes(typeFlags);
     }
 
-    static Assumptions deserialize(SEXP refTable, R_inpstream_t inp);
+    static Context deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
 
-    friend struct std::hash<rir::Assumptions>;
-    friend std::ostream& operator<<(std::ostream& out, const Assumptions& a);
+    friend struct std::hash<rir::Context>;
+    friend std::ostream& operator<<(std::ostream& out, const Context& a);
 
     void clearExcept(const Flags& filter) {
         flags = flags & filter;
@@ -274,8 +272,8 @@ struct Assumptions {
 #pragma pack(pop)
 
 typedef uint32_t Immediate;
-static_assert(sizeof(Assumptions) == 2 * sizeof(Immediate),
-              "Assumptions needs to be 2 immediate args long");
+static_assert(sizeof(Context) == 2 * sizeof(Immediate),
+              "Context needs to be 2 immediate args long");
 
 std::ostream& operator<<(std::ostream& out, Assumption a);
 std::ostream& operator<<(std::ostream& out, TypeAssumption a);
@@ -284,8 +282,8 @@ std::ostream& operator<<(std::ostream& out, TypeAssumption a);
 
 namespace std {
 template <>
-struct hash<rir::Assumptions> {
-    std::size_t operator()(const rir::Assumptions& v) const {
+struct hash<rir::Context> {
+    std::size_t operator()(const rir::Context& v) const {
         return hash_combine(
             hash_combine(hash_combine(0, v.flags.to_i()), v.typeFlags.to_i()),
             v.missing);

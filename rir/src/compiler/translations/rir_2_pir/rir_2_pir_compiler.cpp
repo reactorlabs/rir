@@ -22,18 +22,18 @@ namespace pir {
 
 // Currently PIR optimized functions cannot handle too many arguments or
 // mis-ordered arguments. The caller needs to take care.
-constexpr Assumptions::Flags Rir2PirCompiler::minimalAssumptions;
-constexpr Assumptions Rir2PirCompiler::defaultAssumptions;
+constexpr Context::Flags Rir2PirCompiler::minimalContext;
+constexpr Context Rir2PirCompiler::defaultContext;
 
 void Rir2PirCompiler::compileClosure(
-    SEXP closure, const std::string& name, const Assumptions& assumptions_,
+    SEXP closure, const std::string& name, const Context& assumptions_,
     MaybeCls success, Maybe fail, std::list<PirTypeFeedback*> outerFeedback) {
     assert(isValidClosureSEXP(closure));
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto fun = tbl->baseline();
 
-    Assumptions assumptions = assumptions_;
+    Context assumptions = assumptions_;
     fun->clearDisabledAssumptions(assumptions);
 
     auto frame = RList(FRAME(CLOENV(closure)));
@@ -47,19 +47,19 @@ void Rir2PirCompiler::compileClosure(
         }
     }
     auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun);
-    OptimizationContext context(assumptions);
+    Context context(assumptions);
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, success,
                    fail, outerFeedback);
 }
 
 void Rir2PirCompiler::compileFunction(
     rir::DispatchTable* src, const std::string& name, SEXP formals, SEXP srcRef,
-    const Assumptions& assumptions_, MaybeCls success, Maybe fail,
+    const Context& assumptions_, MaybeCls success, Maybe fail,
     std::list<PirTypeFeedback*> outerFeedback) {
-    Assumptions assumptions = assumptions_;
+    Context assumptions = assumptions_;
     auto srcFunction = src->baseline();
     srcFunction->clearDisabledAssumptions(assumptions);
-    OptimizationContext context(assumptions);
+    Context context(assumptions);
     auto closure =
         module->getOrDeclareRirFunction(name, srcFunction, formals, srcRef);
     compileClosure(closure, src->dispatch(assumptions), context, success, fail,
@@ -67,13 +67,12 @@ void Rir2PirCompiler::compileFunction(
 }
 
 void Rir2PirCompiler::compileClosure(
-    Closure* closure, rir::Function* optFunction,
-    const OptimizationContext& ctx, MaybeCls success, Maybe fail,
-    std::list<PirTypeFeedback*> outerFeedback) {
+    Closure* closure, rir::Function* optFunction, const Context& ctx,
+    MaybeCls success, Maybe fail, std::list<PirTypeFeedback*> outerFeedback) {
 
-    if (!ctx.assumptions.includes(minimalAssumptions)) {
-        for (const auto& a : minimalAssumptions) {
-            if (!ctx.assumptions.includes(a)) {
+    if (!ctx.includes(minimalContext)) {
+        for (const auto& a : minimalContext) {
+            if (!ctx.includes(a)) {
                 std::stringstream as;
                 as << "Missing minimal assumption " << a;
                 logger.warn(as.str());
@@ -87,7 +86,7 @@ void Rir2PirCompiler::compileClosure(
     // `...` list as DOTSXP in the correct location, we can support them.
     // TODO: extend call instruction to do the necessary argument shuffling to
     // support it in all cases
-    if (!ctx.assumptions.includes(Assumption::StaticallyArgmatched) &&
+    if (!ctx.includes(Assumption::StaticallyArgmatched) &&
         closure->formals().hasDots()) {
         closure->rirFunction()->flags.set(Function::NotOptimizable);
         logger.warn("no support for ...");
@@ -108,8 +107,7 @@ void Rir2PirCompiler::compileClosure(
     auto& log = logger.begin(version);
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback);
 
-    auto& assumptions = version->assumptions();
-
+    auto& context = version->context();
     bool failedToCompileDefaultArgs = false;
     auto compileDefaultArg = [&](size_t idx) {
         if (closure->formals().names()[idx] == R_DotsSymbol) {
@@ -137,9 +135,9 @@ void Rir2PirCompiler::compileClosure(
     };
 
     if (closure->formals().hasDefaultArgs()) {
-        if (!ctx.assumptions.includes(Assumption::NoExplicitlyMissingArgs)) {
-            for (unsigned i = 0;
-                 i < closure->nargs() - assumptions.numMissing(); ++i) {
+        if (!ctx.includes(Assumption::NoExplicitlyMissingArgs)) {
+            for (unsigned i = 0; i < closure->nargs() - context.numMissing();
+                 ++i) {
                 if (closure->formals().defaultArgs()[i] != R_MissingArg) {
                     // If this arg has a default, then test if the argument is
                     // missing and if so, load the default arg.
@@ -169,7 +167,7 @@ void Rir2PirCompiler::compileClosure(
 
         // if we supplied less arguments than required, we know the rest is
         // missing
-        for (unsigned i = closure->nargs() - assumptions.numMissing();
+        for (unsigned i = closure->nargs() - context.numMissing();
              i < closure->nargs(); ++i)
             if (closure->formals().defaultArgs()[i] != R_MissingArg)
                 compileDefaultArg(i);
