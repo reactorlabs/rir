@@ -70,48 +70,14 @@ inline bool RecompileCondition(DispatchTable* table, Function* fun,
             fun->body()->flags.contains(Code::Reoptimise));
 }
 
-inline bool matches(Context given, const FunctionSignature& signature,
-                    const Context& context) {
-    // TODO: look at the arguments of the function signature and not just at the
-    // global assumptions list. This only becomes relevant as soon as we want to
-    // optimize based on argument types.
-
-    // Baseline always matches!
-    if (signature.optimization ==
-        FunctionSignature::OptimizationLevel::Baseline) {
-#ifdef DEBUG_DISPATCH
-        std::cout << "BL\n";
-#endif
-        return true;
-    }
-
-    assert(signature.envCreation ==
-           FunctionSignature::Environment::CalleeCreated);
-
-#ifdef DEBUG_DISPATCH
-    std::cout << "have   " << given << "\n";
-    std::cout << "trying " << signature.assumptions << "\n";
-    std::cout << " -> " << signature.assumptions.subtype(given) << "\n";
-#endif
-    // Check if given assumptions match required assumptions
-    return context.subtype(given);
+inline bool matches(const CallContext& call, Function* f) {
+    return call.givenContext.smaller(f->context());
 }
 
 inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
-    // Find the most specific version of the function that can be called given
-    // the current call context.
-    Function* fun = nullptr;
-    for (int i = vt->size() - 1; i >= 0; i--) {
-        auto candidate = vt->get(i);
-        if (matches(call.givenContext, candidate->signature(),
-                    candidate->context())) {
-            fun = candidate;
-            break;
-        }
-    }
-    assert(fun);
-
-    return fun;
+    auto f = vt->dispatch(call.givenContext);
+    assert(f);
+    return f;
 };
 
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx);

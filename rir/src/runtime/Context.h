@@ -180,24 +180,26 @@ struct Context {
     }
 
     RIR_INLINE bool operator<(const Context& other) const {
-        // Order by number of assumptions! Important for dispatching.
-        if (*this != other) {
-            if (subtype(other))
-                return true;
-            if (other.subtype(*this))
-                return false;
-        }
+        if (*this == other)
+            return false;
 
-        // we need a complete order, subtype is only partial
-        if (missing != other.missing)
-            return missing < other.missing;
+        // Order by number of assumptions! Important for dispatching.
+        if (smaller(other))
+            return true;
+        if (other.smaller(*this))
+            return false;
+
+        // we need a complete order, smaller is only partial
+        // (more assumptions = smaller context)
         if (flags.count() != other.flags.count())
-            return flags.count() < other.flags.count();
+            return flags.count() > other.flags.count();
         if (typeFlags.count() != other.typeFlags.count())
-            return typeFlags.count() < other.typeFlags.count();
+            return typeFlags.count() > other.typeFlags.count();
+        if (missing != other.missing)
+            return missing > other.missing;
         if (flags.to_i() != other.flags.to_i())
-            return flags.to_i() < other.flags.to_i();
-        return typeFlags.to_i() < other.typeFlags.to_i();
+            return flags.to_i() > other.flags.to_i();
+        return typeFlags.to_i() > other.typeFlags.to_i();
     }
 
     RIR_INLINE bool operator!=(const Context& other) const {
@@ -210,33 +212,19 @@ struct Context {
                missing == other.missing;
     }
 
-    RIR_INLINE bool subtype(const Context& other) const {
-        bool tooManyPassed =
-            !other.flags.contains(Assumption::NotTooManyArguments);
-        bool requireNotTooMany =
-            flags.contains(Assumption::NotTooManyArguments);
-        // The callsite passed more args than formals and the callee does not
-        // support surplus arguments.
-        if (tooManyPassed && requireNotTooMany)
-            return false;
-
+    RIR_INLINE bool smaller(const Context& other) const {
         // argdiff positive = "more than expected", negative = "less than"
-        long argdiff = (long)missing - (long)other.missing;
+        int argdiff = (int)other.missing - (int)missing;
 
-        // The callsite passed more args than expected
-        if (argdiff > 0 && requireNotTooMany)
+        if (argdiff > 0 &&
+            other.flags.contains(Assumption::NotTooManyArguments))
+            return false;
+        if (argdiff < 0 &&
+            other.flags.contains(Assumption::NoExplicitlyMissingArgs))
             return false;
 
-        // Negative argdiff is padded with missing on call. This only works if
-        // the callee expects passed arguments to be missing.
-        bool requireNoExplicitlyMissing =
-            flags.contains(Assumption::NoExplicitlyMissingArgs);
-        if (requireNoExplicitlyMissing && argdiff < 0)
-            return false;
-
-        // Check the rest of the flags
-        return other.flags.includes(flags) &&
-               other.typeFlags.includes(typeFlags);
+        return flags.includes(other.flags) &&
+               typeFlags.includes(other.typeFlags);
     }
 
     static Context deserialize(SEXP refTable, R_inpstream_t inp);
