@@ -1,10 +1,10 @@
 #ifndef COMPILER_CLOSURE_H
 #define COMPILER_CLOSURE_H
 
-#include "../../runtime/Function.h"
 #include "code.h"
-#include "optimization_context.h"
 #include "pir.h"
+#include "runtime/Context.h"
+#include "runtime/Function.h"
 #include <functional>
 #include <map>
 #include <sstream>
@@ -40,7 +40,7 @@ class Closure {
     const std::string name_;
     const FormalArgs formals_;
 
-    std::map<const OptimizationContext, ClosureVersion*> versions;
+    std::map<const Context, ClosureVersion*> versions;
 
   public:
     SEXP rirClosure() const {
@@ -63,21 +63,16 @@ class Closure {
         return out;
     }
 
-    ClosureVersion* declareVersion(const OptimizationContext&,
-                                   rir::Function* optFunction);
-    void erase(const OptimizationContext& ctx) { versions.erase(ctx); }
+    ClosureVersion* declareVersion(const Context&, rir::Function* optFunction);
+    void erase(const Context& ctx) { versions.erase(ctx); }
 
-    bool existsVersion(const OptimizationContext& ctx) {
-        return versions.count(ctx);
-    }
-    ClosureVersion* getVersion(const OptimizationContext& ctx) {
-        return versions.at(ctx);
-    }
-    ClosureVersion* findCompatibleVersion(const OptimizationContext& ctx) const;
+    bool existsVersion(const Context& ctx) { return versions.count(ctx); }
+    ClosureVersion* getVersion(const Context& ctx) { return versions.at(ctx); }
+    ClosureVersion* findCompatibleVersion(const Context& ctx) const;
 
     typedef std::function<void(ClosureVersion*)> MaybeClsVersion;
     ClosureVersion* cloneWithAssumptions(ClosureVersion* cls,
-                                         const Assumptions& asmpt,
+                                         const Context& asmpt,
                                          const MaybeClsVersion& change);
 
     typedef std::function<void(pir::ClosureVersion*)> ClosureVersionIterator;

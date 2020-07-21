@@ -54,6 +54,8 @@ class Value {
     virtual int minReferenceCount() const {
         return type.maybeReferenceCounted() ? 0 : MAX_REFCOUNT;
     }
+
+    void typeToContext(Context&, unsigned arg) const;
 };
 
 } // namespace pir

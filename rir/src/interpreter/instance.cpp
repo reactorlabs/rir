@@ -46,19 +46,19 @@ InterpreterInstance* context_create() {
     c->closureCompiler = [](SEXP closure, SEXP name) {
         return rir_compile(closure, R_NilValue);
     };
-    c->closureOptimizer = [](SEXP f, const Assumptions&, SEXP n) { return f; };
+    c->closureOptimizer = [](SEXP f, const Context&, SEXP n) { return f; };
 
     if (pir && std::string(pir).compare("off") == 0) {
         // do nothing; use defaults
     } else if (pir && std::string(pir).compare("force") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
             SEXP rir = rir_compile(f, R_NilValue);
-            return rirOptDefaultOpts(rir, Assumptions(), n);
+            return rirOptDefaultOpts(rir, Context(), n);
         };
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
             SEXP rir = rir_compile(f, R_NilValue);
-            return rirOptDefaultOptsDryrun(rir, Assumptions(), n);
+            return rirOptDefaultOptsDryrun(rir, Context(), n);
         };
     } else {
         c->closureOptimizer = rirOptDefaultOpts;

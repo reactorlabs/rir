@@ -63,14 +63,15 @@ inline bool RecompileHeuristic(DispatchTable* table, Function* fun,
 }
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
-                               const Assumptions& context) {
+                               const Context& context) {
     return (fun->flags.contains(Function::MarkOpt) ||
             fun->flags.contains(Function::Dead) || fun == table->baseline() ||
-            context != fun->signature().assumptions ||
+            context != fun->context() ||
             fun->body()->flags.contains(Code::Reoptimise));
 }
 
-inline bool matches(Assumptions given, const FunctionSignature& signature) {
+inline bool matches(Context given, const FunctionSignature& signature,
+                    const Context& context) {
     // TODO: look at the arguments of the function signature and not just at the
     // global assumptions list. This only becomes relevant as soon as we want to
     // optimize based on argument types.
@@ -93,7 +94,7 @@ inline bool matches(Assumptions given, const FunctionSignature& signature) {
     std::cout << " -> " << signature.assumptions.subtype(given) << "\n";
 #endif
     // Check if given assumptions match required assumptions
-    return signature.assumptions.subtype(given);
+    return context.subtype(given);
 }
 
 inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
@@ -102,7 +103,8 @@ inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
     Function* fun = nullptr;
     for (int i = vt->size() - 1; i >= 0; i--) {
         auto candidate = vt->get(i);
-        if (matches(call.givenAssumptions, candidate->signature())) {
+        if (matches(call.givenContext, candidate->signature(),
+                    candidate->context())) {
             fun = candidate;
             break;
         }

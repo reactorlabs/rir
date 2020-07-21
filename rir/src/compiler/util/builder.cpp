@@ -1,6 +1,5 @@
 #include "builder.h"
 #include "../pir/pir_impl.h"
-#include "ConvertAssumptions.h"
 
 namespace rir {
 namespace pir {
@@ -91,14 +90,14 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     // Create another BB to ensure that the entry BB has no predecessors.
     createNextBB();
 
-    auto& assumptions = version->assumptions();
+    auto& context = version->context();
     std::vector<Value*> args(closure->nargs());
-    size_t nargs = closure->nargs() - assumptions.numMissing();
+    size_t nargs = version->effectiveNArgs();
     for (long i = nargs - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
         if (closure->formals().names()[i] == R_DotsSymbol)
             args[i]->type = PirType::dotsArg();
-        readArgTypeFromAssumptions(assumptions, args[i]->type, i);
+        args[i]->type.fromContext(context, i);
     }
     for (size_t i = nargs; i < closure->nargs(); ++i) {
         args[i] = MissingArg::instance();

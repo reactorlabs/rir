@@ -641,10 +641,9 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-static void addDynamicAssumptionsFromContext(CallContext& call,
-                                             size_t formalNargs,
-                                             InterpreterInstance* ctx) {
-    Assumptions& given = call.givenAssumptions;
+static void addDynamicContextFromContext(CallContext& call, size_t formalNargs,
+                                         InterpreterInstance* ctx) {
+    Context& given = call.givenContext;
 
     if (call.suppliedArgs <= formalNargs) {
         given.add(Assumption::NotTooManyArguments);
@@ -724,17 +723,16 @@ static void addDynamicAssumptionsFromContext(CallContext& call,
 // of actually supplied arguments).
 static RIR_INLINE void supplyMissingArgs(CallContext& call,
                                          const Function* fun) {
-    auto signature = fun->signature();
-    assert(signature.expectedNargs() >= call.suppliedArgs ||
-           !signature.assumptions.includes(Assumption::NotTooManyArguments));
-    assert(
-        signature.expectedNargs() == call.suppliedArgs ||
-        !signature.assumptions.includes(Assumption::NoExplicitlyMissingArgs));
-    if (signature.expectedNargs() > call.suppliedArgs) {
-        for (size_t i = 0; i < signature.expectedNargs() - call.suppliedArgs;
-             ++i)
+    auto context = fun->context();
+    auto expected = fun->expectedNargs();
+    assert(expected >= call.suppliedArgs ||
+           !context.includes(Assumption::NotTooManyArguments));
+    assert(expected == call.suppliedArgs ||
+           !context.includes(Assumption::NoExplicitlyMissingArgs));
+    if (expected > call.suppliedArgs) {
+        for (size_t i = 0; i < expected - call.suppliedArgs; ++i)
             ostack_push(ctx, R_MissingArg);
-        call.passedArgs = signature.expectedNargs();
+        call.passedArgs = expected;
     }
 }
 
@@ -762,14 +760,14 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
-    addDynamicAssumptionsFromContext(
+    addDynamicContextFromContext(
         call, table->baseline()->signature().formalNargs(), ctx);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
     auto flags = fun->flags;
     if (!isDeoptimizing() && RecompileHeuristic(table, fun)) {
-        Assumptions given = call.givenAssumptions;
+        Context given = call.givenContext;
         // addDynamicAssumptionForOneTarget compares arguments with the
         // signature of the current dispatch target. There the number of
         // arguments might be off. But we want to force compiling a new version
@@ -778,8 +776,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
         fun->clearDisabledAssumptions(given);
         if (RecompileCondition(table, fun, given)) {
-            if (Assumptions(given).includes(
-                    pir::Rir2PirCompiler::minimalAssumptions)) {
+            if (Context(given).includes(pir::Rir2PirCompiler::minimalContext)) {
                 // More assumptions are available than this version uses. Let's
                 // try compile a better matching version.
 #ifdef DEBUG_DISPATCH
@@ -795,8 +792,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                     name = lhs;
                 if (flags.contains(Function::MarkOpt))
                     fun->flags.reset(Function::MarkOpt);
-                if (fun->signature().assumptions.includes(
-                        Assumption::StaticallyArgmatched))
+                if (fun->context().includes(Assumption::StaticallyArgmatched))
                     given.add(Assumption::StaticallyArgmatched);
                 ctx->closureOptimizer(call.callee, given, name);
                 fun = dispatch(call, table);
@@ -812,15 +808,15 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             arglist = createLegacyLazyArgsList(call, ctx);
         PROTECT(arglist);
         SEXP env;
-        if (call.givenAssumptions.includes(Assumption::StaticallyArgmatched)) {
+        if (call.givenContext.includes(Assumption::StaticallyArgmatched)) {
             auto formals = FORMALS(call.callee);
             env = Rf_NewEnvironment(formals, arglist, CLOENV(call.callee));
 
             // Add missing arguments. Statically argmatched means that still
             // some missing args might need to be supplied.
-            if (!call.givenAssumptions.includes(
+            if (!call.givenContext.includes(
                     Assumption::NoExplicitlyMissingArgs) ||
-                call.passedArgs != fun->numArgs) {
+                call.passedArgs != fun->nargs()) {
                 auto f = formals;
                 auto a = arglist;
                 SEXP prevA = nullptr;
@@ -876,8 +872,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             // Currently we cannot recreate the original arglist if we
             // statically reordered arguments. TODO this needs to be fixed
             // by remembering the original order.
-            if (call.givenAssumptions.includes(
-                    Assumption::StaticallyArgmatched))
+            if (call.givenContext.includes(Assumption::StaticallyArgmatched))
                 lazyArgs.content.args = nullptr;
             supplyMissingArgs(call, fun);
             result = rirCallTrampoline(call, fun, arglist, ctx);
@@ -2536,8 +2531,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(pc);
-            pc += sizeof(Assumptions);
+            Context given(pc);
+            pc += sizeof(Context);
 
             CallContext call(c, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, (long)n - 1), env, given, ctx);
@@ -2561,8 +2556,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(pc);
-            pc += sizeof(Assumptions);
+            Context given(pc);
+            pc += sizeof(Context);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostack_at(ctx, n), n, ast,
@@ -2587,8 +2582,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            Assumptions given(pc);
-            pc += sizeof(Assumptions);
+            Context given(pc);
+            pc += sizeof(Context);
             auto names_ = (Immediate*)pc;
             advanceImmediateN(n);
 
@@ -2631,8 +2626,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             CallContext call(c, callee, n, ast,
-                             ostack_cell_at(ctx, (long)n - 1), env,
-                             Assumptions(), ctx);
+                             ostack_cell_at(ctx, (long)n - 1), env, Context(),
+                             ctx);
             res = builtinCall(call, ctx);
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
@@ -2654,20 +2649,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
-            Assumptions given(pc);
-            pc += sizeof(Assumptions);
+            Context given(pc);
+            pc += sizeof(Context);
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
             CallContext call(c, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), env, given, ctx);
             auto fun = Function::unpack(version);
-            addDynamicAssumptionsFromContext(
-                call, fun->signature().formalNargs(), ctx);
-            Assumptions assumptions = call.givenAssumptions;
+            addDynamicContextFromContext(call, fun->signature().formalNargs(),
+                                         ctx);
+            Context assumptions = call.givenContext;
             auto flags = fun->flags;
-            bool dispatchFail = flags.contains(Function::Dead) ||
-                                !matches(assumptions, fun->signature());
+            bool dispatchFail =
+                flags.contains(Function::Dead) ||
+                !matches(assumptions, fun->signature(), fun->context());
             fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));
             if (!isDeoptimizing() && !dispatchFail &&
@@ -4263,7 +4259,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
     }
 
     CallContext call(nullptr, op, nargs, ast, ostack_cell_at(ctx, nargs - 1),
-                     names.empty() ? nullptr : names.data(), rho, Assumptions(),
+                     names.empty() ? nullptr : names.data(), rho, Context(),
                      ctx);
     call.arglist = arglist;
     call.safeForceArgs();

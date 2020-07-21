@@ -8,9 +8,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "../../runtime/Function.h"
-#include "optimization_context.h"
 #include "pir.h"
+#include "runtime/Function.h"
 
 namespace rir {
 namespace pir {

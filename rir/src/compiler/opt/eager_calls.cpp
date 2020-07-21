@@ -183,7 +183,7 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 }
 
                 auto availableAssumptions = call->inferAvailableAssumptions();
-                assert(version->assumptions().numMissing() <=
+                assert(version->context().numMissing() <=
                        availableAssumptions.numMissing());
                 cls->rirFunction()->clearDisabledAssumptions(
                     availableAssumptions);
@@ -194,7 +194,7 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 if (cls->nargs() > 0 &&
                     availableAssumptions.includes(
                         Assumption::NoReflectiveArgument) &&
-                    !version->assumptions().includes(
+                    !version->context().includes(
                         Assumption::NoReflectiveArgument)) {
                     auto newVersion = cls->cloneWithAssumptions(
                         version, availableAssumptions,
@@ -268,7 +268,7 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 // the callee and ensure that we will evaluate them eagerly
                 // below.
                 unsigned i = 0;
-                Assumptions newAssumptions = availableAssumptions;
+                Context newAssumptions = availableAssumptions;
                 SmallSet<unsigned> eager;
                 call->eachCallArg([&](InstrArg& arg) {
                     if (auto mk = preEval(arg.val(), i)) {

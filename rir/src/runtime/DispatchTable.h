@@ -30,9 +30,9 @@ struct DispatchTable
     Function* baseline() const { return Function::unpack(getEntry(0)); }
     Function* best() const { return get(size() - 1); }
 
-    Function* dispatch(Assumptions a) const {
+    Function* dispatch(Context a) const {
         for (int i = size() - 1; i >= 0; --i) {
-            if (get(i)->signature().assumptions.subtype(a))
+            if (get(i)->context().subtype(a))
                 return get(i);
         }
         return baseline();
@@ -46,9 +46,9 @@ struct DispatchTable
             size_++;
     }
 
-    bool contains(const Assumptions& assumptions) {
+    bool contains(const Context& assumptions) {
         for (size_t i = 1; i < size(); ++i)
-            if (get(i)->signature().assumptions == assumptions)
+            if (get(i)->context() == assumptions)
                 return true;
         return false;
     }
@@ -75,10 +75,10 @@ struct DispatchTable
         assert(size() > 0);
         assert(fun->signature().optimization !=
                FunctionSignature::OptimizationLevel::Baseline);
-        auto assumptions = fun->signature().assumptions;
+        auto assumptions = fun->context();
         size_t i = 1;
         for (; i < size(); ++i) {
-            if (get(i)->signature().assumptions == assumptions) {
+            if (get(i)->context() == assumptions) {
                 // If we override a version we should ensure that we don't call
                 // the old version anymore, or we might end up in a deopt loop.
                 if (i != 0) {
@@ -88,19 +88,17 @@ struct DispatchTable
                 }
                 return;
             }
-            if (!(get(i)->signature().assumptions < assumptions)) {
+            if (!(get(i)->context() < assumptions)) {
                 break;
             }
         }
-        assert(!contains(fun->signature().assumptions));
+        assert(!contains(fun->context()));
         if (size() == capacity()) {
 #ifdef DEBUG_DISPATCH
             std::cout << "Tried to insert into a full Dispatch table. Have: \n";
             for (size_t i = 0; i < size(); ++i) {
                 auto e = getEntry(i);
-                std::cout << "* "
-                          << Function::unpack(e)->signature().assumptions
-                          << "\n";
+                std::cout << "* " << Function::unpack(e)->context() << "\n";
             }
             std::cout << "\n";
             std::cout << "Tried to insert: " << assumptions << "\n";
@@ -122,20 +120,16 @@ struct DispatchTable
         std::cout << "Added version to DT, new order is: \n";
         for (size_t i = 0; i < size(); ++i) {
             auto e = getEntry(i);
-            std::cout << "* " << Function::unpack(e)->signature().assumptions
-                      << "\n";
+            std::cout << "* " << Function::unpack(e)->context() << "\n";
         }
         std::cout << "\n";
 
         for (size_t i = 0; i < size() - 1; ++i) {
-            assert(get(i)->signature().assumptions <
-                   get(i + 1)->signature().assumptions);
-            assert(get(i)->signature().assumptions !=
-                   get(i + 1)->signature().assumptions);
-            assert(!(get(i + 1)->signature().assumptions <
-                     get(i)->signature().assumptions));
+            assert(get(i)->context() < get(i + 1)->context());
+            assert(get(i)->context() != get(i + 1)->context());
+            assert(!(get(i + 1)->context() < get(i)->context()));
         }
-        assert(contains(fun->signature().assumptions));
+        assert(contains(fun->context()));
 #endif
     }
 

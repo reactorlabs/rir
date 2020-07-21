@@ -13,22 +13,22 @@ namespace pir {
 
 class Rir2PirCompiler : public RirCompiler {
   public:
-    static constexpr Assumptions::Flags minimalAssumptions =
-        Assumptions::Flags(Assumption::CorrectOrderOfArguments) |
+    static constexpr Context::Flags minimalContext =
+        Context::Flags(Assumption::CorrectOrderOfArguments) |
         Assumption::NotTooManyArguments;
-    static constexpr Assumptions defaultAssumptions =
-        Assumptions(Assumptions::Flags(Assumption::CorrectOrderOfArguments) |
-                        Assumption::NotTooManyArguments,
-                    0);
+    static constexpr Context defaultContext =
+        Context(Context::Flags(Assumption::CorrectOrderOfArguments) |
+                    Assumption::NotTooManyArguments,
+                0);
 
     Rir2PirCompiler(Module* module, StreamLogger& logger)
         : RirCompiler(module), logger(logger){};
 
-    void compileClosure(SEXP, const std::string& name, const Assumptions& ctx,
+    void compileClosure(SEXP, const std::string& name, const Context& ctx,
                         MaybeCls success, Maybe fail,
                         std::list<PirTypeFeedback*> outerFeedback);
     void compileFunction(rir::DispatchTable*, const std::string& name,
-                         SEXP formals, SEXP srcRef, const Assumptions& ctx,
+                         SEXP formals, SEXP srcRef, const Context& ctx,
                          MaybeCls success, Maybe fail,
                          std::list<PirTypeFeedback*> outerFeedback);
     void optimizeModule();
@@ -38,8 +38,8 @@ class Rir2PirCompiler : public RirCompiler {
   private:
     StreamLogger& logger;
     void compileClosure(Closure* closure, rir::Function* optFunction,
-                        const OptimizationContext& ctx, MaybeCls success,
-                        Maybe fail, std::list<PirTypeFeedback*> outerFeedback);
+                        const Context& ctx, MaybeCls success, Maybe fail,
+                        std::list<PirTypeFeedback*> outerFeedback);
 };
 
 } // namespace pir

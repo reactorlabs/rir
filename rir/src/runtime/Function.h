@@ -43,14 +43,14 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     Function(size_t functionSize, SEXP body_,
              const std::vector<SEXP>& defaultArgs,
-             const FunctionSignature& signature)
+             const FunctionSignature& signature, const Context& ctx)
         : RirRuntimeObject(
               // GC area starts at &locals and goes to the end of defaultArg_
               sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
               NUM_PTRS + defaultArgs.size()),
-          size(functionSize), numArgs(defaultArgs.size()),
-          signature_(signature) {
-        for (size_t i = 0; i < numArgs; ++i)
+          size(functionSize), numArgs_(defaultArgs.size()),
+          signature_(signature), context_(ctx) {
+        for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
     }
@@ -63,7 +63,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void disassemble(std::ostream&);
 
     Code* defaultArg(size_t i) const {
-        assert(i < numArgs);
+        assert(i < numArgs_);
         if (!defaultArg_[i])
             return nullptr;
         return Code::unpack(defaultArg_[i]);
@@ -107,21 +107,25 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
                                    DisableNumArgumentsSepzialization};
         auto f = other->flags;
         if (f.includes(DisableAllSpecialization))
-            assert(!signature().assumptions.includes(
-                Assumption::NoReflectiveArgument));
+            assert(!context_.includes(Assumption::NoReflectiveArgument));
         for (auto flag : inherited)
             if (f.contains(flag))
                 flags.set(flag);
     }
 
-    void clearDisabledAssumptions(Assumptions& given) const;
+    void clearDisabledAssumptions(Context& given) const;
 
-    unsigned numArgs;
+    unsigned nargs() const { return numArgs_; }
+    unsigned expectedNargs() const { return numArgs_ - context().numMissing(); }
 
     const FunctionSignature& signature() const { return signature_; }
+    const Context& context() const { return context_; }
 
   private:
+    unsigned numArgs_;
+
     FunctionSignature signature_; /// pointer to this version's signature
+    Context context_;
 
     // !!! SEXPs traceable by the GC must be declared here !!!
     // locals contains: origin, next, body

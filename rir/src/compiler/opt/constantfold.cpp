@@ -388,11 +388,11 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     ? CallBuiltin::Cast(i)->builtinId
                                     : CallSafeBuiltin::Cast(i)->builtinId;
                 size_t nargs = CallInstruction::CastCall(i)->nCallArgs();
-                assert(function->assumptions().includes(
+                assert(function->context().includes(
                     Assumption::NotTooManyArguments));
                 // PIR functions are always compiled for a particular number
                 // of arguments
-                auto noExplMissing = function->assumptions().includes(
+                auto noExplMissing = function->context().includes(
                     Assumption::NoExplicitlyMissingArgs);
                 if (builtinId == blt("nargs") && noExplMissing) {
                     // nargs inside inlinee refers to nargs passed to inlinee,

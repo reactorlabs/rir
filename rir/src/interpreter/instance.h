@@ -3,7 +3,7 @@
 
 #include "R/r.h"
 #include "ir/BC_inc.h"
-#include "runtime/Assumptions.h"
+#include "runtime/Context.h"
 
 #include "interp_incl.h"
 
@@ -24,7 +24,7 @@ namespace rir {
  */
 typedef std::function<SEXP(SEXP expr, SEXP env)> ExprCompiler;
 typedef std::function<SEXP(SEXP closure, SEXP name)> ClosureCompiler;
-typedef std::function<SEXP(SEXP closure, const rir::Assumptions& assumptions,
+typedef std::function<SEXP(SEXP closure, const rir::Context& assumptions,
                            SEXP name)>
     ClosureOptimizer;
 

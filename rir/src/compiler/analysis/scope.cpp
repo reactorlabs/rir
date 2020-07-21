@@ -267,7 +267,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         auto env = MkEnv::Cast(force->env());
         if (!handled) {
             if (ld) {
-                if (closure->assumptions().includes(
+                if (closure->context().includes(
                         Assumption::NoReflectiveArgument)) {
                     effect.max(state.envs.taintLeaked());
                     updateReturnValue(AbstractPirValue::tainted());
@@ -513,7 +513,7 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
                     if (name == n) {
                         if (miss)
                             maybeInitiallyMissing = isInitiallyMissing = true;
-                        else if (!closure->assumptions().includes(
+                        else if (!closure->context().includes(
                                      Assumption::NoExplicitlyMissingArgs))
                             maybeInitiallyMissing = true;
                     }

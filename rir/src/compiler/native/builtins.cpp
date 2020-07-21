@@ -352,7 +352,7 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs) {
     auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
-                     Assumptions(), ctx);
+                     Context(), ctx);
     if (debugPrintCallBuiltinImpl) {
         debugPrintCallBuiltinImpl = false;
         std::cout << "call builtin " << nargs << " with\n";
@@ -383,7 +383,7 @@ static SEXP callImplCached(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                            Immediate cache) {
     auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
-                     Assumptions(available), ctx);
+                     Context(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -411,7 +411,7 @@ static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                           unsigned long available) {
     auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
-                     names, env, Assumptions(available), ctx);
+                     names, env, Context(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -429,7 +429,7 @@ static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                          size_t nargs, Immediate* names,
                          unsigned long available) {
     auto ctx = globalContext();
-    auto given = Assumptions(available);
+    auto given = Context(available);
     int pushed = 0;
 
     if (TYPEOF(callee) != SPECIALSXP) {
@@ -1020,7 +1020,7 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
     CallContext call(c, cls, /* nargs */ -1,
                      src_pool_at(globalContext(), c->src), args,
-                     (Immediate*)nullptr, env, Assumptions(), globalContext());
+                     (Immediate*)nullptr, env, Context(), globalContext());
 
     deoptFramesWithContext(globalContext(), &call, m, R_NilValue,
                            m->numFrames - 1, stackHeight);
@@ -1407,15 +1407,15 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
 
     auto fun = Function::unpack(Pool::get(target));
     auto missing = fun->signature().numArguments - nargs;
-    auto fail = missing && fun->signature().assumptions.includes(
-                               Assumption::NoExplicitlyMissingArgs);
+    auto fail =
+        missing && fun->context().includes(Assumption::NoExplicitlyMissingArgs);
 
     auto dt = DispatchTable::unpack(BODY(callee));
     fail = fail || !fun->body()->nativeCode;
 
     fun->registerInvocation();
     if (fail || RecompileHeuristic(dt, fun, 3)) {
-        if (fail || RecompileCondition(dt, fun, Assumptions(available))) {
+        if (fail || RecompileCondition(dt, fun, Context(available))) {
             fun->unregisterInvocation();
             auto res = callImplCached(fun->body(), astP, callee, env, nargs,
                                       available, target);

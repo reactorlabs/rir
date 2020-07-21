@@ -1972,7 +1972,7 @@ class CallInstruction {
     virtual void clearFrameState(){};
     virtual bool hasFrameState() = 0;
     virtual Closure* tryGetCls() const { return nullptr; }
-    virtual Assumptions inferAvailableAssumptions() const;
+    virtual Context inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
     ClosureVersion* tryDispatch(Closure*) const;
 };
@@ -2086,7 +2086,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* cls_;
 
   public:
-    Assumptions givenAssumptions;
+    Context givenContext;
 
     ClosureVersion* hint = nullptr;
 
@@ -2095,7 +2095,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
 
     Closure* tryGetCls() const override final { return cls(); }
 
-    StaticCall(Value * callerEnv, Closure * cls, Assumptions givenAssumptions,
+    StaticCall(Value * callerEnv, Closure * cls, Context givenContext,
                const std::vector<Value*>& args, FrameState* fs, unsigned srcIdx,
                Value* runtimeClosure = Tombstone::closure());
 
@@ -2134,8 +2134,8 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
 
     ClosureVersion* tryOptimisticDispatch() const;
 
-    Assumptions inferAvailableAssumptions() const override final {
-        return CallInstruction::inferAvailableAssumptions() | givenAssumptions;
+    Context inferAvailableAssumptions() const override final {
+        return CallInstruction::inferAvailableAssumptions() | givenContext;
     }
 };
 

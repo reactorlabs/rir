@@ -174,7 +174,7 @@ void GenericStreamLogger::header() {
     for (size_t i = 0; i < 78; ++i)
         out() << "─";
     std::stringstream assumptions;
-    assumptions << "Assumptions: " << version->assumptions();
+    assumptions << "Context: " << version->context();
     std::stringstream properties;
     properties << "Properties:  " << version->properties;
     out() << "┐\n";

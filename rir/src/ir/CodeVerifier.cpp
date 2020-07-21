@@ -287,7 +287,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
     // get the code objects
     std::vector<Code*> objs;
     objs.push_back(f->body());
-    for (size_t i = 0; i < f->numArgs; ++i)
+    for (size_t i = 0; i < f->nargs(); ++i)
         if (f->defaultArg(i))
             objs.push_back(f->defaultArg(i));
 
