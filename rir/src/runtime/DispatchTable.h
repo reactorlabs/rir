@@ -27,15 +27,20 @@ struct DispatchTable
         return Function::unpack(getEntry(i));
     }
 
+    Function* best() const {
+        if (size() > 1)
+            return get(1);
+        return get(0);
+    }
     Function* baseline() const {
-        auto f = Function::unpack(getEntry(size() - 1));
+        auto f = Function::unpack(getEntry(0));
         assert(f->signature().envCreation ==
                FunctionSignature::Environment::CallerProvided);
         return f;
     }
 
     Function* dispatch(Context a) const {
-        for (size_t i = 0; i < size(); ++i) {
+        for (size_t i = 1; i < size(); ++i) {
 #ifdef DEBUG_DISPATCH
             std::cout << "DISPATCH trying: " << a << " vs " << get(i)->context()
                       << "\n";
@@ -43,7 +48,6 @@ struct DispatchTable
             if (a.smaller(get(i)->context()))
                 return get(i);
         }
-        assert(false);
         return baseline();
     }
 
@@ -55,7 +59,7 @@ struct DispatchTable
         else
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
-        setEntry(size() - 1, f->container());
+        setEntry(0, f->container());
     }
 
     bool contains(const Context& assumptions) {
@@ -89,7 +93,7 @@ struct DispatchTable
                FunctionSignature::OptimizationLevel::Baseline);
         auto assumptions = fun->context();
         long i;
-        for (i = size() - 1; i >= 0; --i) {
+        for (i = size() - 1; i > 0; --i) {
             if (get(i)->context() == assumptions) {
                 // If we override a version we should ensure that we don't call
                 // the old version anymore, or we might end up in a deopt loop.
@@ -118,7 +122,7 @@ struct DispatchTable
             Rf_error("dispatch table overflow");
 #endif
             // Evict one element and retry
-            auto pos = std::rand() % (size() - 1);
+            auto pos = 1 + (std::rand() % (size() - 1));
             size_--;
             while (pos < size()) {
                 setEntry(pos, getEntry(pos + 1));
