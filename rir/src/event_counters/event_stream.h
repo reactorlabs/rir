@@ -22,9 +22,14 @@ class ClosureVersion;
 
 struct Function;
 
+using Clock = std::chrono::system_clock;
+using Timestamp = Clock::time_point;
+
 // Records events in a stream or timeline
 class EventStream {
   public:
+    enum class Mode : unsigned { NotEnabled, Log, FlameGraph };
+
     enum class CompileEventAssociation {
         NotAssociated,
         IsIntermediateCompileEvent,
@@ -32,11 +37,15 @@ class EventStream {
     };
 
     struct Event {
+        Timestamp timestamp;
+
+        explicit Event(Timestamp timestamp);
         virtual ~Event();
 
         virtual void print(std::ostream& out,
                            const std::vector<Event*>::const_iterator& rest,
                            const std::vector<Event*>::const_iterator& end) = 0;
+        virtual void printFlame(std::ostream& out) = 0;
         virtual bool thisPrintsItself() = 0;
         virtual size_t getDuration() = 0;
         virtual CompileEventAssociation getAssociationWith(const UUID& uid) = 0;
@@ -57,6 +66,7 @@ class EventStream {
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
         bool thisPrintsItself() override;
         size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
@@ -72,26 +82,39 @@ class EventStream {
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
         bool thisPrintsItself() override;
         size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
-    struct ReusedPirCompiled : public Event {
+    struct ReusedRir2Pir : public Event {
         const UUID versionUid;
-        const size_t durationMicros;
 
-        ReusedPirCompiled(const pir::ClosureVersion* version,
-                          size_t durationMicros);
+        ReusedRir2Pir(const pir::ClosureVersion* version);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
         bool thisPrintsItself() override;
         size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
+    struct ReusedPir2Rir : public Event {
+        const UUID versionUid;
+
+        ReusedPir2Rir(const pir::ClosureVersion* version);
+
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
+        bool thisPrintsItself() override;
+        size_t getDuration() override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
+    };
     struct SucceededRir2Pir : public Event {
         const UUID versionUid;
         const size_t pirVersionSize;
@@ -103,6 +126,7 @@ class EventStream {
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
         bool thisPrintsItself() override;
         size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
@@ -117,6 +141,23 @@ class EventStream {
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
+        bool thisPrintsItself() override;
+        size_t getDuration() override;
+        CompileEventAssociation getAssociationWith(const UUID& uid) override;
+    };
+
+    struct Inlined : public Event {
+        const UUID ownerUid;
+        const UUID inlineeUid;
+
+        Inlined(const pir::ClosureVersion* owner,
+                const pir::ClosureVersion* inlinee);
+
+        void print(std::ostream& out,
+                   const std::vector<Event*>::const_iterator& rest,
+                   const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
         bool thisPrintsItself() override;
         size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
@@ -133,6 +174,7 @@ class EventStream {
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
         bool thisPrintsItself() override;
         size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
@@ -147,6 +189,7 @@ class EventStream {
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
         bool thisPrintsItself() override;
         size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
@@ -155,19 +198,17 @@ class EventStream {
     struct FailedPirCompiling : public Event {
         const UUID uid;
         const bool isPirVersion;
-        const size_t durationMicros;
         const std::string explanation;
 
         FailedPirCompiling(const rir::Function* baselineFunction,
-                           size_t durationMicros,
                            const std::string& explanation);
         FailedPirCompiling(const pir::ClosureVersion* version,
-                           size_t durationMicros,
                            const std::string& explanation);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
         bool thisPrintsItself() override;
         size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
@@ -176,18 +217,21 @@ class EventStream {
     struct Deoptimized : public Event {
         const UUID deoptimizedFunctionUid;
         const DeoptReason::Reason deoptReason;
+        const unsigned relativePc;
 
         Deoptimized(const Code* deoptimizedFunctionCode,
-                    DeoptReason::Reason deoptReason);
+                    DeoptReason::Reason deoptReason, unsigned relativePc);
 
         void print(std::ostream& out,
                    const std::vector<Event*>::const_iterator& rest,
                    const std::vector<Event*>::const_iterator& end) override;
+        void printFlame(std::ostream& out) override;
         bool thisPrintsItself() override;
         size_t getDuration() override;
         CompileEventAssociation getAssociationWith(const UUID& uid) override;
     };
 
+    static Mode mode;
     static bool isEnabled;
     static EventStream& instance() {
         static EventStream c;
@@ -203,6 +247,7 @@ class EventStream {
     bool hasEvents();
     void reset();
     void print(std::ostream& out);
+    void printFlame(std::ostream& out);
     void printToFile();
     void flush();
 };

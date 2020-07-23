@@ -1017,8 +1017,8 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     }
     if (EventStream::isEnabled) {
         Code* functionCode = m->frames[m->numFrames - 1].code;
-        EventStream::instance().recordEvent(
-            new EventStream::Deoptimized(functionCode, lastDeoptReason));
+        EventStream::instance().recordEvent(new EventStream::Deoptimized(
+            functionCode, lastDeoptReason, (unsigned)-1));
     }
 #endif
     c->registerDeopt();

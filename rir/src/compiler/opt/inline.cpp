@@ -9,6 +9,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/parameter.h"
+#include "event_counters/event_stream.h"
 #include "pass_definitions.h"
 #include "utils/Pool.h"
 
@@ -17,6 +18,7 @@
 
 namespace {
 
+using rir::EventStream;
 using namespace rir::pir;
 
 class TheInliner {
@@ -220,6 +222,14 @@ class TheInliner {
                         continue;
                     }
                 }
+
+                // At this point we commit to inlining
+#ifdef MEASURE
+                if (EventStream::isEnabled) {
+                    EventStream::instance().recordEvent(
+                        new EventStream::Inlined(version, inlinee));
+                }
+#endif
 
                 if (!inlineeCls->rirFunction()->flags.contains(
                         rir::Function::ForceInline))

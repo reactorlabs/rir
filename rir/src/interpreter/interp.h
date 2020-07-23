@@ -18,6 +18,7 @@
 
 namespace rir {
 extern DeoptReason::Reason lastDeoptReason;
+extern unsigned lastRelativePc;
 
 SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
                    SEXP callerEnv, InterpreterInstance* ctx);
@@ -57,7 +58,8 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                             const CallContext* callCtxt,
                             DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight);
-void recordDeoptReason(SEXP val, const DeoptReason& reason);
+void recordDeoptReason(SEXP val, const DeoptReason& reason,
+                       unsigned relativePc = (unsigned)-1);
 void jit(SEXP cls, SEXP name, InterpreterInstance* ctx);
 
 SEXP seq_int(int n1, int n2);

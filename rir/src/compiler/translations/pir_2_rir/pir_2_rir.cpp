@@ -899,6 +899,12 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                         if (fun) {
                             funCont = fun->container();
+#ifdef MEASURE
+                            if (EventStream::isEnabled) {
+                                EventStream::instance().recordEvent(
+                                    new EventStream::ReusedPir2Rir(trg));
+                            }
+#endif
                         } else if (!compiler.isCompiling(trg)) {
                             fun = compiler.compile(trg, dryRun);
                             funCont = fun->container();

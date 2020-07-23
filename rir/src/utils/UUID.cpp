@@ -28,7 +28,16 @@ void UUID::serialize(SEXP refTable, R_outpstream_t out) const {
     OutBytes(out, &data, UUID_SIZE);
 }
 
-std::string UUID::str() {
+size_t UUID::hash() const {
+    size_t result = 0;
+    for (int byteIndex = 0; byteIndex < sizeof(size_t); byteIndex++) {
+        unsigned char byte = (unsigned char)data[byteIndex];
+        result |= (size_t)byte << (byteIndex * 8);
+    }
+    return result;
+}
+
+std::string UUID::str() const {
     std::ostringstream str;
     for (int i = 0; i < 8; i++) {
         if (i != 0)

@@ -32,6 +32,7 @@ extern Rboolean R_Visible;
 namespace rir {
 
 DeoptReason::Reason lastDeoptReason = DeoptReason::None;
+unsigned lastRelativePc = -1;
 
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
@@ -416,9 +417,11 @@ void checkUserInterrupt() {
     }
 }
 
-void recordDeoptReason(SEXP val, const DeoptReason& reason) {
+void recordDeoptReason(SEXP val, const DeoptReason& reason,
+                       unsigned relativePc) {
     Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
     lastDeoptReason = reason.reason;
+    lastRelativePc = relativePc;
     switch (reason.reason) {
     case DeoptReason::DeadBranchReached: {
         assert(*pos == Opcode::record_test_);
@@ -2552,7 +2555,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_pop(ctx);
             DeoptReason* res = (DeoptReason*)pc;
             pc += sizeof(DeoptReason);
-            recordDeoptReason(val, *res);
+            unsigned relativePc = (int)((uintptr_t)pc - (uintptr_t)c->code());
+            recordDeoptReason(val, *res, relativePc);
             NEXT();
         }
 
@@ -4091,8 +4095,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (EventStream::isEnabled) {
                 Code* functionCode = m->frames[m->numFrames - 1].code;
                 EventStream::instance().recordEvent(
-                    new EventStream::Deoptimized(functionCode,
-                                                 lastDeoptReason));
+                    new EventStream::Deoptimized(functionCode, lastDeoptReason,
+                                                 lastRelativePc));
             }
 #endif
             m->frames[m->numFrames - 1].code->registerDeopt();

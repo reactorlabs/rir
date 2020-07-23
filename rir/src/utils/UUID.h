@@ -17,7 +17,9 @@ class UUID {
     static UUID random();
     static UUID deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
-    std::string str();
+
+    size_t hash() const;
+    std::string str() const;
 
     bool operator==(const UUID& other) const;
     bool operator!=(const UUID& other) const;
@@ -30,6 +32,6 @@ class UUID {
 namespace std {
 template <>
 struct hash<rir::UUID> {
-    std::size_t operator()(const rir::UUID& v) const { return *(size_t*)&v; }
+    std::size_t operator()(const rir::UUID& v) const { return v.hash(); }
 };
 } // namespace std

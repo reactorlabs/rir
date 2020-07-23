@@ -6,62 +6,94 @@
 
 namespace rir {
 
-bool EventStream::isEnabled =
-    getenv("ENABLE_EVENT_STREAM") && *getenv("ENABLE_EVENT_STREAM") == '1';
+using Clock = std::chrono::system_clock;
+using Timestamp = Clock::time_point;
+
+#define TimestampToString(timestamp)                                           \
+    std::to_string(                                                            \
+        std::chrono::duration_cast<std::chrono::milliseconds>(                 \
+            std::chrono::time_point_cast<std::chrono::milliseconds>(timestamp) \
+                .time_since_epoch())                                           \
+            .count())
+
+EventStream::Mode EventStream::mode =
+    getenv("ENABLE_EVENT_STREAM")
+        ? (EventStream::Mode)(unsigned)atoi(getenv("ENABLE_EVENT_STREAM"))
+        : EventStream::Mode::NotEnabled;
+bool EventStream::isEnabled = EventStream::mode > EventStream::Mode::NotEnabled;
+
+EventStream::Event::Event(Timestamp timestamp) : timestamp(timestamp) {}
 
 EventStream::Event::~Event() {}
 
 EventStream::UserEvent::UserEvent(const std::string& message)
-    : message(message) {}
+    : Event(Clock::now()), message(message) {}
 
 EventStream::StartedPirCompiling::StartedPirCompiling(
     const pir::ClosureVersion* version, const Assumptions& assumptions)
-    : versionUid(version->uid), assumptions(assumptions) {}
+    : Event(Clock::now()), versionUid(version->uid), assumptions(assumptions) {}
 
-EventStream::ReusedPirCompiled::ReusedPirCompiled(
-    const pir::ClosureVersion* version, size_t durationMicros)
-    : versionUid(version->uid), durationMicros(durationMicros) {}
+EventStream::ReusedRir2Pir::ReusedRir2Pir(const pir::ClosureVersion* version)
+    : Event(Clock::now()), versionUid(version->uid) {}
+
+EventStream::ReusedPir2Rir::ReusedPir2Rir(const pir::ClosureVersion* version)
+    : Event(Clock::now()), versionUid(version->uid) {}
 
 EventStream::SucceededRir2Pir::SucceededRir2Pir(
     const pir::ClosureVersion* version, size_t durationMicros)
-    : versionUid(version->uid), pirVersionSize(version->size()),
-      durationMicros(durationMicros) {}
+    : Event(Clock::now()), versionUid(version->uid),
+      pirVersionSize(version->size()), durationMicros(durationMicros) {}
 
 EventStream::OptimizedPir::OptimizedPir(const pir::Module* module,
                                         size_t durationMicros)
-    : versionUids(module->getClosureVersionUids()),
+    : Event(Clock::now()), versionUids(module->getClosureVersionUids()),
       durationMicros(durationMicros) {}
+
+EventStream::Inlined::Inlined(const pir::ClosureVersion* owner,
+                              const pir::ClosureVersion* inlinee)
+    : Event(Clock::now()), ownerUid(owner->uid), inlineeUid(inlinee->uid) {}
 
 EventStream::LoweredPir2Rir::LoweredPir2Rir(const pir::ClosureVersion* version,
                                             size_t durationMicros)
-    : versionUid(version->uid), pirVersionSize(version->size()),
-      durationMicros(durationMicros) {}
+    : Event(Clock::now()), versionUid(version->uid),
+      pirVersionSize(version->size()), durationMicros(durationMicros) {}
 
 EventStream::LoweredLLVM::LoweredLLVM(const pir::ClosureVersion* version,
                                       size_t durationMicros)
-    : versionUid(version->uid), durationMicros(durationMicros) {}
+    : Event(Clock::now()), versionUid(version->uid),
+      durationMicros(durationMicros) {}
 
 EventStream::FailedPirCompiling::FailedPirCompiling(
-    const rir::Function* baselineFunction, size_t durationMicros,
-    const std::string& explanation)
-    : uid(baselineFunction->body()->uid), isPirVersion(false),
-      durationMicros(durationMicros), explanation(explanation) {}
+    const rir::Function* baselineFunction, const std::string& explanation)
+    : Event(Clock::now()), uid(baselineFunction->body()->uid),
+      isPirVersion(false), explanation(explanation) {}
 
 EventStream::FailedPirCompiling::FailedPirCompiling(
-    const pir::ClosureVersion* version, size_t durationMicros,
-    const std::string& explanation)
-    : uid(version->uid), isPirVersion(true), durationMicros(durationMicros),
+    const pir::ClosureVersion* version, const std::string& explanation)
+    : Event(Clock::now()), uid(version->uid), isPirVersion(true),
       explanation(explanation) {}
 
 EventStream::Deoptimized::Deoptimized(const Code* deoptimizedFunctionCode,
-                                      DeoptReason::Reason deoptReason)
-    : deoptimizedFunctionUid(deoptimizedFunctionCode->uid),
-      deoptReason(deoptReason) {}
+                                      DeoptReason::Reason deoptReason,
+                                      unsigned relativePc)
+    : Event(Clock::now()), deoptimizedFunctionUid(deoptimizedFunctionCode->uid),
+      deoptReason(deoptReason), relativePc(relativePc) {}
 
 void EventStream::UserEvent::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
     out << message << std::endl;
+}
+
+void EventStream::UserEvent::printFlame(std::ostream& out) {
+    // clang-format off
+    out << "{\"name\": " << std::quoted(message)
+        << ", \"cat\": \"user\""
+        << ", \"ph\": \"i\""
+        << ", \"ts\": " << TimestampToString(timestamp)
+        << ", \"pid\": 1"
+        << "}";
+    // clang-format on
 }
 
 bool EventStream::UserEvent::thisPrintsItself() { return true; }
@@ -110,6 +142,54 @@ void EventStream::StartedPirCompiling::print(
     out << "done [" << (totalDuration / 1000) << "ms] " << std::endl;
 }
 
+static void printEvent(std::ostream& out, const std::string& eventType,
+                       const std::string& type, const std::string& extraLabel,
+                       const std::string& extra, const UUID& uid,
+                       const Timestamp& timestamp) {
+    // clang-format off
+    out << "{ \"name\": " << std::quoted(EventStream::instance().getNameOf(uid))
+        << ", \"cat\": \"" << type << "\""
+        << ", \"args\": {\"" << extraLabel << "\": " << std::quoted(extra) << "}"
+        << ", \"ph\": \"" << eventType << "\""
+        << ", \"ts\": " << TimestampToString(timestamp) 
+        << ", \"pid\": " << uid.hash() << ""
+        << "}";
+    // clang-format on
+};
+
+static void printInstantEvent(std::ostream& out, const std::string& type,
+                              const std::string& extraLabel,
+                              const std::string& extra, const UUID& uid,
+                              const Timestamp& timestamp) {
+    printEvent(out, "I", type, extraLabel, extra, uid, timestamp);
+}
+
+static void printEventWithDuration(std::ostream& out, const std::string& type,
+                                   const std::string& extraLabel,
+                                   const std::string& extra, const UUID& uid,
+                                   const Timestamp& timestamp,
+                                   const size_t durationMicros) {
+    auto printSubEvent = [&](const std::string& eventType,
+                             const Timestamp& timestamp) {
+        printEvent(out, eventType, type, extraLabel, extra, uid, timestamp);
+    };
+
+    if (durationMicros == 0) {
+        printSubEvent("X", timestamp);
+    } else {
+        const std::chrono::microseconds duration(durationMicros);
+
+        printSubEvent("B", timestamp);
+        out << ",\n\t\t";
+        printSubEvent("E", timestamp + duration);
+    }
+}
+
+void EventStream::StartedPirCompiling::printFlame(std::ostream& out) {
+    printEventWithDuration(out, "compile", "stage", "started", versionUid,
+                           timestamp, getDuration());
+}
+
 bool EventStream::StartedPirCompiling::thisPrintsItself() { return true; }
 
 size_t EventStream::StartedPirCompiling::getDuration() { return 0; }
@@ -121,20 +201,46 @@ EventStream::StartedPirCompiling::getAssociationWith(const UUID& uid) {
                : EventStream::CompileEventAssociation::NotAssociated;
 }
 
-void EventStream::ReusedPirCompiled::print(
+void EventStream::ReusedRir2Pir::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
-    out << EventStream::instance().getNameOf(versionUid) << " reused ["
-        << (durationMicros / 1000) << "ms]" << std::endl;
+    out << EventStream::instance().getNameOf(versionUid) << " reused"
+        << std::endl;
 }
 
-bool EventStream::ReusedPirCompiled::thisPrintsItself() { return true; }
+void EventStream::ReusedRir2Pir::printFlame(std::ostream& out) {
+    printInstantEvent(out, "reuse", "stage", "rir", versionUid, timestamp);
+}
 
-size_t EventStream::ReusedPirCompiled::getDuration() { return 0; }
+bool EventStream::ReusedRir2Pir::thisPrintsItself() { return true; }
+
+size_t EventStream::ReusedRir2Pir::getDuration() { return 0; }
 
 EventStream::CompileEventAssociation
-EventStream::ReusedPirCompiled::getAssociationWith(const UUID& uid) {
+EventStream::ReusedRir2Pir::getAssociationWith(const UUID& uid) {
     return EventStream::CompileEventAssociation::NotAssociated;
+}
+
+void EventStream::ReusedPir2Rir::print(
+    std::ostream& out, const std::vector<Event*>::const_iterator& rest,
+    const std::vector<Event*>::const_iterator& end) {
+    out << EventStream::instance().getNameOf(versionUid) << " reused pir; ";
+}
+
+void EventStream::ReusedPir2Rir::printFlame(std::ostream& out) {
+    printInstantEvent(out, "reuse", "stage", "pir", versionUid, timestamp);
+}
+
+bool EventStream::ReusedPir2Rir::thisPrintsItself() { return false; }
+
+size_t EventStream::ReusedPir2Rir::getDuration() { return 0; }
+
+EventStream::CompileEventAssociation
+EventStream::ReusedPir2Rir::getAssociationWith(const UUID& uid) {
+    return (versionUid == uid)
+               ? EventStream::CompileEventAssociation::
+                     IsIntermediateCompileEvent
+               : EventStream::CompileEventAssociation::NotAssociated;
 }
 
 void EventStream::SucceededRir2Pir::print(
@@ -142,6 +248,11 @@ void EventStream::SucceededRir2Pir::print(
     const std::vector<Event*>::const_iterator& end) {
     out << "rir2pir [" << (durationMicros / 1000) << "ms] [" << pirVersionSize
         << "instr]; ";
+}
+
+void EventStream::SucceededRir2Pir::printFlame(std::ostream& out) {
+    printEventWithDuration(out, "compile", "stage", "rir2pir", versionUid,
+                           timestamp, getDuration());
 }
 
 bool EventStream::SucceededRir2Pir::thisPrintsItself() { return false; }
@@ -162,6 +273,18 @@ void EventStream::OptimizedPir::print(
     out << "optimized [" << (durationMicros / 1000) << "ms]; ";
 }
 
+void EventStream::OptimizedPir::printFlame(std::ostream& out) {
+    bool isFirst = true;
+    for (UUID versionUid : versionUids) {
+        if (!isFirst) {
+            out << ",\n\t\t";
+        }
+        isFirst = false;
+        printEventWithDuration(out, "compile", "stage", "optimize", versionUid,
+                               timestamp, getDuration());
+    }
+}
+
 bool EventStream::OptimizedPir::thisPrintsItself() { return false; }
 
 size_t EventStream::OptimizedPir::getDuration() { return durationMicros; }
@@ -174,11 +297,44 @@ EventStream::OptimizedPir::getAssociationWith(const UUID& uid) {
                : EventStream::CompileEventAssociation::NotAssociated;
 }
 
+void EventStream::Inlined::print(
+    std::ostream& out, const std::vector<Event*>::const_iterator& rest,
+    const std::vector<Event*>::const_iterator& end) {
+    out << "inlined into " << EventStream::instance().getNameOf(ownerUid)
+        << "; ";
+}
+
+void EventStream::Inlined::printFlame(std::ostream& out) {
+    std::stringstream subtypeBuffer;
+    subtypeBuffer << "inline into "
+                  << std::quoted(EventStream::instance().getNameOf(ownerUid));
+    std::string subtype = subtypeBuffer.str();
+    printEventWithDuration(out, "compile", "stage", subtype, inlineeUid,
+                           timestamp, getDuration());
+}
+
+bool EventStream::Inlined::thisPrintsItself() { return false; }
+
+size_t EventStream::Inlined::getDuration() { return 0; }
+
+EventStream::CompileEventAssociation
+EventStream::Inlined::getAssociationWith(const UUID& uid) {
+    return (inlineeUid == uid)
+               ? EventStream::CompileEventAssociation::
+                     IsIntermediateCompileEvent
+               : EventStream::CompileEventAssociation::NotAssociated;
+}
+
 void EventStream::LoweredPir2Rir::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
     out << "pir2rir [" << (durationMicros / 1000) << "ms] [" << pirVersionSize
         << "instr]; ";
+}
+
+void EventStream::LoweredPir2Rir::printFlame(std::ostream& out) {
+    printEventWithDuration(out, "compile", "stage", "pir2rir", versionUid,
+                           timestamp, getDuration());
 }
 
 bool EventStream::LoweredPir2Rir::thisPrintsItself() { return false; }
@@ -199,6 +355,11 @@ void EventStream::LoweredLLVM::print(
     out << "llvm [" << (durationMicros / 1000) << "ms]; ";
 }
 
+void EventStream::LoweredLLVM::printFlame(std::ostream& out) {
+    printEventWithDuration(out, "compile", "stage", "lower-llvm", versionUid,
+                           timestamp, getDuration());
+}
+
 bool EventStream::LoweredLLVM::thisPrintsItself() { return false; }
 
 size_t EventStream::LoweredLLVM::getDuration() { return durationMicros; }
@@ -217,15 +378,19 @@ void EventStream::FailedPirCompiling::print(
     if (!isPirVersion) {
         out << EventStream::instance().getNameOf(uid) << " compile ";
     }
-    out << "failed (" << explanation << ") [" << (durationMicros / 1000)
-        << "ms]" << std::endl;
+    out << "failed (" << explanation << ")" << std::endl;
+}
+
+void EventStream::FailedPirCompiling::printFlame(std::ostream& out) {
+    printInstantEvent(out, "failed compile", "reason", explanation, uid,
+                      timestamp);
 }
 
 bool EventStream::FailedPirCompiling::thisPrintsItself() {
     return !isPirVersion;
 }
 
-size_t EventStream::FailedPirCompiling::getDuration() { return durationMicros; }
+size_t EventStream::FailedPirCompiling::getDuration() { return 0; }
 
 EventStream::CompileEventAssociation
 EventStream::FailedPirCompiling::getAssociationWith(const UUID& uid) {
@@ -239,8 +404,17 @@ void EventStream::Deoptimized::print(
     std::ostream& out, const std::vector<Event*>::const_iterator& rest,
     const std::vector<Event*>::const_iterator& end) {
     out << EventStream::instance().getNameOf(deoptimizedFunctionUid)
-        << " deopt (" << getDeoptReasonExplanation(deoptReason) << ")"
-        << std::endl;
+        << " deopt (" << getDeoptReasonExplanation(deoptReason) << ")";
+    if (relativePc != (unsigned)-1) {
+        out << " at " << relativePc;
+    }
+    out << std::endl;
+}
+
+void EventStream::Deoptimized::printFlame(std::ostream& out) {
+    printInstantEvent(out, "deopt", "reason",
+                      getDeoptReasonExplanation(deoptReason),
+                      deoptimizedFunctionUid, timestamp);
 }
 
 bool EventStream::Deoptimized::thisPrintsItself() { return true; }
@@ -300,14 +474,40 @@ void EventStream::print(std::ostream& out) {
     }
 }
 
+void EventStream::printFlame(std::ostream& out) {
+    out << "{\n\t\"traceEvents\": [\n";
+    std::vector<Event*>::const_iterator end = events.end();
+    for (std::vector<Event*>::const_iterator it = events.begin(); it != end;
+         it++) {
+        out << "\t\t";
+        Event* event = *it;
+        event->printFlame(out);
+        if (it + 1 != end) {
+            out << ",\n";
+        }
+    }
+    out << "\n\t],\n\t\"displayTimeUnit\": \"ms\"\n}";
+}
+
 void EventStream::printToFile() {
     if (!hasEvents()) {
         return;
     }
 
     std::ofstream file;
-    file.open("event_stream.log");
-    print(file);
+    switch (EventStream::mode) {
+    case EventStream::Mode::NotEnabled:
+        assert(false &&
+               "tried to print event stream but it doesn't have a mode");
+    case EventStream::Mode::Log:
+        file.open("event_stream.log");
+        print(file);
+        break;
+    case EventStream::Mode::FlameGraph:
+        file.open("event_stream.json");
+        printFlame(file);
+        break;
+    }
     file.close();
 }
 void EventStream::flush() {
