@@ -166,6 +166,8 @@ struct NativeBuiltins {
     static NativeBuiltin getAttrb;
 
     static NativeBuiltin nonLocalReturn;
+
+    static NativeBuiltin clsEq;
 };
 
 }

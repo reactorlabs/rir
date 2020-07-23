@@ -2542,10 +2542,61 @@ bool LowerFunctionLLVM::tryCompile() {
                 break;
 
             case Tag::Identical: {
-                auto a = depromise(load(i->arg(0).val()));
-                auto b = depromise(load(i->arg(1).val()));
-                setVal(i,
-                       builder.CreateZExt(builder.CreateICmpEQ(a, b), t::Int));
+                auto a = i->arg(0).val();
+                auto b = i->arg(1).val();
+                auto cc = LdConst::Cast(a);
+                if (!cc)
+                    cc = LdConst::Cast(b);
+
+                if (cc) {
+                    auto v = cc == a ? b : a;
+                    auto vi = load(v);
+                    if (v->type.maybePromiseWrapped())
+                        vi = depromise(vi);
+
+                    auto res =
+                        builder.CreateICmpEQ(constant(cc->c(), t::SEXP), vi);
+                    if (TYPEOF(cc->c()) == CLOSXP) {
+                        res = createSelect2(
+                            res, [&]() { return builder.getTrue(); },
+                            [&]() {
+                                return createSelect2(
+                                    builder.CreateICmpEQ(sexptype(vi),
+                                                         c(CLOSXP)),
+                                    [&]() {
+                                        return call(
+                                            NativeBuiltins::clsEq,
+                                            {constant(cc->c(), t::SEXP), vi});
+                                    },
+                                    [&]() { return builder.getFalse(); });
+                            });
+                    }
+                    setVal(i, builder.CreateZExt(res, t::Int));
+                    break;
+                }
+
+                auto ai = load(a);
+                auto bi = load(b);
+                if (a->type.maybePromiseWrapped())
+                    ai = depromise(ai);
+                if (b->type.maybePromiseWrapped())
+                    bi = depromise(bi);
+
+                auto res = builder.CreateICmpEQ(ai, bi);
+                res = createSelect2(
+                    res, [&]() { return builder.getTrue(); },
+                    [&]() {
+                        auto cls = builder.CreateAnd(
+                            builder.CreateICmpEQ(sexptype(ai), c(CLOSXP)),
+                            builder.CreateICmpEQ(sexptype(bi), c(CLOSXP)));
+                        return createSelect2(
+                            cls,
+                            [&]() {
+                                return call(NativeBuiltins::clsEq, {ai, bi});
+                            },
+                            [&]() { return builder.getFalse(); });
+                    });
+                setVal(i, builder.CreateZExt(res, t::Int));
                 break;
             }
 

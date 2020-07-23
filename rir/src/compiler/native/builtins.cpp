@@ -2339,5 +2339,16 @@ NativeBuiltin NativeBuiltins::nonLocalReturn = {
     "nonLocalReturn",
     (void*)&nonLocalReturnImpl,
 };
+
+bool clsEqImpl(SEXP lhs, SEXP rhs) {
+    SLOWASSERT(TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP);
+    return CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
+           BODY_EXPR(lhs) == BODY_EXPR(rhs);
+}
+
+NativeBuiltin NativeBuiltins::clsEq = {
+    "cksEq",
+    (void*)&clsEqImpl,
+};
 }
 }
