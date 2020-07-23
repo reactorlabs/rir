@@ -13,6 +13,8 @@
 #include "R/Symbols.h"
 #include <R_ext/RS.h> /* for Memzero */
 
+#include <llvm/IR/Attributes.h>
+
 namespace rir {
 namespace pir {
 
@@ -245,9 +247,7 @@ void setCarImpl(SEXP x, SEXP y) {
 }
 
 NativeBuiltin NativeBuiltins::setCar = {
-    "setCar",
-    (void*)&setCarImpl,
-};
+    "setCar", (void*)&setCarImpl, nullptr, {llvm::Attribute::ArgMemOnly}};
 
 void setCdrImpl(SEXP x, SEXP y) {
     assert(x->sxpinfo.mark && "Use fastpath setCdr");
@@ -257,9 +257,7 @@ void setCdrImpl(SEXP x, SEXP y) {
 }
 
 NativeBuiltin NativeBuiltins::setCdr = {
-    "setCdr",
-    (void*)&setCdrImpl,
-};
+    "setCdr", (void*)&setCdrImpl, nullptr, {llvm::Attribute::ArgMemOnly}};
 
 void setTagImpl(SEXP x, SEXP y) {
     assert(x->sxpinfo.mark && "Use fastpath setTag");
@@ -269,9 +267,7 @@ void setTagImpl(SEXP x, SEXP y) {
 }
 
 NativeBuiltin NativeBuiltins::setTag = {
-    "setTag",
-    (void*)&setTagImpl,
-};
+    "setTag", (void*)&setTagImpl, nullptr, {llvm::Attribute::ArgMemOnly}};
 
 void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
     assert(x->sxpinfo.mark && "Use fastpath setEntry");
@@ -283,7 +279,8 @@ void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
 NativeBuiltin NativeBuiltins::externalsxpSetEntry = {
     "externalsxpSetEntry",
     (void*)&externalsxpSetEntryImpl,
-};
+    nullptr,
+    {llvm::Attribute::ArgMemOnly}};
 
 void defvarImpl(SEXP var, SEXP value, SEXP env) {
     assert(TYPEOF(env) == ENVSXP);
@@ -324,8 +321,8 @@ SEXP ldfunImpl(SEXP sym, SEXP env) {
 }
 
 NativeBuiltin NativeBuiltins::ldfun = {
-    "findFun",
-    (void*)&Rf_findFun,
+    "ldfun",
+    (void*)&ldfunImpl,
 };
 
 NativeBuiltin NativeBuiltins::chkfun = {
@@ -343,9 +340,7 @@ NativeBuiltin NativeBuiltins::warn = {
 static void errorImpl(const char* e) { Rf_error(e); }
 
 NativeBuiltin NativeBuiltins::error = {
-    "error",
-    (void*)&errorImpl,
-};
+    "error", (void*)&errorImpl, nullptr, {llvm::Attribute::NoReturn}};
 
 static bool debugPrintCallBuiltinImpl = false;
 static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
@@ -985,9 +980,7 @@ NativeBuiltin NativeBuiltins::asLogicalBlt = {"aslogical",
 size_t lengthImpl(SEXP e) { return Rf_length(e); }
 
 NativeBuiltin NativeBuiltins::length = {
-    "length",
-    (void*)&lengthImpl,
-};
+    "length", (void*)&lengthImpl, nullptr, {llvm::Attribute::ReadOnly}};
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     if (!pir::Parameter::DEOPT_CHAOS) {
@@ -1028,9 +1021,7 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
 }
 
 NativeBuiltin NativeBuiltins::deopt = {
-    "deopt",
-    (void*)&deoptImpl,
-};
+    "deopt", (void*)&deoptImpl, nullptr, {llvm::Attribute::NoReturn}};
 NativeBuiltin NativeBuiltins::recordDeopt = {
     "recordDeopt",
     (void*)&recordDeoptReason,
@@ -1040,8 +1031,8 @@ void assertFailImpl(const char* msg) {
     std::cout << "Assertion in jitted code failed: '" << msg << "'\n";
     asm("int3");
 }
-NativeBuiltin NativeBuiltins::assertFail = {"assertFail",
-                                            (void*)&assertFailImpl};
+NativeBuiltin NativeBuiltins::assertFail = {
+    "assertFail", (void*)&assertFailImpl, nullptr, {llvm::Attribute::NoReturn}};
 
 void printValueImpl(SEXP v) { Rf_PrintValue(v); }
 NativeBuiltin NativeBuiltins::printValue = {
@@ -2216,13 +2207,15 @@ int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }
 NativeBuiltin NativeBuiltins::matrixNcols = {
     "ncols",
     (void*)ncolsImpl,
-};
+    nullptr,
+    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
 
 int nrowsImpl(SEXP v) { return getMatrixDim(v).row; }
 NativeBuiltin NativeBuiltins::matrixNrows = {
     "nrows",
     (void*)nrowsImpl,
-};
+    nullptr,
+    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
 
 SEXP makeVectorImpl(int mode, size_t len) {
     auto s = Rf_allocVector(mode, len);
@@ -2260,7 +2253,8 @@ double prodrImpl(SEXP v) {
 NativeBuiltin NativeBuiltins::prodr = {
     "prodr",
     (void*)prodrImpl,
-};
+    nullptr,
+    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
 
 double sumrImpl(SEXP v) {
     double res = 0;
@@ -2281,7 +2275,8 @@ double sumrImpl(SEXP v) {
 NativeBuiltin NativeBuiltins::sumr = {
     "sumr",
     (void*)sumrImpl,
-};
+    nullptr,
+    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
 
 NativeBuiltin NativeBuiltins::colonInputEffects = {
     "colonInputEffects",
@@ -2293,10 +2288,10 @@ NativeBuiltin NativeBuiltins::colonCastLhs = {
     (void*)rir::colonCastLhs,
 };
 
-NativeBuiltin NativeBuiltins::colonCastRhs = {
-    "colonCastRhs",
-    (void*)rir::colonCastRhs,
-};
+NativeBuiltin NativeBuiltins::colonCastRhs = {"colonCastRhs",
+                                              (void*)rir::colonCastRhs,
+                                              nullptr,
+                                              {llvm::Attribute::ReadOnly}};
 
 SEXP namesImpl(SEXP val) { return Rf_getAttrib(val, R_NamesSymbol); }
 NativeBuiltin NativeBuiltins::names = {
@@ -2335,10 +2330,10 @@ void nonLocalReturnImpl(SEXP res, SEXP env) {
     Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
 }
 
-NativeBuiltin NativeBuiltins::nonLocalReturn = {
-    "nonLocalReturn",
-    (void*)&nonLocalReturnImpl,
-};
+NativeBuiltin NativeBuiltins::nonLocalReturn = {"nonLocalReturn",
+                                                (void*)&nonLocalReturnImpl,
+                                                nullptr,
+                                                {llvm::Attribute::NoReturn}};
 
 bool clsEqImpl(SEXP lhs, SEXP rhs) {
     SLOWASSERT(TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP);
@@ -2349,6 +2344,7 @@ bool clsEqImpl(SEXP lhs, SEXP rhs) {
 NativeBuiltin NativeBuiltins::clsEq = {
     "cksEq",
     (void*)&clsEqImpl,
-};
+    nullptr,
+    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
 }
 }

@@ -4,6 +4,8 @@
 #include "R/r_incl.h"
 #include "R_ext/Boolean.h"
 #include <cstddef>
+#include <llvm/IR/Attributes.h>
+#include <vector>
 
 extern "C" {
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
@@ -21,6 +23,7 @@ struct NativeBuiltin {
     const char* name;
     void* fun;
     llvm::FunctionType* llvmSignature;
+    std::vector<llvm::Attribute::AttrKind> attrs;
 };
 
 enum class BinopKind : int {
