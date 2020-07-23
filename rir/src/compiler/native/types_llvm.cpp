@@ -336,6 +336,9 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::nonLocalReturn.llvmSignature =
         llvm::FunctionType::get(t_void, {t::SEXP, t::SEXP}, false);
 
+    NativeBuiltins::clsEq.llvmSignature =
+        llvm::FunctionType::get(t::i1, {t::SEXP, t::SEXP}, false);
+
     return 1;
 }
 

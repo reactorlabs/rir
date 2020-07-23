@@ -27,12 +27,25 @@ struct DispatchTable
         return Function::unpack(getEntry(i));
     }
 
-    Function* baseline() const { return Function::unpack(getEntry(0)); }
-    Function* best() const { return get(size() - 1); }
+    Function* best() const {
+        if (size() > 1)
+            return get(1);
+        return get(0);
+    }
+    Function* baseline() const {
+        auto f = Function::unpack(getEntry(0));
+        assert(f->signature().envCreation ==
+               FunctionSignature::Environment::CallerProvided);
+        return f;
+    }
 
     Function* dispatch(Context a) const {
-        for (int i = size() - 1; i >= 0; --i) {
-            if (get(i)->context().subtype(a))
+        for (size_t i = 1; i < size(); ++i) {
+#ifdef DEBUG_DISPATCH
+            std::cout << "DISPATCH trying: " << a << " vs " << get(i)->context()
+                      << "\n";
+#endif
+            if (a.smaller(get(i)->context()))
                 return get(i);
         }
         return baseline();
@@ -41,13 +54,16 @@ struct DispatchTable
     void baseline(Function* f) {
         assert(f->signature().optimization ==
                FunctionSignature::OptimizationLevel::Baseline);
-        setEntry(0, f->container());
         if (size() == 0)
             size_++;
+        else
+            assert(baseline()->signature().optimization ==
+                   FunctionSignature::OptimizationLevel::Baseline);
+        setEntry(0, f->container());
     }
 
     bool contains(const Context& assumptions) {
-        for (size_t i = 1; i < size(); ++i)
+        for (size_t i = 0; i < size(); ++i)
             if (get(i)->context() == assumptions)
                 return true;
         return false;
@@ -76,8 +92,8 @@ struct DispatchTable
         assert(fun->signature().optimization !=
                FunctionSignature::OptimizationLevel::Baseline);
         auto assumptions = fun->context();
-        size_t i = 1;
-        for (; i < size(); ++i) {
+        long i;
+        for (i = size() - 1; i > 0; --i) {
             if (get(i)->context() == assumptions) {
                 // If we override a version we should ensure that we don't call
                 // the old version anymore, or we might end up in a deopt loop.
@@ -88,10 +104,11 @@ struct DispatchTable
                 }
                 return;
             }
-            if (!(get(i)->context() < assumptions)) {
+            if (!(assumptions < get(i)->context())) {
                 break;
             }
         }
+        i++;
         assert(!contains(fun->context()));
         if (size() == capacity()) {
 #ifdef DEBUG_DISPATCH
@@ -105,15 +122,18 @@ struct DispatchTable
             Rf_error("dispatch table overflow");
 #endif
             // Evict one element and retry
-            // TODO: find a better solution here!
+            auto pos = 1 + (std::rand() % (size() - 1));
             size_--;
+            while (pos < size()) {
+                setEntry(pos, getEntry(pos + 1));
+                pos++;
+            }
             return insert(fun);
         }
 
-        size_++;
-        for (size_t j = size() - 1; j > i; --j) {
+        for (long j = size(); j > i; --j)
             setEntry(j, getEntry(j - 1));
-        }
+        size_++;
         setEntry(i, fun->container());
 
 #ifdef DEBUG_DISPATCH
@@ -123,7 +143,6 @@ struct DispatchTable
             std::cout << "* " << Function::unpack(e)->context() << "\n";
         }
         std::cout << "\n";
-
         for (size_t i = 0; i < size() - 1; ++i) {
             assert(get(i)->context() < get(i + 1)->context());
             assert(get(i)->context() != get(i + 1)->context());

@@ -552,8 +552,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // such that we can restore it in createLegaxyArgsList in the
             // interpreter. At the moment however this will just result in
             // an assert.
-            if (Query::needsPromargs(target->baseline()))
-                monomorphicClosure = false;
+            if (Query::needsPromargs(target->baseline())) {
+                monomorphicClosure = monomorphicInnerFunction = false;
+                monomorphic = monomorphicPolyenv = nullptr;
+            }
         }
 
         auto ldfun = LdFun::Cast(callee);

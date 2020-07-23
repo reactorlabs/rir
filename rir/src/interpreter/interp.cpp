@@ -776,15 +776,14 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
         fun->clearDisabledAssumptions(given);
         if (RecompileCondition(table, fun, given)) {
-            if (Context(given).includes(pir::Rir2PirCompiler::minimalContext)) {
+            if (given.includes(pir::Rir2PirCompiler::minimalContext)) {
                 // More assumptions are available than this version uses. Let's
                 // try compile a better matching version.
 #ifdef DEBUG_DISPATCH
                 std::cout << "Optimizing for new context "
                           << fun->invocationCount() << ": ";
                 Rf_PrintValue(call.ast);
-                std::cout << given << " vs " << fun->signature().assumptions
-                          << "\n";
+                std::cout << given << " vs " << fun->context() << "\n";
 #endif
                 SEXP lhs = CAR(call.ast);
                 SEXP name = R_NilValue;
@@ -2662,8 +2661,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Context assumptions = call.givenContext;
             auto flags = fun->flags;
             bool dispatchFail =
-                flags.contains(Function::Dead) ||
-                !matches(assumptions, fun->signature(), fun->context());
+                flags.contains(Function::Dead) || !matches(call, fun);
             fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));
             if (!isDeoptimizing() && !dispatchFail &&

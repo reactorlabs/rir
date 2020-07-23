@@ -1036,17 +1036,18 @@ Context CallInstruction::inferAvailableAssumptions() const {
     Context given;
     if (!hasNamedArgs())
         given.add(Assumption::CorrectOrderOfArguments);
+
     if (auto cls = tryGetCls()) {
         if (cls->nargs() >= nCallArgs()) {
             given.add(Assumption::NotTooManyArguments);
             auto missing = cls->nargs() - nCallArgs();
             given.numMissing(missing);
         }
-
-        // Make some optimistic assumptions, they might be reset below...
-        given.add(Assumption::NoExplicitlyMissingArgs);
-        given.add(Assumption::NoReflectiveArgument);
     }
+
+    // Make some optimistic assumptions, they might be reset below...
+    given.add(Assumption::NoExplicitlyMissingArgs);
+    given.add(Assumption::NoReflectiveArgument);
 
     bool hasDotsArg = false;
     size_t i = 0;
@@ -1061,8 +1062,8 @@ Context CallInstruction::inferAvailableAssumptions() const {
     if (hasDotsArg) {
         given.remove(Assumption::CorrectOrderOfArguments);
         given.remove(Assumption::NotTooManyArguments);
-        given.numMissing(0);
         given.remove(Assumption::NoReflectiveArgument);
+        given.numMissing(0);
     }
 
     return given;

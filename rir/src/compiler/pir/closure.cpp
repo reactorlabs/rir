@@ -52,10 +52,9 @@ ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
 
 ClosureVersion* Closure::findCompatibleVersion(const Context& ctx) const {
     // ordered by number of assumptions
-    for (auto c = versions.rbegin(); c != versions.rend(); c++) {
-        const auto& candidate = *c;
+    for (auto& candidate : versions) {
         const auto& candidateCtx = candidate.first;
-        if (candidateCtx.subtype(ctx))
+        if (ctx.smaller(candidateCtx))
             return candidate.second;
     }
     return nullptr;
