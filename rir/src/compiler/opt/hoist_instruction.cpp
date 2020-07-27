@@ -1,11 +1,9 @@
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../translations/rir_compiler.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/analysis/cfg.h"
 #include "pass_definitions.h"
 
 #include <unordered_set>
@@ -13,7 +11,7 @@
 namespace rir {
 namespace pir {
 
-bool HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* cls, Code* code,
+bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                              LogStream&) const {
     bool anyChange = false;
     DominanceGraph dom(code);

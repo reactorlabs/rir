@@ -1,13 +1,12 @@
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../translations/rir_compiler.h"
-#include "../util/cfg.h"
 #include "../util/phi_placement.h"
 #include "../util/visitor.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/analysis/cfg.h"
+#include "compiler/compiler.h"
 #include "interpreter/interp.h"
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
@@ -103,7 +102,7 @@ static bool convertsToLogicalWithoutWarning(SEXP arg) {
 namespace rir {
 namespace pir {
 
-bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* cls, Code* code,
+bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                          LogStream&) const {
     bool anyChange = false;
 

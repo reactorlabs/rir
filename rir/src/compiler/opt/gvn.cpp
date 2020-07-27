@@ -1,8 +1,8 @@
-#include "../pir/pir.h"
-#include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../util/visitor.h"
 #include "R/r.h"
+#include "compiler/pir/pir.h"
+#include "compiler/pir/pir_impl.h"
+#include "compiler/util/bb_transform.h"
+#include "compiler/util/visitor.h"
 #include "pass_definitions.h"
 #include "utils/Map.h"
 #include <set>
@@ -10,7 +10,7 @@
 namespace rir {
 namespace pir {
 
-bool GVN::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code,
                 LogStream& log) const {
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<Value*, size_t> number;
@@ -170,7 +170,6 @@ bool GVN::apply(RirCompiler&, ClosureVersion* cls, Code* code,
     }
 
     {
-        std::unordered_map<Value*, Value*> replacements;
         DominanceGraph dom(code);
 
         typedef std::set<std::pair<size_t, size_t>> PhiClass;
@@ -253,7 +252,6 @@ bool GVN::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                     i->replaceUsesWith(firstInstr);
                     // Make sure this instruction really gets removed
                     i->effects.reset();
-                    replacements[i] = firstInstr;
                 }
             }
         }

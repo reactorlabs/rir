@@ -1,7 +1,7 @@
 #include "closure_version.h"
-#include "../transform/bb.h"
-#include "../util/visitor.h"
 #include "closure.h"
+#include "compiler/util/bb_transform.h"
+#include "compiler/util/visitor.h"
 #include "pir_impl.h"
 
 #include <iostream>

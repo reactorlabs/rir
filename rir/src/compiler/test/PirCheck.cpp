@@ -3,10 +3,10 @@
 #include "../analysis/query.h"
 #include "../analysis/verifier.h"
 #include "../pir/pir_impl.h"
-#include "../translations/pir_2_rir/pir_2_rir.h"
-#include "../translations/rir_2_pir/rir_2_pir.h"
+#include "../pir2rir/pir2rir.h"
 #include "../util/visitor.h"
 #include "api.h"
+#include "compiler/compiler.h"
 #include "compiler/parameter.h"
 #include <string>
 #include <vector>
@@ -29,12 +29,11 @@ static ClosureVersion* recompilePir(SEXP f, Module* m) {
     }
     assert(DispatchTable::check(BODY(f)));
     auto table = DispatchTable::unpack(BODY(f));
-    auto assumptions =
-        table->best()->context() | Rir2PirCompiler::minimalContext;
+    auto assumptions = table->best()->context() | pir::Compiler::minimalContext;
 
     StreamLogger logger(PirDebug);
     logger.title("Pir Check");
-    Rir2PirCompiler cmp(m, logger);
+    pir::Compiler cmp(m, logger);
     ClosureVersion* res = nullptr;
     cmp.compileClosure(
         f, "pir_check", assumptions, [&](ClosureVersion* r) { res = r; },

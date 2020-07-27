@@ -1,12 +1,12 @@
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "compiler/analysis/cfg.h"
 #include "pass_definitions.h"
 
 namespace rir {
 namespace pir {
 
-bool DelayInstr::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
                        LogStream&) const {
     bool anyChange = false;
 

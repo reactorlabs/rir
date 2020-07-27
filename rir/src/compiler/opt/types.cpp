@@ -1,7 +1,7 @@
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
+#include "compiler/analysis/cfg.h"
 
 #include "../analysis/abstract_value.h"
 #include "../analysis/range.h"
@@ -14,7 +14,7 @@
 namespace rir {
 namespace pir {
 
-bool TypeInference::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                           LogStream& log) const {
 
     RangeAnalysis rangeAnalysis(cls, code, log);

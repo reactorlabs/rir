@@ -278,6 +278,8 @@ class BB {
 
     bool hasSinglePred() const { return prev.size() == 1; }
 
+    void replaceUsesOfValue(Value* old, Value* rpl);
+
   private:
     // don't use them directly unless you know what you are doing
     // We don't want to make them private, since we are all adults. But there

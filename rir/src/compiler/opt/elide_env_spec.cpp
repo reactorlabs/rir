@@ -1,20 +1,20 @@
 #include "../analysis/available_checkpoints.h"
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../util/cfg.h"
-#include "../util/type_test.h"
 #include "../util/visitor.h"
 #include "R/r.h"
+#include "compiler/analysis/cfg.h"
+#include "compiler/util/bb_transform.h"
 #include "compiler/util/safe_builtins_list.h"
 #include "interpreter/builtins.h"
 #include "pass_definitions.h"
+#include "type_test.h"
 
 #include <unordered_map>
 
 namespace rir {
 namespace pir {
 
-bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                          LogStream& log) const {
 
     constexpr bool debug = false;

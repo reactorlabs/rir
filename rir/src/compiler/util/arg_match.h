@@ -3,7 +3,7 @@
 
 #include "../pir/pir.h"
 #include "R/RList.h"
-#include "builder.h"
+#include "compiler/pir/builder.h"
 #include "ir/BC_inc.h"
 
 namespace rir {

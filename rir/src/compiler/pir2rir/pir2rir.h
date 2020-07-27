@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../../debugging/debugging.h"
-#include "../../debugging/stream_logger.h"
-#include "../../pir/module.h"
-#include "../../pir/pir.h"
+#include "compiler/log/debug.h"
+#include "compiler/log/stream_logger.h"
+#include "compiler/pir/module.h"
+#include "compiler/pir/pir.h"
 #include "runtime/Function.h"
 
 #include <sstream>

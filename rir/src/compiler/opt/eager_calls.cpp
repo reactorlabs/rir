@@ -1,14 +1,11 @@
 #include "../analysis/available_checkpoints.h"
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../transform/replace.h"
-#include "../translations/rir_2_pir/rir_2_pir_compiler.h"
-#include "../util/cfg.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/analysis/cfg.h"
 #include "pass_definitions.h"
 
 #include <unordered_map>
@@ -16,7 +13,7 @@
 namespace rir {
 namespace pir {
 
-bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* cls, Code* code,
+bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                        LogStream& log) const {
     AvailableCheckpoints checkpoint(cls, code, log);
 

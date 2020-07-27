@@ -1,7 +1,7 @@
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
+#include "compiler/analysis/cfg.h"
 #include "pass_definitions.h"
 
 #include <unordered_map>
@@ -9,7 +9,7 @@
 namespace rir {
 namespace pir {
 
-bool ElideEnv::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                      LogStream&) const {
     bool anyChange = false;
     std::unordered_set<Value*> envNeeded;

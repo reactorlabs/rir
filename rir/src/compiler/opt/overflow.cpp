@@ -1,5 +1,5 @@
+#include "compiler/analysis/cfg.h"
 #include "compiler/pir/pir_impl.h"
-#include "compiler/util/cfg.h"
 #include "compiler/util/visitor.h"
 #include "pass_definitions.h"
 #include "utils/Set.h"
@@ -7,7 +7,7 @@
 namespace rir {
 namespace pir {
 
-bool Overflow::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool Overflow::apply(Compiler&, ClosureVersion* cls, Code* code,
                      LogStream&) const {
     UsesTree uses(code);
 

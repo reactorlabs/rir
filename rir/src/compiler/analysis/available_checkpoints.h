@@ -1,8 +1,8 @@
 #ifndef PIR_AVAILABLE_CHECKPOINTS_H
 #define PIR_AVAILABLE_CHECKPOINTS_H
 
-#include "../util/cfg.h"
 #include "abstract_value.h"
+#include "compiler/analysis/cfg.h"
 #include "generic_static_analysis.h"
 
 namespace rir {

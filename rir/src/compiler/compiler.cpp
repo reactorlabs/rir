@@ -1,19 +1,17 @@
-#include "rir_2_pir_compiler.h"
-#include "../../pir/pir_impl.h"
+#include "compiler.h"
 #include "R/RList.h"
-#include "rir_2_pir.h"
+#include "pir/pir_impl.h"
+#include "rir2pir/rir2pir.h"
 
+#include "compiler/analysis/query.h"
+#include "compiler/analysis/verifier.h"
+#include "compiler/log/perf_counter.h"
+#include "compiler/opt/pass_definitions.h"
+#include "compiler/opt/pass_scheduler.h"
 #include "compiler/parameter.h"
 
-#include "../../analysis/query.h"
-#include "../../analysis/verifier.h"
-#include "../../opt/pass_definitions.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
-
-#include "../../debugging/PerfCounter.h"
-
-#include "compiler/opt/pass_scheduler.h"
 
 #include <chrono>
 
@@ -22,12 +20,13 @@ namespace pir {
 
 // Currently PIR optimized functions cannot handle too many arguments or
 // mis-ordered arguments. The caller needs to take care.
-constexpr Context::Flags Rir2PirCompiler::minimalContext;
-constexpr Context Rir2PirCompiler::defaultContext;
+constexpr Context::Flags Compiler::minimalContext;
+constexpr Context Compiler::defaultContext;
 
-void Rir2PirCompiler::compileClosure(
-    SEXP closure, const std::string& name, const Context& assumptions_,
-    MaybeCls success, Maybe fail, std::list<PirTypeFeedback*> outerFeedback) {
+void Compiler::compileClosure(SEXP closure, const std::string& name,
+                              const Context& assumptions_, MaybeCls success,
+                              Maybe fail,
+                              std::list<PirTypeFeedback*> outerFeedback) {
     assert(isValidClosureSEXP(closure));
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
@@ -52,10 +51,11 @@ void Rir2PirCompiler::compileClosure(
                    fail, outerFeedback);
 }
 
-void Rir2PirCompiler::compileFunction(
-    rir::DispatchTable* src, const std::string& name, SEXP formals, SEXP srcRef,
-    const Context& assumptions_, MaybeCls success, Maybe fail,
-    std::list<PirTypeFeedback*> outerFeedback) {
+void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
+                               SEXP formals, SEXP srcRef,
+                               const Context& assumptions_, MaybeCls success,
+                               Maybe fail,
+                               std::list<PirTypeFeedback*> outerFeedback) {
     Context assumptions = assumptions_;
     auto srcFunction = src->baseline();
     srcFunction->clearDisabledAssumptions(assumptions);
@@ -66,9 +66,9 @@ void Rir2PirCompiler::compileFunction(
                    outerFeedback);
 }
 
-void Rir2PirCompiler::compileClosure(
-    Closure* closure, rir::Function* optFunction, const Context& ctx,
-    MaybeCls success, Maybe fail, std::list<PirTypeFeedback*> outerFeedback) {
+void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
+                              const Context& ctx, MaybeCls success, Maybe fail,
+                              std::list<PirTypeFeedback*> outerFeedback) {
 
     if (!ctx.includes(minimalContext)) {
         for (const auto& a : minimalContext) {
@@ -206,7 +206,7 @@ std::chrono::time_point<std::chrono::high_resolution_clock> endTime;
 std::unique_ptr<CompilerPerf> PERF = std::unique_ptr<CompilerPerf>(
     MEASURE_COMPILER_PERF ? new CompilerPerf : nullptr);
 
-void Rir2PirCompiler::optimizeModule() {
+void Compiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
     PassScheduler::instance().run([&](const Pass* translation) {

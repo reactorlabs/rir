@@ -1,16 +1,16 @@
-#include "rir_2_pir.h"
-#include "../../analysis/query.h"
-#include "../../analysis/verifier.h"
-#include "../../pir/pir_impl.h"
-#include "../../transform/insert_cast.h"
-#include "../../util/arg_match.h"
-#include "../../util/builder.h"
-#include "../../util/cfg.h"
-#include "../../util/visitor.h"
+#include "rir2pir.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
+#include "compiler/analysis/cfg.h"
+#include "compiler/analysis/query.h"
+#include "compiler/analysis/verifier.h"
+#include "compiler/pir/builder.h"
+#include "compiler/pir/pir_impl.h"
+#include "compiler/util/arg_match.h"
+#include "compiler/util/visitor.h"
+#include "insert_cast.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 #include "simple_instruction_list.h"
@@ -136,8 +136,8 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
-Rir2Pir::Rir2Pir(Rir2PirCompiler& cmp, ClosureVersion* cls,
-                 ClosureStreamLogger& log, const std::string& name,
+Rir2Pir::Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
+                 const std::string& name,
                  const std::list<PirTypeFeedback*>& outerFeedback)
     : compiler(cmp), cls(cls), log(log), name(name),
       outerFeedback(outerFeedback) {
@@ -1396,7 +1396,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
             delayedCompilation[mk] = {dt,      inner.str(),
                                       formals, srcRef,
-                                      false,   Rir2PirCompiler::defaultContext};
+                                      false,   Compiler::defaultContext};
 
             finger = pc;
             skip = true;

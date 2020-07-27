@@ -1,16 +1,17 @@
-#include "pir_2_rir.h"
-#include "../../analysis/last_env.h"
-#include "../../pir/pir_impl.h"
-#include "../../pir/value_list.h"
-#include "../../transform/bb.h"
-#include "../../util/cfg.h"
-#include "../../util/visitor.h"
+#include "pir2rir.h"
 #include "R/BuiltinIds.h"
-#include "allocators.h"
+#include "compiler/analysis/cfg.h"
+#include "compiler/analysis/last_env.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
+#include "compiler/log/perf_counter.h"
 #include "compiler/native/lower_llvm.h"
 #include "compiler/parameter.h"
+#include "compiler/pir/pir_impl.h"
+#include "compiler/pir/value_list.h"
+#include "compiler/util/bb_transform.h"
+#include "compiler/util/lowering/allocators.h"
+#include "compiler/util/visitor.h"
 #include "event_counters.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
@@ -18,8 +19,6 @@
 #include "runtime/DispatchTable.h"
 #include "simple_instruction_list.h"
 #include "utils/FunctionWriter.h"
-
-#include "../../debugging/PerfCounter.h"
 
 #include <algorithm>
 #include <chrono>
@@ -1071,10 +1070,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             // Values, not instructions
 #define V(Value) case Tag::Value:
-            COMPILER_VALUES(V) {
+                COMPILER_VALUES(V) {
 #undef V
-                break;
-            }
+                    break;
+                }
 
             // Dummy sentinel enum item
             case Tag::_UNUSED_: {
@@ -1275,9 +1274,7 @@ void Pir2Rir::lower(Code* code) {
         if (bb->isEmpty())
             bb->append(new Nop());
     });
-
 }
-
 
 void Pir2Rir::toCSSA(Code* code) {
 

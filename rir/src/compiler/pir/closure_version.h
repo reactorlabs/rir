@@ -1,8 +1,8 @@
 #ifndef COMPILER_CLOSURE_VERSION_H
 #define COMPILER_CLOSURE_VERSION_H
 
-#include "../debugging/debugging.h"
 #include "code.h"
+#include "compiler/log/debug.h"
 #include "pir.h"
 #include "runtime/Function.h"
 #include <functional>

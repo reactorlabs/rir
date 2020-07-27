@@ -1,8 +1,8 @@
 #include "liveness.h"
 #include "../pir/bb.h"
 #include "../pir/instruction.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "compiler/analysis/cfg.h"
 
 #include <map>
 #include <set>

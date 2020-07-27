@@ -3,7 +3,7 @@
 
 #include "../pir/bb.h"
 #include "../pir/pir.h"
-#include "../util/cfg.h"
+#include "compiler/analysis/cfg.h"
 
 namespace rir {
 

@@ -17,7 +17,7 @@ class Code;
 class Env;
 class Instruction;
 class LazyEnv;
-
+class Module;
 }
 }
 

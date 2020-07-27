@@ -1,8 +1,8 @@
 #include "../analysis/dead.h"
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "compiler/analysis/cfg.h"
+#include "compiler/util/bb_transform.h"
 #include "pass_definitions.h"
 
 #include "R/r.h"
@@ -14,7 +14,7 @@
 namespace rir {
 namespace pir {
 
-bool Cleanup::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                     LogStream&) const {
     std::unordered_set<size_t> usedProms;
     std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;

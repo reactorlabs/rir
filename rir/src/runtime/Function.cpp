@@ -1,6 +1,6 @@
 #include "Function.h"
 #include "R/Serialize.h"
-#include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
+#include "compiler/compiler.h"
 
 namespace rir {
 
@@ -82,7 +82,7 @@ void Function::clearDisabledAssumptions(Context& given) const {
     if (flags.contains(Function::DisableNumArgumentsSepzialization))
         given.clearNargs();
     if (flags.contains(Function::DisableAllSpecialization))
-        given.clearExcept(pir::Rir2PirCompiler::minimalContext);
+        given.clearExcept(pir::Compiler::minimalContext);
 
     if (GLOBAL_SPECIALIZATION_LEVEL < 100)
         given.setSpecializationLevel(GLOBAL_SPECIALIZATION_LEVEL);
