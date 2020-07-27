@@ -552,7 +552,7 @@ class LowerFunctionLLVM {
     llvm::Value* boxLgl(llvm::Value* v, bool protect = true);
     llvm::Value* boxTst(llvm::Value* v, bool protect = true);
     llvm::Value* depromise(llvm::Value* arg);
-    void insn_assert(llvm::Value* v, const char* msg);
+    void insn_assert(llvm::Value* v, const char* msg, llvm::Value* p = nullptr);
 
     llvm::Value* force(Instruction* i, llvm::Value* arg);
 
@@ -663,13 +663,16 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     return result;
 }
 
-void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg) {
+void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
+                                    llvm::Value* p) {
     auto nok = BasicBlock::Create(C, "assertFail", fun);
     auto ok = BasicBlock::Create(C, "assertOk", fun);
 
     builder.CreateCondBr(v, ok, nok, branchAlwaysTrue);
 
     builder.SetInsertPoint(nok);
+    if (p)
+        call(NativeBuiltins::printValue, {p});
     call(NativeBuiltins::assertFail, {convertToPointer((void*)msg)});
     builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
 

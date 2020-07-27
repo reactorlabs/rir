@@ -35,6 +35,20 @@
 #include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/Vectorize.h>
 
+// analysis passes
+#include <llvm/Analysis/BasicAliasAnalysis.h>
+#include <llvm/Analysis/Passes.h>
+#include <llvm/Analysis/ScopedNoAliasAA.h>
+#include <llvm/Analysis/TypeBasedAliasAnalysis.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/IPO/AlwaysInliner.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/InstSimplifyPass.h>
+#include <llvm/Transforms/Vectorize.h>
+
 #include <llvm/Transforms/IPO.h>
 #include <unordered_map>
 
@@ -239,33 +253,93 @@ class JitLLVMImplementation {
 };
 
 static void pirPassSchedule(const PassManagerBuilder&,
-                            legacy::PassManagerBase& PM) {
-    PM.add(createDeadInstEliminationPass());
+                            legacy::PassManagerBase& PM_) {
+    legacy::PassManagerBase* PM = &PM_;
 
-    PM.add(createCFGSimplificationPass());
-    PM.add(createSROAPass());
-    PM.add(createPromoteMemoryToRegisterPass());
+    // See
+    // https://github.com/JuliaLang/julia/blob/235784a49b6ed8ab5677f42887e08c84fdc12c5c/src/aotcompile.cpp#L607
+    // for inspiration
 
-    PM.add(createConstantPropagationPass());
-    PM.add(createDeadInstEliminationPass());
+    PM->add(createDeadInstEliminationPass());
+    PM->add(createCFGSimplificationPass());
+    PM->add(createSROAPass());
+    PM->add(createConstantPropagationPass());
+    PM->add(createPromoteMemoryToRegisterPass());
 
-    PM.add(createLICMPass());
-    PM.add(createLoopUnswitchPass());
-    PM.add(createInductiveRangeCheckEliminationPass());
-    PM.add(createCFGSimplificationPass());
+    PM->add(createScopedNoAliasAAWrapperPass());
+    PM->add(createTypeBasedAAWrapperPass());
+    PM->add(createBasicAAWrapperPass());
 
-    PM.add(createInstructionCombiningPass());
-    PM.add(createGVNPass());
-    PM.add(createSCCPPass());
-    PM.add(createSinkingPass());
+    PM->add(createCFGSimplificationPass());
+    PM->add(createDeadCodeEliminationPass());
+    PM->add(createSROAPass());
 
-    PM.add(createLICMPass());
-    PM.add(createLoopUnswitchPass());
-    PM.add(createInductiveRangeCheckEliminationPass());
-    PM.add(createCFGSimplificationPass());
+    PM->add(createMemCpyOptPass());
 
-    PM.add(createCFGSimplificationPass());
-    PM.add(createAggressiveDCEPass());
+    PM->add(createInstructionCombiningPass());
+    PM->add(createCFGSimplificationPass());
+    PM->add(createSROAPass());
+    PM->add(createInstSimplifyLegacyPass());
+    PM->add(createAggressiveDCEPass());
+    PM->add(createBitTrackingDCEPass());
+    PM->add(createJumpThreadingPass());
+
+    PM->add(createReassociatePass());
+    PM->add(createEarlyCSEPass());
+    PM->add(createMergedLoadStoreMotionPass());
+
+    // Load forwarding above can expose allocations that aren't actually used
+    // remove those before optimizing loops.
+    PM->add(createLoopRotatePass());
+    PM->add(createLoopIdiomPass());
+
+    // LoopRotate strips metadata from terminator, so run LowerSIMD afterwards
+    PM->add(createLICMPass());
+    PM->add(createLoopUnswitchPass());
+    PM->add(createInductiveRangeCheckEliminationPass());
+    PM->add(createLICMPass());
+    // Subsequent passes not stripping metadata from terminator
+    PM->add(createInstSimplifyLegacyPass());
+    PM->add(createIndVarSimplifyPass());
+    PM->add(createLoopDeletionPass());
+    PM->add(createSimpleLoopUnrollPass());
+
+    // Re-run SROA after loop-unrolling (useful for small loops that operate,
+    // over the structure of an aggregate)
+    PM->add(createSROAPass());
+    // might not be necessary:
+    PM->add(createInstSimplifyLegacyPass());
+
+    PM->add(createGVNPass());
+    PM->add(createMemCpyOptPass());
+    PM->add(createSCCPPass());
+    PM->add(createSinkingPass());
+
+    // Run instcombine after redundancy elimination to exploit opportunities
+    // opened up by them.
+    // This needs to be InstCombine instead of InstSimplify to allow
+    // loops over Union-typed arrays to vectorize.
+    PM->add(createInstructionCombiningPass());
+    PM->add(createJumpThreadingPass());
+    PM->add(createDeadStoreEliminationPass());
+
+    // see if all of the constant folding has exposed more loops
+    // to simplification and deletion
+    // this helps significantly with cleaning up iteration
+    PM->add(createCFGSimplificationPass());
+    PM->add(createLoopDeletionPass());
+    PM->add(createInstructionCombiningPass());
+    PM->add(createLoopVectorizePass());
+    PM->add(createLoopLoadEliminationPass());
+    PM->add(createCFGSimplificationPass());
+    PM->add(createSLPVectorizerPass());
+    // might need this after LLVM 11:
+    // PM->add(createVectorCombinePass());
+
+    PM->add(createSpeculativeExecutionIfHasBranchDivergencePass());
+    PM->add(createAggressiveDCEPass());
+
+    PM->add(createDivRemPairsPass());
 }
 
 // Pass to run after hotCold splitting:
@@ -327,9 +401,9 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     {
         llvm::PassManagerBuilder builder;
 
-        builder.OptLevel = 1;
+        builder.OptLevel = 0;
         builder.SizeLevel = 0;
-        builder.Inliner = llvm::createFunctionInliningPass(1, 0, false);
+        builder.Inliner = llvm::createFunctionInliningPass();
         TM->adjustPassManager(builder);
 
         // Start with some custom passes tailored to our backend
@@ -341,6 +415,11 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
                 PM.add(createHotColdSplittingPass());
                 PM.add(new NooptCold());
             });
+
+        PM->add(
+            new TargetLibraryInfoWrapperPass(Triple(TM->getTargetTriple())));
+        PM->add(
+            createTargetTransformInfoWrapperPass(TM->getTargetIRAnalysis()));
 
         builder.populateFunctionPassManager(*PM);
         builder.populateModulePassManager(MPM);
