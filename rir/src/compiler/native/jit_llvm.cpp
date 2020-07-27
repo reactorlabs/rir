@@ -55,6 +55,8 @@ class JitLLVMImplementation {
     DataLayout DL;
     LegacyRTDyldObjectLinkingLayer ObjectLayer;
     LegacyIRCompileLayer<decltype(ObjectLayer), SimpleCompiler> CompileLayer;
+    std::unordered_map<std::string, std::pair<llvm::Function*, void*>>
+        builtins_;
 
     using OptimizeFunction = std::function<std::unique_ptr<llvm::Module>(
         std::unique_ptr<llvm::Module>)>;
@@ -70,7 +72,7 @@ class JitLLVMImplementation {
     JitLLVMImplementation()
         : Resolver(createLegacyLookupResolver(
               ES,
-              [this](const std::string& Name) {
+              [this](const std::string& Name) -> llvm::JITSymbol {
                   return findMangledSymbol(Name);
               },
               [](Error Err) {
@@ -100,6 +102,7 @@ class JitLLVMImplementation {
         module->setDataLayout(TM->createDataLayout());
         moduleKey = -1;
         funs.clear();
+        builtins_.clear();
     }
 
     llvm::Function* declareFunction(rir::pir::ClosureVersion* v,
@@ -108,7 +111,27 @@ class JitLLVMImplementation {
         assert(!funs.count(v));
         auto f = Function::Create(signature, Function::ExternalLinkage, name,
                                   JitLLVMImplementation::instance().module);
+        f->addFnAttr(Attribute::NoUnwind);
         funs[v] = f;
+        return f;
+    }
+
+    llvm::Function* getBuiltin(const rir::pir::NativeBuiltin& b) {
+        auto l = builtins_.find(b.name);
+        if (l != builtins_.end()) {
+            assert(l->second.second == b.fun);
+            return l->second.first;
+        }
+
+        assert(b.llvmSignature);
+        auto f =
+            Function::Create(b.llvmSignature, Function::ExternalLinkage, b.name,
+                             JitLLVMImplementation::instance().module);
+        f->addFnAttr(Attribute::NoUnwind);
+        for (auto a : b.attrs)
+            f->addFnAttr(a);
+
+        builtins_[b.name] = {f, b.fun};
         return f;
     }
 
@@ -164,6 +187,12 @@ class JitLLVMImplementation {
 
   private:
     JITSymbol findMangledSymbol(const std::string& Name) {
+        auto l = builtins_.find(Name);
+        if (l != builtins_.end()) {
+            return JITSymbol((uintptr_t)l->second.second,
+                             JITSymbolFlags::Exported |
+                                 JITSymbolFlags::Callable);
+        }
 #ifdef _WIN32
         // The symbol lookup of ObjectLinkingLayer uses the
         // SymbolRef::SF_Exported flag to decide whether a symbol will be
@@ -359,6 +388,10 @@ llvm::Function* JitLLVM::declare(ClosureVersion* v, const std::string& name,
                                  llvm::FunctionType* signature) {
     return JitLLVMImplementation::instance().declareFunction(v, name,
                                                              signature);
+}
+
+llvm::Function* JitLLVM::getBuiltin(const NativeBuiltin& b) {
+    return JitLLVMImplementation::instance().getBuiltin(b);
 }
 
 llvm::Value* JitLLVM::getFunctionDeclaration(const std::string& name,

@@ -1739,9 +1739,7 @@ llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
     builder.CreateBr(callBB);
     builder.SetInsertPoint(callBB);
 #endif
-    llvm::Type* tp = PointerType::get(builtin.llvmSignature, 0);
-    auto trg = builder.CreateIntToPtr(c(builtin.fun), tp);
-    return builder.CreateCall(trg, args);
+    return builder.CreateCall(JitLLVM::getBuiltin(builtin), args);
 }
 
 llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
