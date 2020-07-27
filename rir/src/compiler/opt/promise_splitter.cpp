@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-bool PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
+bool PromiseSplitter::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                             LogStream&) const {
 
     bool anyChange = false;
@@ -17,7 +17,7 @@ bool PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
     SmallMap<MkArg*, CastType*> candidateProms;
     SmallMap<CastType*, SmallSet<Instruction*>> uses;
 
-    Visitor::run(function->entry, [&](Instruction* i) {
+    Visitor::run(code->entry, [&](Instruction* i) {
         if (auto ct = CastType::Cast(i)) {
             if (auto mk = MkArg::Cast(ct->arg(0).val())) {
                 candidates.insert(ct);
@@ -26,7 +26,7 @@ bool PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
         }
     });
 
-    Visitor::run(function->entry, [&](Instruction* i) {
+    Visitor::run(code->entry, [&](Instruction* i) {
         size_t count = 0;
         i->eachArg([&](Value* v) {
             if (auto ct = CastType::Cast(v)) {
@@ -48,7 +48,7 @@ bool PromiseSplitter::apply(RirCompiler&, ClosureVersion* function,
                 banned.insert(p);
     });
 
-    CFG cfg(function);
+    CFG cfg(code);
     SmallSet<CastType*> toSplit;
     for (const auto& c : candidates) {
         const auto& us = uses.find(c);

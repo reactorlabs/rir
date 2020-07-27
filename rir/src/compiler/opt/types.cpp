@@ -1,5 +1,4 @@
 #include "../pir/pir_impl.h"
-#include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
@@ -15,16 +14,16 @@
 namespace rir {
 namespace pir {
 
-bool TypeInference::apply(RirCompiler&, ClosureVersion* function,
+bool TypeInference::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                           LogStream& log) const {
 
-    RangeAnalysis rangeAnalysis(function, log);
+    RangeAnalysis rangeAnalysis(cls, code, log);
 
     std::unordered_map<Instruction*, PirType> types;
     {
         bool done = false;
         auto apply = [&]() {
-            Visitor::run(function->entry, [&](Instruction* i) {
+            Visitor::run(code->entry, [&](Instruction* i) {
                 if (!i->producesRirResult())
                     return;
 
@@ -206,7 +205,7 @@ bool TypeInference::apply(RirCompiler&, ClosureVersion* function,
         }
     }
 
-    Visitor::run(function->entry, [&](Instruction* i) {
+    Visitor::run(code->entry, [&](Instruction* i) {
         if (!i->producesRirResult())
             return;
         if (types.count(i))

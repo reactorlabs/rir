@@ -7,7 +7,6 @@
 #include "../pir/pir.h"
 #include "../pir/value.h"
 #include "R/Preserve.h"
-#include "pir_translator.h"
 #include "runtime/Function.h"
 #include <vector>
 

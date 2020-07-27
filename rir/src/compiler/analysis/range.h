@@ -13,13 +13,13 @@
 namespace rir {
 namespace pir {
 
-static int max(int a, int b) {
+inline int max(int a, int b) {
     if (b > a)
         return b;
     return a;
 }
 
-static int min(int a, int b) {
+inline int min(int a, int b) {
     if (b < a)
         return b;
     return a;
@@ -79,8 +79,8 @@ struct RangeAnalysisState {
 class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
                                             true, AnalysisDebugLevel::None> {
   public:
-    RangeAnalysis(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("Range", cls, cls, log) {}
+    RangeAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
+        : StaticAnalysis("Range", cls, code, log) {}
 
     AbstractResult apply(RangeAnalysisState& state,
                          Instruction* i) const override {

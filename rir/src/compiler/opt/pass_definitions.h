@@ -1,22 +1,25 @@
 #ifndef PASS_DEFINITIONS_H
 #define PASS_DEFINITIONS_H
 
-#include "../debugging/stream_logger.h"
-#include "../translations/pir_translator.h"
+#include "pass.h"
 
 namespace rir {
 namespace pir {
 
+class LogStream;
 class Closure;
 
-#define PASS(name)                                                             \
+#define PASS(name, __runOnPromises__)                                          \
     name:                                                                      \
   public                                                                       \
-    PirTranslator {                                                            \
+    Pass {                                                                     \
       public:                                                                  \
-        name() : PirTranslator(#name){};                                       \
-        bool apply(RirCompiler&, ClosureVersion* function, LogStream& log)     \
-            const final override;                                              \
+        name() : Pass(#name){};                                                \
+        bool apply(RirCompiler&, ClosureVersion* function, Code* code,         \
+                   LogStream& log) const final override;                       \
+        bool runOnPromises() const final override {                            \
+            return __runOnPromises__;                                          \
+        }                                                                      \
     };
 
 /*
@@ -26,7 +29,7 @@ class Closure;
  * environment, to pir SSA variables.
  *
  */
-class PASS(ScopeResolution);
+class PASS(ScopeResolution, false);
 
 /*
  * ElideEnv removes envrionments which are not needed. It looks at all uses of
@@ -36,7 +39,7 @@ class PASS(ScopeResolution);
  *
  */
 
-class PASS(ElideEnv);
+class PASS(ElideEnv, true);
 
 /*
  * This pass searches for dominating force instructions.
@@ -46,13 +49,13 @@ class PASS(ElideEnv);
  * dominating force, and replaces all subsequent forces with its result.
  *
  */
-class PASS(ForceDominance);
+class PASS(ForceDominance, false);
 
 /*
  * DelayInstr tries to schedule instructions right before they are needed.
  *
  */
-class PASS(DelayInstr);
+class PASS(DelayInstr, false);
 
 /*
  * The DelayEnv pass tries to delay the scheduling of `MkEnv` instructions as
@@ -60,7 +63,7 @@ class PASS(DelayInstr);
  * the goal is to move it out of the others.
  *
  */
-class PASS(DelayEnv);
+class PASS(DelayEnv, false);
 
 /*
  * Inlines a closure. Intentionally stupid. It does not resolve inner
@@ -68,7 +71,7 @@ class PASS(DelayEnv);
  * with multiple environments. Later scope resolution and force dominance
  * passes will do the smart parts.
  */
-class PASS(Inline);
+class PASS(Inline, false);
 
 /*
  * Goes through every operation that for the general case needs an environment
@@ -80,27 +83,23 @@ class PASS(Inline);
  * instruction for which we could not prove it does not access the parent
  * environment reflectively and speculate it will not.
  */
-class PASS(ElideEnvSpec);
-
-/*
- *
- */
+class PASS(ElideEnvSpec, false);
 
 /*
  * Constantfolding and dead branch removal.
  */
-class PASS(Constantfold);
+class PASS(Constantfold, true);
 
 /*
  * Generic instruction and controlflow cleanup pass.
  */
-class PASS(Cleanup);
+class PASS(Cleanup, true);
 
 /*
  * Checkpoints keep values alive. Thus it makes sense to remove them if they
  * are unused after a while.
  */
-class PASS(CleanupCheckpoints);
+class PASS(CleanupCheckpoints, false);
 
 /*
  * Unused framestate instructions usually get removed automatically. Except
@@ -109,56 +108,57 @@ class PASS(CleanupCheckpoints);
  * that they can be removed later, if they are not actually used by any
  * checkpoint/deopt.
  */
-class PASS(CleanupFramestate);
+class PASS(CleanupFramestate, false);
 
 /*
  * Trying to group assumptions, by pushing them up. This well lead to fewer
  * checkpoints being used overall.
  */
-class PASS(OptimizeAssumptions);
+class PASS(OptimizeAssumptions, false);
 
-class PASS(EagerCalls);
+class PASS(EagerCalls, false);
 
-class PASS(OptimizeVisibility);
+class PASS(OptimizeVisibility, true);
 
-class PASS(OptimizeContexts);
+class PASS(OptimizeContexts, false);
 
-class PASS(DeadStoreRemoval);
+class PASS(DeadStoreRemoval, false);
 
-class PASS(DotDotDots);
+class PASS(DotDotDots, false);
 
 /*
  * At this point, loop code invariant mainly tries to hoist ldFun operations
  * outside the loop in case it can prove that the loop body will not change
  * the binding
  */
-class PASS(LoopInvariant);
+class PASS(LoopInvariant, false);
 
-class PASS(GVN);
+class PASS(GVN, true);
 
-class PASS(LoadElision);
+class PASS(LoadElision, false);
 
-class PASS(TypeInference);
+class PASS(TypeInference, true);
 
-class PASS(TypeSpeculation);
+class PASS(TypeSpeculation, false);
 
-class PASS(PromiseSplitter);
+class PASS(PromiseSplitter, false);
 
 /*
  * Range analysis to detect and optimize code which will not create overflows /
  * underflows
  */
-class PASS(Overflow);
+class PASS(Overflow, true);
 
 /*
  * Loop Invariant Code motion
  */
-class PASS(HoistInstruction);
+class PASS(HoistInstruction, false);
 
-class PhaseMarker : public PirTranslator {
+class PhaseMarker : public Pass {
   public:
-    explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}
-    bool apply(RirCompiler&, ClosureVersion*, LogStream&) const final override {
+    explicit PhaseMarker(const std::string& name) : Pass(name) {}
+    bool apply(RirCompiler&, ClosureVersion*, Code*,
+               LogStream&) const final override {
         return false;
     }
     bool isPhaseMarker() const final override { return true; }

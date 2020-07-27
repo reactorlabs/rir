@@ -38,8 +38,8 @@ class LastVisibilityUpdate {
 
 class VisibilityAnalysis : public StaticAnalysis<LastVisibilityUpdate> {
   public:
-    VisibilityAnalysis(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("VisibilityAnalysis", cls, cls, log) {}
+    VisibilityAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
+        : StaticAnalysis("VisibilityAnalysis", cls, code, log) {}
 
     AbstractResult apply(LastVisibilityUpdate& vis,
                          Instruction* i) const override final;

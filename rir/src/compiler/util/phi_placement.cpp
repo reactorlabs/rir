@@ -13,7 +13,7 @@
 namespace rir {
 namespace pir {
 
-PhiPlacement::PhiPlacement(ClosureVersion* cls,
+PhiPlacement::PhiPlacement(Code* code,
                            const std::unordered_map<BB*, Value*>& writes,
                            const DominanceGraph& dom,
                            const DominanceFrontier& dfrontier) {
@@ -43,7 +43,7 @@ PhiPlacement::PhiPlacement(ClosureVersion* cls,
 
     {
         std::unordered_map<BB*, PhiInput> pendingInput;
-        DominatorTreeVisitor<>(dom).run(cls->entry, [&](BB* cur) {
+        DominatorTreeVisitor<>(dom).run(code->entry, [&](BB* cur) {
             PhiInput input = {nullptr, nullptr, nullptr};
             if (pendingInput.count(cur)) {
                 input = pendingInput.at(cur);

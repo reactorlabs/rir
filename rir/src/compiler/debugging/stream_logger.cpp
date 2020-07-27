@@ -1,6 +1,6 @@
 #include "stream_logger.h"
-#include "../pir/pir_impl.h"
-#include "../translations/pir_translator.h"
+#include "compiler/opt/pass.h"
+#include "compiler/pir/pir_impl.h"
 #include "runtime/Function.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
@@ -144,7 +144,7 @@ void ClosureStreamLogger::pirOptimizationsFinished(ClosureVersion* closure) {
     }
 }
 
-static bool shouldLog(const ClosureVersion* version, const PirTranslator* pass,
+static bool shouldLog(const ClosureVersion* version, const Pass* pass,
                       const DebugOptions& options) {
     auto name = version->name();
     if (options.includes(DebugFlag::PrintOptimizationPasses) &&
@@ -241,7 +241,7 @@ void GenericStreamLogger::highlightOff() {
         ConsoleColor::clear(out().out);
 }
 
-void PassStreamLogger::pirOptimizationsHeader(const PirTranslator* pass) {
+void PassStreamLogger::pirOptimizationsHeader(const Pass* pass) {
     if (shouldLog(version, pass, options)) {
         preparePrint();
         std::stringstream ss;
@@ -250,7 +250,7 @@ void PassStreamLogger::pirOptimizationsHeader(const PirTranslator* pass) {
     }
 }
 
-void PassStreamLogger::pirOptimizations(const PirTranslator* pass) {
+void PassStreamLogger::pirOptimizations(const Pass* pass) {
     if (shouldLog(version, pass, options)) {
         if (options.includes(DebugFlag::OnlyChanges)) {
             static std::string last = "";

@@ -8,9 +8,8 @@ namespace rir {
 namespace pir {
 
 bool CleanupFramestate::apply(RirCompiler&, ClosureVersion* function,
-                              LogStream&) const {
+                              Code* code, LogStream&) const {
     bool anyChange = false;
-    auto apply = [&](Code* code) {
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto call = CallInstruction::CastCall(i)) {
                 if (call->hasFrameState()) {
@@ -19,9 +18,6 @@ bool CleanupFramestate::apply(RirCompiler&, ClosureVersion* function,
                 }
             }
         });
-    };
-    apply(function);
-    function->eachPromise([&](Promise* p) { apply(p); });
     return anyChange;
 }
 } // namespace pir

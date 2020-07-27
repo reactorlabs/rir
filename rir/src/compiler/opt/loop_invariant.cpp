@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-bool taintsEnvironment(Instruction* i) {
+static bool taintsEnvironment(Instruction* i) {
     // For these instructions we test later they don't change the particular
     // binding
     if (StVar::Cast(i) || StVarSuper::Cast(i) || MkEnv::Cast(i) ||
@@ -33,7 +33,7 @@ bool taintsEnvironment(Instruction* i) {
     return i->changesEnv();
 }
 
-bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
+static bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
     for (auto bb : loop) {
         if (!bb->isDeopt()) {
             for (auto instruction : *bb) {
@@ -46,7 +46,8 @@ bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
     return true;
 }
 
-bool instructionOverwritesBinding(Instruction* i, Value* origin, SEXP binding) {
+static bool instructionOverwritesBinding(Instruction* i, Value* origin,
+                                         SEXP binding) {
     if (i == origin)
         return true;
     SEXP varName = nullptr;
@@ -73,8 +74,8 @@ bool instructionOverwritesBinding(Instruction* i, Value* origin, SEXP binding) {
     return false;
 }
 
-bool loopOverwritesBinding(LoopDetection::Loop& loop, Value* origin,
-                           SEXP binding) {
+static bool loopOverwritesBinding(LoopDetection::Loop& loop, Value* origin,
+                                  SEXP binding) {
     for (auto bb : loop) {
         for (auto instruction : *bb) {
             if (instructionOverwritesBinding(instruction, origin, binding))
@@ -84,8 +85,8 @@ bool loopOverwritesBinding(LoopDetection::Loop& loop, Value* origin,
     return false;
 }
 
-bool replaceWithOuterLoopEquivalent(Instruction* instruction,
-                                    DominanceGraph& dom, BB* start) {
+static bool replaceWithOuterLoopEquivalent(Instruction* instruction,
+                                           DominanceGraph& dom, BB* start) {
     std::vector<Instruction*> betweenLoadandLoop;
     Instruction* found = nullptr;
     auto current = start;
@@ -141,9 +142,9 @@ bool replaceWithOuterLoopEquivalent(Instruction* instruction,
     return false;
 }
 
-bool LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
+bool LoopInvariant::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                           LogStream& log) const {
-    LoopDetection loops(function);
+    LoopDetection loops(code);
     bool anyChange = false;
 
     for (auto& loop : loops) {
@@ -179,7 +180,7 @@ bool LoopInvariant::apply(RirCompiler&, ClosureVersion* function,
         }
 
         if (safeToHoist) {
-            DominanceGraph dom(function);
+            DominanceGraph dom(code);
             for (auto loadAndBB : loads) {
                 auto load = loadAndBB.first;
                 auto bb = loadAndBB.second;

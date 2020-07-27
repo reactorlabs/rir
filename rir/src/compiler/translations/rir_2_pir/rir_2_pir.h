@@ -2,7 +2,6 @@
 #define RIR_2_PIR_H
 
 #include "../../util/builder.h"
-#include "../pir_translator.h"
 #include "rir_2_pir_compiler.h"
 
 #include <unordered_map>
