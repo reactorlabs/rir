@@ -2,6 +2,7 @@
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/analysis/query.h"
 #include "pass_definitions.h"
 
 #include <unordered_map>
@@ -41,6 +42,12 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (auto force = Force::Cast(i)) {
                     if (!force->input()->type.maybeLazy())
                         force->elideEnv();
+                }
+
+                if (auto mk = MkArg::Cast(i)) {
+                    if (!mk->prom()->env()) {
+                        mk->elideEnv();
+                    }
                 }
             }
         }

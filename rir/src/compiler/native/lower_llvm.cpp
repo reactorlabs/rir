@@ -4285,9 +4285,13 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::MkArg: {
                 auto p = MkArg::Cast(i);
+                // if the env of a promise is elided we need to put a dummy env,
+                // to forcePromise complaining.
+                auto e = p->hasEnv() ? loadSxp(p->env())
+                                     : constant(R_EmptyEnv, t::SEXP);
                 setVal(i, call(NativeBuiltins::createPromise,
-                               {paramCode(), c(promMap.at(p->prom())),
-                                loadSxp(p->env()), loadSxp(p->eagerArg())}));
+                               {paramCode(), c(promMap.at(p->prom())), e,
+                                loadSxp(p->eagerArg())}));
                 break;
             }
 
