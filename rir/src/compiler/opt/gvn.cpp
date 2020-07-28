@@ -10,7 +10,8 @@
 namespace rir {
 namespace pir {
 
-bool GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
+bool GVN::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+                LogStream& log) const {
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<Value*, size_t> number;
     {
@@ -148,7 +149,7 @@ bool GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
 
         while (changed) {
             changed = false;
-            Visitor::run(cls->entry, [&](BB* bb) {
+            Visitor::run(code->entry, [&](BB* bb) {
                 for (auto i : *bb)
                     computeGN(i);
             });
@@ -170,7 +171,7 @@ bool GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
 
     {
         std::unordered_map<Value*, Value*> replacements;
-        DominanceGraph dom(cls);
+        DominanceGraph dom(code);
 
         typedef std::set<std::pair<size_t, size_t>> PhiClass;
         auto computePhiClass = [&](Phi* phi, PhiClass& res) -> bool {
@@ -260,7 +261,7 @@ bool GVN::apply(RirCompiler&, ClosureVersion* cls, LogStream& log) const {
 
     // Remove dead instructions here, instead of deferring to the cleanup pass.
     // Sometimes a dead instruction will trip the verifier.
-    BBTransform::removeDeadInstrs(cls, 1);
+    BBTransform::removeDeadInstrs(code, 1);
 
     // The current implementation of GVN almost always finds something to
     // change. We use the changed flag to determine when to stop optimizing and

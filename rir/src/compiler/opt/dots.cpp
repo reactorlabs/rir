@@ -17,10 +17,10 @@ namespace rir {
 namespace pir {
 
 // Search for ExpandDots(Dotlist(...)) pairs and statically expand them
-bool DotDotDots::apply(RirCompiler& cmp, ClosureVersion* closure,
+bool DotDotDots::apply(RirCompiler& cmp, ClosureVersion* cls, Code* code,
                        LogStream& log) const {
     bool anyChange = false;
-    Visitor::run(closure->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;

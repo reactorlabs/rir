@@ -1,9 +1,9 @@
 #include "../analysis/dead.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
-#include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "pass_definitions.h"
 
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -11,25 +11,22 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace {
+namespace rir {
+namespace pir {
 
-using namespace rir::pir;
+bool Cleanup::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+                    LogStream&) const {
+    std::unordered_set<size_t> usedProms;
+    std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
+    std::deque<Promise*> todoUsedProms;
 
-class TheCleanup {
-  public:
-    explicit TheCleanup(ClosureVersion* function) : function(function) {}
-    ClosureVersion* function;
-    bool operator()() {
-        std::unordered_set<size_t> used_p;
-        std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
-        std::deque<Promise*> todo;
+    DeadInstructions dead(code, 3, Effect::Visibility,
+                          DeadInstructions::IgnoreUpdatePromise);
 
-        DeadInstructions dead(function, 3, Effect::Visibility,
-                              DeadInstructions::IgnoreUpdatePromise);
+    bool anyChange = false;
 
-        bool anyChange = false;
-
-        Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(
+        code->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 Instruction* i = *ip;
@@ -107,8 +104,8 @@ class TheCleanup {
                         removed = true;
                         next = bb->remove(ip);
                     } else {
-                        used_p.insert(arg->prom()->id);
-                        todo.push_back(arg->prom());
+                        usedProms.insert(arg->prom()->id);
+                        todoUsedProms.push_back(arg->prom());
                     }
                 } else if (auto upd = UpdatePromise::Cast(i)) {
                     if (dead.isDead(upd->arg(0).val())) {
@@ -134,7 +131,7 @@ class TheCleanup {
                     }
                 } else if (auto env = MkEnv::Cast(i)) {
                     static std::unordered_set<Tag> tags{Tag::IsEnvStub};
-                    if (env->stub && env->usesAreOnly(function->entry, tags)) {
+                    if (env->stub && env->usesAreOnly(code->entry, tags)) {
                         env->replaceUsesWith(Env::elided());
                         removed = true;
                         next = bb->remove(ip);
@@ -169,37 +166,40 @@ class TheCleanup {
             }
         });
 
-        while (!todo.empty()) {
-            Promise* p = todo.back();
-            todo.pop_back();
+    if (cls == code) {
+        while (!todoUsedProms.empty()) {
+            Promise* p = todoUsedProms.back();
+            todoUsedProms.pop_back();
             Visitor::run(p->entry, [&](Instruction* i) {
                 if (auto mk = MkArg::Cast(i)) {
                     size_t id = mk->prom()->id;
-                    if (used_p.find(id) == used_p.end()) {
+                    if (!usedProms.count(id)) {
                         // found a new used promise...
-                        todo.push_back(mk->prom());
-                        used_p.insert(mk->prom()->id);
+                        todoUsedProms.push_back(mk->prom());
+                        usedProms.insert(mk->prom()->id);
                     }
                 }
             });
         }
 
-        for (size_t i = 0; i < function->promises().size(); ++i)
-            if (function->promise(i) && used_p.find(i) == used_p.end())
-                function->erasePromise(i);
+        for (size_t i = 0; i < cls->promises().size(); ++i)
+            if (cls->promise(i) && !usedProms.count(i))
+                cls->erasePromise(i);
+    }
 
-        // Consider:
-        //
-        //  loop:
-        //    p1 = phi(...)
-        //    p = phi(a, c)
-        //    c = cast(p1)
-        //    goto loop
-        //
-        //  If cleanup removes the cast, then p1 will be input to p in the same
-        //  block. So we need an additional pass to fix those cases and merge
-        //  the appropriate branch of p1 into p.
-        Visitor::run(function->entry, [&](BB* bb) {
+    // Consider:
+    //
+    //  loop:
+    //    p1 = phi(...)
+    //    p = phi(a, c)
+    //    c = cast(p1)
+    //    goto loop
+    //
+    //  If cleanup removes the cast, then p1 will be input to p in the same
+    //  block. So we need an additional pass to fix those cases and merge
+    //  the appropriate branch of p1 into p.
+    Visitor::run(
+        code->entry, [&](BB* bb) {
             for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
                 if (auto p = Phi::Cast(*ip)) {
                     p->eachArg([&](BB* in, InstrArg& arg) {
@@ -218,25 +218,26 @@ class TheCleanup {
             }
         });
 
-        auto fixupPhiInput = [&](BB* old, BB* n) {
-            if (!usedBB.count(old))
-                return;
-            for (auto phi : usedBB[old]) {
-                for (size_t i = 0; i < phi->nargs(); ++i)
-                    if (phi->inputAt(i) == old)
-                        phi->updateInputAt(i, n);
-            }
-            assert(!n->isDeopt());
-            usedBB[n].insert(usedBB[old].begin(), usedBB[old].end());
-            usedBB.erase(usedBB.find(old));
-        };
+    auto fixupPhiInput = [&](BB* old, BB* n) {
+        if (!usedBB.count(old))
+            return;
+        for (auto phi : usedBB[old]) {
+            for (size_t i = 0; i < phi->nargs(); ++i)
+                if (phi->inputAt(i) == old)
+                    phi->updateInputAt(i, n);
+        }
+        assert(!n->isDeopt());
+        usedBB[n].insert(usedBB[old].begin(), usedBB[old].end());
+        usedBB.erase(usedBB.find(old));
+    };
 
-        std::unordered_map<BB*, BB*> toDel;
-        Visitor::run(function->entry, [&](BB* bb) {
+    std::unordered_map<BB*, BB*> toDel;
+    Visitor::run(
+        code->entry, [&](BB* bb) {
             // Prevent this removal from merging the entry block with its
             // successor. We always want an empty, separate entry block, so
             // that it will never have predecessors.
-            if (function->entry == bb)
+            if (code->entry == bb)
                 return;
             // If bb is a jump to non-merge block, we merge it with the next
             if (bb->isJmp() && bb->next()->hasSinglePred()) {
@@ -262,27 +263,27 @@ class TheCleanup {
             }
         });
 
-        // Merge blocks
-        Visitor::runPostChange(function->entry, [&](BB* bb) {
-            // Prevent this removal from merging the entry block with its
-            // successor. We always want an empty, separate entry block, so
-            // that it will never have predecessors.
-            if (function->entry == bb)
-                return;
-            if (bb->isJmp() && bb->hasSinglePred() &&
-                bb->next()->hasSinglePred()) {
-                BB* d = bb->next();
-                while (!d->isEmpty()) {
-                    d->moveToEnd(d->begin(), bb);
-                }
-                bb->overrideSuccessors(d->successors());
-                d->deleteSuccessors();
-                fixupPhiInput(d, bb);
-                toDel[d] = nullptr;
+    // Merge blocks
+    Visitor::runPostChange(code->entry, [&](BB* bb) {
+        // Prevent this removal from merging the entry block with its
+        // successor. We always want an empty, separate entry block, so
+        // that it will never have predecessors.
+        if (code->entry == bb)
+            return;
+        if (bb->isJmp() && bb->hasSinglePred() && bb->next()->hasSinglePred()) {
+            BB* d = bb->next();
+            while (!d->isEmpty()) {
+                d->moveToEnd(d->begin(), bb);
             }
-        });
+            bb->overrideSuccessors(d->successors());
+            d->deleteSuccessors();
+            fixupPhiInput(d, bb);
+            toDel[d] = nullptr;
+        }
+    });
 
-        Visitor::runPostChange(function->entry, [&](BB* bb) {
+    Visitor::runPostChange(
+        code->entry, [&](BB* bb) {
             // Remove empty branches
             if (bb->isBranch()) {
                 if (bb->trueBranch()->isEmpty() &&
@@ -299,39 +300,28 @@ class TheCleanup {
             }
         });
 
-        // There used to be code here to merge an entry block with its next
-        // block, if the entry had only one successor and the next block had
-        // only one predecessor. We want to avoid this kind of merge, because
-        // we want to ensure that there is always an empty, separate entry
-        // block with no predecessors.
+    // There used to be code here to merge an entry block with its next
+    // block, if the entry had only one successor and the next block had
+    // only one predecessor. We want to avoid this kind of merge, because
+    // we want to ensure that there is always an empty, separate entry
+    // block with no predecessors.
 
-        if (!toDel.empty())
-            anyChange = true;
+    if (!toDel.empty())
+        anyChange = true;
 
-        Visitor::run(function->entry, [&](BB* bb) {
-            while (bb->isJmp() && toDel.count(bb->next()))
-                bb->overrideNext(toDel[bb->next()]);
-        });
-        for (auto e : toDel) {
-            BB* bb = e.first;
-            bb->deleteSuccessors();
-            delete bb;
-        }
-
-        BBTransform::renumber(function);
-        function->eachPromise(BBTransform::renumber);
-
-        return anyChange;
+    Visitor::run(code->entry, [&](BB* bb) {
+        while (bb->isJmp() && toDel.count(bb->next()))
+            bb->overrideNext(toDel[bb->next()]);
+    });
+    for (auto e : toDel) {
+        BB* bb = e.first;
+        bb->deleteSuccessors();
+        delete bb;
     }
-};
-} // namespace
 
-namespace rir {
-namespace pir {
+    BBTransform::renumber(code);
 
-bool Cleanup::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
-    TheCleanup s(function);
-    return s();
+    return anyChange;
 }
 
 } // namespace pir

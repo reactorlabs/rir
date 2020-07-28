@@ -383,7 +383,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 namespace rir {
 namespace pir {
 
-bool ForceDominance::apply(RirCompiler&, ClosureVersion* code,
+bool ForceDominance::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                            LogStream& log) const {
     SmallSet<Force*> toInline;
     SmallSet<Force*> needsUpdate;
@@ -392,13 +392,15 @@ bool ForceDominance::apply(RirCompiler&, ClosureVersion* code,
 
     bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
     {
-        ForceDominanceAnalysis analysis(code, code, log);
+        ForceDominanceAnalysis analysis(cls, code, log);
         analysis();
 
         auto result = analysis.result();
-        if (result.eagerLikeFunction(code))
-            code->properties.set(ClosureVersion::Property::IsEager);
-        code->properties.argumentForceOrder = result.argumentForceOrder;
+        if (code == cls) {
+            if (result.eagerLikeFunction(cls))
+                cls->properties.set(ClosureVersion::Property::IsEager);
+            cls->properties.argumentForceOrder = result.argumentForceOrder;
+        }
 
         VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -470,17 +472,19 @@ bool ForceDominance::apply(RirCompiler&, ClosureVersion* code,
                         assert(entry->isEmpty() && entry->isJmp() &&
                                !entry->next()->isEmpty());
                         BB* prom_copy =
-                            BBTransform::clone(prom->entry->next(), code, code);
+                            BBTransform::clone(prom->entry->next(), code, cls);
                         bb->overrideNext(prom_copy);
 
                         // We assume that the (empty) entry's successor starts
                         // with a LdFunctionEnv instruction. We replace its
                         // usages with the caller environment.
-                        LdFunctionEnv* e =
+                        LdFunctionEnv* promenv =
                             LdFunctionEnv::Cast(*prom_copy->begin());
-                        assert(e);
-                        Replace::usesOfValue(prom_copy, e, mkarg->promEnv());
-                        prom_copy->remove(prom_copy->begin());
+                        if (promenv) {
+                            Replace::usesOfValue(prom_copy, promenv,
+                                                 mkarg->promEnv());
+                            prom_copy->remove(prom_copy->begin());
+                        }
 
                         // Update environment dependency of inlined forces:
                         // the inlined forces can see local env of this

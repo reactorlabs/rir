@@ -1,6 +1,5 @@
 #include "../analysis/available_checkpoints.h"
 #include "../pir/pir_impl.h"
-#include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
@@ -51,8 +50,8 @@ struct ALoad {
 };
 
 struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
-    AvailableLoads(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("AvailableLoads", cls, cls, log) {}
+    AvailableLoads(ClosureVersion* cls, Code* code, LogStream& log)
+        : StaticAnalysis("AvailableLoads", cls, code, log) {}
     AbstractResult apply(IntersectionSet<ALoad>& state, Instruction* i) const {
         AbstractResult res;
         if (auto ld = LdVar::Cast(i)) {
@@ -92,12 +91,12 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
     }
 };
 
-bool LoadElision::apply(RirCompiler&, ClosureVersion* function,
+bool LoadElision::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                         LogStream& log) const {
-    AvailableLoads loads(function, log);
+    AvailableLoads loads(cls, code, log);
     bool anyChange = false;
 
-    Visitor::runPostChange(function->entry, [&](BB* bb) {
+    Visitor::runPostChange(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;

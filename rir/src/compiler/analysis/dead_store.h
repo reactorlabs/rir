@@ -426,9 +426,9 @@ class DeadStoreAnalysis {
     ObservedStoreAnalysis observed;
 
   public:
-    DeadStoreAnalysis(ClosureVersion* cls, LogStream& log)
-        : leak(cls, cls, nullptr, log), observed(cls, cls, nullptr, leak, log) {
-    }
+    DeadStoreAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
+        : leak(cls, code, nullptr, log),
+          observed(cls, code, nullptr, leak, log) {}
 
     bool isDead(StVar* st) const {
         return !observed.isObserved(st);

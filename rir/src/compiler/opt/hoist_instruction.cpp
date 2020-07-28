@@ -13,12 +13,12 @@
 namespace rir {
 namespace pir {
 
-bool HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
+bool HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* cls, Code* code,
                              LogStream&) const {
     bool anyChange = false;
-    DominanceGraph dom(function);
+    DominanceGraph dom(code);
 
-    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
+    VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;
 
@@ -210,7 +210,7 @@ bool HoistInstruction::apply(RirCompiler& cmp, ClosureVersion* function,
     // hoist from immediate successors. Otherwise we would need a cfg.
 
     const static int SEARCH = 5;
-    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
+    VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
         if (bb->isBranch()) {
             auto bb1 = bb->trueBranch();
             auto bb2 = bb->falseBranch();

@@ -1,8 +1,10 @@
 #ifndef PIR_PASS_SCHEDULER_H
 #define PIR_PASS_SCHEDULER_H
 
-#include "compiler/translations/pir_translator.h"
 #include <set>
+#include <string>
+
+#include "pass.h"
 
 namespace rir {
 namespace pir {
@@ -15,7 +17,7 @@ class PassScheduler {
         const std::string& name;
         unsigned budget;
         bool once;
-        typedef std::vector<std::unique_ptr<const PirTranslator>> Passes;
+        typedef std::vector<std::unique_ptr<const Pass>> Passes;
         Passes passes;
     };
     struct Schedule {
@@ -28,7 +30,7 @@ class PassScheduler {
         return i;
     }
 
-    void run(const std::function<bool(const PirTranslator*)>& apply) const {
+    void run(const std::function<bool(const Pass*)>& apply) const {
         for (auto& phase : schedule_.phases) {
             auto budget = phase.budget;
             bool changed = false;
@@ -56,11 +58,11 @@ class PassScheduler {
     Schedule schedule_;
     Schedule::Phases::iterator currentPhase;
 
-    void add(std::unique_ptr<const PirTranslator>&&);
+    void add(std::unique_ptr<const Pass>&&);
 
     template <typename PASS>
     void add() {
-        add(std::unique_ptr<const PirTranslator>(new PASS()));
+        add(std::unique_ptr<const Pass>(new PASS()));
     }
 
     void nextPhase(const std::string& name, unsigned budget = 0);

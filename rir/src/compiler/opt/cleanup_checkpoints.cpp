@@ -7,10 +7,9 @@
 namespace rir {
 namespace pir {
 
-bool CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
+bool CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                                LogStream&) const {
     bool anyChange = false;
-    auto apply = [&](Code* code) {
         std::unordered_set<Checkpoint*> used;
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto a = Assume::Cast(i)) {
@@ -38,9 +37,6 @@ bool CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
         // are not phi inputs. We can delete without further checks.
         for (auto bb : toDelete)
             delete bb;
-    };
-    apply(function);
-    function->eachPromise([&](Promise* p) { apply(p); });
     return anyChange;
 }
 } // namespace pir

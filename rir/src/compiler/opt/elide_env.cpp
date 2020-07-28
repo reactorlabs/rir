@@ -9,12 +9,13 @@
 namespace rir {
 namespace pir {
 
-bool ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
+bool ElideEnv::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+                     LogStream&) const {
     bool anyChange = false;
     std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
             auto i = *ip;
             if (i->hasEnv()) {
@@ -45,7 +46,7 @@ bool ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
         }
     });
 
-    Visitor::run(function->entry, [&](Instruction* i) {
+    Visitor::run(code->entry, [&](Instruction* i) {
         if (i->hasEffect() || i->type != PirType::voyd() || Return::Cast(i) ||
             Deopt::Cast(i)) {
             i->eachArg([&](Value* v) {
@@ -55,7 +56,7 @@ bool ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
         }
     });
 
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;

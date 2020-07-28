@@ -1,7 +1,6 @@
 #include "../analysis/available_checkpoints.h"
 #include "../analysis/dead.h"
 #include "../pir/pir_impl.h"
-#include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
@@ -125,8 +124,8 @@ struct AAssumption {
 
 struct AvailableAssumptions
     : public StaticAnalysis<IntersectionSet<AAssumption>> {
-    AvailableAssumptions(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("AvailableAssumptions", cls, cls, log) {}
+    AvailableAssumptions(ClosureVersion* cls, Code* code, LogStream& log)
+        : StaticAnalysis("AvailableAssumptions", cls, code, log) {}
     AbstractResult apply(IntersectionSet<AAssumption>& state,
                          Instruction* i) const {
         AbstractResult res;
@@ -149,16 +148,16 @@ struct AvailableAssumptions
     }
 };
 
-bool OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
+bool OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* vers, Code* code,
                                 LogStream& log) const {
     {
-        Visitor::run(function->entry, [&](BB* bb) {
+        Visitor::run(code->entry, [&](BB* bb) {
             if (bb->isBranch()) {
                 if (auto cp = Checkpoint::Cast(bb->last())) {
                     if (cp->nextBB()->isMerge()) {
                         // Ensure that bb at the beginning of a loop has a bb
                         // to hoist assumes out of the loop.
-                        auto preheader = new BB(function, function->nextBBId++);
+                        auto preheader = new BB(vers, vers->nextBBId++);
                         bb->replaceSuccessor(cp->nextBB(), preheader);
                         preheader->setNext(cp->nextBB());
                     }
@@ -167,9 +166,9 @@ bool OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         });
     }
 
-    AvailableCheckpoints checkpoint(function, function, log);
-    AvailableAssumptions assumptions(function, log);
-    DominanceGraph dom(function);
+    AvailableCheckpoints checkpoint(vers, code, log);
+    AvailableAssumptions assumptions(vers, code, log);
+    DominanceGraph dom(code);
     std::unordered_map<Checkpoint*, Checkpoint*> replaced;
 
     std::unordered_map<Instruction*,
@@ -177,7 +176,7 @@ bool OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         hoistAssume;
 
     bool anyChange = false;
-    Visitor::runPostChange(function->entry, [&](BB* bb) {
+    Visitor::runPostChange(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;
@@ -271,7 +270,7 @@ bool OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
         }
     });
 
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto h = hoistAssume.find(*ip);

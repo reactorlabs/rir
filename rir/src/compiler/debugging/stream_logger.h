@@ -1,7 +1,7 @@
 #ifndef PIR_LOGGER_H
 #define PIR_LOGGER_H
 
-#include "../pir/pir.h"
+#include "compiler/pir/pir.h"
 #include "debugging.h"
 
 #include <fstream>
@@ -21,9 +21,10 @@ class BC;
 
 namespace pir {
 
-class PirTranslator;
+class Pass;
 class ClosureStreamLogger;
 class StreamLogger;
+
 class LogStream {
   private:
     bool printedAnything = false;
@@ -134,8 +135,8 @@ class PassStreamLogger : public GenericStreamLogger {
     ClosureStreamLogger& parent;
 
   public:
-    void pirOptimizationsHeader(const PirTranslator*);
-    void pirOptimizations(const PirTranslator*);
+    void pirOptimizationsHeader(const Pass*);
+    void pirOptimizations(const Pass*);
 
     void preparePrint() override;
     void flush() override { out().flush(); }

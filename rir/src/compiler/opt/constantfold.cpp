@@ -103,14 +103,14 @@ static bool convertsToLogicalWithoutWarning(SEXP arg) {
 namespace rir {
 namespace pir {
 
-bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
+bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* cls, Code* code,
                          LogStream&) const {
     bool anyChange = false;
 
     std::unordered_map<BB*, bool> branchRemoval;
 
-    DominanceGraph dom(function);
-    DominanceFrontier dfront(function, dom);
+    DominanceGraph dom(code);
+    DominanceFrontier dfront(code, dom);
     {
         // Branch Elimination
         //
@@ -125,7 +125,7 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         // `a->bb()->trueBranch()` or `a->bb()->falseBranch()` do not reach
         std::unordered_map<Instruction*, std::vector<Branch*>> condition;
 
-        DominatorTreeVisitor<>(dom).run(function->entry, [&](BB* bb) {
+        DominatorTreeVisitor<>(dom).run(code->entry, [&](BB* bb) {
             if (bb->isEmpty())
                 return;
             auto branch = Branch::Cast(bb->last());
@@ -178,7 +178,7 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                         True::instance();
                                     inputs[bb1->falseBranch()] =
                                         False::instance();
-                                    pl = new PhiPlacement(function, inputs, dom,
+                                    pl = new PhiPlacement(code, inputs, dom,
                                                           dfront);
 
                                     assert(pl->placement.size() > 0);
@@ -234,7 +234,7 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         }
     }
 
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;
         auto ip = bb->begin();
@@ -388,22 +388,22 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                                     ? CallBuiltin::Cast(i)->builtinId
                                     : CallSafeBuiltin::Cast(i)->builtinId;
                 size_t nargs = CallInstruction::CastCall(i)->nCallArgs();
-                assert(function->context().includes(
-                    Assumption::NotTooManyArguments));
+                assert(
+                    cls->context().includes(Assumption::NotTooManyArguments));
                 // PIR functions are always compiled for a particular number
                 // of arguments
-                auto noExplMissing = function->context().includes(
+                auto noExplMissing = cls->context().includes(
                     Assumption::NoExplicitlyMissingArgs);
                 if (builtinId == blt("nargs") && noExplMissing) {
                     // nargs inside inlinee refers to nargs passed to inlinee,
                     // which is something we cannot recover.
                     bool notInlined =
-                        Visitor::check(function->entry, [](Instruction* i) {
+                        Visitor::check(code->entry, [](Instruction* i) {
                             return !PushContext::Cast(i);
                         });
                     if (notInlined) {
-                        auto nargsC = new LdConst(
-                            ScalarInteger(function->effectiveNArgs()));
+                        auto nargsC =
+                            new LdConst(ScalarInteger(cls->effectiveNArgs()));
                         anyChange = true;
                         i->replaceUsesAndSwapWith(nargsC, ip);
                     }
@@ -771,8 +771,8 @@ bool Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         const auto& condition = e.second;
         dead.insert(condition ? branch->falseBranch() : branch->trueBranch());
     }
-    auto toDelete = DominanceGraph::dominatedSet(function, dead);
-    Visitor::run(function->entry, [&](Instruction* i) {
+    auto toDelete = DominanceGraph::dominatedSet(code, dead);
+    Visitor::run(code->entry, [&](Instruction* i) {
         if (auto phi = Phi::Cast(i))
             phi->removeInputs(toDelete);
     });

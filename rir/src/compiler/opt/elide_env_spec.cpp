@@ -14,12 +14,12 @@
 namespace rir {
 namespace pir {
 
-bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
+bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                          LogStream& log) const {
 
     constexpr bool debug = false;
-    AvailableCheckpoints checkpoint(function, function, log);
-    DominanceGraph dom(function);
+    AvailableCheckpoints checkpoint(cls, code, log);
+    DominanceGraph dom(code);
 
     auto envOnlyForObj = [&](Instruction* i) {
         if (i->envOnlyForObj())
@@ -33,7 +33,7 @@ bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     bool anyChange = false;
     // Speculatively elide environments on instructions that only require them
     // in case any of the arguments is an object
-    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
+    VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
@@ -139,7 +139,7 @@ bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     static constexpr auto dontMaterialize = {
         Tag::PushContext, Tag::LdVar,     Tag::StVar, Tag::StVarSuper,
         Tag::FrameState,  Tag::IsEnvStub, Tag::LdDots};
-    VisitorNoDeoptBranch::run(function->entry, [&](Instruction* i) {
+    VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
                 if (m->stub && !materializableStubs.count(m)) {
@@ -175,7 +175,7 @@ bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
     std::unordered_map<MkEnv*, SmallSet<Instruction*>> needsMaterialization;
     std::unordered_map<MkEnv*, SmallSet<SEXP>> additionalEntries;
-    Visitor::run(function->entry, [&](Instruction* i) {
+    Visitor::run(code->entry, [&](Instruction* i) {
         if (i->hasEnv()) {
             if (auto st = StVar::Cast(i)) {
                 if (!bannedEnvs.count(i->env())) {
@@ -215,7 +215,7 @@ bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
     });
 
     std::unordered_map<BB*, SmallSet<MkEnv*>> materialized;
-    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
+    VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
@@ -265,7 +265,7 @@ bool ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
     // Those absolutely depend on *not* getting the materialized version
     constexpr static auto needStubbed = {Tag::LdVar, Tag::StVar};
-    Visitor::run(function->entry, [&](Instruction* i) {
+    Visitor::run(code->entry, [&](Instruction* i) {
         if (std::find(needStubbed.begin(), needStubbed.end(), i->tag) !=
                 needStubbed.end() &&
             i->hasEnv() && !IsEnvStub::Cast(i) &&

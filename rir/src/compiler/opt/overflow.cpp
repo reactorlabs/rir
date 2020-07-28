@@ -7,8 +7,9 @@
 namespace rir {
 namespace pir {
 
-bool Overflow::apply(RirCompiler&, ClosureVersion* closure, LogStream&) const {
-    UsesTree uses(closure);
+bool Overflow::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+                     LogStream&) const {
+    UsesTree uses(code);
 
     auto willDefinitelyNotOverflow = [&](Instruction* instr) {
         assert(Add::Cast(instr) || Sub::Cast(instr));
@@ -63,7 +64,7 @@ bool Overflow::apply(RirCompiler&, ClosureVersion* closure, LogStream&) const {
     // So normally binops on non-NA typed integers produce a maybe-NA typed
     // integer. Here, we find these binop instructions, check if they won't
     // overflow / underflow, and if so refine the result type to non-NA.
-    Visitor::run(closure->entry, [&](Instruction* instr) {
+    Visitor::run(code->entry, [&](Instruction* instr) {
         if (!Add::Cast(instr) && !Sub::Cast(instr))
             return;
         // is a binop which we can infer may not overflow / underflow
