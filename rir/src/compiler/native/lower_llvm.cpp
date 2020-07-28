@@ -551,7 +551,13 @@ class LowerFunctionLLVM {
     llvm::Value* boxReal(llvm::Value* v, bool protect = true);
     llvm::Value* boxLgl(llvm::Value* v, bool protect = true);
     llvm::Value* boxTst(llvm::Value* v, bool protect = true);
-    llvm::Value* depromise(llvm::Value* arg);
+    llvm::Value* depromise(llvm::Value* arg, const PirType& t);
+    llvm::Value* depromise(Value* v) {
+        if (!v->type.maybePromiseWrapped())
+            return loadSxp(v);
+        assert(representationOf(v) == t::SEXP);
+        return depromise(loadSxp(v), v->type);
+    }
     void insn_assert(llvm::Value* v, const char* msg);
 
     llvm::Value* force(Instruction* i, llvm::Value* arg);
@@ -638,7 +644,7 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     auto val = car(arg);
     checkIsSexp(arg, "prval");
     auto tv = builder.CreateICmpEQ(val, constant(R_UnboundValue, t::SEXP));
-    builder.CreateCondBr(tv, needsEval, isPromVal);
+    builder.CreateCondBr(tv, needsEval, isPromVal, branchMostlyFalse);
 
     builder.SetInsertPoint(needsEval);
     auto evaled = call(NativeBuiltins::forcePromise, {arg});
@@ -1794,8 +1800,15 @@ void LowerFunctionLLVM::protectTemp(llvm::Value* val) {
     setLocal(numLocals - 1 - numTemps++, val);
 }
 
-llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
+llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
 
+    if (!t.maybePromiseWrapped()) {
+#ifdef ENABLE_SLOWASSERT
+        insn_assert(builder.CreateICmpNE(sexptype(arg), c(PROMSXP)),
+                    "Expected no promise");
+#endif
+        return arg;
+    }
     auto isProm = BasicBlock::Create(C, "isProm", fun);
     auto isVal = BasicBlock::Create(C, "", fun);
     auto ok = BasicBlock::Create(C, "", fun);
@@ -1804,7 +1817,7 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg) {
 
     auto type = sexptype(arg);
     auto tt = builder.CreateICmpEQ(type, c(PROMSXP));
-    builder.CreateCondBr(tt, isProm, isVal);
+    builder.CreateCondBr(tt, isProm, isVal, branchMostlyFalse);
 
     builder.SetInsertPoint(isProm);
     auto val = car(arg);
@@ -2548,10 +2561,7 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 if (cc) {
                     auto v = cc == a ? b : a;
-                    auto vi = load(v);
-                    if (v->type.maybePromiseWrapped())
-                        vi = depromise(vi);
-
+                    auto vi = depromise(v);
                     auto res =
                         builder.CreateICmpEQ(constant(cc->c(), t::SEXP), vi);
                     if (TYPEOF(cc->c()) == CLOSXP) {
@@ -2573,12 +2583,8 @@ bool LowerFunctionLLVM::tryCompile() {
                     break;
                 }
 
-                auto ai = load(a);
-                auto bi = load(b);
-                if (a->type.maybePromiseWrapped())
-                    ai = depromise(ai);
-                if (b->type.maybePromiseWrapped())
-                    bi = depromise(bi);
+                auto ai = depromise(a);
+                auto bi = depromise(b);
 
                 auto res = builder.CreateICmpEQ(ai, bi);
                 res = createSelect2(
@@ -4044,9 +4050,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp) {
                     auto a = loadSxp(arg);
-                    if (arg->type.maybePromiseWrapped() &&
-                        t->typeTest.maybePromiseWrapped())
-                        a = depromise(a);
+                    if (t->typeTest.maybePromiseWrapped())
+                        a = depromise(a, arg->type);
 
                     if (t->typeTest.notPromiseWrapped() ==
                         PirType::simpleScalarInt()) {
@@ -4246,17 +4251,21 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Force: {
                 auto f = Force::Cast(i);
-                auto arg = loadSxp(f->arg<0>().val());
+                auto arg = f->arg<0>().val();
                 if (!f->effects.includes(Effect::Force)) {
-                    auto res = depromise(arg);
-                    setVal(i, res);
+                    if (!arg->type.maybePromiseWrapped()) {
+                        setVal(i, load(arg, representationOf(i)));
+                    } else {
+                        auto res = depromise(arg);
+                        setVal(i, res);
 #ifdef ENABLE_SLOWASSERT
-                    insn_assert(builder.CreateICmpNE(
-                                    constant(R_UnboundValue, t::SEXP), res),
-                                "Expected evaluated promise");
+                        insn_assert(builder.CreateICmpNE(
+                                        constant(R_UnboundValue, t::SEXP), res),
+                                    "Expected evaluated promise");
 #endif
+                    }
                 } else {
-                    setVal(i, force(i, arg));
+                    setVal(i, force(i, loadSxp(arg)));
                 }
                 break;
             }
