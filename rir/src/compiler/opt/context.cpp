@@ -1,6 +1,5 @@
 #include "../analysis/unnecessary_contexts.h"
 #include "../pir/pir_impl.h"
-#include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
@@ -13,10 +12,10 @@
 namespace rir {
 namespace pir {
 
-bool OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
+bool OptimizeContexts::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                              LogStream& log) const {
     bool anyChange = false;
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             if (auto ret = NonLocalReturn::Cast(*it)) {
                 if (auto env = MkEnv::Cast(ret->env())) {
@@ -30,10 +29,10 @@ bool OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
         }
     });
 
-    UnnecessaryContexts unnecessary(function, log);
+    UnnecessaryContexts unnecessary(cls, code, log);
 
     std::unordered_set<Instruction*> toRemove;
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         for (auto i : *bb) {
             if (auto pop = PopContext::Cast(i)) {
                 if (unnecessary.canRemove(pop)) {
@@ -53,7 +52,7 @@ bool OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
 
     assert(toRemove.size() % 2 == 0);
 
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;

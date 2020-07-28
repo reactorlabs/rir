@@ -13,7 +13,7 @@ static std::regex getPassBlacklist() {
 
 static const std::regex PIR_PASS_BLACKLIST = getPassBlacklist();
 
-void PassScheduler::add(std::unique_ptr<const PirTranslator>&& t) {
+void PassScheduler::add(std::unique_ptr<const Pass>&& t) {
     auto name = t->getName();
     if (std::regex_match(name.begin(), name.end(), PIR_PASS_BLACKLIST))
         return;
@@ -119,7 +119,7 @@ void PassScheduler::nextPhase(const std::string& name, unsigned budget) {
     schedule_.phases.push_back(Phase(name, budget));
     currentPhase = schedule_.phases.end() - 1;
     currentPhase->passes.push_back(
-        std::unique_ptr<const PirTranslator>(new PhaseMarker(name)));
+        std::unique_ptr<const Pass>(new PhaseMarker(name)));
 }
 }
 }

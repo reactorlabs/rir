@@ -4,18 +4,18 @@
 namespace rir {
 namespace pir {
 
-bool DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* function,
+bool DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                              LogStream& log) const {
     bool noStores = Visitor::check(
-        function->entry, [&](Instruction* i) { return !StVar::Cast(i); });
+        code->entry, [&](Instruction* i) { return !StVar::Cast(i); });
     if (noStores)
         return false;
 
     bool anyChange = false;
     {
-        DeadStoreAnalysis analysis(function, log);
+        DeadStoreAnalysis analysis(cls, code, log);
 
-        Visitor::run(function->entry, [&](BB* bb) {
+        Visitor::run(code->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 auto next = ip + 1;
@@ -29,7 +29,7 @@ bool DeadStoreRemoval::apply(RirCompiler&, ClosureVersion* function,
             }
         });
 
-        VisitorNoDeoptBranch::runBackward(function->entry, [&](BB* bb) {
+        VisitorNoDeoptBranch::runBackward(code->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 auto next = ip + 1;

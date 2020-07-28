@@ -23,8 +23,7 @@ class PhiPlacement {
         }
     };
 
-    PhiPlacement(ClosureVersion* cls,
-                 const std::unordered_map<BB*, Value*>& inputs,
+    PhiPlacement(Code* code, const std::unordered_map<BB*, Value*>& inputs,
                  const DominanceGraph& dom, const DominanceFrontier&);
 
     typedef std::unordered_map<BB*, SmallSet<PhiInput>> Phis;

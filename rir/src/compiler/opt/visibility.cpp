@@ -1,6 +1,5 @@
 #include "../analysis/visibility.h"
 #include "../pir/pir_impl.h"
-#include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
@@ -13,12 +12,12 @@
 namespace rir {
 namespace pir {
 
-bool OptimizeVisibility::apply(RirCompiler&, ClosureVersion* function,
+bool OptimizeVisibility::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                                LogStream& log) const {
-    VisibilityAnalysis visible(function, log);
+    VisibilityAnalysis visible(cls, code, log);
 
     bool anyChange = false;
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;

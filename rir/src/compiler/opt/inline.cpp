@@ -15,34 +15,28 @@
 #include <algorithm>
 #include <unordered_map>
 
-namespace {
+namespace rir {
+namespace pir {
 
-using namespace rir::pir;
+bool Inline::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+                   LogStream& log) const {
+    bool anyChange = false;
+    size_t fuel = Parameter::INLINER_INITIAL_FUEL;
 
-class TheInliner {
-  public:
-    ClosureVersion* version;
-    explicit TheInliner(ClosureVersion* version) : version(version) {}
+    if (cls->size() > Parameter::INLINER_MAX_SIZE)
+        return false;
 
-    bool operator()() {
-        bool anyChange = false;
-        size_t fuel = Parameter::INLINER_INITIAL_FUEL;
-
-        if (version->size() > Parameter::INLINER_MAX_SIZE)
+    auto dontInline = [](Closure* cls) {
+        if (cls->rirFunction()->flags.contains(rir::Function::DisableInline))
+            return true;
+        if (cls->rirFunction()->flags.contains(rir::Function::ForceInline))
             return false;
+        return cls->rirFunction()->flags.contains(rir::Function::NotInlineable);
+    };
 
-        auto dontInline = [](Closure* cls) {
-            if (cls->rirFunction()->flags.contains(
-                    rir::Function::DisableInline))
-                return true;
-            if (cls->rirFunction()->flags.contains(rir::Function::ForceInline))
-                return false;
-            return cls->rirFunction()->flags.contains(
-                rir::Function::NotInlineable);
-        };
-
-        std::unordered_set<BB*> dead;
-        Visitor::run(version->entry, [&](BB* bb) {
+    std::unordered_set<BB*> dead;
+    Visitor::run(
+        code->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
             for (auto it = bb->begin(); it != bb->end() && fuel; it++) {
@@ -86,7 +80,7 @@ class TheInliner {
                     // inline.
                     staticEnv = inlineeCls->closureEnv();
                     if (inlineeCls->closureEnv() == Env::notClosed() &&
-                        inlinee != version) {
+                        inlinee != cls) {
                         if (Query::noParentEnv(inlinee)) {
                         } else if (auto mk =
                                        MkFunCls::Cast(call->runtimeClosure())) {
@@ -202,7 +196,7 @@ class TheInliner {
                 }
 
                 // No recursive inlining
-                if (inlinee->owner() == version->owner()) {
+                if (inlinee->owner() == cls->owner()) {
                     continue;
                 } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
                     if (!inlineeCls->rirFunction()->flags.contains(
@@ -225,11 +219,10 @@ class TheInliner {
                         rir::Function::ForceInline))
                     fuel--;
 
-                version->inlinees++;
+                cls->inlinees++;
                 auto context = (*it)->env();
 
-                BB* split =
-                    BBTransform::split(version->nextBBId++, bb, it, version);
+                BB* split = BBTransform::split(cls->nextBBId++, bb, it, cls);
                 auto theCall = *split->begin();
                 auto theCallInstruction = CallInstruction::CastCall(theCall);
                 std::vector<Value*> arguments;
@@ -237,7 +230,7 @@ class TheInliner {
                     [&](Value* v) { arguments.push_back(v); });
 
                 // Clone the version
-                BB* copy = BBTransform::clone(inlinee->entry, version, version);
+                BB* copy = BBTransform::clone(inlinee->entry, code, cls);
 
                 bool needsEnvPatching = inlineeCls->closureEnv() != staticEnv;
 
@@ -371,12 +364,12 @@ class TheInliner {
                                 assert(id < copiedPromise.size());
                                 if (copiedPromise[id]) {
                                     mk->updatePromise(
-                                        version->promises().at(newPromId[id]));
+                                        cls->promises().at(newPromId[id]));
                                 } else {
-                                    Promise* clone = version->createProm(
-                                        mk->prom()->rirSrc());
+                                    Promise* clone =
+                                        cls->createProm(mk->prom()->rirSrc());
                                     BB* promCopy = BBTransform::clone(
-                                        mk->prom()->entry, clone, version);
+                                        mk->prom()->entry, clone, cls);
                                     clone->entry = promCopy;
                                     newPromId[id] = clone->id;
                                     copiedPromise[id] = true;
@@ -435,15 +428,9 @@ class TheInliner {
             }
         });
 
-        BBTransform::removeDeadBlocks(version, dead);
-        return anyChange;
+    BBTransform::removeDeadBlocks(code, dead);
+    return anyChange;
     }
-};
-
-} // namespace
-
-namespace rir {
-namespace pir {
 
 // TODO: maybe implement something more resonable to pass in those constants.
 // For now it seems a simple env variable is just fine.
@@ -463,9 +450,5 @@ size_t Parameter::INLINER_INLINE_UNLIKELY =
         ? atoi(getenv("PIR_INLINER_INLINE_UNLIKELY"))
         : 0;
 
-bool Inline::apply(RirCompiler&, ClosureVersion* version, LogStream&) const {
-    TheInliner s(version);
-    return s();
-}
 } // namespace pir
 } // namespace rir

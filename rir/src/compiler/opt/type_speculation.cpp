@@ -12,18 +12,18 @@
 namespace rir {
 namespace pir {
 
-bool TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
+bool TypeSpeculation::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                             LogStream& log) const {
 
-    AvailableCheckpoints checkpoint(function, function, log);
+    AvailableCheckpoints checkpoint(cls, code, log);
 
     std::unordered_map<
         BB*, std::unordered_map<Instruction*,
                                 std::pair<Checkpoint*, TypeTest::Info>>>
         speculate;
 
-    auto dom = DominanceGraph(function);
-    Visitor::run(function->entry, [&](Instruction* i) {
+    auto dom = DominanceGraph(code);
+    Visitor::run(code->entry, [&](Instruction* i) {
         if (i->typeFeedback.used || i->typeFeedback.type.isVoid() ||
             i->type.isA(i->typeFeedback.type))
             return;
@@ -103,7 +103,7 @@ bool TypeSpeculation::apply(RirCompiler&, ClosureVersion* function,
     });
 
     bool anyChange = false;
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         if (!speculate.count(bb))
             return;
 

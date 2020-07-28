@@ -111,8 +111,8 @@ class ScopeAnalysis
     using StaticAnalysis::PositioningStyle;
 
     // Default
-    ScopeAnalysis(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, log), depth(0) {
+    ScopeAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
+        : StaticAnalysis("Scope", cls, code, log), depth(0) {
         globalState = globalStateStore = new ScopeAnalysisResults;
     }
 

@@ -6,7 +6,7 @@
 namespace rir {
 namespace pir {
 
-bool DelayInstr::apply(RirCompiler&, ClosureVersion* function,
+bool DelayInstr::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                        LogStream&) const {
     bool anyChange = false;
 
@@ -16,13 +16,13 @@ bool DelayInstr::apply(RirCompiler&, ClosureVersion* function,
         return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
                FrameState::Cast(j) || CastType::Cast(j) || MkEnv::Cast(j);
     };
-    const UsesTree dataDependencies(function);
+    const UsesTree dataDependencies(code);
 
     std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
     std::unordered_map<Instruction*, SmallSet<Instruction*>> updatePromises;
     std::unordered_map<Instruction*, SmallSet<BB*>> udatePromiseTargets;
-    const DominanceGraph dom(function);
-    const CFG cfg(function);
+    const DominanceGraph dom(code);
+    const CFG cfg(code);
     bool changed = true;
 
     while (changed) {
@@ -96,7 +96,7 @@ bool DelayInstr::apply(RirCompiler&, ClosureVersion* function,
     std::unordered_map<Instruction*, SmallSet<std::pair<BB*, Instruction*>>>
         replacements;
 
-    VisitorNoDeoptBranch::run(function->entry, [&](BB* bb) {
+    VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto instruction = *ip;

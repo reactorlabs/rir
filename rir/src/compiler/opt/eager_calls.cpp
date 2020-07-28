@@ -16,10 +16,9 @@
 namespace rir {
 namespace pir {
 
-bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
+bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* cls, Code* code,
                        LogStream& log) const {
-    auto code = closure->entry;
-    AvailableCheckpoints checkpoint(closure, closure, log);
+    AvailableCheckpoints checkpoint(cls, code, log);
 
     auto replaceLdFunBuiltinWithDeopt = [&](BB* bb, BB::Instrs::iterator ip,
                                             Checkpoint* cp, SEXP builtin,
@@ -98,7 +97,7 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
 
     // Search for calls that likely point to a builtin.
     std::unordered_map<LdFun*, std::pair<SEXP, Checkpoint*>> needsGuard;
-    Visitor::run(code, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             if (auto call = Call::Cast(*ip)) {
@@ -117,8 +116,7 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                     } else {
                         // Only speculate if we don't have a static guess
                         if (!ldfun->guessedBinding()) {
-                            auto env =
-                                Env::Cast(closure->owner()->closureEnv());
+                            auto env = Env::Cast(cls->owner()->closureEnv());
                             if (env != Env::notClosed() && env->rho) {
                                 auto name = ldfun->varName;
                                 auto builtin = Rf_findVar(name, env->rho);
@@ -154,7 +152,7 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
         }
     });
 
-    Visitor::run(code, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;
@@ -322,7 +320,7 @@ bool EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
 
     // Third step: eagerly evaluate arguments if we know from above that we will
     // call a function that expects them to be eager.
-    Visitor::run(code, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
             if (auto call = StaticCall::Cast(*ip)) {
                 auto version = call->tryDispatch();

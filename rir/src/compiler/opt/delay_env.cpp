@@ -8,9 +8,10 @@
 namespace rir {
 namespace pir {
 
-bool DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
+bool DelayEnv::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+                     LogStream&) const {
     bool anyChange = false;
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(code->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
         MkEnv* envInstr;
 

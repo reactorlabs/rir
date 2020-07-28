@@ -86,168 +86,169 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
     });
 };
 
-class TheScopeResolution {
-  public:
-    ClosureVersion* function;
-    DominanceGraph dom;
-    DominanceFrontier dfront;
-    LogStream& log;
-    explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
-        : function(function), dom(function), dfront(function, dom), log(log) {}
+} // namespace
 
-    bool operator()() {
-        bool anyChange = false;
-        ScopeAnalysis analysis(function, log);
-        analysis();
-        auto& finalState = analysis.result();
-        if (finalState.noReflection())
-            function->properties.set(ClosureVersion::Property::NoReflection);
+namespace rir {
+namespace pir {
 
-        std::unordered_map<Value*, Value*> replacedValue;
-        struct CreatedPhiCache {
-            bool hasUnbound;
-            std::unordered_map<BB*, Phi*> phis;
-            std::unordered_map<BB*, BB*> dominatingPhi;
-        };
-        std::vector<std::pair<AbstractPirValue, CreatedPhiCache>> createdPhis;
-        auto getReplacedValue = [&](Value* val) {
-            while (replacedValue.count(val))
-                val = replacedValue.at(val);
-            return val;
-        };
-        auto getSingleLocalValue =
-            [&](const AbstractPirValue& result) -> Value* {
-            if (!result.isSingleValue())
-                return nullptr;
-            if (result.singleValue().recursionLevel != 0)
-                return nullptr;
-            auto val = getReplacedValue(result.singleValue().val);
-            assert(val->validIn(function));
-            return val;
-        };
+bool ScopeResolution::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+                            LogStream& log) const {
 
-        auto tryInsertPhis = [&](Value* env, AbstractPirValue res, BB* bb,
-                                 BB::Instrs::iterator& iter,
-                                 bool allowUnbound) -> Value* {
-            if (res.isUnknown())
-                return nullptr;
+    DominanceGraph dom(code);
+    DominanceFrontier dfront(code, dom);
 
-            auto iterPos = *iter;
-            bool onlyLocalVals = true;
-            res.eachSource([&](const ValOrig& src) {
-                if (src.recursionLevel > 0)
-                    onlyLocalVals = false;
-            });
-            if (!onlyLocalVals)
-                return nullptr;
+    bool anyChange = false;
+    ScopeAnalysis analysis(cls, code, log);
+    analysis();
+    auto& finalState = analysis.result();
+    if (finalState.noReflection() && code == cls)
+        cls->properties.set(ClosureVersion::Property::NoReflection);
 
-            std::unordered_map<BB*, Value*> inputs;
-            bool fail = false;
-            bool hasUnbound = false;
-            res.eachSource([&](ValOrig v) {
-                if (fail)
-                    return;
-                if (!v.origin)
-                    assert(v.val == UnboundValue::instance());
-                if (v.val == UnboundValue::instance()) {
-                    if (allowUnbound) {
-                        auto initialBB = Instruction::Cast(env)
-                                             ? Instruction::Cast(env)->bb()
-                                             : function->entry;
-                        inputs[initialBB] = UnboundValue::instance();
-                        hasUnbound = true;
-                    } else {
-                        fail = true;
-                    }
-                } else {
-                    if (inputs.count(v.origin->bb()))
-                        fail = true;
-                    else
-                        inputs[v.origin->bb()] = v.val;
-                }
-            });
+    std::unordered_map<Value*, Value*> replacedValue;
+    struct CreatedPhiCache {
+        bool hasUnbound;
+        std::unordered_map<BB*, Phi*> phis;
+        std::unordered_map<BB*, BB*> dominatingPhi;
+    };
+    std::vector<std::pair<AbstractPirValue, CreatedPhiCache>> createdPhis;
+    auto getReplacedValue = [&](Value* val) {
+        while (replacedValue.count(val))
+            val = replacedValue.at(val);
+        return val;
+    };
+    auto getSingleLocalValue = [&](const AbstractPirValue& result) -> Value* {
+        if (!result.isSingleValue())
+            return nullptr;
+        if (result.singleValue().recursionLevel != 0)
+            return nullptr;
+        auto val = getReplacedValue(result.singleValue().val);
+        assert(val->validIn(code));
+        return val;
+    };
+
+    auto tryInsertPhis = [&](Value* env, AbstractPirValue res, BB* bb,
+                             BB::Instrs::iterator& iter,
+                             bool allowUnbound) -> Value* {
+        if (res.isUnknown())
+            return nullptr;
+
+        auto iterPos = *iter;
+        bool onlyLocalVals = true;
+        res.eachSource([&](const ValOrig& src) {
+            if (src.recursionLevel > 0)
+                onlyLocalVals = false;
+        });
+        if (!onlyLocalVals)
+            return nullptr;
+
+        std::unordered_map<BB*, Value*> inputs;
+        bool fail = false;
+        bool hasUnbound = false;
+        res.eachSource([&](ValOrig v) {
             if (fail)
-                return nullptr;
-
-            auto pl = PhiPlacement(function, inputs, dom, dfront);
-            BB* targetPhiPosition = nullptr;
-            if (pl.placement.count(bb))
-                targetPhiPosition = bb;
-            else if (pl.dominatingPhi.count(bb))
-                targetPhiPosition = pl.dominatingPhi.at(bb);
-            else
-                return nullptr;
-
-            auto findExistingPhi =
-                [&](BB* pos,
-                    const rir::SmallSet<PhiPlacement::PhiInput>& inps) -> Phi* {
-                for (auto i : *pos) {
-                    if (auto candidate = Phi::Cast(i)) {
-                        if (candidate->nargs() == inps.size()) {
-                            rir::SmallSet<PhiPlacement::PhiInput> candidateInp;
-                            // This only works for value inputs, not for phi
-                            // inputs. I am not sure how it could be extended...
-                            candidate->eachArg([&](BB* inbb, Value* inval) {
-                                candidateInp.insert({inbb, nullptr, inval});
-                            });
-                            if (candidateInp == inps)
-                                return candidate;
-                        };
-                    }
+                return;
+            if (!v.origin)
+                assert(v.val == UnboundValue::instance());
+            if (v.val == UnboundValue::instance()) {
+                if (allowUnbound) {
+                    auto initialBB = Instruction::Cast(env)
+                                         ? Instruction::Cast(env)->bb()
+                                         : code->entry;
+                    inputs[initialBB] = UnboundValue::instance();
+                    hasUnbound = true;
+                } else {
+                    fail = true;
                 }
-                return nullptr;
+            } else {
+                if (inputs.count(v.origin->bb()))
+                    fail = true;
+                else
+                    inputs[v.origin->bb()] = v.val;
+            }
+        });
+        if (fail)
+            return nullptr;
+
+        auto pl = PhiPlacement(code, inputs, dom, dfront);
+        BB* targetPhiPosition = nullptr;
+        if (pl.placement.count(bb))
+            targetPhiPosition = bb;
+        else if (pl.dominatingPhi.count(bb))
+            targetPhiPosition = pl.dominatingPhi.at(bb);
+        else
+            return nullptr;
+
+        auto findExistingPhi =
+            [&](BB* pos,
+                const rir::SmallSet<PhiPlacement::PhiInput>& inps) -> Phi* {
+            for (auto i : *pos) {
+                if (auto candidate = Phi::Cast(i)) {
+                    if (candidate->nargs() == inps.size()) {
+                        rir::SmallSet<PhiPlacement::PhiInput> candidateInp;
+                        // This only works for value inputs, not for phi
+                        // inputs. I am not sure how it could be extended...
+                        candidate->eachArg([&](BB* inbb, Value* inval) {
+                            candidateInp.insert({inbb, nullptr, inval});
+                        });
+                        if (candidateInp == inps)
+                            return candidate;
+                    };
+                }
+            }
+            return nullptr;
+        };
+
+        std::unordered_map<BB*, Phi*> thePhis;
+        for (auto& phi : pl.placement) {
+            for (auto& p : phi.second) {
+                if (p.aValue)
+                    p.aValue = getReplacedValue(p.aValue);
             };
 
-            std::unordered_map<BB*, Phi*> thePhis;
-            for (auto& phi : pl.placement) {
-                for (auto& p : phi.second) {
-                    if (p.aValue)
-                        p.aValue = getReplacedValue(p.aValue);
-                };
+            if (auto p = findExistingPhi(phi.first, phi.second))
+                thePhis[phi.first] = p;
+            else
+                thePhis[phi.first] = new Phi;
+        }
 
-                if (auto p = findExistingPhi(phi.first, phi.second))
-                    thePhis[phi.first] = p;
+        for (auto& computed : pl.placement) {
+            auto& pos = computed.first;
+            auto& phi = thePhis.at(pos);
+
+            // Existing phi
+            if (phi->nargs() > 0)
+                continue;
+
+            assert(computed.second.size() > 1);
+            for (auto& p : computed.second) {
+                if (p.aValue)
+                    phi->addInput(p.inputBlock, p.aValue);
                 else
-                    thePhis[phi.first] = new Phi;
-            }
+                    phi->addInput(p.inputBlock, thePhis.at(p.otherPhi));
+            };
 
-            for (auto& computed : pl.placement) {
-                auto& pos = computed.first;
-                auto& phi = thePhis.at(pos);
+            pos->insert(pos->begin(), phi);
+            // If the insert changed the current bb, we need to keep the
+            // iterator updated
+            if (pos == bb)
+                iter = bb->atPosition(iterPos);
 
-                // Existing phi
-                if (phi->nargs() > 0)
-                    continue;
+            if (!phi->type.isA(res.type))
+                phi->type = res.type;
+        }
 
-                assert(computed.second.size() > 1);
-                for (auto& p : computed.second) {
-                    if (p.aValue)
-                        phi->addInput(p.inputBlock, p.aValue);
-                    else
-                        phi->addInput(p.inputBlock, thePhis.at(p.otherPhi));
-                };
+        for (auto& phi : thePhis)
+            phi.second->updateTypeAndEffects();
 
-                pos->insert(pos->begin(), phi);
-                // If the insert changed the current bb, we need to keep the
-                // iterator updated
-                if (pos == bb)
-                    iter = bb->atPosition(iterPos);
+        auto target = thePhis.at(targetPhiPosition);
+        createdPhis.push_back(
+            {res, CreatedPhiCache(
+                      {hasUnbound, thePhis, std::move(pl.dominatingPhi)})});
+        return target;
+    };
 
-                if (!phi->type.isA(res.type))
-                    phi->type = res.type;
-            }
-
-            for (auto& phi : thePhis)
-                phi.second->updateTypeAndEffects();
-
-            auto target = thePhis.at(targetPhiPosition);
-            createdPhis.push_back(
-                {res, CreatedPhiCache(
-                          {hasUnbound, thePhis, std::move(pl.dominatingPhi)})});
-            return target;
-        };
-
-        Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(
+        code->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 Instruction* i = *ip;
@@ -271,7 +272,7 @@ class TheScopeResolution {
 
                 if (auto mk = MkArg::Cast(i)) {
                     if (!mk->noReflection)
-                        if (noReflection(function, mk->prom(),
+                        if (noReflection(cls, mk->prom(),
                                          i->hasEnv() ? i->env()
                                                      : Env::notClosed(),
                                          analysis, before))
@@ -280,7 +281,7 @@ class TheScopeResolution {
 
                 // If no reflective argument is passed to us, then forcing an
                 // argument cannot see our environment
-                if (function->context().includes(
+                if (cls->context().includes(
                         rir::Assumption::NoReflectiveArgument)) {
                     if (auto force = Force::Cast(i)) {
                         if (force->hasEnv()) {
@@ -310,7 +311,7 @@ class TheScopeResolution {
                         auto env = Env::Cast(aLoad.env);
                         if ((env && env->rho == R_GlobalEnv) ||
                             (!aLoad.result.isUnknown() &&
-                             aLoad.env->validIn(function))) {
+                             aLoad.env->validIn(code))) {
                             auto r =
                                 new StVar(sts->varName, sts->val(), aLoad.env);
                             bb->replace(ip, r);
@@ -361,7 +362,7 @@ class TheScopeResolution {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {
                             if (mk->context == 1 && mk->bb() != bb &&
-                                mk->usesAreOnly(function->entry,
+                                mk->usesAreOnly(code->entry,
                                                 {Tag::FrameState, Tag::StVar,
                                                  Tag::IsEnvStub})) {
                                 analysis.tryMaterializeEnv(
@@ -563,7 +564,7 @@ class TheScopeResolution {
                                 }
                             }
                             if (guess->type.isA(PirType::closure()) &&
-                                guess->validIn(function)) {
+                                guess->validIn(code)) {
                                 guess = getReplacedValue(guess);
                                 ldfun->replaceUsesWith(guess);
                                 replacedValue[ldfun] = guess;
@@ -664,19 +665,6 @@ class TheScopeResolution {
                 ip = next;
             }
         });
-        return anyChange;
-    }
-};
-} // namespace
-
-namespace rir {
-namespace pir {
-
-bool ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
-                            LogStream& log) const {
-    TheScopeResolution s(function, log);
-    auto res = s();
-
     // Scope resolution can sometimes generate dead phis, so we remove them
     // here, before they cause errors in later compiler passes. (Sometimes, the
     // verifier will even catch these errors, but then segfault when trying to
@@ -691,8 +679,9 @@ bool ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
     // However, if there is no LdVar to replace, that means the phi is dead;
     // none of the successor instructions needs that value. The problem is when
     // dead phis are malformed.
-    BBTransform::removeDeadInstrs(function, 1);
-    return res;
+    BBTransform::removeDeadInstrs(code, 1);
+
+    return anyChange;
 }
 
 } // namespace pir

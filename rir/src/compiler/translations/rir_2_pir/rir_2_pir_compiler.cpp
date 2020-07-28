@@ -209,7 +209,7 @@ std::unique_ptr<CompilerPerf> PERF = std::unique_ptr<CompilerPerf>(
 void Rir2PirCompiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
-    PassScheduler::instance().run([&](const PirTranslator* translation) {
+    PassScheduler::instance().run([&](const Pass* translation) {
         bool changed = false;
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
