@@ -195,7 +195,10 @@ bool GVN::apply(RirCompiler&, ClosureVersion* cls, Code* code,
             for (auto can : g.second) {
                 if (auto cani = Instruction::Cast(can)) {
                     if (!firstInstr ||
-                        dom.strictlyDominates(cani->bb(), firstInstr->bb()))
+                        dom.strictlyDominates(cani->bb(), firstInstr->bb()) ||
+                        (cani->bb() == firstInstr->bb() &&
+                         cani->bb()->indexOf(cani) <
+                             cani->bb()->indexOf(firstInstr)))
                         firstInstr = cani;
                 }
             }
