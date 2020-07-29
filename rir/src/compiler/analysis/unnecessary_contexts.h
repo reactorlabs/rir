@@ -1,8 +1,8 @@
 #ifndef PIR_UNNECESSARY_CONTEXTS_H
 #define PIR_UNNECESSARY_CONTEXTS_H
 
-#include "../util/cfg.h"
 #include "abstract_value.h"
+#include "compiler/analysis/cfg.h"
 #include "generic_static_analysis.h"
 
 namespace rir {

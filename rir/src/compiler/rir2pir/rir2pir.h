@@ -1,8 +1,8 @@
 #ifndef RIR_2_PIR_H
 #define RIR_2_PIR_H
 
-#include "../../util/builder.h"
-#include "rir_2_pir_compiler.h"
+#include "compiler/compiler.h"
+#include "compiler/pir/builder.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -15,7 +15,7 @@ class MkFunCls;
 
 class Rir2Pir {
   public:
-    Rir2Pir(Rir2PirCompiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
+    Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
             const std::string& name,
             const std::list<PirTypeFeedback*>& outerFeedback);
 
@@ -42,7 +42,7 @@ class Rir2Pir {
 
     bool finalized = false;
 
-    Rir2PirCompiler& compiler;
+    Compiler& compiler;
     ClosureVersion* cls;
     ClosureStreamLogger& log;
     std::string name;
@@ -75,8 +75,8 @@ class Rir2Pir {
 
 class PromiseRir2Pir : public Rir2Pir {
   public:
-    PromiseRir2Pir(Rir2PirCompiler& cmp, ClosureVersion* cls,
-                   ClosureStreamLogger& log, const std::string& name,
+    PromiseRir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
+                   const std::string& name,
                    const std::list<PirTypeFeedback*>& outerFeedback)
         : Rir2Pir(cmp, cls, log, name, outerFeedback) {}
 

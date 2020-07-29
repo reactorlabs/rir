@@ -1,8 +1,8 @@
 #include "../analysis/available_checkpoints.h"
 #include "../analysis/dead.h"
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "compiler/analysis/cfg.h"
 
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -148,7 +148,7 @@ struct AvailableAssumptions
     }
 };
 
-bool OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* vers, Code* code,
+bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                                 LogStream& log) const {
     {
         Visitor::run(code->entry, [&](BB* bb) {

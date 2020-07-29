@@ -3,15 +3,15 @@
 #include "../analysis/query.h"
 #include "../analysis/verifier.h"
 #include "../pir/pir_impl.h"
-#include "../translations/pir_2_rir/pir_2_rir.h"
-#include "../translations/rir_2_pir/rir_2_pir.h"
+#include "../pir2rir/pir2rir.h"
 #include "../util/visitor.h"
 #include "R/Protect.h"
 #include "R/RList.h"
 #include "R_ext/Parse.h"
 #include "api.h"
+#include "compiler/analysis/cfg.h"
+#include "compiler/compiler.h"
 #include "compiler/parameter.h"
-#include "compiler/util/cfg.h"
 #include <string>
 #include <vector>
 
@@ -58,7 +58,7 @@ ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
                                   pir::DebugFlag::PrintFinalPir,
                               std::regex(".*"), std::regex(".*"),
                               pir::DebugStyle::Standard});
-    pir::Rir2PirCompiler cmp(m, logger);
+    pir::Compiler cmp(m, logger);
 
     // Compile every function in the environment
     ClosuresByName results;
@@ -68,7 +68,7 @@ ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
             cmp.compileClosure(fun, "test_function",
-                               pir::Rir2PirCompiler::defaultContext,
+                               pir::Compiler::defaultContext,
                                [&](pir::ClosureVersion* cls) {
                                    results[CHAR(PRINTNAME(f.tag()))] = cls;
                                },
@@ -288,7 +288,7 @@ SEXP parseCompileToRir(std::string input) {
     SEXP expr = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP cls = p(Rf_eval(VECTOR_ELT(expr, 0), R_GlobalEnv));
 
-    Compiler::compileClosure(cls);
+    rir::Compiler::compileClosure(cls);
 
     return cls;
 }

@@ -1,15 +1,15 @@
 #ifndef PIR_GENERIC_STATIC_ANALYSIS
 #define PIR_GENERIC_STATIC_ANALYSIS
 
-#include "../debugging/stream_logger.h"
 #include "../pir/bb.h"
 #include "../pir/closure_version.h"
 #include "../pir/instruction.h"
 #include "../pir/promise.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "abstract_result.h"
+#include "compiler/analysis/cfg.h"
+#include "compiler/log/stream_logger.h"
 
 #include <stack>
 #include <unordered_map>

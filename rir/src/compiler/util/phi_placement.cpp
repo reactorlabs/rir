@@ -1,7 +1,6 @@
 #include "phi_placement.h"
 #include "../analysis/generic_static_analysis.h"
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 
 #include "utils/Set.h"
 

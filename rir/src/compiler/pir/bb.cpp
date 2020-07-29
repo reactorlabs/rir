@@ -199,5 +199,10 @@ bool BB::before(Instruction* a, Instruction* b) const {
     return false;
 }
 
+void BB::replaceUsesOfValue(Value* old, Value* rpl) {
+    Visitor::run(this,
+                 [&](Instruction* i) { i->replaceUsesOfValue(old, rpl); });
+}
+
 } // namespace pir
 } // namespace rir

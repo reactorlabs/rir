@@ -2,12 +2,12 @@
 #include "pir_impl.h"
 
 #include "../analysis/query.h"
-#include "../util/cfg.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "api.h"
+#include "compiler/analysis/cfg.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
 #include "utils/capture_out.h"
@@ -416,6 +416,13 @@ bool Instruction::usesAreOnly(BB* target, std::unordered_set<Tag> tags) {
                 ok = false;
         });
         return ok;
+    });
+}
+
+void Instruction::replaceUsesOfValue(Value* old, Value* rpl) {
+    this->eachArg([&](InstrArg& arg) {
+        if (arg.val() == old)
+            arg.val() = rpl;
     });
 }
 

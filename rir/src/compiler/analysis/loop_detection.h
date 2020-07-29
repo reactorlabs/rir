@@ -1,9 +1,9 @@
 #ifndef PIR_LOOP_DETECTION_H
 #define PIR_LOOP_DETECTION_H
 
-#include "../pir/pir.h"
-#include "../transform/bb.h"
-#include "../util/cfg.h"
+#include "compiler/analysis/cfg.h"
+#include "compiler/pir/pir.h"
+#include "compiler/util/bb_transform.h"
 
 #include <unordered_map>
 #include <unordered_set>

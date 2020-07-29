@@ -1,12 +1,11 @@
 #include "jit_llvm.h"
 
-#include "../analysis/reference_count.h"
+#include "compiler/analysis/reference_count.h"
 #include "types_llvm.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/MDBuilder.h"
 
-#include "../translations/pir_2_rir/allocators.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
@@ -14,6 +13,7 @@
 #include "builtins.h"
 #include "compiler/analysis/liveness.h"
 #include "compiler/pir/pir_impl.h"
+#include "compiler/util/lowering/allocators.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/LazyEnvironment.h"
 #include "interpreter/builtins.h"

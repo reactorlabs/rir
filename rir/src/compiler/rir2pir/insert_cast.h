@@ -25,7 +25,7 @@ class InsertCast {
     InsertCast(Code* s, Value* e) : code(s), env(e) {}
     void operator()();
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

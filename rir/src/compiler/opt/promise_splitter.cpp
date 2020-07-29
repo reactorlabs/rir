@@ -1,6 +1,6 @@
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "compiler/analysis/cfg.h"
 #include "pass_definitions.h"
 #include "utils/Map.h"
 #include "utils/Set.h"
@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-bool PromiseSplitter::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool PromiseSplitter::apply(Compiler&, ClosureVersion* cls, Code* code,
                             LogStream&) const {
 
     bool anyChange = false;

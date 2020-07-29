@@ -2,7 +2,7 @@
 #define API_H_
 
 #include "R/r.h"
-#include "compiler/debugging/debugging.h"
+#include "compiler/log/debug.h"
 #include "runtime/Context.h"
 #include <stdint.h>
 

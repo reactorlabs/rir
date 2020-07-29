@@ -1,7 +1,7 @@
 #include "../analysis/loop_detection.h"
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 #include "../util/safe_builtins_list.h"
+#include "compiler/analysis/cfg.h"
 #include "pass_definitions.h"
 #include <unordered_map>
 
@@ -142,7 +142,7 @@ static bool replaceWithOuterLoopEquivalent(Instruction* instruction,
     return false;
 }
 
-bool LoopInvariant::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool LoopInvariant::apply(Compiler&, ClosureVersion* cls, Code* code,
                           LogStream& log) const {
     LoopDetection loops(code);
     bool anyChange = false;

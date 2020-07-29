@@ -1,11 +1,11 @@
 #include "../analysis/query.h"
 #include "../analysis/scope.h"
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
 #include "../util/phi_placement.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/r.h"
+#include "compiler/util/bb_transform.h"
 #include "pass_definitions.h"
 #include "utils/Set.h"
 
@@ -91,7 +91,7 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
 namespace rir {
 namespace pir {
 
-bool ScopeResolution::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                             LogStream& log) const {
 
     DominanceGraph dom(code);

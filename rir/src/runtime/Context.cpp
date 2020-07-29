@@ -1,6 +1,6 @@
 #include "Context.h"
 #include "R/Serialize.h"
-#include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
+#include "compiler/compiler.h"
 
 namespace rir {
 
@@ -100,7 +100,7 @@ constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
 
 void Context::setSpecializationLevel(int level) {
     static Flags preserve =
-        pir::Rir2PirCompiler::minimalContext | Assumption::StaticallyArgmatched;
+        pir::Compiler::minimalContext | Assumption::StaticallyArgmatched;
 
     switch (level) {
     // All Specialization Disabled

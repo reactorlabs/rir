@@ -1,9 +1,10 @@
-#include "bb.h"
-#include "../analysis/dead.h"
-#include "../pir/pir_impl.h"
-#include "../util/visitor.h"
+#include "bb_transform.h"
+
 #include "R/Funtab.h"
 #include "R/r.h"
+#include "compiler/analysis/dead.h"
+#include "compiler/pir/pir_impl.h"
+#include "compiler/util/visitor.h"
 
 #include <unordered_map>
 #include <unordered_set>

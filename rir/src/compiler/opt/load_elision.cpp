@@ -1,7 +1,7 @@
 #include "../analysis/available_checkpoints.h"
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "compiler/analysis/cfg.h"
 
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -91,7 +91,7 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
     }
 };
 
-bool LoadElision::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool LoadElision::apply(Compiler&, ClosureVersion* cls, Code* code,
                         LogStream& log) const {
     AvailableLoads loads(cls, code, log);
     bool anyChange = false;

@@ -15,7 +15,7 @@ class Closure;
     Pass {                                                                     \
       public:                                                                  \
         name() : Pass(#name){};                                                \
-        bool apply(RirCompiler&, ClosureVersion* function, Code* code,         \
+        bool apply(Compiler&, ClosureVersion* function, Code* code,            \
                    LogStream& log) const final override;                       \
         bool runOnPromises() const final override {                            \
             return __runOnPromises__;                                          \
@@ -157,7 +157,7 @@ class PASS(HoistInstruction, false);
 class PhaseMarker : public Pass {
   public:
     explicit PhaseMarker(const std::string& name) : Pass(name) {}
-    bool apply(RirCompiler&, ClosureVersion*, Code*,
+    bool apply(Compiler&, ClosureVersion*, Code*,
                LogStream&) const final override {
         return false;
     }

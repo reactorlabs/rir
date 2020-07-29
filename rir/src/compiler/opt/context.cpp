@@ -1,7 +1,7 @@
 #include "../analysis/unnecessary_contexts.h"
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "compiler/analysis/cfg.h"
 
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -12,7 +12,7 @@
 namespace rir {
 namespace pir {
 
-bool OptimizeContexts::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool OptimizeContexts::apply(Compiler&, ClosureVersion* cls, Code* code,
                              LogStream& log) const {
     bool anyChange = false;
     Visitor::run(code->entry, [&](BB* bb) {

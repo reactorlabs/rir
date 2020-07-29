@@ -2,8 +2,7 @@
 #include "../analysis/query.h"
 #include "../parameter.h"
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../transform/replace.h"
+#include "compiler/util/bb_transform.h"
 #include "pass_definitions.h"
 #include "utils/Map.h"
 #include "utils/Set.h"
@@ -383,7 +382,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 namespace rir {
 namespace pir {
 
-bool ForceDominance::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                            LogStream& log) const {
     SmallSet<Force*> toInline;
     SmallSet<Force*> needsUpdate;
@@ -481,8 +480,8 @@ bool ForceDominance::apply(RirCompiler&, ClosureVersion* cls, Code* code,
                         LdFunctionEnv* promenv =
                             LdFunctionEnv::Cast(*prom_copy->begin());
                         if (promenv) {
-                            Replace::usesOfValue(prom_copy, promenv,
-                                                 mkarg->promEnv());
+                            prom_copy->replaceUsesOfValue(promenv,
+                                                          mkarg->promEnv());
                             prom_copy->remove(prom_copy->begin());
                         }
 

@@ -1,18 +1,18 @@
 #include "../analysis/available_checkpoints.h"
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../util/cfg.h"
-#include "../util/type_test.h"
 #include "../util/visitor.h"
 #include "R/r.h"
+#include "compiler/analysis/cfg.h"
+#include "compiler/util/bb_transform.h"
 #include "pass_definitions.h"
+#include "type_test.h"
 
 #include <unordered_map>
 
 namespace rir {
 namespace pir {
 
-bool TypeSpeculation::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             LogStream& log) const {
 
     AvailableCheckpoints checkpoint(cls, code, log);

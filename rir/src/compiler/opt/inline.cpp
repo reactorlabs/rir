@@ -1,14 +1,14 @@
 #include "../analysis/query.h"
 #include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../util/cfg.h"
 #include "../util/safe_builtins_list.h"
-#include "../util/visitor.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/analysis/cfg.h"
 #include "compiler/parameter.h"
+#include "compiler/util/bb_transform.h"
+#include "compiler/util/visitor.h"
 #include "pass_definitions.h"
 #include "utils/Pool.h"
 
@@ -18,7 +18,7 @@
 namespace rir {
 namespace pir {
 
-bool Inline::apply(RirCompiler&, ClosureVersion* cls, Code* code,
+bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                    LogStream& log) const {
     bool anyChange = false;
     size_t fuel = Parameter::INLINER_INITIAL_FUEL;

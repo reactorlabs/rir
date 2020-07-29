@@ -1,8 +1,12 @@
 #ifndef PIR_2_RIR_ALLOC_H
 #define PIR_2_RIR_ALLOC_H
 
+#include "compiler/analysis/cfg.h"
+#include "compiler/analysis/liveness.h"
+#include "compiler/analysis/stack_use.h"
+#include "compiler/pir/pir.h"
 #include "interpreter/cache.h"
-#include "stack_use.h"
+
 #include <memory>
 #include <set>
 #include <unordered_map>
@@ -480,9 +484,7 @@ class SSAAllocator {
         return max;
     }
 
-    bool onStack(Value* v) const {
-        return allocation.at(v) == stackSlot;
-    }
+    bool onStack(Value* v) const { return allocation.at(v) == stackSlot; }
 
     bool hasSlot(Value* v) const { return allocation.count(v); }
     unsigned getSlot(Value* v) const { return allocation.at(v); }

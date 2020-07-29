@@ -6,8 +6,8 @@
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "cache.h"
+#include "compiler/compiler.h"
 #include "compiler/parameter.h"
-#include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "event_counters.h"
 #include "ir/Deoptimization.h"
 #include "runtime/TypeFeedback_inl.h"
@@ -776,7 +776,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
         fun->clearDisabledAssumptions(given);
         if (RecompileCondition(table, fun, given)) {
-            if (given.includes(pir::Rir2PirCompiler::minimalContext)) {
+            if (given.includes(pir::Compiler::minimalContext)) {
                 // More assumptions are available than this version uses. Let's
                 // try compile a better matching version.
 #ifdef DEBUG_DISPATCH

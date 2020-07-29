@@ -1,5 +1,5 @@
 #include "stack_use.h"
-#include "../../pir/pir_impl.h"
+#include "compiler/pir/pir_impl.h"
 #include "ir/BC_inc.h"
 
 namespace rir {

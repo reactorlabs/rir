@@ -2,7 +2,7 @@
 #define PIR_LOGGER_H
 
 #include "compiler/pir/pir.h"
-#include "debugging.h"
+#include "debug.h"
 
 #include <fstream>
 #include <functional>

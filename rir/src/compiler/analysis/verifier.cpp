@@ -1,7 +1,7 @@
 #include "verifier.h"
 #include "../pir/pir_impl.h"
-#include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "compiler/analysis/cfg.h"
 
 /*
  * When does the verifier run, and is it the fast or slow version?
