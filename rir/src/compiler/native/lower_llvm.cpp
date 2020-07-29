@@ -426,6 +426,7 @@ class LowerFunctionLLVM {
     void writeBarrier(llvm::Value* x, llvm::Value* y, std::function<void()> no,
                       std::function<void()> yes);
     llvm::Value* envStubGet(llvm::Value* x, int i, size_t size);
+    llvm::Value* loadPromise(llvm::Value* code, int i);
     void envStubSet(llvm::Value* x, int i, llvm::Value* y, size_t size,
                     bool setNotMissing);
     void envStubSetNotMissing(llvm::Value* x, int i);
@@ -687,8 +688,8 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
     static std::unordered_set<SEXP> eternal = {
-        R_TrueValue,  R_NilValue,  R_FalseValue,    R_UnboundValue,
-        R_MissingArg, R_GlobalEnv, R_LogicalNAValue};
+        R_TrueValue,  R_NilValue,  R_FalseValue,     R_UnboundValue,
+        R_MissingArg, R_GlobalEnv, R_LogicalNAValue, R_EmptyEnv};
     if (needed == t::Int) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP)
@@ -2134,6 +2135,15 @@ bool LowerFunctionLLVM::compileDotcall(
                },
                /* dotCall pops arguments : */ false));
     return true;
+}
+
+llvm::Value* LowerFunctionLLVM::loadPromise(llvm::Value* x, int i) {
+    assert(x->getType() != t::SEXP);
+    auto code = builder.CreatePtrToInt(x, t::i64);
+    auto extraPos = builder.CreateAdd(code, c(rir::Code::extraPtrOffset(), 64));
+    auto extraPtr = builder.CreateIntToPtr(extraPos, t::SEXP_ptr);
+    auto extra = builder.CreateLoad(extraPtr);
+    return accessVector(extra, c(i), PirType(RType::vec).notObject());
 }
 
 llvm::Value* LowerFunctionLLVM::envStubGet(llvm::Value* x, int i, size_t size) {
@@ -4285,13 +4295,28 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::MkArg: {
                 auto p = MkArg::Cast(i);
+                auto id = promMap.at(p->prom());
+                auto exp = loadPromise(paramCode(), id);
                 // if the env of a promise is elided we need to put a dummy env,
                 // to forcePromise complaining.
-                auto e = p->hasEnv() ? loadSxp(p->env())
-                                     : constant(R_EmptyEnv, t::SEXP);
-                setVal(i, call(NativeBuiltins::createPromise,
-                               {paramCode(), c(promMap.at(p->prom())), e,
-                                loadSxp(p->eagerArg())}));
+                if (p->hasEnv()) {
+                    auto e = loadSxp(p->env());
+                    if (p->isEager()) {
+                        setVal(i, call(NativeBuiltins::createPromiseEager,
+                                       {exp, e, loadSxp(p->eagerArg())}));
+                    } else {
+                        setVal(i,
+                               call(NativeBuiltins::createPromise, {exp, e}));
+                    }
+                } else {
+                    if (p->isEager()) {
+                        setVal(i, call(NativeBuiltins::createPromiseNoEnvEager,
+                                       {exp, loadSxp(p->eagerArg())}));
+                    } else {
+                        setVal(i,
+                               call(NativeBuiltins::createPromiseNoEnv, {exp}));
+                    }
+                }
                 break;
             }
 

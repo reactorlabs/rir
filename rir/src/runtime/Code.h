@@ -183,6 +183,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;
 
+    static size_t extraPtrOffset() {
+        static Code* c = 0;
+        return (uintptr_t)&c->locals_;
+    }
+
   private:
     SrclistEntry* srclist() const {
         return (SrclistEntry*)(data + pad4(codeSize));
