@@ -60,6 +60,8 @@ class StaticAnalysis {
   public:
     enum PositioningStyle { BeforeInstruction, AfterInstruction };
 
+    virtual ~StaticAnalysis() {}
+
   private:
     const std::string name;
 
@@ -97,6 +99,7 @@ class StaticAnalysis {
         const_cast<StaticAnalysis*>(this)->cache.emplace(i, state);
         const_cast<StaticAnalysis*>(this)->cacheQueue.push_back(i);
     }
+
   protected:
     GlobalAbstractState* globalState = nullptr;
     std::unordered_map<BB*, AbstractState> exitpoints;
