@@ -348,7 +348,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
         });
     }
 
-    std::unordered_map<Promise*, unsigned> promMap;
+    std::unordered_map<Code*, std::pair<unsigned, MkEnv*>> promMap;
 
     CodeBuffer cb(ctx.cs());
 
@@ -590,7 +590,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::LdDots: {
                 SLOWASSERT(instr->usesAreOnly(bb, {Tag::ExpandDots}));
                 auto mkenv = MkEnv::Cast(instr->env());
-                if (mkenv && mkenv->stub) {
+                auto ldenv = LdFunctionEnv::Cast(instr->env());
+                auto stub = (mkenv && mkenv->stub) || (ldenv && ldenv->stub);
+                if (stub) {
                     cb.add(
                         BC::ldvarNoForceStubbed(mkenv->indexOf(R_DotsSymbol)));
                     break;
@@ -631,7 +633,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto key =
                     CachePosition::NameAndEnv(ldvar->varName, ldvar->env());
                 auto mkenv = MkEnv::Cast(ldvar->env());
-                if (mkenv && mkenv->stub) {
+                auto ldenv = LdFunctionEnv::Cast(ldvar->env());
+                auto stub = (mkenv && mkenv->stub) || (ldenv && ldenv->stub);
+                if (stub) {
                     cb.add(BC::ldvarNoForceStubbed(
                         mkenv->indexOf(ldvar->varName)));
                 } else if (needsLdVarForUpdate.count(instr)) {
@@ -694,9 +698,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto key =
                     CachePosition::NameAndEnv(stvar->varName, stvar->env());
                 auto mkenv = MkEnv::Cast(stvar->env());
+                auto ldenv = LdFunctionEnv::Cast(stvar->env());
+                auto stub = (mkenv && mkenv->stub) || (ldenv && ldenv->stub);
                 assert(!MkEnv::Cast(stvar->arg(0).val()));
                 if (stvar->isStArg) {
-                    if (mkenv && mkenv->stub) {
+                    if (stub) {
                         cb.add(
                             BC::stargStubbed(mkenv->indexOf(stvar->varName)));
                     } else if (cache.isCached(key)) {
@@ -706,7 +712,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cb.add(BC::starg(stvar->varName));
                     }
                 } else {
-                    if (mkenv && mkenv->stub) {
+                    if (stub) {
                         cb.add(
                             BC::stvarStubbed(mkenv->indexOf(stvar->varName)));
                     } else if (cache.isCached(key)) {
@@ -723,7 +729,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto mk = MkArg::Cast(instr);
                 auto p = mk->prom();
                 unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
-                promMap[p] = id;
+                promMap[p] = {id, MkEnv::Cast(mk->env())};
                 if (mk->isEager()) {
                     cb.add(BC::mkEagerPromise(id));
                 } else {

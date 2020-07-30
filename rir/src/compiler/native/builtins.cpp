@@ -36,8 +36,7 @@ static R_INLINE MatrixDimension getMatrixDim(SEXP mat) {
 
 static SEXP forcePromiseImpl(SEXP prom) {
     SLOWASSERT(TYPEOF(prom) == PROMSXP);
-    auto res = forcePromise(prom);
-    ENSURE_NAMEDMAX(res);
+    auto res = evaluatePromise(prom);
     return res;
 }
 NativeBuiltin NativeBuiltins::forcePromise = {"forcePromise",

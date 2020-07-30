@@ -52,6 +52,12 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp);
 SEXP copyBySerial(SEXP x);
 
 SEXP materialize(SEXP rirDataWrapper);
+
+SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx);
+inline SEXP evaluatePromise(SEXP e) {
+    return evaluatePromise(e, globalContext());
+}
+
 } // namespace rir
 
 #endif

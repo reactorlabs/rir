@@ -363,7 +363,7 @@ class TheVerifier {
             Tag::LdVar,     Tag::Force,          Tag::PushContext,
             Tag::StVar,     Tag::StVarSuper,     Tag::FrameState,
             Tag::IsEnvStub, Tag::MaterializeEnv, Tag::CallBuiltin,
-            Tag::Call, Tag::StaticCall};
+            Tag::Call,      Tag::StaticCall,     Tag::MkArg};
         if (i->hasEnv() && !allowStub.count(i->tag)) {
             auto env = MkEnv::Cast(i->env());
             if (env && env->stub) {

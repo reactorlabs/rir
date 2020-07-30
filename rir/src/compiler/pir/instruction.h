@@ -1526,6 +1526,7 @@ class FLI(IsType, 1, Effects::None()) {
 class FLI(LdFunctionEnv, 0, Effects::None()) {
   public:
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
+    bool stub = false;
 };
 
 class FLI(Visible, 0, Effect::Visibility) {

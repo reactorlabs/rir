@@ -135,6 +135,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
         Tag::Force,      Tag::PushContext, Tag::LdVar,      Tag::StVar,
         Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin,
         Tag::StaticCall, Tag::LdDots};
+    static constexpr auto allowedInProm = {Tag::LdVar, Tag::StVar, Tag::LdDots};
     // Those do not materialize the stub in any case
     static constexpr auto dontMaterialize = {
         Tag::PushContext, Tag::LdVar,     Tag::StVar, Tag::StVarSuper,
@@ -157,15 +158,27 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                             allowed.end() ||
                         !i->hasEnv() || i->env() != m ||
                         (bt && !supportsFastBuiltinCall(bt->blt))) {
-                        if (debug) {
-                            std::cout << "Environment:";
-                            m->print(std::cout);
-                            std::cout << " blocked by ";
-                            i->print(std::cout);
-                            std::cout << "\n";
+                        bool ok = false;
+                        if (auto mkarg = MkArg::Cast(i)) {
+                            ok = Visitor::check(
+                                mkarg->prom()->entry, [&](Instruction* i) {
+                                    return std::find(allowedInProm.begin(),
+                                                     allowedInProm.end(),
+                                                     i->tag) !=
+                                           allowedInProm.end();
+                                });
                         }
-                        bannedEnvs.insert(m);
-                        return;
+                        if (!ok) {
+                            if (debug) {
+                                std::cout << "Environment:";
+                                m->print(std::cout);
+                                std::cout << " blocked by ";
+                                i->print(std::cout);
+                                std::cout << "\n";
+                            }
+                            bannedEnvs.insert(m);
+                            return;
+                        }
                     }
                 }
             }
@@ -277,6 +290,13 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (!materializableStubs.count(i->env())) {
                 is->replaceUsesWith(True::instance());
                 is->effects.reset();
+            }
+        }
+        if (auto mk = MkArg::Cast(i)) {
+            if (materializableStubs.count(mk->env())) {
+                if (auto e = mk->prom()->env()) {
+                    e->stub = true;
+                }
             }
         }
     });

@@ -142,7 +142,7 @@ class LowerFunctionLLVM {
     Code* code;
     BB::Instrs::iterator currentInstr;
     BB* currentBB = nullptr;
-    const std::unordered_map<Promise*, unsigned>& promMap;
+    const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>& promMap;
     const NeedsRefcountAdjustment& refcount;
     const std::unordered_set<Instruction*>& needsLdVarForUpdate;
     IRBuilder<> builder;
@@ -177,10 +177,11 @@ class LowerFunctionLLVM {
   public:
     PirTypeFeedback* pirTypeFeedback = nullptr;
     llvm::Function* fun;
+    MkEnv* myPromenv = nullptr;
 
     LowerFunctionLLVM(
         const std::string& name, ClosureVersion* cls, Code* code,
-        const std::unordered_map<Promise*, unsigned>& promMap,
+        const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>& promMap,
         const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         LogStream& log)
@@ -195,6 +196,9 @@ class LowerFunctionLLVM {
         // prevent Wunused
         this->cls->size();
         this->promMap.size();
+        auto p = promMap.find(code);
+        if (p != promMap.end())
+            myPromenv = p->second.second;
     }
 
     static llvm::Constant* convertToPointer(void* what, Type* ty = t::voidPtr) {
@@ -4296,7 +4300,7 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::MkArg: {
                 auto p = MkArg::Cast(i);
                 auto id = promMap.at(p->prom());
-                auto exp = loadPromise(paramCode(), id);
+                auto exp = loadPromise(paramCode(), id.first);
                 // if the env of a promise is elided we need to put a dummy env,
                 // to forcePromise complaining.
                 if (p->hasEnv()) {
@@ -4348,6 +4352,9 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto varName = maybeLd ? maybeLd->varName : R_DotsSymbol;
 
                 auto env = MkEnv::Cast(i->env());
+                if (LdFunctionEnv::Cast(i->env()))
+                    env = myPromenv;
+
                 if (env && env->stub) {
                     auto e = loadSxp(env);
                     llvm::Value* res =
@@ -5059,6 +5066,8 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::StVar: {
                 auto st = StVar::Cast(i);
                 auto environment = MkEnv::Cast(st->env());
+                if (LdFunctionEnv::Cast(st->env()))
+                    environment = myPromenv;
 
                 if (environment && environment->stub) {
                     auto idx = environment->indexOf(st->varName);
@@ -5432,7 +5441,7 @@ namespace pir {
 
 void* LowerLLVM::tryCompile(
     ClosureVersion* cls, Code* code,
-    const std::unordered_map<Promise*, unsigned>& m,
+    const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>& m,
     const NeedsRefcountAdjustment& refcount,
     const std::unordered_set<Instruction*>& needsLdVarForUpdate,
     LogStream& log) {

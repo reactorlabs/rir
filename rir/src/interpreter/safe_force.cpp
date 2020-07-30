@@ -8,7 +8,7 @@
 
 namespace rir {
 
-SEXP safeEval(SEXP e, SEXP rho) {
+SEXP safeEval(SEXP e) {
     SEXPTYPE t = TYPEOF(e);
     if (t == LANGSXP || t == SYMSXP || t == PROMSXP || t == BCODESXP ||
         t == EXTERNALSXP) {
@@ -21,7 +21,7 @@ SEXP safeEval(SEXP e, SEXP rho) {
 
 SEXP safeForcePromise(SEXP e) {
     if (PRVALUE(e) == R_UnboundValue) {
-        SEXP val = safeEval(PRCODE(e), PRENV(e));
+        SEXP val = safeEval(PRCODE(e));
         if (val != R_UnboundValue) {
             SET_PRVALUE(e, val);
             ENSURE_NAMEDMAX(val);

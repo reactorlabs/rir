@@ -12,6 +12,7 @@
 #include "../interpreter/cache.h"
 #include "../interpreter/interp.h"
 #include "../interpreter/safe_force.h"
+#include "interpreter/interp_incl.h"
 #include "utils/Pool.h"
 
 #include "CodeVerifier.h"
@@ -1284,7 +1285,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             hasNames = true;
 
         // (3) "safe force" the argument to get static assumptions
-        SEXP known = safeEval(*arg, nullptr);
+        SEXP known = safeEval(*arg);
         // TODO: If we add more assumptions should probably abstract with
         // testArg in interp.cpp. For now they're both much different though
         if (known != R_UnboundValue) {
@@ -1363,7 +1364,7 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
             //         the prom is already evaluated and only used to attach
             //         the expression to the already evaled value
             if (!voidContext) {
-                SEXP val = forcePromise(exp);
+                SEXP val = evaluatePromise(exp);
                 Protect p(val);
                 compileConst(ctx.cs(), val);
                 ctx.cs().addSrc(expr);

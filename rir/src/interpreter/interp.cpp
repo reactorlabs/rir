@@ -18,6 +18,7 @@
 #include <deque>
 #include <libintl.h>
 #include <set>
+#include <unordered_set>
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -172,16 +173,39 @@ static RIR_INLINE SEXP createPromise(Code* code, SEXP env) {
     return p;
 }
 
-static RIR_INLINE SEXP promiseValue(SEXP promise, InterpreterInstance* ctx) {
+RIR_INLINE SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx) {
     // if already evaluated, return the value
-    if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
-        promise = PRVALUE(promise);
-        assert(TYPEOF(promise) != PROMSXP);
-        return promise;
+    if (PRVALUE(e) && PRVALUE(e) != R_UnboundValue) {
+        e = PRVALUE(e);
+        assert(TYPEOF(e) != PROMSXP);
+        return e;
+    } else if (TYPEOF(PRCODE(e)) != EXTERNALSXP) {
+        return forcePromise(e);
     } else {
-        SEXP res = forcePromise(promise);
-        assert(TYPEOF(res) != PROMSXP && "promise returned promise");
-        return res;
+        SEXP val;
+        if (PRSEEN(e)) {
+            if (PRSEEN(e) == 1)
+                errorcall(NULL,
+                          "promise already under evaluation: recursive default "
+                          "argument reference or earlier problems?");
+            else {
+                /* set PRSEEN to 1 to avoid infinite recursion */
+                SET_PRSEEN(e, 1);
+                warningcall(NULL, "restarting interrupted promise evaluation");
+            }
+        }
+        SET_PRSEEN(e, 1);
+
+        val = evalRirCode(Code::unpack(PRCODE(e)), ctx, e->u.promsxp.env,
+                          nullptr);
+
+        SET_PRSEEN(e, 0);
+        SET_PRVALUE(e, val);
+        ENSURE_NAMEDMAX(val);
+        SET_PRENV(e, R_NilValue);
+
+        assert(TYPEOF(val) != PROMSXP && "promise returned promise");
+        return val;
     }
 }
 
@@ -257,7 +281,7 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
         SEXP arg = ostack_at_cell(args + i);
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
-            arg = forcePromise(arg);
+            arg = evaluatePromise(arg, ctx);
         }
         // This is to ensure we pass named arguments to GNU-R builtins because
         // who knows what assumptions does GNU-R do??? We SHOULD test this.
@@ -670,7 +694,13 @@ static void addDynamicContextFromContext(CallContext& call, size_t formalNargs,
                     // reflection) evaluating this promise does not trigger
                     // reflection either.
                     while (TYPEOF(PREXPR(prom)) == SYMSXP) {
-                        auto v = Rf_findVar(PREXPR(prom), PRENV(prom));
+                        SEXP v;
+                        if (auto le =
+                                LazyEnvironment::check(prom->u.promsxp.env)) {
+                            v = le->getArg(PREXPR(prom));
+                        } else {
+                            v = Rf_findVar(PREXPR(prom), PRENV(prom));
+                        }
                         if (v == R_UnboundValue)
                             break;
                         if (TYPEOF(v) != PROMSXP ||
@@ -1378,9 +1408,14 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
         return false;
 
     val = findRootPromise(val);
-    if (!isSymbol(PREXPR(val)))
+    if (!isSymbol(PREXPR(val))) {
         return false;
-    else {
+    } else {
+        if (PREXPR(val) == R_MissingArg)
+            return true;
+        if (auto le = LazyEnvironment::check(val->u.promsxp.env)) {
+            return le->isMissing(PREXPR(val));
+        }
         return R_isMissing(PREXPR(val), PRENV(val));
     }
 }
@@ -1546,7 +1581,7 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                 ellipsis = Rf_findVar(R_DotsSymbol, env);
 
             if (TYPEOF(ellipsis) == PROMSXP)
-                ellipsis = promiseValue(ellipsis, ctx);
+                ellipsis = evaluatePromise(ellipsis, ctx);
 
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
@@ -2077,7 +2112,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue) {
                 if (isLocal)
@@ -2119,7 +2154,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue) {
                 if (isLocal)
@@ -2177,7 +2212,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(sym)));
             } else if (TYPEOF(res) == PROMSXP) {
                 // if promise, evaluate & return
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
             }
 
             if (res != R_NilValue)
@@ -2208,7 +2243,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2277,7 +2312,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2321,7 +2356,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2771,7 +2806,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // If the promise is already evaluated then push the value
                 // inside the promise onto the stack, otherwise push the value
                 // from forcing the promise
-                ostack_push(ctx, promiseValue(val, ctx));
+                ostack_push(ctx, evaluatePromise(val, ctx));
             }
             NEXT();
         }
