@@ -81,6 +81,9 @@ struct NativeBuiltins {
     static NativeBuiltin createStubEnvironment;
     static NativeBuiltin materializeEnvironment;
     static NativeBuiltin createPromise;
+    static NativeBuiltin createPromiseNoEnv;
+    static NativeBuiltin createPromiseEager;
+    static NativeBuiltin createPromiseNoEnvEager;
     static NativeBuiltin createClosure;
 
     static NativeBuiltin newInt;

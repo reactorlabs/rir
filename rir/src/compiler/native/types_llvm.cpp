@@ -182,8 +182,14 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::materializeEnvironment.llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
 
-    NativeBuiltins::createPromise.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP}, false);
+    NativeBuiltins::createPromise.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+    NativeBuiltins::createPromiseNoEnvEager.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+    NativeBuiltins::createPromiseNoEnv.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
+    NativeBuiltins::createPromiseEager.llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP}, false);
     NativeBuiltins::createClosure.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP}, false);
 

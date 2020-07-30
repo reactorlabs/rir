@@ -454,19 +454,48 @@ NativeBuiltin NativeBuiltins::dotsCall = {
     (void*)&dotsCallImpl,
 };
 
-SEXP createPromiseImpl(rir::Code* c, unsigned id, SEXP env, SEXP value) {
-    assert(TYPEOF(value) != PROMSXP);
-    PROTECT(value);
-    SEXP res = Rf_mkPROMISE(c->getPromise(id)->container(), env);
-    UNPROTECT(1);
-    ENSURE_NAMEDMAX(value);
-    SET_PRVALUE(res, value);
+SEXP createPromiseImpl(SEXP expr, SEXP env) {
+    SEXP res = Rf_mkPROMISE(expr, env);
+    SET_PRVALUE(res, R_UnboundValue);
     return res;
 }
 
 NativeBuiltin NativeBuiltins::createPromise = {
     "createPromise",
     (void*)&createPromiseImpl,
+};
+
+SEXP createPromiseNoEnvEagerImpl(SEXP exp, SEXP value) {
+    SLOWASSERT(TYPEOF(value) != PROMSXP);
+    SEXP res = Rf_mkPROMISE(exp, R_EmptyEnv);
+    ENSURE_NAMEDMAX(value);
+    SET_PRVALUE(res, value);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::createPromiseNoEnvEager = {
+    "createPromiseNoEnvEager",
+    (void*)&createPromiseNoEnvEagerImpl,
+};
+
+SEXP createPromiseNoEnvImpl(SEXP exp) { return Rf_mkPROMISE(exp, R_EmptyEnv); }
+
+NativeBuiltin NativeBuiltins::createPromiseNoEnv = {
+    "createPromiseNoEnv",
+    (void*)&createPromiseNoEnvImpl,
+};
+
+SEXP createPromiseEagerImpl(SEXP exp, SEXP env, SEXP value) {
+    SLOWASSERT(TYPEOF(value) != PROMSXP);
+    SEXP res = Rf_mkPROMISE(exp, env);
+    ENSURE_NAMEDMAX(value);
+    SET_PRVALUE(res, value);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::createPromiseEager = {
+    "createPromiseEager",
+    (void*)&createPromiseEagerImpl,
 };
 
 SEXP createClosureImpl(SEXP body, SEXP formals, SEXP env, SEXP srcref) {

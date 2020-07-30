@@ -6,6 +6,8 @@
 namespace rir {
 namespace pir {
 
+class LdFunctionEnv;
+
 class Promise : public Code {
   public:
     const unsigned id;
@@ -18,6 +20,8 @@ class Promise : public Code {
 
     unsigned srcPoolIdx() const;
     rir::Code* rirSrc() { return rirSrc_; }
+
+    LdFunctionEnv* env() const;
 
   private:
     rir::Code* rirSrc_;

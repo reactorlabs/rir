@@ -1,4 +1,7 @@
 #include "promise.h"
+#include "compiler/pir/bb.h"
+#include "compiler/pir/instruction.h"
+#include "compiler/util/visitor.h"
 #include "interpreter/instance.h"
 #include "ir/BC.h"
 
@@ -11,5 +14,17 @@ Promise::Promise(ClosureVersion* owner, unsigned id, rir::Code* rirSrc)
 }
 
 unsigned Promise::srcPoolIdx() const { return srcPoolIdx_; }
+
+LdFunctionEnv* Promise::env() const {
+    LdFunctionEnv* e = nullptr;
+    Visitor::run(entry, [&](Instruction* i) {
+        if (auto ld = LdFunctionEnv::Cast(i)) {
+            assert(!e);
+            e = ld;
+        }
+    });
+    return e;
+}
+
 } // namespace pir
 } // namespace rir

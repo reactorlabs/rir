@@ -474,15 +474,24 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             BBTransform::clone(prom->entry->next(), code, cls);
                         bb->overrideNext(prom_copy);
 
-                        // We assume that the (empty) entry's successor starts
-                        // with a LdFunctionEnv instruction. We replace its
-                        // usages with the caller environment.
-                        LdFunctionEnv* promenv =
-                            LdFunctionEnv::Cast(*prom_copy->begin());
-                        if (promenv) {
-                            prom_copy->replaceUsesOfValue(promenv,
+                        // Search for the env instruction of the promise. We
+                        // replace its usages with the caller environment.
+                        BB::Instrs::iterator promenv;
+                        BB* promenvBB = nullptr;
+                        Visitor::run(prom_copy, [&](BB* bb) {
+                            for (auto it = bb->begin(); it != bb->end(); ++it) {
+                                if (LdFunctionEnv::Cast(*it)) {
+                                    assert(!promenvBB);
+                                    promenv = it;
+                                    promenvBB = (*it)->bb();
+                                }
+                            }
+                        });
+
+                        if (promenvBB) {
+                            prom_copy->replaceUsesOfValue(*promenv,
                                                           mkarg->promEnv());
-                            prom_copy->remove(prom_copy->begin());
+                            promenvBB->remove(promenv);
                         }
 
                         // Update environment dependency of inlined forces:
