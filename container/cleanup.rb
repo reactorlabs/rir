@@ -13,8 +13,10 @@ REPOS = {
       `git rev-parse HEAD`.chomp,                   # current version
       `git rev-parse HEAD~1`.chomp,                 # prev version
       'master',
-      # referenced in paper
+      # dls 19 paper
       'dba88e9bc417325a29c91acb088df7fe8109ca39',
+      # oopsla 20
+      'bc1933dde2673bf830f4505bb2483cd1fdd282ab',
     ]},
   '12325205': {# rir experiments
     repos: [
