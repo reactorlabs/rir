@@ -6,15 +6,13 @@ stages:
   - Deploy
   - Cleanup
   - Benchmark
-
+variables:
+  PIR_DEOPT_CHAOS_SEED: $RANDOM
+  REBENCH_OPTIONS: "-S -df $CI_PROJECT_DIR/benchmarks.data --commit-id=$CI_COMMIT_SHA --branch=master"
+  REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
+  REBENCH_RUN_BL: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
 before_script:
-  - export PIR_MAX_INPUT_SIZE=10000
-  - export PIR_INLINER_MAX_SIZE=10000
-  - export PIR_DEOPT_CHAOS_SEED=$RANDOM
-  - echo "PIR_MAX_INPUT_SIZE=$PIR_MAX_INPUT_SIZE PIR_INLINER_MAX_SIZE=$PIR_INLINER_MAX_SIZE PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
-  - export REBENCH_OPTIONS="-S -df $CI_PROJECT_DIR/benchmarks.data --commit-id=$CI_COMMIT_SHA --branch=master"
-  - export REBENCH_RUN="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
-  - export REBENCH_RUN_BL="/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
+  - echo "PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
 
 sanity:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -63,11 +61,12 @@ test_release_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_INLINER_INLINE_UNLIKELY: 1
+    PIR_MAX_INPUT_SIZE: 10000
+    PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
   except:
     - schedules
-  before_script:
-    - export PIR_INLINER_INLINE_UNLIKELY=1
   script:
     - cd /opt/rir/build/release
     - RIR_CHECK_PIR_TYPES=1 bin/tests
@@ -83,11 +82,12 @@ test_release_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_INLINER_INLINE_UNLIKELY: 1
+    PIR_MAX_INPUT_SIZE: 10000
+    PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
   except:
     - schedules
-  before_script:
-    - export PIR_INLINER_INLINE_UNLIKELY=1
   script:
     - cd /opt/rir/build/release
     - bin/gnur-make-tests check-recommended
@@ -128,6 +128,8 @@ tests_fullverify:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_MAX_INPUT_SIZE: 10000
+    PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
   except:
     - schedules
@@ -181,6 +183,8 @@ test_sanitize1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_MAX_INPUT_SIZE: 10000
+    PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
   except:
     - schedules
@@ -188,7 +192,6 @@ test_sanitize1:
     - cd /opt/rir/build/sanitize
     - ENABLE_VALGRIND=1 ./bin/tests
     - R_GCTORTURE=500 bin/tests
-  
 
 # Run ubsan and gc torture
 test_sanitize2:
@@ -202,14 +205,13 @@ test_sanitize2:
     - cd /opt/rir/build/sanitize
     - R_GCTORTURE=20000 ./bin/gnur-make-tests check
 
-
-
-
 # Test with inlining big functions
 test_big_inline:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_MAX_INPUT_SIZE: 10000
+    PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
   except:
     - schedules
@@ -320,8 +322,6 @@ benchmark_gnur:
   only:
     refs:
       - schedules
-    variables:
-      - $DISABLE_SPEC == "0"
   tags:
     - benchmarks
   script:
@@ -338,8 +338,6 @@ benchmark_fastr:
   only:
     refs:
       - schedules
-    variables:
-      - $DISABLE_SPEC == "0"
   tags:
     - benchmarks
   script:
@@ -348,59 +346,3 @@ benchmark_fastr:
     paths:
     - benchmarks.data
     expire_in: 6 month
-
-# experiments:
-benchmark_noEnvSpec:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    refs:
-      - schedules
-    variables:
-      - $DISABLE_SPEC == "1"
-  tags:
-    - benchmarks
-  script:
-    - $REBENCH_RUN "e:PIR-LLVM-NOENVSPEC $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 24 month
-benchmark_noTypeSpec:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    refs:
-      - schedules
-    variables:
-      - $DISABLE_SPEC == "1"
-  tags:
-    - benchmarks
-  script:
-    - $REBENCH_RUN "e:PIR-LLVM-NOTYPESPEC $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 24 month
-benchmark_noSpec:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    refs:
-      - schedules
-    variables:
-      - $DISABLE_SPEC == "1"
-  tags:
-    - benchmarks
-  script:
-    - $REBENCH_RUN "e:PIR-LLVM-NOSPECULATION $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 24 month
