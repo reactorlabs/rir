@@ -255,23 +255,8 @@ struct ForcedBy {
     };
 
     PromiseInlineable isSafeToInline(MkArg* a, Force* f) const {
-        if (!f->frameState()) {
-            // To inline promises with a deopt instruction we need to be able to
-            // synthesize promises and promise call frames.
-            auto prom = a->prom();
-            if (hasDeopt.count(prom)) {
-                if (hasDeopt.at(prom))
-                    return NotSafeToInline;
-            } else {
-                auto deopt = !Query::noDeopt(prom);
-                const_cast<ForcedBy*>(this)->hasDeopt[prom] = deopt;
-                if (deopt)
-                    return NotSafeToInline;
-            }
-        }
         return escaped.count(a) ? SafeToInlineWithUpdate : SafeToInline;
     }
-    std::unordered_map<Promise*, bool> hasDeopt;
 
     void print(std::ostream& out, bool tty) {
         out << "Known proms: ";
@@ -477,7 +462,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         bb->overrideNext(prom_copy);
 
                         // Patch framestates
-                        Visitor::run(prom_copy, [&](BB* bb) {
+                        Visitor::runPostChange(prom_copy, [&](BB* bb) {
                             auto it = bb->begin();
                             while (it != bb->end()) {
                                 auto next = it + 1;
@@ -512,8 +497,17 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         next = bb->remove(it);
                                     }
                                 } else if (!f->frameState()) {
+                                    // TODO: don't copy this to start with
                                     if ((*it)->frameState())
                                         (*it)->clearFrameState();
+                                    if (auto cp = Checkpoint::Cast(*it)) {
+                                        auto n = cp->nextBB();
+                                        auto d = cp->deoptBranch();
+                                        bb->eraseLast();
+                                        bb->overrideSuccessors({n});
+                                        delete d;
+                                        next = bb->end();
+                                    }
                                 }
                                 it = next;
                             }
