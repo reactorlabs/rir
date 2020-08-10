@@ -154,7 +154,7 @@ test_features_1:
     - schedules
   script:
     - cd /opt/rir/build/debugopt
-    - PIR_NATIVE_BACKEND=1 ./bin/tests
+    - PIR_NATIVE_BACKEND=0 ./bin/tests
 #    - PIR_NATIVE_BACKEND=1 PIR_ENABLE_PROFILER=1 ./bin/tests
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
@@ -176,7 +176,7 @@ test_features_2:
     - schedules
   script:
     - cd /opt/rir/build/release
-    - PIR_NATIVE_BACKEND=1 ./bin/gnur-make-tests check
+    - PIR_NATIVE_BACKEND=0 ./bin/gnur-make-tests check
 
 # Run ubsan and gc torture
 test_sanitize1:
