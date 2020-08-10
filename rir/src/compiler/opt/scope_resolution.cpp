@@ -579,7 +579,8 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     .result;
                             if (auto firstBinding = getSingleLocalValue(res)) {
                                 ip = bb->insert(
-                                    ip, new Force(firstBinding, ldfun->env()));
+                                    ip, new Force(firstBinding, ldfun->env(),
+                                                  Tombstone::framestate()));
                                 ldfun->guessedBinding(*ip);
                                 next = ip + 2;
                                 return;

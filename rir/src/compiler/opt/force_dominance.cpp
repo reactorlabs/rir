@@ -54,7 +54,7 @@ struct ForcedBy {
     bool ambiguousForceOrder = false;
 
     static Force* ambiguous() {
-        static Force f(Nil::instance(), Env::nil());
+        static Force f(Nil::instance(), Env::nil(), Tombstone::framestate());
         return &f;
     }
 
@@ -254,18 +254,20 @@ struct ForcedBy {
         NotSafeToInline
     };
 
-    PromiseInlineable isSafeToInline(MkArg* a) const {
-        // To inline promises with a deopt instruction we need to be able to
-        // synthesize promises and promise call frames.
-        auto prom = a->prom();
-        if (hasDeopt.count(prom)) {
-            if (hasDeopt.at(prom))
-                return NotSafeToInline;
-        } else {
-            auto deopt = !Query::noDeopt(prom);
-            const_cast<ForcedBy*>(this)->hasDeopt[prom] = deopt;
-            if (deopt)
-                return NotSafeToInline;
+    PromiseInlineable isSafeToInline(MkArg* a, Force* f) const {
+        if (!f->frameState()) {
+            // To inline promises with a deopt instruction we need to be able to
+            // synthesize promises and promise call frames.
+            auto prom = a->prom();
+            if (hasDeopt.count(prom)) {
+                if (hasDeopt.at(prom))
+                    return NotSafeToInline;
+            } else {
+                auto deopt = !Query::noDeopt(prom);
+                const_cast<ForcedBy*>(this)->hasDeopt[prom] = deopt;
+                if (deopt)
+                    return NotSafeToInline;
+            }
         }
         return escaped.count(a) ? SafeToInlineWithUpdate : SafeToInline;
     }
@@ -416,7 +418,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             if (!mk->isEager()) {
                                 if (!isHuge || mk->prom()->size() < 10) {
                                     auto query = analysis.after(i);
-                                    auto inl = query.isSafeToInline(mk);
+                                    auto inl = query.isSafeToInline(mk, f);
                                     if (inl != ForcedBy::NotSafeToInline) {
                                         toInline.insert(f);
                                         if (inl ==
@@ -474,11 +476,58 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             BBTransform::clone(prom->entry->next(), code, cls);
                         bb->overrideNext(prom_copy);
 
+                        // Patch framestates
+                        Visitor::run(prom_copy, [&](BB* bb) {
+                            auto it = bb->begin();
+                            while (it != bb->end()) {
+                                auto next = it + 1;
+                                if (auto sp = FrameState::Cast(*it)) {
+                                    if (f->frameState()) {
+                                        if (!sp->next()) {
+                                            auto copyFromFs = f->frameState();
+                                            auto cloneSp = FrameState::Cast(
+                                                copyFromFs->clone());
+
+                                            it = bb->insert(it, cloneSp);
+                                            sp->next(cloneSp);
+
+                                            size_t created = 1;
+                                            while (copyFromFs->next()) {
+                                                assert(copyFromFs->next() ==
+                                                       cloneSp->next());
+                                                copyFromFs = copyFromFs->next();
+                                                auto prevClone = cloneSp;
+                                                cloneSp = FrameState::Cast(
+                                                    copyFromFs->clone());
+
+                                                it = bb->insert(it, cloneSp);
+                                                created++;
+
+                                                prevClone->updateNext(cloneSp);
+                                            }
+
+                                            next = it + created + 1;
+                                        }
+                                    } else {
+                                        next = bb->remove(it);
+                                    }
+                                } else if (!f->frameState()) {
+                                    if ((*it)->frameState())
+                                        (*it)->clearFrameState();
+                                }
+                                it = next;
+                            }
+                        });
+
                         // Search for the env instruction of the promise. We
                         // replace its usages with the caller environment.
                         BB::Instrs::iterator promenv;
                         BB* promenvBB = nullptr;
                         Visitor::run(prom_copy, [&](BB* bb) {
+#ifndef ENABLE_SLOWASSERT
+                            if (promenvBB)
+                                return;
+#endif
                             for (auto it = bb->begin(); it != bb->end(); ++it) {
                                 if (LdFunctionEnv::Cast(*it)) {
                                     assert(!promenvBB);

@@ -1184,8 +1184,8 @@ void Pir2Rir::lower(Code* code) {
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
-            if (auto call = CallInstruction::CastCall(*it))
-                call->clearFrameState();
+            if ((*it)->frameState() && !Deopt::Cast(*it))
+                (*it)->clearFrameState();
             if (auto b = CallSafeBuiltin::Cast(*it)) {
                 if (b->builtinId == blt("length") && next != bb->end()) {
                     if (auto t = IsType::Cast(*(it + 1))) {

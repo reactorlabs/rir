@@ -603,7 +603,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                         cast2->kind == CastType::Upcast) {
                                         anyChange = true;
                                         cast->replaceUsesAndSwapWith(
-                                            new Force(cast2, mk->env()),
+                                            new Force(cast2, mk->env(),
+                                                      Tombstone::framestate()),
                                             cast->bb()->atPosition(cast));
                                     }
                                 }

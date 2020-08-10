@@ -176,6 +176,17 @@ BB::Instrs::iterator BB::atPosition(Instruction* i) {
     return position;
 }
 
+unsigned BB::indexOf(const Instruction* i) {
+    unsigned p = 0;
+    for (auto j : instrs) {
+        if (i == j)
+            return p;
+        p++;
+    }
+    assert(false);
+    return 0;
+}
+
 void BB::gc() {
     // Catch double deletes
     std::unordered_set<Instruction*> dup;

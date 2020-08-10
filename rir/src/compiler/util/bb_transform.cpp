@@ -377,7 +377,7 @@ void BBTransform::removeDeadInstrs(Code* fun, uint8_t maxBurstSize) {
         while (ip != bb->end()) {
             Instruction* i = *ip;
             auto next = ip + 1;
-            if (!i->hasObservableEffects() && dead.isDead(i)) {
+            if (dead.isDead(i)) {
                 next = bb->remove(ip);
             } else {
                 i->eachArg([&](Value* v) {

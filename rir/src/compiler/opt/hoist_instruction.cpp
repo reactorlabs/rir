@@ -228,7 +228,8 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 auto f = new Force(f1->arg(0).val(),
                                                    f1->hasEnv() && f2->hasEnv()
                                                        ? f1->env()
-                                                       : Env::elided());
+                                                       : Env::elided(),
+                                                   Tombstone::framestate());
                                 bb->insert(it, f);
                                 anyChange = true;
                                 f1->replaceUsesWith(f);

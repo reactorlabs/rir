@@ -70,14 +70,16 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 } else {
                     auto asArg = new CastType(mk, CastType::Upcast, RType::prom,
                                               PirType::valOrLazy());
-                    auto forced = new Force(asArg, call->env());
+                    auto forced =
+                        new Force(asArg, call->env(), Tombstone::framestate());
                     ip = bb->insert(ip, forced);
                     ip = bb->insert(ip, asArg);
                     args.push_back(forced);
                     ip += 2;
                 }
             } else if (a->type.maybePromiseWrapped()) {
-                ip = bb->insert(ip, new Force(a, call->env()));
+                ip = bb->insert(
+                    ip, new Force(a, call->env(), Tombstone::framestate()));
                 args.push_back(*ip);
                 ip++;
             } else {
@@ -273,7 +275,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             auto asArg =
                                 new CastType(mk, CastType::Upcast, RType::prom,
                                              PirType::valOrLazy());
-                            auto forced = new Force(asArg, call->env());
+                            auto forced = new Force(asArg, call->env(),
+                                                    Tombstone::framestate());
                             arg.val() = forced;
                             ip = bb->insert(ip, forced);
                             ip = bb->insert(ip, asArg);

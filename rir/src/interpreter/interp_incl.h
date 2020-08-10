@@ -30,8 +30,9 @@ SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env);
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callContext);
 
-SEXP rirEval_f(SEXP f, SEXP env);
+SEXP rirEval(SEXP f, SEXP env);
 SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP rirForcePromise(SEXP);
 
 SEXP argsLazyCreation(void* rirDataWrapper);
 
@@ -53,7 +54,7 @@ SEXP copyBySerial(SEXP x);
 
 SEXP materialize(SEXP rirDataWrapper);
 
-SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx);
+SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc = nullptr);
 inline SEXP evaluatePromise(SEXP e) {
     return evaluatePromise(e, globalContext());
 }

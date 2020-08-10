@@ -99,7 +99,7 @@ class PASS(Cleanup, true);
  * Checkpoints keep values alive. Thus it makes sense to remove them if they
  * are unused after a while.
  */
-class PASS(CleanupCheckpoints, false);
+class PASS(CleanupCheckpoints, true);
 
 /*
  * Unused framestate instructions usually get removed automatically. Except
@@ -108,7 +108,7 @@ class PASS(CleanupCheckpoints, false);
  * that they can be removed later, if they are not actually used by any
  * checkpoint/deopt.
  */
-class PASS(CleanupFramestate, false);
+class PASS(CleanupFramestate, true);
 
 /*
  * Trying to group assumptions, by pushing them up. This well lead to fewer

@@ -149,11 +149,9 @@ Rir2Pir::Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
 Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
                                    const RirStack& stack,
                                    Builder& insert) const {
-    // Checkpoints in promises are badly supported (cannot inline promises
-    // anymore) and checkpoints in eagerly inlined promises are wrong. So for
-    // now we do not emit them in promises!
-    assert(!inPromise());
-    return insert.emitCheckpoint(srcCode, pos, stack);
+    if (inlining())
+        return nullptr;
+    return insert.emitCheckpoint(srcCode, pos, stack, inPromise());
 }
 
 Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
@@ -169,7 +167,7 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
 
     Value* eagerVal = UnboundValue::instance();
     if (eager || Query::pure(prom)) {
-        eagerVal = tryTranslatePromise(promiseCode, insert);
+        eagerVal = tryInlinePromise(promiseCode, insert);
         if (!eagerVal) {
             log.warn("Failed to inline a promise");
             return nullptr;
@@ -207,7 +205,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     auto forceIfPromised = [&](unsigned i) {
         if (stack.at(i)->type.maybePromiseWrapped()) {
-            stack.at(i) = insert(new Force(at(i), env));
+            stack.at(i) =
+                insert(new Force(at(i), env, Tombstone::framestate()));
         }
     };
 
@@ -231,23 +230,25 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_:
     case Opcode::ldvar_cached_:
     case Opcode::ldvar_for_update_:
-    case Opcode::ldvar_for_update_cache_:
+    case Opcode::ldvar_for_update_cache_: {
         if (bc.immediateConst() == symbol::c)
             compiler.seenC = true;
         v = insert(new LdVar(bc.immediateConst(), env));
         // PIR LdVar corresponds to ldvar_noforce_ which does not change
         // visibility
         insert(new Visible());
-        // Checkpoint might be useful if we end up inlining this force
-        if (!inPromise())
-            addCheckpoint(srcCode, pos, stack, insert);
-        push(insert(new Force(v, env)));
+        auto fs = inlining() ? (Value*)Tombstone::framestate()
+                             : insert.registerFrameState(srcCode, nextPos,
+                                                         stack, inPromise());
+        push(insert(new Force(v, env, fs)));
         break;
+    }
 
     case Opcode::starg_:
     case Opcode::starg_cached_:
         if (bc.immediateConst() == symbol::c)
             compiler.seenC = true;
+        forceIfPromised(0);
         v = pop();
         insert(new StArg(bc.immediateConst(), v, env));
         break;
@@ -256,6 +257,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::stvar_cached_:
         if (bc.immediateConst() == symbol::c)
             compiler.seenC = true;
+        forceIfPromised(0);
         v = pop();
         insert(new StVar(bc.immediateConst(), v, env));
         break;
@@ -269,6 +271,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::stvar_super_:
         if (bc.immediateConst() == symbol::c)
             compiler.seenC = true;
+        forceIfPromised(0);
         v = pop();
         insert(new StVarSuper(bc.immediateConst(), v, env));
         break;
@@ -297,9 +300,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ld = insert(new LdFun(bc.immediateConst(), env));
         // Add early checkpoint for efficient speculative inlining. The goal is
         // to be able do move the ldfun into the deoptbranch later.
-        if (!inPromise())
-            std::get<Checkpoint*>(callTargetFeedback[ld]) =
-                addCheckpoint(srcCode, pos, stack, insert);
+        std::get<Checkpoint*>(callTargetFeedback[ld]) =
+            addCheckpoint(srcCode, pos, stack, insert);
         push(ld);
         break;
     }
@@ -404,9 +406,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         // If this call was never executed. Might as well compile an
         // unconditional deopt.
-        if (!inPromise() && feedback.taken == 0 &&
+        if (!inPromise() && !inlining() && feedback.taken == 0 &&
             srcCode->funInvocationCount > 1) {
-            auto sp = insert.registerFrameState(srcCode, pos, stack);
+            auto sp =
+                insert.registerFrameState(srcCode, pos, stack, inPromise());
             auto offset = (uintptr_t)pos - (uintptr_t)srcCode;
             DeoptReason reason = {DeoptReason::Calltarget, srcCode,
                                   (uint32_t)offset};
@@ -437,9 +440,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         }
         if (val == UnboundValue::instance() && Query::pure(prom)) {
-            val = tryTranslatePromise(promiseCode, insert);
+            val = tryInlinePromise(promiseCode, insert);
             if (!val) {
-                log.warn("Failed to compile a promise");
+                log.warn("Failed to inline a promise");
                 return false;
             }
         }
@@ -643,7 +646,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // The guard also ensures that this closure is not a promise thus we
             // can force for free.
             if (guardedCallee->type.maybePromiseWrapped()) {
-                auto forced = new Force(guardedCallee, Env::elided());
+                auto forced = new Force(guardedCallee, Env::elided(),
+                                        Tombstone::framestate());
                 forced->effects.reset();
                 forced->effects.set(Effect::DependsOnAssume);
                 pos = bb->insert(pos, forced);
@@ -725,11 +729,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 push(insert(new NamedCall(env, callee, args, callArgumentNames,
                                           bc.immediate.callFixedArgs.ast)));
             } else {
-                Value* fs = nullptr;
-                if (inPromise())
-                    fs = Tombstone::framestate();
-                else
-                    fs = insert.registerFrameState(srcCode, nextPos, stack);
+                Value* fs = inlining()
+                                ? (Value*)Tombstone::framestate()
+                                : (Value*)insert.registerFrameState(
+                                      srcCode, nextPos, stack, inPromise());
                 push(insert(new Call(env, callee, args, fs,
                                      bc.immediate.callFixedArgs.ast)));
             }
@@ -762,7 +765,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
             auto apply = [&](ClosureVersion* f) {
                 popn(toPop);
-                auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+                assert(!inlining());
+                auto fs = insert.registerFrameState(srcCode, nextPos, stack,
+                                                    inPromise());
                 push(insert(new StaticCall(
                     insert.env, f->owner(), given, matchedArgs, fs, ast,
                     monomorphicClosure ? Tombstone::closure()
@@ -826,11 +831,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract1_1_: {
         forceIfPromised(1); // <- ensure forced captured in framestate
-        if (!inPromise())
-            addCheckpoint(srcCode, pos, stack, insert);
+        addCheckpoint(srcCode, pos, stack, insert);
         forceIfPromised(0);
-        if (!inPromise())
-            addCheckpoint(srcCode, pos, stack, insert);
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
@@ -839,11 +842,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract2_1_: {
         forceIfPromised(1); // <- forced version are captured in framestate
-        if (!inPromise())
-            addCheckpoint(srcCode, pos, stack, insert);
+        addCheckpoint(srcCode, pos, stack, insert);
         forceIfPromised(0);
-        if (!inPromise())
-            addCheckpoint(srcCode, pos, stack, insert);
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
@@ -852,9 +853,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract1_2_: {
         forceIfPromised(2);
-        if (!inPromise()) {
-            addCheckpoint(srcCode, pos, stack, insert);
-        }
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -864,9 +863,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract2_2_: {
         forceIfPromised(2);
-        if (!inPromise()) {
-            addCheckpoint(srcCode, pos, stack, insert);
-        }
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -876,9 +873,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract1_3_: {
         forceIfPromised(3);
-        if (!inPromise()) {
-            addCheckpoint(srcCode, pos, stack, insert);
-        }
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx3 = pop();
         Value* idx2 = pop();
         Value* idx1 = pop();
@@ -889,9 +884,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign1_1_: {
         forceIfPromised(1);
-        if (!inPromise()) {
             addCheckpoint(srcCode, pos, stack, insert);
-        }
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -901,9 +894,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign2_1_: {
         forceIfPromised(1);
-        if (!inPromise()) {
             addCheckpoint(srcCode, pos, stack, insert);
-        }
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -913,9 +904,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign1_2_: {
         forceIfPromised(2);
-        if (!inPromise()) {
             addCheckpoint(srcCode, pos, stack, insert);
-        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -926,9 +915,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign2_2_: {
         forceIfPromised(2);
-        if (!inPromise()) {
             addCheckpoint(srcCode, pos, stack, insert);
-        }
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -939,9 +926,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign1_3_: {
         forceIfPromised(3);
-        if (!inPromise()) {
             addCheckpoint(srcCode, pos, stack, insert);
-        }
         Value* idx3 = pop();
         Value* idx2 = pop();
         Value* idx1 = pop();
@@ -971,11 +956,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
 #define BINOP(Name, Op)                                                        \
     case Opcode::Op: {                                                         \
-        if (!inPromise()) {                                                    \
             forceIfPromised(1);                                                \
             forceIfPromised(0);                                                \
             addCheckpoint(srcCode, pos, stack, insert);                        \
-        }                                                                      \
         auto lhs = at(1);                                                      \
         auto rhs = at(0);                                                      \
         pop();                                                                 \
@@ -1069,9 +1052,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         break;
 
-    case Opcode::force_:
-        push(insert(new Force(pop(), env)));
+    case Opcode::force_: {
+        auto v = pop();
+        push(insert(new Force(v, env, Tombstone::framestate())));
         break;
+    }
 
     case Opcode::names_:
         push(insert(new Names(pop())));
@@ -1176,12 +1161,12 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
 }
 
 bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) {
-    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback)
+    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, false)
         .tryCompile(prom, insert);
 }
 
-Value* Rir2Pir::tryTranslatePromise(rir::Code* srcCode, Builder& insert) {
-    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback)
+Value* Rir2Pir::tryInlinePromise(rir::Code* srcCode, Builder& insert) {
+    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, true)
         .tryTranslate(srcCode, insert);
 }
 
@@ -1250,7 +1235,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             switch (bc.bc) {
             case Opcode::brtrue_:
             case Opcode::brfalse_: {
-                Value* v = cur.stack.pop();
+                auto v = cur.stack.pop();
                 condition = Instruction::Cast(v);
                 insert(new Branch(v));
                 break;
@@ -1285,11 +1270,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                         deopt = insert.getCurrentBB()->trueBranch();
                 }
 
-                if (deopt) {
+                if (deopt && !inlining()) {
                     insert.enterBB(deopt);
 
                     auto sp = insert.registerFrameState(
-                        srcCode, (deopt == fall) ? nextPos : trg, cur.stack);
+                        srcCode, (deopt == fall) ? nextPos : trg, cur.stack,
+                        inPromise());
                     auto offset = (uintptr_t)condition->typeFeedback.origin -
                                   (uintptr_t)srcCode;
                     DeoptReason reason = {DeoptReason::DeadBranchReached,
@@ -1313,18 +1299,19 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         }
 
         if (bc.isExit()) {
-            Value* tos = cur.stack.top();
+            Value* tos;
             bool localReturn = true;
             switch (bc.bc) {
             case Opcode::ret_:
-                cur.stack.pop();
+                tos = cur.stack.pop();
                 break;
             case Opcode::return_:
                 // Return bytecode as top-level statement cannot cause non-local
                 // return. Therefore we can treat it as normal local return
                 // instruction. We just need to make sure to empty the stack.
+                tos = cur.stack.pop();
                 if (inPromise()) {
-                    insert(new NonLocalReturn(cur.stack.pop(), insert.env));
+                    insert(new NonLocalReturn(tos, insert.env));
                     localReturn = false;
                 }
                 cur.stack.clear();
@@ -1410,7 +1397,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 return nullptr;
             }
 
-            if (!inPromise() && !insert.getCurrentBB()->isEmpty()) {
+            if (!insert.getCurrentBB()->isEmpty()) {
                 auto last = insert.getCurrentBB()->last();
 
                 if (Deopt::Cast(last)) {
@@ -1434,7 +1421,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                                 idx++;
                             if (idx < oldStack.size()) {
                                 arg.val() = oldStack.at(idx) =
-                                    insert(new Force(arg.val(), insert.env));
+                                    insert(new Force(arg.val(), insert.env,
+                                                     Tombstone::framestate()));
                                 addCheckpoint(srcCode, pos, oldStack, insert);
                             }
                         }

@@ -168,18 +168,28 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
+SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
+                 R_bcstack_t*, BindingCache*);
+
 static RIR_INLINE SEXP createPromise(Code* code, SEXP env) {
     SEXP p = Rf_mkPROMISE(code->container(), env);
     return p;
 }
 
-RIR_INLINE SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx) {
+typedef struct RPRSTACK {
+    SEXP promise;
+    struct RPRSTACK* next;
+} RPRSTACK;
+extern "C" struct RPRSTACK* R_PendingPromises;
+
+RIR_INLINE SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc) {
     // if already evaluated, return the value
     if (PRVALUE(e) && PRVALUE(e) != R_UnboundValue) {
         e = PRVALUE(e);
         assert(TYPEOF(e) != PROMSXP);
         return e;
     } else if (TYPEOF(PRCODE(e)) != EXTERNALSXP) {
+        assert(!pc);
         return forcePromise(e);
     } else {
         SEXP val;
@@ -196,9 +206,13 @@ RIR_INLINE SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx) {
         }
         SET_PRSEEN(e, 1);
 
+        RPRSTACK prstack;
+        prstack.promise = e;
+        prstack.next = R_PendingPromises;
+        R_PendingPromises = &prstack;
         val = evalRirCode(Code::unpack(PRCODE(e)), ctx, e->u.promsxp.env,
-                          nullptr);
-
+                          nullptr, pc, nullptr, nullptr);
+        R_PendingPromises = prstack.next;
         SET_PRSEEN(e, 0);
         SET_PRVALUE(e, val);
         ENSURE_NAMEDMAX(val);
@@ -208,6 +222,8 @@ RIR_INLINE SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx) {
         return val;
     }
 }
+
+SEXP rirForcePromise(SEXP e) { return evaluatePromise(e, globalContext()); }
 
 void jit(SEXP cls, SEXP name, InterpreterInstance* ctx) {
     assert(TYPEOF(cls) == CLOSXP);
@@ -356,8 +372,6 @@ static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
                                                call.hasEagerCallee(), ctx);
 }
 
-SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
-                 R_bcstack_t*, BindingCache*);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
     if ((SETJMP(cntxt.cjmpbuf))) {
@@ -1439,7 +1453,8 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
 void deoptFramesWithContext(InterpreterInstance* ctx,
                             const CallContext* callCtxt,
                             DeoptMetadata* deoptData, SEXP sysparent,
-                            size_t pos, size_t stackHeight) {
+                            size_t pos, size_t stackHeight,
+                            RCNTXT* currentContext) {
     size_t excessStack = stackHeight;
 
     FrameInfo& f = deoptData->frames[pos];
@@ -1450,6 +1465,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
+    bool inPromise = f.inPromise;
 
     if (outermostFrame)
         startDeoptimizing();
@@ -1461,20 +1477,24 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 
     RCNTXT fake;
     RCNTXT* cntxt;
-    auto originalCntxt = findFunctionContextFor(deoptEnv);
-    if (originalCntxt) {
-        cntxt = originalCntxt;
+    if (inPromise) {
+        cntxt = currentContext;
     } else {
-        // NOTE: this assert triggers if we can't find the context of the
-        // current function. Usually the reason is that a wrong environment is
-        // stored in the context.
-        assert(!outermostFrame && "Cannot find outermost function context");
-        // If the inlinee had no context, we need to synthesize one
-        // TODO: need to add ast and closure to the deopt metadata to create a
-        // complete context
-        cntxt = &fake;
-        initClosureContext(R_NilValue, cntxt, deoptEnv, sysparent,
-                           FRAME(sysparent), R_NilValue);
+        RCNTXT* originalCntxt = findFunctionContextFor(deoptEnv);
+        if (originalCntxt) {
+            cntxt = originalCntxt;
+        } else {
+            // NOTE: this assert triggers if we can't find the context of the
+            // current function. Usually the reason is that a wrong environment
+            // is stored in the context.
+            assert(!outermostFrame && "Cannot find outermost function context");
+            // If the inlinee had no context, we need to synthesize one
+            // TODO: need to add ast and closure to the deopt metadata to create
+            // a complete context
+            cntxt = &fake;
+            initClosureContext(R_NilValue, cntxt, deoptEnv, sysparent,
+                               FRAME(sysparent), R_NilValue);
+        }
     }
 
     if (auto le = LazyEnvironment::check(deoptEnv)) {
@@ -1496,7 +1516,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         // long-jump out of this deopt routine into the inlineContextTrampoline.
         // The outermost frame is the caller, not an inlinee, thus we need not
         // change its context.
-        if (!outermostFrame) {
+        if (!outermostFrame && !inPromise) {
             // The longjump is initialized, when we are still reconstructing
             // the frames. But if we restart from here, we need to remove
             // all the extra stuff from the stack used for reconstruction.
@@ -1516,7 +1536,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         // 2. Execute the inner frames
         if (!innermostFrame) {
             deoptFramesWithContext(ctx, callCtxt, deoptData, deoptEnv, pos - 1,
-                                   stackHeight);
+                                   stackHeight, cntxt);
         }
 
         // 3. Execute our frame
@@ -1535,6 +1555,13 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         ostack_pop(ctx);
         if (!innermostFrame)
             ostack_push(ctx, res);
+        if (inPromise) {
+            SEXP p = createPromise(code, deoptEnv);
+            PROTECT(p);
+            auto r = evaluatePromise(p, ctx, f.pc);
+            UNPROTECT(1);
+            return r;
+        }
         return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr,
                            nullptr);
     };
@@ -1543,8 +1570,15 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     assert((size_t)ostack_length(ctx) == frameBaseSize);
 
     if (!outermostFrame) {
-        endClosureContext(cntxt, res);
+        if (!inPromise)
+            endClosureContext(cntxt, res);
     } else {
+        // Deopt in promise is only possible if the promise is not the outermost
+        // frame. The reason is that the promise does not have a context
+        // associated and we can therefore not jump out of deoptimized promise
+        // evaluation. Therefore promises should only occur in inner frames
+        // during deoptimization.
+        assert(!inPromise);
         endDeoptimizing();
         assert(findFunctionContextFor(deoptEnv) == cntxt);
         // long-jump out of all the inlined contexts
@@ -4059,7 +4093,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             m->frames[m->numFrames - 1].code->registerDeopt();
             c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
-                                   m->numFrames - 1, stackHeight);
+                                   m->numFrames - 1, stackHeight,
+                                   (RCNTXT*)R_GlobalContext);
             assert(false);
         }
 
@@ -4302,7 +4337,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
     return res;
 }
 
-SEXP rirEval_f(SEXP what, SEXP env) {
+SEXP rirEval(SEXP what, SEXP env) {
     assert(TYPEOF(what) == EXTERNALSXP);
 
     // TODO: do we not need an RCNTXT here?

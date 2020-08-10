@@ -15,6 +15,11 @@ struct FrameInfo {
     Opcode* pc;
     Code* code;
     size_t stackSize;
+    bool inPromise;
+
+    FrameInfo() {}
+    FrameInfo(Opcode* pc, Code* code, size_t stackSize, bool promise)
+        : pc(pc), code(code), stackSize(stackSize), inPromise(promise) {}
 
     static FrameInfo deserialize(const Opcode* anchor, SEXP refTable,
                                  R_inpstream_t inp);

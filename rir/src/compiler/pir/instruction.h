@@ -147,6 +147,7 @@ struct TypeFeedback {
 
 class DominanceGraph;
 class MkEnv;
+class FrameState;
 class Instruction : public Value {
   public:
     struct InstructionUID : public std::pair<unsigned, unsigned> {
@@ -223,6 +224,11 @@ class Instruction : public Value {
     bool leaksEnv() const {
         return hasEnv() && effects.includes(Effect::LeaksEnv);
     }
+
+    void clearFrameState();
+    FrameState* frameState() const;
+    virtual Value* frameStateOrTs() const { return Tombstone::framestate(); }
+    virtual void updateFrameState(Value*) { assert(false); }
 
     virtual unsigned cost() const { return 1; }
 
@@ -426,7 +432,7 @@ class Instruction : public Value {
     void printRef(std::ostream& out) const override final;
     std::string getRef() const;
     void print() const { print(std::cerr, true); }
-    void printRecursive(std::ostream& out, int i) {
+    void printRecursive(std::ostream& out, int i) const {
         if (i == 0)
             return;
         eachArg([&](Value* v) {
@@ -789,6 +795,112 @@ class FLI(LdConst, 0, Effects::None()) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
+struct RirStack {
+  private:
+    typedef std::deque<Value*> Stack;
+    Stack stack;
+
+  public:
+    void push(Value* v) { stack.push_back(v); }
+    Value* pop() {
+        assert(!empty());
+        auto v = stack.back();
+        stack.pop_back();
+        return v;
+    }
+    Value*& at(unsigned i) {
+        assert(i < size());
+        return stack[stack.size() - 1 - i];
+    }
+    Value* at(unsigned i) const {
+        assert(i < size());
+        return stack[stack.size() - 1 - i];
+    }
+    Value* top() const {
+        assert(!empty());
+        return stack.back();
+    }
+    bool empty() const { return stack.empty(); }
+    size_t size() const { return stack.size(); }
+    void clear() { stack.clear(); }
+    Stack::const_iterator begin() const { return stack.cbegin(); }
+    Stack::const_iterator end() const { return stack.cend(); }
+    Stack::iterator begin() { return stack.begin(); }
+    Stack::iterator end() { return stack.end(); }
+};
+
+class FLI(RecordDeoptReason, 1, Effects::Any()) {
+  public:
+    DeoptReason reason;
+    RecordDeoptReason(const DeoptReason& r, Value* value)
+        : FixedLenInstruction(PirType::voyd(), {{value->type}}, {{value}}),
+          reason(r) {}
+};
+
+/*
+ *  Collects metadata about the current state of variables
+ *  eventually needed for deoptimization purposes
+ */
+class VLIE(FrameState, Effects(Effect::LeaksEnv) | Effect::ReadsEnv) {
+  public:
+    bool inlined = false;
+    Opcode* pc;
+    rir::Code* code;
+    size_t stackSize;
+    bool inPromise;
+
+    size_t gvnBase() const override {
+        return hash_combine(
+            hash_combine(hash_combine(hash_combine(tagHash(), inlined), pc),
+                         code),
+            stackSize);
+    }
+
+    FrameState(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack,
+               bool inPromise)
+        : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
+          code(code), stackSize(stack.size()), inPromise(inPromise) {
+        for (auto& v : stack)
+            pushArg(v);
+    }
+
+    void updateNext(FrameState* s) {
+        assert(inlined);
+        auto& pos = arg(stackSize);
+        assert(pos.type() == NativeType::frameState);
+        pos.val() = s;
+    }
+
+    void next(FrameState* s) {
+        assert(!inlined);
+        inlined = true;
+        pushArg(s, NativeType::frameState);
+    }
+
+    FrameState* next() const {
+        if (inlined) {
+            auto r = Cast(arg(stackSize).val());
+            assert(r);
+            return r;
+        } else {
+            return nullptr;
+        }
+    }
+
+    Value* tos() { return arg(stackSize - 1).val(); }
+
+    void popStack() {
+        stackSize--;
+        // Move the next() ptr
+        if (inlined)
+            arg(stackSize) = arg(stackSize + 1);
+        popArg();
+    }
+
+    void printArgs(std::ostream& out, bool tty) const override;
+    void printEnv(std::ostream& out, bool tty) const override final{};
+};
+
 class FLIE(LdFun, 2, Effects::Any()) {
   public:
     SEXP varName;
@@ -1063,7 +1175,7 @@ class FLIE(MkFunCls, 1, Effects::None()) {
     size_t gvnBase() const override { return hash_combine(tagHash(), cls); }
 };
 
-class FLIE(Force, 2, Effects::Any()) {
+class FLIE(Force, 3, Effects::Any()) {
   public:
     // Set to true if we are sure that the promise will be forced here
     bool strict = false;
@@ -1072,9 +1184,10 @@ class FLIE(Force, 2, Effects::Any()) {
     using ArgumentKind = ObservedValues::StateBeforeLastForce;
     ArgumentKind observed = ArgumentKind::unknown;
 
-    Force(Value* in, Value* env)
-        : FixedLenInstructionWithEnvSlot(in->type.forced(), {{PirType::any()}},
-                                         {{in}}, env) {
+    Force(Value* in, Value* env, Value* fs)
+        : FixedLenInstructionWithEnvSlot(
+              in->type.forced(), {{PirType::any(), NativeType::frameState}},
+              {{in, fs}}, env) {
         if (auto mk = MkArg::Cast(in)) {
             if (mk->noReflection) {
                 elideEnv();
@@ -1084,6 +1197,9 @@ class FLIE(Force, 2, Effects::Any()) {
         updateTypeAndEffects();
     }
     Value* input() const { return arg(0).val(); }
+
+    Value* frameStateOrTs() const override final { return arg<1>().val(); }
+    void updateFrameState(Value* fs) override final { arg<1>().val() = fs; };
 
     std::string name() const override {
         std::stringstream ss;
@@ -1852,110 +1968,6 @@ ARITHMETIC_UNOP(Minus);
 #undef ARITHMETIC_UNOP
 #undef LOGICAL_UNOP
 
-struct RirStack {
-  private:
-    typedef std::deque<Value*> Stack;
-    Stack stack;
-
-  public:
-    void push(Value* v) { stack.push_back(v); }
-    Value* pop() {
-        assert(!empty());
-        auto v = stack.back();
-        stack.pop_back();
-        return v;
-    }
-    Value*& at(unsigned i) {
-        assert(i < size());
-        return stack[stack.size() - 1 - i];
-    }
-    Value* at(unsigned i) const {
-        assert(i < size());
-        return stack[stack.size() - 1 - i];
-    }
-    Value* top() const {
-        assert(!empty());
-        return stack.back();
-    }
-    bool empty() const { return stack.empty(); }
-    size_t size() const { return stack.size(); }
-    void clear() { stack.clear(); }
-    Stack::const_iterator begin() const { return stack.cbegin(); }
-    Stack::const_iterator end() const { return stack.cend(); }
-    Stack::iterator begin() { return stack.begin(); }
-    Stack::iterator end() { return stack.end(); }
-};
-
-class FLI(RecordDeoptReason, 1, Effects::Any()) {
-  public:
-    DeoptReason reason;
-    RecordDeoptReason(const DeoptReason& r, Value* value)
-        : FixedLenInstruction(PirType::voyd(), {{value->type}}, {{value}}),
-          reason(r) {}
-};
-
-/*
- *  Collects metadata about the current state of variables
- *  eventually needed for deoptimization purposes
- */
-class VLIE(FrameState, Effects(Effect::LeaksEnv) | Effect::ReadsEnv) {
-  public:
-    bool inlined = false;
-    Opcode* pc;
-    rir::Code* code;
-    size_t stackSize;
-
-    size_t gvnBase() const override {
-        return hash_combine(
-            hash_combine(hash_combine(hash_combine(tagHash(), inlined), pc),
-                         code),
-            stackSize);
-    }
-
-    FrameState(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack)
-        : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
-          code(code), stackSize(stack.size()) {
-        for (auto& v : stack)
-            pushArg(v);
-    }
-
-    void updateNext(FrameState* s) {
-        assert(inlined);
-        auto& pos = arg(stackSize);
-        assert(pos.type() == NativeType::frameState);
-        pos.val() = s;
-    }
-
-    void next(FrameState* s) {
-        assert(!inlined);
-        inlined = true;
-        pushArg(s, NativeType::frameState);
-    }
-
-    FrameState* next() const {
-        if (inlined) {
-            auto r = Cast(arg(stackSize).val());
-            assert(r);
-            return r;
-        } else {
-            return nullptr;
-        }
-    }
-
-    Value* tos() { return arg(stackSize - 1).val(); }
-
-    void popStack() {
-        stackSize--;
-        // Move the next() ptr
-        if (inlined)
-            arg(stackSize) = arg(stackSize + 1);
-        popArg();
-    }
-
-    void printArgs(std::ostream& out, bool tty) const override;
-    void printEnv(std::ostream& out, bool tty) const override final{};
-};
-
 // Common interface to all call instructions
 class CallInstruction {
   public:
@@ -1971,8 +1983,6 @@ class CallInstruction {
     eachCallArg(const Instruction::MutableArgumentIterator& it) = 0;
     virtual const InstrArg& callArg(size_t pos) const = 0;
     virtual InstrArg& callArg(size_t pos) = 0;
-    virtual void clearFrameState(){};
-    virtual bool hasFrameState() = 0;
     virtual Closure* tryGetCls() const { return nullptr; }
     virtual Context inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
@@ -2030,9 +2040,8 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         return arg(pos + 2);
     }
 
-    FrameState* frameState() const { return FrameState::Cast(arg(0).val()); }
-    void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
-    bool hasFrameState() override { return frameState(); }
+    Value* frameStateOrTs() const override final { return arg(0).val(); }
+    void updateFrameState(Value * fs) override final { arg(0).val() = fs; };
 
     Value* callerEnv() { return env(); }
 
@@ -2052,7 +2061,10 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
     }
 
     bool hasNamedArgs() const override { return true; }
-    bool hasFrameState() override { return false; }
+
+    Value* frameStateOrTs() const override final {
+        return Tombstone::framestate();
+    }
 
     NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
               const std::vector<SEXP>& names_, unsigned srcIdx);
@@ -2123,9 +2135,8 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     PirType inferType(const GetType& getType) const override final;
     Effects inferEffects(const GetType& getType) const override final;
 
-    FrameState* frameState() const { return FrameState::Cast(arg(0).val()); }
-    void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
-    bool hasFrameState() override { return frameState(); }
+    Value* frameStateOrTs() const override final { return arg(0).val(); }
+    void updateFrameState(Value * fs) override final { arg(0).val() = fs; };
 
     Value* runtimeClosure() const { return arg(1).val(); }
 
@@ -2173,7 +2184,9 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     Value* callerEnv() { return env(); }
 
     VisibilityFlag visibilityFlag() const override;
-    bool hasFrameState() override { return false; }
+    Value* frameStateOrTs() const override final {
+        return Tombstone::framestate();
+    }
 
   private:
     CallBuiltin(Value * callerEnv, SEXP builtin,
@@ -2209,7 +2222,9 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
                     unsigned srcIdx);
 
     VisibilityFlag visibilityFlag() const override;
-    bool hasFrameState() override { return false; }
+    Value* frameStateOrTs() const override final {
+        return Tombstone::framestate();
+    }
 };
 
 class BuiltinCallFactory {
@@ -2459,7 +2474,8 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effects::AnyI(),
     explicit Deopt(FrameState* frameState)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::frameState}},
                               {{frameState}}) {}
-    FrameState* frameState();
+
+    Value* frameStateOrTs() const override final { return arg<0>().val(); }
 };
 
 /*

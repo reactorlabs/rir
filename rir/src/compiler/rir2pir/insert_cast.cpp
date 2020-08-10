@@ -7,7 +7,7 @@ namespace pir {
 
 pir::Instruction* InsertCast::cast(pir::Value* v, PirType t, Value* env) {
     if (v->type.maybePromiseWrapped() && !t.maybePromiseWrapped()) {
-        return new pir::Force(v, env);
+        return new pir::Force(v, env, Tombstone::framestate());
     }
     if (v->type.isRType() && !v->type.maybeLazy() && t == NativeType::test) {
         return new pir::AsTest(v);

@@ -286,6 +286,14 @@ Instruction* Instruction::hasSingleUse() {
 
 void Instruction::eraseAndRemove() { bb()->remove(this); }
 
+FrameState* Instruction::frameState() const {
+    return FrameState::Cast(frameStateOrTs());
+}
+
+void Instruction::clearFrameState() {
+    updateFrameState(Tombstone::framestate());
+}
+
 static void checkReplace(Instruction* origin, Value* replace) {
     if (replace->type.isRType() != origin->type.isRType() ||
         (replace->type.maybePromiseWrapped() &&
@@ -615,6 +623,8 @@ void LdFun::printArgs(std::ostream& out, bool tty) const {
     if (hint && hint != symbol::ambiguousCallTarget) {
         out << "<" << hint << ">, ";
     }
+    frameStateOrTs()->printRef(out);
+    out << ", ";
 }
 
 void LdArg::printArgs(std::ostream& out, bool tty) const { out << id; }
@@ -841,6 +851,8 @@ void CallSafeBuiltin::printArgs(std::ostream& out, bool tty) const {
 
 void FrameState::printArgs(std::ostream& out, bool tty) const {
     out << code << "+" << pc - code->code();
+    if (inPromise)
+        out << "(pr)";
     out << ": [";
     long s = stackSize;
     eachArg([&](Value* i) {
@@ -868,9 +880,14 @@ void ScheduledDeopt::consumeFrameStates(Deopt* deopt) {
             sp = sp->next();
         } while (sp);
     }
+    if (frameStates.back()->inPromise) {
+        deopt->printRecursive(std::cout, 1);
+        deopt->bb()->owner->printCode(std::cout, true, false);
+    }
+    assert(!frameStates.back()->inPromise);
     for (auto spi = frameStates.rbegin(); spi != frameStates.rend(); spi++) {
         auto sp = *spi;
-        frames.push_back({sp->pc, sp->code, sp->stackSize});
+        frames.emplace_back(sp->pc, sp->code, sp->stackSize, sp->inPromise);
         for (size_t i = 0; i < sp->stackSize; i++)
             pushArg(sp->arg(i).val());
         pushArg(sp->env());
@@ -1144,8 +1161,6 @@ void NamedCall::printArgs(std::ostream& out, bool tty) const {
     });
     out << ") ";
 }
-
-FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
 
 void Checkpoint::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);

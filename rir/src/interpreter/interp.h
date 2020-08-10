@@ -87,7 +87,8 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
 void deoptFramesWithContext(InterpreterInstance* ctx,
                             const CallContext* callCtxt,
                             DeoptMetadata* deoptData, SEXP sysparent,
-                            size_t pos, size_t stackHeight);
+                            size_t pos, size_t stackHeight,
+                            RCNTXT* currentContext);
 void recordDeoptReason(SEXP val, const DeoptReason& reason);
 void jit(SEXP cls, SEXP name, InterpreterInstance* ctx);
 
