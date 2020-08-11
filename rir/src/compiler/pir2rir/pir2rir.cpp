@@ -1174,7 +1174,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 
 static bool coinFlip() {
     static std::mt19937 gen(Parameter::DEOPT_CHAOS_SEED);
-    static std::bernoulli_distribution coin(0.03);
+    static std::bernoulli_distribution coin(0.0003);
     return coin(gen);
 };
 

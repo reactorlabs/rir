@@ -1214,6 +1214,7 @@ class FLIE(Force, 3, Effects::Any()) {
             ss << "<value>";
         return ss.str();
     }
+    void printArgs(std::ostream& out, bool tty) const override;
 
     PirType inferType(const GetType& getType) const override final {
         return getType(input()).forced();

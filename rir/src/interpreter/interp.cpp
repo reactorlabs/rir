@@ -4060,14 +4060,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto m = (DeoptMetadata*)DATAPTR(r);
 
 #if 0
+            std::cout << "\n## ====================\n";
             size_t pos = 0;
             for (size_t i = 0; i < m->numFrames; ++i) {
+                std::cout << "## Frame " << i << (m->frames[i].inPromise ? " prom" : "") << ":\n";
                 std::cout << "Code " << m->frames[i].code << "\n";
-                std::cout << "Frame " << i << ":\n";
-                std::cout << "  - env (" << pos << ")\n";
+                std::cout << "== env (" << pos << ")\n";
                 Rf_PrintValue(ostack_at(ctx, pos++));
                 for( size_t j = 0; j < m->frames[i].stackSize; ++j) {
-                    std::cout << "  - stack (" << pos << ") " << j << "\n";
+                    std::cout << "== stack (" << pos << ") " << j << "\n";
                     Rf_PrintValue(ostack_at(ctx, pos++));
                 }
             }

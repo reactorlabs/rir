@@ -466,8 +466,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             auto it = bb->begin();
                             while (it != bb->end()) {
                                 auto next = it + 1;
-                                if (auto sp = FrameState::Cast(*it)) {
-                                    if (f->frameState()) {
+                                if (f->frameState()) {
+                                    if (auto sp = FrameState::Cast(*it)) {
                                         if (!sp->next()) {
                                             auto copyFromFs = f->frameState();
                                             auto cloneSp = FrameState::Cast(
@@ -493,10 +493,10 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                                             next = it + created + 1;
                                         }
-                                    } else {
-                                        next = bb->remove(it);
                                     }
-                                } else if (!f->frameState()) {
+                                } else {
+                                    if (FrameState::Cast(*it))
+                                        next = bb->remove(it);
                                     // TODO: don't copy this to start with
                                     if ((*it)->frameState())
                                         (*it)->clearFrameState();
