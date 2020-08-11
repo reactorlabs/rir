@@ -10,6 +10,7 @@ FrameInfo FrameInfo::deserialize(const Opcode* anchor, SEXP refTable,
     info.code = Code::withUid(UUID::deserialize(refTable, inp));
     info.pc = info.code->code() + InInteger(inp);
     info.stackSize = InInteger(inp);
+    info.inPromise = InInteger(inp);
     return info;
 }
 
@@ -18,6 +19,7 @@ void FrameInfo::serialize(const Opcode* anchor, SEXP refTable,
     code->uid.serialize(refTable, out);
     OutInteger(out, pc - code->code());
     OutInteger(out, stackSize);
+    OutInteger(out, inPromise);
 }
 
 SEXP DeoptMetadata::deserialize(const Opcode* anchor, SEXP refTable,
