@@ -8,8 +8,8 @@ namespace pir {
 
 struct Parameter {
     static bool DEBUG_DEOPTS;
-    static bool DEOPT_CHAOS;
-    static bool DEOPT_CHAOS_SEED;
+    static int DEOPT_CHAOS;
+    static int DEOPT_CHAOS_SEED;
     static size_t MAX_INPUT_SIZE;
     static unsigned RIR_WARMUP;
     static unsigned DEOPT_ABANDON;
