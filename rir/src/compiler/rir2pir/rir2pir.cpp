@@ -166,7 +166,7 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
     }
 
     Value* eagerVal = UnboundValue::instance();
-    if (eager || Query::pure(prom)) {
+    if (eager || Query::pureExceptDeopt(prom)) {
         eagerVal = tryInlinePromise(promiseCode, insert);
         if (!eagerVal) {
             log.warn("Failed to inline a promise");
@@ -439,7 +439,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 return false;
             }
         }
-        if (val == UnboundValue::instance() && Query::pure(prom)) {
+        if (val == UnboundValue::instance() && Query::pureExceptDeopt(prom)) {
             val = tryInlinePromise(promiseCode, insert);
             if (!val) {
                 log.warn("Failed to inline a promise");
