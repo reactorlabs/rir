@@ -68,7 +68,7 @@ PassScheduler::PassScheduler() {
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
-    nextPhase("Speculation", 100);
+    nextPhase("Speculation", 140);
     add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();
@@ -87,7 +87,7 @@ PassScheduler::PassScheduler() {
     add<CleanupCheckpoints>();
     addDefaultPostPhaseOpt();
 
-    nextPhase("Intermediate 2", 50);
+    nextPhase("Intermediate 2", 70);
     addDefaultOpt();
     nextPhase("Intermediate 2 post");
     addDefaultPostPhaseOpt();

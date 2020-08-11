@@ -884,7 +884,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign1_1_: {
         forceIfPromised(1);
-            addCheckpoint(srcCode, pos, stack, insert);
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -894,7 +894,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign2_1_: {
         forceIfPromised(1);
-            addCheckpoint(srcCode, pos, stack, insert);
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -904,7 +904,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign1_2_: {
         forceIfPromised(2);
-            addCheckpoint(srcCode, pos, stack, insert);
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -915,7 +915,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign2_2_: {
         forceIfPromised(2);
-            addCheckpoint(srcCode, pos, stack, insert);
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -926,7 +926,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::subassign1_3_: {
         forceIfPromised(3);
-            addCheckpoint(srcCode, pos, stack, insert);
+        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx3 = pop();
         Value* idx2 = pop();
         Value* idx1 = pop();
@@ -956,9 +956,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
 #define BINOP(Name, Op)                                                        \
     case Opcode::Op: {                                                         \
-            forceIfPromised(1);                                                \
-            forceIfPromised(0);                                                \
-            addCheckpoint(srcCode, pos, stack, insert);                        \
+        forceIfPromised(1);                                                    \
+        forceIfPromised(0);                                                    \
+        addCheckpoint(srcCode, pos, stack, insert);                            \
         auto lhs = at(1);                                                      \
         auto rhs = at(0);                                                      \
         pop();                                                                 \
