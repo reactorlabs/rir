@@ -1054,7 +1054,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::force_: {
         auto v = pop();
-        push(insert(new Force(v, env, Tombstone::framestate())));
+        auto fs = inlining() ? (Value*)Tombstone::framestate()
+                             : insert.registerFrameState(srcCode, nextPos,
+                                                         stack, inPromise());
+        push(insert(new Force(v, env, fs)));
         break;
     }
 

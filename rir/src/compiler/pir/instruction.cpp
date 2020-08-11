@@ -878,10 +878,6 @@ void ScheduledDeopt::consumeFrameStates(Deopt* deopt) {
             sp = sp->next();
         } while (sp);
     }
-    if (frameStates.back()->inPromise) {
-        deopt->printRecursive(std::cout, 1);
-        deopt->bb()->owner->printCode(std::cout, true, false);
-    }
     assert(!frameStates.back()->inPromise);
     for (auto spi = frameStates.rbegin(); spi != frameStates.rend(); spi++) {
         auto sp = *spi;
