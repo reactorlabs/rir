@@ -951,6 +951,7 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
 
 void Force::printArgs(std::ostream& out, bool tty) const {
     input()->printRef(out);
+    out << ", ";
     if (frameState()) {
         frameState()->printRef(out);
         out << ", ";
