@@ -44,9 +44,10 @@ class Builder {
     void setBranch(BB* bb1, BB* bb2);
 
     FrameState* registerFrameState(rir::Code* srcCode, Opcode* pos,
-                                   const RirStack& stack);
+                                   const RirStack& stack, bool inPromise);
     Checkpoint* emitCheckpoint(rir::Code* srcCode, Opcode* pos,
-                               const RirStack& stack);
+                               const RirStack& stack, bool inPromise);
+    Checkpoint* emitCheckpoint(FrameState* fs);
 
     // Use with care, let the builder keep track of BB. Prefer the highlevel
     // api above.

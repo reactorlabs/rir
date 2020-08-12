@@ -30,6 +30,7 @@ PassScheduler::PassScheduler() {
 
         add<ForceDominance>();
         add<ScopeResolution>();
+        add<LoadElision>();
         add<GVN>();
         add<Constantfold>();
         add<DeadStoreRemoval>();
@@ -56,10 +57,9 @@ PassScheduler::PassScheduler() {
     auto addDefaultPostPhaseOpt = [&]() {
         add<HoistInstruction>();
         add<LoopInvariant>();
-        add<LoadElision>();
     };
 
-    nextPhase("Initial", 50);
+    nextPhase("Initial", 60);
     addDefaultOpt();
     nextPhase("Initial post");
     addDefaultPostPhaseOpt();
@@ -87,7 +87,7 @@ PassScheduler::PassScheduler() {
     add<CleanupCheckpoints>();
     addDefaultPostPhaseOpt();
 
-    nextPhase("Intermediate 2", 50);
+    nextPhase("Intermediate 2", 60);
     addDefaultOpt();
     nextPhase("Intermediate 2 post");
     addDefaultPostPhaseOpt();

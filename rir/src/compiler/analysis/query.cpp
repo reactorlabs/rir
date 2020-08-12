@@ -39,6 +39,12 @@ bool Query::pure(Code* c) {
         c->entry, [&](Instruction* i) { return !i->hasStrongEffects(); });
 }
 
+bool Query::pureExceptDeopt(Code* c) {
+    return Visitor::check(c->entry, [&](Instruction* i) {
+        return !i->hasStrongEffects() || Deopt::Cast(i);
+    });
+}
+
 std::unordered_set<Value*> Query::returned(Code* c) {
     std::unordered_set<Value*> returned;
     Visitor::run(c->entry, [&](BB* bb) {

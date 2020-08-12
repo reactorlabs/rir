@@ -110,30 +110,38 @@ class DeadStoreAnalysis {
         AbstractResult apply(EnvSet& state, Instruction* i) const override {
             AbstractResult effect;
             applyRecurse(effect, state, i, promEnv);
-            if (i->leaksEnv()) {
-                Value* env = i->env();
+            auto markEnv = [&](Value* env) {
                 if (LdFunctionEnv::Cast(env)) {
                     assert(promEnv);
                     env = promEnv;
                 }
                 if (auto m = MaterializeEnv::Cast(env))
                     env = m->env();
-                if (auto mk = MkEnv::Cast(env)) {
-                    // stubs cannot leak, or we deopt
-                    if (mk->stub)
-                        return effect;
-                }
                 if (i->bb()->isDeopt()) {
                     if (!state.leakedByDeopt.count(env)) {
                         state.leakedByDeopt.insert(env);
                         effect.update();
                     }
                 } else {
+                    if (auto mk = MkEnv::Cast(env)) {
+                        // stubs cannot leak, or we deopt
+                        if (mk->stub)
+                            return;
+                    }
                     if (!state.leaked.count(env)) {
                         state.leaked.insert(env);
                         effect.update();
                     }
                 }
+            };
+            if (i->leaksEnv()) {
+                markEnv(i->env());
+            }
+            if (auto fs = i->frameState()) {
+                do {
+                    markEnv(fs->env());
+                    fs = fs->next();
+                } while (fs);
             }
             return effect;
         }
@@ -394,31 +402,33 @@ class DeadStoreAnalysis {
       public:
         bool isObserved(StVar* st) const {
             auto state = at<PositioningStyle::BeforeInstruction>(st);
-            Variable var({st->varName, resolveEnv(st->env())});
+            auto e = resolveEnv(st->env());
+            Variable var({st->varName, e});
             if (state.ignoreStore.count(var))
                 return false;
-            if (state.completelyObserved.count(st->env()) ||
-                state.observedByDeopt.count(st->env()))
+            if (state.completelyObserved.count(e) ||
+                state.observedByDeopt.count(e))
                 return true;
-            return Env::isStaticEnv(st->env()) ||
-                   state.partiallyObserved.count(var);
+            return Env::isStaticEnv(e) || state.partiallyObserved.count(var);
         }
 
         bool isObservedOnlyByDeopt(StVar* st) const {
             auto state = at<PositioningStyle::BeforeInstruction>(st);
-            Variable var({st->varName, st->env()});
-            assert(!(state.completelyObserved.count(st->env()) &&
-                     state.observedByDeopt.count(st->env())));
-            return !Env::isStaticEnv(st->env()) &&
+            auto e = resolveEnv(st->env());
+            Variable var({st->varName, e});
+            assert(!(state.completelyObserved.count(e) &&
+                     state.observedByDeopt.count(e)));
+            return !Env::isStaticEnv(e) &&
                    !state.partiallyObserved.count(var) &&
-                   state.observedByDeopt.count(st->env());
+                   state.observedByDeopt.count(e);
         }
 
         std::unordered_set<Instruction*>
         observedByDeoptInstructions(StVar* st) const {
             auto state = at<PositioningStyle::BeforeInstruction>(st);
-            assert(state.observedByDeopt.count(st->env()));
-            return state.observedByDeopt.at(st->env());
+            auto e = resolveEnv(st->env());
+            assert(state.observedByDeopt.count(e));
+            return state.observedByDeopt.at(e);
         }
     };
 

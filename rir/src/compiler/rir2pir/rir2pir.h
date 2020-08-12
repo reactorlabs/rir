@@ -25,7 +25,7 @@ class Rir2Pir {
         __attribute__((warn_unused_result));
 
   private:
-    Value* tryTranslatePromise(rir::Code* srcCode, Builder& insert)
+    Value* tryInlinePromise(rir::Code* srcCode, Builder& insert)
         __attribute__((warn_unused_result));
 
     // Tries to compile the srcCode. Return value indicates failure. Builder
@@ -65,22 +65,24 @@ class Rir2Pir {
     bool compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                    rir::Code* srcCode, RirStack&, Builder&,
                    CallTargetFeedback&);
-    virtual bool inPromise() const { return inPromise_; }
+    virtual bool inPromise() const { return false; }
+    virtual bool inlining() const { return false; }
 
     Checkpoint* addCheckpoint(rir::Code* srcCode, Opcode* pos,
                               const RirStack& stack, Builder& insert) const;
-
-    bool inPromise_ = false;
 };
 
 class PromiseRir2Pir : public Rir2Pir {
   public:
     PromiseRir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
                    const std::string& name,
-                   const std::list<PirTypeFeedback*>& outerFeedback)
-        : Rir2Pir(cmp, cls, log, name, outerFeedback) {}
+                   const std::list<PirTypeFeedback*>& outerFeedback,
+                   bool inlining)
+        : Rir2Pir(cmp, cls, log, name, outerFeedback), inlining_(inlining) {}
 
   private:
+    bool inlining_;
+    bool inlining() const override final { return inlining_; }
     bool inPromise() const override final { return true; }
 };
 

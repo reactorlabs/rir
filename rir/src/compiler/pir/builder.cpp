@@ -58,21 +58,35 @@ void Builder::add(Instruction* i) {
 }
 
 FrameState* Builder::registerFrameState(rir::Code* srcCode, Opcode* pos,
-                                        const RirStack& stack) {
-    auto sp = new FrameState(env, srcCode, pos, stack);
+                                        const RirStack& stack, bool inPromise) {
+    auto sp = new FrameState(env, srcCode, pos, stack, inPromise);
     add(sp);
     return sp;
 };
 
-Checkpoint* Builder::emitCheckpoint(rir::Code* srcCode, Opcode* pos,
-                                    const RirStack& stack) {
+Checkpoint* Builder::emitCheckpoint(FrameState* fs) {
     auto cp = new Checkpoint();
     add(cp);
     auto cont = createBB();
     auto fail = createBB();
     setBranch(cont, fail);
     enterBB(fail);
-    auto sp = registerFrameState(srcCode, pos, stack);
+    add(new Deopt(fs));
+    markDone(fail);
+
+    enterBB(cont);
+    return cp;
+};
+
+Checkpoint* Builder::emitCheckpoint(rir::Code* srcCode, Opcode* pos,
+                                    const RirStack& stack, bool inPromise) {
+    auto cp = new Checkpoint();
+    add(cp);
+    auto cont = createBB();
+    auto fail = createBB();
+    setBranch(cont, fail);
+    enterBB(fail);
+    auto sp = registerFrameState(srcCode, pos, stack, inPromise);
     add(new Deopt(sp));
     markDone(fail);
 
@@ -97,7 +111,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
         args[i] = this->operator()(new LdArg(i));
         if (closure->formals().names()[i] == R_DotsSymbol)
             args[i]->type = PirType::dotsArg();
-        args[i]->type.fromContext(context, i);
+        args[i]->type.fromContext(context, i, closure->nargs());
     }
     for (size_t i = nargs; i < closure->nargs(); ++i) {
         args[i] = MissingArg::instance();

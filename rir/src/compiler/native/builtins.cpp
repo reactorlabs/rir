@@ -36,8 +36,7 @@ static R_INLINE MatrixDimension getMatrixDim(SEXP mat) {
 
 static SEXP forcePromiseImpl(SEXP prom) {
     SLOWASSERT(TYPEOF(prom) == PROMSXP);
-    auto res = forcePromise(prom);
-    ENSURE_NAMEDMAX(res);
+    auto res = evaluatePromise(prom);
     return res;
 }
 NativeBuiltin NativeBuiltins::forcePromise = {"forcePromise",
@@ -1045,7 +1044,8 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
                      (Immediate*)nullptr, env, Context(), globalContext());
 
     deoptFramesWithContext(globalContext(), &call, m, R_NilValue,
-                           m->numFrames - 1, stackHeight);
+                           m->numFrames - 1, stackHeight,
+                           (RCNTXT*)R_GlobalContext);
     assert(false);
 }
 

@@ -11,6 +11,9 @@ namespace pir {
 
 constexpr static std::initializer_list<Tag> TypecheckInstrsList = {
     Tag::IsType, Tag::CastType, Tag::FrameState};
+constexpr static std::initializer_list<Tag> BoxedUsesInstrsList = {
+    Tag::MkEnv,     Tag::StVar, Tag::UpdatePromise, Tag::Call,
+    Tag::NamedCall, Tag::MkArg, Tag::DotsList,      Tag::FrameState};
 class DeadInstructions {
     std::unordered_set<Instruction*> unused_;
 
@@ -19,6 +22,7 @@ class DeadInstructions {
         CountAll,
         IgnoreUpdatePromise,
         IgnoreTypeTests,
+        IgnoreBoxedUses,
     };
 
     DeadInstructions(Code*, uint8_t maxBurstSize, Effects ignoreEffects,

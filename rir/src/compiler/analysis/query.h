@@ -17,6 +17,7 @@ namespace pir {
 class Query {
   public:
     static bool pure(Code* c);
+    static bool pureExceptDeopt(Code* c);
     static bool noEnv(Code* c);
     static bool noParentEnv(Code* c);
     static bool noEnvSpec(Code* c);

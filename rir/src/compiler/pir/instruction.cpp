@@ -286,6 +286,14 @@ Instruction* Instruction::hasSingleUse() {
 
 void Instruction::eraseAndRemove() { bb()->remove(this); }
 
+FrameState* Instruction::frameState() const {
+    return FrameState::Cast(frameStateOrTs());
+}
+
+void Instruction::clearFrameState() {
+    updateFrameState(Tombstone::framestate());
+}
+
 static void checkReplace(Instruction* origin, Value* replace) {
     if (replace->type.isRType() != origin->type.isRType() ||
         (replace->type.maybePromiseWrapped() &&
@@ -841,6 +849,8 @@ void CallSafeBuiltin::printArgs(std::ostream& out, bool tty) const {
 
 void FrameState::printArgs(std::ostream& out, bool tty) const {
     out << code << "+" << pc - code->code();
+    if (inPromise)
+        out << "(pr)";
     out << ": [";
     long s = stackSize;
     eachArg([&](Value* i) {
@@ -868,9 +878,10 @@ void ScheduledDeopt::consumeFrameStates(Deopt* deopt) {
             sp = sp->next();
         } while (sp);
     }
+    assert(!frameStates.back()->inPromise);
     for (auto spi = frameStates.rbegin(); spi != frameStates.rend(); spi++) {
         auto sp = *spi;
-        frames.push_back({sp->pc, sp->code, sp->stackSize});
+        frames.emplace_back(sp->pc, sp->code, sp->stackSize, sp->inPromise);
         for (size_t i = 0; i < sp->stackSize; i++)
             pushArg(sp->arg(i).val());
         pushArg(sp->env());
@@ -935,6 +946,15 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
         out << "from ";
         runtimeClosure()->printRef(out);
         out << " ";
+    }
+}
+
+void Force::printArgs(std::ostream& out, bool tty) const {
+    input()->printRef(out);
+    out << ", ";
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
     }
 }
 
@@ -1144,8 +1164,6 @@ void NamedCall::printArgs(std::ostream& out, bool tty) const {
     });
     out << ") ";
 }
-
-FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
 
 void Checkpoint::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);

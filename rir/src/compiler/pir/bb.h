@@ -1,6 +1,7 @@
 #ifndef COMPILER_BB_H
 #define COMPILER_BB_H
 
+#include "common.h"
 #include "pir.h"
 
 #include "utils/Set.h"
@@ -44,16 +45,7 @@ class BB {
 
     void unsafeSetId(unsigned newId) { *const_cast<unsigned*>(&id) = newId; }
 
-    unsigned indexOf(const Instruction* i) {
-        unsigned p = 0;
-        for (auto j : instrs) {
-            if (i == j)
-                return p;
-            p++;
-        }
-        assert(false);
-        return 0;
-    }
+    unsigned indexOf(const Instruction* i);
 
     Instruction* last() const;
 

@@ -16,7 +16,7 @@ class LowerLLVM {
     PirTypeFeedback* pirTypeFeedback;
     void*
     tryCompile(ClosureVersion* cls, Code* code,
-               const std::unordered_map<Promise*, unsigned>&,
+               const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>&,
                const NeedsRefcountAdjustment& refcount,
                const std::unordered_set<Instruction*>& needsLdVarForUpdate,
                LogStream& log);

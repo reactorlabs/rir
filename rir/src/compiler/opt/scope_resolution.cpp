@@ -324,11 +324,25 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                     continue;
                 }
 
-                // Constant fold "missing" if we can
+                // Constant fold "missing" if we can. Warning: forcing a
+                // (non-missing) promise can still return missing...
                 if (auto missing = Missing::Cast(i)) {
                     auto res =
                         analysis.load(before, missing->varName, missing->env());
-                    if (!res.result.type.maybeMissing()) {
+                    bool notMissing = false;
+                    if (res.result.isSingleValue()) {
+                        auto v =
+                            res.result.singleValue().val->followCastsAndForce();
+                        if (!v->type.maybePromiseWrapped() &&
+                            !v->type.maybeMissing()) {
+                            notMissing = true;
+                        }
+                    }
+                    if (!res.result.type.maybeMissing() &&
+                        !res.result.type.maybePromiseWrapped()) {
+                        notMissing = true;
+                    }
+                    if (notMissing) {
                         // Missing still returns TRUE, if the argument was
                         // initially missing, but then overwritten by a default
                         // argument.
@@ -579,7 +593,8 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     .result;
                             if (auto firstBinding = getSingleLocalValue(res)) {
                                 ip = bb->insert(
-                                    ip, new Force(firstBinding, ldfun->env()));
+                                    ip, new Force(firstBinding, ldfun->env(),
+                                                  Tombstone::framestate()));
                                 ldfun->guessedBinding(*ip);
                                 next = ip + 2;
                                 return;

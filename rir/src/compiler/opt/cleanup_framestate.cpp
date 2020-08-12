@@ -9,14 +9,12 @@ namespace pir {
 bool CleanupFramestate::apply(Compiler&, ClosureVersion* function, Code* code,
                               LogStream&) const {
     bool anyChange = false;
-        Visitor::run(code->entry, [&](Instruction* i) {
-            if (auto call = CallInstruction::CastCall(i)) {
-                if (call->hasFrameState()) {
-                    anyChange = true;
-                    call->clearFrameState();
-                }
-            }
-        });
+    Visitor::run(code->entry, [&](Instruction* i) {
+        if (!Deopt::Cast(i) && i->frameState()) {
+            anyChange = true;
+            i->clearFrameState();
+        }
+    });
     return anyChange;
 }
 } // namespace pir

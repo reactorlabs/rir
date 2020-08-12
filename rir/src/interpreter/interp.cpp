@@ -18,6 +18,7 @@
 #include <deque>
 #include <libintl.h>
 #include <set>
+#include <unordered_set>
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -167,23 +168,62 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
+SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
+                 R_bcstack_t*, BindingCache*);
+
 static RIR_INLINE SEXP createPromise(Code* code, SEXP env) {
     SEXP p = Rf_mkPROMISE(code->container(), env);
     return p;
 }
 
-static RIR_INLINE SEXP promiseValue(SEXP promise, InterpreterInstance* ctx) {
+typedef struct RPRSTACK {
+    SEXP promise;
+    struct RPRSTACK* next;
+} RPRSTACK;
+extern "C" struct RPRSTACK* R_PendingPromises;
+
+RIR_INLINE SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc) {
     // if already evaluated, return the value
-    if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
-        promise = PRVALUE(promise);
-        assert(TYPEOF(promise) != PROMSXP);
-        return promise;
+    if (PRVALUE(e) && PRVALUE(e) != R_UnboundValue) {
+        e = PRVALUE(e);
+        assert(TYPEOF(e) != PROMSXP);
+        return e;
+    } else if (TYPEOF(PRCODE(e)) != EXTERNALSXP) {
+        assert(!pc);
+        return forcePromise(e);
     } else {
-        SEXP res = forcePromise(promise);
-        assert(TYPEOF(res) != PROMSXP && "promise returned promise");
-        return res;
+        SEXP val;
+        if (PRSEEN(e)) {
+            if (PRSEEN(e) == 1)
+                errorcall(NULL,
+                          "promise already under evaluation: recursive default "
+                          "argument reference or earlier problems?");
+            else {
+                /* set PRSEEN to 1 to avoid infinite recursion */
+                SET_PRSEEN(e, 1);
+                warningcall(NULL, "restarting interrupted promise evaluation");
+            }
+        }
+        SET_PRSEEN(e, 1);
+
+        RPRSTACK prstack;
+        prstack.promise = e;
+        prstack.next = R_PendingPromises;
+        R_PendingPromises = &prstack;
+        val = evalRirCode(Code::unpack(PRCODE(e)), ctx, e->u.promsxp.env,
+                          nullptr, pc, nullptr, nullptr);
+        R_PendingPromises = prstack.next;
+        SET_PRSEEN(e, 0);
+        SET_PRVALUE(e, val);
+        ENSURE_NAMEDMAX(val);
+        SET_PRENV(e, R_NilValue);
+
+        assert(TYPEOF(val) != PROMSXP && "promise returned promise");
+        return val;
     }
 }
+
+SEXP rirForcePromise(SEXP e) { return evaluatePromise(e, globalContext()); }
 
 void jit(SEXP cls, SEXP name, InterpreterInstance* ctx) {
     assert(TYPEOF(cls) == CLOSXP);
@@ -257,7 +297,7 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
         SEXP arg = ostack_at_cell(args + i);
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
-            arg = forcePromise(arg);
+            arg = evaluatePromise(arg, ctx);
         }
         // This is to ensure we pass named arguments to GNU-R builtins because
         // who knows what assumptions does GNU-R do??? We SHOULD test this.
@@ -332,8 +372,6 @@ static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
                                                call.hasEagerCallee(), ctx);
 }
 
-SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
-                 R_bcstack_t*, BindingCache*);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
     if ((SETJMP(cntxt.cjmpbuf))) {
@@ -670,7 +708,13 @@ static void addDynamicContextFromContext(CallContext& call, size_t formalNargs,
                     // reflection) evaluating this promise does not trigger
                     // reflection either.
                     while (TYPEOF(PREXPR(prom)) == SYMSXP) {
-                        auto v = Rf_findVar(PREXPR(prom), PRENV(prom));
+                        SEXP v;
+                        if (auto le =
+                                LazyEnvironment::check(prom->u.promsxp.env)) {
+                            v = le->getArg(PREXPR(prom));
+                        } else {
+                            v = Rf_findVar(PREXPR(prom), PRENV(prom));
+                        }
                         if (v == R_UnboundValue)
                             break;
                         if (TYPEOF(v) != PROMSXP ||
@@ -690,6 +734,7 @@ static void addDynamicContextFromContext(CallContext& call, size_t formalNargs,
         if (arg == R_MissingArg) {
             given.remove(Assumption::NoExplicitlyMissingArgs);
             isEager = false;
+            notObj = false;
         }
         if (isObject(arg)) {
             notObj = false;
@@ -1378,9 +1423,14 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
         return false;
 
     val = findRootPromise(val);
-    if (!isSymbol(PREXPR(val)))
+    if (!isSymbol(PREXPR(val))) {
         return false;
-    else {
+    } else {
+        if (PREXPR(val) == R_MissingArg)
+            return true;
+        if (auto le = LazyEnvironment::check(val->u.promsxp.env)) {
+            return le->isMissing(PREXPR(val));
+        }
         return R_isMissing(PREXPR(val), PRENV(val));
     }
 }
@@ -1404,7 +1454,8 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
 void deoptFramesWithContext(InterpreterInstance* ctx,
                             const CallContext* callCtxt,
                             DeoptMetadata* deoptData, SEXP sysparent,
-                            size_t pos, size_t stackHeight) {
+                            size_t pos, size_t stackHeight,
+                            RCNTXT* currentContext) {
     size_t excessStack = stackHeight;
 
     FrameInfo& f = deoptData->frames[pos];
@@ -1415,6 +1466,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
+    bool inPromise = f.inPromise;
 
     if (outermostFrame)
         startDeoptimizing();
@@ -1426,20 +1478,24 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 
     RCNTXT fake;
     RCNTXT* cntxt;
-    auto originalCntxt = findFunctionContextFor(deoptEnv);
-    if (originalCntxt) {
-        cntxt = originalCntxt;
+    if (inPromise) {
+        cntxt = currentContext;
     } else {
-        // NOTE: this assert triggers if we can't find the context of the
-        // current function. Usually the reason is that a wrong environment is
-        // stored in the context.
-        assert(!outermostFrame && "Cannot find outermost function context");
-        // If the inlinee had no context, we need to synthesize one
-        // TODO: need to add ast and closure to the deopt metadata to create a
-        // complete context
-        cntxt = &fake;
-        initClosureContext(R_NilValue, cntxt, deoptEnv, sysparent,
-                           FRAME(sysparent), R_NilValue);
+        RCNTXT* originalCntxt = findFunctionContextFor(deoptEnv);
+        if (originalCntxt) {
+            cntxt = originalCntxt;
+        } else {
+            // NOTE: this assert triggers if we can't find the context of the
+            // current function. Usually the reason is that a wrong environment
+            // is stored in the context.
+            assert(!outermostFrame && "Cannot find outermost function context");
+            // If the inlinee had no context, we need to synthesize one
+            // TODO: need to add ast and closure to the deopt metadata to create
+            // a complete context
+            cntxt = &fake;
+            initClosureContext(R_NilValue, cntxt, deoptEnv, sysparent,
+                               FRAME(sysparent), R_NilValue);
+        }
     }
 
     if (auto le = LazyEnvironment::check(deoptEnv)) {
@@ -1461,7 +1517,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         // long-jump out of this deopt routine into the inlineContextTrampoline.
         // The outermost frame is the caller, not an inlinee, thus we need not
         // change its context.
-        if (!outermostFrame) {
+        if (!outermostFrame && !inPromise) {
             // The longjump is initialized, when we are still reconstructing
             // the frames. But if we restart from here, we need to remove
             // all the extra stuff from the stack used for reconstruction.
@@ -1481,7 +1537,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         // 2. Execute the inner frames
         if (!innermostFrame) {
             deoptFramesWithContext(ctx, callCtxt, deoptData, deoptEnv, pos - 1,
-                                   stackHeight);
+                                   stackHeight, cntxt);
         }
 
         // 3. Execute our frame
@@ -1500,6 +1556,13 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         ostack_pop(ctx);
         if (!innermostFrame)
             ostack_push(ctx, res);
+        if (inPromise) {
+            SEXP p = createPromise(code, deoptEnv);
+            PROTECT(p);
+            auto r = evaluatePromise(p, ctx, f.pc);
+            UNPROTECT(1);
+            return r;
+        }
         return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr,
                            nullptr);
     };
@@ -1508,8 +1571,15 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     assert((size_t)ostack_length(ctx) == frameBaseSize);
 
     if (!outermostFrame) {
-        endClosureContext(cntxt, res);
+        if (!inPromise)
+            endClosureContext(cntxt, res);
     } else {
+        // Deopt in promise is only possible if the promise is not the outermost
+        // frame. The reason is that the promise does not have a context
+        // associated and we can therefore not jump out of deoptimized promise
+        // evaluation. Therefore promises should only occur in inner frames
+        // during deoptimization.
+        assert(!inPromise);
         endDeoptimizing();
         assert(findFunctionContextFor(deoptEnv) == cntxt);
         // long-jump out of all the inlined contexts
@@ -1546,7 +1616,7 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                 ellipsis = Rf_findVar(R_DotsSymbol, env);
 
             if (TYPEOF(ellipsis) == PROMSXP)
-                ellipsis = promiseValue(ellipsis, ctx);
+                ellipsis = evaluatePromise(ellipsis, ctx);
 
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
@@ -2077,7 +2147,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue) {
                 if (isLocal)
@@ -2119,7 +2189,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue) {
                 if (isLocal)
@@ -2177,7 +2247,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(sym)));
             } else if (TYPEOF(res) == PROMSXP) {
                 // if promise, evaluate & return
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
             }
 
             if (res != R_NilValue)
@@ -2208,7 +2278,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2277,7 +2347,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2321,7 +2391,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
+                res = evaluatePromise(res, ctx);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2771,7 +2841,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // If the promise is already evaluated then push the value
                 // inside the promise onto the stack, otherwise push the value
                 // from forcing the promise
-                ostack_push(ctx, promiseValue(val, ctx));
+                ostack_push(ctx, evaluatePromise(val, ctx));
             }
             NEXT();
         }
@@ -3991,14 +4061,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto m = (DeoptMetadata*)DATAPTR(r);
 
 #if 0
+            std::cout << "\n## ====================\n";
             size_t pos = 0;
             for (size_t i = 0; i < m->numFrames; ++i) {
+                std::cout << "## Frame " << i << (m->frames[i].inPromise ? " prom" : "") << ":\n";
                 std::cout << "Code " << m->frames[i].code << "\n";
-                std::cout << "Frame " << i << ":\n";
-                std::cout << "  - env (" << pos << ")\n";
+                std::cout << "== env (" << pos << ")\n";
                 Rf_PrintValue(ostack_at(ctx, pos++));
                 for( size_t j = 0; j < m->frames[i].stackSize; ++j) {
-                    std::cout << "  - stack (" << pos << ") " << j << "\n";
+                    std::cout << "== stack (" << pos << ") " << j << "\n";
                     Rf_PrintValue(ostack_at(ctx, pos++));
                 }
             }
@@ -4024,7 +4095,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             m->frames[m->numFrames - 1].code->registerDeopt();
             c->registerDeopt();
             deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
-                                   m->numFrames - 1, stackHeight);
+                                   m->numFrames - 1, stackHeight,
+                                   (RCNTXT*)R_GlobalContext);
             assert(false);
         }
 
@@ -4267,7 +4339,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
     return res;
 }
 
-SEXP rirEval_f(SEXP what, SEXP env) {
+SEXP rirEval(SEXP what, SEXP env) {
     assert(TYPEOF(what) == EXTERNALSXP);
 
     // TODO: do we not need an RCNTXT here?

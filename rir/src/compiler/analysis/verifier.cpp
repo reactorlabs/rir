@@ -119,11 +119,7 @@ class TheVerifier {
         }
 
         for (auto i : *bb) {
-            if (FrameState::Cast(i) && inPromise) {
-                std::cerr << "Framestate in promise!\n";
-                ok = false;
-            }
-            verify(i, bb);
+            verify(i, bb, inPromise);
         }
         /* This check verifies that our graph is in edge-split format.
             Currently we do not rely on this property, however we should
@@ -201,7 +197,7 @@ class TheVerifier {
         Visitor::run(p->entry, [&](BB* bb) { verify(bb, true); });
     }
 
-    void verify(Instruction* i, BB* bb) {
+    void verify(Instruction* i, BB* bb, bool inPromise) {
 
         if (i->bb() != bb) {
             std::cerr << "Error: instruction '";
@@ -244,6 +240,19 @@ class TheVerifier {
             });
         }
 
+        if (i->frameState()) {
+            if (!inPromise) {
+                auto fs = i->frameState();
+                while (fs->next())
+                    fs = fs->next();
+                if (fs->inPromise) {
+                    std::cerr << "Error: instruction '";
+                    i->print(std::cerr);
+                    std::cerr << "' outermost fs inPromis in body code\n";
+                    ok = false;
+                }
+            }
+        }
         if (auto assume = Assume::Cast(i)) {
             if (IsType::Cast(assume->arg(0).val())) {
                 if (assume->feedbackOrigin.empty()) {
@@ -346,24 +355,26 @@ class TheVerifier {
                 std::cerr << " framestate env cannot be elided\n";
                 ok = false;
             }
-            std::unordered_set<Value*> envs({fs->env()});
-            while (fs->next()) {
-                fs = fs->next();
-                if (envs.count(fs->env())) {
-                    std::cerr << "Error at instruction '";
-                    i->print(std::cerr);
-                    std::cerr << " same env occurs multiple times\n";
-                    ok = false;
+            std::unordered_set<Value*> envs;
+            do {
+                if (!fs->inPromise) {
+                    if (envs.count(fs->env())) {
+                        std::cerr << "Error at instruction '";
+                        i->print(std::cerr);
+                        std::cerr << " same env occurs multiple times\n";
+                        ok = false;
+                    }
+                    envs.insert(fs->env());
                 }
-                envs.insert(fs->env());
-            }
+                fs = fs->next();
+            } while (fs);
         }
 
         static std::unordered_set<Tag> allowStub{
             Tag::LdVar,     Tag::Force,          Tag::PushContext,
             Tag::StVar,     Tag::StVarSuper,     Tag::FrameState,
             Tag::IsEnvStub, Tag::MaterializeEnv, Tag::CallBuiltin,
-            Tag::Call, Tag::StaticCall};
+            Tag::Call,      Tag::StaticCall,     Tag::MkArg};
         if (i->hasEnv() && !allowStub.count(i->tag)) {
             auto env = MkEnv::Cast(i->env());
             if (env && env->stub) {

@@ -97,7 +97,9 @@ bool DotDotDots::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     PirType::any().notMissing());
                                 ip = bb->insert(ip, cast);
                                 ip++;
-                                ip = bb->insert(ip, new Force(cast, env));
+                                ip = bb->insert(
+                                    ip, new Force(cast, env,
+                                                  Tombstone::framestate()));
                                 a = *ip;
                                 ip++;
                                 next = ip + 1;

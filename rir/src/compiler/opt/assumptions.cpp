@@ -130,12 +130,19 @@ struct AvailableAssumptions
                          Instruction* i) const {
         AbstractResult res;
         if (auto a = Assume::Cast(i)) {
-            if (!IsEnvStub::Cast(a->arg(0).val())) {
-                AAssumption am(a);
-                auto contains = state.available.find(am);
-                if (contains == state.available.end()) {
-                    state.available.insert(am);
-                    res.update();
+            AAssumption am(a);
+            auto contains = state.available.find(am);
+            if (contains == state.available.end()) {
+                state.available.insert(am);
+                res.update();
+            }
+        } else if (i->effects.contains(Effect::ExecuteCode)) {
+            for (auto it = state.available.begin(); it != state.available.end();
+                 ++it) {
+                if ((*it).kind == AAssumption::Kind::IsEnvStub) {
+                    it = state.available.erase(it);
+                    if (it == state.available.end())
+                        break;
                 }
             }
         }
