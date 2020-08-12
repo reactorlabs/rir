@@ -111,7 +111,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
         args[i] = this->operator()(new LdArg(i));
         if (closure->formals().names()[i] == R_DotsSymbol)
             args[i]->type = PirType::dotsArg();
-        args[i]->type.fromContext(context, i);
+        args[i]->type.fromContext(context, i, closure->nargs());
     }
     for (size_t i = nargs; i < closure->nargs(); ++i) {
         args[i] = MissingArg::instance();

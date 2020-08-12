@@ -208,9 +208,13 @@ bool PirType::isInstance(SEXP val) const {
     }
 }
 
-void PirType::fromContext(const Context& assumptions, unsigned arg) {
+void PirType::fromContext(const Context& assumptions, unsigned arg,
+                          unsigned nargs) {
     auto& type = *this;
     auto i = arg;
+    if (assumptions.includes(Assumption::NoExplicitlyMissingArgs) &&
+        arg < nargs - assumptions.numMissing())
+        type = type.notMissing();
     if (assumptions.isEager(i))
         type = type.notLazy().notMissing();
     if (assumptions.isNotObj(i))

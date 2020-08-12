@@ -228,7 +228,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                     auto safe =
                         Visitor::check(mk->prom()->entry, [&](Instruction* i) {
-                            return !i->mayObserveContext();
+                            return !i->mayObserveContext() || Deopt::Cast(i);
                         });
                     if (!safe)
                         return nullptr;
@@ -267,15 +267,17 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 unsigned i = 0;
                 Context newAssumptions = availableAssumptions;
                 SmallSet<unsigned> eager;
+                bool improved = false;
                 call->eachCallArg([&](InstrArg& arg) {
                     if (auto mk = preEval(arg.val(), i)) {
+                        improved = true;
                         if (mk->isEager()) {
                             arg.val() = mk->eagerArg();
                         } else {
                             auto asArg =
                                 new CastType(mk, CastType::Upcast, RType::prom,
                                              PirType::valOrLazy());
-                            auto forced = new Force(asArg, call->env(),
+                            auto forced = new Force(asArg, Env::elided(),
                                                     Tombstone::framestate());
                             arg.val() = forced;
                             ip = bb->insert(ip, forced);
@@ -288,6 +290,11 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
                     i++;
                 });
+
+                if (!improved) {
+                    ip = next;
+                    continue;
+                }
                 next = ip + 1;
 
                 // This might fire back, since we don't know if we really have no
