@@ -334,7 +334,7 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                         auto v =
                             res.result.singleValue().val->followCastsAndForce();
                         if (!v->type.maybePromiseWrapped() &&
-                            v->type.maybeMissing()) {
+                            !v->type.maybeMissing()) {
                             notMissing = true;
                         }
                     }
