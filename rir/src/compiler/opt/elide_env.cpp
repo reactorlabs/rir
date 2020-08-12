@@ -40,8 +40,10 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                 }
 
                 if (auto force = Force::Cast(i)) {
-                    if (!force->input()->type.maybeLazy())
+                    if (!force->input()->type.maybeLazy()) {
                         force->elideEnv();
+                        force->clearFrameState();
+                    }
                 }
 
                 if (auto mk = MkArg::Cast(i)) {

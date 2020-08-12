@@ -135,7 +135,8 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
         Tag::Force,      Tag::PushContext, Tag::LdVar,      Tag::StVar,
         Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin,
         Tag::StaticCall, Tag::LdDots};
-    static constexpr auto allowedInProm = {Tag::LdVar, Tag::StVar, Tag::LdDots};
+    static constexpr auto allowedInProm = {Tag::LdVar, Tag::StVar,
+                                           Tag::StVarSuper, Tag::LdDots};
     // Those do not materialize the stub in any case
     static constexpr auto dontMaterialize = {
         Tag::PushContext, Tag::LdVar,     Tag::StVar, Tag::StVarSuper,

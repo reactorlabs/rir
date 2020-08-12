@@ -11,7 +11,7 @@ ScopeAnalysis::ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
                              ScopeAnalysisResults* globalState, size_t depth,
                              LogStream& log)
     : StaticAnalysis("Scope", cls, prom, initialState, globalState, log),
-      depth(depth), staticClosureEnv(promEnv) {}
+      depth(depth), staticClosureEnv(promEnv), inPromise(true) {}
 
 void ScopeAnalysis::lookup(Value* v, const LoadMaybe& action,
                            const Maybe& notFound) const {
@@ -140,15 +140,23 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             [&]() { state.returnValue.merge(ValOrig(res, i, depth)); });
         effect.update();
     } else if (auto d = Deopt::Cast(i)) {
-        // who knows what the deopt target will return...
-        state.returnValue.taint();
-        state.mayUseReflection = true;
-        auto fs = d->frameState();
-        while (fs) {
-            state.envs.leak(fs->env());
-            fs = fs->next();
+        // Deoptimization is currently only supported in inlined promises.
+        // Therefore we can ignore Deopt points in promises for the sake of this
+        // analysis, since a deoptimization through such a point will also
+        // deoptimize the forcee function. This is a quite useful optimization,
+        // I hope once we support deoptimization in promises proper, we will be
+        // remember to remove this check!
+        if (!inPromise) {
+            // who knows what the deopt target will return...
+            state.returnValue.taint();
+            state.mayUseReflection = true;
+            auto fs = d->frameState();
+            while (fs) {
+                state.envs.leak(fs->env());
+                fs = fs->next();
+            }
+            effect.taint();
         }
-        effect.taint();
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env

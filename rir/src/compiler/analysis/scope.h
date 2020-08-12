@@ -88,10 +88,11 @@ class ScopeAnalysis
     const std::vector<Value*> args;
 
     static constexpr size_t MAX_DEPTH = 2;
-    static constexpr size_t MAX_SIZE = 200;
+    static constexpr size_t MAX_SIZE = 250;
     static constexpr size_t MAX_RESULTS = 1000;
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
+    bool inPromise = false;
 
     AbstractResult doCompute(ScopeAnalysisState& state, Instruction* i,
                              bool updateGlobalState);

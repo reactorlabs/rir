@@ -1433,7 +1433,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                     insert(last);
                 }
 
-                if (last->isDeoptBarrier())
+                if (last->isDeoptBarrier() && finger != end)
                     addCheckpoint(srcCode, nextPos, cur.stack, insert);
             }
 
