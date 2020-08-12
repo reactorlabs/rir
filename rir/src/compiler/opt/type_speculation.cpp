@@ -1,4 +1,5 @@
 #include "../analysis/available_checkpoints.h"
+#include "../analysis/dead.h"
 #include "../pir/pir_impl.h"
 #include "../util/visitor.h"
 #include "R/r.h"
@@ -16,6 +17,8 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             LogStream& log) const {
 
     AvailableCheckpoints checkpoint(cls, code, log);
+    DeadInstructions maybeUsedUnboxed(code, 1, Effects::Any(),
+                                      DeadInstructions::IgnoreBoxedUses);
 
     std::unordered_map<
         BB*, std::unordered_map<Instruction*,
@@ -78,7 +81,8 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                    // Vector where Extract is unboxed if we speculate
                    (i->type.isA(PirType::num()) &&
                     !i->type.scalar().unboxable() &&
-                    i->typeFeedback.type.scalar().unboxable())) {
+                    i->typeFeedback.type.scalar().unboxable() &&
+                    maybeUsedUnboxed.isAlive(i))) {
             speculateOn = i;
             feedback = i->typeFeedback;
             guardPos = checkpoint.next(i, i, dom);
@@ -96,8 +100,6 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
                 // Prevent redundant speculation
                 speculateOn->typeFeedback.used = true;
-                //                speculateOn->typeFeedback.type =
-                //                PirType::bottom();
             },
             []() {});
     });

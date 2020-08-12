@@ -42,6 +42,13 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
                         isAlive(use))
                         addToDead = false;
                     break;
+                case IgnoreBoxedUses:
+                    if (std::find(BoxedUsesInstrsList.begin(),
+                                  BoxedUsesInstrsList.end(),
+                                  use->tag) == BoxedUsesInstrsList.end() &&
+                        isAlive(use))
+                        addToDead = false;
+                    break;
                 case IgnoreUpdatePromise: {
                     auto up = UpdatePromise::Cast(use);
                     if (!(up && up->arg(0).val() == candidate) && isAlive(use))
