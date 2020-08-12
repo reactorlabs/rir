@@ -734,6 +734,7 @@ static void addDynamicContextFromContext(CallContext& call, size_t formalNargs,
         if (arg == R_MissingArg) {
             given.remove(Assumption::NoExplicitlyMissingArgs);
             isEager = false;
+            notObj = false;
         }
         if (isObject(arg)) {
             notObj = false;
