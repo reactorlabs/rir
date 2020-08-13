@@ -372,6 +372,16 @@ NativeBuiltin NativeBuiltins::callBuiltin = {
     (void*)&callBuiltinImpl,
 };
 
+static SEXP callImplCached(CallContext& call, Immediate cache) {
+    auto res = doCall(call, globalContext());
+    if (cache != 0) {
+        auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
+        Pool::patch(cache, trg->container());
+    }
+    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
+    return res;
+};
+
 static SEXP callImplCached(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                            size_t nargs, unsigned long available,
                            Immediate cache) {
@@ -381,13 +391,7 @@ static SEXP callImplCached(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
-    auto res = doCall(call, ctx);
-    if (cache != 0) {
-        auto trg = dispatch(call, DispatchTable::unpack(BODY(callee)));
-        Pool::patch(cache, trg->container());
-    }
-    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
-    return res;
+    return callImplCached(call, cache);
 };
 
 static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
@@ -1426,25 +1430,33 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
                env == R_NilValue || LazyEnvironment::check(env));
 
     auto fun = Function::unpack(Pool::get(target));
-    auto missing = fun->signature().numArguments - nargs;
-    auto fail =
-        missing && fun->context().includes(Assumption::NoExplicitlyMissingArgs);
+
+    auto ctx = globalContext();
+    CallContext call(fun->body(), callee, nargs, astP,
+                     ostack_cell_at(ctx, nargs - 1), env, Context(available),
+                     ctx);
+
+    auto fail = !call.givenContext.smaller(fun->context());
+    if (fail) {
+        inferCurrentContext(call, fun->nargs(), ctx);
+        fail = !call.givenContext.smaller(fun->context());
+    }
+    if (!fun->body()->nativeCode)
+        fail = true;
 
     auto dt = DispatchTable::unpack(BODY(callee));
-    fail = fail || !fun->body()->nativeCode;
 
     fun->registerInvocation();
     if (fail || RecompileHeuristic(dt, fun, 3)) {
         if (fail || RecompileCondition(dt, fun, Context(available))) {
             fun->unregisterInvocation();
-            auto res = callImplCached(fun->body(), astP, callee, env, nargs,
-                                      available, target);
-            return res;
+            return callImplCached(call, target);
         }
     }
 
     auto t = R_BCNodeStackTop;
 
+    auto missing = fun->nargs() - nargs;
     for (size_t i = 0; i < missing; ++i)
         ostack_push(globalContext(), R_MissingArg);
 

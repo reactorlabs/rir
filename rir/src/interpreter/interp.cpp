@@ -679,8 +679,8 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-static void addDynamicContextFromContext(CallContext& call, size_t formalNargs,
-                                         InterpreterInstance* ctx) {
+void inferCurrentContext(CallContext& call, size_t formalNargs,
+                         InterpreterInstance* ctx) {
     Context& given = call.givenContext;
 
     if (call.suppliedArgs <= formalNargs) {
@@ -805,8 +805,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
-    addDynamicContextFromContext(
-        call, table->baseline()->signature().formalNargs(), ctx);
+    inferCurrentContext(call, table->baseline()->signature().formalNargs(),
+                        ctx);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
@@ -2726,8 +2726,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(c, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), env, given, ctx);
             auto fun = Function::unpack(version);
-            addDynamicContextFromContext(call, fun->signature().formalNargs(),
-                                         ctx);
+            inferCurrentContext(call, fun->signature().formalNargs(), ctx);
             Context assumptions = call.givenContext;
             auto flags = fun->flags;
             bool dispatchFail =

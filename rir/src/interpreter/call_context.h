@@ -20,6 +20,9 @@
 namespace rir {
 
 struct CallContext {
+    CallContext(const CallContext&) = delete;
+    CallContext& operator=(CallContext&) = delete;
+
     CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
                 R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
                 const Context& givenContext, InterpreterInstance* ctx)

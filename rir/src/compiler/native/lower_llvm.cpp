@@ -3417,6 +3417,7 @@ bool LowerFunctionLLVM::tryCompile() {
                             asmpt.includes(Assumption::StaticallyArgmatched));
                         auto idx = Pool::makeSpace();
                         Pool::patch(idx, nativeTarget->container());
+                        assert(asmpt.smaller(nativeTarget->context()));
                         auto res = withCallFrame(args, [&]() {
                             return call(NativeBuiltins::nativeCallTrampoline,
                                         {
