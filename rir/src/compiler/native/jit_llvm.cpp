@@ -1,5 +1,6 @@
 #include "jit_llvm.h"
 
+#include "compiler/parameter.h"
 #include "types_llvm.h"
 
 #include <llvm/ADT/STLExtras.h>
@@ -262,22 +263,33 @@ static void pirPassSchedule(const PassManagerBuilder&,
 
     PM->add(createDeadInstEliminationPass());
     PM->add(createCFGSimplificationPass());
-    PM->add(createSROAPass());
-    PM->add(createConstantPropagationPass());
-    PM->add(createPromoteMemoryToRegisterPass());
 
-    PM->add(createScopedNoAliasAAWrapperPass());
-    PM->add(createTypeBasedAAWrapperPass());
-    PM->add(createBasicAAWrapperPass());
+    if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
+        PM->add(createSROAPass());
+        PM->add(createConstantPropagationPass());
+        PM->add(createPromoteMemoryToRegisterPass());
+    }
 
-    PM->add(createCFGSimplificationPass());
-    PM->add(createDeadCodeEliminationPass());
-    PM->add(createSROAPass());
+    if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 1) {
+        PM->add(createScopedNoAliasAAWrapperPass());
+        PM->add(createTypeBasedAAWrapperPass());
+        PM->add(createBasicAAWrapperPass());
+    }
 
-    PM->add(createMemCpyOptPass());
+    if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
+        PM->add(createCFGSimplificationPass());
+        PM->add(createDeadCodeEliminationPass());
+        PM->add(createSROAPass());
 
-    PM->add(createInstructionCombiningPass());
-    PM->add(createCFGSimplificationPass());
+        PM->add(createMemCpyOptPass());
+
+        PM->add(createInstructionCombiningPass());
+        PM->add(createCFGSimplificationPass());
+    }
+
+    if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL < 2)
+        return;
+
     PM->add(createSROAPass());
     PM->add(createInstSimplifyLegacyPass());
     PM->add(createAggressiveDCEPass());
@@ -488,6 +500,9 @@ llvm::Value* JitLLVM::getFunctionDeclaration(const std::string& name,
 llvm::Module& JitLLVM::module() {
     return *JitLLVMImplementation::instance().module;
 }
+
+unsigned Parameter::PIR_LLVM_OPT_LEVEL =
+    getenv("PIR_LLVM_OPT_LEVEL") ? atoi(getenv("PIR_LLVM_OPT_LEVEL")) : 2;
 
 } // namespace pir
 } // namespace rir

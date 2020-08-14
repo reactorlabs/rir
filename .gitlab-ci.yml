@@ -7,17 +7,15 @@ stages:
   - Cleanup
   - Benchmark
 variables:
-  PIR_DEOPT_CHAOS_SEED: $RANDOM
   REBENCH_OPTIONS: "-S -df $CI_PROJECT_DIR/benchmarks.data --commit-id=$CI_COMMIT_SHA --branch=master"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   REBENCH_RUN_BL: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
-before_script:
-  - echo "PIR_DEOPT_CHAOS_SEED=$PIR_DEOPT_CHAOS_SEED"
 
 sanity:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 1
   stage: Sanity Checks
   script:
     - /opt/rir/tools/cppcheck --xml
@@ -61,6 +59,7 @@ test_release_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_NATIVE_BACKEND: 0
     PIR_INLINER_INLINE_UNLIKELY: 1
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
@@ -85,6 +84,7 @@ test_release_2:
     PIR_INLINER_INLINE_UNLIKELY: 1
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
+    PIR_NATIVE_BACKEND: 0
   stage: Run tests
   except:
     - schedules
@@ -103,6 +103,7 @@ tests_debug:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_NATIVE_BACKEND: 0
   stage: Run tests
   except:
     - schedules
@@ -130,6 +131,7 @@ tests_fullverify:
     GIT_STRATEGY: none
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
+    PIR_NATIVE_BACKEND: 0
   stage: Run tests
   except:
     - schedules
@@ -149,6 +151,7 @@ test_features_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   except:
     - schedules
@@ -158,7 +161,7 @@ test_features_1:
 #    - PIR_NATIVE_BACKEND=1 PIR_ENABLE_PROFILER=1 ./bin/tests
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
-    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=400 ./bin/gnur-make-tests check
+    - PIR_WARMUP=2 PIR_NATIVE_BACKEND=0 PIR_DEOPT_CHAOS=400 ./bin/gnur-make-tests check
     - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=1 ./bin/tests
@@ -171,6 +174,7 @@ test_features_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 1
   stage: Run tests
   except:
     - schedules
@@ -185,19 +189,21 @@ test_sanitize1:
     GIT_STRATEGY: none
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
+    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   except:
     - schedules
   script:
     - cd /opt/rir/build/sanitize
-    - ENABLE_VALGRIND=1 ./bin/tests
-    - R_GCTORTURE=500 bin/tests
+    - PIR_NATIVE_BACKEND=0 ENABLE_VALGRIND=1 ./bin/tests
+    - R_GCTORTURE=1000 bin/tests
 
 # Run ubsan and gc torture
 test_sanitize2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_NATIVE_BACKEND: 0
   stage: Run tests
   except:
     - schedules
@@ -212,6 +218,7 @@ test_big_inline:
     GIT_STRATEGY: none
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
+    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   except:
     - schedules

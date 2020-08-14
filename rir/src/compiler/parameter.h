@@ -25,6 +25,8 @@ struct Parameter {
     static unsigned RIR_SERIALIZE_CHAOS;
 
     static unsigned RIR_CHECK_PIR_TYPES;
+
+    static unsigned PIR_LLVM_OPT_LEVEL;
 };
 } // namespace pir
 } // namespace rir
