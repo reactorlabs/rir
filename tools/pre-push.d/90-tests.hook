@@ -20,7 +20,7 @@ fi
 
 cd ${ROOT}/tests/build_push_hook
 
-${ROOT}/tools/tests
+PIR_LLVM_OPT_LEVEL=0 ${ROOT}/tools/tests
 
 if test "$?" -ne 0; then
   echo "make tests failed. Please fix first."

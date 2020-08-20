@@ -127,7 +127,7 @@ script:
   - PIR_NATIVE_BACKEND=1 ./bin/tests
   - if [[ "$TEST_GCTORTURE" != "" ]];  then  R_GCTORTURE=200   ./bin/tests; fi
   # Run a particular portion of the gnur testsuite
-  - if [[ "$CHECK" != "" ]]; then ./bin/gnur-make-tests $CHECK; fi
+  - if [[ "$CHECK" != "" ]]; then PIR_NATIVE_BACKEND=0 ./bin/gnur-make-tests $CHECK; fi
   - ../tools/check-gnur-make-tests-error
 
 cache:

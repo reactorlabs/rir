@@ -262,7 +262,7 @@ static unsigned ClosuresCompiled =
 #endif
 
 static int PIR_NATIVE_BACKEND =
-    getenv("PIR_NATIVE_BACKEND") ? atoi(getenv("PIR_NATIVE_BACKEND")) : 0;
+    getenv("PIR_NATIVE_BACKEND") ? atoi(getenv("PIR_NATIVE_BACKEND")) : 1;
 
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 #ifdef ENABLE_EVENT_COUNTERS

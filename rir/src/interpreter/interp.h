@@ -80,6 +80,9 @@ inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
     return f;
 };
 
+void inferCurrentContext(CallContext& call, size_t formalNargs,
+                         InterpreterInstance* ctx);
+
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx);
 SEXP doCall(CallContext& call, InterpreterInstance* ctx);
 size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,

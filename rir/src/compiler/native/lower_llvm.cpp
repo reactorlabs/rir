@@ -3222,21 +3222,24 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                     case blt("is.vector"):
                         if (auto cnst = LdConst::Cast(b->arg(1).val())) {
-                            if (TYPEOF(cnst->c()) == STRSXP &&
-                                LENGTH(cnst->c()) == 1) {
-                                auto kind = STRING_ELT(cnst->c(), 0);
-                                if (std::string("any") == CHAR(kind)) {
-                                    if (arep == Representation::Sexp) {
-                                        setVal(
-                                            i,
-                                            builder.CreateSelect(
-                                                isVector(aval),
-                                                constant(R_TrueValue, orep),
-                                                constant(R_FalseValue, orep)));
-                                    } else {
-                                        setVal(i, constant(R_TrueValue, orep));
+                            if (b->arg(0).val()->type.maybeHasAttrs()) {
+                                if (TYPEOF(cnst->c()) == STRSXP &&
+                                    LENGTH(cnst->c()) == 1) {
+                                    auto kind = STRING_ELT(cnst->c(), 0);
+                                    if (std::string("any") == CHAR(kind)) {
+                                        if (arep == Representation::Sexp) {
+                                            setVal(i, builder.CreateSelect(
+                                                          isVector(aval),
+                                                          constant(R_TrueValue,
+                                                                   orep),
+                                                          constant(R_FalseValue,
+                                                                   orep)));
+                                        } else {
+                                            setVal(i,
+                                                   constant(R_TrueValue, orep));
+                                        }
+                                        fastcase = true;
                                     }
-                                    fastcase = true;
                                 }
                             }
                         }
@@ -3417,6 +3420,7 @@ bool LowerFunctionLLVM::tryCompile() {
                             asmpt.includes(Assumption::StaticallyArgmatched));
                         auto idx = Pool::makeSpace();
                         Pool::patch(idx, nativeTarget->container());
+                        assert(asmpt.smaller(nativeTarget->context()));
                         auto res = withCallFrame(args, [&]() {
                             return call(NativeBuiltins::nativeCallTrampoline,
                                         {
