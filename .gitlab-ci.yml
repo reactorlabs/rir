@@ -19,11 +19,13 @@ sanity:
   variables:
     GIT_STRATEGY: none
   stage: Sanity Checks
+  needs:
+    - rir_container
   script:
     - /opt/rir/tools/cppcheck --xml
     - /opt/rir/build/release/bin/tests
 
-rir container:
+rir_container:
   stage: Build container
   image: docker:stable
   variables:
@@ -40,8 +42,10 @@ rir container:
   tags:
     - build
 
-benchmark container:
+benchmark_container:
   stage: Build benchmark container
+  needs:
+    - rir_container
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
@@ -65,6 +69,8 @@ test_release_1:
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
+  needs:
+    - sanity
   except:
     - schedules
   script:
@@ -86,6 +92,8 @@ test_release_2:
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
+  needs:
+    - sanity
   except:
     - schedules
   script:
@@ -104,6 +112,8 @@ tests_debug:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  needs:
+    - sanity
   except:
     - schedules
   script:
@@ -131,6 +141,8 @@ tests_fullverify:
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
+  needs:
+    - sanity
   except:
     - schedules
   script:
@@ -150,6 +162,8 @@ test_features_1:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  needs:
+    - sanity
   except:
     - schedules
   script:
@@ -172,6 +186,8 @@ test_features_2:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  needs:
+    - sanity
   except:
     - schedules
   script:
@@ -186,6 +202,8 @@ test_sanitize1:
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
+  needs:
+    - sanity
   except:
     - schedules
   script:
@@ -199,6 +217,8 @@ test_sanitize2:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  needs:
+    - sanity
   except:
     - schedules
   script:
@@ -213,6 +233,8 @@ test_big_inline:
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
+  needs:
+    - sanity
   except:
     - schedules
   script:
@@ -228,6 +250,8 @@ test_benchmarks:
   variables:
     GIT_STRATEGY: none
   stage: Run tests
+  needs:
+    - benchmark_container
   except:
     - schedules
   script:
@@ -271,6 +295,8 @@ cleanup_registry:
 benchmark_llvm:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
+  needs:
+    - test_benchmarks
   variables:
     GIT_STRATEGY: none
   tags:
