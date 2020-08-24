@@ -142,17 +142,20 @@ void EventStream::StartedPirCompiling::print(
     out << "done [" << (totalDuration / 1000) << "ms] " << std::endl;
 }
 
+static size_t nextEventNumber = 0;
+
 static void printEvent(std::ostream& out, const std::string& eventType,
                        const std::string& type, const std::string& extraLabel,
                        const std::string& extra, const UUID& uid,
-                       const Timestamp& timestamp) {
+                       const Timestamp& timestamp, size_t eventNumber) {
     // clang-format off
     out << "{ \"name\": " << std::quoted(EventStream::instance().getNameOf(uid))
         << ", \"cat\": \"" << type << "\""
         << ", \"args\": {\"" << extraLabel << "\": " << std::quoted(extra) << "}"
         << ", \"ph\": \"" << eventType << "\""
         << ", \"ts\": " << TimestampToString(timestamp) 
-        << ", \"pid\": " << uid.hash() << ""
+        << ", \"pid\": 1"
+        << ", \"tid\": " << eventNumber << ""
         << "}";
     // clang-format on
 };
@@ -161,7 +164,8 @@ static void printInstantEvent(std::ostream& out, const std::string& type,
                               const std::string& extraLabel,
                               const std::string& extra, const UUID& uid,
                               const Timestamp& timestamp) {
-    printEvent(out, "I", type, extraLabel, extra, uid, timestamp);
+    printEvent(out, "X", type, extraLabel, extra, uid, timestamp,
+               nextEventNumber++);
 }
 
 static void printEventWithDuration(std::ostream& out, const std::string& type,
@@ -169,9 +173,11 @@ static void printEventWithDuration(std::ostream& out, const std::string& type,
                                    const std::string& extra, const UUID& uid,
                                    const Timestamp& timestamp,
                                    const size_t durationMicros) {
+    size_t eventNumber = nextEventNumber++;
     auto printSubEvent = [&](const std::string& eventType,
                              const Timestamp& timestamp) {
-        printEvent(out, eventType, type, extraLabel, extra, uid, timestamp);
+        printEvent(out, eventType, type, extraLabel, extra, uid, timestamp,
+                   eventNumber);
     };
 
     if (durationMicros == 0) {
@@ -490,15 +496,14 @@ void EventStream::printFlame(std::ostream& out) {
 }
 
 void EventStream::printToFile() {
-    if (!hasEvents()) {
+    if (!hasEvents() || EventStream::mode == EventStream::Mode::NotEnabled) {
         return;
     }
 
     std::ofstream file;
     switch (EventStream::mode) {
     case EventStream::Mode::NotEnabled:
-        assert(false &&
-               "tried to print event stream but it doesn't have a mode");
+        assert(false);
     case EventStream::Mode::Log:
         file.open("event_stream.log");
         print(file);

@@ -13,7 +13,7 @@ using Timestamp = Clock::time_point;
 static bool onlyTrackClosures =
     !(getenv("ONLY_TRACK_CLOSURES") && *getenv("ONLY_TRACK_CLOSURES") == '0');
 
-const std::string ANONYMOUS_DEALLOCATED = "<anonymous deallocated>";
+const std::string ANONYMOUS = "<anonymous>";
 const ptrdiff_t UNKNOWN_BYTECODE_OFFSET = -1;
 
 static void endProfileBecauseOfContextSwitch(void* data) {
@@ -158,17 +158,8 @@ void CodeEventCounters::countCallSite(const Function* callee,
 void CodeEventCounters::countCallSite(const Code* calleeCode,
                                       const Code* callerCode,
                                       const void* address) {
-    SmallSet<CallSite>& callSites = closureCallSites[calleeCode->uid];
     CallSite callSite(callerCode, address);
-
-    if (!callSites.count(callSite)) {
-        callSites.insert(callSite);
-#ifdef MEASURE
-        count(calleeCode, codeEvents::CallSites);
-#else
-        assert(false);
-#endif
-    }
+    callSitesToCalleeUids[callSite].push_back(calleeCode->uid);
 }
 
 void CodeEventCounters::countDeopt(const DispatchTable* dispatchTable) {
@@ -255,6 +246,20 @@ void CodeEventCounters::assignName(const Function* function,
     closureNames[uid] = fullName;
 }
 
+std::string CodeEventCounters::getNameOf(const UUID& versionUid,
+                                         const Code* versionCode) const {
+    if (closureNames.count(versionUid)) {
+        return closureNames.at(versionUid);
+    } else {
+        if (versionCode == nullptr) {
+            return ANONYMOUS;
+        } else {
+            SEXP codeAst = versionCode->getAst();
+            return "<code: " + dumpSexp(codeAst) + ">";
+        }
+    }
+}
+
 void CodeEventCounters::recordContainedFunctionHeaders(
     const DispatchTable* dispatchTable) {
     for (size_t i = 0; i < dispatchTable->size(); i++) {
@@ -286,6 +291,7 @@ bool CodeEventCounters::hasADispatchTable() const {
 void CodeEventCounters::dump() const {
     dumpCodeCounters();
     dumpNumClosureVersions();
+    dumpCallSites();
 }
 
 void CodeEventCounters::dumpCodeCounters() const {
@@ -316,19 +322,7 @@ void CodeEventCounters::dumpCodeCounters() const {
             continue;
         }
 
-        std::string codeName;
-        if (closureNames.count(codeUid)) {
-            codeName = closureNames.at(codeUid);
-        } else {
-            if (code == nullptr) {
-                // The code was deallocated - must've been an anonymous
-                // closure anyways
-                codeName = ANONYMOUS_DEALLOCATED;
-            } else {
-                SEXP codeAst = code->getAst();
-                codeName = "<code: " + dumpSexp(codeAst) + ">";
-            }
-        }
+        std::string codeName = getNameOf(code->uid, code);
 
         if (code != nullptr) {
             if (codesBeingProfiled.count(code->uid)) {
@@ -393,9 +387,68 @@ void CodeEventCounters::dumpNumClosureVersions() const {
     file.close();
 }
 
+void CodeEventCounters::dumpCallSites() const {
+    if (callSitesToCalleeUids.empty()) {
+        return;
+    }
+
+    std::ofstream file;
+    file.open("call_sites.csv");
+
+    // Heading
+    file << "id, list of called versions\n";
+
+    // Body
+    for (std::pair<CallSite, std::vector<UUID>> callSiteAndCalleeUids :
+         callSitesToCalleeUids) {
+        CallSite callSite = callSiteAndCalleeUids.first;
+        std::vector<UUID> calleeUids = callSiteAndCalleeUids.second;
+
+        if (callSite.callerCodeUid == UUID::null()) {
+            // Called from R so we don't actually know the callsite
+            continue;
+        }
+
+        std::unordered_set<UUID> calleeUidSet;
+        for (UUID calleeUid : calleeUids) {
+            calleeUidSet.insert(calleeUid);
+        }
+        if (calleeUidSet.size() <= 1) {
+            continue;
+        }
+
+        std::string callSiteDescription =
+            getNameOf(callSite.callerCodeUid) + "+" +
+            std::to_string(callSite.bytecodeOffset);
+
+        file << callSiteDescription << ", ";
+        std::unordered_set<UUID> foundUids;
+        for (UUID calleeUid : calleeUids) {
+            if (foundUids.count(calleeUid)) {
+                continue;
+            }
+
+            unsigned numberOfOccurrences = 0;
+            for (UUID otherCalleeUidOrItselfAgain : calleeUids) {
+                if (calleeUid == otherCalleeUidOrItselfAgain) {
+                    numberOfOccurrences++;
+                }
+            }
+
+            file << getNameOf(calleeUid) << "="
+                 << std::to_string(numberOfOccurrences) << "; ";
+
+            foundUids.insert(calleeUid);
+        }
+        file << "\n";
+    }
+
+    file.close();
+}
+
 void CodeEventCounters::reset() {
     counters.clear();
-    closureCallSites.clear();
+    callSitesToCalleeUids.clear();
     for (std::pair<UUID, DispatchTableInfo> dispatchTableFirstCodeUidAndInfo :
          closureDispatchTables) {
         UUID firstCode = dispatchTableFirstCodeUidAndInfo.first;

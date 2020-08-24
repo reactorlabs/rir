@@ -341,12 +341,6 @@ SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
                  R_bcstack_t*, BindingCache*);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
-#ifdef MEASURE
-    if (EventCounters::isEnabled) {
-        CodeEventCounters::instance().countCallSite(code, call.caller,
-                                                    call.callSiteAddress);
-    }
-#endif
     if ((SETJMP(cntxt.cjmpbuf))) {
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
@@ -2744,6 +2738,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 FunctionSignature::Environment::CallerProvided) {
                 res = rirCall(call, ctx);
             } else {
+#ifdef MEASURE
+                if (EventCounters::isEnabled) {
+                    CodeEventCounters::instance().countCallSite(
+                        fun, call.caller, call.callSiteAddress);
+                }
+#endif
                 fun->registerInvocationStart();
                 ArgsLazyData lazyArgs(call.callee, call.suppliedArgs,
                                       call.stackArgs, call.names, ctx);
@@ -4351,6 +4351,11 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     // TODO: do we not need an RCNTXT here?
 
     if (auto code = Code::check(what)) {
+#ifdef MEASURE
+        if (EventCounters::isEnabled) {
+            CodeEventCounters::instance().countCallSite(code, NULL, NULL);
+        }
+#endif
         code->registerInvocationStart();
         SEXP res = evalRirCodeExtCaller(code, globalContext(), env);
         code->registerInvocationEnd();
@@ -4370,6 +4375,11 @@ SEXP rirEval_f(SEXP what, SEXP env) {
         assert(false && "Expected a code object or a dispatch table");
     }
 
+#ifdef MEASURE
+    if (EventCounters::isEnabled) {
+        CodeEventCounters::instance().countCallSite(fun, NULL, NULL);
+    }
+#endif
     fun->registerInvocationStart();
     SEXP res = evalRirCodeExtCaller(fun->body(), globalContext(), env);
     fun->registerInvocationEnd();

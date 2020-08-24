@@ -1,7 +1,6 @@
 #pragma once
 
 #include "event_counters.h"
-#include "utils/Set.h"
 #include "utils/UUID.h"
 #include <algorithm>
 #include <cassert>
@@ -49,6 +48,15 @@ class CodeEventCounters {
         bool operator==(const CallSite& other) const;
     };
 
+    struct CallSiteHash {
+        std::size_t operator()(const CallSite& v) const {
+            return v.callerCodeUid.hash() ^ (size_t)v.bytecodeOffset;
+        }
+    };
+
+    using CallSiteMap =
+        std::unordered_map<CallSite, std::vector<UUID>, CallSiteHash>;
+
     struct DispatchTableInfo {
         std::string name;
         unsigned size;
@@ -69,8 +77,8 @@ class CodeEventCounters {
     std::unordered_map<UUID, std::string> closureNames;
     // Map of closure version code uid's to function header description
     std::unordered_map<UUID, std::string> functionHeaders;
-    // Map of closure version code uids to RIR call sites so far
-    std::unordered_map<UUID, SmallSet<CallSite>> closureCallSites;
+    // Map RIR call sites so far to callee UIDs
+    CallSiteMap callSitesToCalleeUids;
     // Map of dispatch table's baseline's body's uid (more reliable than
     // address) to info about the entire table
     std::unordered_map<UUID, DispatchTableInfo> closureDispatchTables;
@@ -101,6 +109,8 @@ class CodeEventCounters {
                     const std::string& name);
     void assignName(const Function* function, const std::string& name,
                     size_t version);
+    std::string getNameOf(const UUID& versionUid,
+                          const Code* versionCode = nullptr) const;
     void recordContainedFunctionHeaders(const DispatchTable* dispatchTable);
     void recordHeader(const Function* function);
     bool aCounterIsNonzero() const;
@@ -108,14 +118,13 @@ class CodeEventCounters {
     void dump() const;
     void dumpCodeCounters() const;
     void dumpNumClosureVersions() const;
+    void dumpCallSites() const;
     void reset();
     void flush();
 };
 
 #ifdef MEASURE
 namespace codeEvents {
-static unsigned CallSites =
-    CodeEventCounters::instance().registerCounter("# distinct callsites");
 static unsigned Invocations =
     CodeEventCounters::instance().registerCounter("# invocations");
 static unsigned TotalExecutionTime =
