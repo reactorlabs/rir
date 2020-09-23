@@ -46,9 +46,9 @@ NativeBuiltin NativeBuiltins::consNr = {"consNr", (void*)&CONS_NR};
 
 static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
+    SET_TAG(res, name);
     if (val == R_MissingArg)
         SET_MISSING(res, 2);
-    SET_TAG(res, name);
     INCREMENT_NAMED(val);
     return res;
 }
@@ -158,7 +158,7 @@ SEXP ldvarForUpdateImpl(SEXP sym, SEXP env) {
             SET_NAMED(res, 2);
     }
     return res;
-};
+}
 
 NativeBuiltin NativeBuiltins::ldvarForUpdate = {
     "ldvarForUpdate",
@@ -171,7 +171,7 @@ SEXP ldvarImpl(SEXP a, SEXP b) {
     // Rf_PrintValue(res);
     ENSURE_NAMED(res);
     return res;
-};
+}
 
 NativeBuiltin NativeBuiltins::ldvar = {
     "ldvar",
@@ -194,20 +194,20 @@ SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
     auto res = Rf_findVar(sym, env);
     ENSURE_NAMED(res);
     return res;
-};
+}
 
 NativeBuiltin NativeBuiltins::ldvarCacheMiss = {
     "ldvarCacheMiss",
     (void*)&ldvarCachedImpl,
 };
 
-void stvarImpl(SEXP a, SEXP val, SEXP c) { rirDefineVarWrapper(a, val, c); };
+void stvarImpl(SEXP a, SEXP val, SEXP c) { rirDefineVarWrapper(a, val, c); }
 NativeBuiltin NativeBuiltins::stvar = {
     "stvar",
     (void*)&stvarImpl,
 };
 
-void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapperI(a, val, c); };
+void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapperI(a, val, c); }
 NativeBuiltin NativeBuiltins::stvari = {
     "stvari",
     (void*)&stvarImplI,
@@ -232,7 +232,7 @@ void stargImpl(SEXP sym, SEXP val, SEXP env) {
     }
 
     rirDefineVarWrapper(sym, val, env);
-};
+}
 NativeBuiltin NativeBuiltins::starg = {
     "starg",
     (void*)&stargImpl,
@@ -284,7 +284,7 @@ NativeBuiltin NativeBuiltins::externalsxpSetEntry = {
 void defvarImpl(SEXP var, SEXP value, SEXP env) {
     assert(TYPEOF(env) == ENVSXP);
     rirSetVarWrapper(var, value, ENCLOS(env));
-};
+}
 
 NativeBuiltin NativeBuiltins::defvar = {
     "defvar",
@@ -366,7 +366,7 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     auto res = builtinCall(call, ctx);
     SLOWASSERT(res);
     return res;
-};
+}
 NativeBuiltin NativeBuiltins::callBuiltin = {
     "callBuiltin",
     (void*)&callBuiltinImpl,
@@ -380,7 +380,7 @@ static SEXP callImplCached(CallContext& call, Immediate cache) {
     }
     ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
     return res;
-};
+}
 
 static SEXP callImplCached(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                            size_t nargs, unsigned long available,
@@ -392,7 +392,7 @@ static SEXP callImplCached(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     return callImplCached(call, cache);
-};
+}
 
 static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                      size_t nargs, unsigned long available) {
@@ -416,7 +416,7 @@ static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     auto res = doCall(call, ctx);
     ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
     return res;
-};
+}
 
 NativeBuiltin NativeBuiltins::namedCall = {
     "namedCall",
@@ -450,7 +450,7 @@ static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     auto res = doCall(call, ctx);
     ostack_popn(ctx, call.passedArgs + pushed);
     return res;
-};
+}
 
 NativeBuiltin NativeBuiltins::dotsCall = {
     "dotsCall",

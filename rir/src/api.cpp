@@ -66,7 +66,7 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
-REXPORT SEXP rir_compile(SEXP what, SEXP env) {
+REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
@@ -154,9 +154,9 @@ REXPORT SEXP rir_markFunction(SEXP what, SEXP which, SEXP reopt_,
     }
     if (disableNumArgumentSpecialization != NA_LOGICAL) {
         if (disableNumArgumentSpecialization)
-            fun->flags.set(Function::DisableNumArgumentsSepzialization);
+            fun->flags.set(Function::DisableNumArgumentsSpezialization);
         else
-            fun->flags.reset(Function::DisableNumArgumentsSepzialization);
+            fun->flags.reset(Function::DisableNumArgumentsSpezialization);
     }
 
     return R_NilValue;
@@ -399,7 +399,7 @@ REXPORT SEXP pir_check(SEXP f, SEXP checksSxp, SEXP env) {
     }
     // Automatically compile rir for convenience (necessary to get PIR)
     if (!isValidClosureSEXP(f))
-        rir_compile(f, env);
+        rirCompile(f, env);
     PirCheck check(checkTypes);
     bool res = check.run(f);
     return res ? R_TrueValue : R_FalseValue;

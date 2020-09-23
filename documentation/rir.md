@@ -102,7 +102,7 @@ Here are a few important files and functions:
 
 - [`R/rir.R`](../rir/R/rir.R): Defines extra functions in R which let you access RIR/PIR, like `rir.compile` and `pir.compile`. This is run whenever RIR R is loaded.
 - [`api.cpp`](../rir/src/api.cpp): Allows us to "inject" RIR into R, reads environment variables and debug flags, and provides the implementation for the functions in `rir.R`.
-  - [`rir_compile`](../rir/src/api.cpp#L45): `rir.compile` - this "hacks" a function so that it gets evaluated in RIR.
+  - [`rirCompile`](../rir/src/api.cpp#L45): `rir.compile` - this "hacks" a function so that it gets evaluated in RIR.
 - [`Compiler.cpp`](../rir/src/Compiler.cpp): Converts the parsed R AST into RIR (GNU-R parses the AST).
   - [`compileSpecialCall`](../rir/src/ir/Compiler.cpp#L137): Converts calls to certain, "special" functions (e.g. `+`, `for`) into their own bytecodes. This way we can interpret them faster.
 - [`interp.cpp`](../rir/src/interpreter/interp.cpp): Contains almost the entire RIR interpreter, that's why it's so huge.

@@ -375,10 +375,6 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 #ifdef ENABLE_SLOWASSERT
                     std::stringstream ss;
                     v->printRef(ss);
-                    // Protect error: install can allocate and calling it
-                    // many times during pir2rir might in principle cause
-                    // some of these to be gc'd.. But unlikely and only
-                    // possible in debug mode
                     return Rf_install(ss.str().c_str());
 #else
                     return nullptr;

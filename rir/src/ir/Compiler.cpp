@@ -1192,30 +1192,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
     }
 
-    // The code bellow hardwires any call to a function that also exists as a
-    // builtin in the global namespace. That is probably not the best idea and
-    // much broader than the unsound optimizations of the gnu R BC interpreter.
-    // Let's just disable that for now.
-    //
-    // SEXP builtin = fun->u.symsxp.value;
-    // if (TYPEOF(builtin) == BUILTINSXP) {
-    //     for (RListIter a = args.begin(); a != args.end(); ++a)
-    //         if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
-    //             return false;
-
-    //     // Those are somehow overloaded in std libs
-    //     if (fun == symbol::standardGeneric)
-    //         return false;
-
-    //     cs << BC::guardNamePrimitive(fun);
-
-    //     for (SEXP a : args)
-    //         compileExpr(ctx, a);
-    //     cs << BC::staticCall(args.length(), ast, builtin);
-
-    //     return true;
-    // }
-
 #define V(NESTED, name, Name)                                                  \
     if (fun == symbol::name) {                                                 \
         cs << BC::push(R_NilValue) << BC::name();                              \

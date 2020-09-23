@@ -43,7 +43,7 @@ rir.disassemble <- function(what, verbose = FALSE) {
 
 # compiles given closure, or expression and returns the compiled version.
 rir.compile <- function(what) {
-    .Call("rir_compile", what)
+    .Call("rirCompile", what)
 }
 
 # optimizes given rir compiled closure

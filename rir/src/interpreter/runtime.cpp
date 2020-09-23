@@ -6,10 +6,6 @@
 
 namespace rir {
 
-SEXP envSymbol;
-SEXP callSymbol;
-SEXP execName;
-SEXP promExecName;
 InterpreterInstance* globalContext_;
 
 /** Checks if given closure should be executed using RIR.
@@ -28,15 +24,9 @@ bool isValidClosureSEXP(SEXP closure) {
 }
 
 void initializeRuntime() {
-    envSymbol = Rf_install("environment");
-    callSymbol = Rf_install(".Call");
-    execName = Rf_mkString("rir_executeWrapper");
-    R_PreserveObject(execName);
-    promExecName = Rf_mkString("rir_executePromiseWrapper");
-    R_PreserveObject(promExecName);
     // initialize the global context
     globalContext_ = context_create();
-    registerExternalCode(rirEval, rirApplyClosure, rirForcePromise, rir_compile,
+    registerExternalCode(rirEval, rirApplyClosure, rirForcePromise, rirCompile,
                          rirDecompile, deserializeRir, serializeRir,
                          materialize);
     RuntimeProfiler::initProfiler();
