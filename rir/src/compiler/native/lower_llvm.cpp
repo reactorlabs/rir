@@ -3222,7 +3222,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                     case blt("is.vector"):
                         if (auto cnst = LdConst::Cast(b->arg(1).val())) {
-                            if (b->arg(0).val()->type.maybeHasAttrs()) {
+                            if (!b->arg(0).val()->type.maybeHasAttrs()) {
                                 if (TYPEOF(cnst->c()) == STRSXP &&
                                     LENGTH(cnst->c()) == 1) {
                                     auto kind = STRING_ELT(cnst->c(), 0);
