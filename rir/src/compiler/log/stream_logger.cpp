@@ -252,19 +252,10 @@ void PassStreamLogger::pirOptimizationsHeader(const Pass* pass) {
 
 void PassStreamLogger::pirOptimizations(const Pass* pass) {
     if (shouldLog(version, pass, options)) {
-        if (options.includes(DebugFlag::OnlyChanges)) {
-            static std::string last = "";
-            std::stringstream ss;
-            version->print(options.style, ss, out().tty(),
-                           options.includes(DebugFlag::OmitDeoptBranches));
-            if (last != ss.str()) {
-                last = ss.str();
-                out() << last;
-            }
-        } else {
+        if (!options.includes(DebugFlag::OnlyChanges) ||
+            pass->changedAnything())
             version->print(options.style, out().out, out().tty(),
                            options.includes(DebugFlag::OmitDeoptBranches));
-        }
     }
 }
 
