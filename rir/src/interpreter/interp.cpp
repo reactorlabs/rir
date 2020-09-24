@@ -3248,6 +3248,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(aslogical_) {
             SEXP val = ostack_top(ctx);
+            if (!Rf_isNumber(val)) {
+              SEXP call = getSrcAt(c, pc - 1, ctx);
+              errorcall(call, "argument has the wrong type for && or ||");
+            }
             int x1 = Rf_asLogical(val);
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             res = Rf_ScalarLogical(x1);

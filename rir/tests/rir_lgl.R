@@ -43,6 +43,21 @@ f <- rir.compile(function() {
     stopifnot(is.na(a21))
     a22 <- !((1:5 %% 2) == 0)
     stopifnot(a22 == c(TRUE, FALSE, TRUE, FALSE, TRUE))
+
+    fail <- function(expr) {
+      msg <- "argument has the wrong type for && or ||"
+      tryCatch(expr, error=function(e) { stopifnot(e[1] == msg) })
+    }
+    fail("foo" || -42)
+    fail(c("one", "two") || 1)
+    fail(42 && "")
+    fail(TRUE && "bad")
+
+    # short circuit could prevent error from occurring
+    a23 <- TRUE || "bad"
+    stopifnot(a23 == TRUE)
+    a24 <- FALSE && c("one", "two")
+    stopifnot(a24 == FALSE)
 })
 
 f()
