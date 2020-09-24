@@ -3499,7 +3499,7 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::ScheduledDeopt: {
-                // TODO, this is copied from pir_2_rir... rather ugly
+                // TODO, this is copied from pir2rir... rather ugly
                 DeoptMetadata* m = nullptr;
                 {
                     auto deopt = ScheduledDeopt::Cast(i);

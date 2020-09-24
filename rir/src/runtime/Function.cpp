@@ -56,7 +56,7 @@ void Function::disassemble(std::ostream& out) {
     std::cout << "[sigature] ";
     signature().print(std::cout);
     if (!context_.empty())
-        out << "| assumptions: [" << context_ << "]";
+        out << "| context: [" << context_ << "]";
     std::cout << "\n";
     std::cout << "[flags]    ";
 #define V(F)                                                                   \

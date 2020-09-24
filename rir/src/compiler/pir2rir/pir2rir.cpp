@@ -1066,7 +1066,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Checkpoint: {
                 assert(false && "Deopt instructions must be lowered into "
                                 "standard branches and scheduled deopt, "
-                                "before pir_2_rir");
+                                "before pir2rir");
                 break;
             }
 

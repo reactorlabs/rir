@@ -8,7 +8,7 @@ rir.markFunction <- function(what, which,
                              DisableArgumentTypeSpecialization=NA,
                              DisableNumArgumentsSepcialization=NA) {
     doIt = function(n) {
-        .Call("rir_markFunction", what, n,
+        .Call("rirMarkFunction", what, n,
               Reopt,
               ForceInline, DisableInline,
               DisableAllSpecialization,
@@ -24,21 +24,21 @@ rir.markFunction <- function(what, which,
 }
 
 rir.functionVersions <- function(what) {
-    .Call("rir_functionVersions", what);
+    .Call("rirFunctionVersions", what);
 }
 
 rir.functionInvocations <- function(what) {
-    .Call("rir_invocation_count", what);
+    .Call("rirInvocationCount", what);
 }
 
 # Returns TRUE if the argument is a rir-compiled closure.
 rir.isValidFunction <- function(what) {
-    .Call("rir_isValidFunction", what);
+    .Call("rirIsValidFunction", what);
 }
 
 # prints the disassembled rir function
 rir.disassemble <- function(what, verbose = FALSE) {
-    invisible(.Call("rir_disassemble", what, verbose))
+    invisible(.Call("rirDisassemble", what, verbose))
 }
 
 # compiles given closure, or expression and returns the compiled version.
@@ -68,7 +68,7 @@ pir.compile <- function(what, debugFlags, debugStyle, P_EARLY=FALSE, P_FINAL=FAL
         as.name(as.character(substitute(debugStyle)))
       }
 
-    .Call("pir_compile",
+    .Call("pirCompileWrapper",
           what,
           as.name(as.character(substitute(what))),
           debugFlags,
@@ -76,7 +76,7 @@ pir.compile <- function(what, debugFlags, debugStyle, P_EARLY=FALSE, P_FINAL=FAL
 }
 
 pir.tests <- function() {
-    invisible(.Call("pir_tests"))
+    invisible(.Call("pirTests"))
 }
 
 # returns TRUE f, when PIR compiled, satisfies the the given checks (e.g.
@@ -88,7 +88,7 @@ pir.check <- function(f, ..., warmup=NULL) {
     if (length(checks) == 0)
         stop("pir.check: needs at least 1 check")
 
-    .Call("pir_check_warmup_begin")
+    .Call("pirCheckWarmupBegin")
     rir.compile(f)
     if (!is.null(warmup)) {
         rir.compile(warmup)
@@ -96,8 +96,8 @@ pir.check <- function(f, ..., warmup=NULL) {
         for (i in 1:as.numeric(Sys.getenv("PIR_WARMUP", unset="3")))
             warmup(f)
     }
-    res = .Call("pir_check", f, checks)
-    .Call("pir_check_warmup_end")
+    res = .Call("pirCheck", f, checks)
+    .Call("pirCheckWarmupEnd")
     res
 }
 
@@ -121,7 +121,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            PrintFinalRir = FALSE) {
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
-    .Call("pir_debugFlags",
+    .Call("pirDebugFlags",
           ShowWarnings,
           DryRun,
           PrintPassesIntoFolders,
@@ -145,7 +145,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
 
 # sets the default debug options for pir compiler
 pir.setDebugFlags <- function(debugFlags = pir.debugFlags()) {
-    invisible(.Call("pir_setDebugFlags", debugFlags))
+    invisible(.Call("pirSetDebugFlags", debugFlags))
 }
 
 # compiles code of the given file and returns the list of compiled version.
@@ -159,7 +159,7 @@ pir.program <- function(file) {
 
 # returns the body of rir-compiled function. The body is the vector containing its ast maps and code objects
 rir.body <- function(f) {
-    .Call("rir_body", f);
+    .Call("rirBody", f);
 }
 
 # breakpoint during evaluation
@@ -171,12 +171,12 @@ rir.body <- function(f) {
 
 # Serializes the SEXP, preserving RIR/PIR-compiled closures, to the given path
 rir.serialize <- function(data, path) {
-    .Call("rir_serialize", data, path)
+    .Call("rirSerialize", data, path)
 }
 
 # Deserializes and returns the SEXP at the given path
 rir.deserialize <- function(path) {
-    .Call("rir_deserialize", path)
+    .Call("rirDeserialize", path)
 }
 
 rir.enableLoopPeeling <- function() {
