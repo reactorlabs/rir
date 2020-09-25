@@ -11,20 +11,19 @@
 extern int R_ENABLE_JIT;
 extern rir::pir::DebugOptions PirDebug;
 
-REXPORT SEXP rir_invocation_count(SEXP what);
-REXPORT SEXP rir_eval(SEXP exp, SEXP env);
-REXPORT SEXP pir_compile(SEXP closure, SEXP name, SEXP debugFlags,
-                         SEXP debugStyle);
-REXPORT SEXP rir_compile(SEXP what, SEXP env);
-REXPORT SEXP pir_tests();
-REXPORT SEXP pir_check(SEXP f, SEXP check, SEXP env);
-REXPORT SEXP pir_setDebugFlags(SEXP debugFlags);
+REXPORT SEXP rirInvocationCount(SEXP what);
+REXPORT SEXP pirCompileWrapper(SEXP closure, SEXP name, SEXP debugFlags,
+                               SEXP debugStyle);
+REXPORT SEXP rirCompile(SEXP what, SEXP env);
+REXPORT SEXP pirTests();
+REXPORT SEXP pirCheck(SEXP f, SEXP check, SEXP env);
+REXPORT SEXP pirSetDebugFlags(SEXP debugFlags);
 SEXP pirCompile(SEXP closure, const rir::Context& assumptions,
                 const std::string& name, const rir::pir::DebugOptions& debug);
 extern SEXP rirOptDefaultOpts(SEXP closure, const rir::Context&, SEXP name);
 extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Context&,
                                     SEXP name);
-REXPORT SEXP rir_serialize(SEXP data, SEXP file);
-REXPORT SEXP rir_deserialize(SEXP file);
+REXPORT SEXP rirSerialize(SEXP data, SEXP file);
+REXPORT SEXP rirDeserialize(SEXP file);
 
 #endif // API_H_

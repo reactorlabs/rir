@@ -9,7 +9,9 @@ namespace rir {
 static inline std::string dumpSexp(SEXP src, size_t length = 50) {
     CaptureOut rec;
     if (src == R_UnboundValue) {
-        std::cout << "-";
+        std::cout << "R_UnboundValue";
+    } else if (src == R_MissingArg) {
+        std::cout << "R_MissingArg";
     } else {
         Rf_PrintValue(src);
     }

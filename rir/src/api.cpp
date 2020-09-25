@@ -47,7 +47,7 @@ bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
     }
 }
 
-REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
+REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     if (!what || TYPEOF(what) != CLOSXP)
         Rf_error("Not a rir compiled code");
     DispatchTable* t = DispatchTable::check(BODY(what));
@@ -66,7 +66,7 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
-REXPORT SEXP rir_compile(SEXP what, SEXP env) {
+REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
@@ -85,11 +85,11 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env) {
     }
 }
 
-REXPORT SEXP rir_markFunction(SEXP what, SEXP which, SEXP reopt_,
-                              SEXP forceInline_, SEXP disableInline_,
-                              SEXP disableSpecialization_,
-                              SEXP disableArgumentTypeSpecialization_,
-                              SEXP disableNumArgumentSpecialization_) {
+REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
+                             SEXP forceInline_, SEXP disableInline_,
+                             SEXP disableSpecialization_,
+                             SEXP disableArgumentTypeSpecialization_,
+                             SEXP disableNumArgumentSpecialization_) {
     if (!isValidClosureSEXP(what))
         Rf_error("Not rir compiled code");
     if (TYPEOF(which) != INTSXP || LENGTH(which) != 1)
@@ -154,15 +154,15 @@ REXPORT SEXP rir_markFunction(SEXP what, SEXP which, SEXP reopt_,
     }
     if (disableNumArgumentSpecialization != NA_LOGICAL) {
         if (disableNumArgumentSpecialization)
-            fun->flags.set(Function::DisableNumArgumentsSepzialization);
+            fun->flags.set(Function::DisableNumArgumentsSpezialization);
         else
-            fun->flags.reset(Function::DisableNumArgumentsSepzialization);
+            fun->flags.reset(Function::DisableNumArgumentsSpezialization);
     }
 
     return R_NilValue;
 }
 
-REXPORT SEXP rir_functionVersions(SEXP what) {
+REXPORT SEXP rirFunctionVersions(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("Not rir compiled code");
     DispatchTable* dt = DispatchTable::unpack(BODY(what));
@@ -172,13 +172,13 @@ REXPORT SEXP rir_functionVersions(SEXP what) {
     return res;
 }
 
-REXPORT SEXP rir_body(SEXP cls) {
+REXPORT SEXP rirBody(SEXP cls) {
     if (!isValidClosureSEXP(cls))
         Rf_error("Not a valid rir compiled function");
     return DispatchTable::unpack(BODY(cls))->baseline()->container();
 }
 
-REXPORT SEXP pir_debugFlags(
+REXPORT SEXP pirDebugFlags(
 #define V(n) SEXP n,
     LIST_OF_PIR_DEBUGGING_FLAGS(V)
 #undef V
@@ -265,10 +265,10 @@ pir::DebugOptions PirDebug = {
     getInitialDebugFlags(), getInitialDebugPassFilter(),
     getInitialDebugFunctionFilter(), getInitialDebugStyle()};
 
-REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
+REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
     if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
         Rf_error(
-            "pir_setDebugFlags expects an integer vector as second parameter");
+            "pirSetDebugFlags expects an integer vector as second parameter");
     PirDebug.flags = pir::DebugOptions::DebugFlags(INTEGER(debugFlags)[0]);
     return R_NilValue;
 }
@@ -317,7 +317,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     return what;
 }
 
-REXPORT SEXP rir_invocation_count(SEXP what) {
+REXPORT SEXP rirInvocationCount(SEXP what) {
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
     }
@@ -331,13 +331,14 @@ REXPORT SEXP rir_invocation_count(SEXP what) {
     return res;
 }
 
-REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags,
-                         SEXP debugStyle) {
+REXPORT SEXP pirCompileWrapper(SEXP what, SEXP name, SEXP debugFlags,
+                               SEXP debugStyle) {
     if (debugFlags != R_NilValue &&
         (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) != 1))
-        Rf_error("pir_compile expects an integer scalar as second parameter");
+        Rf_error(
+            "pirCompileWrapper expects an integer scalar as second parameter");
     if (debugStyle != R_NilValue && TYPEOF(debugStyle) != SYMSXP)
-        Rf_error("pir_compile expects a symbol as third parameter");
+        Rf_error("pirCompileWrapper expects a symbol as third parameter");
     std::string n;
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
@@ -348,18 +349,18 @@ REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags,
     }
     if (debugStyle != R_NilValue) {
         if (!parseDebugStyle(CHAR(PRINTNAME(debugStyle)), opts.style)) {
-            Rf_error("pir_compile - given unknown debug style");
+            Rf_error("pirCompileWrapper - given unknown debug style");
         }
     }
     return pirCompile(what, rir::pir::Compiler::defaultContext, n, opts);
 }
 
-REXPORT SEXP pir_tests() {
+REXPORT SEXP pirTests() {
     PirTests::run();
     return R_NilValue;
 }
 
-REXPORT SEXP pir_check_warmup_begin(SEXP f, SEXP checksSxp, SEXP env) {
+REXPORT SEXP pirCheckWarmupBegin(SEXP f, SEXP checksSxp, SEXP env) {
     if (oldMaxInput == 0) {
         oldMaxInput = pir::Parameter::MAX_INPUT_SIZE;
         oldInlinerMax = pir::Parameter::INLINER_MAX_SIZE;
@@ -372,7 +373,7 @@ REXPORT SEXP pir_check_warmup_begin(SEXP f, SEXP checksSxp, SEXP env) {
     pir::Parameter::DEOPT_CHAOS = false;
     return R_NilValue;
 }
-REXPORT SEXP pir_check_warmup_end(SEXP f, SEXP checksSxp, SEXP env) {
+REXPORT SEXP pirCheckWarmupEnd(SEXP f, SEXP checksSxp, SEXP env) {
     pir::Parameter::MAX_INPUT_SIZE = oldMaxInput;
     pir::Parameter::INLINER_MAX_SIZE = oldInlinerMax;
     pir::Parameter::RIR_SERIALIZE_CHAOS = oldSerializeChaos;
@@ -380,17 +381,17 @@ REXPORT SEXP pir_check_warmup_end(SEXP f, SEXP checksSxp, SEXP env) {
     return R_NilValue;
 }
 
-REXPORT SEXP pir_check(SEXP f, SEXP checksSxp, SEXP env) {
+REXPORT SEXP pirCheck(SEXP f, SEXP checksSxp, SEXP env) {
     if (TYPEOF(checksSxp) != LISTSXP)
-        Rf_error("pir_check: 2nd parameter must be a pairlist (of symbols)");
+        Rf_error("pirCheck: 2nd parameter must be a pairlist (of symbols)");
     std::list<PirCheck::Type> checkTypes;
     for (SEXP c = checksSxp; c != R_NilValue; c = CDR(c)) {
         SEXP checkSxp = CAR(c);
         if (TYPEOF(checkSxp) != SYMSXP)
-            Rf_error("pir_check: each item in 2nd parameter must be a symbol");
+            Rf_error("pirCheck: each item in 2nd parameter must be a symbol");
         PirCheck::Type type = PirCheck::parseType(CHAR(PRINTNAME(checkSxp)));
         if (type == PirCheck::Type::Invalid)
-            Rf_error("pir_check: invalid check type. List of check types:"
+            Rf_error("pirCheck: invalid check type. List of check types:"
 #define V(Check) "\n    " #Check
                      LIST_OF_PIR_CHECKS(V)
 #undef V
@@ -399,7 +400,7 @@ REXPORT SEXP pir_check(SEXP f, SEXP checksSxp, SEXP env) {
     }
     // Automatically compile rir for convenience (necessary to get PIR)
     if (!isValidClosureSEXP(f))
-        rir_compile(f, env);
+        rirCompile(f, env);
     PirCheck check(checkTypes);
     bool res = check.run(f);
     return res ? R_TrueValue : R_FalseValue;
@@ -429,7 +430,7 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Context& assumptions,
         return closure;
 }
 
-REXPORT SEXP rir_serialize(SEXP data, SEXP fileSexp) {
+REXPORT SEXP rirSerialize(SEXP data, SEXP fileSexp) {
     oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
     if (TYPEOF(fileSexp) != STRSXP)
@@ -444,7 +445,7 @@ REXPORT SEXP rir_serialize(SEXP data, SEXP fileSexp) {
     return R_NilValue;
 }
 
-REXPORT SEXP rir_deserialize(SEXP fileSexp) {
+REXPORT SEXP rirDeserialize(SEXP fileSexp) {
     oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
     if (TYPEOF(fileSexp) != STRSXP)

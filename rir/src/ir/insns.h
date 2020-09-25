@@ -187,7 +187,7 @@ DEF_INSTR(named_call_, 4, -1, 1, 0)
 
 /*
  * call_dots_:: This instruction is like named_call_, but additionally it
- *              allows the callee to pass R_DotsSymbol as an argument. This
+ *              allows the caller to pass R_DotsSymbol as an argument. This
  *              argument will be expanded (on the stack) with the contents of
  *              `...` and passed to the callee.
  */

@@ -210,7 +210,7 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
     }
     UNPROTECT(protectedVars);
 
-    // End of copy/paste snippt. Collecting results.
+    // End of copy/paste snippet. Collecting results.
 
     RList result(actuals);
     for (auto r : result) {

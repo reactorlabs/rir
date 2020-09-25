@@ -314,12 +314,12 @@ struct PirType {
     RIR_INLINE constexpr bool maybeObj() const {
         if (!isRType())
             return false;
-        return isRType() && flags_.includes(TypeFlags::maybeObject);
+        return flags_.includes(TypeFlags::maybeObject);
     }
     RIR_INLINE constexpr bool maybeHasAttrs() const {
         if (!isRType())
             return false;
-        return isRType() && flags_.includes(TypeFlags::maybeAttrib);
+        return flags_.includes(TypeFlags::maybeAttrib);
     }
 
     RIR_INLINE constexpr PirType operator|(const PirType& o) const {

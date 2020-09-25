@@ -561,7 +561,7 @@ void BC::print(std::ostream& out) const {
         out << nargs << " : ";
         if (targetV != R_NilValue)
             out << "(" << Function::unpack(targetV) << ") ";
-        out << dumpSexp(target).c_str();
+        out << dumpSexp(target);
         break;
     }
     case Opcode::mk_stub_env_:
@@ -585,7 +585,7 @@ void BC::print(std::ostream& out) const {
         break;
     }
     case Opcode::push_:
-        out << dumpSexp(immediateConst()).c_str();
+        out << dumpSexp(immediateConst());
         break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:

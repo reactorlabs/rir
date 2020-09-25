@@ -56,7 +56,7 @@ void Function::disassemble(std::ostream& out) {
     std::cout << "[sigature] ";
     signature().print(std::cout);
     if (!context_.empty())
-        out << "| assumptions: [" << context_ << "]";
+        out << "| context: [" << context_ << "]";
     std::cout << "\n";
     std::cout << "[flags]    ";
 #define V(F)                                                                   \
@@ -79,7 +79,7 @@ static int GLOBAL_SPECIALIZATION_LEVEL =
 void Function::clearDisabledAssumptions(Context& given) const {
     if (flags.contains(Function::DisableArgumentTypeSpecialization))
         given.clearTypeFlags();
-    if (flags.contains(Function::DisableNumArgumentsSepzialization))
+    if (flags.contains(Function::DisableNumArgumentsSpezialization))
         given.clearNargs();
     if (flags.contains(Function::DisableAllSpecialization))
         given.clearExcept(pir::Compiler::minimalContext);

@@ -1748,7 +1748,7 @@ llvm::Value* LowerFunctionLLVM::container(llvm::Value* v) {
 llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
                                         const std::vector<llvm::Value*>& args) {
 #ifdef ENABLE_SLOWASSERT
-    // abuse BB lable as comment
+    // abuse BB label as comment
     auto callBB = BasicBlock::Create(C, builtin.name, fun);
     builder.CreateBr(callBB);
     builder.SetInsertPoint(callBB);
@@ -3222,7 +3222,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                     case blt("is.vector"):
                         if (auto cnst = LdConst::Cast(b->arg(1).val())) {
-                            if (b->arg(0).val()->type.maybeHasAttrs()) {
+                            if (!b->arg(0).val()->type.maybeHasAttrs()) {
                                 if (TYPEOF(cnst->c()) == STRSXP &&
                                     LENGTH(cnst->c()) == 1) {
                                     auto kind = STRING_ELT(cnst->c(), 0);
@@ -3499,7 +3499,7 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::ScheduledDeopt: {
-                // TODO, this is copied from pir_2_rir... rather ugly
+                // TODO, this is copied from pir2rir... rather ugly
                 DeoptMetadata* m = nullptr;
                 {
                     auto deopt = ScheduledDeopt::Cast(i);

@@ -46,7 +46,7 @@ static void printInterp(Opcode* pc, Code* c, InterpreterInstance* ctx) {
     std::cout << "#; Stack:";
     for (int i = 0;; i++) {
         SEXP sexp = ostack_at(ctx, i);
-        if (sexp == nullptr || ostack_length(ctx) == 0)
+        if (sexp == nullptr || ostack_length(ctx) - i == 0)
             break;
         else if (i == PRINT_STACK_SIZE) {
             std::cout << " ...";

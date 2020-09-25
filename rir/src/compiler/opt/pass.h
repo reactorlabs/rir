@@ -20,12 +20,14 @@ class Pass {
     virtual bool apply(Compiler&, ClosureVersion*, Code*, LogStream&) const = 0;
 
     std::string getName() const { return this->name; }
+    bool changedAnything() const { return changedAnything_; }
     virtual ~Pass() {}
     virtual bool isPhaseMarker() const { return false; }
     virtual unsigned cost() const { return 1; }
 
   protected:
     std::string name;
+    mutable bool changedAnything_ = false;
 };
 
 } // namespace pir

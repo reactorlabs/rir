@@ -1,1 +1,1 @@
-.Call("pir_tests")
+.Call("pirTests")

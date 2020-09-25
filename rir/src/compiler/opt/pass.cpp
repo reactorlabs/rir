@@ -12,6 +12,7 @@ bool Pass::apply(Compiler& cmp, ClosureVersion* function,
         function->eachPromise(
             [&](Promise* p) { res = apply(cmp, function, p, log) && res; });
     }
+    changedAnything_ = res;
     return res;
 }
 

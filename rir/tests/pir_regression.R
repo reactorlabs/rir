@@ -63,21 +63,21 @@ if (Sys.getenv("PIR_DEOPT_CHAOS") != "1" &&
     stopifnot(f(-1) == 42)
     stopifnot(f(-1) == 42)
     
-    hc1 = .Call("rir_invocation_count", h)
-    ic1 = .Call("rir_invocation_count", i)
+    hc1 = .Call("rirInvocationCount", h)
+    ic1 = .Call("rirInvocationCount", i)
     g <- pir.compile(g)
     stopifnot(f(-1) == 42)
     
     ## Assert we are really inlined (ie. h and i are not called)
-    hc2 = .Call("rir_invocation_count", h)
-    ic2 = .Call("rir_invocation_count", i)
+    hc2 = .Call("rirInvocationCount", h)
+    ic2 = .Call("rirInvocationCount", i)
     stopifnot(hc1 == hc2)
     stopifnot(ic1 == ic2)
     
     ## Assert we deopt (ie. base version of h and i are invoked)
     stopifnot(f(structure(-1, class="asdf")) == 42)
-    hc3 = .Call("rir_invocation_count", h)
-    ic3 = .Call("rir_invocation_count", i)
+    hc3 = .Call("rirInvocationCount", h)
+    ic3 = .Call("rirInvocationCount", i)
     stopifnot(hc3 == hc2+1)
     stopifnot(ic3 == ic2+1)
 }
@@ -107,7 +107,7 @@ if (Sys.getenv("RIR_SERIALIZE_CHAOS") == 0) {
   for (i in 1:100) pir.compile(function() p())()
   for (i in 1:100) pir.compile(function() p(1))()
   for (i in 1:100) pir.compile(function() p(1,2))()
-  stopifnot(length(.Call("rir_invocation_count", p)) > 3)
+  stopifnot(length(.Call("rirInvocationCount", p)) > 3)
   compiler::enableJIT(old)
 }
 
