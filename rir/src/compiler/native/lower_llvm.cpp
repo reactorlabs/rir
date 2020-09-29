@@ -2993,12 +2993,14 @@ bool LowerFunctionLLVM::tryCompile() {
                                 builder.CreateICmpEQ(
                                     attr(a), constant(R_NilValue, t::SEXP)),
                                 builder.CreateICmpEQ(sexptype(a), c(INTSXP)));
-                            
 
                             setVal(i, createSelect2(
                                           isSimpleInt,
                                           [&]() { return convert(a, i->type); },
-                                          [&]() { return callTheBuiltin(); }));
+                                          [&]() {
+                                              return convert(callTheBuiltin(),
+                                                             i->type);
+                                          }));
 
                         } else {
                             done = false;
