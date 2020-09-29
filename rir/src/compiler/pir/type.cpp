@@ -220,13 +220,10 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
     if (assumptions.isNotObj(i))
         type.setNotObject();
     if (assumptions.isSimpleReal(i)) {
-        assert(assumptions.isEager(i) && assumptions.isNotObj(i));
         type.setScalar(RType::real);
         type.setNoAttribs();
     }
     if (assumptions.isSimpleInt(i)) {
-        assert(assumptions.isEager(i) && assumptions.isNotObj(i) &&
-               !assumptions.isSimpleReal(i));
         type.setScalar(RType::integer);
         type.setNoAttribs();
     }

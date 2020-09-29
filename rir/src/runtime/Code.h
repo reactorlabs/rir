@@ -107,6 +107,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     enum Flag {
         NeedsFullEnv,
+        NoReflection,
         Reoptimise,
 
         FIRST = NeedsFullEnv,

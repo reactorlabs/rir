@@ -724,7 +724,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::MkArg: {
                 auto mk = MkArg::Cast(instr);
                 auto p = mk->prom();
-                unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
+                auto pr = getPromise(ctx, p);
+                if (mk->noReflection &&
+                    !pr->flags.contains(rir::Code::NoReflection))
+                    pr->flags.set(rir::Code::NoReflection);
+                unsigned id = ctx.cs().addPromise(pr);
                 promMap[p] = {id, MkEnv::Cast(mk->env())};
                 if (mk->isEager()) {
                     cb.add(BC::mkEagerPromise(id));

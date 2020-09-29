@@ -692,61 +692,71 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
     given.add(Assumption::NoReflectiveArgument);
     auto testArg = [&](size_t i) {
         SEXP arg = call.stackArg(i);
-        bool notObj = true;
         bool isEager = true;
+        if (arg == R_MissingArg) {
+            isEager = false;
+            given.remove(Assumption::NoExplicitlyMissingArgs);
+        }
+
         if (TYPEOF(arg) == PROMSXP) {
             auto prom = arg;
             arg = PRVALUE(arg);
             if (arg == R_UnboundValue) {
-                notObj = false;
                 isEager = false;
-                if (given.includes(Assumption::NoReflectiveArgument)) {
-                    bool reflectionPossible = true;
-                    // If this is a simple promise, that just looks up an eager
-                    // value we do not reset the no-reflection flag. The callee
-                    // can assume that (as long as he does not trigger any other
-                    // reflection) evaluating this promise does not trigger
-                    // reflection either.
-                    while (TYPEOF(PREXPR(prom)) == SYMSXP) {
-                        SEXP v;
-                        if (auto le =
-                                LazyEnvironment::check(prom->u.promsxp.env)) {
-                            v = le->getArg(PREXPR(prom));
-                        } else {
-                            v = Rf_findVar(PREXPR(prom), PRENV(prom));
+                bool reflectionPossible = true;
+                // If this is a simple promise, that just looks up an eager
+                // value we do not reset the no-reflection flag. The callee
+                // can assume that (as long as he does not trigger any other
+                // reflection) evaluating this promise does not trigger
+                // reflection either.
+                while (true) {
+                    SEXP sym = nullptr;
+                    auto pr = Code::check(PREXPR(prom));
+                    SEXP v = PRVALUE(prom);
+
+                    if (v == R_UnboundValue) {
+                        if (TYPEOF(PREXPR(prom)) == SYMSXP) {
+                            sym = PREXPR(prom);
+                        } else if (pr) {
+                            auto s = src_pool_at(ctx, pr->src);
+                            if (TYPEOF(s) == SYMSXP)
+                                sym = s;
                         }
-                        if (v == R_UnboundValue)
-                            break;
-                        if (TYPEOF(v) != PROMSXP ||
-                            PRVALUE(v) != R_UnboundValue) {
-                            reflectionPossible = false;
-                            break;
+                        if (sym) {
+                            if (auto le = LazyEnvironment::check(
+                                    prom->u.promsxp.env)) {
+                                v = le->getArg(sym);
+                            } else {
+                                v = Rf_findVar(sym, PRENV(prom));
+                            }
                         }
-                        assert(TYPEOF(v) == PROMSXP);
-                        prom = v;
                     }
-                    if (reflectionPossible) {
-                        given.remove(Assumption::NoReflectiveArgument);
+                    if (pr && pr->flags.contains(Code::NoReflection))
+                        reflectionPossible = false;
+                    if (v == R_UnboundValue)
+                        break;
+                    if (TYPEOF(v) != PROMSXP) {
+                        reflectionPossible = false;
+                        arg = v;
+                        break;
                     }
+                    prom = v;
+                }
+                if (reflectionPossible) {
+                    given.remove(Assumption::NoReflectiveArgument);
                 }
             }
         }
-        if (arg == R_MissingArg) {
-            given.remove(Assumption::NoExplicitlyMissingArgs);
-            isEager = false;
-            notObj = false;
-        }
-        if (isObject(arg)) {
-            notObj = false;
-        }
         if (isEager)
             given.setEager(i);
-        if (notObj)
-            given.setNotObj(i);
-        if (isEager && notObj && IS_SIMPLE_SCALAR(arg, REALSXP))
-            given.setSimpleReal(i);
-        if (isEager && notObj && IS_SIMPLE_SCALAR(arg, INTSXP))
-            given.setSimpleInt(i);
+        if (arg != R_UnboundValue) {
+            if (!isObject(arg))
+                given.setNotObj(i);
+            if (IS_SIMPLE_SCALAR(arg, REALSXP))
+                given.setSimpleReal(i);
+            if (IS_SIMPLE_SCALAR(arg, INTSXP))
+                given.setSimpleInt(i);
+        }
     };
 
     given.add(Assumption::CorrectOrderOfArguments);

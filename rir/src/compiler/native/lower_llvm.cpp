@@ -97,14 +97,16 @@ struct Representation {
 static Representation representationOf(PirType t) {
     // Combined types like integer|real cannot be unbox, since we do not know
     // how to re-box again.
-    if (t.isA(NativeType::test))
-        return Representation::Integer;
-    if (t.isA(PirType(RType::logical).scalar().notObject()))
-        return Representation::Integer;
-    if (t.isA(PirType(RType::integer).scalar().notObject()))
-        return Representation::Integer;
-    if (t.isA(PirType(RType::real).scalar().notObject()))
-        return Representation::Real;
+    if (!t.maybeMissing()) {
+        if (t.isA(NativeType::test))
+            return Representation::Integer;
+        if (t.isA(PirType(RType::logical).scalar().notObject()))
+            return Representation::Integer;
+        if (t.isA(PirType(RType::integer).scalar().notObject()))
+            return Representation::Integer;
+        if (t.isA(PirType(RType::real).scalar().notObject()))
+            return Representation::Real;
+    }
     return Representation::Sexp;
 }
 
@@ -5273,7 +5275,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp)
                     checkMissing(loadSxp(arg));
-                setVal(i, load(arg, representationOf(i)));
+                setVal(i,
+                       load(arg, arg->type.notMissing(), representationOf(i)));
                 break;
             }
 
