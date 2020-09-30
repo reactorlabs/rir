@@ -695,8 +695,9 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
         bool isEager = true;
 
         // An explicitly missing arg, such as f(,1)
-        if (arg == R_MissingArg)
+        if (arg == R_MissingArg) {
             given.remove(Assumption::NoExplicitlyMissingArgs);
+        }
 
         bool reflectionPossible = false;
 
@@ -719,6 +720,7 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                     SEXP v = PRVALUE(prom);
 
                     if (v == R_MissingArg) {
+                        arg = v;
                         reflectionPossible = false;
                         break;
                     }
@@ -760,28 +762,32 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
             }
         }
 
-        // Eager in the context translates to the notLazy().notMissing()
-        // type in pir. Thus we need to ensure that we don't set it for
-        // wrapped missings.
-        if (arg != R_MissingArg && isEager) {
-            given.setEager(i);
-            SLOWASSERT(TYPEOF(call.stackArg(i)) != PROMSXP ||
-                       PRVALUE(call.stackArg(i)) != R_UnboundValue);
-        }
+        assert(TYPEOF(arg) != PROMSXP);
 
         if (!reflectionPossible) {
             given.setNonRefl(i);
         }
 
-        // Without isEager, these are the results of executing a trivial
-        // expression, given no reflective change happens.
-        if (arg != R_UnboundValue) {
-            if (!isObject(arg))
-                given.setNotObj(i);
-            if (IS_SIMPLE_SCALAR(arg, REALSXP))
-                given.setSimpleReal(i);
-            if (IS_SIMPLE_SCALAR(arg, INTSXP))
-                given.setSimpleInt(i);
+        // Eager in the context translates to the notLazy().notMissing()
+        // type in pir. Thus we need to ensure that we don't set it for
+        // wrapped missings.
+        if (arg != R_MissingArg) {
+            if (isEager) {
+                given.setEager(i);
+                SLOWASSERT(TYPEOF(call.stackArg(i)) != PROMSXP ||
+                           PRVALUE(call.stackArg(i)) != R_UnboundValue);
+            }
+
+            // Without isEager, these are the results of executing a trivial
+            // expression, given no reflective change happens.
+            if (arg != R_UnboundValue) {
+                if (!isObject(arg))
+                    given.setNotObj(i);
+                if (IS_SIMPLE_SCALAR(arg, REALSXP))
+                    given.setSimpleReal(i);
+                if (IS_SIMPLE_SCALAR(arg, INTSXP))
+                    given.setSimpleInt(i);
+            }
         }
     };
 
