@@ -70,6 +70,29 @@ inline bool RecompileCondition(DispatchTable* table, Function* fun,
             fun->body()->flags.contains(Code::Reoptimise));
 }
 
+inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given,
+                        InterpreterInstance* ctx) {
+    // We have more assumptions available, let's recompile
+    // More assumptions are available than this version uses. Let's
+    // try compile a better matching version.
+    auto flags = fun->flags;
+#ifdef DEBUG_DISPATCH
+    std::cout << "Optimizing for new context " << fun->invocationCount()
+              << ": ";
+    Rf_PrintValue(ast);
+    std::cout << given << " vs " << fun->context() << "\n";
+#endif
+    SEXP lhs = CAR(ast);
+    SEXP name = R_NilValue;
+    if (TYPEOF(lhs) == SYMSXP)
+        name = lhs;
+    if (flags.contains(Function::MarkOpt))
+        fun->flags.reset(Function::MarkOpt);
+    if (fun->context().includes(Assumption::StaticallyArgmatched))
+        given.add(Assumption::StaticallyArgmatched);
+    ctx->closureOptimizer(callee, given, name);
+}
+
 inline bool matches(const CallContext& call, Function* f) {
     return call.givenContext.smaller(f->context());
 }

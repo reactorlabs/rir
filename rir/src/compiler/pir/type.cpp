@@ -222,6 +222,7 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
     if (assumptions.isEager(i) || forced) {
         type = type.notLazy();
         if (assumptions.isNotObj(i)) {
+            type.setNotMissing();
             type.setNotObject();
         }
         if (assumptions.isSimpleReal(i)) {

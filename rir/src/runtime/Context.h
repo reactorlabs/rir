@@ -18,8 +18,14 @@ enum class TypeAssumption {
     Arg3IsEager_,
     Arg4IsEager_,
     Arg5IsEager_,
-    Arg6IsEager_,
-    Arg7IsEager_,
+
+    // Arg is not reflective
+    Arg0IsNonRefl_,
+    Arg1IsNonRefl_,
+    Arg2IsNonRefl_,
+    Arg3IsNonRefl_,
+    Arg4IsNonRefl_,
+    Arg5IsNonRefl_,
 
     // Arg is not an object
     Arg0IsNotObj_,
@@ -28,8 +34,6 @@ enum class TypeAssumption {
     Arg3IsNotObj_,
     Arg4IsNotObj_,
     Arg5IsNotObj_,
-    Arg6IsNotObj_,
-    Arg7IsNotObj_,
 
     // Arg is simple integer scalar
     Arg0IsSimpleInt_,
@@ -38,8 +42,6 @@ enum class TypeAssumption {
     Arg3IsSimpleInt_,
     Arg4IsSimpleInt_,
     Arg5IsSimpleInt_,
-    Arg6IsSimpleInt_,
-    Arg7IsSimpleInt_,
 
     // Arg is simple real scalar
     Arg0IsSimpleReal_,
@@ -48,18 +50,15 @@ enum class TypeAssumption {
     Arg3IsSimpleReal_,
     Arg4IsSimpleReal_,
     Arg5IsSimpleReal_,
-    Arg6IsSimpleReal_,
-    Arg7IsSimpleReal_,
 
     FIRST = Arg0IsEager_,
-    LAST = Arg7IsSimpleReal_,
+    LAST = Arg5IsSimpleReal_,
 };
 
 enum class Assumption {
     NoExplicitlyMissingArgs, // Explicitly missing, e.g. f(,,)
     CorrectOrderOfArguments, // Ie. the args are not named
     NotTooManyArguments,     // The number of args supplied is <= nargs
-    NoReflectiveArgument,    // Argument promises are not reflective
     StaticallyArgmatched,    // Arguments are statically matched
 
     FIRST = NoExplicitlyMissingArgs,
@@ -74,8 +73,7 @@ struct Context {
 
     constexpr static size_t MAX_MISSING = 255;
     // # of args with type assumptions
-    constexpr static size_t NUM_TYPED_ARGS = 8;
-    constexpr static size_t NUM_TYPED_ARGS_SPECULATE = 8;
+    constexpr static size_t NUM_TYPED_ARGS = 6;
 
     Context() = default;
     Context(const Context&) noexcept = default;
@@ -110,34 +108,34 @@ struct Context {
         Type##Context = {                                                      \
             {TypeAssumption::Arg0Is##Type##_, TypeAssumption::Arg1Is##Type##_, \
              TypeAssumption::Arg2Is##Type##_, TypeAssumption::Arg3Is##Type##_, \
-             TypeAssumption::Arg4Is##Type##_, TypeAssumption::Arg5Is##Type##_, \
-             TypeAssumption::Arg6Is##Type##_,                                  \
-             TypeAssumption::Arg7Is##Type##_}};                                \
+             TypeAssumption::Arg4Is##Type##_,                                  \
+             TypeAssumption::Arg5Is##Type##_}};                                \
     RIR_INLINE bool is##Type(size_t i) const {                                 \
-        if (i < NUM_TYPED_ARGS_SPECULATE)                                      \
+        if (i < NUM_TYPED_ARGS)                                                \
             if (typeFlags.includes(Type##Context[i]))                          \
                 return true;                                                   \
         return false;                                                          \
     }                                                                          \
     RIR_INLINE void set##Type(size_t i) {                                      \
-        if (i < NUM_TYPED_ARGS_SPECULATE)                                      \
+        if (i < NUM_TYPED_ARGS)                                                \
             typeFlags.set(Type##Context[i]);                                   \
     }
     TYPE_ASSUMPTIONS(Eager);
     TYPE_ASSUMPTIONS(NotObj);
     TYPE_ASSUMPTIONS(SimpleInt);
     TYPE_ASSUMPTIONS(SimpleReal);
+    TYPE_ASSUMPTIONS(NonRefl);
 #undef TYPE_ASSUMPTIONS
 
     static TypeFlags allEagerArgsFlags() {
         Context a;
-        for (size_t i = 0; i < NUM_TYPED_ARGS_SPECULATE; ++i)
+        for (size_t i = 0; i < NUM_TYPED_ARGS; ++i)
             a.setEager(i);
         return a.typeFlags;
     }
     static TypeFlags allNonObjArgsFlags() {
         Context a;
-        for (size_t i = 0; i < NUM_TYPED_ARGS_SPECULATE; ++i)
+        for (size_t i = 0; i < NUM_TYPED_ARGS; ++i)
             a.setNotObj(i);
         return a.typeFlags;
     }
@@ -241,7 +239,6 @@ struct Context {
 
     void clearTypeFlags() {
         typeFlags.reset();
-        flags.reset(Assumption::NoReflectiveArgument);
     }
 
     void clearNargs() {

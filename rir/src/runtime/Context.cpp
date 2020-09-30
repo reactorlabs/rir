@@ -16,9 +16,6 @@ void Context::serialize(SEXP refTable, R_outpstream_t out) const {
 
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
-    case Assumption::NoReflectiveArgument:
-        out << "!RefA";
-        break;
     case Assumption::NoExplicitlyMissingArgs:
         out << "!ExpMi";
         break;
@@ -56,17 +53,12 @@ std::ostream& operator<<(std::ostream& out, TypeAssumption a) {
     case TypeAssumption::Arg5Is##Type##_:                                      \
         out << Msg << "5";                                                     \
         break;                                                                 \
-    case TypeAssumption::Arg6Is##Type##_:                                      \
-        out << Msg << "6";                                                     \
-        break;                                                                 \
-    case TypeAssumption::Arg7Is##Type##_:                                      \
-        out << Msg << "7";                                                     \
-        break;
 
         TYPE_ASSUMPTIONS(Eager, "Eager");
         TYPE_ASSUMPTIONS(NotObj, "!Obj");
         TYPE_ASSUMPTIONS(SimpleInt, "SimpleInt");
         TYPE_ASSUMPTIONS(SimpleReal, "SimpleReal");
+        TYPE_ASSUMPTIONS(NonRefl, "NonRefl");
     }
     return out;
 };
@@ -97,6 +89,8 @@ constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
     Context::SimpleIntContext;
 constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
     Context::SimpleRealContext;
+constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
+    Context::NonReflContext;
 
 void Context::setSpecializationLevel(int level) {
     static Flags preserve =

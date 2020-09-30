@@ -40,8 +40,7 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
                 auto v = vo.val->followCastsAndForce();
                 if (v->type.maybeLazy()) {
                     if (auto ld = LdArg::Cast(v))
-                        if (cls->context().includes(
-                                rir::Assumption::NoReflectiveArgument) ||
+                        if (cls->context().isNonRefl(ld->id) ||
                             cls->context().isEager(ld->id))
                             return;
                     maybe = true;
@@ -281,10 +280,7 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                 // If no reflective argument is passed to us, then forcing an
                 // argument cannot see our environment
-                if (cls->context().includes(
-                        rir::Assumption::NoReflectiveArgument)) {
                     if (auto force = Force::Cast(i)) {
-                        if (force->hasEnv()) {
                             auto arg =
                                 force->arg<0>().val()->followCastsAndForce();
                             analysis.lookup(
@@ -292,13 +288,20 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     res.ifSingleValue(
                                         [&](Value* val) { arg = val; });
                                 });
-                            if (LdArg::Cast(arg)) {
-                                force->elideEnv();
-                                force->effects.reset(Effect::Reflection);
-                            }
+                            if (auto ld = LdArg::Cast(arg)) {
+                                if (force->hasEnv() &&
+                                    cls->context().isNonRefl(ld->id)) {
+                                    force->elideEnv();
+                                    force->effects.reset(Effect::Reflection);
+                                }
+
+                                if (after.noReflection()) {
+                                    force->type.fromContext(cls->context(),
+                                                            ld->id,
+                                                            cls->nargs(), true);
+                                }
                         }
                     }
-                }
 
                 // StVarSuper where the parent environment is known and
                 // local, can be replaced by simple StVar, if the variable
@@ -473,17 +476,6 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                     // Narrow down type according to what the analysis reports
                     if (i->type.isRType()) {
                         auto inferedType = res.type;
-                        // If we force an argument and no show no reflection,
-                        // we can merge in more information from the context.
-                        if (auto f = Force::Cast(i)) {
-                            if (auto ld = LdArg::Cast(
-                                    f->input()->followCastsAndForce())) {
-                                if (after.noReflection())
-                                    inferedType.fromContext(cls->context(),
-                                                            ld->id,
-                                                            cls->nargs(), true);
-                            }
-                        }
                         if (!i->type.isA(inferedType))
                             i->type = inferedType;
                     }

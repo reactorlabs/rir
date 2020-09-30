@@ -275,8 +275,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         auto env = MkEnv::Cast(force->env());
         if (!handled) {
             if (ld) {
-                if (closure->context().includes(
-                        Assumption::NoReflectiveArgument)) {
+                if (closure->context().isNonRefl(ld->id)) {
                     effect.max(state.envs.taintLeaked());
                     updateReturnValue(AbstractPirValue::tainted());
                     handled = true;

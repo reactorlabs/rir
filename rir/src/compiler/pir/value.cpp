@@ -15,12 +15,13 @@ void Value::typeToContext(Context& assumptions, unsigned i) const {
                 assumptions.setEager(i);
         }
         if (!mk->noReflection)
-            assumptions.remove(Assumption::NoReflectiveArgument);
+            assumptions.setNonRefl(i);
     } else {
         auto value = arg->cFollowCastsAndForce();
         if (value == MissingArg::instance()) {
             assumptions.remove(Assumption::NoExplicitlyMissingArgs);
         } else {
+            assumptions.setNonRefl(i);
             if (!value->type.maybeLazy())
                 assumptions.setEager(i);
             if (!value->type.maybeObj()) {
