@@ -473,6 +473,17 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                     // Narrow down type according to what the analysis reports
                     if (i->type.isRType()) {
                         auto inferedType = res.type;
+                        // If we force an argument and no show no reflection,
+                        // we can merge in more information from the context.
+                        if (auto f = Force::Cast(i)) {
+                            if (auto ld = LdArg::Cast(
+                                    f->input()->followCastsAndForce())) {
+                                if (after.noReflection())
+                                    inferedType.fromContext(cls->context(),
+                                                            ld->id,
+                                                            cls->nargs(), true);
+                            }
+                        }
                         if (!i->type.isA(inferedType))
                             i->type = inferedType;
                     }

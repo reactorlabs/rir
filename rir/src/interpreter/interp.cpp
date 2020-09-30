@@ -693,14 +693,16 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
     auto testArg = [&](size_t i) {
         SEXP arg = call.stackArg(i);
         bool isEager = true;
-        if (arg == R_MissingArg) {
-            isEager = false;
+
+        // An explicitly missing arg, such as f(,1)
+        if (arg == R_MissingArg)
             given.remove(Assumption::NoExplicitlyMissingArgs);
-        }
 
         if (TYPEOF(arg) == PROMSXP) {
             auto prom = arg;
             arg = PRVALUE(arg);
+
+            // For Lazy promises, lets try to figure out where it points to.
             if (arg == R_UnboundValue) {
                 isEager = false;
                 bool reflectionPossible = true;
@@ -714,13 +716,19 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                     auto pr = Code::check(PREXPR(prom));
                     SEXP v = PRVALUE(prom);
 
+                    if (v == R_MissingArg) {
+                        reflectionPossible = false;
+                        break;
+                    }
+
+                    // Let's try to find out if this promise is a trivial
+                    // expression (i.e. just a name lookup) and if that lookup
+                    // can be easily resolved.
                     if (v == R_UnboundValue) {
                         if (TYPEOF(PREXPR(prom)) == SYMSXP) {
                             sym = PREXPR(prom);
                         } else if (pr) {
-                            auto s = src_pool_at(ctx, pr->src);
-                            if (TYPEOF(s) == SYMSXP)
-                                sym = s;
+                            sym = pr->trivialExpr;
                         }
                         if (sym) {
                             if (auto le = LazyEnvironment::check(
@@ -731,10 +739,15 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                             }
                         }
                     }
+
                     if (pr && pr->flags.contains(Code::NoReflection))
                         reflectionPossible = false;
+
+                    // This is truly lazy and we did not manage to lookup
+                    // anything
                     if (v == R_UnboundValue)
                         break;
+
                     if (TYPEOF(v) != PROMSXP) {
                         reflectionPossible = false;
                         arg = v;
@@ -747,8 +760,19 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                 }
             }
         }
-        if (isEager)
+
+        // Eager in the context translates to the notLazy().notMissing()
+        // type in pir. Thus we need to ensure that we don't set it for
+        // wrapped missings.
+        if (arg != R_MissingArg && isEager) {
             given.setEager(i);
+            SLOWASSERT(TYPEOF(call.stackArg(i)) != PROMSXP ||
+                       PRVALUE(call.stackArg(i)) != R_UnboundValue);
+            ;
+        }
+
+        // Without isEager, these are the results of executing a trivial
+        // expression, given no reflective change happens.
         if (arg != R_UnboundValue) {
             if (!isObject(arg))
                 given.setNotObj(i);
@@ -4290,7 +4314,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 std::cerr << "got " << pir::PirType(val) << " but expexted a "
                           << typ << ":\n";
                 Rf_PrintValue(val);
-                std::cout << "\n";
+                std::cout << (PRVALUE(val) == R_UnboundValue) << " / "
+                          << (PRVALUE(val) == R_MissingArg) << "\n";
                 assert(false);
             }
             NEXT();

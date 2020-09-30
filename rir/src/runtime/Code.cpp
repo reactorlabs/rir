@@ -14,19 +14,21 @@ std::unordered_map<UUID, Code*> allCodes;
 Code* Code::withUid(UUID uid) { return allCodes.at(uid); }
 
 // cppcheck-suppress uninitMemberVar symbol=data
-Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
-           size_t localsCnt, size_t bindingsCnt)
+Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
+           unsigned sourceLength, size_t localsCnt, size_t bindingsCnt)
     : RirRuntimeObject(
           // GC area starts just after the header
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
       nativeCode(nullptr), uid(UUID::random()), funInvocationCount(0),
-      deoptCount(0), src(src), stackLength(0), localsCount(localsCnt),
-      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
-      extraPoolSize(0) {
+      deoptCount(0), src(srcIdx), trivialExpr(nullptr), stackLength(0),
+      localsCount(localsCnt), bindingCacheSize(bindingsCnt), codeSize(cs),
+      srcLength(sourceLength), extraPoolSize(0) {
     setEntry(0, R_NilValue);
     allCodes.emplace(uid, this);
+    if (TYPEOF(src) == SYMSXP)
+        trivialExpr = src;
 }
 
 Code::~Code() {
