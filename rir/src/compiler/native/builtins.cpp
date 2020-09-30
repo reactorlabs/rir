@@ -388,8 +388,9 @@ static SEXP callImplCached(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     auto ctx = globalContext();
     CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
                      Context(available), ctx);
+
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
-               LazyEnvironment::check(env));
+               LazyEnvironment::check(env) || env == R_NilValue);
     SLOWASSERT(ctx);
     return callImplCached(call, cache);
 }

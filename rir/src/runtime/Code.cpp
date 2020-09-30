@@ -27,7 +27,7 @@ Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
       srcLength(sourceLength), extraPoolSize(0) {
     setEntry(0, R_NilValue);
     allCodes.emplace(uid, this);
-    if (TYPEOF(src) == SYMSXP)
+    if (src && TYPEOF(src) == SYMSXP)
         trivialExpr = src;
 }
 
@@ -86,6 +86,9 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->funInvocationCount = InInteger(inp);
     code->deoptCount = InInteger(inp);
     code->src = InInteger(inp);
+    bool hasTr = InInteger(inp);
+    if (hasTr)
+        code->trivialExpr = ReadItem(refTable, inp);
     code->stackLength = InInteger(inp);
     *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
     *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
@@ -122,6 +125,9 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, funInvocationCount);
     OutInteger(out, deoptCount);
     OutInteger(out, src);
+    OutInteger(out, trivialExpr != nullptr);
+    if (trivialExpr)
+        WriteItem(trivialExpr, refTable, out);
     OutInteger(out, stackLength);
     OutInteger(out, localsCount);
     OutInteger(out, bindingCacheSize);
