@@ -525,14 +525,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         compileExpr(ctx, args[0]);
 
         cs << BC::asLogical();
-        cs.addSrc(args[0]);
+        cs.addSrc(ast);
         cs << BC::dup()
            << BC::brtrue(nextBranch);
 
         compileExpr(ctx, args[1]);
 
         cs << BC::asLogical();
-        cs.addSrc(args[1]);
+        cs.addSrc(ast);
         cs << BC::lglOr();
 
         cs << nextBranch;
