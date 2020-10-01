@@ -4144,6 +4144,11 @@ bool LowerFunctionLLVM::tryCompile() {
                     case NILSXP:
                     case LGLSXP:
                     case REALSXP:
+                    case STRSXP:
+                    case INTSXP:
+                    case CPLXSXP:
+                    case RAWSXP:
+                    case EXPRSXP:
                         res = builder.CreateICmpEQ(typeNative,
                                                    expectedTypeNative);
                         break;

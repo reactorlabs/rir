@@ -1072,6 +1072,148 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
     }
 
+    if (fun == symbol::Switch) {
+        /* # Assume argLen > 1:
+         *   compile arg[0]
+         *   dup; if (arg[0] is not length-1 vector) br vecECont
+         *   error("EXPR must be a length 1 vector")
+         *   # unreachable
+         * vecECont:
+         *   dup; if (not isFactor(arg[0])) br facWCont
+         *   warning(
+         *     "EXPR is a \"factor\", treated as integer.\n"
+         *     " Consider using 'switch(as.character( * ), ...)' instead.")
+         * facWCont:
+         *   dup; if (isString(arg[0])) br str
+         *   dup; asInteger(arg[0])
+         *   if (value == 1) br label[0]
+         *   ...
+         *   if (value == n) br label[n-1]
+         *   br nil
+         *
+         * str:
+         *   check if it fits in group[i], if yes jump to label[i]
+         *   if (value == group[0]) br labels[0]
+         *   ...
+         *   if (value == group[n-1]) br labels[n-1]
+         *   compile default arg (or br to nil if none)
+         *   br cont
+         *
+         * label[i]:
+         *   # if arg[i+1] is missing, we must came from integer case
+         *   # error("empty alternative in numeric switch")
+         *   compile expression[i]
+         *   br cont
+         * ...
+         *
+         * nil:
+         *   push R_NilValue
+         *
+         * cont:
+         *   # (stack is [1stArg, retval])
+         *   swap
+         *   pop # 1stArg
+         */
+        int argLen = args.length();
+        if (argLen <= 1) {
+            // this call will always give error/warning
+            // TODO add error instruction once available
+            return false;
+        }
+        // when 1st arg is string, switch behaves like C/C++ switch/case.
+        // Cases like `x=, y=, z=20` are grouped together.
+        // groups[-1] is not used, for impl convenience
+        std::vector<std::vector<SEXP>> groups = {{}};
+        std::vector<SEXP> expressions; // the ret-val ast for each group
+        std::vector<BC::Label> labels; // evaluate/return for each group
+        BC::Label vecEContBr = cs.mkLabel();
+        BC::Label facWContBr = cs.mkLabel();
+        BC::Label strBr  = cs.mkLabel();
+        BC::Label nilBr  = cs.mkLabel();
+        BC::Label contBr = cs.mkLabel();
+        SEXP dflt = nullptr; // ast for default ret-val
+        std::vector<bool> argMissing(argLen, true);
+
+        // find default and group args
+        int argIdx = 1;
+        for (RListIter arg = args.begin() + 1; arg != args.end(); ++arg, ++argIdx) {
+            if (!arg.hasTag()) {
+                if (dflt)
+                    // TODO multiple default with 1st arg type == string
+                    // i.e. compile `str` section with
+                    // error("duplicate 'switch' defaults")
+                    return false;
+                dflt = *arg;
+                continue;
+            }
+            groups.back().push_back(arg.tag());
+            if (*arg != R_MissingArg) {
+                expressions.push_back(*arg);
+                groups.push_back({});
+                labels.push_back(cs.mkLabel());
+                argMissing[argIdx] = false;
+            }
+        }
+
+        /******************* INSTRUCTIONS START HERE *********************/
+        compileExpr(ctx, args[0]);
+        // the inlined list of types is based on definition of `isVector` in `Rinlinedfuns.h`
+        for (auto type : {LGLSXP, INTSXP, REALSXP, CPLXSXP, STRSXP,
+                          RAWSXP, VECSXP, EXPRSXP}) {
+          cs << BC::dup() << BC::is(type) << BC::brtrue(vecEContBr);
+        }
+        cs << BC::dup() << BC::xlength_() << BC::push(Rf_ScalarInteger(1))
+           << BC::eq() << BC::brtrue(vecEContBr)
+           << BC::br(nilBr) // TODO replace with error("EXPR must be a length 1 vector")
+           << vecEContBr;
+        // isFactor is INTSXP + inherits("factor") from `Rinlinedfuns.h`
+        cs << BC::dup() << BC::is(INTSXP) << BC::brfalse(facWContBr)
+           << BC::dup() << BC::push(Rf_mkString("factor")) << BC::push(R_FalseValue)
+           << BC::callBuiltin(3, ast, getBuiltinFun("inherits"))
+           << BC::brfalse(facWContBr);
+        // TODO warning for factor.
+        cs << facWContBr << BC::dup() << BC::is(STRSXP) << BC::brtrue(strBr);
+        // TODO needs Rf_asInteger, builtin as.integer behaves differently
+        // currently stack is [arg[0]]
+        for (size_t i = 0; i < expressions.size(); ++i) {
+            cs << BC::dup() << BC::push(Rf_ScalarInteger(i+1)) << BC::eq()
+               << BC::asbool() << BC::recordTest() << BC::brtrue(labels[i]);
+        }
+        cs << BC::br(nilBr) << strBr;
+        for (size_t i = 0; i < expressions.size(); ++i) {
+            for (auto& n : groups[i]) {
+                cs << BC::dup() << BC::push(n) << BC::eq();
+                cs.addSrc(R_NilValue); // TODO from Oli's draft, why?
+                cs << BC::asbool() << BC::recordTest() << BC::brtrue(labels[i]);
+            }
+        }
+        if (dflt) {
+            compileExpr(ctx, dflt);
+            cs << BC::br(contBr);
+        } else {
+            cs << BC::br(nilBr);
+        }
+
+        for (size_t i = 0; i < expressions.size(); ++i) {
+            cs << labels[i];
+            if (argMissing[i+1]) {
+                // TODO error("empty alternative in numeric switch")
+                BC::br(nilBr);
+                continue;
+            } else {
+                compileExpr(ctx, expressions[i]);
+                cs << BC::br(contBr);
+            }
+        }
+
+        cs << nilBr << BC::push(R_NilValue);
+        cs << contBr;
+        cs << BC::swap() << BC::pop(); // pop off 1st arg, leave answer on top
+        if (voidContext)
+            cs << BC::pop();
+        return true;
+    }
+
     if (fun == symbol::Internal) {
         SEXP inAst = args[0];
         SEXP args_ = CDR(inAst);

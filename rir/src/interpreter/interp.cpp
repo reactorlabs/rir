@@ -3385,6 +3385,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             case NILSXP:
             case LGLSXP:
             case REALSXP:
+            case STRSXP:
+            case INTSXP:
+            case CPLXSXP:
+            case RAWSXP:
+            case EXPRSXP:
                 res = TYPEOF(val) == type;
                 break;
 
