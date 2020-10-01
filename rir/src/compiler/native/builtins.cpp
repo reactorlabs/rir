@@ -1004,7 +1004,12 @@ NativeBuiltin NativeBuiltins::asTest = {
     (void*)&astestImpl,
 };
 
-int asLogicalImpl(SEXP a) { return Rf_asLogical(a); }
+int asLogicalImpl(SEXP a) {
+    if (!Rf_isNumber(a)) {
+      Rf_errorcall(R_NilValue, "argument has the wrong type for && or ||");
+    }
+    return Rf_asLogical(a);
+}
 
 NativeBuiltin NativeBuiltins::asLogicalBlt = {"aslogical",
                                               (void*)&asLogicalImpl};
