@@ -157,6 +157,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             }
             effect.taint();
         }
+        handled = true;
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
