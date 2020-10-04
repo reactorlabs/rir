@@ -3248,6 +3248,17 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(aslogical_) {
             SEXP val = ostack_top(ctx);
+            // TODO
+            // 1. currently aslogical_ is used for &&, || only, and this checking
+            //    is to mimic the behavior of builtin &&, ||. Technically asLogical
+            //    is less strict than this.
+            // 2. the error message also doesn't suggest which argument is wrong, or
+            //    which boolean operation it was. To achieve the exact behavior, one
+            //    could potentially compile this check in `ir/Compiler.cpp`
+            if (!Rf_isNumber(val)) {
+                SEXP call = getSrcAt(c, pc - 1, ctx);
+                Rf_errorcall(call, "argument has the wrong type for && or ||");
+            }
             int x1 = Rf_asLogical(val);
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             res = Rf_ScalarLogical(x1);
