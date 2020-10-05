@@ -36,7 +36,13 @@ struct FunctionSignature {
         OutInteger(out, numArguments);
     }
 
-    void pushDefaultArgument() { numArguments++; }
+    void pushFormal(SEXP arg, SEXP name) {
+        if (arg != R_MissingArg)
+            hasDefaultArgs = true;
+        if (name != R_NilValue)
+            hasDotsFormals = true;
+        numArguments++;
+    }
 
     void print(std::ostream& out = std::cout) const {
         if (optimization != OptimizationLevel::Baseline)
@@ -55,6 +61,8 @@ struct FunctionSignature {
     const Environment envCreation;
     const OptimizationLevel optimization;
     unsigned numArguments = 0;
+    bool hasDotsFormals = false;
+    bool hasDefaultArgs = false;
 };
 
 } // namespace rir

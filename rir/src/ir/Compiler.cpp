@@ -1383,7 +1383,7 @@ SEXP Compiler::finalize() {
             Code* compiled = compilePromise(ctx, *arg);
             function.addDefaultArg(compiled);
         }
-        signature.pushDefaultArgument();
+        signature.pushFormal(*arg, arg.tag());
     }
 
     ctx.push(exp, closureEnv);

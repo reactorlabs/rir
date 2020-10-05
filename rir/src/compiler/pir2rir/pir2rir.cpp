@@ -1352,10 +1352,12 @@ rir::Function* Pir2Rir::finalize() {
         FunctionSignature::Environment::CalleeCreated,
         FunctionSignature::OptimizationLevel::Optimized);
 
-    // PIR does not support default args currently.
+    auto arg = cls->owner()->formals().original();
     for (size_t i = 0; i < cls->nargs(); ++i) {
+        // In PIR default args are callee-handled.
         function.addArgWithoutDefault();
-        signature.pushDefaultArgument();
+        signature.pushFormal(CAR(arg), TAG(arg));
+        arg = CDR(arg);
     }
 
     assert(signature.formalNargs() == cls->nargs());

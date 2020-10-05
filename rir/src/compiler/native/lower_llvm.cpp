@@ -97,7 +97,7 @@ struct Representation {
 static Representation representationOf(PirType t) {
     // Combined types like integer|real cannot be unbox, since we do not know
     // how to re-box again.
-    if (!t.maybeMissing()) {
+    if (!t.maybeMissing() && !t.maybePromiseWrapped()) {
         if (t.isA(NativeType::test))
             return Representation::Integer;
         if (t.isA(PirType(RType::logical).scalar().notObject()))
@@ -957,7 +957,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
             res = boxLgl(res);
         else if (type.isA(NativeType::test))
             res = boxTst(res);
-        else if (type.isA(RType::real)) {
+        else if (type.isA(PirType() | RType::real)) {
             res = boxReal(res);
         } else {
             std::cout << "Failed to convert int/float to " << type << "\n";

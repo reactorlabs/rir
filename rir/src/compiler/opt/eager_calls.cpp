@@ -188,7 +188,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 // We picked up more assumptions, let's compile a better
                 // version. Maybe we should limit this at some point, to avoid
                 // version explosion.
-                if (availableAssumptions.smaller(version->context())) {
+                if (availableAssumptions.isImproving(version)) {
                     auto newVersion = cls->cloneWithAssumptions(
                         version, availableAssumptions,
                         [&](ClosureVersion* newCls) {

@@ -65,6 +65,11 @@ enum class Assumption {
     LAST = StaticallyArgmatched,
 };
 
+struct Function;
+namespace pir {
+class ClosureVersion;
+}
+
 #pragma pack(push)
 #pragma pack(1)
 struct Context {
@@ -210,7 +215,7 @@ struct Context {
                missing == other.missing;
     }
 
-    RIR_INLINE bool smaller(const Context& other) const {
+    bool smaller(const Context& other) const {
         // argdiff positive = "more than expected", negative = "less than"
         int argdiff = (int)other.missing - (int)missing;
 
@@ -224,6 +229,11 @@ struct Context {
         return flags.includes(other.flags) &&
                typeFlags.includes(other.typeFlags);
     }
+
+    bool isImproving(rir::Function*) const;
+    bool isImproving(rir::pir::ClosureVersion*) const;
+    bool isImproving(const Context& other, bool hasDotsFormals,
+                     bool hasDefaultArgs) const;
 
     static Context deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;

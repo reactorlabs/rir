@@ -2760,7 +2760,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto given = call.givenContext;
             fun->clearDisabledAssumptions(given);
             if (!isDeoptimizing() && !dispatchFail &&
-                RecompileHeuristic(dt, fun, 3) &&
+                RecompileHeuristic(dt, fun, 6) &&
                 RecompileCondition(dt, fun, given)) {
                 DoRecompile(fun, call.ast, call.callee, given, ctx);
                 dispatchFail = true;

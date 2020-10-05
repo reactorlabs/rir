@@ -1453,7 +1453,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
     auto dt = DispatchTable::unpack(BODY(callee));
 
     fun->registerInvocation();
-    if (fail || RecompileHeuristic(dt, fun, 3)) {
+    if (fail || RecompileHeuristic(dt, fun, 6)) {
         if (fail || RecompileCondition(dt, fun, Context(available))) {
             fun->unregisterInvocation();
             return callImplCached(call, target);

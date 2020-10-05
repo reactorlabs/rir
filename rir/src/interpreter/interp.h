@@ -66,7 +66,7 @@ inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
     return (fun->flags.contains(Function::MarkOpt) ||
             fun->flags.contains(Function::Dead) || fun == table->baseline() ||
-            context != fun->context() ||
+            (context.smaller(fun->context()) && context.isImproving(fun)) ||
             fun->body()->flags.contains(Code::Reoptimise));
 }
 
@@ -88,8 +88,6 @@ inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given,
         name = lhs;
     if (flags.contains(Function::MarkOpt))
         fun->flags.reset(Function::MarkOpt);
-    if (fun->context().includes(Assumption::StaticallyArgmatched))
-        given.add(Assumption::StaticallyArgmatched);
     ctx->closureOptimizer(callee, given, name);
 }
 
