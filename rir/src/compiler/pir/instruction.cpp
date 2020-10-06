@@ -1118,7 +1118,7 @@ Context CallInstruction::inferAvailableAssumptions() const {
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
                      const std::vector<SEXP>& names_, unsigned srcIdx)
-    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
+    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
 
@@ -1140,7 +1140,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
                      const std::vector<BC::PoolIdx>& names_, unsigned srcIdx)
-    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
+    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
 
