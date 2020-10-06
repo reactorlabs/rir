@@ -5,6 +5,8 @@
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 
+#include <list>
+
 namespace rir {
 
 #define DISPATCH_TABLE_MAGIC (unsigned)0xd7ab1e00
@@ -40,6 +42,10 @@ struct DispatchTable
     }
 
     Function* dispatch(Context a) const {
+        if (!a.smaller(userDefinedContext_))
+            Rf_error(
+                "Context does not satisfy annotations"); // Improve message!
+
         for (size_t i = 1; i < size(); ++i) {
 #ifdef DEBUG_DISPATCH
             std::cout << "DISPATCH trying: " << a << " vs " << get(i)->context()
@@ -182,6 +188,28 @@ struct DispatchTable
         }
     }
 
+    DispatchTable* newWithUserContext(Context udc) {
+        std::list<SEXP> l;
+
+        for (size_t i = 1; i < size(); i++) {
+            if (get(i)->context().smaller(udc))
+                l.push_back(getEntry(i));
+        }
+        auto clone = create(this->capacity());
+
+        clone->size_ = 1 + this->size();
+        clone->setEntry(0, this->getEntry(0));
+
+        auto i = 1;
+
+        for (auto it = l.begin(); it != l.end(); it++) {
+            clone->setEntry(i, *it);
+            i++;
+        }
+        clone->userDefinedContext_ = udc;
+        return clone;
+    }
+
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t cap)
@@ -192,6 +220,7 @@ struct DispatchTable
               cap) {}
 
     size_t size_ = 0;
+    Context userDefinedContext_;
 };
 #pragma pack(pop)
 } // namespace rir

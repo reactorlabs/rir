@@ -496,6 +496,32 @@ REXPORT SEXP rirPrintBuiltinIds() {
     return R_NilValue;
 }
 
+REXPORT SEXP rirSetUserContext(SEXP f, SEXP userContext) {
+
+    // TODO: improve assertion. What to do if f is not compiled?
+    // Maybe compile first?
+    if (TYPEOF(f) != CLOSXP)
+        Rf_error("f not closure");
+
+    auto body = BODY(f);
+    if (TYPEOF(body) != EXTERNALSXP)
+        Rf_error("f not rir function");
+
+    if (TYPEOF(userContext) != INTSXP || LENGTH(userContext) != 2)
+        Rf_error("userDefinedContext is not integer array of size 2");
+
+    Context newContext;
+    auto p = (int*)((void*)&newContext);
+    *p = INTEGER(userContext)[0]; // improve
+    p++;
+    *p = INTEGER(userContext)[1];
+
+    auto tbl = DispatchTable::unpack(body); // GC?
+    auto newTbl = tbl->newWithUserContext(newContext);
+    SET_BODY(f, newTbl->container());
+    return R_NilValue;
+}
+
 bool startup() {
     initializeRuntime();
     return true;
