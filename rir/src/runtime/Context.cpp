@@ -167,6 +167,9 @@ bool Context::isImproving(const Context& other, bool hasDotsFormals,
     if (!hasDefaultArgs)
         normalized.remove(Assumption::NoExplicitlyMissingArgs);
 
+    // These don't pay of that much...
+    normalized.clearObjFlags();
+
     if (hasDotsFormals || hasDefaultArgs) {
         if (normalized.numMissing() != other.numMissing())
             return true;

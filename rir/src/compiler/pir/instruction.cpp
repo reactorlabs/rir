@@ -1081,7 +1081,7 @@ Context CallInstruction::inferAvailableAssumptions() const {
         if (arg->type.maybe(RType::expandedDots))
             hasDotsArg = true;
         else
-            arg->typeToContext(given, i);
+            arg->callArgTypeToContext(given, i);
         ++i;
     });
 

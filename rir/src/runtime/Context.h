@@ -121,6 +121,10 @@ struct Context {
                 return true;                                                   \
         return false;                                                          \
     }                                                                          \
+    RIR_INLINE void reset##Type(size_t i) {                                    \
+        if (i < NUM_TYPED_ARGS)                                                \
+            typeFlags.reset(Type##Context[i]);                                 \
+    }                                                                          \
     RIR_INLINE void set##Type(size_t i) {                                      \
         if (i < NUM_TYPED_ARGS)                                                \
             typeFlags.set(Type##Context[i]);                                   \
@@ -254,6 +258,11 @@ struct Context {
     void clearNargs() {
         missing = 0;
         flags.reset(Assumption::NoExplicitlyMissingArgs);
+    }
+
+    void clearObjFlags() {
+        for (size_t i = 0; i < NUM_TYPED_ARGS; ++i)
+            resetNotObj(i);
     }
 
     void setSpecializationLevel(int level);
