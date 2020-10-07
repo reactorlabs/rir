@@ -5,7 +5,6 @@
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 
-#include <list>
 
 namespace rir {
 
@@ -189,23 +188,19 @@ struct DispatchTable
     }
 
     DispatchTable* newWithUserContext(Context udc) {
-        std::list<SEXP> l;
 
-        for (size_t i = 1; i < size(); i++) {
-            if (get(i)->context().smaller(udc))
-                l.push_back(getEntry(i));
-        }
         auto clone = create(this->capacity());
-
-        clone->size_ = 1 + this->size();
         clone->setEntry(0, this->getEntry(0));
 
-        auto i = 1;
-
-        for (auto it = l.begin(); it != l.end(); it++) {
-            clone->setEntry(i, *it);
-            i++;
+        auto j = 1;
+        for (size_t i = 1; i < size(); i++) {
+            if (get(i)->context().smaller(udc)) {
+                clone->setEntry(j, getEntry(i));
+                j++;
+            }
         }
+
+        clone->size_ = j;
         clone->userDefinedContext_ = udc;
         return clone;
     }

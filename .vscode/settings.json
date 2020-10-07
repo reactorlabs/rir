@@ -104,6 +104,9 @@
     "typeinfo": "cpp",
     "utility": "cpp",
     "future": "cpp",
-    "memory_resource": "cpp"
+    "memory_resource": "cpp",
+    "*.def": "cpp",
+    "*.inc": "cpp",
+    "*.gen": "cpp"
   }
 }

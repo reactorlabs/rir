@@ -983,6 +983,8 @@ Effects StaticCall::inferEffects(const GetType& getType) const {
 }
 
 ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
+    // if (cls->rirFunction)...
+
     auto res = cls->findCompatibleVersion(inferAvailableAssumptions());
 #ifdef WARN_DISPATCH_FAIL
     if (!res) {
