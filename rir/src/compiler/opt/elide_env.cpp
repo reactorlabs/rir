@@ -45,12 +45,6 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                         force->clearFrameState();
                     }
                 }
-
-                if (auto mk = MkArg::Cast(i)) {
-                    if (!mk->prom()->env()) {
-                        mk->elideEnv();
-                    }
-                }
             }
         }
     });

@@ -333,6 +333,7 @@ bool SafeBuiltinsList::nonObject(SEXP builtin) {
     V(on.exit)                                                                 \
     V(environment)                                                             \
     V(nargs)                                                                   \
+    V(pos.to.env)                                                              \
     V(sys.parent)                                                              \
     V(sys.function)                                                            \
     V(sys.frame)                                                               \
