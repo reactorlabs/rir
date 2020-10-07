@@ -2774,7 +2774,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
 
             SLOWASSERT(!fun->flags.contains(Function::Dead));
-            SLOWASSERT(dt->dispatch(fun->context()) == fun);
+            SLOWASSERT(!dispatchFail || dt->dispatch(fun->context()) == fun);
             if (fun->signature().envCreation ==
                 FunctionSignature::Environment::CallerProvided) {
                 res = rirCall(call, ctx);
