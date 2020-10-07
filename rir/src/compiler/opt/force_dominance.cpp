@@ -559,6 +559,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                         assert(!promRes->type.maybePromiseWrapped());
                         f = Force::Cast(*split->begin());
+                        // Ensure we don't loose inferred type information
+                        promRes->type = promRes->type & f->type;
                         assert(f);
                         f->replaceUsesWith(promRes);
                         split->remove(split->begin());
@@ -604,10 +606,12 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto dom = dominatedBy.find(f);
                 if (dom != dominatedBy.end()) {
                     assert(f != dom->second);
-                    if (inlinedPromise.count(dom->second))
+                    if (inlinedPromise.count(dom->second)) {
                         f->replaceUsesWith(inlinedPromise.at(dom->second));
-                    else
+                    } else {
+                        dom->second->type = dom->second->type & f->type;
                         f->replaceUsesWith(dom->second);
+                    }
                     next = bb->remove(ip);
                 }
             }
