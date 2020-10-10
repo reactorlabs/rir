@@ -16,7 +16,7 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
     }
 
     if (auto mk = MkArg::Cast(arg)) {
-        if (mk->isEager() || !mk->noReflection)
+        if (mk->isEager() || mk->noReflection)
             assumptions.setNonRefl(i);
 
         if (mk->isEager()) {
