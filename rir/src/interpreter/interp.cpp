@@ -2132,7 +2132,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             switch (TYPEOF(res)) {
             case CLOSXP:
-                jit(res, sym, ctx);
+                // Prevent recompilation loops in lapply and similar
+                if (sym != symbol::FUN)
+                    jit(res, sym, ctx);
                 break;
             case SPECIALSXP:
             case BUILTINSXP:
