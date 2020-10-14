@@ -1187,10 +1187,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
            << vecErrorBr;
         ERROR_CALL_CODEGEN("EXPR must be a length 1 vector", nilBr);
         cs << vecEContBr
-           // isFactor is INTSXP + inherits("factor") from `Rinlinedfuns.h`
            << BC::dup() << BC::is(INTSXP) << BC::brfalse(facWContBr)
-           << BC::dup() << BC::push(Rf_mkString("factor")) << BC::push(R_FalseValue)
-           << BC::callBuiltin(3, ast, getBuiltinFun("inherits"))
+           << BC::dup() << BC::isType(TypeChecks::Factor)
            << BC::brfalse(facWContBr);
         WARNING_CALL_CODEGEN(
             "EXPR is a \"factor\", treated as integer.\n"

@@ -3488,6 +3488,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 res = fastVeceltOk(val);
                 break;
 
+            case TypeChecks::Factor:
+                res = Rf_isFactor(val);
+                break;
+
             case TypeChecks::_START_:
             case TypeChecks::_END_:
                 assert(false);

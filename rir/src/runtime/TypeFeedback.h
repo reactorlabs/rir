@@ -189,7 +189,9 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
     V(NotObject)                                                               \
     V(NotObjectWrapped)                                                        \
     V(NoAttribsExceptDim)                                                      \
-    V(NoAttribsExceptDimWrapped)
+    V(NoAttribsExceptDimWrapped)                                               \
+    V(Factor)
+
 
 enum class TypeChecks : uint32_t {
     // Must be bigger than smallest sexptype
