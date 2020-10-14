@@ -1079,6 +1079,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
          *   error(...)
          *   # unreachable
          * vecECont:
+         *   # this check is currently skipped
          *   if (not isFactor(arg[0])) br facWCont
          *   warning(...)
          * facWCont:
@@ -1148,7 +1149,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         BC::Label vecArityBr = cs.mkLabel();
         BC::Label vecErrorBr = cs.mkLabel();
         BC::Label vecEContBr = cs.mkLabel();
-        BC::Label facWContBr = cs.mkLabel();
+        // BC::Label facWContBr = cs.mkLabel();
         BC::Label strBr  = cs.mkLabel();
         BC::Label nilBr  = cs.mkLabel();
         BC::Label contBr = cs.mkLabel();
@@ -1183,17 +1184,27 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs << BC::br(vecErrorBr)
            << vecArityBr
            << BC::dup() << BC::xlength_() << BC::push(Rf_ScalarInteger(1))
-           << BC::eq() << BC::brtrue(vecEContBr)
-           << vecErrorBr;
+           << BC::eq();
+           cs.addSrc(R_NilValue); // to make code verifier happy
+           cs << BC::brtrue(vecEContBr) << vecErrorBr;
         ERROR_CALL_CODEGEN("EXPR must be a length 1 vector", nilBr);
-        cs << vecEContBr
-           << BC::dup() << BC::is(INTSXP) << BC::brfalse(facWContBr)
-           << BC::dup() << BC::isType(TypeChecks::Factor)
+        cs << vecEContBr;
+        /* TODO 2 attempts to simulate `isFactor` check both failed
+         * 1. use builtin "inherit" function. Somehow it produces extra
+         * warnings, probably due to different behavior between the builtin and
+         * the one used in `Rf_isFactor`
+         * 2. use BC::isType(TypeChecks::Factor), this one fails for stranger
+         * reason, "Error: argument is not interpretable as logical"
+           // 1. << BC::dup() << BC::is(INTSXP) << BC::brfalse(facWContBr)
+           // << BC::dup() << BC::push(Rf_mkString("factor")) << BC::push(R_FalseValue)
+           // << BC::callBuiltin(3, ast, getBuiltinFun("inherits"))
+           // 2. << BC::dup() << BC::isType(TypeChecks::Factor)
            << BC::brfalse(facWContBr);
         WARNING_CALL_CODEGEN(
             "EXPR is a \"factor\", treated as integer.\n"
             " Consider using 'switch(as.character( * ), ...)' instead.")
         cs << facWContBr;
+        */
         if (argLen == 1) { // inserted here to mimic behavior of builtin impl
             WARNING_CALL_CODEGEN("'switch' with no alternatives");
             cs << BC::br(nilBr);
