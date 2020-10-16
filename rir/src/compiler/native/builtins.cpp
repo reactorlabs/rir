@@ -457,6 +457,30 @@ NativeBuiltin NativeBuiltins::dotsCall = {
     (void*)&dotsCallImpl,
 };
 
+static SEXP reorderedCallImpl(rir::Code* c, Immediate ast, SEXP callee,
+                              SEXP env, size_t nargs, size_t nargsOrig,
+                              Immediate* argOrderOrig,
+                              unsigned long available) {
+    auto ctx = globalContext();
+    CallContext call(c, callee, nargs, nargsOrig, cp_pool_at(ctx, ast),
+                     ostack_cell_at(ctx, nargs - 1), argOrderOrig, env,
+                     Context(available));
+    SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+               LazyEnvironment::check(env));
+    // Or this from nativeCallTrampoline?
+    // SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
+    //            env == R_NilValue || LazyEnvironment::check(env));
+    SLOWASSERT(ctx);
+    auto res = doCall(call, ctx);
+    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
+    return res;
+}
+
+NativeBuiltin NativeBuiltins::reorderedCall = {
+    "reorderedCall",
+    (void*)&reorderedCallImpl,
+};
+
 SEXP createPromiseImpl(SEXP expr, SEXP env) {
     SEXP res = Rf_mkPROMISE(expr, env);
     SET_PRVALUE(res, R_UnboundValue);

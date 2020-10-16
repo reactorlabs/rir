@@ -217,6 +217,11 @@ int initializeTypes(LLVMContext& context) {
         t::SEXP,
         {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
         false);
+    NativeBuiltins::reorderedCall.llvmSignature =
+        llvm::FunctionType::get(t::SEXP,
+                                {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64,
+                                 t::i64, t::IntPtr, t::i64},
+                                false);
     NativeBuiltins::dotsCall.llvmSignature = llvm::FunctionType::get(
         t::SEXP,
         {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},

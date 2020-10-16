@@ -99,6 +99,7 @@ struct NativeBuiltins {
     static NativeBuiltin call;
     static NativeBuiltin namedCall;
     static NativeBuiltin dotsCall;
+    static NativeBuiltin reorderedCall;
     static NativeBuiltin callBuiltin;
 
     static NativeBuiltin notOp;
