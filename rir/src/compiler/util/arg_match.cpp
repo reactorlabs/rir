@@ -32,7 +32,7 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
     // where errors have been replaced by 'return false'. Also our Protect
     // wrapper is used and the unused argument list is not built.
     Rboolean seendots;
-    size_t i, arg_i = 0;
+    size_t arg_i = 0;
     SEXP f, a, b, dots, actuals;
 
     actuals = R_NilValue;
@@ -59,6 +59,7 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
 
     {
         Protect p(actuals);
+        unsigned i;
 
         /* First pass: exact matches by tag */
         /* Grab matched arguments and check */
