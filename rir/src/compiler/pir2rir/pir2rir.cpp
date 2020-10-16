@@ -29,7 +29,7 @@
 namespace rir {
 namespace pir {
 
-namespace {
+namespace pir2rir {
 
 class Context {
   public:
@@ -59,6 +59,7 @@ class Pir2Rir {
     rir::Code* compileCode(Context& ctx, Code* code);
     rir::Code* getPromise(Context& ctx, Promise* code);
 
+    void replaceFailingStaticCalls(Code* code);
     void lower(Code* code);
     void toCSSA(Code* code);
     rir::Function* finalize();
@@ -113,17 +114,18 @@ class Pir2Rir {
 
                     if (bc.is(rir::Opcode::pick_)) {
                         unsigned arg = bc.immediate.i;
-                        unsigned n = 1;
+                        unsigned n = 0;
                         // Have 1 pick(arg), can remove if we find arg + 1 of
                         // them
-                        auto last = next;
+                        auto last = it;
                         for (; last != code.end(); last++) {
                             auto& bc = last->first;
                             if (bc.is(rir::Opcode::pick_) &&
-                                bc.immediate.i == arg)
+                                bc.immediate.i == arg) {
                                 n++;
-                            else
+                            } else {
                                 break;
+                            }
                         }
                         if (n == arg + 1 && last != code.end()) {
                             next = code.erase(it, last);
@@ -278,6 +280,7 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     }
 #endif
 
+    replaceFailingStaticCalls(code);
     lower(code);
     toCSSA(code);
 #ifdef FULLVERIFIER
@@ -741,6 +744,15 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::FakeMkArg: {
+                auto mk = FakeMkArg::Cast(instr);
+                auto p = mk->prom();
+                unsigned id = ctx.cs().addPromise(p->rirSrc());
+                promMap[p] = {id, MkEnv::Cast(mk->env())};
+                cb.add(BC::mkEagerPromise(id));
+                break;
+            }
+
             case Tag::UpdatePromise: {
                 cb.add(BC::updatePromise());
                 break;
@@ -894,45 +906,40 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
                 call->eachArg([](Value* v) { assert(!ExpandDots::Cast(v)); });
-                if (call->cls()->hasOriginClosure()) {
-                    SEXP originalClosure = call->cls()->rirClosure();
-                    auto dt = DispatchTable::unpack(BODY(originalClosure));
-                    if (auto trg = call->tryOptimisticDispatch()) {
-                        // Avoid recursivly compiling the same closure
-                        auto fun = compiler.alreadyCompiled(trg);
-                        SEXP funCont = nullptr;
+                assert(call->cls()->hasOriginClosure());
+                assert(call->runtimeClosure() == Tombstone::closure());
+                SEXP originalClosure = call->cls()->rirClosure();
+                auto dt = DispatchTable::unpack(BODY(originalClosure));
+                if (auto trg = call->tryOptimisticDispatch()) {
+                    // Avoid recursivly compiling the same closure
+                    auto fun = compiler.alreadyCompiled(trg);
+                    SEXP funCont = nullptr;
 
-                        if (fun) {
-                            funCont = fun->container();
-                        } else if (!compiler.isCompiling(trg)) {
-                            fun = compiler.compile(trg, dryRun);
-                            funCont = fun->container();
-                            Protect p(funCont);
-                            assert(originalClosure &&
-                                   "Cannot compile synthetic closure");
-                            dt->insert(fun);
-                        }
-                        auto bc = BC::staticCall(
-                            call->nCallArgs(), Pool::get(call->srcIdx),
-                            originalClosure, funCont,
-                            call->inferAvailableAssumptions());
-                        auto hint =
-                            bc.immediate.staticCallFixedArgs.versionHint;
-                        cb.add(std::move(bc));
-                        if (!funCont)
-                            compiler.needsPatching(trg, hint);
-                    } else {
-                        // Something went wrong with dispatching, let's put the
-                        // baseline there
-                        cb.add(BC::staticCall(
-                            call->nCallArgs(), Pool::get(call->srcIdx),
-                            originalClosure, dt->baseline()->container(),
-                            call->inferAvailableAssumptions()));
+                    if (fun) {
+                        funCont = fun->container();
+                    } else if (!compiler.isCompiling(trg)) {
+                        fun = compiler.compile(trg, dryRun);
+                        funCont = fun->container();
+                        Protect p(funCont);
+                        assert(originalClosure &&
+                               "Cannot compile synthetic closure");
+                        dt->insert(fun);
                     }
+                    auto bc = BC::staticCall(
+                        call->nCallArgs(), Pool::get(call->srcIdx),
+                        originalClosure, funCont,
+                        call->inferAvailableAssumptions(), call->argOrderOrig);
+                    auto hint = bc.immediate.staticCallFixedArgs.versionHint;
+                    cb.add(std::move(bc));
+                    if (!funCont)
+                        compiler.needsPatching(trg, hint);
                 } else {
-                    assert(call->runtimeClosure());
-                    cb.add(BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
-                                    call->inferAvailableAssumptions()));
+                    // Something went wrong with dispatching, let's put the
+                    // baseline there
+                    cb.add(BC::staticCall(
+                        call->nCallArgs(), Pool::get(call->srcIdx),
+                        originalClosure, dt->baseline()->container(),
+                        call->inferAvailableAssumptions(), call->argOrderOrig));
                 }
                 break;
             }
@@ -1177,7 +1184,82 @@ static bool coinFlip() {
     static std::bernoulli_distribution coin(
         Parameter::DEOPT_CHAOS ? 1.0 / Parameter::DEOPT_CHAOS : 0);
     return coin(gen);
-};
+}
+
+void Pir2Rir::replaceFailingStaticCalls(Code* code) {
+#ifdef ENABLE_SLOWASSERT
+    bool DEBUG = false;
+    if (DEBUG) {
+        bool replaced = false;
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto call = StaticCall::Cast(i)) {
+                if (!call->cls()->hasOriginClosure())
+                    replaced = true;
+            }
+        });
+        DEBUG = replaced;
+    }
+    if (DEBUG) {
+        std::cout << "===== replaceFailingStaticCalls\n";
+        code->printCode(std::cout, 1, 0);
+    }
+#endif
+    Visitor::run(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (auto call = StaticCall::Cast(*it)) {
+                if (!call->cls()->hasOriginClosure()) {
+                    assert(call->runtimeClosure() != Tombstone::closure());
+
+                    std::vector<Value*> args;
+                    std::vector<SEXP> names;
+                    bool hasNames = false;
+                    call->eachUnorderedArg([&](Value* arg, SEXP name,
+                                               rir::Code* prom) {
+                        if (MkArg::Cast(arg) || arg == MissingArg::instance()) {
+                            args.push_back(arg);
+                        } else {
+                            assert(prom);
+                            auto p = cls->createFakeProm(prom);
+                            auto mk = new FakeMkArg(p, arg);
+                            it = bb->insert(it, mk);
+                            it = it + 1;
+                            args.push_back(mk);
+                        }
+                        names.push_back(name);
+                        hasNames = hasNames || name != R_NilValue;
+                    });
+
+                    Instruction* nc = nullptr;
+                    if (hasNames) {
+                        nc = new NamedCall(call->callerEnv(),
+                                           call->runtimeClosure(), args, names,
+                                           call->srcIdx);
+                    } else {
+                        nc = new Call(call->callerEnv(), call->runtimeClosure(),
+                                      args, call->frameStateOrTs(),
+                                      call->srcIdx);
+                        call->clearFrameState();
+                    }
+                    it = bb->insert(it, nc);
+                    it = it + 1;
+                    auto f = new Force(nc, call->callerEnv(),
+                                       Tombstone::framestate());
+                    call->replaceUsesAndSwapWith(f, it);
+                    next = it;
+                }
+            }
+            it = next;
+        }
+    });
+#ifdef ENABLE_SLOWASSERT
+    if (DEBUG) {
+        std::cout << "==\n";
+        code->printCode(std::cout, 1, 0);
+    }
+#endif
+}
 
 void Pir2Rir::lower(Code* code) {
 
@@ -1379,12 +1461,12 @@ rir::Function* Pir2Rir::finalize() {
     return function.function();
 }
 
-} // namespace
+} // namespace pir2rir
 
 rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, bool dryRun) {
     auto& log = logger.get(cls);
     done[cls] = nullptr;
-    Pir2Rir pir2rir(*this, cls, dryRun, log);
+    pir2rir::Pir2Rir pir2rir(*this, cls, dryRun, log);
     auto fun = pir2rir.finalize();
     done[cls] = fun;
     log.flush();

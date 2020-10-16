@@ -57,13 +57,6 @@ class SSAAllocator {
         if (useStack)
             sa = std::make_unique<StackUseAnalysis>(cls, code, log,
                                                     livenessIntervals);
-
-#ifdef DEBUG_LIVENESS
-        std::cerr << "^^^^^^^^^^ "
-                  << "SSAAllocator ran liveness analysis"
-                  << " ^^^^^^^^^^\n";
-        code->printGraphCode(std::cerr, false);
-#endif
     }
 
     void compute() {
@@ -89,7 +82,6 @@ class SSAAllocator {
     bool dead(Instruction* instr) const { return sa ? sa->dead(instr) : false; }
 
     void computeStackAllocation() {
-        needsASlot(*code->entry->begin());
         std::unordered_map<Instruction*, bool> twice;
         Visitor::run(code->entry, [&](Instruction* i) {
             i->eachArg([&](Value* v) {

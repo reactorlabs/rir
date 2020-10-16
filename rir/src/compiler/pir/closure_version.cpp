@@ -80,10 +80,18 @@ Promise* ClosureVersion::createProm(rir::Code* rirSrc) {
     return p;
 }
 
+Promise* ClosureVersion::createFakeProm(rir::Code* rirSrc) {
+    Promise* p = new Promise(this, fakePromises_.size(), rirSrc);
+    fakePromises_.push_back(p);
+    return p;
+}
+
 ClosureVersion::~ClosureVersion() {
     for (auto p : promises_) {
-        if (p)
-            delete p;
+        delete p;
+    }
+    for (auto p : fakePromises_) {
+        delete p;
     }
 }
 
@@ -98,7 +106,7 @@ ClosureVersion* ClosureVersion::clone(const Context& newAssumptions) {
 void ClosureVersion::erasePromise(unsigned id) {
     assert(promises_.at(id) && "Promise already deleted");
 
-    // If we delete a corrupt promise it get's hard to debug...
+    // If we delete a corrupt promise it gets hard to debug...
     assert(promises_.at(id)->owner == this);
     assert(promise(promises_.at(id)->id) == promises_.at(id));
 

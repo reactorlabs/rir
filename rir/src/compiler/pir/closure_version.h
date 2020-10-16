@@ -44,6 +44,7 @@ class ClosureVersion : public Code {
   private:
     Closure* owner_;
     std::vector<Promise*> promises_;
+    std::vector<Promise*> fakePromises_;
     const Context& optimizationContext_;
 
     std::string name_;
@@ -76,6 +77,7 @@ class ClosureVersion : public Code {
     void printBBGraph(std::ostream& out, bool omitDeoptBranches) const;
 
     Promise* createProm(rir::Code* rirSrc);
+    Promise* createFakeProm(rir::Code* rirSrc);
 
     Promise* promise(unsigned id) const { return promises_.at(id); }
     const std::vector<Promise*>& promises() { return promises_; }

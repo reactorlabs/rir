@@ -37,7 +37,8 @@ void Code::printBBGraphCode(std::ostream& out, bool omitDeoptBranches) const {
 
 Code::~Code() {
     std::stack<BB*> toDel;
-    Visitor::run(entry, [&toDel](BB* bb) { toDel.push(bb); });
+    if (entry)
+        Visitor::run(entry, [&toDel](BB* bb) { toDel.push(bb); });
     while (!toDel.empty()) {
         auto d = toDel.top();
         toDel.pop();

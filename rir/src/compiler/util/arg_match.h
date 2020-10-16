@@ -12,7 +12,8 @@ namespace pir {
 struct ArgumentMatcher {
     static bool reorder(Builder& insert, SEXP formals,
                         const std::vector<BC::PoolIdx>& actualNames,
-                        std::vector<Value*>& given);
+                        std::vector<Value*>& given,
+                        std::vector<BC::ArgIdx>& argOrderOrig);
 };
 
 } // namespace pir

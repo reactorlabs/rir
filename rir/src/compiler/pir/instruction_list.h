@@ -60,6 +60,7 @@
     V(Return)                                                                  \
     V(NonLocalReturn)                                                          \
     V(MkArg)                                                                   \
+    V(FakeMkArg)                                                               \
     V(UpdatePromise)                                                           \
     V(MkFunCls)                                                                \
     V(MkCls)                                                                   \

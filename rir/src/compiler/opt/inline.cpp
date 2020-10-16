@@ -360,28 +360,26 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                     Visitor::run(copy, [&](BB* bb) {
                         auto it = bb->begin();
                         while (it != bb->end()) {
-                            MkArg* mk = MkArg::Cast(*it);
-                            it++;
-                            if (!mk)
-                                continue;
-
-                            size_t id = mk->prom()->id;
-                            if (mk->prom()->owner == inlinee) {
-                                assert(id < copiedPromise.size());
-                                if (copiedPromise[id]) {
-                                    mk->updatePromise(
-                                        cls->promises().at(newPromId[id]));
-                                } else {
-                                    Promise* clone =
-                                        cls->createProm(mk->prom()->rirSrc());
-                                    BB* promCopy = BBTransform::clone(
-                                        mk->prom()->entry, clone, cls);
-                                    clone->entry = promCopy;
-                                    newPromId[id] = clone->id;
-                                    copiedPromise[id] = true;
-                                    mk->updatePromise(clone);
+                            if (auto mk = MkArg::Cast(*it)) {
+                                size_t id = mk->prom()->id;
+                                if (mk->prom()->owner == inlinee) {
+                                    assert(id < copiedPromise.size());
+                                    if (copiedPromise[id]) {
+                                        mk->updatePromise(
+                                            cls->promises().at(newPromId[id]));
+                                    } else {
+                                        Promise* clone = cls->createProm(
+                                            mk->prom()->rirSrc());
+                                        BB* promCopy = BBTransform::clone(
+                                            mk->prom()->entry, clone, cls);
+                                        clone->entry = promCopy;
+                                        newPromId[id] = clone->id;
+                                        copiedPromise[id] = true;
+                                        mk->updatePromise(clone);
+                                    }
                                 }
                             }
+                            it++;
                         }
                     });
 

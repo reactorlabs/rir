@@ -606,6 +606,13 @@ bool MkArg::usesPromEnv() const {
     return false;
 }
 
+void FakeMkArg::printArgs(std::ostream& out, bool tty) const {
+    eagerArg()->printRef(out);
+    out << ", " << *prom();
+    out << " (!refl)";
+    out << ", ";
+}
+
 void Missing::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName)) << ", ";
 }
@@ -958,6 +965,13 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
         runtimeClosure()->printRef(out);
         out << " ";
     }
+
+    if (!argOrderOrig.empty()) {
+        out << "{ ";
+        for (auto a : argOrderOrig)
+            out << a << " ";
+        out << "} ";
+    }
 }
 
 void Force::printArgs(std::ostream& out, bool tty) const {
@@ -1040,25 +1054,52 @@ ClosureVersion* StaticCall::tryOptimisticDispatch() const {
 }
 
 StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
-                       const std::vector<Value*>& args, FrameState* fs,
+                       const std::vector<Value*>& args,
+                       std::vector<BC::ArgIdx>& argOrderOrig, FrameState* fs,
                        unsigned srcIdx, Value* runtimeClosure)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls), givenContext(givenContext) {
+      cls_(cls), argOrderOrig(argOrderOrig),
+      promises(argOrderOrig.size(), nullptr), givenContext(givenContext) {
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
     pushArg(runtimeClosure, RType::closure);
+    std::vector<Value*> expandedArgs;
     for (unsigned i = 0; i < args.size(); ++i) {
         assert(!ExpandDots::Cast(args[i]) &&
                "Static Call cannot accept dynamic number of arguments");
         if (cls->formals().names()[i] == R_DotsSymbol) {
             pushArg(args[i],
                     PirType() | RType::prom | RType::missing | RType::dots);
+            if (auto dots = DotsList::Cast(args[i])) {
+                dots->eachElement([&](SEXP name, Value* val) {
+                    assert(MkArg::Cast(val) || val == MissingArg::instance());
+                    expandedArgs.push_back(val);
+                });
+            } else {
+                assert(args[i] == MissingArg::instance());
+                expandedArgs.push_back(args[i]);
+            }
         } else {
             pushArg(args[i],
                     PirType() | RType::prom | RType::missing | PirType::val());
+            assert(MkArg::Cast(args[i]) || args[i] == MissingArg::instance());
+            expandedArgs.push_back(args[i]);
         }
     }
+    while (expandedArgs.size() < argOrderOrig.size())
+        expandedArgs.push_back(MissingArg::instance());
+
+    size_t j = 0;
+    for (auto i : argOrderOrig) {
+        assert(i < expandedArgs.size());
+        if (auto mk = MkArg::Cast(expandedArgs[i])) {
+            promises[j] = mk->prom()->rirSrc();
+        }
+        j++;
+    }
+
+    assert(promises.size() == argOrderOrig.size());
     assert(tryDispatch());
 }
 
@@ -1123,7 +1164,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     pushArg(fun, RType::closure);
 
     // Calling builtins with names or ... is not supported by callBuiltin,
-    // that's why those calls go through the normall call BC.
+    // that's why those calls go through the normal call BC.
     auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
@@ -1145,7 +1186,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     pushArg(fun, RType::closure);
 
     // Calling builtins with names or ... is not supported by callBuiltin,
-    // that's why those calls go through the normall call BC.
+    // that's why those calls go through the normal call BC.
     auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)

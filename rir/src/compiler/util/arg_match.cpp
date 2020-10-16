@@ -12,7 +12,8 @@ namespace pir {
 // cppcheck-suppress constParameter
 bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
                               const std::vector<BC::PoolIdx>& actualNames,
-                              std::vector<Value*>& givenArgs) {
+                              std::vector<Value*>& givenArgs,
+                              std::vector<BC::ArgIdx>& argOrderOrig) {
     // Build up the list of supplied args. We use the names from actualNames
     // and integers to represent the index into givenArgs.
     SEXP supplied = R_NilValue;
@@ -245,19 +246,24 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
     std::vector<Value*> copy(givenArgs);
     givenArgs.resize(result.length());
     size_t pos = 0;
+    size_t reorderPos = 0;
     const static bool DEBUG = false;
     if (DEBUG)
         std::cout << "MATCHED : ";
     f = formals;
+
+    // This loop updates all positions in argOrderOrig, no need to clear&resize
     for (auto r : result) {
         if (DEBUG)
             std::cout << CHAR(PRINTNAME(TAG(f))) << "=";
         if (TYPEOF(r) == INTSXP) {
             int idx = INTEGER(r)[0];
+            argOrderOrig[idx] = reorderPos++;
             givenArgs[pos++] = copy[idx];
             if (DEBUG)
                 copy[idx]->printRef(std::cout);
         } else if (r == R_MissingArg) {
+            reorderPos++;
             givenArgs[pos++] = MissingArg::instance();
             if (DEBUG)
                 std::cout << "miss";
@@ -273,6 +279,7 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
                 assert(TYPEOF(*da) == INTSXP);
                 int idx = INTEGER(*da)[0];
                 conv->addInput(da.tag(), copy[idx]);
+                argOrderOrig[idx] = reorderPos++;
                 if (DEBUG) {
                     if (da.tag() != R_NilValue)
                         std::cout << CHAR(PRINTNAME(da.tag())) << "=";
@@ -292,8 +299,12 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
         if (DEBUG && f != R_NilValue)
             std::cout << ", ";
     }
-    if (DEBUG)
-        std::cout << "\n";
+    if (DEBUG) {
+        std::cout << " { ";
+        for (auto arg : argOrderOrig)
+            std::cout << arg << " ";
+        std::cout << "}\n";
+    }
 
     while (!givenArgs.empty() && givenArgs.back() == MissingArg::instance())
         givenArgs.pop_back();

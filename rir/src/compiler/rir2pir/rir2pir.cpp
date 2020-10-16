@@ -16,6 +16,7 @@
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
 
+#include <numeric>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
@@ -450,9 +451,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::call_dots_:
+    case Opcode::call_:
     case Opcode::named_call_:
-    case Opcode::call_: {
+    case Opcode::call_dots_: {
         long nargs = bc.immediate.callFixedArgs.nargs;
         auto toPop = nargs + 1;
         std::vector<Value*> args(nargs);
@@ -542,23 +543,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         DispatchTable* target = nullptr;
         if (monomorphicClosure || monomorphicInnerFunction) {
             target = DispatchTable::unpack(BODY(monomorphic));
-        }
-
-        if (target) {
-            // TODO: this is a complete hack, but right now we don't have a
-            // better solution. What happens if we statically reorder
-            // arguments (and create dotdotdot lists) is that we loose the
-            // original promargs order. But for upon calling usemethod a
-            // second environment (and thus new argument matching) is done,
-            // which needs the original order. What we should do is to
-            // somehow record the original order before static shuffling,
-            // such that we can restore it in createLegaxyArgsList in the
-            // interpreter. At the moment however this will just result in
-            // an assert.
-            if (Query::needsPromargs(target->baseline())) {
-                monomorphicClosure = monomorphicInnerFunction = false;
-                monomorphic = monomorphicPolyenv = nullptr;
-            }
         }
 
         auto ldfun = LdFun::Cast(callee);
@@ -683,6 +667,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         size_t missingArgs = 0;
         auto matchedArgs(args);
+        std::vector<BC::ArgIdx> argOrderOrig(nargs);
+        std::iota(argOrderOrig.begin(), argOrderOrig.end(), 0);
         // Static argument name matching
         // Currently we only match callsites with the correct number of
         // arguments passed. Thus, we set those given assumptions below.
@@ -703,10 +689,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (namedArguments) {
                     correctOrder = ArgumentMatcher::reorder(
                         insert, FORMALS(monomorphic), callArgumentNames,
-                        matchedArgs);
+                        matchedArgs, argOrderOrig);
                 } else {
-                    correctOrder = ArgumentMatcher::reorder(
-                        insert, FORMALS(monomorphic), {}, matchedArgs);
+                    correctOrder =
+                        ArgumentMatcher::reorder(insert, FORMALS(monomorphic),
+                                                 {}, matchedArgs, argOrderOrig);
                 }
             }
 
@@ -768,10 +755,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 assert(!inlining());
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
                                                     inPromise());
-                push(insert(new StaticCall(
-                    insert.env, f->owner(), given, matchedArgs, fs, ast,
-                    monomorphicClosure ? Tombstone::closure()
-                                       : guardedCallee)));
+                push(insert(new StaticCall(insert.env, f->owner(), given,
+                                           matchedArgs, argOrderOrig, fs, ast,
+                                           monomorphicClosure
+                                               ? Tombstone::closure()
+                                               : guardedCallee)));
                 auto innerc = MkFunCls::Cast(callee);
                 if (!innerc)
                     return;

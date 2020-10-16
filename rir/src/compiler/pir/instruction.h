@@ -2,6 +2,7 @@
 #define COMPILER_INSTRUCTION_H
 
 #include "R/r.h"
+#include "closure.h"
 #include "env.h"
 #include "instruction_list.h"
 #include "ir/BC_inc.h"
@@ -1138,6 +1139,21 @@ class FLIE(MkArg, 2, Effects::None()) {
     bool usesPromEnv() const;
 };
 
+class FLIE(FakeMkArg, 2, Effects::None()) {
+    Promise* prom_;
+
+  public:
+    FakeMkArg(Promise* prom, Value* v)
+        : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
+                                         Env::elided()),
+          prom_(prom) {
+        assert(eagerArg() != UnboundValue::instance());
+    }
+    Value* eagerArg() const { return arg(0).val(); }
+    Promise* prom() const { return prom_; }
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
 class FLI(UpdatePromise, 2, Effect::MutatesArgument) {
   public:
     UpdatePromise(MkArg* prom, Value* v)
@@ -1980,6 +1996,49 @@ ARITHMETIC_UNOP(Minus);
 #undef ARITHMETIC_UNOP
 #undef LOGICAL_UNOP
 
+class FLIE(LdDots, 1, Effect::ReadsEnv) {
+  public:
+    std::vector<SEXP> names;
+    explicit LdDots(Value* env)
+        : FixedLenInstructionWithEnvSlot(PirType::dotsArg(), {}, {}, env) {}
+};
+
+class FLI(ExpandDots, 1, Effects::None()) {
+  public:
+    std::vector<SEXP> names;
+    explicit ExpandDots(Value* dots)
+        : FixedLenInstruction(RType::expandedDots, {{PirType::dotsArg()}},
+                              {{dots}}) {}
+};
+
+class VLI(DotsList, Effects::None()) {
+  public:
+    std::vector<SEXP> names;
+    DotsList() : VarLenInstruction(RType::dots) {}
+
+    void addInput(SEXP name, Value* val) {
+        names.push_back(name);
+        VarLenInstruction::pushArg(val, val->type);
+    }
+
+    void pushArg(Value* a, PirType t) override {
+        assert(false && "use addInput");
+    }
+    void pushArg(Value* a) override { assert(false && "use addInput"); }
+
+    void printArgs(std::ostream& out, bool tty) const override;
+
+    typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
+    RIR_INLINE void eachElement(LocalVarIt it) const {
+        for (unsigned i = 0; i < nargs(); ++i)
+            it(names[i], arg(i).val());
+    }
+    RIR_INLINE void eachElementRev(LocalVarIt it) const {
+        for (long i = nargs() - 1; i >= 0; --i)
+            it(names[i], arg(i).val());
+    }
+};
+
 // Common interface to all call instructions
 class CallInstruction {
   public:
@@ -2016,7 +2075,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         pushArg(fun, RType::closure);
 
         // Calling builtins with names or ... is not supported by callBuiltin,
-        // that's why those calls go through the normall call BC.
+        // that's why those calls go through the normal call BC.
         auto argtype =
             PirType(RType::prom) | RType::missing | RType::expandedDots;
         if (auto con = LdConst::Cast(fun))
@@ -2112,6 +2171,9 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* cls_;
 
   public:
+    std::vector<BC::ArgIdx> argOrderOrig;
+    std::vector<rir::Code*> promises;
+
     Context givenContext;
 
     ClosureVersion* hint = nullptr;
@@ -2122,8 +2184,9 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* tryGetCls() const override final { return cls(); }
 
     StaticCall(Value * callerEnv, Closure * cls, Context givenContext,
-               const std::vector<Value*>& args, FrameState* fs, unsigned srcIdx,
-               Value* runtimeClosure = Tombstone::closure());
+               const std::vector<Value*>& args,
+               std::vector<BC::ArgIdx>& argOrderOrig, FrameState* fs,
+               unsigned srcIdx, Value* runtimeClosure = Tombstone::closure());
 
     size_t nCallArgs() const override { return nargs() - 3; };
     void eachCallArg(const Instruction::ArgumentValueIterator& it)
@@ -2135,6 +2198,33 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 2));
     }
+    typedef std::function<void(Value*, SEXP, rir::Code*)> UnorderedArgIterator;
+    void eachUnorderedArg(const UnorderedArgIterator& it) {
+        std::vector<Value*> callArgs;
+        std::vector<SEXP> callNames;
+        auto& names = cls_->formals().names();
+        size_t i = 0;
+        eachCallArg([&](Value* v) {
+            auto name = names[i++];
+            if (auto d = DotsList::Cast(v)) {
+                assert(name == R_DotsSymbol);
+                d->eachElement([&](SEXP name, Value* v) {
+                    callArgs.push_back(v);
+                    callNames.push_back(name);
+                });
+            } else {
+                assert(name != R_DotsSymbol);
+                callArgs.push_back(v);
+                callNames.push_back(name);
+            }
+        });
+        size_t j = 0;
+        for (auto i : argOrderOrig) {
+            assert(i < callArgs.size());
+            it(callArgs[i], callNames[i], promises[j++]);
+        }
+    }
+
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
         return arg(pos + 2);
@@ -2365,45 +2455,6 @@ class FLI(PopContext, 2, Effect::ChangesContexts) {
 
     PirType inferType(const GetType& getType) const override final {
         return getType(result());
-    }
-};
-
-class FLIE(LdDots, 1, Effect::ReadsEnv) {
-  public:
-    std::vector<SEXP> names;
-    explicit LdDots(Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::dotsArg(), {}, {}, env) {}
-};
-
-class FLI(ExpandDots, 1, Effects::None()) {
-  public:
-    std::vector<SEXP> names;
-    explicit ExpandDots(Value* dots)
-        : FixedLenInstruction(RType::expandedDots, {{PirType::dotsArg()}},
-                              {{dots}}) {}
-};
-
-class VLI(DotsList, Effects::None()) {
-  public:
-    std::vector<SEXP> names;
-    DotsList() : VarLenInstruction(RType::dots) {}
-
-    void addInput(SEXP name, Value* val) {
-        names.push_back(name);
-        VarLenInstruction::pushArg(val, val->type);
-    }
-
-    void pushArg(Value* a, PirType t) override {
-        assert(false && "use addInput");
-    }
-    void pushArg(Value* a) override { assert(false && "use addInput"); }
-
-    void printArgs(std::ostream& out, bool tty) const override;
-
-    typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
-    RIR_INLINE void eachElementRev(LocalVarIt it) const {
-        for (long i = nargs() - 1; i >= 0; --i)
-            it(names[i], arg(i).val());
     }
 };
 

@@ -187,7 +187,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             }
 
             // Look for static calls, where we statically know that all (or
-            // some) arguments are eager. In this case we will compile an
+            // some) arguments are eager. In this case we will compile a
             // special eager version of the function and call this one instead.
             if (auto call = StaticCall::Cast(*ip)) {
                 Closure* cls = call->cls();
