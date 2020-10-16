@@ -16,7 +16,6 @@
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
 
-#include <numeric>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
@@ -668,7 +667,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         size_t missingArgs = 0;
         auto matchedArgs(args);
         std::vector<BC::ArgIdx> argOrderOrig(nargs);
-        std::iota(argOrderOrig.begin(), argOrderOrig.end(), 0);
+        for (BC::ArgIdx i = 0; i < nargs; i++)
+            argOrderOrig[i] = BC::encodeArgOrder(i, false);
         // Static argument name matching
         // Currently we only match callsites with the correct number of
         // arguments passed. Thus, we set those given assumptions below.

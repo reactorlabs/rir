@@ -969,7 +969,8 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
     if (!argOrderOrig.empty()) {
         out << "{ ";
         for (auto a : argOrderOrig)
-            out << a << " ";
+            out << BC::decodeArgOrder(a)
+                << (BC::isArgOrderNamed(a) ? "(N) " : " ");
         out << "} ";
     }
 }
@@ -1092,6 +1093,7 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
 
     size_t j = 0;
     for (auto i : argOrderOrig) {
+        i = BC::decodeArgOrder(i);
         assert(i < expandedArgs.size());
         if (auto mk = MkArg::Cast(expandedArgs[i])) {
             promises[j] = mk->prom()->rirSrc();

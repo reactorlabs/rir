@@ -356,7 +356,7 @@ SEXP createLegacyArgsListFromStackValues(size_t nargs, size_t nargsOrig,
     SEXP pos = result;
     for (size_t i = 0; i < nargsOrig; ++i) {
 
-        int idx = reorder ? argOrderOrig[i] : i;
+        int idx = reorder ? BC::decodeArgOrder(argOrderOrig[i]) : i;
         bool inDots = false;
         if (seenDots) {
             if (dotsRange.first <= idx && idx < dotsRange.second) {
@@ -371,10 +371,7 @@ SEXP createLegacyArgsListFromStackValues(size_t nargs, size_t nargsOrig,
         SEXP name = inDots ? (dots.begin() + idx).tag()
                            : (names ? cp_pool_at(ctx, names[idx]) : R_NilValue);
 
-        // For static calls, we add names to all arguments since we don't
-        // know where they used to be in the original arglist (we would
-        // need to add named static calls to pir)
-        if (staticCall && !inDots)
+        if (!inDots && reorder && BC::isArgOrderNamed(argOrderOrig[i]))
             name = (RList(formals).begin() + idx).tag();
 
         bool isMissing = false;

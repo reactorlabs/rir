@@ -148,6 +148,13 @@ class BC {
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_JMP = (1L << ((8 * sizeof(Jmp)) - 1)) - 1;
     static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(Jmp)) - 1));
+    static constexpr uint32_t ARG_NAMED_MASK = 1L << ((8 * sizeof(ArgIdx)) - 1);
+
+    static ArgIdx encodeArgOrder(ArgIdx val, bool named) {
+        return named ? val | ARG_NAMED_MASK : val;
+    }
+    static ArgIdx decodeArgOrder(ArgIdx val) { return val & ~ARG_NAMED_MASK; }
+    static bool isArgOrderNamed(ArgIdx val) { return val & ARG_NAMED_MASK; }
 
     // This is only used internally in the BC handle objects
     // On the bytecode stream each immediate argument uses only the actual

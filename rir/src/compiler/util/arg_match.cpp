@@ -258,10 +258,18 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
             std::cout << CHAR(PRINTNAME(TAG(f))) << "=";
         if (TYPEOF(r) == INTSXP) {
             int idx = INTEGER(r)[0];
-            argOrderOrig[idx] = reorderPos++;
+            argOrderOrig[idx] = BC::encodeArgOrder(
+                reorderPos++, actualNames.size() > (unsigned)idx &&
+                                  Pool::get(actualNames[idx]) != R_NilValue);
             givenArgs[pos++] = copy[idx];
-            if (DEBUG)
+            if (DEBUG) {
                 copy[idx]->printRef(std::cout);
+                if (actualNames.size() > (unsigned)idx &&
+                    Pool::get(actualNames[idx]) != R_NilValue)
+                    std::cout << "("
+                              << CHAR(PRINTNAME(Pool::get(actualNames[idx])))
+                              << ")";
+            }
         } else if (r == R_MissingArg) {
             reorderPos++;
             givenArgs[pos++] = MissingArg::instance();
@@ -279,7 +287,8 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
                 assert(TYPEOF(*da) == INTSXP);
                 int idx = INTEGER(*da)[0];
                 conv->addInput(da.tag(), copy[idx]);
-                argOrderOrig[idx] = reorderPos++;
+                argOrderOrig[idx] =
+                    BC::encodeArgOrder(reorderPos++, da.tag() != R_NilValue);
                 if (DEBUG) {
                     if (da.tag() != R_NilValue)
                         std::cout << CHAR(PRINTNAME(da.tag())) << "=";
@@ -302,7 +311,8 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
     if (DEBUG) {
         std::cout << " { ";
         for (auto arg : argOrderOrig)
-            std::cout << arg << " ";
+            std::cout << BC::decodeArgOrder(arg)
+                      << (BC::isArgOrderNamed(arg) ? "(N) " : " ");
         std::cout << "}\n";
     }
 

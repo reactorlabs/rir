@@ -2220,6 +2220,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
         });
         size_t j = 0;
         for (auto i : argOrderOrig) {
+            i = BC::decodeArgOrder(i);
             assert(i < callArgs.size());
             it(callArgs[i], callNames[i], promises[j++]);
         }

@@ -481,7 +481,8 @@ void BC::printArgOrderOrig(std::ostream& out,
     if (!argOrderOrig.empty()) {
         out << " { ";
         for (auto a : argOrderOrig)
-            out << a << " ";
+            out << BC::decodeArgOrder(a)
+                << (BC::isArgOrderNamed(a) ? "(N) " : " ");
         out << "}";
     }
 }
