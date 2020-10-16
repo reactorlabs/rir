@@ -213,10 +213,6 @@ int initializeTypes(LLVMContext& context) {
 
     NativeBuiltins::call.llvmSignature = llvm::FunctionType::get(
         t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64}, false);
-    NativeBuiltins::dotsCall.llvmSignature = llvm::FunctionType::get(
-        t::SEXP,
-        {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
-        false);
     NativeBuiltins::namedCall.llvmSignature = llvm::FunctionType::get(
         t::SEXP,
         {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::IntPtr, t::i64},
@@ -304,8 +300,10 @@ int initializeTypes(LLVMContext& context) {
         false);
 
     NativeBuiltins::nativeCallTrampoline.llvmSignature =
-        llvm::FunctionType::get(
-            t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::i64, t::i64}, false);
+        llvm::FunctionType::get(t::SEXP,
+                                {t::SEXP, t::Int, t::Int, t::SEXP, t::i64,
+                                 t::i64, t::IntPtr, t::i64},
+                                false);
 
     NativeBuiltins::unop.llvmSignature = t::sexp_sexpint;
     NativeBuiltins::unopEnv.llvmSignature = t::sexp_sexp2int2;

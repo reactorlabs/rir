@@ -3372,23 +3372,13 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::StaticCall: {
                 auto calli = StaticCall::Cast(i);
                 calli->eachArg([](Value* v) { assert(!ExpandDots::Cast(v)); });
+                assert(calli->cls()->hasOriginClosure());
+                assert(calli->runtimeClosure() == Tombstone::closure());
                 auto target = calli->tryDispatch();
                 auto bestTarget = calli->tryOptimisticDispatch();
                 std::vector<Value*> args;
                 calli->eachCallArg([&](Value* v) { args.push_back(v); });
                 Context asmpt = calli->inferAvailableAssumptions();
-
-                if (!target->owner()->hasOriginClosure()) {
-                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                               return call(NativeBuiltins::call,
-                                           {paramCode(), c(calli->srcIdx),
-                                            loadSxp(calli->runtimeClosure()),
-                                            loadSxp(calli->env()),
-                                            c(calli->nCallArgs()),
-                                            c(asmpt.toI())});
-                           }));
-                    break;
-                }
 
                 if (target == bestTarget) {
                     auto callee = target->owner()->rirClosure();
@@ -3424,6 +3414,8 @@ bool LowerFunctionLLVM::tryCompile() {
                         auto idx = Pool::makeSpace();
                         Pool::patch(idx, nativeTarget->container());
                         assert(asmpt.smaller(nativeTarget->context()));
+                        auto orderConst = c(calli->argOrderOrig);
+                        auto orderStore = globalConst(orderConst);
                         auto res = withCallFrame(args, [&]() {
                             return call(NativeBuiltins::nativeCallTrampoline,
                                         {
@@ -3432,6 +3424,9 @@ bool LowerFunctionLLVM::tryCompile() {
                                             c(calli->srcIdx),
                                             loadSxp(calli->env()),
                                             c(args.size()),
+                                            c(calli->argOrderOrig.size()),
+                                            builder.CreateBitCast(orderStore,
+                                                                  t::IntPtr),
                                             c(asmpt.toI()),
                                         });
                         });
@@ -3441,19 +3436,42 @@ bool LowerFunctionLLVM::tryCompile() {
                 }
 
                 assert(asmpt.includes(Assumption::StaticallyArgmatched));
-                setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                           return call(
-                               NativeBuiltins::call,
-                               {
-                                   paramCode(),
-                                   c(calli->srcIdx),
-                                   builder.CreateIntToPtr(
-                                       c(calli->cls()->rirClosure()), t::SEXP),
-                                   loadSxp(calli->env()),
-                                   c(calli->nCallArgs()),
-                                   c(asmpt.toI()),
-                               });
-                       }));
+                args.clear();
+                std::vector<BC::PoolIdx> names;
+                bool hasNames = false;
+                calli->eachUnorderedArg(
+                    [&](Value* arg, SEXP name, rir::Code* prom) {
+                        args.push_back(arg);
+                        names.push_back(Pool::insert(name));
+                        hasNames = hasNames || name != R_NilValue;
+                    });
+
+                if (hasNames) {
+                    auto namesConst = c(names);
+                    auto namesStore = globalConst(namesConst);
+
+                    setVal(
+                        i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::namedCall,
+                                {paramCode(), c(calli->srcIdx),
+                                 builder.CreateIntToPtr(
+                                     c(calli->cls()->rirClosure()), t::SEXP),
+                                 loadSxp(calli->env()), c(args.size()),
+                                 builder.CreateBitCast(namesStore, t::IntPtr),
+                                 c(asmpt.toI())});
+                        }));
+                } else {
+                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                               return call(
+                                   NativeBuiltins::call,
+                                   {paramCode(), c(calli->srcIdx),
+                                    builder.CreateIntToPtr(
+                                        c(calli->cls()->rirClosure()), t::SEXP),
+                                    loadSxp(calli->env()), c(args.size()),
+                                    c(asmpt.toI())});
+                           }));
+                }
                 break;
             }
 
@@ -4342,6 +4360,15 @@ bool LowerFunctionLLVM::tryCompile() {
                                call(NativeBuiltins::createPromiseNoEnv, {exp}));
                     }
                 }
+                break;
+            }
+
+            case Tag::FakeMkArg: {
+                auto p = FakeMkArg::Cast(i);
+                auto id = promMap.at(p->prom());
+                auto exp = loadPromise(paramCode(), id.first);
+                setVal(i, call(NativeBuiltins::createPromiseNoEnvEager,
+                               {exp, loadSxp(p->eagerArg())}));
                 break;
             }
 
