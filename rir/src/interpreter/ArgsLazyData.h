@@ -26,19 +26,29 @@ struct ArgsLazyDataContent
     ArgsLazyDataContent(const ArgsLazyDataContent&) = delete;
     ArgsLazyDataContent& operator=(const ArgsLazyDataContent&) = delete;
 
-    ArgsLazyDataContent(size_t length, const R_bcstack_t* args,
-                        const Immediate* names, InterpreterInstance* cmpCtx)
-        : RirRuntimeObject(sizeof(ArgsLazyDataContent), 0), length(length),
-          args(args), names(names), compilationContext(cmpCtx){};
+    ArgsLazyDataContent(size_t nargs, size_t nargsOrig, const R_bcstack_t* args,
+                        const Immediate* argOrderOrig, const Immediate* names,
+                        SEXP formals, bool staticCall, bool eagerCallee,
+                        InterpreterInstance* cmpCtx)
+        : RirRuntimeObject(sizeof(ArgsLazyDataContent), 0), nargs(nargs),
+          nargsOrig(nargsOrig), args(args), argOrderOrig(argOrderOrig),
+          names(names), formals(formals), staticCall(staticCall),
+          eagerCallee(eagerCallee), compilationContext(cmpCtx) {}
 
-    size_t length;
+    size_t nargs;
+    size_t nargsOrig;
     const R_bcstack_t* args;
+    const Immediate* argOrderOrig;
     const Immediate* names;
+    SEXP formals;
+    bool staticCall;
+    bool eagerCallee;
     InterpreterInstance* compilationContext;
 
-    SEXP createArgsLists() {
-        return createLegacyArgsListFromStackValues(length, args, names, false,
-                                                   compilationContext);
+    SEXP createArgsList() {
+        return createLegacyArgsListFromStackValues(
+            nargs, nargsOrig, args, argOrderOrig, names, formals, staticCall,
+            eagerCallee, compilationContext);
     }
 };
 
@@ -52,9 +62,12 @@ struct ArgsLazyData {
     ArgsLazyData(const ArgsLazyData&) = delete;
     ArgsLazyData& operator=(const ArgsLazyData&) = delete;
 
-    ArgsLazyData(size_t length, const R_bcstack_t* args, const Immediate* names,
+    ArgsLazyData(size_t nargs, size_t nargsOrig, const R_bcstack_t* args,
+                 const Immediate* argOrderOrig, const Immediate* names,
+                 SEXP formals, bool staticCall, bool eagerCallee,
                  InterpreterInstance* cmpCtx)
-        : content(length, args, names, cmpCtx) {
+        : content(nargs, nargsOrig, args, argOrderOrig, names, formals,
+                  staticCall, eagerCallee, cmpCtx) {
         fakeSEXP.attrib = R_NilValue;
         fakeSEXP.gengc_next_node = R_NilValue;
         fakeSEXP.gengc_prev_node = R_NilValue;

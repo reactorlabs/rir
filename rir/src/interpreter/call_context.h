@@ -23,44 +23,62 @@ struct CallContext {
     CallContext(const CallContext&) = delete;
     CallContext& operator=(CallContext&) = delete;
 
-    CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
-                R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
-                const Context& givenContext, InterpreterInstance* ctx)
-        : caller(c), suppliedArgs(nargs), passedArgs(nargs),
-          stackArgs(stackArgs), names(names), callerEnv(callerEnv), ast(ast),
-          callee(callee), givenContext(givenContext) {
+  private:
+    CallContext(Code* c, SEXP callee, size_t nargs, size_t nargsOrig, SEXP ast,
+                R_bcstack_t* stackArgs, Immediate* argOrderOrig,
+                Immediate* names, SEXP callerEnv, const Context& givenContext,
+                bool staticCall)
+        : caller(c), suppliedArgs(nargs), nargsOrig(nargsOrig),
+          passedArgs(nargs), stackArgs(stackArgs), argOrderOrig(argOrderOrig),
+          names(names), callerEnv(callerEnv), ast(ast), callee(callee),
+          givenContext(givenContext), staticCall(staticCall) {
         assert(callerEnv);
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
                 TYPEOF(callee) == BUILTINSXP));
+        assert((staticCall && argOrderOrig && !names) ||
+               (!staticCall && !argOrderOrig));
         SLOWASSERT(callerEnv == symbol::delayedEnv ||
                    TYPEOF(callerEnv) == ENVSXP || callerEnv == R_NilValue ||
                    LazyEnvironment::check(callerEnv));
+        if (nargs == 0)
+            this->argOrderOrig = nullptr;
     }
 
-    // cppcheck-suppress uninitMemberVar
-    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
+  public:
+    // For regular calls (named and with dots, too)
+    CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
                 R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
-                const Context& givenContext, InterpreterInstance* ctx)
-        : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), stackArgs, names,
-                      callerEnv, givenContext, ctx) {}
+                const Context& givenContext)
+        : CallContext(c, callee, nargs, nargs, ast, stackArgs, nullptr, names,
+                      callerEnv, givenContext, false) {}
 
-    // cppcheck-suppress uninitMemberVar
-    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
+    // For static calls
+    CallContext(Code* c, SEXP callee, size_t nargs, size_t nargsOrig, SEXP ast,
+                R_bcstack_t* stackArgs, Immediate* argOrderOrig, SEXP callerEnv,
+                const Context& givenContext)
+        : CallContext(c, callee, nargs, nargsOrig, ast, stackArgs, argOrderOrig,
+                      nullptr, callerEnv, givenContext, true) {}
+
+    // For builtin calls
+    CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
                 R_bcstack_t* stackArgs, SEXP callerEnv,
-                const Context& givenContext, InterpreterInstance* ctx)
-        : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
-                      nullptr, callerEnv, givenContext, ctx) {}
+                const Context& givenContext)
+        : CallContext(c, callee, nargs, nargs, ast, stackArgs, nullptr, nullptr,
+                      callerEnv, givenContext, false) {}
 
     const Code* caller;
     const size_t suppliedArgs;
+    const size_t nargsOrig;
     size_t passedArgs;
     const R_bcstack_t* stackArgs;
+    const Immediate* argOrderOrig;
     const Immediate* names;
     SEXP callerEnv;
     const SEXP ast;
     const SEXP callee;
     Context givenContext;
+    bool staticCall;
     SEXP arglist = nullptr;
 
     bool hasEagerCallee() const { return TYPEOF(callee) == BUILTINSXP; }
@@ -69,6 +87,10 @@ struct CallContext {
     SEXP stackArg(unsigned i) const {
         assert(stackArgs && i < passedArgs);
         return ostack_at_cell(stackArgs + i);
+    }
+
+    SEXP formals() const {
+        return TYPEOF(callee) == CLOSXP ? FORMALS(callee) : nullptr;
     }
 
     SEXP name(unsigned i, InterpreterInstance* ctx) const {

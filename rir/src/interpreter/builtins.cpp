@@ -155,7 +155,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             if ((cptr->callflag & CTXT_FUNCTION) &&
                 cptr->cloenv == call.callerEnv) {
                 if (auto l = ArgsLazyDataContent::check(cptr->promargs)) {
-                    nargs = l->length;
+                    nargs = l->nargs;
                     break;
                 }
                 nargs = Rf_length(cptr->promargs);
