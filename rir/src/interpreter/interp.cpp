@@ -2743,6 +2743,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // Stack contains [arg1, ..., argn], callee is immediate
             Immediate n = readImmediate();
             advanceImmediate();
+            Immediate nOrig = readImmediate();
+            advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
             Context staticContext(pc);
@@ -2750,9 +2752,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
-            CallContext call(c, callee, n, ast,
-                             ostack_cell_at(ctx, (long)n - 1), env,
-                             staticContext, ctx);
+            auto inlineCache = pc;
+            advanceImmediate();
+            auto order = (Immediate*)pc;
+            advanceImmediateN(nOrig);
+            CallContext call(c, callee, n, nOrig, cp_pool_at(ctx, ast),
+                             ostack_cell_at(ctx, (long)n - 1), order, env,
+                             staticContext);
             auto fun = Function::unpack(version);
             inferCurrentContext(call, fun->signature().formalNargs(), ctx);
             auto flags = fun->flags;
@@ -2771,9 +2777,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (dispatchFail) {
                 fun = dispatch(call, dt);
                 // Patch inline cache
-                (*(Immediate*)pc) = Pool::insert(fun->container());
+                (*(Immediate*)inlineCache) = Pool::insert(fun->container());
             }
-            advanceImmediate();
 
             SLOWASSERT(!fun->flags.contains(Function::Dead));
             SLOWASSERT(!dispatchFail || dt->dispatch(fun->context()) == fun);
@@ -4422,4 +4427,5 @@ SEXP rirEval(SEXP what, SEXP env) {
     assert(false && "Expected a code object or a dispatch table");
     return nullptr;
 }
+
 } // namespace rir

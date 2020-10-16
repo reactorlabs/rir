@@ -94,6 +94,7 @@ class BC {
     };
     struct StaticCallFixedArgs {
         NumArgs nargs;
+        NumArgs nargsOrig;
         Immediate ast;
         Context given;
         Immediate targetClosure;
@@ -208,15 +209,19 @@ class BC {
     inline size_t size() const {
         // Those are the variable length BC we have
         if (bc == Opcode::named_call_ || bc == Opcode::call_dots_)
-            return immediate.callFixedArgs.nargs * sizeof(FunIdx) +
+            return immediate.callFixedArgs.nargs * sizeof(PoolIdx) +
+                   fixedSize(bc);
+
+        if (bc == Opcode::static_call_)
+            return immediate.staticCallFixedArgs.nargsOrig * sizeof(ArgIdx) +
                    fixedSize(bc);
 
         if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
-            return immediate.mkEnvFixedArgs.nargs * sizeof(FunIdx) +
+            return immediate.mkEnvFixedArgs.nargs * sizeof(PoolIdx) +
                    fixedSize(bc);
 
         if (bc == Opcode::mk_dotlist_)
-            return immediate.mkDotlistFixedArgs.nargs * sizeof(FunIdx) +
+            return immediate.mkDotlistFixedArgs.nargs * sizeof(PoolIdx) +
                    fixedSize(bc);
 
         // the others have no variable length part
@@ -253,7 +258,7 @@ class BC {
 
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;
-    void printImmediateArgs(std::ostream& out) const;
+    void printArgOrderOrig(std::ostream& out, const std::vector<ArgIdx>&) const;
     void printNames(std::ostream& out, const std::vector<PoolIdx>&) const;
     void printProfile(std::ostream& out) const;
     void printOpcode(std::ostream& out) const;
@@ -311,30 +316,32 @@ class BC {
     RIR_INLINE static unsigned size(rir::Opcode* pc) {
         auto bc = *pc;
         switch (bc) {
-        // First handle the varlength BCs. In all three cases the number of
-        // call arguments is the 2nd immediate argument and the
-        // instructions have 4 fixed length immediates. After that there are
-        // narg varlen immediates for the first two and 2*narg varlen
-        // immediates in the last case.
-        case Opcode::call_dots_:
-        case Opcode::named_call_: {
+        // First handle the varlength BCs.
+        case Opcode::named_call_:
+        case Opcode::call_dots_: {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (4 + nargs) * sizeof(Immediate);
+            return nargs * sizeof(PoolIdx) + fixedSize(bc);
+        }
+        case Opcode::static_call_: {
+            pc++;
+            Immediate nargsOrig;
+            memcpy(&nargsOrig, pc + sizeof(Immediate), sizeof(Immediate));
+            return nargsOrig * sizeof(ArgIdx) + fixedSize(bc);
         }
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (2 + nargs) * sizeof(Immediate);
+            return nargs * sizeof(Immediate) + fixedSize(bc);
         }
         case Opcode::mk_dotlist_: {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (1 + nargs) * sizeof(Immediate);
+            return nargs * sizeof(Immediate) + fixedSize(bc);
         }
         default: {}
         }
@@ -409,12 +416,13 @@ BC_NOARGS(V, _)
     inline static BC isType(TypeChecks);
     inline static BC deopt(SEXP);
     inline static BC call(size_t nargs, SEXP ast, const Context& given);
-    inline static BC callDots(size_t nargs, const std::vector<SEXP>& names,
-                              SEXP ast, const Context& given);
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
                           SEXP ast, const Context& given);
+    inline static BC callDots(size_t nargs, const std::vector<SEXP>& names,
+                              SEXP ast, const Context& given);
     inline static BC staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
-                                SEXP targetVersion, const Context& given);
+                                SEXP targetVersion, const Context& given,
+                                std::vector<ArgIdx>& argOrderOrig);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
     inline static BC mkEnv(const std::vector<SEXP>& names,
                            const std::vector<bool>& missing,
@@ -446,47 +454,52 @@ BC_NOARGS(V, _)
         virtual ~ExtraInformation() {}
     };
     struct CallInstructionExtraInformation : public ExtraInformation {
-        std::vector<BC::ArgIdx> immediateCallArguments;
-        std::vector<BC::PoolIdx> callArgumentNames;
+        std::vector<PoolIdx> callArgumentNames;
+    };
+    struct StaticCallExtraInformation : public ExtraInformation {
+        std::vector<ArgIdx> argOrderOrig;
     };
     struct CallFeedbackExtraInformation : public ExtraInformation {
         std::vector<SEXP> targets;
     };
     struct MkEnvExtraInformation : public ExtraInformation {
-        std::vector<BC::PoolIdx> names;
+        std::vector<PoolIdx> names;
     };
     std::unique_ptr<ExtraInformation> extraInformation = nullptr;
 
   public:
-    MkEnvExtraInformation& mkEnvExtra() const {
-        assert((bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_ ||
-                bc == Opcode::mk_dotlist_) &&
-               "Not a varlen call instruction");
-        assert(extraInformation.get() &&
-               "missing extra information. created through decodeShallow?");
-        return *static_cast<MkEnvExtraInformation*>(extraInformation.get());
-    }
-
     CallInstructionExtraInformation& callExtra() const {
-        switch (bc) {
-        case Opcode::named_call_:
-        case Opcode::call_dots_:
-            break;
-        default:
-            assert(false && "Not a varlen call instruction");
-        }
+        assert((bc == Opcode::named_call_ || bc == Opcode::call_dots_) &&
+               "Not a varlen call instruction.");
         assert(extraInformation.get() &&
-               "missing extra information. created through decodeShallow?");
+               "Missing extra information. Created through decodeShallow?");
         return *static_cast<CallInstructionExtraInformation*>(
             extraInformation.get());
     }
 
-    CallFeedbackExtraInformation& callFeedbackExtra() const {
-        assert(bc == Opcode::record_call_ && "not a record call instruction");
+    StaticCallExtraInformation& staticCallExtra() const {
+        assert(bc == Opcode::static_call_ && "Not a varlen call instruction.");
         assert(extraInformation.get() &&
-               "missing extra information. created through decodeShallow?");
+               "Missing extra information. Created through decodeShallow?");
+        return *static_cast<StaticCallExtraInformation*>(
+            extraInformation.get());
+    }
+
+    CallFeedbackExtraInformation& callFeedbackExtra() const {
+        assert(bc == Opcode::record_call_ && "Not a record call instruction.");
+        assert(extraInformation.get() &&
+               "Missing extra information. Created through decodeShallow?");
         return *static_cast<CallFeedbackExtraInformation*>(
             extraInformation.get());
+    }
+
+    MkEnvExtraInformation& mkEnvExtra() const {
+        assert((bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_ ||
+                bc == Opcode::mk_dotlist_) &&
+               "Not a varlen instruction.");
+        assert(extraInformation.get() &&
+               "Missing extra information. Created through decodeShallow?");
+        return *static_cast<MkEnvExtraInformation*>(extraInformation.get());
     }
 
   private:
@@ -494,13 +507,17 @@ BC_NOARGS(V, _)
         assert(extraInformation == nullptr);
 
         switch (bc) {
-        case Opcode::invalid_:
-            assert(false && "run decodeFixlen first!");
+        case Opcode::invalid_: {
+            assert(false && "Run decodeFixlen first!");
             break;
-
-        case Opcode::call_dots_:
-        case Opcode::named_call_: {
+        }
+        case Opcode::named_call_:
+        case Opcode::call_dots_: {
             extraInformation.reset(new CallInstructionExtraInformation);
+            break;
+        }
+        case Opcode::static_call_: {
+            extraInformation.reset(new StaticCallExtraInformation);
             break;
         }
         case Opcode::record_call_: {
@@ -522,16 +539,18 @@ BC_NOARGS(V, _)
         pc++; // skip bc
 
         switch (bc) {
-        case Opcode::call_dots_:
-        case Opcode::named_call_: {
+        case Opcode::named_call_:
+        case Opcode::call_dots_: {
             pc += sizeof(CallFixedArgs);
-
             // Read named arguments
-            if (bc == Opcode::named_call_ || bc == Opcode::call_dots_) {
-                for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
-                    callExtra().callArgumentNames.push_back(readImmediate(&pc));
-            }
-
+            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                callExtra().callArgumentNames.push_back(readImmediate(&pc));
+            break;
+        }
+        case Opcode::static_call_: {
+            pc += sizeof(StaticCallFixedArgs);
+            for (size_t i = 0; i < immediate.staticCallFixedArgs.nargsOrig; ++i)
+                staticCallExtra().argOrderOrig.push_back(readImmediate(&pc));
             break;
         }
         case Opcode::mk_stub_env_:
@@ -541,14 +560,12 @@ BC_NOARGS(V, _)
                 mkEnvExtra().names.push_back(readImmediate(&pc));
             break;
         }
-
         case Opcode::mk_dotlist_: {
             pc += sizeof(MkDotlistFixedArgs);
             for (size_t i = 0; i < immediate.mkDotlistFixedArgs.nargs; ++i)
                 mkEnvExtra().names.push_back(readImmediate(&pc));
             break;
         }
-
         case Opcode::record_call_: {
             // Read call target feedback from the extra pool
             for (size_t i = 0; i < immediate.callFeedback.numTargets; ++i)
@@ -665,8 +682,15 @@ BC_NOARGS(V, _)
         case Opcode::call_:
         case Opcode::named_call_:
         case Opcode::call_dots_:
-            memcpy(&immediate.callFixedArgs,
-                   reinterpret_cast<CallFixedArgs*>(pc), sizeof(CallFixedArgs));
+            memcpy(&immediate.callFixedArgs, pc, sizeof(CallFixedArgs));
+            break;
+        case Opcode::static_call_:
+            memcpy(&immediate.staticCallFixedArgs, pc,
+                   sizeof(StaticCallFixedArgs));
+            break;
+        case Opcode::call_builtin_:
+            memcpy(&immediate.callBuiltinFixedArgs, pc,
+                   sizeof(CallBuiltinFixedArgs));
             break;
         case Opcode::mk_stub_env_:
         case Opcode::mk_env_:
@@ -675,14 +699,6 @@ BC_NOARGS(V, _)
         case Opcode::mk_dotlist_:
             memcpy(&immediate.mkDotlistFixedArgs, pc,
                    sizeof(MkDotlistFixedArgs));
-            break;
-        case Opcode::call_builtin_:
-            memcpy(&immediate.callBuiltinFixedArgs, pc,
-                   sizeof(CallBuiltinFixedArgs));
-            break;
-        case Opcode::static_call_:
-            memcpy(reinterpret_cast<void*>(&immediate.staticCallFixedArgs), pc,
-                   sizeof(StaticCallFixedArgs));
             break;
         case Opcode::record_deopt_:
             memcpy(&immediate.deoptReason, pc, sizeof(DeoptReason));
@@ -728,12 +744,10 @@ BC_NOARGS(V, _)
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;
         case Opcode::record_test_:
-            memcpy(reinterpret_cast<void*>(&immediate.testFeedback), pc,
-                   sizeof(ObservedValues));
+            memcpy(&immediate.testFeedback, pc, sizeof(ObservedValues));
             break;
         case Opcode::record_type_:
-            memcpy(reinterpret_cast<void*>(&immediate.typeFeedback), pc,
-                   sizeof(ObservedValues));
+            memcpy(&immediate.typeFeedback, pc, sizeof(ObservedValues));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)

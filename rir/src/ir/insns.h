@@ -196,8 +196,10 @@ DEF_INSTR(call_dots_, 4, -1, 1, 0)
 /**
  * static_call_:: Like call_, but the callee is statically known
  *                and is accessed via the immediate callsite
+ *                THIS IS A VARIABLE LENGTH INSTRUCTION
+ *                the actual number of immediates is 6 + nargs
  */
-DEF_INSTR(static_call_, 6, -1, 1, 0)
+DEF_INSTR(static_call_, 7, -1, 1, 0)
 
 /**
  * call_builtin_:: Like static call, but calls a builtin

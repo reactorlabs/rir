@@ -25,6 +25,7 @@ BC_NOARGS(V, _)
 BC BC::recordCall() { return BC(Opcode::record_call_); }
 BC BC::recordType() { return BC(Opcode::record_type_); }
 BC BC::recordTest() { return BC(Opcode::record_test_); }
+
 BC BC::recordDeopt(const DeoptReason& reason) {
     ImmediateArguments i;
     i.deoptReason = reason;
@@ -36,6 +37,7 @@ BC BC::popn(unsigned n) {
     i.i = n;
     return BC(Opcode::popn_, i);
 }
+
 BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
     assert(!Code::check(constant));
@@ -43,16 +45,19 @@ BC BC::push(SEXP constant) {
     i.pool = Pool::insert(constant);
     return BC(Opcode::push_, i);
 }
+
 BC BC::push(double constant) {
     ImmediateArguments i;
     i.pool = Pool::getNum(constant);
     return BC(Opcode::push_, i);
 }
+
 BC BC::push(int constant) {
     ImmediateArguments i;
     i.pool = Pool::getInt(constant);
     return BC(Opcode::push_, i);
 }
+
 BC BC::push_from_pool(PoolIdx idx) {
     ImmediateArguments i;
     i.pool = idx;
@@ -64,27 +69,32 @@ BC BC::ldfun(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldfun_, i);
 }
+
 BC BC::ldddvar(SEXP sym) {
     assert(DDVAL(sym));
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
 }
+
 BC BC::stargStubbed(unsigned pos) {
     ImmediateArguments i;
     i.i = pos;
     return BC(Opcode::starg_stubbed_, i);
 }
+
 BC BC::stvarStubbed(unsigned pos) {
     ImmediateArguments i;
     i.i = pos;
     return BC(Opcode::stvar_stubbed_, i);
 }
+
 BC BC::ldvarNoForceStubbed(unsigned pos) {
     ImmediateArguments i;
     i.i = pos;
     return BC(Opcode::ldvar_noforce_stubbed_, i);
 }
+
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -92,6 +102,7 @@ BC BC::ldvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_, i);
 }
+
 BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -100,6 +111,7 @@ BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
     i.poolAndCache.cacheIndex = cacheSlot;
     return BC(Opcode::ldvar_cached_, i);
 }
+
 BC BC::ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -108,6 +120,7 @@ BC BC::ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot) {
     i.poolAndCache.cacheIndex = cacheSlot;
     return BC(Opcode::ldvar_for_update_cache_, i);
 }
+
 BC BC::ldvarForUpdate(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -115,6 +128,7 @@ BC BC::ldvarForUpdate(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_for_update_, i);
 }
+
 BC BC::ldvarNoForce(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -122,6 +136,7 @@ BC BC::ldvarNoForce(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_noforce_, i);
 }
+
 BC BC::ldvarNoForceCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -130,6 +145,7 @@ BC BC::ldvarNoForceCached(SEXP sym, uint32_t cacheSlot) {
     i.poolAndCache.cacheIndex = cacheSlot;
     return BC(Opcode::ldvar_noforce_cached_, i);
 }
+
 BC BC::ldvarSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -137,6 +153,7 @@ BC BC::ldvarSuper(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_super_, i);
 }
+
 BC BC::ldvarNoForceSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -144,33 +161,39 @@ BC BC::ldvarNoForceSuper(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_noforce_super_, i);
 }
+
 BC BC::ldarg(uint32_t offset) {
     ImmediateArguments i;
     i.arg_idx = offset;
     return BC(Opcode::ldarg_, i);
 }
+
 BC BC::ldloc(uint32_t offset) {
     ImmediateArguments im;
     im.loc = offset;
     return BC(Opcode::ldloc_, im);
 }
+
 BC BC::stloc(uint32_t offset) {
     ImmediateArguments im;
     im.loc = offset;
     return BC(Opcode::stloc_, im);
 }
+
 BC BC::copyloc(uint32_t target, uint32_t source) {
     ImmediateArguments im;
     im.loc_cpy.target = target;
     im.loc_cpy.source = source;
     return BC(Opcode::movloc_, im);
 }
+
 BC BC::guardName(SEXP sym, SEXP expected) {
     ImmediateArguments i;
     i.guard_fun_args = {Pool::insert(sym), Pool::insert(expected),
                         NO_DEOPT_INFO};
     return BC(Opcode::guard_fun_, i);
 }
+
 BC BC::guardNamePrimitive(SEXP sym) {
     ImmediateArguments i;
     assert(TYPEOF(sym) == SYMSXP);
@@ -179,21 +202,25 @@ BC BC::guardNamePrimitive(SEXP sym) {
     i.guard_fun_args = {Pool::insert(sym), Pool::insert(prim), NO_DEOPT_INFO};
     return BC(Opcode::guard_fun_, i);
 }
+
 BC BC::push_code(FunIdx prom) {
     ImmediateArguments i;
     i.fun = prom;
     return BC(Opcode::push_code_, i);
 }
+
 BC BC::mkEagerPromise(FunIdx prom) {
     ImmediateArguments i;
     i.fun = prom;
     return BC(Opcode::mk_eager_promise_, i);
 }
+
 BC BC::mkPromise(FunIdx prom) {
     ImmediateArguments i;
     i.fun = prom;
     return BC(Opcode::mk_promise_, i);
 }
+
 BC BC::missing(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -201,6 +228,7 @@ BC BC::missing(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
+
 BC BC::starg(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -208,6 +236,7 @@ BC BC::starg(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::starg_, i);
 }
+
 BC BC::stargCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -216,6 +245,7 @@ BC BC::stargCached(SEXP sym, uint32_t cacheSlot) {
     i.poolAndCache.cacheIndex = cacheSlot;
     return BC(Opcode::starg_cached_, i);
 }
+
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -223,6 +253,7 @@ BC BC::stvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_, i);
 }
+
 BC BC::stvarCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -231,6 +262,7 @@ BC BC::stvarCached(SEXP sym, uint32_t cacheSlot) {
     i.poolAndCache.cacheIndex = cacheSlot;
     return BC(Opcode::stvar_cached_, i);
 }
+
 BC BC::stvarSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -238,52 +270,62 @@ BC BC::stvarSuper(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_super_, i);
 }
+
 BC BC::br(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
     return BC(Opcode::br_, i);
 }
+
 BC BC::pushContext(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
     return BC(Opcode::push_context_, i);
 }
+
 BC BC::popContext(Jmp stackOffset) {
     ImmediateArguments i;
     i.offset = stackOffset;
     return BC(Opcode::pop_context_, i);
 }
+
 BC BC::beginloop(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
     return BC(Opcode::beginloop_, i);
 }
+
 BC BC::brtrue(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
     return BC(Opcode::brtrue_, i);
 }
+
 BC BC::brfalse(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
     return BC(Opcode::brfalse_, i);
 }
+
 BC BC::pull(uint32_t i) {
     ImmediateArguments im;
     im.i = i;
     return BC(Opcode::pull_, im);
 }
+
 BC BC::pick(uint32_t i) {
     ImmediateArguments im;
     im.i = i;
     return BC(Opcode::pick_, im);
 }
+
 BC BC::is(uint32_t i) {
     assert(i < MAX_NUM_SEXPTYPE && "Invalid SEXPTYPE in is_");
     ImmediateArguments im;
     im.i = i;
     return BC(Opcode::is_, im);
 }
+
 BC BC::isType(TypeChecks i) {
     assert(static_cast<uint32_t>(i) > MAX_NUM_SEXPTYPE &&
            "Invalid type in istype_");
@@ -291,11 +333,13 @@ BC BC::isType(TypeChecks i) {
     im.i = static_cast<uint32_t>(i);
     return BC(Opcode::istype_, im);
 }
+
 BC BC::put(uint32_t i) {
     ImmediateArguments im;
     im.i = i;
     return BC(Opcode::put_, im);
 }
+
 BC BC::call(size_t nargs, SEXP ast, const Context& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = nargs;
@@ -303,19 +347,7 @@ BC BC::call(size_t nargs, SEXP ast, const Context& given) {
     im.callFixedArgs.given = given;
     return BC(Opcode::call_, im);
 }
-BC BC::callDots(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
-                const Context& given) {
-    ImmediateArguments im;
-    im.callFixedArgs.nargs = nargs;
-    im.callFixedArgs.ast = Pool::insert(ast);
-    im.callFixedArgs.given = given;
-    std::vector<PoolIdx> nameIdxs;
-    for (auto n : names)
-        nameIdxs.push_back(Pool::insert(n));
-    BC cur(Opcode::call_dots_, im);
-    cur.callExtra().callArgumentNames = nameIdxs;
-    return cur;
-}
+
 BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
             const Context& given) {
     ImmediateArguments im;
@@ -329,20 +361,40 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
     cur.callExtra().callArgumentNames = nameIdxs;
     return cur;
 }
+
+BC BC::callDots(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
+                const Context& given) {
+    ImmediateArguments im;
+    im.callFixedArgs.nargs = nargs;
+    im.callFixedArgs.ast = Pool::insert(ast);
+    im.callFixedArgs.given = given;
+    std::vector<PoolIdx> nameIdxs;
+    for (auto n : names)
+        nameIdxs.push_back(Pool::insert(n));
+    BC cur(Opcode::call_dots_, im);
+    cur.callExtra().callArgumentNames = nameIdxs;
+    return cur;
+}
+
 BC BC::staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
-                  SEXP targetVersion, const Context& given) {
+                  SEXP targetVersion, const Context& given,
+                  std::vector<ArgIdx>& argOrderOrig) {
     assert(!targetVersion || Function::unpack(targetVersion));
     assert(TYPEOF(targetClosure) == CLOSXP);
     auto target =
         targetVersion ? Pool::insert(targetVersion) : Pool::makeSpace();
     ImmediateArguments im;
     im.staticCallFixedArgs.nargs = nargs;
+    im.staticCallFixedArgs.nargsOrig = argOrderOrig.size();
     im.staticCallFixedArgs.ast = Pool::insert(ast);
     im.staticCallFixedArgs.targetClosure = Pool::insert(targetClosure);
     im.staticCallFixedArgs.versionHint = target;
     im.staticCallFixedArgs.given = given;
-    return BC(Opcode::static_call_, im);
+    BC cur(Opcode::static_call_, im);
+    cur.staticCallExtra().argOrderOrig = argOrderOrig;
+    return cur;
 }
+
 BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     assert(TYPEOF(builtin) == BUILTINSXP);
     ImmediateArguments im;

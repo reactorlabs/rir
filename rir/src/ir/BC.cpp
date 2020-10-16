@@ -81,12 +81,14 @@ void BC::write(CodeStream& cs) const {
     case Opcode::named_call_:
     case Opcode::call_dots_:
         cs.insert(immediate.callFixedArgs);
-        for (PoolIdx name : callExtra().callArgumentNames)
+        for (auto name : callExtra().callArgumentNames)
             cs.insert(name);
         break;
 
     case Opcode::static_call_:
         cs.insert(immediate.staticCallFixedArgs);
+        for (auto o : staticCallExtra().argOrderOrig)
+            cs.insert(o);
         break;
 
     case Opcode::call_builtin_:
@@ -241,21 +243,28 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             }
             break;
         }
-        case Opcode::call_builtin_:
+        case Opcode::static_call_: {
+            i.staticCallFixedArgs.nargs = InInteger(inp);
+            i.staticCallFixedArgs.nargsOrig = InInteger(inp);
+            i.staticCallFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
+            InBytes(inp, &i.staticCallFixedArgs.given, sizeof(Context));
+            i.staticCallFixedArgs.targetClosure =
+                Pool::insert(ReadItem(refTable, inp));
+            i.staticCallFixedArgs.versionHint =
+                Pool::insert(ReadItem(refTable, inp));
+            Opcode* c = code + 1 + sizeof(StaticCallFixedArgs);
+            ArgIdx* argOrderOrig = (ArgIdx*)c;
+            for (size_t j = 0; j < i.staticCallFixedArgs.nargsOrig; j++)
+                argOrderOrig[j] = InInteger(inp);
+            break;
+        }
+        case Opcode::call_builtin_: {
             i.callBuiltinFixedArgs.nargs = InInteger(inp);
             i.callBuiltinFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
             i.callBuiltinFixedArgs.builtin =
                 Pool::insert(ReadItem(refTable, inp));
             break;
-        case Opcode::static_call_:
-            i.callFixedArgs.nargs = InInteger(inp);
-            i.callFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
-            InBytes(inp, &i.callFixedArgs.given, sizeof(Context));
-            i.staticCallFixedArgs.targetClosure =
-                Pool::insert(ReadItem(refTable, inp));
-            i.staticCallFixedArgs.versionHint =
-                Pool::insert(ReadItem(refTable, inp));
-            break;
+        }
         case Opcode::deopt_: {
             SEXP meta = DeoptMetadata::deserialize(code, refTable, inp);
             i.pool = Pool::insert(meta);
@@ -382,19 +391,22 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
                               refTable, out);
             }
             break;
-        case Opcode::call_builtin_:
-            OutInteger(out, i.callBuiltinFixedArgs.nargs);
-            WriteItem(Pool::get(i.callBuiltinFixedArgs.ast), refTable, out);
-            WriteItem(Pool::get(i.callBuiltinFixedArgs.builtin), refTable, out);
-            break;
         case Opcode::static_call_:
             OutInteger(out, i.staticCallFixedArgs.nargs);
+            OutInteger(out, i.staticCallFixedArgs.nargsOrig);
             WriteItem(Pool::get(i.staticCallFixedArgs.ast), refTable, out);
             OutBytes(out, &i.staticCallFixedArgs.given, sizeof(Context));
             WriteItem(Pool::get(i.staticCallFixedArgs.targetClosure), refTable,
                       out);
             WriteItem(Pool::get(i.staticCallFixedArgs.versionHint), refTable,
                       out);
+            for (size_t j = 0; j < i.staticCallFixedArgs.nargsOrig; j++)
+                OutInteger(out, bc.staticCallExtra().argOrderOrig[j]);
+            break;
+        case Opcode::call_builtin_:
+            OutInteger(out, i.callBuiltinFixedArgs.nargs);
+            WriteItem(Pool::get(i.callBuiltinFixedArgs.ast), refTable, out);
+            WriteItem(Pool::get(i.callBuiltinFixedArgs.builtin), refTable, out);
             break;
         case Opcode::deopt_: {
             DeoptMetadata* meta = (DeoptMetadata*)DATAPTR(Pool::get(i.pool));
@@ -464,12 +476,14 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
 
 #pragma GCC diagnostic pop
 
-void BC::printImmediateArgs(std::ostream& out) const {
-    out << "[";
-    for (auto arg : callExtra().immediateCallArguments) {
-        out << " " << std::hex << arg << std::dec;
+void BC::printArgOrderOrig(std::ostream& out,
+                           const std::vector<ArgIdx>& argOrderOrig) const {
+    if (!argOrderOrig.empty()) {
+        out << " { ";
+        for (auto a : argOrderOrig)
+            out << a << " ";
+        out << "}";
     }
-    out << " ]";
 }
 
 void BC::printNames(std::ostream& out,
@@ -532,6 +546,7 @@ void BC::print(std::ostream& out) const {
         out << nargs;
         break;
     }
+    case Opcode::named_call_:
     case Opcode::call_dots_: {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
@@ -539,11 +554,17 @@ void BC::print(std::ostream& out) const {
         printNames(out, callExtra().callArgumentNames);
         break;
     }
-    case Opcode::named_call_: {
-        auto args = immediate.callFixedArgs;
+    case Opcode::static_call_: {
+        auto args = immediate.staticCallFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        out << nargs << " ";
-        printNames(out, callExtra().callArgumentNames);
+        auto target = Pool::get(args.targetClosure);
+        auto targetV = Pool::get(args.versionHint);
+        out << nargs;
+        printArgOrderOrig(out, staticCallExtra().argOrderOrig);
+        out << " : ";
+        if (targetV != R_NilValue)
+            out << "(" << Function::unpack(targetV) << ") ";
+        out << dumpSexp(target);
         break;
     }
     case Opcode::call_builtin_: {
@@ -551,17 +572,6 @@ void BC::print(std::ostream& out) const {
         BC::NumArgs nargs = args.nargs;
         auto target = Pool::get(args.builtin);
         out << nargs << " : " << dumpSexp(target).c_str();
-        break;
-    }
-    case Opcode::static_call_: {
-        auto args = immediate.staticCallFixedArgs;
-        BC::NumArgs nargs = args.nargs;
-        auto target = Pool::get(args.targetClosure);
-        auto targetV = Pool::get(args.versionHint);
-        out << nargs << " : ";
-        if (targetV != R_NilValue)
-            out << "(" << Function::unpack(targetV) << ") ";
-        out << dumpSexp(target);
         break;
     }
     case Opcode::mk_stub_env_:
