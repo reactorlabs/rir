@@ -242,7 +242,7 @@ static void endClosureDebug(SEXP call, SEXP op, SEXP rho) {
     // TODO!!!
 }
 
-RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
+void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     SLOWASSERT(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
     SLOWASSERT(TYPEOF(*last) == LISTSXP || TYPEOF(*last) == NILSXP);
 
@@ -2073,13 +2073,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             PROTECT(parent);
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
-            SEXP arglist = R_NilValue;
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
+
+            SEXP arglist = R_NilValue;
             bool hasMissing = false;
             bool hasDots = false;
-            for (long i = n - 1; i >= 0; --i) {
-                SEXP val = ostack_pop(ctx);
+            for (long i = n - 1, j = 0; i >= 0; --i, ++j) {
+                SEXP val = ostack_at(ctx, j);
                 INCREMENT_NAMED(val);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 bool isMissing = val == R_MissingArg;
@@ -2087,8 +2088,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     isMissing = true;
                     name = CAR(name);
                 }
-                if (name == R_DotsSymbol)
+                if (name == R_DotsSymbol) {
+                    assert(!hasDots);
+                    assert(TYPEOF(val) == DOTSXP || val == R_MissingArg);
                     hasDots = true;
+                }
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
                 hasMissing = hasMissing || isMissing;
@@ -2099,29 +2103,35 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (contextPos > 0) {
                 if (auto cptr = getFunctionContext(contextPos - 1)) {
                     cptr->cloenv = res;
-                    // TODO proper handling of promargs if we have ... args
-                    if (!hasDots && cptr->promargs == symbol::delayedArglist) {
-                        auto promargs = arglist;
-                        if (hasMissing) {
-                            // For the promargs we need to strip missing
-                            // arguments from the list, otherwise nargs()
-                            // reports the wrong value.
-                            promargs = Rf_shallow_duplicate(arglist);
-                            auto p = promargs;
-                            auto a = arglist;
-                            auto prev = p;
-                            while (p != R_NilValue) {
-                                if (MISSING(a))
-                                    SETCDR(prev, CDR(p));
-                                prev = p;
-                                p = CDR(p);
-                                a = CDR(a);
+                    if (cptr->promargs == symbol::delayedArglist) {
+                        // For the promargs we need to strip missing
+                        // arguments from the list and expand dots, otherwise
+                        // nargs() reports the wrong value.
+                        auto promargs = R_NilValue;
+                        auto pos = promargs;
+                        auto a = arglist;
+                        while (a != R_NilValue) {
+                            if (MISSING(a)) {
+                                // Skip
+                            } else if (TYPEOF(CAR(a)) == DOTSXP) {
+                                auto dots = CAR(a);
+                                while (dots != R_NilValue) {
+                                    __listAppend(&promargs, &pos, CAR(dots),
+                                                 TAG(dots));
+                                    dots = CDR(dots);
+                                }
+                            } else {
+                                __listAppend(&promargs, &pos, CAR(a), TAG(a));
                             }
+                            a = CDR(a);
                         }
                         cptr->promargs = promargs;
+                        if (promargs != R_NilValue)
+                            UNPROTECT(1);
                     }
                 }
             }
+            ostack_popn(ctx, n);
             ostack_push(ctx, res);
             UNPROTECT(1);
 

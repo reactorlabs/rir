@@ -71,41 +71,37 @@ SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
     SLOWASSERT(TYPEOF(parent) == ENVSXP);
     SLOWASSERT(TYPEOF(arglist) == LISTSXP || arglist == R_NilValue);
     SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent);
+    PROTECT(res);
 
     if (contextPos > 0) {
         if (auto cptr = getFunctionContext(contextPos - 1)) {
             cptr->cloenv = res;
             if (cptr->promargs == symbol::delayedArglist) {
-                auto promargs = arglist;
-                bool hasMissing = false;
+                auto promargs = R_NilValue;
+                auto pos = promargs;
                 auto a = arglist;
                 while (a != R_NilValue) {
-                    if (CAR(a) == R_MissingArg)
-                        hasMissing = true;
+                    if (MISSING(a)) {
+                        // skip
+                    } else if (TYPEOF(CAR(a)) == DOTSXP) {
+                        auto dots = CAR(a);
+                        while (dots != R_NilValue) {
+                            __listAppend(&promargs, &pos, CAR(dots), TAG(dots));
+                            dots = CDR(dots);
+                        }
+                    } else {
+                        __listAppend(&promargs, &pos, CAR(a), TAG(a));
+                    }
                     a = CDR(a);
                 }
-
-                if (hasMissing) {
-                    // For the promargs we need to strip missing
-                    // arguments from the list, otherwise nargs()
-                    // reports the wrong value.
-                    promargs = Rf_shallow_duplicate(arglist);
-                    auto p = promargs;
-                    auto a = arglist;
-                    auto prev = p;
-                    while (p != R_NilValue) {
-                        if (MISSING(a))
-                            SETCDR(prev, CDR(p));
-                        prev = p;
-                        p = CDR(p);
-                        a = CDR(a);
-                    }
-                }
                 cptr->promargs = promargs;
+                if (promargs != R_NilValue)
+                    UNPROTECT(1);
             }
         }
     }
 
+    UNPROTECT(1);
     return res;
 }
 
