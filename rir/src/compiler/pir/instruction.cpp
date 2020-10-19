@@ -983,9 +983,13 @@ Effects StaticCall::inferEffects(const GetType& getType) const {
 }
 
 ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
-    // if (cls->rirFunction)...
+    auto assumptions = inferAvailableAssumptions();
 
-    auto res = cls->findCompatibleVersion(inferAvailableAssumptions());
+    if (!cls->matchesUserContext(assumptions)) {
+        return nullptr;
+    }
+
+    auto res = cls->findCompatibleVersion(assumptions);
 #ifdef WARN_DISPATCH_FAIL
     if (!res) {
         std::cout << "DISPATCH FAILED! Available versions: \n";
@@ -993,7 +997,7 @@ ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
             std::cout << "* " << v->context() << "\n";
         });
         std::cout << "Available assumptions at callsite: \n ";
-        std::cout << inferAvailableAssumptions() << "\n";
+        std::cout << inferAvailableAssumptions << "\n";
     }
 #endif
     if (res) {

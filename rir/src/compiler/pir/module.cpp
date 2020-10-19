@@ -13,16 +13,16 @@ void Module::print(std::ostream& out, bool tty) {
 
 Closure* Module::getOrDeclareRirFunction(const std::string& name,
                                          rir::Function* f, SEXP formals,
-                                         SEXP src) {
+                                         SEXP src, Context userContext) {
     auto env = Env::notClosed();
     if (!closures.count(Idx(f, env))) {
-        closures[Idx(f, env)] = new Closure(name, f, formals, src);
+        closures[Idx(f, env)] = new Closure(name, f, formals, src, userContext);
     }
     return closures.at(Idx(f, env));
 }
 
 Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
-                                        rir::Function* f) {
+                                        rir::Function* f, Context userContext) {
     // For Identification we use the real env, but for optimization we only use
     // the real environment if this is not an inner function. When it is an
     // inner function, then the env is expected to change over time.
@@ -31,7 +31,7 @@ Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
                    ? Env::notClosed()
                    : getEnv(CLOENV(closure));
     if (!closures.count(id))
-        closures[id] = new Closure(name, closure, f, env);
+        closures[id] = new Closure(name, closure, f, env, userContext);
     assert(closures.at(id)->rirClosure() == closure);
     return closures.at(id);
 }

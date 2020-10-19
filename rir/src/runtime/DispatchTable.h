@@ -187,6 +187,7 @@ struct DispatchTable
         }
     }
 
+    Context userDefinedContext() const { return userDefinedContext_; }
     DispatchTable* newWithUserContext(Context udc) {
 
         auto clone = create(this->capacity());
