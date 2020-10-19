@@ -120,33 +120,56 @@ struct ForcedBy {
     }
 
     AbstractResult mergeExit(const ForcedBy& other) {
+        return merge(other, true);
+    }
+
+    AbstractResult merge(const ForcedBy& other, bool exitMerge = false) {
         AbstractResult res;
 
+        // Those are the cases where we merge two branches where one branch has
+        // the promise evaluated and the other not. For exits we don't care
+        // about this case.
+        // For Phis, it's possible that an argument is not in scope (if it isn't
+        // added by declare before) but that still means it's not forced on that
+        // path, so we need to set ambiguous in that case too.
         for (auto& e : forcedBy) {
+            if (!e.second)
+                continue;
             auto v = e.first;
             auto f = e.second;
+            if (f == ambiguous())
+                continue;
             auto o = other.forcedBy.find(v);
-            if (o != other.forcedBy.end() && o->second) {
-                if (f != o->second) {
-                    if (e.second != ambiguous()) {
+            if (o == other.forcedBy.end() || !o->second) {
+                if (!exitMerge) {
+                    if (other.inScope.count(v) || Phi::Cast(v)) {
                         e.second = ambiguous();
                         res.lostPrecision();
                     }
                 }
+            } else if (o->second) {
+                if (f != o->second) {
+                    e.second = ambiguous();
+                    res.lostPrecision();
+                }
             }
         }
         for (auto& e : other.forcedBy) {
-            auto o = forcedBy.find(e.first);
+            auto v = e.first;
+            auto f = e.second;
+            auto o = forcedBy.find(v);
             if (o == forcedBy.end() || !o->second) {
-                if (!inScope.count(e.first))
-                    inScope.insert(e.first);
-                if (o == forcedBy.end())
-                    forcedBy.insert(e.first, e.second);
-                else
-                    o->second = e.second;
-                res.update();
+                if (inScope.count(v) || Phi::Cast(v) || exitMerge) {
+                    auto m = exitMerge ? f : ambiguous();
+                    if (o == forcedBy.end())
+                        forcedBy.insert(v, m);
+                    else
+                        o->second = m;
+                    res.lostPrecision();
+                }
             }
         }
+
         for (auto& e : other.escaped) {
             if (!escaped.count(e)) {
                 escaped.insert(e);
@@ -183,48 +206,6 @@ struct ForcedBy {
                 }
             }
         }
-
-        return res;
-    }
-
-    AbstractResult merge(const ForcedBy& other) {
-        AbstractResult res;
-
-        // Those are the cases where we merge two branches where one branch has
-        // the promise evaluated and the other not. For exits we don't care
-        // about this case.
-        // For Phis, it's possible that an argument is not in scope (if it isn't
-        // added by declare before) but that still means it's not forced on that
-        // path, so we need to set ambiguous in that case too.
-        for (auto& e : forcedBy) {
-            if (!e.second)
-                continue;
-            auto v = e.first;
-            auto o = other.forcedBy.find(v);
-            if (o == other.forcedBy.end() || !o->second) {
-                if (other.inScope.count(v) || Phi::Cast(v)) {
-                    if (e.second != ambiguous()) {
-                        e.second = ambiguous();
-                        res.lostPrecision();
-                    }
-                }
-            }
-        }
-        for (auto& e : other.forcedBy) {
-            auto v = e.first;
-            auto o = forcedBy.find(v);
-            if (o == forcedBy.end() || !o->second) {
-                if (inScope.count(v) || Phi::Cast(v)) {
-                    if (o == forcedBy.end())
-                        forcedBy.insert(v, ambiguous());
-                    else
-                        o->second = ambiguous();
-                    res.lostPrecision();
-                }
-            }
-        }
-
-        res.max(mergeExit(other));
 
         return res;
     }
