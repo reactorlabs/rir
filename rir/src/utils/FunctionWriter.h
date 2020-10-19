@@ -71,8 +71,8 @@ class FunctionWriter {
         auto src = src_pool_add(globalContext(), ast);
         SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
         void* payload = DATAPTR(store);
-        Code* code = new (payload) Code(nullptr, src, codeSize, sources.size(),
-                                        localsCnt, bindingsCnt);
+        Code* code = new (payload) Code(nullptr, ast, src, codeSize,
+                                        sources.size(), localsCnt, bindingsCnt);
         preserve(store);
 
         size_t numberOfSources = 0;

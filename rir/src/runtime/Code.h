@@ -51,12 +51,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     static Code* withUid(UUID uid);
 
-    Code(FunctionSEXP fun, unsigned src, unsigned codeSize, unsigned sourceSize,
-         size_t localsCnt, size_t bindingsCacheSize);
+    Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned codeSize,
+         unsigned sourceSize, size_t localsCnt, size_t bindingsCacheSize);
     ~Code();
 
   private:
-    Code() : Code(NULL, 0, 0, 0, 0, 0) {}
+    Code() : Code(NULL, 0, 0, 0, 0, 0, 0) {}
     /*
      * This array contains the GC reachable pointers. Currently there are two
      * of them.
@@ -107,6 +107,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     enum Flag {
         NeedsFullEnv,
+        NoReflection,
         Reoptimise,
 
         FIRST = NeedsFullEnv,
@@ -116,6 +117,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     EnumSet<Flag> flags;
 
     unsigned src; /// AST of the function (or promise) represented by the code
+
+    SEXP trivialExpr; /// If this code object is a trivial expression
 
     unsigned stackLength; /// Number of slots in stack required
 

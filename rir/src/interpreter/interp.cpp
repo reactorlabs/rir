@@ -689,64 +689,106 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
     }
 
     given.add(Assumption::NoExplicitlyMissingArgs);
-    given.add(Assumption::NoReflectiveArgument);
+
     auto testArg = [&](size_t i) {
         SEXP arg = call.stackArg(i);
-        bool notObj = true;
         bool isEager = true;
+
+        // An explicitly missing arg, such as f(,1)
+        if (arg == R_MissingArg) {
+            given.remove(Assumption::NoExplicitlyMissingArgs);
+        }
+
+        bool reflectionPossible = false;
+
         if (TYPEOF(arg) == PROMSXP) {
             auto prom = arg;
             arg = PRVALUE(arg);
+
+            // For Lazy promises, lets try to figure out where it points to.
             if (arg == R_UnboundValue) {
-                notObj = false;
+                reflectionPossible = true;
                 isEager = false;
-                if (given.includes(Assumption::NoReflectiveArgument)) {
-                    bool reflectionPossible = true;
-                    // If this is a simple promise, that just looks up an eager
-                    // value we do not reset the no-reflection flag. The callee
-                    // can assume that (as long as he does not trigger any other
-                    // reflection) evaluating this promise does not trigger
-                    // reflection either.
-                    while (TYPEOF(PREXPR(prom)) == SYMSXP) {
-                        SEXP v;
-                        if (auto le =
-                                LazyEnvironment::check(prom->u.promsxp.env)) {
-                            v = le->getArg(PREXPR(prom));
-                        } else {
-                            v = Rf_findVar(PREXPR(prom), PRENV(prom));
-                        }
-                        if (v == R_UnboundValue)
-                            break;
-                        if (TYPEOF(v) != PROMSXP ||
-                            PRVALUE(v) != R_UnboundValue) {
-                            reflectionPossible = false;
-                            break;
-                        }
-                        assert(TYPEOF(v) == PROMSXP);
-                        prom = v;
+                // If this is a simple promise, that just looks up an eager
+                // value we do not reset the no-reflection flag. The callee
+                // can assume that (as long as he does not trigger any other
+                // reflection) evaluating this promise does not trigger
+                // reflection either.
+                while (true) {
+                    SEXP sym = nullptr;
+                    auto pr = Code::check(PREXPR(prom));
+                    SEXP v = PRVALUE(prom);
+
+                    if (v == R_MissingArg) {
+                        arg = v;
+                        reflectionPossible = false;
+                        break;
                     }
-                    if (reflectionPossible) {
-                        given.remove(Assumption::NoReflectiveArgument);
+
+                    // Let's try to find out if this promise is a trivial
+                    // expression (i.e. just a name lookup) and if that lookup
+                    // can be easily resolved.
+                    if (v == R_UnboundValue) {
+                        if (TYPEOF(PREXPR(prom)) == SYMSXP) {
+                            sym = PREXPR(prom);
+                        } else if (pr) {
+                            sym = pr->trivialExpr;
+                        }
+                        if (sym) {
+                            if (auto le = LazyEnvironment::check(
+                                    prom->u.promsxp.env)) {
+                                v = le->getArg(sym);
+                            } else {
+                                v = Rf_findVar(sym, PRENV(prom));
+                            }
+                        }
                     }
+
+                    if (pr && pr->flags.contains(Code::NoReflection))
+                        reflectionPossible = false;
+
+                    // This is truly lazy and we did not manage to lookup
+                    // anything
+                    if (v == R_UnboundValue)
+                        break;
+
+                    if (TYPEOF(v) != PROMSXP) {
+                        reflectionPossible = false;
+                        arg = v;
+                        break;
+                    }
+                    prom = v;
                 }
             }
         }
-        if (arg == R_MissingArg) {
-            given.remove(Assumption::NoExplicitlyMissingArgs);
-            isEager = false;
-            notObj = false;
+
+        assert(TYPEOF(arg) != PROMSXP);
+
+        if (!reflectionPossible) {
+            given.setNonRefl(i);
         }
-        if (isObject(arg)) {
-            notObj = false;
+
+        // Eager in the context translates to the notLazy().notMissing()
+        // type in pir. Thus we need to ensure that we don't set it for
+        // wrapped missings.
+        if (arg != R_MissingArg) {
+            if (isEager) {
+                given.setEager(i);
+                SLOWASSERT(TYPEOF(call.stackArg(i)) != PROMSXP ||
+                           PRVALUE(call.stackArg(i)) != R_UnboundValue);
+            }
+
+            // Without isEager, these are the results of executing a trivial
+            // expression, given no reflective change happens.
+            if (arg != R_UnboundValue) {
+                if (!isObject(arg))
+                    given.setNotObj(i);
+                if (IS_SIMPLE_SCALAR(arg, REALSXP))
+                    given.setSimpleReal(i);
+                if (IS_SIMPLE_SCALAR(arg, INTSXP))
+                    given.setSimpleInt(i);
+            }
         }
-        if (isEager)
-            given.setEager(i);
-        if (notObj)
-            given.setNotObj(i);
-        if (isEager && notObj && IS_SIMPLE_SCALAR(arg, REALSXP))
-            given.setSimpleReal(i);
-        if (isEager && notObj && IS_SIMPLE_SCALAR(arg, INTSXP))
-            given.setSimpleInt(i);
     };
 
     given.add(Assumption::CorrectOrderOfArguments);
@@ -810,7 +852,6 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    auto flags = fun->flags;
     if (!isDeoptimizing() && RecompileHeuristic(table, fun)) {
         Context given = call.givenContext;
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -822,23 +863,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         fun->clearDisabledAssumptions(given);
         if (RecompileCondition(table, fun, given)) {
             if (given.includes(pir::Compiler::minimalContext)) {
-                // More assumptions are available than this version uses. Let's
-                // try compile a better matching version.
-#ifdef DEBUG_DISPATCH
-                std::cout << "Optimizing for new context "
-                          << fun->invocationCount() << ": ";
-                Rf_PrintValue(call.ast);
-                std::cout << given << " vs " << fun->context() << "\n";
-#endif
-                SEXP lhs = CAR(call.ast);
-                SEXP name = R_NilValue;
-                if (TYPEOF(lhs) == SYMSXP)
-                    name = lhs;
-                if (flags.contains(Function::MarkOpt))
-                    fun->flags.reset(Function::MarkOpt);
-                if (fun->context().includes(Assumption::StaticallyArgmatched))
-                    given.add(Assumption::StaticallyArgmatched);
-                ctx->closureOptimizer(call.callee, given, name);
+                DoRecompile(fun, call.ast, call.callee, given, ctx);
                 fun = dispatch(call, table);
             }
         }
@@ -2107,7 +2132,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             switch (TYPEOF(res)) {
             case CLOSXP:
-                jit(res, sym, ctx);
+                // Prevent recompilation loops in lapply and similar
+                if (sym != symbol::FUN)
+                    jit(res, sym, ctx);
                 break;
             case SPECIALSXP:
             case BUILTINSXP:
@@ -2718,25 +2745,26 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
-            Context given(pc);
+            Context staticContext(pc);
             pc += sizeof(Context);
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
             CallContext call(c, callee, n, ast,
-                             ostack_cell_at(ctx, (long)n - 1), env, given, ctx);
+                             ostack_cell_at(ctx, (long)n - 1), env,
+                             staticContext, ctx);
             auto fun = Function::unpack(version);
             inferCurrentContext(call, fun->signature().formalNargs(), ctx);
-            Context assumptions = call.givenContext;
             auto flags = fun->flags;
             bool dispatchFail =
                 flags.contains(Function::Dead) || !matches(call, fun);
-            fun->registerInvocation();
             auto dt = DispatchTable::unpack(BODY(callee));
+            auto given = call.givenContext;
+            fun->clearDisabledAssumptions(given);
             if (!isDeoptimizing() && !dispatchFail &&
-                RecompileHeuristic(dt, fun, 3) &&
-                RecompileCondition(dt, fun, assumptions)) {
-                // We have more assumptions available, let's recompile
+                RecompileHeuristic(dt, fun, 6) &&
+                RecompileCondition(dt, fun, given)) {
+                DoRecompile(fun, call.ast, call.callee, given, ctx);
                 dispatchFail = true;
             }
 
@@ -2747,6 +2775,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             advanceImmediate();
 
+            SLOWASSERT(!fun->flags.contains(Function::Dead));
+            SLOWASSERT(!dispatchFail || dt->dispatch(fun->context()) == fun);
             if (fun->signature().envCreation ==
                 FunctionSignature::Environment::CallerProvided) {
                 res = rirCall(call, ctx);
@@ -2756,9 +2786,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // Currently we cannot recreate the original arglist if we
                 // statically reordered arguments. TODO this needs to be fixed
                 // by remembering the original order.
-                if (assumptions.includes(Assumption::StaticallyArgmatched))
+                if (given.includes(Assumption::StaticallyArgmatched))
                     lazyArgs.content.args = nullptr;
                 supplyMissingArgs(call, fun);
+                fun->registerInvocation();
                 res = rirCallTrampoline(call, fun, symbol::delayedEnv,
                                         (SEXP)&lazyArgs, ctx);
             }
@@ -4280,7 +4311,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 std::cerr << "got " << pir::PirType(val) << " but expexted a "
                           << typ << ":\n";
                 Rf_PrintValue(val);
-                std::cout << "\n";
+                std::cout << (PRVALUE(val) == R_UnboundValue) << " / "
+                          << (PRVALUE(val) == R_MissingArg) << "\n";
                 assert(false);
             }
             NEXT();

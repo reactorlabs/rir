@@ -55,7 +55,7 @@ class Value {
         return type.maybeReferenceCounted() ? 0 : MAX_REFCOUNT;
     }
 
-    void typeToContext(Context&, unsigned arg) const;
+    void callArgTypeToContext(Context&, unsigned arg) const;
 };
 
 } // namespace pir

@@ -1,6 +1,8 @@
 #include "Context.h"
 #include "R/Serialize.h"
 #include "compiler/compiler.h"
+#include "compiler/pir/closure.h"
+#include "compiler/pir/closure_version.h"
 
 namespace rir {
 
@@ -16,9 +18,6 @@ void Context::serialize(SEXP refTable, R_outpstream_t out) const {
 
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
-    case Assumption::NoReflectiveArgument:
-        out << "!RefA";
-        break;
     case Assumption::NoExplicitlyMissingArgs:
         out << "!ExpMi";
         break;
@@ -56,17 +55,12 @@ std::ostream& operator<<(std::ostream& out, TypeAssumption a) {
     case TypeAssumption::Arg5Is##Type##_:                                      \
         out << Msg << "5";                                                     \
         break;                                                                 \
-    case TypeAssumption::Arg6Is##Type##_:                                      \
-        out << Msg << "6";                                                     \
-        break;                                                                 \
-    case TypeAssumption::Arg7Is##Type##_:                                      \
-        out << Msg << "7";                                                     \
-        break;
 
         TYPE_ASSUMPTIONS(Eager, "Eager");
         TYPE_ASSUMPTIONS(NotObj, "!Obj");
         TYPE_ASSUMPTIONS(SimpleInt, "SimpleInt");
         TYPE_ASSUMPTIONS(SimpleReal, "SimpleReal");
+        TYPE_ASSUMPTIONS(NonRefl, "NonRefl");
     }
     return out;
 };
@@ -97,6 +91,8 @@ constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
     Context::SimpleIntContext;
 constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
     Context::SimpleRealContext;
+constexpr std::array<TypeAssumption, Context::NUM_TYPED_ARGS>
+    Context::NonReflContext;
 
 void Context::setSpecializationLevel(int level) {
     static Flags preserve =
@@ -147,6 +143,42 @@ void Context::setSpecializationLevel(int level) {
     default:
         break;
     }
+}
+
+bool Context::isImproving(Function* f) const {
+    return isImproving(f->context(), f->signature().hasDotsFormals,
+                       f->signature().hasDefaultArgs);
+}
+bool Context::isImproving(pir::ClosureVersion* f) const {
+    return isImproving(f->context(), f->owner()->formals().hasDots(),
+                       f->owner()->formals().hasDefaultArgs());
+}
+
+bool Context::isImproving(const Context& other, bool hasDotsFormals,
+                          bool hasDefaultArgs) const {
+    assert(smaller(other));
+
+    if (other == *this)
+        return false;
+    auto normalized = *this;
+
+    if (!hasDotsFormals)
+        normalized.remove(Assumption::StaticallyArgmatched);
+    if (!hasDefaultArgs)
+        normalized.remove(Assumption::NoExplicitlyMissingArgs);
+
+    // These don't pay of that much...
+    normalized.clearObjFlags();
+
+    if (hasDotsFormals || hasDefaultArgs) {
+        if (normalized.numMissing() != other.numMissing())
+            return true;
+    } else {
+        normalized.numMissing(other.numMissing());
+    }
+
+    normalized = normalized | other;
+    return normalized != other;
 }
 
 } // namespace rir

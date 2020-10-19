@@ -1074,7 +1074,6 @@ Context CallInstruction::inferAvailableAssumptions() const {
 
     // Make some optimistic assumptions, they might be reset below...
     given.add(Assumption::NoExplicitlyMissingArgs);
-    given.add(Assumption::NoReflectiveArgument);
 
     bool hasDotsArg = false;
     size_t i = 0;
@@ -1082,14 +1081,13 @@ Context CallInstruction::inferAvailableAssumptions() const {
         if (arg->type.maybe(RType::expandedDots))
             hasDotsArg = true;
         else
-            arg->typeToContext(given, i);
+            arg->callArgTypeToContext(given, i);
         ++i;
     });
 
     if (hasDotsArg) {
         given.remove(Assumption::CorrectOrderOfArguments);
         given.remove(Assumption::NotTooManyArguments);
-        given.remove(Assumption::NoReflectiveArgument);
         given.numMissing(0);
     }
 

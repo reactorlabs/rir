@@ -106,8 +106,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
                                    DisableArgumentTypeSpecialization,
                                    DisableNumArgumentsSpezialization};
         auto f = other->flags;
-        if (f.includes(DisableAllSpecialization))
-            assert(!context_.includes(Assumption::NoReflectiveArgument));
         for (auto flag : inherited)
             if (f.contains(flag))
                 flags.set(flag);
