@@ -46,7 +46,7 @@ using namespace rir::pir;
  */
 
 struct ForcedBy {
-    std::unordered_map<Value*, Force*> forcedBy;
+    rir::SmallMap<Value*, Force*> forcedBy;
     rir::SmallSet<Value*> inScope;
     rir::SmallSet<Value*> escaped;
 
@@ -65,8 +65,8 @@ struct ForcedBy {
             changed = true;
         }
         auto f = forcedBy.find(arg);
-        if (f != forcedBy.end()) {
-            forcedBy.erase(f);
+        if (f != forcedBy.end() && f->second) {
+            f->second = nullptr;
             changed = true;
         }
         auto e = escaped.find(arg);
@@ -84,8 +84,12 @@ struct ForcedBy {
         // been forced
 
         for (auto& e : escaped) {
-            if (!forcedBy.count(e)) {
-                forcedBy[e] = ambiguous();
+            auto f = forcedBy.find(e);
+            if (f == forcedBy.end()) {
+                forcedBy.insert(e, ambiguous());
+                changed = true;
+            } else if (!f->second) {
+                f->second = ambiguous();
                 changed = true;
             }
         }
@@ -94,15 +98,20 @@ struct ForcedBy {
     }
 
     bool forcedAt(Value* val, Force* force) {
-        if (!forcedBy.count(val)) {
-            forcedBy[val] = force;
+        auto f = forcedBy.find(val);
+        if (f == forcedBy.end()) {
+            forcedBy.insert(val, force);
+            return true;
+        } else if (!f->second) {
+            f->second = force;
             return true;
         }
         return false;
     }
 
     bool escape(Value* val) {
-        if (!forcedBy.count(val) && !escaped.count(val)) {
+        auto f = forcedBy.find(val);
+        if ((f == forcedBy.end() || !f->second) && !escaped.count(val)) {
             escaped.insert(val);
             return true;
         }
@@ -116,8 +125,9 @@ struct ForcedBy {
         for (auto& e : forcedBy) {
             auto v = e.first;
             auto f = e.second;
-            if (other.forcedBy.count(v)) {
-                if (f != other.forcedBy.at(v)) {
+            auto o = other.forcedBy.find(v);
+            if (o != other.forcedBy.end() && o->second) {
+                if (f != o->second) {
                     if (e.second != ambiguous()) {
                         e.second = ambiguous();
                         res.lostPrecision();
@@ -126,15 +136,15 @@ struct ForcedBy {
             }
         }
         for (auto& e : other.forcedBy) {
-            if (!forcedBy.count(e.first)) {
-                if (inScope.count(e.first)) {
-                    forcedBy.emplace(e);
-                    res.update();
-                } else {
+            auto o = forcedBy.find(e.first);
+            if (o == forcedBy.end() || !o->second) {
+                if (!inScope.count(e.first))
                     inScope.insert(e.first);
-                    forcedBy[e.first] = e.second;
-                    res.update();
-                }
+                if (o == forcedBy.end())
+                    forcedBy.insert(e.first, e.second);
+                else
+                    o->second = e.second;
+                res.update();
             }
         }
         for (auto& e : other.escaped) {
@@ -187,8 +197,11 @@ struct ForcedBy {
         // added by declare before) but that still means it's not forced on that
         // path, so we need to set ambiguous in that case too.
         for (auto& e : forcedBy) {
+            if (!e.second)
+                continue;
             auto v = e.first;
-            if (!other.forcedBy.count(v)) {
+            auto o = other.forcedBy.find(v);
+            if (o == other.forcedBy.end() || !o->second) {
                 if (other.inScope.count(v) || Phi::Cast(v)) {
                     if (e.second != ambiguous()) {
                         e.second = ambiguous();
@@ -199,9 +212,13 @@ struct ForcedBy {
         }
         for (auto& e : other.forcedBy) {
             auto v = e.first;
-            if (!forcedBy.count(v)) {
+            auto o = forcedBy.find(v);
+            if (o == forcedBy.end() || !o->second) {
                 if (inScope.count(v) || Phi::Cast(v)) {
-                    forcedBy[v] = ambiguous();
+                    if (o == forcedBy.end())
+                        forcedBy.insert(v, ambiguous());
+                    else
+                        o->second = ambiguous();
                     res.lostPrecision();
                 }
             }
@@ -238,14 +255,13 @@ struct ForcedBy {
 
     Force* getDominatingForce(Force* f) const {
         auto a = f->arg<0>().val()->followCasts();
-        if (!forcedBy.count(a)) {
+        auto res = forcedBy.find(a);
+        if (res == forcedBy.end())
+            return nullptr;
+        if (res->second == ambiguous()) {
             return nullptr;
         }
-        auto res = forcedBy.at(a);
-        if (res == ambiguous()) {
-            return nullptr;
-        }
-        return res;
+        return res->second;
     }
 
     enum PromiseInlineable {
@@ -272,6 +288,8 @@ struct ForcedBy {
         }
         out << "\n";
         for (auto& e : forcedBy) {
+            if (!e.second)
+                continue;
             e.first->printRef(out);
             if (e.second == ambiguous()) {
                 out << " force is ambiguous\n";
