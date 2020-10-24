@@ -189,8 +189,7 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
     V(NotObject)                                                               \
     V(NotObjectWrapped)                                                        \
     V(NoAttribsExceptDim)                                                      \
-    V(NoAttribsExceptDimWrapped)                                               \
-    V(Factor)
+    V(NoAttribsExceptDimWrapped)
 
 
 enum class TypeChecks : uint32_t {

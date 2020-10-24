@@ -60,6 +60,8 @@ f5 <- rir.compile(function(x) {
   switch(x, a=17, "42", b=c(1, 2))
 })
 stopifnot(f5(1) == 17)
+stopifnot(f5(1.2) == 17)
 stopifnot(f5(2) == "42")
 stopifnot(f5(3) == c(1, 2))
+stopifnot(f5(3.002) == c(1, 2))
 stopifnot(f5(42) == NULL)

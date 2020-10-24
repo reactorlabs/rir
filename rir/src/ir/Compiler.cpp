@@ -1073,7 +1073,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     }
 
     if (fun == symbol::Switch) {
-        /* # Assume argLen > 1:
+        /* # A high level overview
+         * # Assume argLen > 1:
          *   compile arg[0]
          *   if (arg[0] is not length-1 vector) br vecECont
          *   error(...)
@@ -1091,26 +1092,27 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
          *   br nil
          *
          * str:
-         *   if (value == group[0]) br labels[g0]
+         *   if (value == group[0]) br groupLabels[0]
          *   ...
-         *   if (value == group[k+1]) br labels[gk]
-         *   br default label[?] # or nil if no default
+         *   if (value == group[k]) br groupLabels[k]
+         *   br default label[dftLabelIdx] # or nil if no default
          *
          * label[i]:
          *   # if arg[i+1] is missing, we must came from integer case
          *   # error(...)
+         *   pop # pop evaluated 1st arg
          *   compile expression[i]
          *   br cont
          * ...
          *
          * nil:
+         *   # stack is [1stArg]
          *   push R_NilValue
          *
          * cont:
-         *   # (stack is [1stArg, retval])
-         *   swap
-         *   pop # 1stArg
+         *   # stack is [retval]
          */
+// These 2 macros guarantee 0 net change to stack
 #define ERROR_CALL_CODEGEN(MSG, CONT) {                   \
     cs << BC::push(R_TrueValue) /* call site */           \
        << BC::push(Rf_mkString((MSG)))                    \
@@ -1139,6 +1141,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // when 1st arg is string, switch behaves like C/C++ switch/case.
         // Cases like `x=, y=, z=20` are grouped together.
         // groups[-1] is not used, for impl convenience
+        Rf_PrintValue(ast);
         std::vector<std::vector<SEXP>> groups = {{}};
         std::vector<BC::Label> groupLabels; // eval/return for each group
         std::vector<SEXP> expressions;      // return value ast for each group
@@ -1238,17 +1241,16 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             cs << labels[i];
             if (argMissing[i]) {
                 ERROR_CALL_CODEGEN("empty alternative in numeric switch", nilBr);
-                cs << BC::br(nilBr);
                 continue;
             } else {
+                cs << BC::pop();
                 compileExpr(ctx, expressions[j++]);
                 cs << BC::br(contBr);
             }
         }
 
-        cs << nilBr << BC::push(R_NilValue);
+        cs << nilBr << BC::pop() << BC::push(R_NilValue);
         cs << contBr;
-        cs << BC::swap() << BC::pop(); // pop off 1st arg, leave answer on top
         if (voidContext)
             cs << BC::pop();
         return true;
