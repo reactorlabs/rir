@@ -1141,7 +1141,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // when 1st arg is string, switch behaves like C/C++ switch/case.
         // Cases like `x=, y=, z=20` are grouped together.
         // groups[-1] is not used, for impl convenience
-        Rf_PrintValue(ast);
         std::vector<std::vector<SEXP>> groups = {{}};
         std::vector<BC::Label> groupLabels; // eval/return for each group
         std::vector<SEXP> expressions;      // return value ast for each group
