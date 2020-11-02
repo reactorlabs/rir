@@ -146,9 +146,6 @@ endif(APPLE)
 file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/*/*.cpp" "rir/src/*.h")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 add_dependencies(${PROJECT_NAME} setup-build-dir)
-# to resolve build error from
-# https://www.gnu.org/software/gettext/FAQ.html#integrating_undefined
-target_link_libraries(${PROJECT_NAME} -lintl)
 
 # dummy target so that IDEs show the tools folder in solution explorers
 add_custom_target(tools SOURCES ${BIN})
