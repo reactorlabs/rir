@@ -49,7 +49,6 @@ addons:
       - ca-certificates-java
       - java-common
       - libbison-dev
-      - libc6-dev
       - libcairo-script-interpreter2
       - libcairo2-dev
       - libjbig-dev
@@ -97,6 +96,7 @@ addons:
       - make
       - automake
       - libtool
+      - gettext
     sources:
       - ubuntu-toolchain-r-test
 
