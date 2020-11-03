@@ -41,9 +41,13 @@ struct DispatchTable
     }
 
     Function* dispatch(Context a) const {
-        if (!a.smaller(userDefinedContext_))
-            Rf_error(
-                "Context does not satisfy annotations"); // Improve message!
+        if (!a.smaller(userDefinedContext_)) {
+#ifdef DEBUG_DISPATCH
+            std::cout << "DISPATCH trying: " << a
+                      << " vs annotation: " << userDefinedContext_ << "\n";
+#endif
+            Rf_error("Provided context does not satisfy user defined context");
+        }
 
         for (size_t i = 1; i < size(); ++i) {
 #ifdef DEBUG_DISPATCH

@@ -25,6 +25,8 @@ extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Context&,
                                     SEXP name);
 REXPORT SEXP rirSerialize(SEXP data, SEXP file);
 REXPORT SEXP rirDeserialize(SEXP file);
-REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
+
+REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc, SEXP env);
+REXPORT SEXP rirCreateSimpleIntContext();
 
 #endif // API_H_

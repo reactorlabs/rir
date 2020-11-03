@@ -986,6 +986,10 @@ ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
     auto assumptions = inferAvailableAssumptions();
 
     if (!cls->matchesUserContext(assumptions)) {
+#ifdef WARN_DISPATCH_FAIL
+        std::cout << "DISPATCH FAILED! Closure's user context doesn't match "
+                     "available assumptions \n";
+#endif
         return nullptr;
     }
 
