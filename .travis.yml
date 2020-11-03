@@ -96,7 +96,6 @@ addons:
       - make
       - automake
       - libtool
-      - gettext
     sources:
       - ubuntu-toolchain-r-test
 
