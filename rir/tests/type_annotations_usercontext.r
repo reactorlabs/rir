@@ -1,6 +1,5 @@
 f <- function(x) x + 1
 
-
 c <- .Call("rirCreateSimpleIntContext")
 rir.setUserContext(f, c)
 

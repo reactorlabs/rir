@@ -496,13 +496,14 @@ REXPORT SEXP rirPrintBuiltinIds() {
     return R_NilValue;
 }
 
-REXPORT SEXP rirSetUserContext(SEXP f, SEXP userContext, SEXP env) {
+REXPORT SEXP rirSetUserContext(SEXP f, SEXP userContext) {
 
     if (TYPEOF(f) != CLOSXP)
         Rf_error("f not closure");
 
-    if (TYPEOF(BODY(f)) != EXTERNALSXP)
-        rirCompile(f, env);
+    if (TYPEOF(BODY(f)) != EXTERNALSXP) {
+        rirCompile(f, CLOENV(f));
+    }
 
     if (TYPEOF(userContext) != INTSXP || LENGTH(userContext) != 2)
         Rf_error("userDefinedContext should be an Integer Array of size 2");
