@@ -540,7 +540,8 @@ struct PirType {
     static const PirType voyd() { return PirType(NativeTypeSet()); }
     static const PirType bottom() { return optimistic(); }
 
-    void fromContext(const Context&, unsigned arg, unsigned nargs);
+    void fromContext(const Context&, unsigned arg, unsigned nargs,
+                     bool forced = false);
 
     RIR_INLINE bool operator==(const NativeType& o) const {
         return !isRType() && t_.n == o;

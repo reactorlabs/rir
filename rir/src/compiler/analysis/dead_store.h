@@ -10,35 +10,6 @@ namespace rir {
 namespace pir {
 
 class DeadStoreAnalysis {
-    template <class State>
-    class SubAnalysis {
-      protected:
-        SubAnalysis() {}
-
-        void applyRecurse(AbstractResult& effect, State& state, Instruction* i,
-                          Value* promEnv) const {
-            i->eachArg([&](Value* v) {
-                if (auto mk = MkArg::Cast(v->followCasts())) {
-                    if (mk->usesPromEnv() && !state.visited.count(mk)) {
-                        // The promise could get forced here and
-                        // use variables in the parent environment
-                        state.visited.insert(mk);
-                        auto env = mk->promEnv();
-                        if (LdFunctionEnv::Cast(env)) {
-                            assert(promEnv);
-                            env = promEnv;
-                        }
-                        effect.max(handleRecurse(state, i, mk->prom(), env));
-                    }
-                }
-            });
-        }
-
-        virtual AbstractResult handleRecurse(State& state, Instruction* i,
-                                             Promise* prom,
-                                             Value* env) const = 0;
-    };
-
     // perfom an escape analysis on the environment.
     class EnvSet {
       public:
@@ -87,8 +58,7 @@ class DeadStoreAnalysis {
         }
     };
 
-    class EnvLeakAnalysis : public StaticAnalysis<EnvSet>,
-                            private SubAnalysis<EnvSet> {
+    class EnvLeakAnalysis : public StaticAnalysis<EnvSet> {
         Value* promEnv = nullptr;
 
       public:
@@ -100,16 +70,15 @@ class DeadStoreAnalysis {
                         const EnvSet& initialState, Value* promEnv,
                         LogStream& log)
             : StaticAnalysis("envLeak", cls, code, initialState, NULL, log),
-              SubAnalysis(), promEnv(promEnv) {}
+              promEnv(promEnv) {}
 
-        EnvSet leakedAt(Instruction* i) const {
-            return at<StaticAnalysis::PositioningStyle::BeforeInstruction>(i);
+        EnvSet leakedWhile(Instruction* i) const {
+            return at<StaticAnalysis::PositioningStyle::AfterInstruction>(i);
         }
 
       protected:
         AbstractResult apply(EnvSet& state, Instruction* i) const override {
             AbstractResult effect;
-            applyRecurse(effect, state, i, promEnv);
             auto markEnv = [&](Value* env) {
                 if (LdFunctionEnv::Cast(env)) {
                     assert(promEnv);
@@ -144,13 +113,6 @@ class DeadStoreAnalysis {
                 } while (fs);
             }
             return effect;
-        }
-
-        AbstractResult handleRecurse(EnvSet& state, Instruction* i,
-                                     Promise* prom, Value* env) const override {
-            EnvLeakAnalysis analysis(closure, prom, env, log);
-            analysis();
-            return state.merge(analysis.result());
         }
     };
 
@@ -246,16 +208,15 @@ class DeadStoreAnalysis {
     };
 
     class ObservedStoreAnalysis
-        : public StaticAnalysis<ObservedStores, DummyState, false>,
-          private SubAnalysis<ObservedStores> {
+        : public StaticAnalysis<ObservedStores, DummyState, false> {
         Value* promEnv = nullptr;
         const EnvLeakAnalysis& leaked;
 
       public:
         ObservedStoreAnalysis(ClosureVersion* cls, Code* code, Value* promEnv,
                               const EnvLeakAnalysis& leaked, LogStream& log)
-            : StaticAnalysis("observedEnv", cls, code, log), SubAnalysis(),
-              promEnv(promEnv), leaked(leaked) {}
+            : StaticAnalysis("observedEnv", cls, code, log), promEnv(promEnv),
+              leaked(leaked) {}
 
       private:
         static std::unordered_set<Value*> withPotentialParents(Value* env) {
@@ -294,7 +255,6 @@ class DeadStoreAnalysis {
         AbstractResult apply(ObservedStores& state, Instruction* i,
                              Value* alias) const {
             AbstractResult effect;
-            applyRecurse(effect, state, i, promEnv);
 
             auto observeStaticEnvs = [&]() {
                 for (auto it = state.ignoreStore.begin();
@@ -366,7 +326,7 @@ class DeadStoreAnalysis {
                     effect.update();
                 }
             } else if (i->exits() || i->effects.contains(Effect::ExecuteCode)) {
-                auto leakedEnvs = leaked.leakedAt(i);
+                auto leakedEnvs = leaked.leakedWhile(i);
                 for (auto& l : leakedEnvs.leaked)
                     observeFullEnv(l);
                 if (i->bb()->isDeopt()) {
@@ -374,7 +334,7 @@ class DeadStoreAnalysis {
                         observeLeakedEnv(l, i);
                 }
             } else if (i->readsEnv()) {
-                auto leakedEnvs = leaked.leakedAt(i);
+                auto leakedEnvs = leaked.leakedWhile(i);
                 Value* environment = resolveEnv(i->env());
                 if (i->bb()->isDeopt())
                     observeLeakedEnv(environment, i);
@@ -388,15 +348,6 @@ class DeadStoreAnalysis {
             }
 
             return effect;
-        }
-
-        AbstractResult handleRecurse(ObservedStores& state, Instruction* i,
-                                     Promise* prom, Value* env) const override {
-            EnvLeakAnalysis subLeak(closure, prom, leaked.leakedAt(i), env,
-                                    log);
-            ObservedStoreAnalysis analysis(closure, prom, env, subLeak, log);
-            analysis();
-            return state.merge(analysis.result());
         }
 
       public:

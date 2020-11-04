@@ -724,7 +724,11 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::MkArg: {
                 auto mk = MkArg::Cast(instr);
                 auto p = mk->prom();
-                unsigned id = ctx.cs().addPromise(getPromise(ctx, p));
+                auto pr = getPromise(ctx, p);
+                if (mk->noReflection &&
+                    !pr->flags.contains(rir::Code::NoReflection))
+                    pr->flags.set(rir::Code::NoReflection);
+                unsigned id = ctx.cs().addPromise(pr);
                 promMap[p] = {id, MkEnv::Cast(mk->env())};
                 if (mk->isEager()) {
                     cb.add(BC::mkEagerPromise(id));
@@ -1348,10 +1352,12 @@ rir::Function* Pir2Rir::finalize() {
         FunctionSignature::Environment::CalleeCreated,
         FunctionSignature::OptimizationLevel::Optimized);
 
-    // PIR does not support default args currently.
+    auto arg = cls->owner()->formals().original();
     for (size_t i = 0; i < cls->nargs(); ++i) {
+        // In PIR default args are callee-handled.
         function.addArgWithoutDefault();
-        signature.pushDefaultArgument();
+        signature.pushFormal(CAR(arg), TAG(arg));
+        arg = CDR(arg);
     }
 
     assert(signature.formalNargs() == cls->nargs());

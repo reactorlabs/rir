@@ -61,6 +61,13 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                         removed = true;
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);
+                    } else if (auto ld =
+                                   LdArg::Cast(arg->followCastsAndForce())) {
+                        if (force->hasEnv() &&
+                            cls->context().isNonRefl(ld->id)) {
+                            force->elideEnv();
+                            force->effects.reset(Effect::Reflection);
+                        }
                     }
                 } else if (auto chkcls = ChkClosure::Cast(i)) {
                     Value* arg = chkcls->arg<0>().val();

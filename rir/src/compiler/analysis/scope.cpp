@@ -157,6 +157,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             }
             effect.taint();
         }
+        handled = true;
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
@@ -275,8 +276,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         auto env = MkEnv::Cast(force->env());
         if (!handled) {
             if (ld) {
-                if (closure->context().includes(
-                        Assumption::NoReflectiveArgument)) {
+                if (closure->context().isNonRefl(ld->id)) {
                     effect.max(state.envs.taintLeaked());
                     updateReturnValue(AbstractPirValue::tainted());
                     handled = true;

@@ -14,19 +14,21 @@ std::unordered_map<UUID, Code*> allCodes;
 Code* Code::withUid(UUID uid) { return allCodes.at(uid); }
 
 // cppcheck-suppress uninitMemberVar symbol=data
-Code::Code(FunctionSEXP fun, unsigned src, unsigned cs, unsigned sourceLength,
-           size_t localsCnt, size_t bindingsCnt)
+Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
+           unsigned sourceLength, size_t localsCnt, size_t bindingsCnt)
     : RirRuntimeObject(
           // GC area starts just after the header
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
       nativeCode(nullptr), uid(UUID::random()), funInvocationCount(0),
-      deoptCount(0), src(src), stackLength(0), localsCount(localsCnt),
-      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
-      extraPoolSize(0) {
+      deoptCount(0), src(srcIdx), trivialExpr(nullptr), stackLength(0),
+      localsCount(localsCnt), bindingCacheSize(bindingsCnt), codeSize(cs),
+      srcLength(sourceLength), extraPoolSize(0) {
     setEntry(0, R_NilValue);
     allCodes.emplace(uid, this);
+    if (src && TYPEOF(src) == SYMSXP)
+        trivialExpr = src;
 }
 
 Code::~Code() {
@@ -84,6 +86,9 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->funInvocationCount = InInteger(inp);
     code->deoptCount = InInteger(inp);
     code->src = InInteger(inp);
+    bool hasTr = InInteger(inp);
+    if (hasTr)
+        code->trivialExpr = ReadItem(refTable, inp);
     code->stackLength = InInteger(inp);
     *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
     *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
@@ -120,6 +125,9 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, funInvocationCount);
     OutInteger(out, deoptCount);
     OutInteger(out, src);
+    OutInteger(out, trivialExpr != nullptr);
+    if (trivialExpr)
+        WriteItem(trivialExpr, refTable, out);
     OutInteger(out, stackLength);
     OutInteger(out, localsCount);
     OutInteger(out, bindingCacheSize);

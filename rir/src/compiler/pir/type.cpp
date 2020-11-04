@@ -209,26 +209,33 @@ bool PirType::isInstance(SEXP val) const {
 }
 
 void PirType::fromContext(const Context& assumptions, unsigned arg,
-                          unsigned nargs) {
+                          unsigned nargs, bool afterForce) {
     auto& type = *this;
     auto i = arg;
-    if (assumptions.includes(Assumption::NoExplicitlyMissingArgs) &&
+    if (!afterForce &&
+        assumptions.includes(Assumption::NoExplicitlyMissingArgs) &&
         arg < nargs - assumptions.numMissing())
         type = type.notMissing();
+
     if (assumptions.isEager(i))
         type = type.notLazy().notMissing();
-    if (assumptions.isNotObj(i))
-        type.setNotObject();
-    if (assumptions.isSimpleReal(i)) {
-        assert(assumptions.isEager(i) && assumptions.isNotObj(i));
-        type.setScalar(RType::real);
-        type.setNoAttribs();
-    }
-    if (assumptions.isSimpleInt(i)) {
-        assert(assumptions.isEager(i) && assumptions.isNotObj(i) &&
-               !assumptions.isSimpleReal(i));
-        type.setScalar(RType::integer);
-        type.setNoAttribs();
+
+    if (assumptions.isEager(i) || afterForce) {
+        type = type.notLazy();
+        if (assumptions.isNotObj(i)) {
+            type.setNotMissing();
+            type.setNotObject();
+        }
+        if (assumptions.isSimpleReal(i)) {
+            type.setNotMissing();
+            type.setScalar(RType::real);
+            type.setNoAttribs();
+        }
+        if (assumptions.isSimpleInt(i)) {
+            type.setNotMissing();
+            type.setScalar(RType::integer);
+            type.setNoAttribs();
+        }
     }
 }
 }

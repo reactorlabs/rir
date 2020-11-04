@@ -85,6 +85,7 @@
     V(eval, "eval")                                                            \
     V(lazyLoadDBexec, "lazyLoadDBexec")                                        \
     V(all, "all")                                                              \
+    V(FUN, "FUN")                                                              \
     V(Recall, "Recall")
 
 #endif // SYMBOLS_LIST_H_

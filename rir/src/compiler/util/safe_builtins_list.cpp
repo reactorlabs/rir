@@ -340,6 +340,7 @@ bool SafeBuiltinsList::nonObject(SEXP builtin) {
     V(parent.frame)                                                            \
     V(UseMethod)                                                               \
     V(eval)                                                                    \
+    V(pos.to.env)                                                              \
     V(standardGeneric)
 
 bool SafeBuiltinsList::forInline(int builtin) {

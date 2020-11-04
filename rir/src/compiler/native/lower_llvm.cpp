@@ -97,14 +97,16 @@ struct Representation {
 static Representation representationOf(PirType t) {
     // Combined types like integer|real cannot be unbox, since we do not know
     // how to re-box again.
-    if (t.isA(NativeType::test))
-        return Representation::Integer;
-    if (t.isA(PirType(RType::logical).scalar().notObject()))
-        return Representation::Integer;
-    if (t.isA(PirType(RType::integer).scalar().notObject()))
-        return Representation::Integer;
-    if (t.isA(PirType(RType::real).scalar().notObject()))
-        return Representation::Real;
+    if (!t.maybeMissing() && !t.maybePromiseWrapped()) {
+        if (t.isA(NativeType::test))
+            return Representation::Integer;
+        if (t.isA(PirType(RType::logical).scalar().notObject()))
+            return Representation::Integer;
+        if (t.isA(PirType(RType::integer).scalar().notObject()))
+            return Representation::Integer;
+        if (t.isA(PirType(RType::real).scalar().notObject()))
+            return Representation::Real;
+    }
     return Representation::Sexp;
 }
 
@@ -955,7 +957,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
             res = boxLgl(res);
         else if (type.isA(NativeType::test))
             res = boxTst(res);
-        else if (type.isA(RType::real)) {
+        else if (type.isA(PirType() | RType::real)) {
             res = boxReal(res);
         } else {
             std::cout << "Failed to convert int/float to " << type << "\n";
@@ -2991,12 +2993,14 @@ bool LowerFunctionLLVM::tryCompile() {
                                 builder.CreateICmpEQ(
                                     attr(a), constant(R_NilValue, t::SEXP)),
                                 builder.CreateICmpEQ(sexptype(a), c(INTSXP)));
-                            
 
                             setVal(i, createSelect2(
                                           isSimpleInt,
                                           [&]() { return convert(a, i->type); },
-                                          [&]() { return callTheBuiltin(); }));
+                                          [&]() {
+                                              return convert(callTheBuiltin(),
+                                                             i->type);
+                                          }));
 
                         } else {
                             done = false;
@@ -5273,7 +5277,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto arg = i->arg(0).val();
                 if (representationOf(arg) == Representation::Sexp)
                     checkMissing(loadSxp(arg));
-                setVal(i, load(arg, representationOf(i)));
+                setVal(i,
+                       load(arg, arg->type.notMissing(), representationOf(i)));
                 break;
             }
 
