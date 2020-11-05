@@ -12,8 +12,7 @@ matrix:
       env:
         - CXX_OVERRIDE=clang++
         - CC_OVERRIDE=clang
-        - BUILD=release
-        - TEST_GCTORTURE=1
+        - BUILD=debugopt
       compiler: clang
 
     - os: osx
@@ -22,7 +21,7 @@ matrix:
         - CC_OVERRIDE=clang
         - PIR_MAX_INPUT_SIZE=1000
         - PIR_INLINER_MAX_SIZE=800
-        - BUILD=debugopt
+        - BUILD=release
         - CHECK=check
 
       compiler: clang
@@ -122,10 +121,6 @@ before_script:
 
 script:
   - ./bin/tests
-  - PIR_ENABLE=off ./bin/tests
-  - PIR_ENABLE=force ./bin/tests
-  - PIR_NATIVE_BACKEND=1 ./bin/tests
-  - if [[ "$TEST_GCTORTURE" != "" ]];  then  R_GCTORTURE=1000   ./bin/tests; fi
   # Run a particular portion of the gnur testsuite
   - if [[ "$CHECK" != "" ]]; then PIR_NATIVE_BACKEND=0 ./bin/gnur-make-tests $CHECK; fi
   - ../tools/check-gnur-make-tests-error
