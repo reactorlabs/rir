@@ -1256,6 +1256,9 @@ class FLI(CastType, 1, Effects::None()) {
         }
         return type;
     }
+    bool promToValue() const {
+        return kind == Kind::Upcast && MkArg::Cast(arg(0).val());
+    }
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
