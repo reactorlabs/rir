@@ -476,9 +476,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                      result.promToValueCast[mkarg]) {
                                     auto fixedCast = new CastType(
                                         fixedMkArg, CastType::Upcast,
-                                        RType::prom,
-                                        eagerVal->type.forced()
-                                            .orPromiseWrapped());
+                                        RType::prom, cast->type);
                                     next = bb->insert(next, fixedCast);
                                     cast->replaceDominatedUses(fixedCast);
                                 }
