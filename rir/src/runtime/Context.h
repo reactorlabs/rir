@@ -171,9 +171,27 @@ struct Context {
         return Context(flags, other | typeFlags, missing);
     }
     constexpr Context operator|(const Context& other) const {
-        assert(missing == other.missing);
+
+        if (missing != other.missing) {
+
+            auto minContext = this;
+            auto maxContext = &other;
+
+            if (missing > other.missing) {
+                auto temp = minContext;
+                minContext = maxContext;
+                maxContext = temp;
+            }
+
+            if (minContext->flags.contains(
+                    Assumption::NoExplicitlyMissingArgs)) {
+                assert(false && "Contexts are not compatible for | operator");
+            }
+        }
+
+        auto newMissing = other.missing > missing ? other.missing : missing;
         return Context(other.flags | flags, other.typeFlags | typeFlags,
-                       missing);
+                       newMissing);
     }
     constexpr Context operator&(const Context& other) const {
         if (missing != other.missing) {

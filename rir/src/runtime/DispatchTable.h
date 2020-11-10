@@ -210,6 +210,10 @@ struct DispatchTable
         return clone;
     }
 
+    Context combineContextWith(Context anotherContext) {
+        return userDefinedContext_ | anotherContext;
+    }
+
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t cap)
