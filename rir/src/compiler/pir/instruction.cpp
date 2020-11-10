@@ -1115,6 +1115,24 @@ Context CallInstruction::inferAvailableAssumptions() const {
     return given;
 }
 
+Call::Call(Value* callerEnv, Value* fun, const std::vector<Value*>& args,
+           Value* fs, unsigned srcIdx)
+    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
+    assert(fs);
+    pushArg(fs, NativeType::frameState);
+    pushArg(fun, RType::closure);
+
+    // Calling builtins with names or ... is not supported by callBuiltin,
+    // that's why those calls go through the normall call BC.
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    if (auto con = LdConst::Cast(fun))
+        if (TYPEOF(con->c()) == BUILTINSXP)
+            argtype = argtype | PirType::val();
+
+    for (unsigned i = 0; i < args.size(); ++i)
+        pushArg(args[i], argtype);
+}
+
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
                      const std::vector<SEXP>& names_, unsigned srcIdx)
