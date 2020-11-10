@@ -4107,8 +4107,10 @@ bool LowerFunctionLLVM::tryCompile() {
                                    PirType(RType::real).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
                     } else {
-                        assert(arg->type.notMissing().notLazy().noAttribs().isA(
-                            t->typeTest));
+                        assert(arg->type.notMissing()
+                                   .notPromiseWrapped()
+                                   .noAttribs()
+                                   .isA(t->typeTest));
                         res = builder.CreateICmpNE(
                             a, constant(R_UnboundValue, t::SEXP));
                     }

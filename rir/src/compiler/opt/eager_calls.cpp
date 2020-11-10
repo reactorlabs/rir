@@ -99,6 +99,25 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
+            auto i = *ip;
+            switch (i->tag) {
+#define V(instr)                                                               \
+    case Tag::instr:                                                           \
+        if (!i->arg(0).val()->type.maybeObj()) {                               \
+            i->eachArg([&](InstrArg& arg) {                                    \
+                if (arg.val()->type.maybePromiseWrapped()) {                   \
+                    ip = bb->insert(ip, new Force(arg.val(), i->env(),         \
+                                                  Tombstone::framestate()));   \
+                    arg.val() = *ip;                                           \
+                    ip++;                                                      \
+                }                                                              \
+            });                                                                \
+        }                                                                      \
+        break;
+                VECTOR_RW_INSTRUCTIONS(V);
+            default: {}
+            }
+
             if (auto call = Call::Cast(*ip)) {
                 if (auto ldfun = LdFun::Cast(call->cls())) {
                     if (ldfun->hint) {

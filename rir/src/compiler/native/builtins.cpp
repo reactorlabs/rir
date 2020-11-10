@@ -1150,12 +1150,15 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
         PROTECT(args);
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset_dflt(call, symbol::Bracket, args, env);
+        }
         UNPROTECT(1);
     } else {
         SEXP args;
         FAKE_ARGS2(args, vector, index);
+        forceAll(args, globalContext());
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
     return res;
@@ -1177,9 +1180,12 @@ SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1204,9 +1210,12 @@ SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1231,9 +1240,12 @@ SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1254,9 +1266,12 @@ SEXP extract12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset_dflt(call, symbol::Bracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
     UNPROTECT(1);
@@ -1278,9 +1293,12 @@ SEXP extract13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset_dflt(call, symbol::Bracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
     UNPROTECT(1);
@@ -1301,9 +1319,12 @@ SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1341,9 +1362,12 @@ SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1381,9 +1405,12 @@ SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);

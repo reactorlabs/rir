@@ -37,8 +37,9 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
                 for (auto use : uses) {
                     if (UpdatePromise::Cast(use)) {
                         updatePromises[candidate].insert(use);
-                    } else if (!use->bb()->isDeopt() &&
-                               !usedOnlyInDeopt.count(use)) {
+                    } else if (Phi::Cast(use) ||
+                               (!use->bb()->isDeopt() &&
+                                !usedOnlyInDeopt.count(use))) {
                         addToDeopt = false;
                     }
                 }

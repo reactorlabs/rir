@@ -3559,10 +3559,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
                 res = dispatchApply(call, val, args, symbol::Bracket, env, ctx);
-                if (!res)
+                if (!res) {
+                    forceAll(args, ctx);
                     res =
                         do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+                }
             } else {
+                forceAll(args, ctx);
                 res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
             }
 
@@ -3583,10 +3586,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
                 res = dispatchApply(call, val, args, symbol::Bracket, env, ctx);
-                if (!res)
+                if (!res) {
+                    forceAll(args, ctx);
                     res =
                         do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+                }
             } else {
+                forceAll(args, ctx);
                 res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
             }
 
@@ -3609,10 +3615,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
                 res = dispatchApply(call, val, args, symbol::Bracket, env, ctx);
-                if (!res)
+                if (!res) {
+                    forceAll(args, ctx);
                     res =
                         do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
+                }
             } else {
+                forceAll(args, ctx);
                 res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
             }
 
@@ -3694,10 +3703,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 SEXP call = getSrcAt(c, pc - 1, ctx);
                 res = dispatchApply(call, val, args, symbol::DoubleBracket, env,
                                     ctx);
-                if (!res)
+                if (!res) {
+                    forceAll(args, ctx);
                     res =
                         do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+                }
             } else {
+                forceAll(args, ctx);
                 res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
                                       env);
             }
@@ -3720,10 +3732,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
                 res = dispatchApply(call, val, args, symbol::DoubleBracket, env,
                                     ctx);
-                if (!res)
+                if (!res) {
+                    forceAll(args, ctx);
                     res =
                         do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+                }
             } else {
+                forceAll(args, ctx);
                 res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
                                       env);
             }

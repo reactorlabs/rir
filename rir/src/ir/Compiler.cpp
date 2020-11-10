@@ -178,6 +178,14 @@ class CompilerContext {
     }
 };
 
+struct LoadArgsResult {
+    bool hasNames = false;
+    bool hasDots = false;
+    std::vector<SEXP> names;
+    Context assumptions;
+    int numArgs;
+};
+
 Code* compilePromise(CompilerContext& ctx, SEXP exp);
 // If we are in a void context, then compile expression will not leave a value
 // on the stack. For example in `{a; b}` the expression `a` is in a void
@@ -185,6 +193,9 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp);
 // in a void context, since the loop as an expression is always nil.
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
+static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
+                                      SEXP args, bool voidContext,
+                                      int skipArgs = 0);
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
                   std::function<void()> compileBody, bool peelLoop = false) {
@@ -861,14 +872,35 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         emitGuardForNamePrimitive(cs, fun);
         compileExpr(ctx, lhs);
 
+        BC::Label objBranch = cs.mkLabel();
+        BC::Label nonObjBranch = cs.mkLabel();
+        BC::Label contBranch = cs.mkLabel();
+
+        cs << BC::dup() << BC::isType(TypeChecks::NotObject) << BC::recordTest()
+           << BC::brtrue(nonObjBranch) << BC::br(objBranch);
+
+        cs << objBranch;
+
+        compileLoadArgs(ctx, ast, fun, args_, voidContext, 1);
+        cs << BC::br(contBranch);
+
+        cs << nonObjBranch;
+
         compileExpr(ctx, *idx);
         if (dims == 3) {
             compileExpr(ctx, *(idx + 1));
             compileExpr(ctx, *(idx + 2));
+        } else if (dims == 2) {
+            compileExpr(ctx, *(idx + 1));
+        }
+        cs << BC::br(contBranch);
+
+        cs << contBranch;
+
+        if (dims == 3) {
             assert(fun != symbol::DoubleBracket);
             cs << BC::extract1_3();
         } else if (dims == 2) {
-            compileExpr(ctx, *(idx + 1));
             if (fun == symbol::DoubleBracket)
                 cs << BC::extract2_2();
             else
@@ -887,6 +919,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         } else {
             cs << BC::pop();
         }
+
         return true;
     }
 
@@ -1204,6 +1237,67 @@ SIMPLE_INSTRUCTIONS(V, _)
     return false;
 }
 
+static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
+                                      SEXP args, bool voidContext,
+                                      int skipArgs) {
+    CodeStream& cs = ctx.cs();
+
+    // Process arguments:
+    // Arguments can be optionally named
+
+    LoadArgsResult res;
+    RListIter arg = RList(args).begin();
+
+    int i = skipArgs;
+    arg = arg + skipArgs;
+
+    for (; arg != RList::end(); ++i, ++arg) {
+        if (*arg == R_DotsSymbol) {
+            cs << BC::push(R_DotsSymbol);
+            res.names.push_back(R_DotsSymbol);
+            res.hasDots = true;
+            continue;
+        }
+        if (*arg == R_MissingArg) {
+            cs << BC::push(R_MissingArg);
+            res.names.push_back(R_NilValue);
+            continue;
+        }
+
+        // (1) Arguments are wrapped as Promises:
+        //     create a new Code object for the promise
+        Code* prom = compilePromise(ctx, *arg);
+        size_t idx = cs.addPromise(prom);
+
+        // (2) remember if the argument had a name associated
+        res.names.push_back(arg.tag());
+        if (arg.tag() != R_NilValue)
+            res.hasNames = true;
+
+        // (3) "safe force" the argument to get static assumptions
+        SEXP known = safeEval(*arg);
+        // TODO: If we add more assumptions should probably abstract with
+        // testArg in interp.cpp. For now they're both much different though
+        if (known != R_UnboundValue) {
+            res.assumptions.setEager(i);
+            if (!isObject(known)) {
+                res.assumptions.setNotObj(i);
+                if (IS_SIMPLE_SCALAR(known, REALSXP))
+                    res.assumptions.setSimpleReal(i);
+                if (IS_SIMPLE_SCALAR(known, INTSXP))
+                    res.assumptions.setSimpleInt(i);
+            }
+            cs << BC::push(known);
+            cs << BC::mkEagerPromise(idx);
+        } else {
+            cs << BC::mkPromise(idx);
+        }
+    }
+
+    res.numArgs = i;
+    return res;
+}
+
 // function application
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext) {
@@ -1229,64 +1323,15 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (Compiler::profile)
         cs << BC::recordCall();
 
-    // Process arguments:
-    // Arguments can be optionally named
-    std::vector<SEXP> names;
-    Context assumptions;
+    auto info = compileLoadArgs(ctx, ast, fun, args, voidContext);
 
-    bool hasNames = false;
-    bool hasDots = false;
-    int i = 0;
-    for (RListIter arg = RList(args).begin(); arg != RList::end(); ++i, ++arg) {
-        if (*arg == R_DotsSymbol) {
-            cs << BC::push(R_DotsSymbol);
-            names.push_back(R_DotsSymbol);
-            hasDots = true;
-            continue;
-        }
-        if (*arg == R_MissingArg) {
-            cs << BC::push(R_MissingArg);
-            names.push_back(R_NilValue);
-            continue;
-        }
-
-        // (1) Arguments are wrapped as Promises:
-        //     create a new Code object for the promise
-        Code* prom = compilePromise(ctx, *arg);
-        size_t idx = cs.addPromise(prom);
-
-        // (2) remember if the argument had a name associated
-        names.push_back(arg.tag());
-        if (arg.tag() != R_NilValue)
-            hasNames = true;
-
-        // (3) "safe force" the argument to get static assumptions
-        SEXP known = safeEval(*arg);
-        // TODO: If we add more assumptions should probably abstract with
-        // testArg in interp.cpp. For now they're both much different though
-        if (known != R_UnboundValue) {
-            assumptions.setEager(i);
-            if (!isObject(known)) {
-                assumptions.setNotObj(i);
-                if (IS_SIMPLE_SCALAR(known, REALSXP))
-                    assumptions.setSimpleReal(i);
-                if (IS_SIMPLE_SCALAR(known, INTSXP))
-                    assumptions.setSimpleInt(i);
-            }
-            cs << BC::push(known);
-            cs << BC::mkEagerPromise(idx);
-        } else {
-            cs << BC::mkPromise(idx);
-        }
-    }
-
-    if (hasDots) {
-        cs << BC::callDots(i, names, ast, assumptions);
-    } else if (hasNames) {
-        cs << BC::call(i, names, ast, assumptions);
+    if (info.hasDots) {
+        cs << BC::callDots(info.numArgs, info.names, ast, info.assumptions);
+    } else if (info.hasNames) {
+        cs << BC::call(info.numArgs, info.names, ast, info.assumptions);
     } else {
-        assumptions.add(Assumption::CorrectOrderOfArguments);
-        cs << BC::call(i, ast, assumptions);
+        info.assumptions.add(Assumption::CorrectOrderOfArguments);
+        cs << BC::call(info.numArgs, ast, info.assumptions);
     }
     if (voidContext)
         cs << BC::pop();
