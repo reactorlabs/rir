@@ -78,6 +78,16 @@ class SSAAllocator {
         return val->producesRirResult();
     }
 
+    size_t stackSizeBefore(Instruction* instr) const {
+        return sa ? sa->stackBefore(instr).size() : 0;
+    }
+
+    std::vector<Value*> toDrop(Instruction* instr) const {
+        return sa ? sa->toDrop(instr) : std::vector<Value*>{};
+    }
+
+    bool dead(Instruction* instr) const { return sa ? sa->dead(instr) : false; }
+
     void computeStackAllocation() {
         needsASlot(*code->entry->begin());
         std::unordered_map<Instruction*, bool> twice;
