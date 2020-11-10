@@ -4247,7 +4247,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     res = call(NativeBuiltins::asLogicalBlt, {loadSxp(arg)});
                 } else if (r1 == Representation::Real) {
                     auto phi = phiBuilder(t::Int);
-                    auto in = load(arg, Representation::Integer);
                     auto nin = load(arg, Representation::Real);
 
                     auto done = BasicBlock::Create(C, "", fun);
@@ -4260,7 +4259,11 @@ bool LowerFunctionLLVM::tryCompile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(notNaBr);
-                    phi.addInput(in);
+                    auto cnv =
+                        builder.CreateSelect(builder.CreateFCmpOEQ(c(0.0), nin),
+                                             constant(R_FalseValue, t::Int),
+                                             constant(R_TrueValue, t::Int));
+                    phi.addInput(cnv);
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
@@ -4268,6 +4271,15 @@ bool LowerFunctionLLVM::tryCompile() {
                 } else {
                     assert(r1 == Representation::Integer);
                     res = load(arg, Representation::Integer);
+                    if (!arg->type.isA(RType::logical)) {
+                        res = builder.CreateSelect(
+                            builder.CreateICmpEQ(res, c(NA_INTEGER)),
+                            c(NA_LOGICAL),
+                            builder.CreateSelect(
+                                builder.CreateICmpEQ(res, c(0)),
+                                constant(R_FalseValue, t::Int),
+                                constant(R_TrueValue, t::Int)));
+                    }
                 }
 
                 setVal(i, res);
