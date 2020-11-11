@@ -12,7 +12,7 @@ matrix:
       env:
         - CXX_OVERRIDE=clang++
         - CC_OVERRIDE=clang
-        - BUILD=debugopt
+        - BUILD=release
       compiler: clang
 
     - os: osx
