@@ -158,4 +158,7 @@ endif(DEFINED LLVM_PACKAGE_VERSION)
 if(APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${R_HOME}/lib")
     target_link_libraries(${PROJECT_NAME} R)
+    # to resolve build error from
+    # https://www.gnu.org/software/gettext/FAQ.html#integrating_undefined
+    target_link_libraries(${PROJECT_NAME} -lintl)
 endif(APPLE)
