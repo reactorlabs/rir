@@ -440,10 +440,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (auto f = Force::Cast(*ip)) {
                 if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
                     if (mkarg->isEager()) {
-                        anyChange = true;
-                        Value* eager = mkarg->eagerArg();
-                        f->replaceUsesWith(eager);
-                        next = bb->remove(ip);
+                        assert(false &&
+                               "followCastsAndForce returned an eager MkArg");
                     } else if (toInline.count(f)) {
                         anyChange = true;
                         Promise* prom = mkarg->prom();
@@ -578,15 +576,29 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             dead.insert(split);
                         break;
                     }
-                }
-            } else if (auto cast = CastType::Cast(*ip)) {
-                if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
+                } else if (auto mk = MkArg::Cast(f->input()->followCasts())) {
+                    // This covers the case of an eager mkarg (force ->
+                    // cast -> mkarg) Note: followCastsAndForce recurses through
+                    // an eager mkarg, but followCasts returns the mkarg itself
                     if (mk->isEager()) {
                         anyChange = true;
-                        auto eager = mk->eagerArg();
-                        cast->replaceUsesWith(eager);
+                        Value* eager = mk->eagerArg();
+                        f->replaceUsesWith(eager);
                         next = bb->remove(ip);
                     }
+                } else if (auto phi = Phi::Cast(f->followCastsAndForce())) {
+                    phi->eachArg([&](BB* bb, InstrArg& v) {
+                        if (auto mk = MkArg::Cast(v.val()->followCasts())) {
+                            if (mk->isEager()) {
+                                anyChange = true;
+                                auto eager = Instruction::Cast(mk->eagerArg());
+                                assert(eager);
+                                v.val() = eager;
+                                v.type() = eager->type;
+                            }
+                        }
+                    });
+                    phi->updateTypeAndEffects();
                 }
             }
             ip = next;
