@@ -165,25 +165,34 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     inferred = i->inferType(getType);
                     break;
                 }
+#define V(instr) case Tag::instr:
+                    VECTOR_RW_INSTRUCTIONS(V);
+                    {
+                        inferred = i->inferType(getType);
 
-                case Tag::Extract1_1D: {
-                    inferred = i->inferType(getType);
-                    auto e = Extract1_1D::Cast(i);
-                    if (!inferred.isScalar() &&
-                        getType(e->vec()).isA(PirType::num()) &&
-                        // named arguments produce named result
-                        !getType(e->vec()).maybeHasAttrs() &&
-                        getType(e->idx()).isScalar()) {
-                        auto range = rangeAnalysis.before(e).range;
-                        if (range.count(e->idx())) {
-                            if (range.at(e->idx()).first > 0) {
-                                // Negative numbers as indices make the extract
-                                // return a vector. Only positive are safe.
-                                inferred.setScalar();
+                        // These return primitive values, unless overwritten by
+                        // objects
+                        if (!i->arg(0).val()->type.maybeObj())
+                            inferred = inferred & PirType::val();
+
+                        if (auto e = Extract1_1D::Cast(i)) {
+                            if (!inferred.isScalar() &&
+                                getType(e->vec()).isA(PirType::num()) &&
+                                // named arguments produce named result
+                                !getType(e->vec()).maybeHasAttrs() &&
+                                getType(e->idx()).isScalar()) {
+                                auto range = rangeAnalysis.before(e).range;
+                                if (range.count(e->idx())) {
+                                    if (range.at(e->idx()).first > 0) {
+                                        // Negative numbers as indices make the
+                                        // extract return a vector. Only
+                                        // positive are safe.
+                                        inferred.setScalar();
+                                    }
+                                }
                             }
                         }
-                    }
-                    break;
+                        break;
                 }
 
                 default:

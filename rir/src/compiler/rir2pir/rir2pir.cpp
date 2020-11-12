@@ -832,8 +832,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::extract1_1_: {
         forceIfPromised(1); // <- ensure forced captured in framestate
         addCheckpoint(srcCode, pos, stack, insert);
-        forceIfPromised(0);
-        addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
@@ -842,8 +840,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract2_1_: {
         forceIfPromised(1); // <- forced version are captured in framestate
-        addCheckpoint(srcCode, pos, stack, insert);
-        forceIfPromised(0);
         addCheckpoint(srcCode, pos, stack, insert);
         Value* idx = pop();
         Value* vec = pop();
@@ -1017,6 +1013,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Is(bc.immediate.i, pop())));
         break;
 
+    case Opcode::istype_: {
+        switch (bc.immediate.i) {
+        case (uint32_t)TypeChecks::NotObject: {
+            push(insert(
+                new IsType(PirType::val().notMissing().notObject(), pop())));
+            break;
+        default:
+            log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
+            assert(false && "Recompiling PIR not supported for now.");
+        }
+        }
+        break;
+    }
+
     case Opcode::pull_: {
         size_t i = bc.immediate.i;
         push(at(i));
@@ -1129,7 +1139,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::assert_type_:
     case Opcode::record_deopt_:
     case Opcode::update_promise_:
-    case Opcode::istype_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
