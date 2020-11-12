@@ -44,7 +44,8 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                 switch (i->tag) {
                 case Tag::CallSafeBuiltin: {
                     auto c = CallSafeBuiltin::Cast(i);
-                    std::string name = getBuiltinName(getBuiltinNr(c->blt));
+                    std::string name =
+                        getBuiltinName(getBuiltinNr(c->builtinSexp));
 
                     static const std::unordered_set<std::string> bitwise = {
                         "bitwiseXor", "bitwiseShiftL", "bitwiseShiftLR",

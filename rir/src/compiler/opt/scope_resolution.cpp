@@ -672,8 +672,8 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     args.push_back(v);
                             }
                         });
-                        auto safe =
-                            new CallSafeBuiltin(b->blt, args, b->srcIdx);
+                        auto safe = new CallSafeBuiltin(b->builtinSexp, args,
+                                                        b->srcIdx);
                         assert(!b->type.maybePromiseWrapped() ||
                                safe->type.maybePromiseWrapped());
                         b->replaceUsesWith(safe);

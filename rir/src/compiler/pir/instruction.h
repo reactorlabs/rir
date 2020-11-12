@@ -2157,7 +2157,7 @@ typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
 class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
   public:
-    SEXP blt;
+    SEXP builtinSexp;
     const CCODE builtin;
     int builtinId;
 
@@ -2199,7 +2199,7 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
                                Effect::Visibility | Effect::DependsOnAssume),
     public CallInstruction {
   public:
-    SEXP blt;
+    SEXP builtinSexp;
     const CCODE builtin;
     int builtinId;
 
@@ -2226,6 +2226,8 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
     Value* frameStateOrTs() const override final {
         return Tombstone::framestate();
     }
+
+    size_t gvnBase() const override;
 };
 
 class BuiltinCallFactory {

@@ -941,13 +941,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto blt = CallBuiltin::Cast(instr);
                 if (compileCallDots(blt, blt->srcIdx,
                                     [&]() {
-                                        cb.add(BC::push(blt->blt));
+                                        cb.add(BC::push(blt->builtinSexp));
                                         cb.add(BC::put(blt->nCallArgs()));
                                     },
                                     [](size_t) { return R_NilValue; }))
                     break;
                 cb.add(BC::callBuiltin(blt->nCallArgs(), Pool::get(blt->srcIdx),
-                                       blt->blt));
+                                       blt->builtinSexp));
                 break;
             }
 
@@ -955,13 +955,13 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto blt = CallSafeBuiltin::Cast(instr);
                 if (compileCallDots(blt, blt->srcIdx,
                                     [&]() {
-                                        cb.add(BC::push(blt->blt));
+                                        cb.add(BC::push(blt->builtinSexp));
                                         cb.add(BC::put(blt->nCallArgs()));
                                     },
                                     [](size_t) { return R_NilValue; }))
                     break;
                 cb.add(BC::callBuiltin(blt->nargs(), Pool::get(blt->srcIdx),
-                                       blt->blt));
+                                       blt->builtinSexp));
                 break;
             }
 
