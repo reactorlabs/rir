@@ -586,19 +586,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         f->replaceUsesWith(eager);
                         next = bb->remove(ip);
                     }
-                } else if (auto phi = Phi::Cast(f->followCastsAndForce())) {
-                    phi->eachArg([&](BB* bb, InstrArg& v) {
-                        if (auto mk = MkArg::Cast(v.val()->followCasts())) {
-                            if (mk->isEager()) {
-                                anyChange = true;
-                                auto eager = Instruction::Cast(mk->eagerArg());
-                                assert(eager);
-                                v.val() = eager;
-                                v.type() = eager->type;
-                            }
-                        }
-                    });
-                    phi->updateTypeAndEffects();
                 }
             }
             ip = next;
