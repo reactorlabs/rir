@@ -98,15 +98,29 @@ struct ForcedBy {
     }
 
     bool forcedAt(Value* val, Force* force) {
-        auto f = forcedBy.find(val);
-        if (f == forcedBy.end()) {
-            forcedBy.insert(val, force);
-            return true;
-        } else if (!f->second) {
-            f->second = force;
-            return true;
-        }
-        return false;
+        rir::SmallSet<Phi*> seen;
+        std::function<bool(Value*, bool)> apply = [&](Value* val, bool phiArg) {
+            bool res = false;
+            auto p = Phi::Cast(val);
+            if (p) {
+                if (seen.includes(p))
+                    return false;
+                seen.insert(p);
+                p->eachArg([&](BB*, Value* v) { res = apply(v, true) || res; });
+            }
+            if (phiArg)
+                force = ambiguous();
+            auto f = forcedBy.find(val);
+            if (f == forcedBy.end()) {
+                forcedBy.insert(val, force);
+                return true;
+            } else if (!f->second) {
+                f->second = force;
+                return true;
+            }
+            return res;
+        };
+        return apply(val, false);
     }
 
     bool escape(Value* val) {
@@ -126,12 +140,6 @@ struct ForcedBy {
     AbstractResult merge(const ForcedBy& other, bool exitMerge = false) {
         AbstractResult res;
 
-        // Those are the cases where we merge two branches where one branch has
-        // the promise evaluated and the other not. For exits we don't care
-        // about this case.
-        // For Phis, it's possible that an argument is not in scope (if it isn't
-        // added by declare before) but that still means it's not forced on that
-        // path, so we need to set ambiguous in that case too.
         for (auto& e : forcedBy) {
             if (!e.second)
                 continue;
@@ -141,11 +149,9 @@ struct ForcedBy {
                 continue;
             auto o = other.forcedBy.find(v);
             if (o == other.forcedBy.end() || !o->second) {
-                if (!exitMerge) {
-                    if (other.inScope.count(v) || Phi::Cast(v)) {
-                        e.second = ambiguous();
-                        res.lostPrecision();
-                    }
+                if (!exitMerge && other.inScope.count(v)) {
+                    e.second = ambiguous();
+                    res.lostPrecision();
                 }
             } else if (o->second) {
                 if (f != o->second) {
@@ -156,11 +162,10 @@ struct ForcedBy {
         }
         for (auto& e : other.forcedBy) {
             auto v = e.first;
-            auto f = e.second;
             auto o = forcedBy.find(v);
             if (o == forcedBy.end() || !o->second) {
-                if (inScope.count(v) || Phi::Cast(v) || exitMerge) {
-                    auto m = exitMerge ? f : ambiguous();
+                auto m = exitMerge ? e.second : ambiguous();
+                if (exitMerge || inScope.count(v)) {
                     if (o == forcedBy.end())
                         forcedBy.insert(v, m);
                     else
@@ -401,8 +406,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
                             if (!mk->isEager()) {
                                 if (!isHuge || mk->prom()->size() < 10) {
-                                    auto query = analysis.after(i);
-                                    auto inl = query.isSafeToInline(mk, f);
+                                    auto inl = a.isSafeToInline(mk, f);
                                     if (inl != ForcedBy::NotSafeToInline) {
                                         toInline.insert(f);
                                         if (inl ==

@@ -110,6 +110,7 @@ PassScheduler::PassScheduler() {
 
     nextPhase("Final post");
     addDefaultPostPhaseOpt();
+    add<Cleanup>();
     add<CleanupCheckpoints>();
 
     nextPhase("done");
