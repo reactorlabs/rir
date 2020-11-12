@@ -382,7 +382,7 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                             if (mk->context == 1 && mk->bb() != bb &&
                                 mk->usesAreOnly(code->entry,
                                                 {Tag::FrameState, Tag::StVar,
-                                                 Tag::IsEnvStub, Tag::LdVar})) {
+                                                 Tag::IsEnvStub})) {
                                 analysis.tryMaterializeEnv(
                                     before, mk,
                                     [&](const std::unordered_map<
