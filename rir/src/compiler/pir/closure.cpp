@@ -7,16 +7,17 @@ namespace rir {
 namespace pir {
 
 Closure::Closure(const std::string& name, rir::Function* function, SEXP formals,
-                 SEXP srcRef)
+                 SEXP srcRef, Context userContext)
     : origin_(nullptr), function(function), env(Env::notClosed()),
-      srcRef_(srcRef), name_(name), formals_(function, formals) {
+      srcRef_(srcRef), name_(name), formals_(function, formals),
+      userContext_(userContext) {
     invariant();
 }
 
 Closure::Closure(const std::string& name, SEXP closure, rir::Function* f,
-                 Env* env)
+                 Env* env, Context userContext)
     : origin_(closure), function(f), env(env), name_(name),
-      formals_(f, FORMALS(closure)) {
+      formals_(f, FORMALS(closure)), userContext_(userContext) {
 
     static SEXP srcRefSymbol = Rf_install("srcref");
     srcRef_ = Rf_getAttrib(closure, srcRefSymbol);

@@ -34,6 +34,7 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
 
     Context assumptions = assumptions_;
     fun->clearDisabledAssumptions(assumptions);
+    assumptions = tbl->combineContextWith(assumptions);
 
     auto frame = RList(FRAME(CLOENV(closure)));
 
@@ -45,7 +46,8 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
                 closureName = CHAR(PRINTNAME(e.tag()));
         }
     }
-    auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun);
+    auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun,
+                                                     tbl->userDefinedContext());
     Context context(assumptions);
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, success,
                    fail, outerFeedback);
@@ -59,9 +61,10 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
     Context assumptions = assumptions_;
     auto srcFunction = src->baseline();
     srcFunction->clearDisabledAssumptions(assumptions);
+    assumptions = src->combineContextWith(assumptions);
     Context context(assumptions);
-    auto closure =
-        module->getOrDeclareRirFunction(name, srcFunction, formals, srcRef);
+    auto closure = module->getOrDeclareRirFunction(
+        name, srcFunction, formals, srcRef, src->userDefinedContext());
     compileClosure(closure, src->dispatch(assumptions), context, success, fail,
                    outerFeedback);
 }

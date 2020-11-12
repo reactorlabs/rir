@@ -496,6 +496,45 @@ REXPORT SEXP rirPrintBuiltinIds() {
     return R_NilValue;
 }
 
+REXPORT SEXP rirSetUserContext(SEXP f, SEXP userContext) {
+
+    if (TYPEOF(f) != CLOSXP)
+        Rf_error("f not closure");
+
+    if (TYPEOF(BODY(f)) != EXTERNALSXP) {
+        rirCompile(f, CLOENV(f));
+    }
+
+    if (TYPEOF(userContext) != INTSXP || LENGTH(userContext) != 2)
+        Rf_error("userDefinedContext should be an Integer Array of size 2");
+
+    Context newContext;
+    auto p = (int*)((void*)&newContext);
+    *p = INTEGER(userContext)[0];
+    p++;
+    *p = INTEGER(userContext)[1];
+
+    auto tbl = DispatchTable::unpack(BODY(f));
+    auto newTbl = tbl->newWithUserContext(newContext);
+    SET_BODY(f, newTbl->container());
+    return R_NilValue;
+}
+
+REXPORT SEXP rirCreateSimpleIntContext() {
+    Context newContext = Context();
+    newContext.setSimpleInt(0);
+
+    int* p = (int*)((void*)&newContext);
+    int n1 = *p;
+    p++;
+    int n2 = *p;
+
+    auto res = Rf_allocVector(INTSXP, 2);
+    INTEGER(res)[0] = n1;
+    INTEGER(res)[1] = n2;
+    return res;
+}
+
 bool startup() {
     initializeRuntime();
     return true;

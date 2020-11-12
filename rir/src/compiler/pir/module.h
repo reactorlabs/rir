@@ -23,9 +23,10 @@ class Module {
     void print(std::ostream& out = std::cout, bool tty = false);
 
     Closure* getOrDeclareRirFunction(const std::string& name, rir::Function* f,
-                                     SEXP formals, SEXP src);
+                                     SEXP formals, SEXP src,
+                                     Context userContext);
     Closure* getOrDeclareRirClosure(const std::string& name, SEXP closure,
-                                    rir::Function* f);
+                                    rir::Function* f, Context userContext);
 
     typedef std::function<void(pir::Closure*)> PirClosureIterator;
     typedef std::function<void(pir::ClosureVersion*)> PirClosureVersionIterator;

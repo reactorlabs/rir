@@ -190,3 +190,8 @@ rir.disableLoopPeeling <- function() {
 rir.printBuiltinIds <- function() {
     invisible(.Call("rirPrintBuiltinIds"))
 }
+
+# compiles given closure, or expression and returns the compiled version.
+rir.setUserContext <- function(f, udc) {
+    .Call("rirSetUserContext", f, udc)
+}

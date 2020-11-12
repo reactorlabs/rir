@@ -5,6 +5,7 @@
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 
+
 namespace rir {
 
 #define DISPATCH_TABLE_MAGIC (unsigned)0xd7ab1e00
@@ -40,6 +41,14 @@ struct DispatchTable
     }
 
     Function* dispatch(Context a) const {
+        if (!a.smaller(userDefinedContext_)) {
+#ifdef DEBUG_DISPATCH
+            std::cout << "DISPATCH trying: " << a
+                      << " vs annotation: " << userDefinedContext_ << "\n";
+#endif
+            Rf_error("Provided context does not satisfy user defined context");
+        }
+
         for (size_t i = 1; i < size(); ++i) {
 #ifdef DEBUG_DISPATCH
             std::cout << "DISPATCH trying: " << a << " vs " << get(i)->context()
@@ -182,6 +191,29 @@ struct DispatchTable
         }
     }
 
+    Context userDefinedContext() const { return userDefinedContext_; }
+    DispatchTable* newWithUserContext(Context udc) {
+
+        auto clone = create(this->capacity());
+        clone->setEntry(0, this->getEntry(0));
+
+        auto j = 1;
+        for (size_t i = 1; i < size(); i++) {
+            if (get(i)->context().smaller(udc)) {
+                clone->setEntry(j, getEntry(i));
+                j++;
+            }
+        }
+
+        clone->size_ = j;
+        clone->userDefinedContext_ = udc;
+        return clone;
+    }
+
+    Context combineContextWith(Context anotherContext) {
+        return userDefinedContext_ | anotherContext;
+    }
+
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t cap)
@@ -192,6 +224,7 @@ struct DispatchTable
               cap) {}
 
     size_t size_ = 0;
+    Context userDefinedContext_;
 };
 #pragma pack(pop)
 } // namespace rir
