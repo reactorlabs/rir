@@ -379,10 +379,12 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (bb->isDeopt()) {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {
+                            std::unordered_set<Tag> allowed(
+                                {Tag::FrameState, Tag::StVar, Tag::IsEnvStub});
+                            if (!mk->stub)
+                                allowed.insert(Tag::LdVar);
                             if (mk->context == 1 && mk->bb() != bb &&
-                                mk->usesAreOnly(code->entry,
-                                                {Tag::FrameState, Tag::StVar,
-                                                 Tag::IsEnvStub})) {
+                                mk->usesAreOnly(code->entry, allowed)) {
                                 analysis.tryMaterializeEnv(
                                     before, mk,
                                     [&](const std::unordered_map<
