@@ -762,16 +762,26 @@ void PirCopy::print(std::ostream& out, bool tty) const {
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                                  unsigned srcIdx)
     : VarLenInstruction(PirType::val().notObject().notMissing(), srcIdx),
-      blt(builtin), builtin(getBuiltin(builtin)),
+      builtinSexp(builtin), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
 }
 
+size_t CallSafeBuiltin::gvnBase() const {
+    if (!SafeBuiltinsList::idempotent(builtinId)) {
+        if (type.maybeObj() ||
+            !SafeBuiltinsList::nonObjectIdempotent(builtinId))
+            return 0;
+    }
+    return hash_combine(builtinId, tagHash());
+}
+
 CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
                          const std::vector<Value*>& args, unsigned srcIdx)
-    : VarLenInstructionWithEnvSlot(PirType::val(), env, srcIdx), blt(builtin),
-      builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
+    : VarLenInstructionWithEnvSlot(PirType::val(), env, srcIdx),
+      builtinSexp(builtin), builtin(getBuiltin(builtin)),
+      builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
 }

@@ -81,7 +81,9 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                         std::vector<Value*> args;
                         b->eachCallArg([&](Value* v) { args.push_back(v); });
                         i->replaceUsesAndSwapWith(
-                            new CallSafeBuiltin(b->blt, args, b->srcIdx), ip);
+                            new CallSafeBuiltin(b->builtinSexp, args,
+                                                b->srcIdx),
+                            ip);
                     }
                 } else if (auto missing = ChkMissing::Cast(i)) {
                     Value* arg = missing->arg<0>().val();

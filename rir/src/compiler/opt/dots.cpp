@@ -133,12 +133,12 @@ bool DotDotDots::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                          Tombstone::framestate(), i->srcIdx);
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else if (auto b = CallBuiltin::Cast(i)) {
-                            auto nc = BuiltinCallFactory::New(i->env(), b->blt,
-                                                              args, i->srcIdx);
+                            auto nc = BuiltinCallFactory::New(
+                                i->env(), b->builtinSexp, args, i->srcIdx);
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else if (auto b = CallSafeBuiltin::Cast(i)) {
                             auto nc = BuiltinCallFactory::New(
-                                Env::elided(), b->blt, args, i->srcIdx);
+                                Env::elided(), b->builtinSexp, args, i->srcIdx);
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else {
                             assert(false);

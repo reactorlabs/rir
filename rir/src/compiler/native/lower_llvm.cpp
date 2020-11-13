@@ -2625,9 +2625,9 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::CallSafeBuiltin: {
                 auto b = CallSafeBuiltin::Cast(i);
-                if (compileDotcall(b,
-                                   [&]() { return constant(b->blt, t::SEXP); },
-                                   [&](size_t i) { return R_NilValue; })) {
+                if (compileDotcall(
+                        b, [&]() { return constant(b->builtinSexp, t::SEXP); },
+                        [&](size_t i) { return R_NilValue; })) {
                     break;
                 }
                 std::vector<Value*> args;
@@ -2636,7 +2636,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 auto callTheBuiltin = [&]() -> llvm::Value* {
                     // Some "safe" builtins still look up functions in the base
                     // env
-                    return callRBuiltin(b->blt, args, i->srcIdx, b->builtin,
+                    return callRBuiltin(b->builtinSexp, args, i->srcIdx,
+                                        b->builtin,
                                         constant(R_BaseEnv, t::SEXP));
                 };
 
@@ -3304,17 +3305,17 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::CallBuiltin: {
                 auto b = CallBuiltin::Cast(i);
-                if (compileDotcall(b,
-                                   [&]() { return constant(b->blt, t::SEXP); },
-                                   [&](size_t i) { return R_NilValue; })) {
+                if (compileDotcall(
+                        b, [&]() { return constant(b->builtinSexp, t::SEXP); },
+                        [&](size_t i) { return R_NilValue; })) {
                     break;
                 }
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
-                setVal(i, callRBuiltin(b->blt, args, i->srcIdx, b->builtin,
-                                       b->hasEnv()
-                                           ? loadSxp(b->env())
-                                           : constant(R_BaseEnv, t::SEXP)));
+                setVal(i, callRBuiltin(
+                              b->builtinSexp, args, i->srcIdx, b->builtin,
+                              b->hasEnv() ? loadSxp(b->env())
+                                          : constant(R_BaseEnv, t::SEXP)));
                 break;
             }
 
