@@ -290,6 +290,7 @@ class Instruction : public Value {
 
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
+    bool dominatesAllFollowingUsesOf(Instruction*);
 
     typedef std::function<PirType(Value*)> GetType;
 
@@ -1255,6 +1256,12 @@ class FLI(CastType, 1, Effects::None()) {
                 return t;
         }
         return type;
+    }
+    MkArg* tryGetPromise() const {
+        if (kind == Kind::Upcast)
+            if (auto mk = MkArg::Cast(arg(0).val()))
+                return mk;
+        return nullptr;
     }
     void printArgs(std::ostream& out, bool tty) const override;
 };

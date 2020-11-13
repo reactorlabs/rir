@@ -446,6 +446,30 @@ bool Instruction::usesDoNotInclude(BB* target, std::unordered_set<Tag> tags) {
     });
 }
 
+bool Instruction::dominatesAllFollowingUsesOf(Instruction* target) {
+    DominanceGraph dom(bb()->owner);
+    bool ok = true;
+    bool start = false;
+    Visitor::check(bb(), [&](Instruction* i) -> bool {
+        if (!start) {
+            if (i == this)
+                start = true;
+            return true;
+        }
+        if (i == target) {
+            return false;
+        }
+        i->eachArg([&](InstrArg& arg) {
+            if (arg.val() == target && i->bb() != bb() &&
+                !dom.dominates(bb(), i->bb())) {
+                ok = false;
+            }
+        });
+        return ok;
+    });
+    return ok;
+}
+
 const Value* Instruction::cFollowCasts() const {
     if (auto cast = PirCopy::Cast(this))
         return cast->arg<0>().val()->followCasts();

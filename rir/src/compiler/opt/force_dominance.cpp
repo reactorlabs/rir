@@ -47,6 +47,7 @@ using namespace rir::pir;
 
 struct ForcedBy {
     rir::SmallMap<Value*, Force*> forcedBy;
+    rir::SmallMap<MkArg*, rir::SmallSet<CastType*>> promToValueCast;
     rir::SmallSet<Value*> inScope;
     rir::SmallSet<Value*> escaped;
 
@@ -119,6 +120,22 @@ struct ForcedBy {
         return false;
     }
 
+    bool markCast(CastType* cast) {
+        if (auto mkarg = cast->tryGetPromise()) {
+            auto p = promToValueCast.find(mkarg);
+            if (p != promToValueCast.end()) {
+                if (!p->second.count(cast)) {
+                    p->second.insert(cast);
+                    return true;
+                }
+            } else {
+                promToValueCast[mkarg].insert(cast);
+                return true;
+            }
+        }
+        return false;
+    }
+
     AbstractResult mergeExit(const ForcedBy& other) {
         return merge(other, true);
     }
@@ -173,6 +190,21 @@ struct ForcedBy {
         for (auto& e : other.escaped) {
             if (!escaped.count(e)) {
                 escaped.insert(e);
+                res.update();
+            }
+        }
+
+        for (auto const& mc : other.promToValueCast) {
+            auto p = promToValueCast.find(mc.first);
+            if (p != promToValueCast.end()) {
+                for (auto c : mc.second) {
+                    if (!p->second.count(c)) {
+                        p->second.insert(c);
+                        res.update();
+                    }
+                }
+            } else {
+                promToValueCast[mc.first] = mc.second;
                 res.update();
             }
         }
@@ -268,6 +300,17 @@ struct ForcedBy {
             out << " ";
         }
         out << "\n";
+        out << "Known casts: ";
+        for (auto& c : promToValueCast) {
+            c.first->printRef(out);
+            out << " -> { ";
+            for (auto& cc : c.second) {
+                cc->printRef(out);
+                out << " ";
+            }
+            out << "}";
+        }
+        out << "\n";
         for (auto& e : forcedBy) {
             if (!e.second)
                 continue;
@@ -336,7 +379,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else if (auto e = MkEnv::Cast(i)) {
             if (!e->stub)
                 apply(e);
-        } else if (CastType::Cast(i) || Deopt::Cast(i)) { /* do nothing */ 
+        } else if (auto c = CastType::Cast(i)) {
+            if (state.markCast(c))
+                res.update();
+        } else if (Deopt::Cast(i)) { /* do nothing */
         } else {
             if (i->type.maybeLazy()) {
                 if (state.declare(i))
@@ -418,8 +464,40 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 } else if (auto u = UpdatePromise::Cast(i)) {
                     if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
-                        if (!analysis.before(i).escaped.count(mkarg))
-                            next = bb->remove(ip);
+                        if (!analysis.before(i).escaped.count(mkarg)) {
+                            bool ok = u->dominatesAllFollowingUsesOf(mkarg);
+                            auto p = result.promToValueCast.find(mkarg);
+                            if (p != result.promToValueCast.end()) {
+                                for (auto cast : p->second) {
+                                    ok = ok &&
+                                         u->dominatesAllFollowingUsesOf(cast);
+                                }
+                            }
+
+                            if (ok) {
+                                // Here we can replace the UpdatePromise
+                                // instruction with a fresh eager MkArg and
+                                // replace all dominated uses of the old MkArg
+                                // and its CastType's
+                                next = bb->remove(ip);
+                                auto eagerVal = u->arg(1).val();
+                                auto fixedMkArg = new MkArg(
+                                    mkarg->prom(), eagerVal, mkarg->promEnv());
+                                next = bb->insert(next, fixedMkArg);
+                                next++;
+                                mkarg->replaceDominatedUses(fixedMkArg);
+                                if (p != result.promToValueCast.end()) {
+                                    for (auto cast : p->second) {
+                                        auto fixedCast = new CastType(
+                                            fixedMkArg, CastType::Upcast,
+                                            RType::prom, cast->type);
+                                        next = bb->insert(next, fixedCast);
+                                        cast->replaceDominatedUses(fixedCast);
+                                    }
+                                }
+                                anyChange = true;
+                            }
+                        }
                     }
                 }
 
