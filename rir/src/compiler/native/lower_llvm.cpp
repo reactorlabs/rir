@@ -4827,6 +4827,10 @@ bool LowerFunctionLLVM::tryCompile() {
                     ((vecType.isA(RType::integer) &&
                       valType.isA(RType::integer)) ||
                      (vecType.isA(RType::real) && valType.isA(RType::real)));
+                // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
+                if (representationOf(subAssign->lhs()) != t::SEXP &&
+                    representationOf(i) == t::SEXP)
+                    fastcase = false;
 
                 if (fastcase) {
                     auto fallback = BasicBlock::Create(C, "", fun);
@@ -4930,6 +4934,10 @@ bool LowerFunctionLLVM::tryCompile() {
                     ((vecType.isA(RType::integer) &&
                       valType.isA(RType::integer)) ||
                      (vecType.isA(RType::real) && valType.isA(RType::real)));
+                // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
+                if (representationOf(subAssign->vector()) != t::SEXP &&
+                    representationOf(i) == t::SEXP)
+                    fastcase = false;
 
                 if (fastcase) {
                     auto fallback = BasicBlock::Create(C, "", fun);
@@ -5010,6 +5018,10 @@ bool LowerFunctionLLVM::tryCompile() {
                     ((vecType.isA(RType::integer) &&
                       valType.isA(RType::integer)) ||
                      (vecType.isA(RType::real) && valType.isA(RType::real)));
+                // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
+                if (representationOf(subAssign->vector()) != t::SEXP &&
+                    representationOf(i) == t::SEXP)
+                    fastcase = false;
 
                 if (fastcase) {
                     auto fallback = BasicBlock::Create(C, "", fun);
