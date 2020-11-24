@@ -1,6 +1,6 @@
 FROM registry.gitlab.com/rirvm/rir_mirror/base
 
-ARG GRAAL_VERSION=19.3.1
+ARG GRAAL_VERSION=20.3.0
 
 RUN git clone --depth 1 https://github.com/reactorlabs/ReBench.git -b envVarsSupport /opt/ReBench && cd /opt/ReBench && pip3 install .
 RUN git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout 03207aed8ce24675ad710ca9ca991e158dd09e7a
