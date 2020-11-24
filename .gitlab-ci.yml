@@ -28,9 +28,9 @@ rir_container:
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
   services:
-    - docker:stable
+    - docker:19.03.0-dind
   before_script:
     - docker info
   script:
@@ -47,9 +47,9 @@ benchmark_container:
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
   services:
-    - docker:stable
+    - docker:19.03.0-dind
   before_script:
     - docker info
   script:
@@ -272,9 +272,9 @@ deploy:
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
   services:
-    - docker:stable
+    - docker:19.03.0-dind
   before_script:
     - docker info
   variables:
