@@ -20,7 +20,7 @@ sanity:
   needs:
     - rir_container
   script:
-    - /opt/rir/tools/cppcheck --xml
+    - /opt/rir/tools/cppcheck
     - /opt/rir/build/release/bin/tests
 
 rir_container:
