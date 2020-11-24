@@ -30,7 +30,7 @@ rir_container:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
   services:
-    - docker:19.03.0-dind
+    - docker:stable
   before_script:
     - docker info
   script:
@@ -49,7 +49,7 @@ benchmark_container:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
   services:
-    - docker:19.03.0-dind
+    - docker:stable
   before_script:
     - docker info
   script:
@@ -274,7 +274,7 @@ deploy:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
   services:
-    - docker:19.03.0-dind
+    - docker:stable
   before_script:
     - docker info
   variables:
