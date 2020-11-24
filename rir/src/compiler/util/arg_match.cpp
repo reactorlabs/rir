@@ -29,7 +29,7 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
     // The following code is mostly a copy of Rf_machArgs from main/match.c,
     // where errors have been replaced by 'return false'
     Rboolean seendots;
-    unsigned i, arg_i = 0;
+    size_t i, arg_i = 0;
     SEXP f, a, b, dots, actuals;
 
     actuals = R_NilValue;
