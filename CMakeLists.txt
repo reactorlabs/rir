@@ -27,7 +27,7 @@ if(${MACOS_USE_GCC_9})
     set(CMAKE_CXX_COMPILER /usr/local/bin/g++-9 CACHE PATH "" FORCE)
 endif()
 
-add_definitions(-g3)
+add_definitions(-g3 -fno-strict-overflow)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror")
 set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
