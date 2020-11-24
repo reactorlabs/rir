@@ -1483,7 +1483,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                             RCNTXT* currentContext) {
     size_t excessStack = stackHeight;
 
-    FrameInfo& f = deoptData->frames[pos];
+    const FrameInfo& f = deoptData->frames[pos];
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(ctx, stackHeight);
     auto code = f.code;
@@ -4304,7 +4304,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(printInvocation_) {
-            printf("Invocation count: %d\n", c->funInvocationCount);
+            printf("Invocation count: %u\n", c->funInvocationCount);
             NEXT();
         }
 

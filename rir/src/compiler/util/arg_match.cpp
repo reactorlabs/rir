@@ -9,6 +9,7 @@ namespace pir {
 #define SET_ARGUSED(x, v) SETLEVELS(x, v)
 #define streql(s, t) (!strcmp((s), (t)))
 
+// cppcheck-suppress constParameter
 bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
                               const std::vector<BC::PoolIdx>& actualNames,
                               std::vector<Value*>& givenArgs) {
@@ -188,6 +189,7 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
         }
     } else {
         /* Check that all arguments are used */
+        // cppcheck-suppress unreadVariable
         SEXP unused = R_NilValue, last = R_NilValue;
         for (b = supplied; b != R_NilValue; b = CDR(b))
             if (!ARGUSED(b)) {

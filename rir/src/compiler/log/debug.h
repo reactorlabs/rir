@@ -66,6 +66,9 @@ struct DebugOptions {
     bool includes(const DebugFlags& otherFlags) const {
         return flags.includes(otherFlags);
     }
+    bool includes(const DebugFlag& otherFlag) const {
+        return flags.includes(otherFlag);
+    }
     bool intersects(const DebugFlags& otherFlags) const {
         return flags.intersects(otherFlags);
     }

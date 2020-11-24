@@ -45,8 +45,9 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
         }
         i->eachArg([&](InstrArg& arg) {
             if (arg.val()->isInstruction()) {
-                assert(relocation_table.count(arg.val()));
-                arg.val() = relocation_table.at(arg.val());
+                auto val = arg.val();
+                assert(relocation_table.count(val));
+                arg.val() = relocation_table.at(val);
             }
         });
         if (auto mk = MkArg::Cast(i)) {

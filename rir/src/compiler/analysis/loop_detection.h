@@ -108,7 +108,7 @@ class LoopDetection {
         }
     };
 
-    LoopDetection(Code* code, bool determineNesting = false);
+    explicit LoopDetection(Code* code, bool determineNesting = false);
 
     LoopDetection(const LoopDetection&) = delete;
     LoopDetection& operator=(const LoopDetection&) = delete;

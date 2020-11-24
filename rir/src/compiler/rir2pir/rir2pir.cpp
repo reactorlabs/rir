@@ -376,7 +376,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     bool found = false;
                     // TODO: implement with a find method on register map
                     fb->forEachSlot(
-                        [&](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
+                        [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
                             found = true;
                             auto origin = fb->getOriginOfSlot(i);
                             if (origin == pos && mdEntry.readyForReopt) {

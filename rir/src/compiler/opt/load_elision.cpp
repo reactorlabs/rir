@@ -52,7 +52,8 @@ struct ALoad {
 struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
     AvailableLoads(ClosureVersion* cls, Code* code, LogStream& log)
         : StaticAnalysis("AvailableLoads", cls, code, log) {}
-    AbstractResult apply(IntersectionSet<ALoad>& state, Instruction* i) const {
+    AbstractResult apply(IntersectionSet<ALoad>& state,
+                         Instruction* i) const override {
         AbstractResult res;
         if (auto ld = LdVar::Cast(i)) {
             for (auto& ald : state.available) {

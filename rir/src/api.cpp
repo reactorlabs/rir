@@ -10,6 +10,7 @@
 #include "R/Funtab.h"
 #include "R/Serialize.h"
 #include "compiler/compiler.h"
+#include "compiler/log/debug.h"
 #include "compiler/parameter.h"
 #include "compiler/pir2rir/pir2rir.h"
 #include "compiler/test/PirCheck.h"
@@ -345,7 +346,7 @@ REXPORT SEXP pirCompileWrapper(SEXP what, SEXP name, SEXP debugFlags,
     pir::DebugOptions opts = PirDebug;
 
     if (debugFlags != R_NilValue) {
-        opts.flags = *INTEGER(debugFlags);
+        opts.flags = pir::DebugOptions::DebugFlags(*INTEGER(debugFlags));
     }
     if (debugStyle != R_NilValue) {
         if (!parseDebugStyle(CHAR(PRINTNAME(debugStyle)), opts.style)) {
@@ -424,8 +425,9 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Context& assumptions,
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(closure))
-        return pirCompile(closure, assumptions, n,
-                          PirDebug | pir::DebugFlag::DryRun);
+        return pirCompile(
+            closure, assumptions, n,
+            PirDebug | pir::DebugOptions::DebugFlags(pir::DebugFlag::DryRun));
     else
         return closure;
 }

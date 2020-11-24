@@ -58,6 +58,7 @@ class PassScheduler {
     Schedule schedule_;
     Schedule::Phases::iterator currentPhase;
 
+    // cppcheck-suppress unusedPrivateFunction
     void add(std::unique_ptr<const Pass>&&);
 
     template <typename PASS>

@@ -175,12 +175,9 @@ struct Context {
         if (missing != other.missing) {
 
             auto minContext = this;
-            auto maxContext = &other;
 
             if (missing > other.missing) {
-                auto temp = minContext;
-                minContext = maxContext;
-                maxContext = temp;
+                minContext = &other;
             }
 
             if (minContext->flags.contains(

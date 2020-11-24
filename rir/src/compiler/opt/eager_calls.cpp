@@ -24,11 +24,11 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         assert(cp);
 
         // skip ldfun
-        ip++;
+        ++ip;
 
         auto expected = new LdConst(builtin);
         ip = bb->insert(ip, expected);
-        ip++;
+        ++ip;
         Instruction* given = ldfun;
 
         // We use ldvar instead of ldfun for the guard. The reason is that ldfun
@@ -45,16 +45,16 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             (funEnv && funEnv->rho == R_GlobalEnv)) {
             given = new LdVar(ldfun->varName, ldfun->env());
             ip = bb->insert(ip, given);
-            ip++;
+            ++ip;
         }
 
         auto test = new Identical(given, expected);
         ip = bb->insert(ip, test);
-        ip++;
+        ++ip;
 
         auto assume = new Assume(test, cp);
         ip = bb->insert(ip, assume);
-        ip++;
+        ++ip;
 
         return ip;
     };
@@ -81,7 +81,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 ip = bb->insert(
                     ip, new Force(a, call->env(), Tombstone::framestate()));
                 args.push_back(*ip);
-                ip++;
+                ++ip;
             } else {
                 args.push_back(a);
             }

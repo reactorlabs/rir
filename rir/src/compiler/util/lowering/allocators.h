@@ -346,16 +346,18 @@ class SSAAllocator {
                         }
                         if (slot == stackSlot) {
                             bool found = false;
-                            for (auto it = stack.begin(); it != stack.end();
-                                 ++it) {
+                            auto it = stack.begin();
+                            while (it != stack.end()) {
+                                auto next = it + 1;
                                 phi->eachArg([&](BB* phiInput, Value* phiArg) {
                                     if (phiInput == pred && phiArg == *it) {
-                                        stack.erase(it);
+                                        next = stack.erase(it);
                                         found = true;
                                     }
                                 });
                                 if (found)
                                     break;
+                                it = next;
                             }
                             if (!found) {
                                 std::cerr << "REG alloc fail: phi ";
