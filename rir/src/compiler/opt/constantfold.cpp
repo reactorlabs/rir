@@ -412,6 +412,21 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         anyChange = true;
                         i->replaceUsesAndSwapWith(new LdConst(1), ip);
                     }
+                } else if (builtinId == blt("list")) {
+                    bool allConst = true;
+                    i->eachArg([&](Value* v) {
+                        if (!LdConst::Cast(v))
+                            allConst = false;
+                    });
+                    if (allConst) {
+                        auto list = Rf_allocVector(VECSXP, i->nargs());
+                        auto pos = 0;
+                        i->eachArg([&](Value* v) {
+                            VECTOR_ELT(list, pos++) = LdConst::Cast(v)->c();
+                        });
+                        anyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(list), ip);
+                    }
                 } else if (builtinId == blt("as.character") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(PirType(RType::str)
