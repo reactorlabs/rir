@@ -98,8 +98,7 @@ struct ObservedTest {
                 seen = Both;
             return;
         }
-        if (seen != Both)
-            seen = Both;
+        seen = Both;
     }
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),

@@ -71,7 +71,7 @@ struct DispatchTable
         setEntry(0, f->container());
     }
 
-    bool contains(const Context& assumptions) {
+    bool contains(const Context& assumptions) const {
         for (size_t i = 0; i < size(); ++i)
             if (get(i)->context() == assumptions)
                 return true;
@@ -162,9 +162,9 @@ struct DispatchTable
     }
 
     static DispatchTable* create(size_t capacity = 20) {
-        size_t size =
+        size_t sz =
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
-        SEXP s = Rf_allocVector(EXTERNALSXP, size);
+        SEXP s = Rf_allocVector(EXTERNALSXP, sz);
         return new (INTEGER(s)) DispatchTable(capacity);
     }
 

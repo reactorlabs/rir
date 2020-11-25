@@ -5,5 +5,10 @@ constStatement
 // We need to suppress alloca obsolote warnings while we
 // use it as a dynamic cache strategy
 allocaCalled
-// Broken with closures
+// this is annoying
+useStlAlgorithm
+shadowVariable
+shadowFunction
+shadowArgument
 knownConditionTrueFalse
+toomanyconfigs

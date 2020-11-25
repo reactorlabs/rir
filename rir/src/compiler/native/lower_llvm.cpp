@@ -1773,14 +1773,12 @@ llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
 }
 llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
     if (v->getType() == t::Int) {
-        if (false) {
-            std::ostringstream dbg;
-            (*currentInstr)->printRecursive(dbg, 2);
-            auto l = new std::string;
-            l->append(dbg.str());
-            return call(NativeBuiltins::newIntDebug,
-                        {v, c((unsigned long)l->data())});
-        }
+        // std::ostringstream dbg;
+        // (*currentInstr)->printRecursive(dbg, 2);
+        // auto l = new std::string;
+        // l->append(dbg.str());
+        // return call(NativeBuiltins::newIntDebug,
+        //             {v, c((unsigned long)l->data())});
         return call(NativeBuiltins::newInt, {v});
     }
     assert(v->getType() == t::Double);
@@ -5370,10 +5368,8 @@ bool LowerFunctionLLVM::tryCompile() {
                 // std::cerr << "Can't compile ";
                 // i->print(std::cerr, true);
                 // std::cerr << "\n";
-            }
-
-            if (!success)
                 return;
+            }
 
             // Here we directly access the variable to bypass liveness
             // checks when loading the variable. This is ok, since this is

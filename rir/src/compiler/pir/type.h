@@ -156,13 +156,14 @@ struct PirType {
     constexpr PirType() : flags_(topRTypeFlags()), t_(RTypeSet()) {}
 
     // cppcheck-suppress noExplicitConstructor
-    constexpr PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    constexpr PirType(const RType& t)
+        : flags_(defaultRTypeFlags()), t_(RTypeSet(t)) {}
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
     constexpr PirType(const RTypeSet& t, const FlagSet& f) : flags_(f), t_(t) {}
 
     // cppcheck-suppress noExplicitConstructor
-    constexpr PirType(const NativeType& t) : t_(t) {}
+    constexpr PirType(const NativeType& t) : t_(NativeTypeSet(t)) {}
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const NativeTypeSet& t) : t_(t) {}
 
@@ -171,7 +172,7 @@ struct PirType {
         : flags_(other.flags_), t_(other.t_) {}
     explicit PirType(const void* pos);
 
-    constexpr PirType& operator=(const PirType& o) {
+    PirType& operator=(const PirType& o) {
         flags_ = o.flags_;
         if (isRType())
             t_.r = o.t_.r;

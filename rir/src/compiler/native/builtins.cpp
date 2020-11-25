@@ -2235,6 +2235,7 @@ int forSeqSizeImpl(SEXP seq) {
         res = Rf_length(seq);
     } else {
         Rf_errorcall(R_NilValue, "invalid for() loop sequence");
+        return 0;
     }
     // TODO: Even when the for loop sequence is an object, R won't
     // dispatch on it. Since in RIR we use the normals extract2_1

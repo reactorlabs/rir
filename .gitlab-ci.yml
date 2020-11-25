@@ -20,7 +20,7 @@ sanity:
   needs:
     - rir_container
   script:
-    - /opt/rir/tools/cppcheck --xml
+    - /opt/rir/tools/cppcheck
     - /opt/rir/build/release/bin/tests
 
 rir_container:
@@ -28,7 +28,7 @@ rir_container:
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
   services:
     - docker:19.03.0-dind
   before_script:
@@ -38,7 +38,7 @@ rir_container:
     - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   tags:
-    - build
+    - dockerInDocker
 
 benchmark_container:
   stage: Build benchmark container
@@ -47,11 +47,13 @@ benchmark_container:
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
   services:
     - docker:19.03.0-dind
   before_script:
     - docker info
+  tags:
+    - dockerInDocker
   script:
     - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
     - cd container/benchmark
@@ -272,7 +274,7 @@ deploy:
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
   services:
     - docker:19.03.0-dind
   before_script:
@@ -287,6 +289,8 @@ deploy:
     - docker pull registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
     - docker tag registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA registry.gitlab.com/rirvm/rir_mirror/benchmark:master
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:master
+  tags:
+    - dockerInDocker
   only:
     - master
 

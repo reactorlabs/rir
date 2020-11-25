@@ -523,10 +523,12 @@ class InstructionImplementation : public Instruction {
 
   public:
     InstructionImplementation(PirType resultType, unsigned srcIdx)
-        : Instruction(ITAG, resultType, INITIAL_EFFECTS, srcIdx), args_({}) {}
+        : Instruction(ITAG, resultType, Effects(INITIAL_EFFECTS), srcIdx),
+          args_({}) {}
     InstructionImplementation(PirType resultType, const ArgStore& args,
                               unsigned srcIdx)
-        : Instruction(ITAG, resultType, INITIAL_EFFECTS, srcIdx), args_(args) {}
+        : Instruction(ITAG, resultType, Effects(INITIAL_EFFECTS), srcIdx),
+          args_(args) {}
 
     InstructionImplementation& operator=(InstructionImplementation&) = delete;
     InstructionImplementation() = delete;
@@ -612,7 +614,7 @@ class FixedLenInstruction
         return arg(POS);
     }
 
-    FixedLenInstruction(PirType resultType, unsigned srcIdx = 0)
+    explicit FixedLenInstruction(PirType resultType, unsigned srcIdx = 0)
         : Super(resultType, {}, srcIdx) {
         static_assert(ARGS == 0, "This instruction expects more arguments");
     }
@@ -708,7 +710,7 @@ class VarLenInstruction
         args_.pop_back();
     }
 
-    VarLenInstruction(PirType return_type, unsigned srcIdx = 0)
+    explicit VarLenInstruction(PirType return_type, unsigned srcIdx = 0)
         : Super(return_type, srcIdx) {}
 };
 
@@ -1220,8 +1222,9 @@ class FLIE(Force, 3, Effects::Any()) {
         return type & getType(input()).forced();
     }
     Effects inferEffects(const GetType& getType) const override final {
-        auto e =
-            getType(input()).maybeLazy() ? effects : Effect::DependsOnAssume;
+        auto e = getType(input()).maybeLazy()
+                     ? effects
+                     : Effects(Effect::DependsOnAssume);
         if (auto mk = MkArg::Cast(input()->followCastsAndForce())) {
             if (mk->noReflection)
                 e.reset(Effect::Reflection);
@@ -2271,14 +2274,14 @@ class VLIE(MkEnv, Effects::None()) {
         : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names),
           missing(missing) {
         for (unsigned i = 0; i < varName.size(); ++i) {
-            pushArg(args[i], PirType::any());
+            MkEnv::pushArg(args[i], PirType::any());
         }
     }
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args)
         : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names) {
         for (unsigned i = 0; i < varName.size(); ++i) {
-            pushArg(args[i], PirType::any());
+            MkEnv::pushArg(args[i], PirType::any());
         }
     }
 

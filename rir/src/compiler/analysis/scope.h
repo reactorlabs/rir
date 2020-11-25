@@ -113,9 +113,13 @@ class ScopeAnalysis
 
     // Default
     ScopeAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
-        : StaticAnalysis("Scope", cls, code, log), depth(0) {
-        globalState = globalStateStore = new ScopeAnalysisResults;
+        : StaticAnalysis("Scope", cls, code, log), depth(0),
+          globalStateStore(new ScopeAnalysisResults) {
+        globalState = globalStateStore;
     }
+
+    ScopeAnalysis(const ScopeAnalysis&) = delete;
+    ScopeAnalysis& operator=(const ScopeAnalysis& other) = delete;
 
     ~ScopeAnalysis() {
         if (globalStateStore)

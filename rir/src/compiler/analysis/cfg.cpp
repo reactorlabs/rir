@@ -156,10 +156,10 @@ DominanceGraph::DominanceGraph(Code* start) : idom(start->nextBBId) {
 
     // Note that this is an overapproximation of the actual number of BBs,
     // because some BBs may have been deleted.
-    int size = start->nextBBId;
+    size_t size = start->nextBBId;
 
     // Counter for numbering BBs, by depth-first search order.
-    int N = 0;
+    size_t N = 0;
 
     // Indexed by BB id. `dfnum[n->id]` is the dfnum of node `n`.
     std::vector<int> dfnum(size);
@@ -268,7 +268,7 @@ DominanceGraph::DominanceGraph(Code* start) : idom(start->nextBBId) {
 
     // Step 2. Iterate over nodes (skipping the root) in descending dfnum
     // order.
-    for (int i = N - 1; i >= 1; --i) {
+    for (size_t i = N - 1; i >= 1; --i) {
         BB* n = vertex[i];
         BB* p = parent[n->id];
 
@@ -336,7 +336,7 @@ DominanceGraph::DominanceGraph(Code* start) : idom(start->nextBBId) {
 
     // Step 4. Iterate over the nodes (skipping the root) in ascending dfnum
     // order.
-    for (int i = 1; i < N; ++i) {
+    for (size_t i = 1; i < N; ++i) {
         BB* n = vertex[i];
         // Perform the deferred dominator calculations, based on the second
         // clause of the Dominator Theorem.

@@ -74,8 +74,8 @@ static bool instructionOverwritesBinding(Instruction* i, Value* origin,
     return false;
 }
 
-static bool loopOverwritesBinding(LoopDetection::Loop& loop, Value* origin,
-                                  SEXP binding) {
+static bool loopOverwritesBinding(const LoopDetection::Loop& loop,
+                                  Value* origin, SEXP binding) {
     for (auto bb : loop) {
         for (auto instruction : *bb) {
             if (instructionOverwritesBinding(instruction, origin, binding))
@@ -86,7 +86,8 @@ static bool loopOverwritesBinding(LoopDetection::Loop& loop, Value* origin,
 }
 
 static bool replaceWithOuterLoopEquivalent(Instruction* instruction,
-                                           DominanceGraph& dom, BB* start) {
+                                           const DominanceGraph& dom,
+                                           BB* start) {
     std::vector<Instruction*> betweenLoadandLoop;
     Instruction* found = nullptr;
     auto current = start;

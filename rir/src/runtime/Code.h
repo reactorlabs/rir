@@ -187,8 +187,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void print(std::ostream&) const;
 
     static size_t extraPtrOffset() {
-        static Code* c = 0;
-        return (uintptr_t)&c->locals_;
+        static Code* c = (Code*)malloc(sizeof(Code));
+        assert(c);
+        return (uintptr_t)&c->locals_ - (uintptr_t)c;
     }
 
   private:

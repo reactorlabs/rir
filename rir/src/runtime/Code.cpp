@@ -13,7 +13,7 @@ std::unordered_map<UUID, Code*> allCodes;
 
 Code* Code::withUid(UUID uid) { return allCodes.at(uid); }
 
-// cppcheck-suppress uninitMemberVar symbol=data
+// cppcheck-suppress uninitMemberVar; symbol=data
 Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
            unsigned sourceLength, size_t localsCnt, size_t bindingsCnt)
     : RirRuntimeObject(
@@ -149,7 +149,8 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     if (auto map = pirTypeFeedback()) {
-        map->forEachSlot([&](size_t i, PirTypeFeedback::MDEntry& mdEntry) {
+        map->forEachSlot([&](size_t i,
+                             const PirTypeFeedback::MDEntry& mdEntry) {
             auto feedback = mdEntry.feedback;
             out << " - slot #" << i << ": " << mdEntry.offset << " : [";
             feedback.print(out);

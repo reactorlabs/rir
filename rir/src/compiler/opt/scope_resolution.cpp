@@ -19,11 +19,13 @@ using namespace rir::pir;
 // Checks (using the local state of the caller) if forcing a promise can have
 // reflective effects
 static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
-                         ScopeAnalysis& analysis, ScopeAnalysisState& state) {
+                         const ScopeAnalysis& analysis,
+                         const ScopeAnalysisState& state) {
     // Note that the entry block is empty and jumps to the next block; this is
     // to ensure that it has no predecessors.
     auto entry = code->entry;
-    assert(entry->isEmpty() && entry->isJmp() && !entry->next()->isEmpty());
+    assert(entry->isEmpty() && entry->isJmp() &&
+           !((const BB*)entry)->next()->isEmpty());
     auto funEnv = LdFunctionEnv::Cast(*entry->next()->begin());
 
     return Visitor::check(code->entry, [&](Instruction* i) {

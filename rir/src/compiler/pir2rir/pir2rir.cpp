@@ -95,7 +95,7 @@ class Pir2Rir {
 
             auto plus = [](std::list<RIRInstruction>::iterator it, int n) {
                 while (n--)
-                    it++;
+                    ++it;
                 return it;
             };
 

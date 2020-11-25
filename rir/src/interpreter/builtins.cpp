@@ -97,7 +97,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(!call.hasNames());
 
     static constexpr size_t MAXARGS = 8;
-    std::array<SEXP, MAXARGS> args;
+    SEXP args[MAXARGS];
     auto nargs = call.suppliedArgs;
 
     if (nargs > MAXARGS)
@@ -306,7 +306,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 1)
             return nullptr;
         auto x = args[0];
-        SEXP s = R_NilValue;
+        SEXP s;
         if (isInteger(x) || isLogical(x)) {
             /* integer or logical ==> return integer,
                factor was covered by Math.factor. */
@@ -348,8 +348,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 2)
             return nullptr;
 
-        auto a = args[0];
-        auto b = args[1];
+        SEXP a = args[0];
+        SEXP b = args[1];
 
         if (XLENGTH(a) != 1 || XLENGTH(b) != 1)
             return nullptr;
@@ -393,8 +393,10 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     case blt("as.character"): {
         if (nargs != 1)
             return nullptr;
-        if (TYPEOF(args[0]) == STRSXP)
-            return args[0];
+        if (TYPEOF(args[0]) == STRSXP) {
+            SEXP r = args[0];
+            return r;
+        }
         if (IS_SIMPLE_SCALAR(args[0], INTSXP)) {
             auto i = INTEGER(args[0])[0];
             if (i >= 0 && i < 1000) {
@@ -409,7 +411,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
                     ENSURE_NAMEDMAX(res);
                     stringCache[i] = res;
                 }
-                return stringCache[i];
+                SEXP r = stringCache[i];
+                return r;
             }
             if (i > -10000 && i < 100000) {
                 char buf[6];
@@ -426,8 +429,10 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     case blt("as.integer"): {
         if (nargs != 1)
             return nullptr;
-        if (TYPEOF(args[0]) == INTSXP)
-            return args[0];
+        if (TYPEOF(args[0]) == INTSXP) {
+            SEXP r = args[0];
+            return r;
+        }
         break;
     }
 

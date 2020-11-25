@@ -311,9 +311,9 @@ class DeadStoreAnalysis {
                         state.partiallyObserved.insert(var);
                         effect.update();
                     }
-                    auto i = state.ignoreStore.find(var);
-                    if (i != state.ignoreStore.end()) {
-                        state.ignoreStore.erase(i);
+                    auto j = state.ignoreStore.find(var);
+                    if (j != state.ignoreStore.end()) {
+                        state.ignoreStore.erase(j);
                         effect.update();
                     }
                 }

@@ -5,7 +5,6 @@
 
 #include "R/Funtab.h"
 #include "R/RList.h"
-#include "R/Sexp.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 
@@ -38,10 +37,14 @@ static bool isConstant(SEXP exp) {
 }
 
 static bool containsLoop(SEXP exp) {
-    Match(exp) {
-        Case(LANGSXP, fun, args_) {
-            if (TYPEOF(fun) != SYMSXP) {
-                return false;
+    if (TYPEOF(exp) != LANGSXP)
+        return false;
+
+    auto fun = CAR(exp);
+    auto args_ = CDR(exp);
+
+    if (TYPEOF(fun) != SYMSXP) {
+        return false;
             } else if (fun == symbol::Repeat) {
                 return true;
             } else if (fun == symbol::While) {
@@ -56,12 +59,6 @@ static bool containsLoop(SEXP exp) {
                 res = res || containsLoop(*e);
             }
             return res;
-        }
-        Else({
-            return false;
-        })
-    }
-    assert(false);
 }
 
 class CompilerContext {
@@ -243,11 +240,15 @@ void emitGuardForNamePrimitive(CodeStream& cs, SEXP fun) {
  */
 bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
                       SEXP body, bool voidContext) {
-    Match(seq) {
-        Case(LANGSXP, fun, argsSexp) {
-            RList args(argsSexp);
-            if (fun != symbol::Colon || args.length() != 2) {
-                return false;
+    if (TYPEOF(seq) != LANGSXP)
+        return false;
+
+    auto fun = CAR(seq);
+    auto argsSexp = CDR(seq);
+
+    RList args(argsSexp);
+    if (fun != symbol::Colon || args.length() != 2) {
+        return false;
             }
 
             // for(i in m:n) {
@@ -316,9 +317,11 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
                 size_t bodyPromIdx = cs.addPromise(bodyProm);
 
                 // 3) Add the function, arguments, and call
-                Context assumptions = Context() | TypeAssumption::Arg0IsEager_ |
-                                      Assumption::CorrectOrderOfArguments |
-                                      Assumption::NotTooManyArguments;
+                Context assumptions;
+                assumptions.setEager(0);
+                assumptions.add(Assumption::CorrectOrderOfArguments);
+                assumptions.add(Assumption::NotTooManyArguments);
+
                 cs << BC::ldfun(symbol::For) << BC::swap()
                    << BC::mkEagerPromise(seqPromIdx)
                    << BC::mkPromise(bodyPromIdx)
@@ -381,14 +384,6 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
                 cs << BC::push(R_NilValue) << BC::invisible();
             cs << endBranch;
             return true;
-            // clang-format off
-        }
-        Else({ 
-            return false;
-        })
-    }
-    // clang-format on
-    assert(false);
 }
 
 // A very conservative estimation if the ast could contain an assignment, or
@@ -571,45 +566,47 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // 1) Verify lhs is valid
         SEXP l = lhs;
         while (l) {
-            Match(l) {
-                Case(LANGSXP, fun, args) {
-                    if (TYPEOF(fun) == SYMSXP) {
-                        l = CAR(args);
-                    } else {
-                        // Cant rewrite this statically...
-                        return false;
-                    }
-                }
-                Case(SYMSXP) { l = nullptr; }
-                Case(STRSXP) { l = nullptr; }
-                Else({
-                    // Probably broken assignment
+            switch (TYPEOF(l)) {
+            case LANGSXP: {
+                auto fun = CAR(l);
+                auto args = CDR(l);
+                if (TYPEOF(fun) == SYMSXP) {
+                    l = CAR(args);
+                } else {
+                    // Cant rewrite this statically...
                     return false;
-                })
+                }
+            } break;
+            case SYMSXP:
+                l = nullptr;
+                break;
+            case STRSXP:
+                l = nullptr;
+                break;
+            default:
+                // Probably broken assignment
+                return false;
             }
         }
 
         // 2) Specialcalse normal assignment (ie. "i <- expr")
-        Match(lhs) {
-            Case(SYMSXP) {
-                emitGuardForNamePrimitive(cs, fun);
-                compileExpr(ctx, rhs);
-                if (!voidContext) {
-                    // No ensureNamed needed, stvar already ensures named
-                    cs << BC::dup() << BC::invisible();
-                }
-                if (superAssign) {
-                    cs << BC::stvarSuper(lhs);
-                } else {
-                    if (ctx.code.top()->isCached(lhs))
-                        cs << BC::stvarCached(
-                            lhs, ctx.code.top()->cacheSlotFor(lhs));
-                    else
-                        cs << BC::stvar(lhs);
-                }
-                return true;
+        if (TYPEOF(lhs) == SYMSXP) {
+            emitGuardForNamePrimitive(cs, fun);
+            compileExpr(ctx, rhs);
+            if (!voidContext) {
+                // No ensureNamed needed, stvar already ensures named
+                cs << BC::dup() << BC::invisible();
             }
-            Else(break)
+            if (superAssign) {
+                cs << BC::stvarSuper(lhs);
+            } else {
+                if (ctx.code.top()->isCached(lhs))
+                    cs << BC::stvarCached(lhs,
+                                          ctx.code.top()->cacheSlotFor(lhs));
+                else
+                    cs << BC::stvar(lhs);
+            }
+            return true;
         }
 
         // Find all parts of the lhs
@@ -617,24 +614,26 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         l = lhs;
         std::vector<SEXP> lhsParts;
         while (!target) {
-            Match(l) {
-                Case(LANGSXP, fun, args) {
-                    assert(TYPEOF(fun) == SYMSXP);
-                    lhsParts.push_back(l);
-                    l = CAR(args);
-                }
-                Case(SYMSXP) {
-                    lhsParts.push_back(l);
-                    target = l;
-                }
-                Case(STRSXP) {
-                    assert(Rf_length(l) == 1);
-                    target = Rf_install(CHAR(STRING_ELT(l, 0)));
-                    lhsParts.push_back(target);
-                }
-                Else({
-                    errorcall(ast, "invalid (do_set) left-hand side to assignment");
-                })
+            switch (TYPEOF(l)) {
+            case LANGSXP: {
+                auto fun = l->u.listsxp.carval;
+                auto args = l->u.listsxp.cdrval;
+                assert(TYPEOF(fun) == SYMSXP);
+                lhsParts.push_back(l);
+                l = CAR(args);
+            } break;
+            case SYMSXP: {
+                lhsParts.push_back(l);
+                target = l;
+            } break;
+            case STRSXP: {
+                assert(Rf_length(l) == 1);
+                target = Rf_install(CHAR(STRING_ELT(l, 0)));
+                lhsParts.push_back(target);
+            } break;
+            default:
+                errorcall(ast, "invalid (do_set) left-hand side to assignment");
+                break;
             }
         }
 
@@ -1307,17 +1306,14 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     // LHS ( ARGS )
 
     // LHS can either be an identifier or an expression
-    Match(fun) {
-        Case(SYMSXP) {
-            if (compileSpecialCall(ctx, ast, fun, args, voidContext))
-                return;
+    if (TYPEOF(fun) == SYMSXP) {
+        if (compileSpecialCall(ctx, ast, fun, args, voidContext))
+            return;
 
-            cs << BC::ldfun(fun);
-        }
-        Else({
-            compileExpr(ctx, fun);
-            cs << BC::checkClosure();
-        });
+        cs << BC::ldfun(fun);
+    } else {
+        compileExpr(ctx, fun);
+        cs << BC::checkClosure();
     }
 
     if (Compiler::profile)
@@ -1364,43 +1360,51 @@ void compileConst(CodeStream& cs, SEXP constant) {
 
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
     // Dispatch on the current type of AST node
-    Match(exp) {
+    switch (TYPEOF(exp)) {
         // Function application
-        Case(LANGSXP, fun, args) {
-            compileCall(ctx, exp, fun, args, voidContext);
-        }
+    case LANGSXP: {
+
+        auto fun = CAR(exp);
+        auto args = CDR(exp);
+        compileCall(ctx, exp, fun, args, voidContext);
+    } break;
         // Variable lookup
-        Case(SYMSXP) {
-            compileGetvar(ctx, exp);
-            if (voidContext)
-                ctx.cs() << BC::pop();
+    case SYMSXP:
+        compileGetvar(ctx, exp);
+        if (voidContext)
+            ctx.cs() << BC::pop();
+        break;
+    case PROMSXP: {
+        auto expr = PREXPR(exp);
+        // TODO: honestly I do not know what should be the semantics of
+        //       this shit.... For now force it here and see what
+        //       breaks...
+        //       * One of the callers that does this is eg. print.c:1013
+        //       * Another (a bit more sane) producer of this kind of ast
+        //         is eval.c::applydefine (see rhsprom). At least there
+        //         the prom is already evaluated and only used to attach
+        //         the expression to the already evaled value
+        if (!voidContext) {
+            SEXP val = evaluatePromise(exp);
+            Protect p(val);
+            compileConst(ctx.cs(), val);
+            ctx.cs().addSrc(expr);
         }
-        Case(PROMSXP, value, expr) {
-            // TODO: honestly I do not know what should be the semantics of
-            //       this shit.... For now force it here and see what
-            //       breaks...
-            //       * One of the callers that does this is eg. print.c:1013
-            //       * Another (a bit more sane) producer of this kind of ast
-            //         is eval.c::applydefine (see rhsprom). At least there
-            //         the prom is already evaluated and only used to attach
-            //         the expression to the already evaled value
-            if (!voidContext) {
-                SEXP val = evaluatePromise(exp);
-                Protect p(val);
-                compileConst(ctx.cs(), val);
-                ctx.cs().addSrc(expr);
-            }
-        }
-        Case(BCODESXP) { assert(false); }
-        Case(EXTERNALSXP) { assert(false); }
+    } break;
+    case BCODESXP:
+    case EXTERNALSXP:
+        assert(false);
+        break;
         // TODO : some code (eg. serialize.c:2154) puts closures into asts...
         //        not sure how we want to handle it...
         // Case(CLOSXP) {
         //     assert(false);
         // }
 
-        // Constant
-        Else(if (!voidContext) compileConst(ctx.cs(), exp));
+    default:
+        if (!voidContext)
+            compileConst(ctx.cs(), exp);
+        break;
     }
 }
 

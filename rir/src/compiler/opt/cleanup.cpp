@@ -20,7 +20,7 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
     std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
     std::deque<Promise*> todoUsedProms;
 
-    DeadInstructions dead(code, 3, Effect::Visibility,
+    DeadInstructions dead(code, 3, Effects(Effect::Visibility),
                           DeadInstructions::IgnoreUpdatePromise);
 
     bool anyChange = false;
