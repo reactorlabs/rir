@@ -106,10 +106,31 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     bool hasAttrib = false;
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = call.stackArg(i);
+        auto prom = arg;
         if (TYPEOF(arg) == PROMSXP)
             arg = PRVALUE(arg);
-        if (arg == R_UnboundValue || arg == R_MissingArg)
+        // Try to lookup simple expr in env
+        if (arg == R_UnboundValue) {
+            SEXP sym = nullptr;
+            auto pr = Code::check(PREXPR(prom));
+            if (TYPEOF(PREXPR(prom)) == SYMSXP) {
+                sym = PREXPR(prom);
+            } else if (pr) {
+                sym = pr->trivialExpr;
+            }
+            if (sym) {
+                if (auto le = LazyEnvironment::check(prom->u.promsxp.env)) {
+                    arg = le->getArg(sym);
+                } else {
+                    arg = Rf_findVar(sym, PRENV(prom));
+                }
+            }
+            if (TYPEOF(arg) == PROMSXP)
+                arg = PRVALUE(arg);
+        }
+        if (arg == R_UnboundValue || arg == R_MissingArg) {
             return nullptr;
+        }
         if (ATTRIB(arg) != R_NilValue)
             hasAttrib = true;
         args[i] = arg;
@@ -138,6 +159,10 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 1)
             return nullptr;
         return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
+    }
+
+    case blt("baseenv"): {
+        return R_BaseEnv;
     }
     }
 
@@ -169,15 +194,21 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 1)
             return nullptr;
 
+        size_t res;
         switch (TYPEOF(args[0])) {
         case INTSXP:
         case REALSXP:
         case LGLSXP:
-            return Rf_ScalarInteger(XLENGTH(args[0]));
+        case STRSXP:
+            res = XLENGTH(args[0]);
+            break;
         default:
-            return nullptr;
+            res = Rf_length(args[0]);
+            break;
         }
-        assert(false);
+        if (res >= INT_MAX)
+            return Rf_ScalarReal(res);
+        return Rf_ScalarInteger(res);
     }
 
     case blt("c"): {
@@ -519,13 +550,49 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     }
 
     case blt("is.vector"): {
-        if (nargs != 1)
+        if (nargs < 1 || nargs > 2)
             return nullptr;
 
+        bool any = true;
+        if (nargs == 2) {
+            if (!isString(args[1]) || LENGTH(args[1]) != 1)
+                return nullptr;
+            auto stype = CHAR(STRING_ELT(args[1], 0));
+            if (std::string("any") == stype) {
+            } else if (std::string("numeric") == stype) {
+                any = false;
+            } else {
+                return nullptr;
+            }
+        }
+
         auto arg = args[0];
-        if (XLENGTH(arg) != 1)
+        auto res = any ? isVector(arg) : (isNumeric(arg) && !isLogical(arg));
+
+        auto a = ATTRIB(arg);
+        if (res && a != R_NilValue) {
+            while (a != R_NilValue) {
+                if (TAG(a) != R_NamesSymbol) {
+                    res = FALSE;
+                    break;
+                }
+                a = CDR(a);
+            }
+        }
+        return res ? R_TrueValue : R_FalseValue;
+    }
+
+    case blt("as.logical"): {
+        if (nargs != 1)
             return nullptr;
-        return TYPEOF(arg) == VECSXP ? R_TrueValue : R_FalseValue;
+        auto arg = args[0];
+        if (TYPEOF(arg) != LGLSXP)
+            return nullptr;
+        if (ATTRIB(arg) == R_NilValue)
+            return arg;
+        arg = MAYBE_REFERENCED(arg) ? duplicate(arg) : arg;
+        CLEAR_ATTRIB(arg);
+        return arg;
     }
 
     case blt("list"): {
@@ -660,6 +727,7 @@ bool supportsFastBuiltinCall(SEXP b) {
     case blt("bitwiseXor"):
     case blt("bitwiseShiftL"):
     case blt("bitwiseShiftR"):
+    case blt("baseenv"):
         return true;
     default: {}
     }

@@ -22,6 +22,8 @@
 
 #define NOT_IMPLEMENTED assert(false)
 
+#define DEBUG_SLOWCASES 1
+
 #undef eval
 
 extern "C" {

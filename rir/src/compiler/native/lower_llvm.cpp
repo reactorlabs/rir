@@ -2806,10 +2806,8 @@ bool LowerFunctionLLVM::tryCompile() {
                     switch (b->builtinId) {
                     case blt("length"):
                         if (irep == t::SEXP) {
-
                             llvm::Value* r = call(NativeBuiltins::length, {a});
                             if (orep == t::SEXP) {
-                               
                                 r = createSelect2(
                                     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
                                     [&]() {
