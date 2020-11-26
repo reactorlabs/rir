@@ -111,6 +111,9 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             arg = PRVALUE(arg);
         // Try to lookup simple expr in env
         if (arg == R_UnboundValue) {
+            auto le = LazyEnvironment::check(prom->u.promsxp.env);
+            if (!le)
+                return nullptr;
             SEXP sym = nullptr;
             auto pr = Code::check(PREXPR(prom));
             if (TYPEOF(PREXPR(prom)) == SYMSXP) {
@@ -118,13 +121,9 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             } else if (pr) {
                 sym = pr->trivialExpr;
             }
-            if (sym) {
-                if (auto le = LazyEnvironment::check(prom->u.promsxp.env)) {
-                    arg = le->getArg(sym);
-                } else {
-                    arg = Rf_findVar(sym, PRENV(prom));
-                }
-            }
+            if (!sym)
+                return nullptr;
+            arg = le->getArg(sym);
             if (TYPEOF(arg) == PROMSXP)
                 arg = PRVALUE(arg);
         }
