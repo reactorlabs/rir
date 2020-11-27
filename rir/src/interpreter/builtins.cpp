@@ -106,30 +106,10 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     bool hasAttrib = false;
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = call.stackArg(i);
-        auto prom = arg;
         if (TYPEOF(arg) == PROMSXP)
             arg = PRVALUE(arg);
-        // Try to lookup simple expr in env
-        if (arg == R_UnboundValue) {
-            auto le = LazyEnvironment::check(prom->u.promsxp.env);
-            if (!le)
-                return nullptr;
-            SEXP sym = nullptr;
-            auto pr = Code::check(PREXPR(prom));
-            if (TYPEOF(PREXPR(prom)) == SYMSXP) {
-                sym = PREXPR(prom);
-            } else if (pr) {
-                sym = pr->trivialExpr;
-            }
-            if (!sym)
-                return nullptr;
-            arg = le->getArg(sym);
-            if (TYPEOF(arg) == PROMSXP)
-                arg = PRVALUE(arg);
-        }
-        if (arg == R_UnboundValue || arg == R_MissingArg) {
+        if (arg == R_UnboundValue || arg == R_MissingArg)
             return nullptr;
-        }
         if (ATTRIB(arg) != R_NilValue)
             hasAttrib = true;
         args[i] = arg;
