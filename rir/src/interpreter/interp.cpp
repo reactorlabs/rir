@@ -417,7 +417,7 @@ static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
 
 // Recreate an arglist after matching to formals
 static RIR_INLINE SEXP createLegacyArgsListFromMatchedStackValues(
-    CallContext& call, InterpreterInstance* ctx) {
+    CallContext const& call, InterpreterInstance* ctx) {
 
     SEXP result = R_NilValue;
     SEXP pos = result;

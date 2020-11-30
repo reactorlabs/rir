@@ -2202,7 +2202,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     void eachUnorderedArg(const UnorderedArgIterator& it) {
         std::vector<Value*> callArgs;
         std::vector<SEXP> callNames;
-        auto& names = cls_->formals().names();
+        auto const& names = cls_->formals().names();
         size_t i = 0;
         eachCallArg([&](Value* v) {
             auto name = names[i++];

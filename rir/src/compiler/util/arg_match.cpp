@@ -33,7 +33,7 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
     // wrapper is used and the unused argument list is not built.
     Rboolean seendots;
     size_t arg_i = 0;
-    SEXP f, a, b, dots, actuals;
+    SEXP f, a, b, actuals;
 
     actuals = R_NilValue;
     for (f = formals; f != R_NilValue; f = CDR(f), arg_i++) {
@@ -101,7 +101,7 @@ bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
         /* An exact match is required after first ... */
         /* The location of the first ... is saved in "dots" */
 
-        dots = R_NilValue;
+        SEXP dots = R_NilValue;
         seendots = FALSE;
         f = formals;
         a = actuals;
