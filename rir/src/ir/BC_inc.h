@@ -689,10 +689,12 @@ BC_NOARGS(V, _)
         case Opcode::call_:
         case Opcode::named_call_:
         case Opcode::call_dots_:
-            memcpy(&immediate.callFixedArgs, pc, sizeof(CallFixedArgs));
+            memcpy(&immediate.callFixedArgs,
+                   reinterpret_cast<CallFixedArgs*>(pc), sizeof(CallFixedArgs));
             break;
         case Opcode::static_call_:
-            memcpy(&immediate.staticCallFixedArgs, pc,
+            memcpy(&immediate.staticCallFixedArgs,
+                   reinterpret_cast<StaticCallFixedArgs*>(pc),
                    sizeof(StaticCallFixedArgs));
             break;
         case Opcode::call_builtin_:
@@ -751,10 +753,12 @@ BC_NOARGS(V, _)
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;
         case Opcode::record_test_:
-            memcpy(&immediate.testFeedback, pc, sizeof(ObservedValues));
+            memcpy(reinterpret_cast<void*>(&immediate.testFeedback), pc,
+                   sizeof(ObservedValues));
             break;
         case Opcode::record_type_:
-            memcpy(&immediate.typeFeedback, pc, sizeof(ObservedValues));
+            memcpy(reinterpret_cast<void*>(&immediate.typeFeedback), pc,
+                   sizeof(ObservedValues));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)
