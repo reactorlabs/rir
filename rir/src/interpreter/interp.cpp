@@ -683,6 +683,11 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     if (FORMALS(op) == R_NilValue && arglist == R_NilValue)
         return Rf_NewEnvironment(R_NilValue, R_NilValue, CLOENV(op));
 
+    // Rf_matchArgs needs a proper list, so materialize it here to also put it
+    // in the context
+    if (auto a = ArgsLazyDataContent::check(arglist))
+        arglist = a->createArgsList();
+
     /*  Set up a context with the call in it so error has access to it */
     RCNTXT cntxt;
     initClosureContext(call.ast, &cntxt, CLOENV(op), call.callerEnv, arglist,
@@ -954,10 +959,11 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP result = nullptr;
     auto arglist = call.arglist;
     if (needsEnv) {
-        if (arglist) {
-            if (auto a = ArgsLazyDataContent::check(arglist))
-                arglist = a->createArgsList();
-        } else {
+        // ArgsLazyData lazyArgs(call.suppliedArgs, call.nargsOrig, call.stackArgs,
+        //                     call.argOrderOrig, call.names, call.formals(),
+        //                     call.staticCall, call.hasEagerCallee(), ctx);
+        if (!arglist) {
+            // arglist = (SEXP)&lazyArgs;
             arglist = createLegacyLazyArgsList(call, ctx);
         }
         PROTECT(arglist);
