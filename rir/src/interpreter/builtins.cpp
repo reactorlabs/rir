@@ -88,6 +88,35 @@ R_xlen_t asVecSize(SEXP x) {
     return -999; /* which gives error in the caller */
 }
 
+enum class IsVectorCheck {
+    unsupported,
+    any,
+    numeric,
+    integer,
+    logical,
+    character,
+};
+
+static IsVectorCheck whichIsVectorCheck(SEXP str) {
+    if (!isString(str) || LENGTH(str) != 1)
+        return IsVectorCheck::unsupported;
+    auto stype = CHAR(STRING_ELT(str, 0));
+    if (std::string("any") == stype) {
+        return IsVectorCheck::any;
+    } else if (std::string("numeric") == stype) {
+        return IsVectorCheck::numeric;
+    } else if (std::string("integer") == stype) {
+        return IsVectorCheck::integer;
+    } else if (std::string("logical") == stype) {
+        return IsVectorCheck::logical;
+    } else if (std::string("double") == stype) {
+        return IsVectorCheck::numeric;
+    } else if (std::string("character") == stype) {
+        return IsVectorCheck::character;
+    }
+    return IsVectorCheck::unsupported;
+}
+
 SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(!call.hasNames());
     return nullptr;
@@ -529,36 +558,46 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     }
 
     case blt("is.vector"): {
+        bool res = false;
         if (nargs < 1 || nargs > 2)
             return nullptr;
 
-        bool any = true;
-        if (nargs == 2) {
-            if (!isString(args[1]) || LENGTH(args[1]) != 1)
-                return nullptr;
-            auto stype = CHAR(STRING_ELT(args[1], 0));
-            if (std::string("any") == stype) {
-            } else if (std::string("numeric") == stype) {
-                any = false;
-            } else {
+        auto arg = args[0];
+        if (nargs == 1) {
+            res = isVector(arg);
+        } else {
+            auto which = whichIsVectorCheck(args[1]);
+            switch (which) {
+            case IsVectorCheck::any:
+                res = isVector(arg);
+                break;
+            case IsVectorCheck::numeric:
+                res = (isNumeric(arg) && !isLogical(arg));
+                break;
+            case IsVectorCheck::integer:
+                res = isInteger(arg);
+                break;
+            case IsVectorCheck::logical:
+                res = isLogical(arg);
+                break;
+            case IsVectorCheck::character:
+                res = isString(arg);
+                break;
+            case IsVectorCheck::unsupported:
                 return nullptr;
             }
         }
 
-        auto arg = args[0];
-        auto res = any ? isVector(arg) : (isNumeric(arg) && !isLogical(arg));
+        if (!res)
+            return R_FalseValue;
 
         auto a = ATTRIB(arg);
-        if (res && a != R_NilValue) {
-            while (a != R_NilValue) {
-                if (TAG(a) != R_NamesSymbol) {
-                    res = FALSE;
-                    break;
-                }
-                a = CDR(a);
-            }
+        while (a != R_NilValue) {
+            if (TAG(a) != R_NamesSymbol)
+                return R_FalseValue;
+            a = CDR(a);
         }
-        return res ? R_TrueValue : R_FalseValue;
+        return R_TrueValue;
     }
 
     case blt("as.logical"): {
@@ -698,6 +737,7 @@ bool supportsFastBuiltinCall(SEXP b) {
     case blt("is.function"):
     case blt("is.na"):
     case blt("is.vector"):
+    case blt("as.logical"):
     case blt("list"):
     case blt("rep.int"):
     case blt("islistfactor"):
