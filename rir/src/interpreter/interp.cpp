@@ -3,6 +3,7 @@
 #include "LazyEnvironment.h"
 #include "R/Funtab.h"
 #include "R/Printing.h"
+#include "R/Protect.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "cache.h"
@@ -919,13 +920,12 @@ static unsigned serializeCounter = 0;
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
-    bool bodyPreserved = false;
+    Protect p;
     if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
         serializeCounter++;
         if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
             body = copyBySerial(body);
-            PROTECT(body);
-            bodyPreserved = true;
+            p(body);
             serializeCounter = 0;
         }
     }
@@ -957,23 +957,14 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
     SEXP result = nullptr;
-    auto arglist = call.arglist;
+    SEXP arglist = call.arglist;
     if (needsEnv) {
-        // ArgsLazyData lazyArgs(call.suppliedArgs, call.nargsOrig, call.stackArgs,
-        //                     call.argOrderOrig, call.names, call.formals(),
-        //                     call.staticCall, call.hasEagerCallee(), ctx);
-        if (!arglist) {
-            // arglist = (SEXP)&lazyArgs;
-            arglist = createLegacyLazyArgsList(call, ctx);
-        }
-        PROTECT(arglist);
-        SEXP env;
         if (call.givenContext.includes(Assumption::StaticallyArgmatched)) {
             auto formals = FORMALS(call.callee);
             auto actuals =
                 createLegacyArgsListFromMatchedStackValues(call, ctx);
-            env = Rf_NewEnvironment(formals, actuals, CLOENV(call.callee));
-            PROTECT(env);
+            SEXP env = Rf_NewEnvironment(formals, actuals, CLOENV(call.callee));
+            p(env);
 
             // Add missing arguments. Statically argmatched means that still
             // some missing args might need to be supplied.
@@ -1012,12 +1003,24 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                     pos++;
                 }
             }
+
+            ArgsLazyData lazyArgs(call.suppliedArgs, call.nargsOrig,
+                                  call.stackArgs, call.argOrderOrig, call.names,
+                                  call.formals(), call.staticCall,
+                                  call.hasEagerCallee(), ctx);
+            if (!arglist)
+                arglist = (SEXP)&lazyArgs;
+            p(arglist);
+            result = rirCallTrampoline(call, fun, env, arglist, ctx);
+
         } else {
-            env = closureArgumentAdaptor(call, arglist, R_NilValue);
-            PROTECT(env);
+            if (!arglist)
+                arglist = createLegacyLazyArgsList(call, ctx);
+            p(arglist);
+            SEXP env = closureArgumentAdaptor(call, arglist, R_NilValue);
+            p(env);
+            result = rirCallTrampoline(call, fun, env, arglist, ctx);
         }
-        result = rirCallTrampoline(call, fun, env, arglist, ctx);
-        UNPROTECT(2);
     } else {
         // Instead of a SEXP with the argslist we create a
         // structure with the information needed to recreate
@@ -1032,11 +1035,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         result = rirCallTrampoline(call, fun, arglist, ctx);
     }
 
-    if (bodyPreserved)
-        UNPROTECT(1);
-
     assert(result);
-
     assert(!fun->flags.contains(Function::Deopt));
     return result;
 }
