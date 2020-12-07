@@ -88,6 +88,35 @@ R_xlen_t asVecSize(SEXP x) {
     return -999; /* which gives error in the caller */
 }
 
+enum class IsVectorCheck {
+    unsupported,
+    any,
+    numeric,
+    integer,
+    logical,
+    character,
+};
+
+static IsVectorCheck whichIsVectorCheck(SEXP str) {
+    if (!isString(str) || LENGTH(str) != 1)
+        return IsVectorCheck::unsupported;
+    auto stype = CHAR(STRING_ELT(str, 0));
+    if (std::string("any") == stype) {
+        return IsVectorCheck::any;
+    } else if (std::string("numeric") == stype) {
+        return IsVectorCheck::numeric;
+    } else if (std::string("integer") == stype) {
+        return IsVectorCheck::integer;
+    } else if (std::string("logical") == stype) {
+        return IsVectorCheck::logical;
+    } else if (std::string("double") == stype) {
+        return IsVectorCheck::numeric;
+    } else if (std::string("character") == stype) {
+        return IsVectorCheck::character;
+    }
+    return IsVectorCheck::unsupported;
+}
+
 SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(!call.hasNames());
     return nullptr;
@@ -139,6 +168,10 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
     }
+
+    case blt("baseenv"): {
+        return R_BaseEnv;
+    }
     }
 
     if (hasAttrib)
@@ -169,15 +202,21 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 1)
             return nullptr;
 
+        size_t res;
         switch (TYPEOF(args[0])) {
         case INTSXP:
         case REALSXP:
         case LGLSXP:
-            return Rf_ScalarInteger(XLENGTH(args[0]));
+        case STRSXP:
+            res = XLENGTH(args[0]);
+            break;
         default:
-            return nullptr;
+            res = Rf_length(args[0]);
+            break;
         }
-        assert(false);
+        if (res >= INT_MAX)
+            return Rf_ScalarReal(res);
+        return Rf_ScalarInteger(res);
     }
 
     case blt("c"): {
@@ -519,13 +558,59 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     }
 
     case blt("is.vector"): {
-        if (nargs != 1)
+        bool res = false;
+        if (nargs < 1 || nargs > 2)
             return nullptr;
 
         auto arg = args[0];
-        if (XLENGTH(arg) != 1)
+        if (nargs == 1) {
+            res = isVector(arg);
+        } else {
+            auto which = whichIsVectorCheck(args[1]);
+            switch (which) {
+            case IsVectorCheck::any:
+                res = isVector(arg);
+                break;
+            case IsVectorCheck::numeric:
+                res = (isNumeric(arg) && !isLogical(arg));
+                break;
+            case IsVectorCheck::integer:
+                res = isInteger(arg);
+                break;
+            case IsVectorCheck::logical:
+                res = isLogical(arg);
+                break;
+            case IsVectorCheck::character:
+                res = isString(arg);
+                break;
+            case IsVectorCheck::unsupported:
+                return nullptr;
+            }
+        }
+
+        if (!res)
+            return R_FalseValue;
+
+        auto a = ATTRIB(arg);
+        while (a != R_NilValue) {
+            if (TAG(a) != R_NamesSymbol)
+                return R_FalseValue;
+            a = CDR(a);
+        }
+        return R_TrueValue;
+    }
+
+    case blt("as.logical"): {
+        if (nargs != 1)
             return nullptr;
-        return TYPEOF(arg) == VECSXP ? R_TrueValue : R_FalseValue;
+        auto arg = args[0];
+        if (TYPEOF(arg) != LGLSXP)
+            return nullptr;
+        if (ATTRIB(arg) == R_NilValue)
+            return arg;
+        arg = MAYBE_REFERENCED(arg) ? duplicate(arg) : arg;
+        CLEAR_ATTRIB(arg);
+        return arg;
     }
 
     case blt("list"): {
@@ -652,6 +737,7 @@ bool supportsFastBuiltinCall(SEXP b) {
     case blt("is.function"):
     case blt("is.na"):
     case blt("is.vector"):
+    case blt("as.logical"):
     case blt("list"):
     case blt("rep.int"):
     case blt("islistfactor"):
@@ -660,6 +746,7 @@ bool supportsFastBuiltinCall(SEXP b) {
     case blt("bitwiseXor"):
     case blt("bitwiseShiftL"):
     case blt("bitwiseShiftR"):
+    case blt("baseenv"):
         return true;
     default: {}
     }
