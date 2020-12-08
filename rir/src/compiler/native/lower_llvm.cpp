@@ -15,6 +15,7 @@
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/lowering/allocators.h"
 #include "compiler/util/visitor.h"
+#include "interpreter/LazyArglist.h"
 #include "interpreter/LazyEnvironment.h"
 #include "interpreter/builtins.h"
 #include "interpreter/instance.h"
@@ -1059,15 +1060,27 @@ void LowerFunctionLLVM::compilePopContext(Instruction* i) {
 
 void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     auto ct = PushContext::Cast(i);
-    auto ast = loadSxp(ct->arg(0).val());
-    auto op = loadSxp(ct->arg(1).val());
+    auto ast = loadSxp(ct->ast());
+    auto op = loadSxp(ct->op());
     auto sysparent = loadSxp(ct->env());
 
     inPushContext++;
 
     // initialize a RCNTXT on the stack
     auto& data = contexts[i];
-    call(NativeBuiltins::initClosureContext, {ast, data.rcntxt, sysparent, op});
+
+    std::vector<Value*> arglist;
+    for (size_t i = 0; i < ct->narglist(); ++i) {
+        arglist.push_back(ct->arg(i).val());
+    }
+
+    withCallFrame(arglist,
+                  [&]() -> llvm::Value* {
+                      return call(
+                          NativeBuiltins::initClosureContext,
+                          {ast, data.rcntxt, sysparent, op, c(ct->narglist())});
+                  },
+                  false);
 
     // Create a copy of all live variables to be able to restart
     // SEXPs are stored as local vars, primitive values are placed in an

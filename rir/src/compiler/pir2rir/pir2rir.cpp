@@ -968,7 +968,8 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::PushContext: {
                 if (!pushContexts.count(instr))
                     pushContexts[instr] = ctx.cs().mkLabel();
-                cb.add(BC::pushContext(pushContexts.at(instr)));
+                auto p = PushContext::Cast(instr);
+                cb.add(BC::pushContext(pushContexts.at(instr), p->narglist()));
                 break;
             }
 

@@ -60,7 +60,8 @@ class State {
         check();
 
         if (bc.bc == Opcode::push_context_) {
-            uint32_t popCtxt = *reinterpret_cast<Immediate*>(oldPc + 1);
+            uint32_t popCtxt =
+                *reinterpret_cast<Immediate*>(oldPc + 1 + sizeof(Immediate));
             auto popCtxtPos = pc + popCtxt;
             assert(*popCtxtPos == Opcode::pop_context_ ||
                    *popCtxtPos == Opcode::int3_);
