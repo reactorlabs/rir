@@ -2346,12 +2346,16 @@ class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
         : FixedLenInstructionWithEnvSlot(NativeType::test, e) {}
 };
 
-class FLIE(PushContext, 3, Effect::ChangesContexts) {
+class VLIE(PushContext, Effect::ChangesContexts) {
   public:
-    PushContext(Value* ast, Value* op, Value* sysparent)
-        : FixedLenInstructionWithEnvSlot(NativeType::context,
-                                         {{PirType::any(), PirType::closure()}},
-                                         {{ast, op}}, sysparent) {}
+    PushContext(Value* ast, Value* op, CallInstruction* call, Value* sysparent)
+        : VarLenInstructionWithEnvSlot(NativeType::context, sysparent) {
+        call->eachCallArg([&](Value* v) { pushArg(v, PirType::any()); });
+        pushArg(ast, PirType::any());
+        pushArg(op, PirType::closure());
+    }
+
+    size_t narglist() const { return nargs() - 3; }
 };
 
 class FLI(PopContext, 2, Effect::ChangesContexts) {

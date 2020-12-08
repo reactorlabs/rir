@@ -14,7 +14,7 @@ DEF_INSTR(invalid_, 0, 0, 0, 0)
  */
 DEF_INSTR(nop_, 0, 0, 0, 1)
 
-DEF_INSTR(push_context_, 1, 2, 0, 0)
+DEF_INSTR(push_context_, 2, -1, 0, 0)
 DEF_INSTR(pop_context_, 1, 1, 1, 0)
 
 /**

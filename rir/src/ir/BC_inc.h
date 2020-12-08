@@ -134,6 +134,10 @@ class BC {
         NumArgs nargs;
         SignedImmediate context;
     };
+    struct PushContextArgs {
+        NumArgs nargs;
+        Jmp offset;
+    };
     struct PoolAndCachePositionRange {
         PoolIdx poolIndex;
         CacheIdx cacheIndex;
@@ -153,6 +157,7 @@ class BC {
     // space required.
     union ImmediateArguments {
         MkEnvFixedArgs mkEnvFixedArgs;
+        PushContextArgs pushContextArgs;
         MkDotlistFixedArgs mkDotlistFixedArgs;
         StaticCallFixedArgs staticCallFixedArgs;
         CallFixedArgs callFixedArgs;
@@ -235,13 +240,17 @@ class BC {
             return immediate.callBuiltinFixedArgs.nargs;
         if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
             return immediate.mkEnvFixedArgs.nargs + 1;
+        if (bc == Opcode::push_context_)
+            return immediate.pushContextArgs.nargs + 2;
         if (bc == Opcode::mk_dotlist_)
             return immediate.mkDotlistFixedArgs.nargs;
         if (bc == Opcode::popn_)
             return immediate.i;
         return popCount(bc);
     }
-    inline size_t pushCount() { return pushCount(bc); }
+    inline size_t pushCount() {
+        return pushCount(bc);
+    }
 
     // Used to serialize bc to CodeStream
     void write(CodeStream& cs) const;
@@ -393,7 +402,7 @@ BC_NOARGS(V, _)
     inline static BC stvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
-    inline static BC pushContext(Jmp);
+    inline static BC pushContext(Jmp, uint32_t);
     inline static BC popContext(Jmp);
     inline static BC beginloop(Jmp);
     inline static BC brtrue(Jmp);
@@ -699,9 +708,11 @@ BC_NOARGS(V, _)
         case Opcode::brtrue_:
         case Opcode::brfalse_:
         case Opcode::beginloop_:
-        case Opcode::push_context_:
         case Opcode::pop_context_:
             memcpy(&immediate.offset, pc, sizeof(Jmp));
+            break;
+        case Opcode::push_context_:
+            memcpy(&immediate.pushContextArgs, pc, sizeof(PushContextArgs));
             break;
         case Opcode::popn_:
         case Opcode::pick_:

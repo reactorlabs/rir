@@ -18,7 +18,8 @@ int initializeTypes(LLVMContext& context) {
     t::i32 = IntegerType::get(context, 32);
     t::i64ptr = PointerType::get(t::i64, 0);
 
-    t::i8ptr = PointerType::get(IntegerType::get(context, 8), 0);
+    t::i8 = IntegerType::get(context, 8);
+    t::i8ptr = PointerType::get(t::i8, 0);
     t::voidPtr = t::i8ptr;
     t::charPtr = t::i8ptr;
 
@@ -311,7 +312,7 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::unopEnv.llvmSignature = t::sexp_sexp2int2;
 
     NativeBuiltins::initClosureContext.llvmSignature = llvm::FunctionType::get(
-        t::t_void, {t::SEXP, t::RCNTXT_ptr, t::SEXP, t::SEXP}, false);
+        t::t_void, {t::SEXP, t::RCNTXT_ptr, t::SEXP, t::SEXP, t::i64}, false);
     NativeBuiltins::endClosureContext.llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::RCNTXT_ptr, t::SEXP}, false);
 
@@ -384,6 +385,7 @@ Type* voidPtr;
 Type* charPtr;
 Type* i64;
 Type* i32;
+Type* i8;
 PointerType* i64ptr;
 PointerType* i8ptr;
 

@@ -119,9 +119,13 @@ void BC::write(CodeStream& cs) const {
     case Opcode::br_:
     case Opcode::brtrue_:
     case Opcode::beginloop_:
-    case Opcode::push_context_:
     case Opcode::brfalse_:
         cs.patchpoint(immediate.offset);
+        break;
+
+    case Opcode::push_context_:
+        cs.insert(immediate.pushContextArgs.nargs);
+        cs.patchpoint(immediate.pushContextArgs.offset);
         return;
 
     case Opcode::popn_:
@@ -708,9 +712,12 @@ void BC::print(std::ostream& out) const {
     case Opcode::push_code_:
         out << std::hex << immediate.fun << std::dec;
         break;
+    case Opcode::push_context_:
+        out << immediate.pushContextArgs.nargs << " "
+            << immediate.pushContextArgs.offset;
+        break;
     case Opcode::beginloop_:
     case Opcode::pop_context_:
-    case Opcode::push_context_:
     case Opcode::brtrue_:
     case Opcode::brfalse_:
     case Opcode::br_:

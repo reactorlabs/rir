@@ -1,5 +1,5 @@
 #include "interp.h"
-#include "ArgsLazyData.h"
+#include "LazyArglist.h"
 #include "LazyEnvironment.h"
 #include "R/Funtab.h"
 #include "R/Printing.h"
@@ -282,23 +282,52 @@ static SEXP materializeCallerEnv(CallContext& callCtx,
 }
 
 SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
-                                         const Immediate* names,
+                                         LazyArglist* argsStore,
+                                         const Immediate* names, SEXP ast,
                                          bool eagerCallee,
                                          InterpreterInstance* ctx) {
-    assert(args && "Cannot materialize promargs for statically reordered "
-                   "arguments. Static Call to UseMethod function?");
+    assert((args || argsStore) &&
+           "Cannot materialize promargs for statically reordered "
+           "arguments. Static Call to UseMethod function?");
     SEXP result = R_NilValue;
     SEXP pos = result;
 
+    SEXP formal = nullptr;
+    if (ast)
+        formal = CDR(ast);
+
     for (size_t i = 0; i < length; ++i) {
 
-        SEXP name = names ? cp_pool_at(ctx, names[i]) : R_NilValue;
+        SEXP name = names ? cp_pool_at(ctx, names[i])
+                          : (ast ? TAG(formal) : R_NilValue);
 
-        SEXP arg = ostack_at_cell(args + i);
+        if (ast)
+            formal = CDR(formal);
+
+        SEXP arg = args ? ostack_at_cell(args + i) : argsStore->getEntry(i);
+
+        // This can happen if context dispatch padded the call with "synthetic"
+        // missings to be able to call a version which expects more args
+        if (arg == R_MissingArg && ast && formal == R_NilValue)
+            continue;
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
             arg = evaluatePromise(arg, ctx);
         }
+
+        // This can happen if we materialize the lazy arglist of a statically
+        // argmatched call, where dots gets pre-created by the caller.
+        if (TYPEOF(arg) == DOTSXP) {
+            while (arg != R_NilValue) {
+                auto v = CAR(arg);
+                if (eagerCallee && TYPEOF(v) == PROMSXP)
+                    v = evaluatePromise(v, ctx);
+                __listAppend(&result, &pos, v, TAG(arg));
+                arg = CDR(arg);
+            }
+            continue;
+        }
+
         // This is to ensure we pass named arguments to GNU-R builtins because
         // who knows what assumptions does GNU-R do??? We SHOULD test this.
         if (TYPEOF(arg) != PROMSXP)
@@ -339,8 +368,8 @@ SEXP materialize(SEXP rirDataWrapper) {
         return environment;
     };
 
-    if (auto promargs = ArgsLazyDataContent::check(rirDataWrapper)) {
-        return promargs->createArgsLists();
+    if (auto promargs = LazyArglist::check(rirDataWrapper)) {
+        return promargs->createArgsLists(globalContext());
     } else if (auto lazyEnv = LazyEnvironment::check(rirDataWrapper)) {
         auto newEnv = createEnvironment(globalContext(), rirDataWrapper);
         Rf_setAttrib(newEnv, symbol::delayedEnv, rirDataWrapper);
@@ -359,17 +388,18 @@ SEXP materialize(SEXP rirDataWrapper) {
     return nullptr;
 }
 
-static RIR_INLINE SEXP createLegacyLazyArgsList(CallContext& call,
-                                                InterpreterInstance* ctx) {
-    return createLegacyArgsListFromStackValues(
-        call.suppliedArgs, call.stackArgs, call.names, false, ctx);
-}
-
 static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
                                             InterpreterInstance* ctx) {
+    return createLegacyArgsListFromStackValues(
+        call.suppliedArgs, call.stackArgs, nullptr, call.names, nullptr,
+        call.hasEagerCallee(), ctx);
+}
+
+static RIR_INLINE SEXP createLegacyLazyArgsList(CallContext& call,
+                                                InterpreterInstance* ctx) {
     return createLegacyArgsListFromStackValues(call.suppliedArgs,
-                                               call.stackArgs, call.names,
-                                               call.hasEagerCallee(), ctx);
+                                               call.stackArgs, nullptr,
+                                               call.names, nullptr, false, ctx);
 }
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
@@ -513,15 +543,14 @@ static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
 static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
                                     SEXP ast, SEXP sysparent, SEXP op,
                                     InterpreterInstance* ctx, Opcode* pc,
-                                    R_bcstack_t* localsBase,
+                                    R_bcstack_t* localsBase, SEXP arglist,
                                     BindingCache* cache, int32_t stackOffset) {
     RCNTXT cntxt;
     // The first env should be the callee env, but that will be done by the
     // callee. We store sysparent there, because our optimizer may actually
     // delay instructions into the inlinee and might assume that we still have
     // to outer env.
-    initClosureContext(ast, &cntxt, symbol::delayedEnv, sysparent,
-                       symbol::delayedArglist, op);
+    initClosureContext(ast, &cntxt, symbol::delayedEnv, sysparent, arglist, op);
     auto trampoline = [&]() {
         if ((SETJMP(cntxt.cjmpbuf))) {
             if (R_ReturnedValue == R_RestartToken) {
@@ -919,10 +948,10 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             // Currently we cannot recreate the original arglist if we
             // statically reordered arguments. TODO this needs to be fixed
             // by remembering the original order.
-            if (auto a = ArgsLazyDataContent::check(arglist))
-                a->args = nullptr;
-            else
-                arglist = symbol::delayedArglist;
+            if (auto a = LazyArglist::check(arglist)) {
+                // cppcheck-suppress unreadVariable
+                a->wrong = true;
+            }
         } else {
             env = closureArgumentAdaptor(call, arglist, R_NilValue);
         }
@@ -933,16 +962,18 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             // Instead of a SEXP with the argslist we create an
             // structure with the information needed to recreate
             // the list lazily if the gnu-r interpreter needs it
-            ArgsLazyData lazyArgs(call.suppliedArgs, call.stackArgs, call.names,
-                                  ctx);
+            LazyArglistOnStack lazyArgs(call.suppliedArgs, call.stackArgs,
+                                        call.ast);
             if (!arglist)
-                arglist = (SEXP)&lazyArgs;
+                arglist = lazyArgs.asSexp();
 
             // Currently we cannot recreate the original arglist if we
             // statically reordered arguments. TODO this needs to be fixed
             // by remembering the original order.
-            if (call.givenContext.includes(Assumption::StaticallyArgmatched))
-                lazyArgs.content.args = nullptr;
+            if (call.givenContext.includes(Assumption::StaticallyArgmatched)) {
+                // cppcheck-suppress unreadVariable
+                lazyArgs.content.wrong = true;
+            }
             supplyMissingArgs(call, fun);
             result = rirCallTrampoline(call, fun, arglist, ctx);
     }
@@ -1931,6 +1962,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             assert(LazyEnvironment::check(env) || TYPEOF(env) == ENVSXP);
             assert(TYPEOF(op) == CLOSXP);
             ostack_popn(ctx, 2);
+            int nargs = readImmediate();
+            advanceImmediate();
             int offset = readJumpOffset();
             advanceJump();
             auto curPc = pc;
@@ -1945,12 +1978,17 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto stackOffset = readSignedImmediate();
             advanceImmediate();
 
+            // The argslist is passed on the stack and explicitly popped later
+            auto lazyArgs = LazyArglistOnHeap::New(
+                nargs, ostack_cell_at(ctx, nargs - 1), ast);
+            ostack_popn(ctx, nargs);
+
             // Recursively call myself through a inlineContextTrampoline. The
             // trampoline creates an RCNTXT, and then continues executing the
             // same code.
-            res =
-                inlineContextTrampoline(c, callCtxt, ast, env, op, ctx, curPc,
-                                        localsBase, bindingCache, stackOffset);
+            res = inlineContextTrampoline(c, callCtxt, ast, env, op, ctx, curPc,
+                                          localsBase, lazyArgs, bindingCache,
+                                          stackOffset);
 
             ostack_push(ctx, res);
             NEXT();
@@ -1995,7 +2033,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             bool hasMissing = false;
-            bool hasDots = false;
             for (long i = n - 1; i >= 0; --i) {
                 SEXP val = ostack_pop(ctx);
                 INCREMENT_NAMED(val);
@@ -2005,8 +2042,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     isMissing = true;
                     name = CAR(name);
                 }
-                if (name == R_DotsSymbol)
-                    hasDots = true;
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
                 hasMissing = hasMissing || isMissing;
@@ -2017,27 +2052,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (contextPos > 0) {
                 if (auto cptr = getFunctionContext(contextPos - 1)) {
                     cptr->cloenv = res;
-                    // TODO proper handling of promargs if we have ... args
-                    if (!hasDots && cptr->promargs == symbol::delayedArglist) {
-                        auto promargs = arglist;
-                        if (hasMissing) {
-                            // For the promargs we need to strip missing
-                            // arguments from the list, otherwise nargs()
-                            // reports the wrong value.
-                            promargs = Rf_shallow_duplicate(arglist);
-                            auto p = promargs;
-                            auto a = arglist;
-                            auto prev = p;
-                            while (p != R_NilValue) {
-                                if (MISSING(a))
-                                    SETCDR(prev, CDR(p));
-                                prev = p;
-                                p = CDR(p);
-                                a = CDR(a);
-                            }
-                        }
-                        cptr->promargs = promargs;
-                    }
                 }
             }
             ostack_push(ctx, res);
@@ -2781,17 +2795,19 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 FunctionSignature::Environment::CallerProvided) {
                 res = rirCall(call, ctx);
             } else {
-                ArgsLazyData lazyArgs(call.suppliedArgs, call.stackArgs,
-                                      call.names, ctx);
+                LazyArglistOnStack lazyArgs(call.suppliedArgs, call.stackArgs,
+                                            call.ast);
                 // Currently we cannot recreate the original arglist if we
                 // statically reordered arguments. TODO this needs to be fixed
                 // by remembering the original order.
-                if (given.includes(Assumption::StaticallyArgmatched))
-                    lazyArgs.content.args = nullptr;
+                if (given.includes(Assumption::StaticallyArgmatched)) {
+                    // cppcheck-suppress unreadVariable
+                    lazyArgs.content.wrong = true;
+                }
                 supplyMissingArgs(call, fun);
                 fun->registerInvocation();
                 res = rirCallTrampoline(call, fun, symbol::delayedEnv,
-                                        (SEXP)&lazyArgs, ctx);
+                                        lazyArgs.asSexp(), ctx);
             }
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
