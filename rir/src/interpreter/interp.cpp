@@ -285,6 +285,7 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
                                          LazyArglist* argsStore,
                                          const Immediate* names, SEXP ast,
                                          bool eagerCallee,
+                                         bool recreateOriginalPromargs,
                                          InterpreterInstance* ctx) {
     assert((args || argsStore) &&
            "Cannot materialize promargs for statically reordered "
@@ -308,7 +309,8 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
 
         // This can happen if context dispatch padded the call with "synthetic"
         // missings to be able to call a version which expects more args
-        if (arg == R_MissingArg && ast && formal == R_NilValue)
+        if (recreateOriginalPromargs && arg == R_MissingArg && ast &&
+            formal == R_NilValue)
             continue;
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
@@ -317,7 +319,7 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
 
         // This can happen if we materialize the lazy arglist of a statically
         // argmatched call, where dots gets pre-created by the caller.
-        if (TYPEOF(arg) == DOTSXP) {
+        if (recreateOriginalPromargs && TYPEOF(arg) == DOTSXP) {
             while (arg != R_NilValue) {
                 auto v = CAR(arg);
                 if (eagerCallee && TYPEOF(v) == PROMSXP)
@@ -388,18 +390,19 @@ SEXP materialize(SEXP rirDataWrapper) {
     return nullptr;
 }
 
-static RIR_INLINE SEXP createLegacyArgsList(CallContext& call,
-                                            InterpreterInstance* ctx) {
+SEXP createPromargsFromStackValues(CallContext& call,
+                                   InterpreterInstance* ctx) {
     return createLegacyArgsListFromStackValues(
-        call.suppliedArgs, call.stackArgs, nullptr, call.names, nullptr,
-        call.hasEagerCallee(), ctx);
+        call.suppliedArgs, call.stackArgs, nullptr, call.names, call.ast,
+        call.hasEagerCallee(),
+        call.givenContext.includes(Assumption::StaticallyArgmatched), ctx);
 }
 
-static RIR_INLINE SEXP createLegacyLazyArgsList(CallContext& call,
-                                                InterpreterInstance* ctx) {
-    return createLegacyArgsListFromStackValues(call.suppliedArgs,
-                                               call.stackArgs, nullptr,
-                                               call.names, nullptr, false, ctx);
+SEXP createEnvironmentFrameFromStackValues(CallContext& call,
+                                           InterpreterInstance* ctx) {
+    return createLegacyArgsListFromStackValues(
+        call.suppliedArgs, call.stackArgs, nullptr, call.names, call.ast, false,
+        false, ctx);
 }
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
@@ -618,7 +621,7 @@ static RIR_INLINE SEXP legacyCallWithArgslist(CallContext& call, SEXP argslist,
 
 static RIR_INLINE SEXP legacyCall(CallContext& call, InterpreterInstance* ctx) {
     // create the argslist
-    SEXP argslist = createLegacyArgsList(call, ctx);
+    SEXP argslist = createPromargsFromStackValues(call, ctx);
     PROTECT(argslist);
     SEXP res = legacyCallWithArgslist(call, argslist, ctx);
     UNPROTECT(1);
@@ -859,18 +862,92 @@ unsigned pir::Parameter::DEOPT_ABANDON =
 
 static unsigned serializeCounter = 0;
 
+static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
+                                     SEXP lazyPromargs,
+                                     InterpreterInstance* ctx) {
+    // TODO: figure out why this slowcase happens too often...
+    int npreserved = 0;
+
+    // Slowcase: callee expects arguments bound to pre-created environment.
+    // We need the list of arguments for creating the environment and also the
+    // list of original arguments for the promargs, which we will create lazily
+    // if it does not exist yet.
+    SEXP frame;
+    SEXP promargs;
+    if (call.arglist) {
+        promargs = frame = call.arglist;
+    } else {
+        // Wrap the passed args in a linked-list.
+        frame = createEnvironmentFrameFromStackValues(call, ctx);
+        PROTECT(frame);
+        npreserved++;
+        promargs = lazyPromargs;
+    }
+
+    SEXP env;
+    if (call.givenContext.includes(Assumption::StaticallyArgmatched)) {
+        // Statically argmatched means that we can directly bundle the list of
+        // arguments with the formals, since they are already in the correct
+        // order.
+        auto formals = FORMALS(call.callee);
+        env = Rf_NewEnvironment(formals, frame, CLOENV(call.callee));
+        PROTECT(env);
+        npreserved++;
+
+        // Add missing arguments. Statically argmatched means that still
+        // some missing args might need to be supplied.
+        if (!call.givenContext.includes(Assumption::NoExplicitlyMissingArgs) ||
+            call.passedArgs != fun->nargs()) {
+            auto f = formals;
+            auto a = frame;
+            SEXP prevA = nullptr;
+            size_t pos = 0;
+            while (f != R_NilValue) {
+                if (a == R_NilValue) {
+                    a = CONS_NR(R_MissingArg, R_NilValue);
+                    SET_TAG(a, TAG(f));
+                    SET_MISSING(a, 2);
+                    if (auto dflt = fun->defaultArg(pos)) {
+                        SETCAR(a, createPromise(dflt, env));
+                    }
+                    if (prevA) {
+                        SETCDR(prevA, a);
+                    } else {
+                        assert(frame == R_NilValue);
+                        SET_FRAME(env, a);
+                    }
+                } else if (CAR(a) == R_MissingArg) {
+                    if (auto dflt = fun->defaultArg(pos))
+                        SETCAR(a, createPromise(dflt, env));
+                }
+
+                f = CDR(f);
+                prevA = a;
+                a = CDR(a);
+                pos++;
+            }
+        }
+    } else {
+        env = closureArgumentAdaptor(call, frame, R_NilValue);
+        PROTECT(env);
+        npreserved++;
+    }
+
+    auto res = rirCallTrampoline(call, fun, env, promargs, ctx);
+    UNPROTECT(npreserved);
+    return res;
+}
+
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
-    bool bodyPreserved = false;
     if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
         serializeCounter++;
         if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
             body = copyBySerial(body);
-            PROTECT(body);
-            bodyPreserved = true;
             serializeCounter = 0;
         }
+        PROTECT(body);
     }
     assert(DispatchTable::check(body));
 
@@ -899,90 +976,37 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     }
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
-    SEXP result = nullptr;
-    auto arglist = call.arglist;
-    if (needsEnv) {
-        if (!arglist)
-            arglist = createLegacyLazyArgsList(call, ctx);
-        PROTECT(arglist);
-        SEXP env;
-        if (call.givenContext.includes(Assumption::StaticallyArgmatched)) {
-            auto formals = FORMALS(call.callee);
-            env = Rf_NewEnvironment(formals, arglist, CLOENV(call.callee));
-
-            // Add missing arguments. Statically argmatched means that still
-            // some missing args might need to be supplied.
-            if (!call.givenContext.includes(
-                    Assumption::NoExplicitlyMissingArgs) ||
-                call.passedArgs != fun->nargs()) {
-                auto f = formals;
-                auto a = arglist;
-                SEXP prevA = nullptr;
-                size_t pos = 0;
-                while (f != R_NilValue) {
-                    if (a == R_NilValue) {
-                        a = CONS_NR(R_MissingArg, R_NilValue);
-                        SET_TAG(a, TAG(f));
-                        SET_MISSING(a, 2);
-                        if (auto dflt = fun->defaultArg(pos)) {
-                            SETCAR(a, createPromise(dflt, env));
-                        }
-                        if (prevA) {
-                            SETCDR(prevA, a);
-                        } else {
-                            assert(arglist == R_NilValue);
-                            SET_FRAME(env, a);
-                        }
-                    } else if (CAR(a) == R_MissingArg) {
-                        if (auto dflt = fun->defaultArg(pos))
-                            SETCAR(a, createPromise(dflt, env));
-                    }
-
-                    f = CDR(f);
-                    prevA = a;
-                    a = CDR(a);
-                    pos++;
-                }
-            }
-
-            // Currently we cannot recreate the original arglist if we
-            // statically reordered arguments. TODO this needs to be fixed
-            // by remembering the original order.
-            if (auto a = LazyArglist::check(arglist)) {
-                // cppcheck-suppress unreadVariable
-                a->wrong = true;
-            }
-        } else {
-            env = closureArgumentAdaptor(call, arglist, R_NilValue);
-        }
-        PROTECT(env);
-        result = rirCallTrampoline(call, fun, env, arglist, ctx);
-        UNPROTECT(2);
-    } else {
-            // Instead of a SEXP with the argslist we create an
-            // structure with the information needed to recreate
-            // the list lazily if the gnu-r interpreter needs it
-            LazyArglistOnStack lazyArgs(call.suppliedArgs, call.stackArgs,
-                                        call.ast);
-            if (!arglist)
-                arglist = lazyArgs.asSexp();
-
-            // Currently we cannot recreate the original arglist if we
-            // statically reordered arguments. TODO this needs to be fixed
-            // by remembering the original order.
-            if (call.givenContext.includes(Assumption::StaticallyArgmatched)) {
-                // cppcheck-suppress unreadVariable
-                lazyArgs.content.wrong = true;
-            }
-            supplyMissingArgs(call, fun);
-            result = rirCallTrampoline(call, fun, arglist, ctx);
+    LazyArglistOnStack lazyPromargs(call.suppliedArgs, call.stackArgs,
+                                    call.ast);
+    if (call.givenContext.includes(Assumption::StaticallyArgmatched)) {
+        // Currently we cannot recreate the original arglist if we
+        // statically reordered arguments. TODO this needs to be fixed
+        // by remembering the original order.
+        // cppcheck-suppress unreadVariable
+        lazyPromargs.content.wrong = true;
     }
 
-    if (bodyPreserved)
+    SEXP result;
+    if (!needsEnv) {
+        // Default fast calling convention for pir, environment is created by
+        // the callee
+        SEXP arglist = call.arglist;
+        if (!arglist) {
+            assert(call.stackArgs);
+            arglist = lazyPromargs.asSexp();
+        }
+
+        supplyMissingArgs(call, fun);
+        result = rirCallTrampoline(call, fun, arglist, ctx);
+    } else {
+        result =
+            rirCallCallerProvidedEnv(call, fun, lazyPromargs.asSexp(), ctx);
+    }
+
+    if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
         UNPROTECT(1);
-
+    }
     assert(result);
-
     assert(!fun->flags.contains(Function::Deopt));
     return result;
 }

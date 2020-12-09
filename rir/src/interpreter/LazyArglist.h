@@ -29,48 +29,52 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
   private:
     LazyArglist(size_t length, const R_bcstack_t* args, SEXP ast, bool onStack)
         : RirRuntimeObject(sizeof(LazyArglist), onStack ? 0 : length),
-          length(length), onStack(onStack), args(args), ast(ast) {
+          length(length), ast(ast) {
 #ifdef ENABLE_SLOWASSERT
         for (size_t i = 0; i < length; ++i) {
             assert(args[i].tag == 0);
             assert(args[i].u.sxpval);
         }
 #endif
-        if (!onStack) {
+        if (onStack) {
+            stackArgs = args;
+        } else {
             for (size_t i = 0; i < length; ++i) {
                 assert(args[i].tag == 0);
                 setEntry(i, args[i].u.sxpval);
             }
-            this->args = nullptr;
+            stackArgs = nullptr;
         }
     };
 
     friend struct LazyArglistOnHeap;
     friend struct LazyArglistOnStack;
-  public:
 
+  public:
     // TODO: remove once we can correctly reorder!
     bool wrong = false;
 
   private:
-    const size_t length;
-    size_t actualNargs = 0;
-    bool onStack;
-    const R_bcstack_t* args;
+    const uint32_t length;
+    uint32_t actualNargs = 0;
+    const R_bcstack_t* stackArgs;
+    // Needed to recover the names
     SEXP ast;
 
   public:
     size_t nargs() {
         if (length == 0)
             return 0;
+
+        // Cache
         if (actualNargs != 0)
             return actualNargs;
 
         for (size_t i = 0; i < length; ++i) {
             SEXP arg;
-            if (onStack) {
-                assert(args[i].tag == 0);
-                arg = args[i].u.sxpval;
+            if (stackArgs) {
+                assert(stackArgs[i].tag == 0);
+                arg = stackArgs[i].u.sxpval;
             } else {
                 arg = getEntry(i);
             }
@@ -83,15 +87,13 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
             }
             actualNargs++;
         }
-
         return actualNargs;
     }
 
     SEXP createArgsLists(InterpreterInstance* ctx) {
         SLOWASSERT(!wrong);
         return createLegacyArgsListFromStackValues(
-            length, onStack ? args : nullptr, onStack ? nullptr : this, nullptr,
-            ast, false, ctx);
+            length, stackArgs, this, nullptr, ast, false, true, ctx);
     }
 
     using RirRuntimeObject::getEntry;
