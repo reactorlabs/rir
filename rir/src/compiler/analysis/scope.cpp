@@ -167,7 +167,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         }
         auto& env = state.envs.at(mk);
         env.parentEnv(lexicalEnv);
-        mk->eachLocalVar([&](SEXP name, Value* val, bool m) {
+        mk->eachLocalVar([&](SEXP name, Value* val, bool m, PirType) {
             env.set(name, val, mk, depth);
         });
         handled = true;
@@ -517,7 +517,7 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
         val.eachSource([&](const ValOrig& src) {
             if (!src.origin) {
             } else if (auto mk = MkEnv::Cast(src.origin)) {
-                mk->eachLocalVar([&](SEXP n, Value* v, bool miss) {
+                mk->eachLocalVar([&](SEXP n, Value* v, bool miss, PirType) {
                     if (name == n) {
                         if (miss)
                             maybeInitiallyMissing = isInitiallyMissing = true;

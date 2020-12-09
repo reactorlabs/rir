@@ -648,13 +648,13 @@ void LdVarSuper::printArgs(std::ostream& out, bool tty) const {
 }
 
 void MkEnv::printArgs(std::ostream& out, bool tty) const {
-    eachLocalVar([&](SEXP name, Value* v, bool miss) {
+    eachLocalVar([&](SEXP name, Value* v, bool miss, PirType type) {
         out << CHAR(PRINTNAME(name));
         if (miss)
             out << "(miss)";
         out << "=";
         v->printRef(out);
-        out << ", ";
+        out << " : " << type << ", ";
     });
     out << "parent=";
     Instruction::printEnv(out, tty);

@@ -2249,32 +2249,36 @@ class BuiltinCallFactory {
 
 class VLIE(MkEnv, Effects::None()) {
   public:
+    std::vector<PirType> types;
     std::vector<SEXP> varName;
     std::vector<bool> missing;
     bool stub = false;
     bool neverStub = false;
     int context = 1;
 
-    typedef std::function<void(SEXP name, Value* val, bool missing)> LocalVarIt;
-    typedef std::function<void(SEXP name, InstrArg&, bool& missing)>
+    typedef std::function<void(SEXP name, Value* val, bool missing,
+                               PirType type)>
+        LocalVarIt;
+    typedef std::function<void(SEXP name, InstrArg&, bool& missing,
+                               PirType& type)>
         MutableLocalVarIt;
 
     RIR_INLINE void eachLocalVar(MutableLocalVarIt it) {
         for (size_t i = 0; i < envSlot(); ++i) {
             bool m = missing[i];
-            it(varName[i], arg(i), m);
+            it(varName[i], arg(i), m, types[i]);
             missing[i] = m;
         }
     }
 
     RIR_INLINE void eachLocalVar(LocalVarIt it) const {
         for (size_t i = 0; i < envSlot(); ++i)
-            it(varName[i], arg(i).val(), missing[i]);
+            it(varName[i], arg(i).val(), missing[i], types[i]);
     }
 
     RIR_INLINE void eachLocalVarRev(LocalVarIt it) const {
         for (long i = envSlot() - 1; i >= 0; --i)
-            it(varName[i], arg(i).val(), missing[i]);
+            it(varName[i], arg(i).val(), missing[i], types[i]);
     }
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args,
@@ -2296,11 +2300,13 @@ class VLIE(MkEnv, Effects::None()) {
     void pushArg(Value* a, PirType t) override final {
         VarLenInstructionWithEnvSlot::pushArg(a, t);
         missing.push_back(a == MissingArg::instance());
+        types.push_back(PirType::any());
     }
 
     void pushArg(Value* a) override final {
         VarLenInstructionWithEnvSlot::pushArg(a);
         missing.push_back(a == MissingArg::instance());
+        types.push_back(PirType::any());
     }
 
     Value* lexicalEnv() const { return env(); }

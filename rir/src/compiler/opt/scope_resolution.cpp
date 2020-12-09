@@ -355,7 +355,7 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (auto env = MkEnv::Cast(missing->env())) {
                             bool initiallyMissing = false;
                             env->eachLocalVar(
-                                [&](SEXP name, Value* val, bool m) {
+                                [&](SEXP name, Value* val, bool m, PirType) {
                                     if (name == missing->varName)
                                         initiallyMissing = m;
                                 });

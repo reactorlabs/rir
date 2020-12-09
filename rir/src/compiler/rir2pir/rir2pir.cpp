@@ -1160,7 +1160,7 @@ bool Rir2Pir::tryCompile(Builder& insert) {
 
 bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
     if (auto mk = MkEnv::Cast(insert.env)) {
-        mk->eachLocalVar([&](SEXP name, Value*, bool) {
+        mk->eachLocalVar([&](SEXP name, Value*, bool, PirType) {
             if (name == symbol::c)
                 compiler.seenC = true;
         });

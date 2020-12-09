@@ -3570,20 +3570,22 @@ bool LowerFunctionLLVM::tryCompile() {
                               builder.CreateBitCast(namesStore, t::IntPtr),
                               c(mkenv->context)});
                     size_t pos = 0;
-                    mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
-                        auto vn = loadSxp(v);
-                        envStubSet(env, pos, vn, mkenv->nLocals(), false);
-                        if (miss)
-                            envStubSetMissing(env, pos);
-                        pos++;
-                        incrementNamed(vn);
-                    });
+                    mkenv->eachLocalVar(
+                        [&](SEXP name, Value* v, bool miss, PirType) {
+                            auto vn = loadSxp(v);
+                            envStubSet(env, pos, vn, mkenv->nLocals(), false);
+                            if (miss)
+                                envStubSetMissing(env, pos);
+                            pos++;
+                            incrementNamed(vn);
+                        });
                     setVal(i, env);
                     break;
                 }
 
                 auto arglist = constant(R_NilValue, t::SEXP);
-                mkenv->eachLocalVarRev([&](SEXP name, Value* v, bool miss) {
+                mkenv->eachLocalVarRev([&](SEXP name, Value* v, bool miss,
+                                           PirType) {
                     if (miss) {
                         arglist = call(
                             NativeBuiltins::createMissingBindingCell,

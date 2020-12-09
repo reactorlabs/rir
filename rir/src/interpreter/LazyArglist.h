@@ -62,6 +62,28 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
   public:
     SEXP createArgsLists(InterpreterInstance* ctx) {
         SLOWASSERT(!wrong);
+        if (args) {
+        auto args = const_cast<R_bcstack_t*>(this->args);
+        for (size_t i = 0; i < length; ++i) {
+            switch (args[i].tag) {
+            case 0:
+                continue;
+            case INTSXP:
+                args[i].u.sxpval = Rf_ScalarInteger(args[i].u.ival);
+                break;
+            case REALSXP:
+                args[i].u.sxpval = Rf_ScalarReal(args[i].u.ival);
+                break;
+            case LGLSXP:
+                args[i].u.sxpval = Rf_ScalarInteger(args[i].u.ival);
+                break;
+            default:
+                assert(false);
+                continue;
+            }
+            args[i].tag = 0;
+        }
+        }
         return createLegacyArgsListFromStackValues(
             length, onStack ? args : nullptr, onStack ? nullptr : this, nullptr,
             ast, false, ctx);

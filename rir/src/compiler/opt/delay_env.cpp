@@ -44,7 +44,7 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto consumeStVar = [&](StVar* st) {
                     bool exists = false;
                     envInstr->eachLocalVar(
-                        [&](SEXP name, InstrArg& arg, bool& missing) {
+                        [&](SEXP name, InstrArg& arg, bool& missing, PirType&) {
                             if (name == st->varName) {
                                 exists = true;
                                 arg.val() = st->val();
