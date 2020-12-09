@@ -324,6 +324,8 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
                 auto v = CAR(arg);
                 if (eagerCallee && TYPEOF(v) == PROMSXP)
                     v = evaluatePromise(v, ctx);
+                if (TYPEOF(v) != PROMSXP)
+                    ENSURE_NAMED(v);
                 __listAppend(&result, &pos, v, TAG(arg));
                 arg = CDR(arg);
             }
@@ -929,6 +931,8 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
         }
     } else {
         env = closureArgumentAdaptor(call, frame, R_NilValue);
+        // The Adapter updates the promargs while matching
+        promargs = frame;
         PROTECT(env);
         npreserved++;
     }
