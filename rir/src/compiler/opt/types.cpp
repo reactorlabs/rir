@@ -222,6 +222,34 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
             i->type = types.at(i);
     });
 
+    Visitor::run(code->entry, [&](Instruction* i) {
+        if (auto mk = MkEnv::Cast(i)) {
+            mk->eachLocalVar([&](SEXP, InstrArg& a, bool&, PirType& type) {
+                type = a.val()->type;
+            });
+        }
+    });
+
+    Visitor::run(code->entry, [&](Instruction* i) {
+        if (auto st = StVar::Cast(i)) {
+            if (auto mk = MkEnv::Cast(st->env())) {
+                if (mk->contains(st->varName)) {
+                    auto& t = mk->types[mk->indexOf(st->varName)];
+                    t = t | st->val()->type;
+                }
+            }
+        } else if (i->hasEnv() && i->changesEnv()) {
+            if (auto mk = MkEnv::Cast(i->env())) {
+                if (!mk->stub) {
+                    mk->eachLocalVar(
+                        [&](SEXP, InstrArg& a, bool&, PirType& type) {
+                            type = PirType::any();
+                        });
+                }
+            }
+        }
+    });
+
     return false;
 }
 

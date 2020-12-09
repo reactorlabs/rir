@@ -5117,6 +5117,12 @@ bool LowerFunctionLLVM::tryCompile() {
 
                 if (environment && environment->stub) {
                     auto idx = environment->indexOf(st->varName);
+
+                    if (representationOf(st->val()) != t::SEXP &&
+                        representationOf(environment->types[idx]) ==
+                            representationOf(st->val()))
+                        break;
+
                     auto e = loadSxp(environment);
                     BasicBlock* done = BasicBlock::Create(C, "", fun);
                     auto cur = envStubGet(e, idx, environment->nLocals());
