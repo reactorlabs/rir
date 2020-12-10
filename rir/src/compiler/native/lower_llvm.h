@@ -13,7 +13,8 @@ namespace pir {
 
 class LowerLLVM {
   public:
-    PirTypeFeedback* pirTypeFeedback;
+    LowerLLVM() {}
+    PirTypeFeedback* pirTypeFeedback = nullptr;
     void* compile(ClosureVersion* cls, Code* code,
                   const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>&,
                   const NeedsRefcountAdjustment& refcount,
