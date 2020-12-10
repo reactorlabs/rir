@@ -48,6 +48,7 @@ extern llvm::Type* voidPtr;
 extern llvm::Type* charPtr;
 extern llvm::Type* i64;
 extern llvm::Type* i32;
+extern llvm::Type* i8;
 extern llvm::PointerType* i64ptr;
 extern llvm::PointerType* i8ptr;
 

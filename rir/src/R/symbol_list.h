@@ -80,7 +80,6 @@
     V(syscall, "sys.call")                                                     \
     V(srcref, "srcref")                                                        \
     V(ambiguousCallTarget, ".ambiguousCallTarget.")                            \
-    V(delayedArglist, ".delayedArglist.")                                      \
     V(delayedEnv, ".delayedEnv.")                                              \
     V(eval, "eval")                                                            \
     V(lazyLoadDBexec, "lazyLoadDBexec")                                        \

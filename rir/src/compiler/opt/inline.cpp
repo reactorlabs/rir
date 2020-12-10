@@ -410,7 +410,8 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
                         assert(op);
                         auto ast = new LdConst(rir::Pool::get(theCall->srcIdx));
-                        auto ctx = new PushContext(ast, op, theCall->env());
+                        auto ctx = new PushContext(ast, op, theCallInstruction,
+                                                   theCall->env());
                         copy->insert(copy->begin() + insertPos, ctx);
                         copy->insert(copy->begin() + insertPos, ast);
                         auto popc = new PopContext(inlineeRes, ctx);

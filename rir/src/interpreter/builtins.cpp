@@ -1,5 +1,5 @@
 #include "builtins.h"
-#include "ArgsLazyData.h"
+#include "LazyArglist.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "interp.h"
@@ -187,8 +187,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
              cptr = cptr->nextcontext) {
             if ((cptr->callflag & CTXT_FUNCTION) &&
                 cptr->cloenv == call.callerEnv) {
-                if (auto l = ArgsLazyDataContent::check(cptr->promargs)) {
-                    nargs = l->length;
+                if (auto l = LazyArglist::check(cptr->promargs)) {
+                    nargs = l->nargs();
                     break;
                 }
                 nargs = Rf_length(cptr->promargs);

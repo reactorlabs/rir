@@ -1,7 +1,7 @@
 #include "builtins.h"
 
 #include "compiler/parameter.h"
-#include "interpreter/ArgsLazyData.h"
+#include "interpreter/LazyArglist.h"
 #include "interpreter/LazyEnvironment.h"
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
@@ -75,34 +75,6 @@ SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
     if (contextPos > 0) {
         if (auto cptr = getFunctionContext(contextPos - 1)) {
             cptr->cloenv = res;
-            if (cptr->promargs == symbol::delayedArglist) {
-                auto promargs = arglist;
-                bool hasMissing = false;
-                auto a = arglist;
-                while (a != R_NilValue) {
-                    if (CAR(a) == R_MissingArg)
-                        hasMissing = true;
-                    a = CDR(a);
-                }
-
-                if (hasMissing) {
-                    // For the promargs we need to strip missing
-                    // arguments from the list, otherwise nargs()
-                    // reports the wrong value.
-                    promargs = Rf_shallow_duplicate(arglist);
-                    auto p = promargs;
-                    auto a = arglist;
-                    auto prev = p;
-                    while (p != R_NilValue) {
-                        if (MISSING(a))
-                            SETCDR(prev, CDR(p));
-                        prev = p;
-                        p = CDR(p);
-                        a = CDR(a);
-                    }
-                }
-                cptr->promargs = promargs;
-            }
         }
     }
 
@@ -1496,8 +1468,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
     R_bcstack_t* args = ostack_cell_at(ctx, nargs + missing - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
-    ArgsLazyData lazyArgs(nargs, args, nullptr, globalContext());
-    SEXP arglist = (SEXP)&lazyArgs;
+    LazyArglistOnStack lazyArgs(nargs, args, ast);
 
     assert(fun->signature().envCreation ==
            FunctionSignature::Environment::CalleeCreated);
@@ -1508,7 +1479,8 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
     // could get overwritten while we are executing it.
     PROTECT(fun->container());
 
-    initClosureContext(ast, &cntxt, symbol::delayedEnv, env, arglist, callee);
+    initClosureContext(ast, &cntxt, symbol::delayedEnv, env, lazyArgs.asSexp(),
+                       callee);
     R_Srcref = getAttrib(callee, symbol::srcref);
 
     // TODO debug
@@ -2253,14 +2225,19 @@ int forSeqSizeImpl(SEXP seq) {
 NativeBuiltin NativeBuiltins::forSeqSize = {"forSeqSize",
                                             (void*)&forSeqSizeImpl};
 
-void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op) {
+void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op,
+                            size_t nargs) {
+    auto lazyArglist =
+        LazyArglistOnHeap::New(nargs, ostack_cell_at(ctx, nargs - 1), ast);
+    ostack_popn(globalContext(), nargs);
+
     auto global = (RCNTXT*)R_GlobalContext;
     if (global->callflag == CTXT_GENERIC)
         Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv,
-                        global->sysparent, symbol::delayedArglist, op);
+                        global->sysparent, lazyArglist, op);
     else
         Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv, sysparent,
-                        symbol::delayedArglist, op);
+                        lazyArglist, op);
 }
 
 NativeBuiltin NativeBuiltins::initClosureContext = {
