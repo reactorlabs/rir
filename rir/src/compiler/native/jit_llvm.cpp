@@ -157,7 +157,7 @@ class JitLLVMImplementation {
         return nullptr;
     }
 
-    void* tryCompile(llvm::Function* fun) {
+    void* compile(llvm::Function* fun) {
         auto name = fun->getName().str();
 
         verifyFunction(*fun);
@@ -466,9 +466,9 @@ void JitLLVM::createModule() {
     JitLLVMImplementation::instance().createModule();
 }
 
-void* JitLLVM::tryCompile(llvm::Function* fun) {
+void* JitLLVM::compile(llvm::Function* fun) {
     JitLLVMImplementation::instance();
-    return JitLLVMImplementation::instance().tryCompile(fun);
+    return JitLLVMImplementation::instance().compile(fun);
 }
 
 llvm::Function* JitLLVM::get(ClosureVersion* v) {

@@ -27,6 +27,8 @@ struct Parameter {
     static unsigned RIR_CHECK_PIR_TYPES;
 
     static unsigned PIR_LLVM_OPT_LEVEL;
+
+    static bool ENABLE_PIR2RIR;
 };
 } // namespace pir
 } // namespace rir

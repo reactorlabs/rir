@@ -31,6 +31,23 @@ Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
         trivialExpr = src;
 }
 
+Code* Code::New(SEXP ast, size_t codeSize, size_t sources, size_t locals,
+                size_t bindingCache) {
+    auto src = src_pool_add(globalContext(), ast);
+    return New(src, codeSize, sources, locals, bindingCache);
+}
+
+Code* Code::New(Immediate ast, size_t codeSize, size_t sources, size_t locals,
+                size_t bindingCache) {
+    unsigned totalSize = Code::size(codeSize, sources);
+    SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
+    void* payload = DATAPTR(store);
+    return new (payload) Code(nullptr, src_pool_at(globalContext(), ast), ast,
+                              codeSize, sources, locals, bindingCache);
+}
+
+Code* Code::New(Immediate ast) { return New(ast, 0, 0, 0, 0); }
+
 Code::~Code() {
     // TODO: Not sure if this is actually called
     // Otherwise the pointer will leak a few bytes

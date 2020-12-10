@@ -612,8 +612,7 @@ class LowerFunctionLLVM {
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
         BinopKind kind);
 
-    bool success = true;
-    bool tryCompile();
+    void compile();
 
     bool tryInlineBuiltin(int builtin);
 
@@ -2330,7 +2329,7 @@ llvm::Value* LowerFunctionLLVM::createSelect2(
     return r;
 };
 
-bool LowerFunctionLLVM::tryCompile() {
+void LowerFunctionLLVM::compile() {
 
     {
         auto arg = fun->arg_begin();
@@ -2472,8 +2471,6 @@ bool LowerFunctionLLVM::tryCompile() {
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         currentBB = bb;
-        if (!success)
-            return;
 
         builder.SetInsertPoint(getBlock(bb));
         inPushContext = blockInPushContext.at(bb);
@@ -2481,8 +2478,6 @@ bool LowerFunctionLLVM::tryCompile() {
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             currentInstr = it;
             auto i = *it;
-            if (!success)
-                return;
 
             auto adjustRefcount = refcount.beforeUse.find(i);
             if (adjustRefcount != refcount.beforeUse.end()) {
@@ -3142,7 +3137,7 @@ bool LowerFunctionLLVM::tryCompile() {
                     }
                     case blt("environment"):
                         if (!i->arg(0).val()->type.isA(RType::closure)) {
-                            success = false;
+                            done = false;
                             break;
                         }
                         assert(irep == Representation::Sexp && orep == irep);
@@ -3471,12 +3466,9 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Inc: {
                 auto arg = i->arg(0).val();
                 llvm::Value* res = nullptr;
-                if (representationOf(arg) == Representation::Integer) {
-                    res = load(arg, Representation::Integer);
-                    res = builder.CreateAdd(res, c(1), "", true, true);
-                } else {
-                    success = false;
-                }
+                assert(representationOf(arg) == Representation::Integer);
+                res = load(arg, Representation::Integer);
+                res = builder.CreateAdd(res, c(1), "", true, true);
                 setVal(i, res);
                 break;
             }
@@ -4076,10 +4068,7 @@ bool LowerFunctionLLVM::tryCompile() {
             }
 
             case Tag::IsType: {
-                if (representationOf(i) != Representation::Integer) {
-                    success = false;
-                    break;
-                }
+                assert(representationOf(i) == Representation::Integer);
 
                 auto t = IsType::Cast(i);
                 auto arg = i->arg(0).val();
@@ -4181,7 +4170,6 @@ bool LowerFunctionLLVM::tryCompile() {
                     default:
                         assert(false);
                         res = builder.getFalse();
-                        success = false;
                         break;
                     }
                 } else {
@@ -5287,7 +5275,9 @@ bool LowerFunctionLLVM::tryCompile() {
                 if (environment) {
                     auto parent = MkEnv::Cast(environment->lexicalEnv());
                     if (environment->stub || (parent && parent->stub)) {
-                        success = false;
+                        call(NativeBuiltins::stvarSuper,
+                             {constant(st->varName, t::SEXP),
+                              loadSxp(st->arg<0>().val()), loadSxp(st->env())});
                         break;
                     }
                 }
@@ -5363,12 +5353,11 @@ bool LowerFunctionLLVM::tryCompile() {
 
             case Tag::Int3:
             case Tag::PrintInvocation:
-                success = false;
+                assert(false);
                 break;
 
             case Tag::_UNUSED_:
                 assert(false && "Invalid instruction tag");
-                success = false;
                 break;
 
             case Tag::FrameState:
@@ -5376,22 +5365,13 @@ bool LowerFunctionLLVM::tryCompile() {
             case Tag::Assume:
             case Tag::Deopt:
                 assert(false && "Expected scheduled deopt");
-                success = false;
                 break;
 
 #define V(Value) case Tag::Value:
                 COMPILER_VALUES(V)
 #undef V
                 assert(false && "Values should not occur in instructions");
-                success = false;
                 break;
-            }
-
-            if (!success) {
-                // std::cerr << "Can't compile ";
-                // i->print(std::cerr, true);
-                // std::cerr << "\n";
-                return;
             }
 
             // Here we directly access the variable to bypass liveness
@@ -5431,12 +5411,6 @@ bool LowerFunctionLLVM::tryCompile() {
     builder.SetInsertPoint(entryBlock);
     builder.CreateBr(getBlock(code->entry));
 
-    if (success) {
-        // outs() << "Compiled " << fun->getName() << "\n";
-        // fun->dump();
-        // code->printCode(std::cout, true, true);
-    }
-
     std::unordered_set<rir::Code*> codes;
     std::unordered_map<size_t, const pir::TypeFeedback&> variableMapping;
 #ifdef DEBUG_REGISTER_MAP
@@ -5470,8 +5444,6 @@ bool LowerFunctionLLVM::tryCompile() {
         }
 #endif
     }
-
-    return success;
 }
 
 } // namespace pir
@@ -5482,7 +5454,7 @@ bool LowerFunctionLLVM::tryCompile() {
 namespace rir {
 namespace pir {
 
-void* LowerLLVM::tryCompile(
+void* LowerLLVM::compile(
     ClosureVersion* cls, Code* code,
     const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>& m,
     const NeedsRefcountAdjustment& refcount,
@@ -5493,10 +5465,9 @@ void* LowerLLVM::tryCompile(
     auto mangledName = JitLLVM::mangle(cls->name());
     LowerFunctionLLVM funCompiler(mangledName, cls, code, m, refcount,
                                   needsLdVarForUpdate, log);
-    if (!funCompiler.tryCompile())
-        return nullptr;
+    funCompiler.compile();
     pirTypeFeedback = funCompiler.pirTypeFeedback;
-    return JitLLVM::tryCompile(funCompiler.fun);
+    return JitLLVM::compile(funCompiler.fun);
 }
 
 } // namespace pir
