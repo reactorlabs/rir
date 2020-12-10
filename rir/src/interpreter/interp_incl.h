@@ -45,8 +45,7 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
                                          InterpreterInstance* ctx);
 
 SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
-                       const Opcode* pc, InterpreterInstance* ctx,
-                       R_bcstack_t* localsBase, SEXP stub);
+                       const Opcode* pc, InterpreterInstance* ctx, SEXP stub);
 
 SEXP rirDecompile(SEXP s);
 

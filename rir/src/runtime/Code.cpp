@@ -226,12 +226,6 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 << dumpSexp(Pool::get(bc.immediate.callFixedArgs.ast)) << "\n"
                 << std::setw(OFFSET_WIDTH) << "";
             break;
-        case Opcode::static_call_:
-            out << "   ; "
-                << dumpSexp(Pool::get(bc.immediate.staticCallFixedArgs.ast))
-                << "\n"
-                << std::setw(OFFSET_WIDTH) << "";
-            break;
         default: {}
         }
 

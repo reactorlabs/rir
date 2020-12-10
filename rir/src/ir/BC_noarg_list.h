@@ -7,17 +7,11 @@
 
 #define BC_NOARGS(V, NESTED)                                                   \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_BC_NOARGS, V)                  \
-    V(NESTED, updatePromise, update_promise)                                   \
     V(NESTED, nop, nop)                                                        \
-    V(NESTED, parentEnv, parent_env)                                           \
-    V(NESTED, getEnv, get_env)                                                 \
-    V(NESTED, setEnv, set_env)                                                 \
-    V(NESTED, materializeEnv, materialize_env)                                 \
     V(NESTED, ret, ret)                                                        \
     V(NESTED, pop, pop)                                                        \
     V(NESTED, force, force)                                                    \
     V(NESTED, asast, asast)                                                    \
-    V(NESTED, checkMissing, check_missing)                                     \
     V(NESTED, subassign1_1, subassign1_1)                                      \
     V(NESTED, subassign2_1, subassign2_1)                                      \
     V(NESTED, subassign1_2, subassign1_2)                                      \
@@ -65,7 +59,6 @@
     V(NESTED, extract2_1, extract2_1)                                          \
     V(NESTED, extract2_2, extract2_2)                                          \
     V(NESTED, swap, swap)                                                      \
-    V(NESTED, isstubenv, isstubenv)                                            \
     V(NESTED, return_, return )                                                \
     V(NESTED, colonInputEffects, colon_input_effects)                          \
     V(NESTED, colonCastLhs, colon_cast_lhs)                                    \

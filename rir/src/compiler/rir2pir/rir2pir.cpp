@@ -1112,36 +1112,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::return_:
         assert(false);
 
-    // Opcodes that only come from PIR
-    case Opcode::deopt_:
-    case Opcode::mk_stub_env_:
-    case Opcode::mk_env_:
-    case Opcode::mk_dotlist_:
-    case Opcode::get_env_:
-    case Opcode::parent_env_:
-    case Opcode::set_env_:
-    case Opcode::materialize_env_:
-    case Opcode::ldvar_noforce_:
-    case Opcode::ldvar_noforce_cached_:
-    case Opcode::ldvar_noforce_super_:
-    case Opcode::ldarg_:
-    case Opcode::ldloc_:
-    case Opcode::stloc_:
-    case Opcode::movloc_:
-    case Opcode::isstubenv_:
-    case Opcode::check_missing_:
-    case Opcode::static_call_:
-    case Opcode::pop_context_:
-    case Opcode::push_context_:
-    case Opcode::ldvar_noforce_stubbed_:
-    case Opcode::stvar_stubbed_:
-    case Opcode::starg_stubbed_:
-    case Opcode::assert_type_:
-    case Opcode::record_deopt_:
-    case Opcode::update_promise_:
-        log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
-        assert(false && "Recompiling PIR not supported for now.");
-
     // Unsupported opcodes:
     case Opcode::asast_:
     case Opcode::beginloop_:
@@ -1328,9 +1298,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 }
                 cur.stack.clear();
                 break;
-            case Opcode::deopt_:
-                log.warn("Cannot compile Function. Unsupported deopt bc");
-                return nullptr;
             default:
                 assert(false);
             }
