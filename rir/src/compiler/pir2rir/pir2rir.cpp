@@ -1382,6 +1382,7 @@ rir::Function* Pir2Rir::finalize() {
         std::function<void(Code*)> scan = [&](Code* c) {
             if (promMap.count(c))
                 return;
+            // cppcheck-suppress variableScope
             auto& pm = promMap[c];
             auto addProm = [&](Instruction* i) {
                 if (auto mk = MkArg::Cast(i)) {
