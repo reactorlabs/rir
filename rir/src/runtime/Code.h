@@ -65,6 +65,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     SEXP locals_[NumLocals];
 
   public:
+    static Code* New(SEXP ast, size_t codeSize, size_t sources, size_t locals,
+                     size_t bindingCache);
+    static Code* New(Immediate ast, size_t codeSize, size_t sources,
+                     size_t locals, size_t bindingCache);
+    static Code* New(Immediate ast);
+
     NativeCode nativeCode;
 
     static unsigned pad4(unsigned sizeInBytes) {

@@ -375,6 +375,7 @@ class MockBB : public BB {
             // ~Code wants to delete something
             entry = new MockBB;
         }
+        rir::Code* rirSrc() const override final { return nullptr; }
     };
 
   public:

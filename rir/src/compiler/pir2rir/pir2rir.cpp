@@ -250,6 +250,10 @@ class Pir2Rir {
             cs << label;
         }
     };
+
+    void approximateRefcount(Code*, NeedsRefcountAdjustment& refcount);
+    void approximateNeedsLdVarForUpdate(
+        Code*, std::unordered_set<Instruction*>& needsLdVarForUpdate);
 };
 
 #ifdef ENABLE_EVENT_COUNTERS
@@ -263,6 +267,45 @@ static unsigned ClosuresCompiled =
 
 static int PIR_NATIVE_BACKEND =
     getenv("PIR_NATIVE_BACKEND") ? atoi(getenv("PIR_NATIVE_BACKEND")) : 1;
+
+void Pir2Rir::approximateRefcount(Code* code,
+                                  NeedsRefcountAdjustment& refcount) {
+    StaticReferenceCount refcountAnalysis(cls, code, log.out());
+    refcountAnalysis();
+    refcount = refcountAnalysis.getGlobalState();
+}
+
+void Pir2Rir::approximateNeedsLdVarForUpdate(
+    Code* code, std::unordered_set<Instruction*>& needsLdVarForUpdate) {
+    Visitor::run(code->entry, [&](Instruction* i) {
+        switch (i->tag) {
+        case Tag::Subassign1_1D:
+        case Tag::Subassign2_1D:
+        case Tag::Subassign1_2D:
+        case Tag::Subassign2_2D:
+            // Subassigns override the vector, even if the named count
+            // is 1. This is only valid, if we are sure that the vector
+            // is local, ie. vector and subassign operation come from
+            // the same lexical scope.
+            if (auto vec =
+                    Instruction::Cast(i->arg(1).val()->followCastsAndForce())) {
+                if (auto ld = LdVar::Cast(vec)) {
+                    if (auto su = vec->hasSingleUse()) {
+                        if (auto st = StVar::Cast(su)) {
+                            if (ld->env() != st->env())
+                                needsLdVarForUpdate.insert(vec);
+                            break;
+                        }
+                    }
+                    if (ld->env() != i->env())
+                        needsLdVarForUpdate.insert(vec);
+                }
+            }
+            break;
+        default: {}
+        }
+    });
+}
 
 rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
 #ifdef ENABLE_EVENT_COUNTERS
@@ -311,42 +354,9 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     LoweringVisitor::run(code->entry, [&](BB* bb) { order.push_back(bb->id); });
 
     NeedsRefcountAdjustment refcount;
-    {
-        StaticReferenceCount refcountAnalysis(cls, log.out());
-        refcountAnalysis();
-        refcount = refcountAnalysis.getGlobalState();
-    }
+    approximateRefcount(code, refcount);
     std::unordered_set<Instruction*> needsLdVarForUpdate;
-    {
-        Visitor::run(code->entry, [&](Instruction* i) {
-            switch (i->tag) {
-            case Tag::Subassign1_1D:
-            case Tag::Subassign2_1D:
-            case Tag::Subassign1_2D:
-            case Tag::Subassign2_2D:
-                // Subassigns override the vector, even if the named count
-                // is 1. This is only valid, if we are sure that the vector
-                // is local, ie. vector and subassign operation come from
-                // the same lexical scope.
-                if (auto vec = Instruction::Cast(
-                        i->arg(1).val()->followCastsAndForce())) {
-                    if (auto ld = LdVar::Cast(vec)) {
-                        if (auto su = vec->hasSingleUse()) {
-                            if (auto st = StVar::Cast(su)) {
-                                if (ld->env() != st->env())
-                                    needsLdVarForUpdate.insert(vec);
-                                break;
-                            }
-                        }
-                        if (ld->env() != i->env())
-                            needsLdVarForUpdate.insert(vec);
-                    }
-                }
-                break;
-            default: {}
-            }
-        });
-    }
+    approximateNeedsLdVarForUpdate(code, needsLdVarForUpdate);
 
     std::unordered_map<Code*, std::pair<unsigned, MkEnv*>> promMap;
 
@@ -1163,12 +1173,10 @@ rir::Code* Pir2Rir::compileCode(Context& ctx, Code* code) {
     auto res = ctx.finalizeCode(localsCnt, cache.size());
     if (PIR_NATIVE_BACKEND) {
         LowerLLVM native;
-        if (auto n = native.tryCompile(cls, code, promMap, refcount,
-                                       needsLdVarForUpdate, log.out())) {
-            res->nativeCode = (NativeCode)n;
-            if (native.pirTypeFeedback)
-                res->pirTypeFeedback(native.pirTypeFeedback);
-        }
+        res->nativeCode = (NativeCode)native.compile(
+            cls, code, promMap, refcount, needsLdVarForUpdate, log.out());
+        if (native.pirTypeFeedback)
+            res->pirTypeFeedback(native.pirTypeFeedback);
     }
     return res;
 }
@@ -1181,7 +1189,6 @@ static bool coinFlip() {
 };
 
 void Pir2Rir::lower(Code* code) {
-
     Visitor::runPostChange(code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
@@ -1346,6 +1353,7 @@ rir::Function* Pir2Rir::finalize() {
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?
 
+    Preserve preserve;
     FunctionWriter function;
     Context ctx(function);
 
@@ -1362,17 +1370,72 @@ rir::Function* Pir2Rir::finalize() {
     }
 
     assert(signature.formalNargs() == cls->nargs());
-    ctx.push(R_NilValue);
-    auto body = compileCode(ctx, cls);
+    rir::Code* body;
+    if (Parameter::ENABLE_PIR2RIR || !PIR_NATIVE_BACKEND) {
+        ctx.push(R_NilValue);
+        body = compileCode(ctx, cls);
+    } else {
+        LowerLLVM native;
+        std::unordered_map<
+            Code*, std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>>
+            promMap;
+        std::function<void(Code*)> scan = [&](Code* c) {
+            if (promMap.count(c))
+                return;
+            auto& pm = promMap[c];
+            auto addProm = [&](Instruction* i) {
+                if (auto mk = MkArg::Cast(i)) {
+                    auto p = mk->prom();
+                    if (!pm.count(p)) {
+                        scan(p);
+                        pm[p] = {pm.size(), MkEnv::Cast(mk->env())};
+                    }
+                }
+            };
+            lower(c);
+            toCSSA(c);
+            Visitor::run(c->entry, addProm);
+        };
+        scan(cls);
+
+        std::unordered_map<Code*, rir::Code*> done;
+        std::function<rir::Code*(Code*)> compile = [&](Code* c) {
+            if (done.count(c))
+                return done.at(c);
+            NeedsRefcountAdjustment refcount;
+            approximateRefcount(c, refcount);
+            std::unordered_set<Instruction*> needsLdVarForUpdate;
+            approximateNeedsLdVarForUpdate(c, needsLdVarForUpdate);
+            auto res = done[c] = rir::Code::New(c->rirSrc()->src);
+            preserve(res->container());
+            res->nativeCode =
+                (NativeCode)native.compile(cls, c, promMap.at(c), refcount,
+                                           needsLdVarForUpdate, log.out());
+            if (native.pirTypeFeedback)
+                res->pirTypeFeedback(native.pirTypeFeedback);
+            auto& pm = promMap.at(c);
+            // Order of prms in the extra pool must equal id in promMap
+            std::vector<Code*> proms(pm.size());
+            for (auto p : pm)
+                proms.at(p.second.first) = p.first;
+            for (auto p : proms)
+                res->addExtraPoolEntry(compile(p)->container());
+            return res;
+        };
+        body = compile(cls);
+    }
+
     log.finalPIR(cls);
     function.finalize(body, signature, cls->context());
 
     function.function()->inheritFlags(cls->owner()->rirFunction());
+    if (Parameter::ENABLE_PIR2RIR || !PIR_NATIVE_BACKEND) {
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());
 #endif
     log.finalRIR(function.function());
+    }
 #ifdef ENABLE_EVENT_COUNTERS
     if (ENABLE_EVENT_COUNTERS)
         EventCounters::instance().count(ClosuresCompiled, cls->inlinees + 1);
@@ -1404,6 +1467,9 @@ int Parameter::DEOPT_CHAOS =
     getenv("PIR_DEOPT_CHAOS") ? atoi(getenv("PIR_DEOPT_CHAOS")) : 0;
 int Parameter::DEOPT_CHAOS_SEED =
     getenv("PIR_DEOPT_CHAOS_SEED") ? atoi(getenv("PIR_DEOPT_CHAOS_SEED")) : 42;
+bool Parameter::ENABLE_PIR2RIR =
+    getenv("PIR_ENABLE_PIR2RIR") &&
+    0 == strncmp("1", getenv("PIR_ENABLE_PIR2RIR"), 1);
 
 } // namespace pir
 } // namespace rir

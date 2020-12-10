@@ -91,6 +91,8 @@ class ClosureVersion : public Code {
 
     size_t size() const override final;
 
+    rir::Code* rirSrc() const override final;
+
     friend std::ostream& operator<<(std::ostream& out,
                                     const ClosureVersion& e) {
         out << e.name();

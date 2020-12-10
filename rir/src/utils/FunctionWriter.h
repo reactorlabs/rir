@@ -66,14 +66,10 @@ class FunctionWriter {
         assert(function_ == nullptr &&
                "Trying to add more code after finalizing");
         unsigned codeSize = originalCodeSize - nops;
-        unsigned totalSize = Code::size(codeSize, sources.size());
 
-        auto src = src_pool_add(globalContext(), ast);
-        SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
-        void* payload = DATAPTR(store);
-        Code* code = new (payload) Code(nullptr, ast, src, codeSize,
-                                        sources.size(), localsCnt, bindingsCnt);
-        preserve(store);
+        Code* code =
+            Code::New(ast, codeSize, sources.size(), localsCnt, bindingsCnt);
+        preserve(code->container());
 
         size_t numberOfSources = 0;
 

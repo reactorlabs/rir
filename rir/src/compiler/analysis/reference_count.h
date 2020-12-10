@@ -173,8 +173,8 @@ class StaticReferenceCount
     DominanceGraph dom;
 
   public:
-    StaticReferenceCount(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("StaticReferenceCountAnalysis", cls, cls, log),
+    StaticReferenceCount(ClosureVersion* cls, Code* code, LogStream& log)
+        : StaticAnalysis("StaticReferenceCountAnalysis", cls, code, log),
           dom(cls) {
         globalState = new NeedsRefcountAdjustment;
     }

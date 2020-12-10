@@ -173,6 +173,21 @@ NativeBuiltin NativeBuiltins::ldvarCacheMiss = {
     (void*)&ldvarCachedImpl,
 };
 
+void stvarSuperImpl(SEXP a, SEXP val, SEXP env) {
+    auto le = LazyEnvironment::check(env);
+    assert(!le || !le->materialized());
+    SEXP superEnv;
+    if (le)
+        superEnv = le->getParent();
+    else
+        superEnv = ENCLOS(env);
+    rirSetVarWrapper(a, val, superEnv);
+}
+NativeBuiltin NativeBuiltins::stvarSuper = {
+    "stvarSuper",
+    (void*)&stvarSuperImpl,
+};
+
 void stvarImpl(SEXP a, SEXP val, SEXP c) { rirDefineVarWrapper(a, val, c); }
 NativeBuiltin NativeBuiltins::stvar = {
     "stvar",
