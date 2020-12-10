@@ -158,10 +158,8 @@ class ClosureStreamLogger : public GenericStreamLogger {
 
     void pirOptimizationsFinished(ClosureVersion*);
     void compilationEarlyPir(ClosureVersion*);
-    void afterAllocator(Code*, std::function<void(std::ostream&)>);
     void CSSA(Code*);
     void finalPIR(ClosureVersion*);
-    void finalRIR(Function*);
     void unsupportedBC(const std::string&, const rir::BC&);
 
     void preparePrint() override {

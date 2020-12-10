@@ -29,48 +29,15 @@
 namespace rir {
 namespace pir {
 
-namespace {
-
-class Pir2Rir {
-  public:
-    Pir2Rir(Pir2RirCompiler& cmp, ClosureVersion* cls, bool dryRun,
-            ClosureStreamLogger& log)
-        : compiler(cmp), cls(cls), dryRun(dryRun), log(log) {}
-    rir::Code* compileCode(Context& ctx, Code* code);
-    rir::Code* getPromise(Context& ctx, Promise* code);
-
-    void lower(Code* code);
-    void toCSSA(Code* code);
-    rir::Function* finalize();
-
-  private:
-    Pir2RirCompiler& compiler;
-    ClosureVersion* cls;
-    bool dryRun;
-    ClosureStreamLogger& log;
-
-    void approximateRefcount(Code*, NeedsRefcountAdjustment& refcount);
-    void approximateNeedsLdVarForUpdate(
-        Code*, std::unordered_set<Instruction*>& needsLdVarForUpdate);
-};
-
-#ifdef ENABLE_EVENT_COUNTERS
-static unsigned MkEnvEmited =
-    EventCounters::instance().registerCounter("mkenv emited");
-static unsigned MkEnvStubEmited =
-    EventCounters::instance().registerCounter("mkenvstub emited");
-static unsigned ClosuresCompiled =
-    EventCounters::instance().registerCounter("closures compiled");
-#endif
-
-void Pir2Rir::approximateRefcount(Code* code,
-                                  NeedsRefcountAdjustment& refcount) {
+static void approximateRefcount(ClosureVersion* cls, Code* code,
+                                NeedsRefcountAdjustment& refcount,
+                                ClosureStreamLogger& log) {
     StaticReferenceCount refcountAnalysis(cls, code, log.out());
     refcountAnalysis();
     refcount = refcountAnalysis.getGlobalState();
 }
 
-void Pir2Rir::approximateNeedsLdVarForUpdate(
+static void approximateNeedsLdVarForUpdate(
     Code* code, std::unordered_set<Instruction*>& needsLdVarForUpdate) {
     Visitor::run(code->entry, [&](Instruction* i) {
         switch (i->tag) {
@@ -109,7 +76,7 @@ static bool coinFlip() {
     return coin(gen);
 };
 
-void Pir2Rir::lower(Code* code) {
+static void lower(Code* code) {
     Visitor::runPostChange(code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
@@ -212,7 +179,7 @@ void Pir2Rir::lower(Code* code) {
     });
 }
 
-void Pir2Rir::toCSSA(Code* code) {
+static void toCSSA(Code* code) {
 
     // For each Phi, insert copies
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
@@ -261,7 +228,8 @@ void Pir2Rir::toCSSA(Code* code) {
     });
 }
 
-rir::Function* Pir2Rir::finalize() {
+rir::Function* Pir2RirCompiler::doCompile(ClosureVersion* cls,
+                                          ClosureStreamLogger& log) {
     // TODO: keep track of source ast indices in the source pool
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?
@@ -282,7 +250,6 @@ rir::Function* Pir2Rir::finalize() {
     }
 
     assert(signature.formalNargs() == cls->nargs());
-    LowerLLVM native;
     std::unordered_map<Code*,
                        std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>>
         promMap;
@@ -319,7 +286,7 @@ rir::Function* Pir2Rir::finalize() {
         if (done.count(c))
             return done.at(c);
         NeedsRefcountAdjustment refcount;
-        approximateRefcount(c, refcount);
+        approximateRefcount(cls, c, refcount, log);
         std::unordered_set<Instruction*> needsLdVarForUpdate;
         approximateNeedsLdVarForUpdate(c, needsLdVarForUpdate);
         auto res = done[c] = rir::Code::New(c->rirSrc()->src);
@@ -343,20 +310,14 @@ rir::Function* Pir2Rir::finalize() {
     function.finalize(body, signature, cls->context());
 
     function.function()->inheritFlags(cls->owner()->rirFunction());
-#ifdef ENABLE_EVENT_COUNTERS
-    if (ENABLE_EVENT_COUNTERS)
-        EventCounters::instance().count(ClosuresCompiled, cls->inlinees + 1);
-#endif
     return function.function();
 }
 
-} // namespace
-
-rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, bool dryRun) {
+rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls) {
     auto& log = logger.get(cls);
+    assert(!done[cls]);
     done[cls] = nullptr;
-    Pir2Rir pir2rir(*this, cls, dryRun, log);
-    auto fun = pir2rir.finalize();
+    auto fun = doCompile(cls, log);
     done[cls] = fun;
     log.flush();
     if (fixup.count(cls)) {

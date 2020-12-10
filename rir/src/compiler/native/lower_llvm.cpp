@@ -119,7 +119,7 @@ class NativeAllocator : public SSAAllocator {
   public:
     NativeAllocator(Code* code, ClosureVersion* cls,
                     const LivenessIntervals& livenessIntervals, LogStream& log)
-        : SSAAllocator(code, cls, livenessIntervals, false, log) {}
+        : SSAAllocator(code, cls, livenessIntervals, log) {}
 
     bool needsAVariable(Value* v) const {
         return v->producesRirResult() && !LdConst::Cast(v) &&
@@ -408,7 +408,6 @@ class LowerFunctionLLVM {
     llvm::Value* stack(int i);
     void stack(const std::vector<llvm::Value*>& args);
     void setLocal(size_t i, llvm::Value* v);
-    llvm::Value* getLocal(size_t i);
     void incStack(int i, bool zero);
     void decStack(int i);
     llvm::Value* withCallFrame(const std::vector<Value*>& args,
@@ -614,8 +613,6 @@ class LowerFunctionLLVM {
 
     void compile();
 
-    bool tryInlineBuiltin(int builtin);
-
     llvm::Value* createSelect2(llvm::Value* cond,
                                std::function<llvm::Value*()> trueValueAction,
                                std::function<llvm::Value*()> falseValueAction);
@@ -769,12 +766,6 @@ void LowerFunctionLLVM::setLocal(size_t i, llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto pos = builder.CreateGEP(basepointer, {c(i), c(1)});
     builder.CreateStore(v, pos, true);
-}
-
-llvm::Value* LowerFunctionLLVM::getLocal(size_t i) {
-    assert(i < numLocals);
-    auto pos = builder.CreateGEP(basepointer, {c(i), c(1)});
-    return builder.CreateLoad(pos);
 }
 
 void LowerFunctionLLVM::incStack(int i, bool zero) {
@@ -2258,11 +2249,6 @@ llvm::Value* LowerFunctionLLVM::isAltrep(llvm::Value* v) {
     return builder.CreateICmpNE(
         c(0, 64),
         builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 2)))));
-};
-
-bool LowerFunctionLLVM::tryInlineBuiltin(int builtin) {
-    switch (builtin) {}
-    return false;
 };
 
 llvm::Value* LowerFunctionLLVM::createSelect2(

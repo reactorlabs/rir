@@ -21,7 +21,6 @@ class BBTransform {
     static BB* splitEdge(size_t next_id, BB* from, BB* to, Code* target);
     static BB* split(size_t next_id, BB* src, BB::Instrs::iterator,
                      Code* target);
-    static void splitCriticalEdges(Code* fun);
     static std::pair<Value*, BB*> forInline(BB* inlinee, BB* cont,
                                             Value* context);
     static BB* lowerExpect(Code* closure, BB* src,
