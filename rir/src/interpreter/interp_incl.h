@@ -56,7 +56,10 @@ SEXP copyBySerial(SEXP x);
 
 SEXP materialize(SEXP rirDataWrapper);
 
-SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc = nullptr);
+SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc);
+inline SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx) {
+    return evaluatePromise(e, ctx, nullptr);
+}
 inline SEXP evaluatePromise(SEXP e) {
     return evaluatePromise(e, globalContext());
 }

@@ -182,7 +182,7 @@ typedef struct RPRSTACK {
 } RPRSTACK;
 extern "C" struct RPRSTACK* R_PendingPromises;
 
-RIR_INLINE SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc) {
+SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc) {
     // if already evaluated, return the value
     if (PRVALUE(e) && PRVALUE(e) != R_UnboundValue) {
         e = PRVALUE(e);
