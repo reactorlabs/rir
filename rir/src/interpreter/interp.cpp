@@ -290,27 +290,31 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
     assert((args || argsStore) &&
            "Cannot materialize promargs for statically reordered "
            "arguments. Static Call to UseMethod function?");
+    assert((!recreateOriginalPromargs || ast) &&
+           "need ast to recreate promargs");
     SEXP result = R_NilValue;
     SEXP pos = result;
 
-    SEXP formal = nullptr;
+    SEXP a = nullptr;
     if (ast)
-        formal = CDR(ast);
+        a = CDR(ast);
 
     for (size_t i = 0; i < length; ++i) {
 
-        SEXP name = names ? cp_pool_at(ctx, names[i])
-                          : (ast ? TAG(formal) : R_NilValue);
+        SEXP name =
+            names ? cp_pool_at(ctx, names[i]) : (ast ? TAG(a) : R_NilValue);
 
-        if (ast)
-            formal = CDR(formal);
+        SEXP expr = R_NilValue;
+        if (ast) {
+            expr = CAR(a);
+            a = CDR(a);
+        }
 
         SEXP arg = args ? ostack_at_cell(args + i) : argsStore->getEntry(i);
 
         // This can happen if context dispatch padded the call with "synthetic"
         // missings to be able to call a version which expects more args
-        if (recreateOriginalPromargs && arg == R_MissingArg && ast &&
-            formal == R_NilValue)
+        if (recreateOriginalPromargs && arg == R_MissingArg && a == R_NilValue)
             continue;
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
@@ -318,8 +322,11 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
         }
 
         // This can happen if we materialize the lazy arglist of a statically
-        // argmatched call, where dots gets pre-created by the caller.
-        if (recreateOriginalPromargs && TYPEOF(arg) == DOTSXP) {
+        // argmatched call, where dots gets pre-created by the caller. Under
+        // normal conditions the only legal way of passing a DOTSXP is by
+        // passing the expression `...` as an argument.
+        if (recreateOriginalPromargs && TYPEOF(arg) == DOTSXP &&
+            expr != R_DotsSymbol) {
             while (arg != R_NilValue) {
                 auto v = CAR(arg);
                 if (eagerCallee && TYPEOF(v) == PROMSXP)
@@ -930,9 +937,9 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
             }
         }
     } else {
-        env = closureArgumentAdaptor(call, frame, R_NilValue);
-        // The Adapter updates the promargs while matching
+        // No need for lazy args if we have the non-modified list anyway
         promargs = frame;
+        env = closureArgumentAdaptor(call, frame, R_NilValue);
         PROTECT(env);
         npreserved++;
     }
