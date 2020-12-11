@@ -2,6 +2,7 @@
 #define PIR_COMPILER_LOWER_FUNCTION_LLVM_H
 
 #include "jit_llvm.h"
+#include "lower_llvm.h"
 #include "types_llvm.h"
 
 #include "compiler/pir/pir.h"
@@ -28,7 +29,7 @@ class LowerFunctionLLVM {
     Code* code;
     BB::Instrs::iterator currentInstr;
     BB* currentBB = nullptr;
-    const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>& promMap;
+    const PromMap& promMap;
     const NeedsRefcountAdjustment& refcount;
     const std::unordered_set<Instruction*>& needsLdVarForUpdate;
     llvm::IRBuilder<> builder;
@@ -67,8 +68,7 @@ class LowerFunctionLLVM {
 
     LowerFunctionLLVM(
         const std::string& name, ClosureVersion* cls, Code* code,
-        const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>& promMap,
-        const NeedsRefcountAdjustment& refcount,
+        const PromMap& promMap, const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         LogStream& log)
         : cls(cls), code(code), promMap(promMap), refcount(refcount),
@@ -84,8 +84,10 @@ class LowerFunctionLLVM {
         this->cls->size();
         this->promMap.size();
         auto p = promMap.find(code);
-        if (p != promMap.end())
-            myPromenv = p->second.second;
+        if (p != promMap.end()) {
+            auto mk = MkEnv::Cast(p->second.second->env());
+            myPromenv = mk;
+        }
     }
 
     static llvm::Constant* convertToPointer(void* what,

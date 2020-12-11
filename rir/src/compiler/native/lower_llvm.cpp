@@ -6,8 +6,7 @@ namespace rir {
 namespace pir {
 
 void LowerLLVM::compile(
-    rir::Code* target, ClosureVersion* cls, Code* code,
-    const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>& m,
+    rir::Code* target, ClosureVersion* cls, Code* code, const PromMap& m,
     const NeedsRefcountAdjustment& refcount,
     const std::unordered_set<Instruction*>& needsLdVarForUpdate,
     LogStream& log) {

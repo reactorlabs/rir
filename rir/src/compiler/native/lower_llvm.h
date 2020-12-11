@@ -13,12 +13,13 @@ namespace pir {
 
 struct NeedsRefcountAdjustment;
 
+typedef std::unordered_map<Code*, std::pair<unsigned, MkArg*>> PromMap;
+
 class LowerLLVM {
   public:
     LowerLLVM() {}
     void compile(rir::Code* target, ClosureVersion* cls, Code* code,
-                 const std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>&,
-                 const NeedsRefcountAdjustment& refcount,
+                 const PromMap&, const NeedsRefcountAdjustment& refcount,
                  const std::unordered_set<Instruction*>& needsLdVarForUpdate,
                  LogStream& log);
 };

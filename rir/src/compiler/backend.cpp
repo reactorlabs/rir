@@ -251,7 +251,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
     assert(signature.formalNargs() == cls->nargs());
     std::unordered_map<Code*,
-                       std::unordered_map<Code*, std::pair<unsigned, MkEnv*>>>
+                       std::unordered_map<Code*, std::pair<unsigned, MkArg*>>>
         promMap;
     std::function<void(Code*)> scan = [&](Code* c) {
         if (promMap.count(c))
@@ -263,7 +263,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                 auto p = mk->prom();
                 if (!pm.count(p)) {
                     scan(p);
-                    pm[p] = {pm.size(), MkEnv::Cast(mk->env())};
+                    pm[p] = {pm.size(), mk};
                 }
             }
         };
@@ -299,8 +299,12 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         std::vector<Code*> proms(pm.size());
         for (auto p : pm)
             proms.at(p.second.first) = p.first;
-        for (auto p : proms)
-            res->addExtraPoolEntry(compile(p)->container());
+        for (auto p : proms) {
+            auto code = compile(p);
+            if (pm.at(p).second->noReflection)
+                res->flags.set(rir::Code::NoReflection);
+            res->addExtraPoolEntry(code->container());
+        }
         return res;
     };
     auto body = compile(cls);

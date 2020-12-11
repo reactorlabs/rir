@@ -19,6 +19,7 @@ class Instruction;
 class LazyEnv;
 class Module;
 class MkEnv;
+class MkArg;
 class LogStream;
 }
 }
