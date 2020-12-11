@@ -8,6 +8,7 @@
 namespace rir {
 
 enum class Opcode : uint8_t;
+struct Code;
 
 namespace pir {
 

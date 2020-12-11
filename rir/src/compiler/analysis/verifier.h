@@ -3,6 +3,8 @@
 
 #include "../pir/pir.h"
 
+#include <string>
+
 namespace rir {
 namespace pir {
 

@@ -3,7 +3,6 @@
 #include "../analysis/query.h"
 #include "../analysis/verifier.h"
 #include "../pir/pir_impl.h"
-#include "../pir2rir/pir2rir.h"
 #include "../util/visitor.h"
 #include "R/Protect.h"
 #include "R/RList.h"

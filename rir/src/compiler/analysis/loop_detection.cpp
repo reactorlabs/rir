@@ -85,5 +85,13 @@ LoopDetection::LoopDetection(Code* code, bool determineNesting) {
     }
 }
 
+void LoopDetection::Loop::print(std::ostream& out, bool tty) {
+    out << "==========\nLoop Start:\n";
+    for (auto bb : body_) {
+        bb->print(out, tty);
+    }
+    out << "==========\nLoop End";
+}
+
 } // namespace pir
 } // namespace rir

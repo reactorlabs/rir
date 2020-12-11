@@ -1,4 +1,4 @@
-#include "pir2rir.h"
+#include "backend.h"
 #include "R/BuiltinIds.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/analysis/last_env.h"
@@ -228,8 +228,8 @@ static void toCSSA(Code* code) {
     });
 }
 
-rir::Function* Pir2RirCompiler::doCompile(ClosureVersion* cls,
-                                          ClosureStreamLogger& log) {
+rir::Function* Backend::doCompile(ClosureVersion* cls,
+                                  ClosureStreamLogger& log) {
     // TODO: keep track of source ast indices in the source pool
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?
@@ -282,6 +282,7 @@ rir::Function* Pir2RirCompiler::doCompile(ClosureVersion* cls,
     scan(cls);
 
     std::unordered_map<Code*, rir::Code*> done;
+    LowerLLVM lowerLlvm;
     std::function<rir::Code*(Code*)> compile = [&](Code* c) {
         if (done.count(c))
             return done.at(c);
@@ -291,10 +292,8 @@ rir::Function* Pir2RirCompiler::doCompile(ClosureVersion* cls,
         approximateNeedsLdVarForUpdate(c, needsLdVarForUpdate);
         auto res = done[c] = rir::Code::New(c->rirSrc()->src);
         preserve(res->container());
-        res->nativeCode = (NativeCode)native.compile(
-            cls, c, promMap.at(c), refcount, needsLdVarForUpdate, log.out());
-        if (native.pirTypeFeedback)
-            res->pirTypeFeedback(native.pirTypeFeedback);
+        lowerLlvm.compile(res, cls, c, promMap.at(c), refcount,
+                          needsLdVarForUpdate, log.out());
         auto& pm = promMap.at(c);
         // Order of prms in the extra pool must equal id in promMap
         std::vector<Code*> proms(pm.size());
@@ -313,13 +312,17 @@ rir::Function* Pir2RirCompiler::doCompile(ClosureVersion* cls,
     return function.function();
 }
 
-rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls) {
+rir::Function* Backend::compile(ClosureVersion* cls) {
+    auto res = done.find(cls);
+    if (res != done.end())
+        return res->second;
+
     auto& log = logger.get(cls);
-    assert(!done[cls]);
     done[cls] = nullptr;
     auto fun = doCompile(cls, log);
     done[cls] = fun;
     log.flush();
+
     if (fixup.count(cls)) {
         auto fixups = fixup.find(cls);
         for (auto idx : fixups->second)

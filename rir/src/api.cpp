@@ -9,10 +9,10 @@
 
 #include "R/Funtab.h"
 #include "R/Serialize.h"
+#include "compiler/backend.h"
 #include "compiler/compiler.h"
 #include "compiler/log/debug.h"
 #include "compiler/parameter.h"
-#include "compiler/pir2rir/pir2rir.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
@@ -291,14 +291,13 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
+    pir::Backend backend(logger);
     cmp.compileClosure(what, name, assumptions,
                        [&](pir::ClosureVersion* c) {
                            logger.flush();
                            cmp.optimizeModule();
 
-                           // compile back to rir
-                           pir::Pir2RirCompiler p2r(logger);
-                           auto fun = p2r.compile(c);
+                           auto fun = backend.compile(c);
 
                            // Install
                            if (dryRun)

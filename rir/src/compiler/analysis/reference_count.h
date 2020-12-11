@@ -1,7 +1,7 @@
 #ifndef PIR_REFERENCE_COUNT_H
 #define PIR_REFERENCE_COUNT_H
 
-#include "../pir/pir_impl.h"
+#include "../pir/pir.h"
 #include "dead.h"
 #include "generic_static_analysis.h"
 #include "utils/Map.h"

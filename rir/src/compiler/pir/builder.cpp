@@ -1,5 +1,7 @@
 #include "builder.h"
-#include "../pir/pir_impl.h"
+
+#include "compiler/pir/pir_impl.h"
+#include "runtime/Context.h"
 
 namespace rir {
 namespace pir {

@@ -3,7 +3,7 @@
 
 #include "utils/EnumSet.h"
 
-#include <R/r.h>
+#include <R/r_incl.h>
 #include <array>
 #include <cstring>
 #include <iostream>

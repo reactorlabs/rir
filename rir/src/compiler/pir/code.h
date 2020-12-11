@@ -3,7 +3,12 @@
 
 #include "pir.h"
 
+#include <cstddef>
+#include <iostream>
+
 namespace rir {
+struct Code;
+
 namespace pir {
 
 /*
