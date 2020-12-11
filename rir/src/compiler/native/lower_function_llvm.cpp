@@ -1,4 +1,5 @@
 #include "lower_function_llvm.h"
+#include "compiler/native/types_llvm.h"
 #include "representation_llvm.h"
 
 #include "llvm/IR/Intrinsics.h"
@@ -17,6 +18,7 @@
 #include "runtime/DispatchTable.h"
 #include "utils/Pool.h"
 
+#include "compiler/parameter.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/lowering/allocators.h"
 #include "compiler/util/visitor.h"
@@ -376,6 +378,9 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
     if (res->getType() == t::SEXP && needed != t::SEXP) {
         if (type.isA(PirType(RType::integer).scalar().notObject())) {
             res = unboxInt(res);
+            assert(res->getType() == t::Int);
+        } else if (type.isA(PirType(RType::logical).scalar().notObject())) {
+            res = unboxLgl(res);
             assert(res->getType() == t::Int);
         } else if (type.isA((PirType() | RType::integer | RType::logical)
                                 .scalar()
@@ -4324,7 +4329,8 @@ void LowerFunctionLLVM::compile() {
                 auto irep = Representation::Of(subAssign->idx1());
                 auto vrep = Representation::Of(subAssign->rhs());
                 if (Representation::Of(subAssign->idx2()) == irep &&
-                    irep != t::SEXP && vrep != t::SEXP) {
+                    irep != t::SEXP && vrep != t::SEXP &&
+                    subAssign->rhs()->type.isA(subAssign->lhs()->type)) {
                     NativeBuiltin setter;
                     if (irep == t::Int && vrep == t::Int)
                         setter = NativeBuiltins::subassign22iii;
@@ -4470,6 +4476,7 @@ void LowerFunctionLLVM::compile() {
                     Representation::Of(i) == t::SEXP)
                     fastcase = false;
 
+                fastcase = false;
                 if (fastcase) {
                     auto fallback = BasicBlock::Create(C, "", fun);
                     done = BasicBlock::Create(C, "", fun);
@@ -4507,7 +4514,8 @@ void LowerFunctionLLVM::compile() {
                 llvm::Value* res0 = nullptr;
                 auto irep = Representation::Of(subAssign->idx());
                 auto vrep = Representation::Of(subAssign->val());
-                if (irep != t::SEXP && vrep != t::SEXP) {
+                if (irep != t::SEXP && vrep != t::SEXP &&
+                    subAssign->val()->type.isA(subAssign->vector()->type)) {
                     NativeBuiltin setter;
                     if (irep == t::Int && vrep == t::Int)
                         setter = NativeBuiltins::subassign21ii;
@@ -4830,6 +4838,26 @@ void LowerFunctionLLVM::compile() {
             ++currentInstr;
             if (!Phi::Cast(i))
                 ensureNamedIfNeeded(i);
+
+            if (Parameter::RIR_CHECK_PIR_TYPES > 0 &&
+                Representation::Of(i) == t::SEXP) {
+                if (variables_.count(i) && i->type != PirType::voyd() &&
+                    i->type != RType::expandedDots &&
+                    i->type != NativeType::context && !CastType::Cast(i) &&
+                    !LdConst::Cast(i)) {
+                    static std::vector<std::string> leaky;
+                    const char* msg = nullptr;
+                    if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
+                        std::stringstream str;
+                        i->printRecursive(str, 2);
+                        leaky.push_back(str.str());
+                        msg = leaky.back().c_str();
+                    }
+                    call(NativeBuiltins::checkType,
+                         {load(i), c(i->type.serialize()),
+                          convertToPointer(msg)});
+                }
+            }
 
             numTemps = 0;
         }

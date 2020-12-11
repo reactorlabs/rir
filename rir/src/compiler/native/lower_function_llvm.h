@@ -90,7 +90,7 @@ class LowerFunctionLLVM {
         }
     }
 
-    static llvm::Constant* convertToPointer(void* what,
+    static llvm::Constant* convertToPointer(const void* what,
                                             llvm::Type* ty = t::voidPtr) {
         return llvm::ConstantExpr::getCast(
             llvm::Instruction::IntToPtr,

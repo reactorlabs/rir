@@ -2413,5 +2413,25 @@ NativeBuiltin NativeBuiltins::clsEq = {
     (void*)&clsEqImpl,
     nullptr,
     {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
+
+void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
+    assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
+    pir::PirType typ(type);
+    if (!typ.isInstance(val)) {
+        std::cerr << "type assert failed\n";
+        std::cerr << "got " << pir::PirType(val) << " but expexted a " << typ
+                  << ":\n";
+        Rf_PrintValue(val);
+        std::cout << (PRVALUE(val) == R_UnboundValue) << " / "
+                  << (PRVALUE(val) == R_MissingArg) << "\n";
+        if (msg)
+            std::cout << msg;
+
+        assert(false);
+    }
+}
+
+NativeBuiltin NativeBuiltins::checkType = {
+    "checkType", (void*)&checkTypeImpl, nullptr, {}};
 }
 }

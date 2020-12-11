@@ -170,7 +170,14 @@ struct PirType {
     explicit PirType(SEXP);
     constexpr PirType(const PirType& other)
         : flags_(other.flags_), t_(other.t_) {}
-    explicit PirType(const void* pos);
+
+    explicit PirType(uint64_t);
+    uint64_t serialize() {
+        uint64_t i;
+        static_assert(sizeof(*this) <= sizeof(uint64_t), "PirType is too big");
+        memcpy(&i, this, sizeof(*this));
+        return i;
+    }
 
     PirType& operator=(const PirType& o) {
         flags_ = o.flags_;

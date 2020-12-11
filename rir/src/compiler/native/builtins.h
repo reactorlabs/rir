@@ -175,6 +175,8 @@ struct NativeBuiltins {
     static NativeBuiltin nonLocalReturn;
 
     static NativeBuiltin clsEq;
+
+    static NativeBuiltin checkType;
 };
 
 }
