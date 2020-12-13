@@ -300,13 +300,20 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         AbstractResult res;
         auto apply = [&](Instruction* i) {
-            i->eachArg([&](Value* v) {
-                v = v->followCasts();
+            auto pc = PushContext::Cast(i);
+            i->eachArg([&](Value* v_) {
+                auto v = v_->followCasts();
                 auto instruction = Instruction::Cast(v);
                 if (MkArg::Cast(v) || LdArg::Cast(v) ||
-                    (instruction && instruction->type.maybeLazy()))
+                    (instruction && instruction->type.maybeLazy())) {
+                    // Pushcontext captures the arglist, which contains the
+                    // originally passed arguments. These must not be
+                    // updated!
+                    if (pc && pc->ast() != v_ && pc->op() != v_)
+                        return;
                     if (state.escape(instruction))
                         res.update();
+                }
             });
         };
         if (auto phi = Phi::Cast(i)) {
