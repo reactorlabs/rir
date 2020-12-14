@@ -706,6 +706,61 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         return bitwiseOp(bitShiftR(), args[0], args[1], false);
     }
+
+    case blt("row"): {
+        if (nargs != 1)
+            return nullptr;
+        SEXP dim = args[0];
+        int nprot = 0;
+        if (!isInteger(dim)) {
+            PROTECT(dim = coerceVector(dim, INTSXP));
+            nprot++;
+        }
+        if (LENGTH(dim) != 2)
+            Rf_error("a matrix-like object is required as argument to 'row'");
+
+        int nr = INTEGER(dim)[0], nc = INTEGER(dim)[1];
+        if (nprot)
+            UNPROTECT(nprot);
+
+        SEXP ans = allocMatrix(INTSXP, nr, nc);
+
+        R_xlen_t NR = nr;
+        for (int i = 0; i < nr; i++)
+            for (int j = 0; j < nc; j++)
+                INTEGER(ans)[i + j * NR] = i + 1;
+        return ans;
+    }
+
+    case blt("col"): {
+        if (nargs != 1)
+            return nullptr;
+        SEXP dim = args[0];
+        int nprot = 0;
+        if (!isInteger(dim)) {
+            PROTECT(dim = coerceVector(dim, INTSXP));
+            nprot++;
+        }
+        if (LENGTH(dim) != 2)
+            Rf_error("a matrix-like object is required as argument to 'col'");
+
+        int nr = INTEGER(dim)[0], nc = INTEGER(dim)[1];
+        if (nprot)
+            UNPROTECT(nprot);
+
+        SEXP ans = allocMatrix(INTSXP, nr, nc);
+
+        R_xlen_t NR = nr;
+        for (int i = 0; i < nr; i++)
+            for (int j = 0; j < nc; j++)
+                INTEGER(ans)[i + j * NR] = j + 1;
+        return ans;
+    }
+    case blt("dim"): {
+        if (nargs != 1)
+            return nullptr;
+        return getAttrib(args[0], R_DimNamesSymbol);
+    }
     }
     return nullptr;
 }
@@ -747,6 +802,9 @@ bool supportsFastBuiltinCall(SEXP b) {
     case blt("bitwiseShiftL"):
     case blt("bitwiseShiftR"):
     case blt("baseenv"):
+    case blt("col"):
+    case blt("row"):
+    case blt("dim"):
         return true;
     default: {}
     }
