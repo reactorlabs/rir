@@ -2718,31 +2718,35 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                 }
-                if (b->builtinId == blt("c")) {
-                    bool allInt = true;
-                    bool allReal = true;
-                    b->eachCallArg([&](Value* v) {
-                        if (Representation::Of(v) != Representation::Real)
-                            allReal = false;
-                        if (Representation::Of(v) != Representation::Integer)
-                            allInt = false;
+                if (b->builtinId == blt("c") && !b->type.maybeHasAttrs()) {
+                    bool allScalar = true;
+                    b->eachArg([&](Value* v) {
+                        if (!v->type.isA(PirType::simpleScalar()))
+                            allScalar = false;
                     });
-                    if (allInt || allReal) {
-                        auto res = call(NativeBuiltins::makeVector,
-                                        {allInt ? c(INTSXP) : c(REALSXP),
-                                         c(b->nCallArgs(), 64)});
-                        auto pos = 0;
-                        auto resT =
-                            PirType(allInt ? RType::integer : RType::real)
-                                .notObject();
-
-                        b->eachCallArg([&](Value* v) {
-                            assignVector(res, c(pos), load(v), resT);
-                            pos++;
-                        });
-                        setVal(i, res);
-                        fixVisibility();
-                        break;
+                    if (allScalar) {
+                        SEXPTYPE typ = 100;
+                        if (b->type.isA(RType::real)) {
+                            typ = REALSXP;
+                        } else if (b->type.isA(RType::integer)) {
+                            typ = INTSXP;
+                        } else if (b->type.isA(RType::logical)) {
+                            typ = LGLSXP;
+                        }
+                        if (typ != 100) {
+                            auto res = call(NativeBuiltins::makeVector,
+                                            {c(typ), c(b->nCallArgs(), 64)});
+                            auto pos = 0;
+                            b->eachCallArg([&](Value* v) {
+                                assignVector(res, c(pos),
+                                             convert(load(v), b->type.scalar()),
+                                             b->type);
+                                pos++;
+                            });
+                            setVal(i, res);
+                            fixVisibility();
+                            break;
+                        }
                     }
                 }
 
