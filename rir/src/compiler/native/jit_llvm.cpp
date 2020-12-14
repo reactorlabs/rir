@@ -87,7 +87,7 @@ class JitLLVMImplementation {
     JitLLVMImplementation()
         : Resolver(createLegacyLookupResolver(
               ES,
-              [this](const std::string& Name) -> llvm::JITSymbol {
+              [this](const llvm::StringRef& Name) {
                   return findMangledSymbol(Name);
               },
               [](Error Err) {
@@ -126,7 +126,6 @@ class JitLLVMImplementation {
         assert(!funs.count(v));
         auto f = Function::Create(signature, Function::ExternalLinkage, name,
                                   JitLLVMImplementation::instance().module);
-        f->addFnAttr(Attribute::NoUnwind);
         funs[v] = f;
         return f;
     }
@@ -142,7 +141,6 @@ class JitLLVMImplementation {
         auto f =
             Function::Create(b.llvmSignature, Function::ExternalLinkage, b.name,
                              JitLLVMImplementation::instance().module);
-        f->addFnAttr(Attribute::NoUnwind);
         for (auto a : b.attrs)
             f->addFnAttr(a);
 
@@ -201,8 +199,8 @@ class JitLLVMImplementation {
     }
 
   private:
-    JITSymbol findMangledSymbol(const std::string& Name) {
-        auto l = builtins_.find(Name);
+    JITSymbol findMangledSymbol(const llvm::StringRef& Name) {
+        auto l = builtins_.find(Name.str());
         if (l != builtins_.end()) {
             return JITSymbol((uintptr_t)l->second.second,
                              JITSymbolFlags::Exported |
@@ -227,13 +225,14 @@ class JitLLVMImplementation {
         // more sense in a REPL where we want to bind to the newest available
         // definition.
         if (moduleKey != (unsigned long)-1)
-            if (auto Sym = CompileLayer.findSymbolIn(moduleKey, Name,
+            if (auto Sym = CompileLayer.findSymbolIn(moduleKey, Name.str(),
                                                      ExportedSymbolsOnly))
                 return Sym;
 
         // If we can't find the symbol in the JIT, try looking in the host
         // process.
-        if (auto SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(Name))
+        if (auto SymAddr =
+                RTDyldMemoryManager::getSymbolAddressInProcess(Name.str()))
             return JITSymbol(SymAddr, JITSymbolFlags::Exported);
 
 #ifdef _WIN32
@@ -345,8 +344,7 @@ static void pirPassSchedule(const PassManagerBuilder&,
     PM->add(createLoopLoadEliminationPass());
     PM->add(createCFGSimplificationPass());
     PM->add(createSLPVectorizerPass());
-    // might need this after LLVM 11:
-    // PM->add(createVectorCombinePass());
+    PM->add(createVectorCombinePass());
 
     PM->add(createSpeculativeExecutionIfHasBranchDivergencePass());
     PM->add(createAggressiveDCEPass());
@@ -408,7 +406,7 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     M->setDataLayout(TM->createDataLayout());
 
     llvm::legacy::PassManager MPM;
-    auto PM = llvm::make_unique<legacy::FunctionPassManager>(M.get());
+    auto PM = std::make_unique<legacy::FunctionPassManager>(M.get());
 
     {
         llvm::PassManagerBuilder builder;

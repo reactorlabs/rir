@@ -104,21 +104,37 @@ function build_r {
 
 build_r custom-r
 
-LLVM_DIR="${SRC_DIR}/external/llvm-8.0.0"
+LLVM_DIR="${SRC_DIR}/external/llvm-11"
 if [ ! -d $LLVM_DIR ]; then
     echo "-> unpacking LLVM"
     cd "${SRC_DIR}/external"
     if [ $USING_OSX -eq 1 ]; then
-        if [ ! -f "clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz" ]; then
-            curl -L http://releases.llvm.org/8.0.0/clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz > clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz
+        F="clang+llvm-11.0.0-x86_64-apple-darwin"
+        if [ ! -f "$F" ]; then
+            curl -L https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/$F.tar.xz
         fi
-        tar xf clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz
-        mv clang+llvm-8.0.0-x86_64-apple-darwin llvm-8.0.0
+        tar xf $F.tar.xz
+        ln -s $F llvm-11
     else
-        if [ ! -f "clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz" ]; then
-            curl -L http://releases.llvm.org/8.0.0/clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz > clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+        V=`lsb_release -r -s`
+        if [ "$V" == "20.04" ]; then
+          F="clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04"
+          if [ ! -f "$F" ]; then
+              curl -L https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/$F.tar.xz > $F.tar.xz
+          fi
+          tar xf $F.tar.xz
+          ln -s $F llvm-11
+        else
+          F="llvm-11.0.0.src"
+          if [ ! -f "$F" ]; then
+            curl -L https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/$F.tar.xz > $F.tar.xz
+          fi
+          tar xf $F.tar.xz
+          mkdir llvm-11-build && cd llvm-11-build
+          cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=1 -DLLVM_OPTIMIZED_TABLEGEN=1 -DLLVM_TARGETS_TO_BUILD="X86" ../$F
+          ninja
+          cd ..
+          ln -s llvm-11-build llvm-11
         fi
-        tar xf clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-        mv clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04 llvm-8.0.0
     fi
 fi
