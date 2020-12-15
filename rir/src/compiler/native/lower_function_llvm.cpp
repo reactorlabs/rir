@@ -2972,13 +2972,14 @@ void LowerFunctionLLVM::compile() {
                 break;
 
             case Tag::ForSeqSize: {
+                auto a = i->arg(0).val();
+                if (Representation::Of(a) != t::SEXP) {
+                    setVal(i, c(1));
+                    break;
+                }
                 llvm::Value* res = call(NativeBuiltins::forSeqSize,
                                         {loadSxp(i->arg(0).val())});
-                if (Representation::Of(i) == Representation::Real)
-                    res = builder.CreateSIToFP(res, t::Double);
-                else if (Representation::Of(i) == Representation::Sexp)
-                    res = boxInt(res);
-                setVal(i, res);
+                setVal(i, convert(res, i->type));
                 break;
             }
 
@@ -4892,7 +4893,6 @@ void LowerFunctionLLVM::compile() {
                 auto b = i->arg(1).val();
                 if (Representation::Of(a) == t::SEXP ||
                     Representation::Of(b) == t::SEXP ||
-                    Representation::Of(a) != Representation::Of(b) ||
                     Representation::Of(i) == t::SEXP) {
                     setVal(i, call(NativeBuiltins::colonCastRhs,
                                    {loadSxp(a), loadSxp(b)}));
@@ -4912,44 +4912,36 @@ void LowerFunctionLLVM::compile() {
                 builder.CreateUnreachable();
 
                 builder.SetInsertPoint(contBr);
-                auto lda = load(a);
-                bool real = Representation::Of(a) == Representation::Real;
 
                 // This is such a mess, but unfortunately a more or less literal
                 // translation of the corresponding bytecode...
-                auto increasing = real ? builder.CreateFCmpOLE(lda, ldb)
-                                       : builder.CreateICmpSLE(lda, ldb);
 
+                if (ldb->getType() != t::Double)
+                    ldb = builder.CreateSIToFP(ldb, t::Double);
+                auto lda = load(a);
+                if (lda->getType() != t::Double)
+                    lda = builder.CreateSIToFP(lda, t::Double);
+
+                auto increasing = builder.CreateFCmpOLE(lda, ldb);
                 auto upwards = [&]() {
-                    if (real) {
-                        return builder.CreateFAdd(
-                            lda, builder.CreateFAdd(
-                                     builder.CreateIntrinsic(
-                                         Intrinsic::floor, {ldb->getType()},
-                                         {builder.CreateFSub(ldb, lda)}),
-                                     c(1.0)));
-                    }
-                    return builder.CreateAdd(
-                        lda,
-                        builder.CreateAdd(builder.CreateSub(ldb, lda), c(1)));
+                    return builder.CreateFAdd(
+                        lda, builder.CreateFAdd(
+                                 builder.CreateIntrinsic(
+                                     Intrinsic::floor, {ldb->getType()},
+                                     {builder.CreateFSub(ldb, lda)}),
+                                 c(1.0)));
                 };
-
                 auto downwards = [&]() {
-                    if (real) {
-                        return builder.CreateFSub(
-                            lda, builder.CreateFSub(
-                                     builder.CreateIntrinsic(
-                                         Intrinsic::floor, {ldb->getType()},
-                                         {builder.CreateFSub(lda, ldb)}),
-                                     c(1.0)));
-                    }
-                    return builder.CreateSub(
-                        lda,
-                        builder.CreateSub(builder.CreateSub(ldb, lda), c(1)));
+                    return builder.CreateFSub(
+                        lda, builder.CreateFSub(
+                                 builder.CreateIntrinsic(
+                                     Intrinsic::floor, {ldb->getType()},
+                                     {builder.CreateFSub(lda, ldb)}),
+                                 c(1.0)));
                 };
 
                 auto res = createSelect2(increasing, upwards, downwards);
-                setVal(i, res);
+                setVal(i, convert(res, i->type));
                 break;
             }
 
