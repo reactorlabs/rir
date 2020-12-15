@@ -91,7 +91,6 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     // support it in all cases
     if (!ctx.includes(Assumption::StaticallyArgmatched) &&
         closure->formals().hasDots()) {
-        closure->rirFunction()->flags.set(Function::NotOptimizable);
         logger.warn("no support for ...");
         return fail();
     }
