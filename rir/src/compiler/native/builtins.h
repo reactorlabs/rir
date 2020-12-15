@@ -64,6 +64,7 @@ struct NativeBuiltins {
     static NativeBuiltin stvar;
     static NativeBuiltin stvarSuper;
     static NativeBuiltin stvari;
+    static NativeBuiltin stvarr;
     static NativeBuiltin defvar;
     static NativeBuiltin starg;
     static NativeBuiltin ldfun;

@@ -425,13 +425,13 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
         res = builder.CreateFPToSI(res, t::Int);
     } else if ((res->getType() == t::Int || res->getType() == t::Double) &&
                needed == t::SEXP) {
-        if (type.isA(PirType() | RType::integer))
+        if (type.isA(PirType() | RType::integer)) {
             res = boxInt(res);
-        else if (type.isA(PirType() | RType::logical))
+        } else if (type.isA(PirType() | RType::logical)) {
             res = boxLgl(res);
-        else if (type.isA(NativeType::test))
+        } else if (type.isA(NativeType::test)) {
             res = boxTst(res);
-        else if (type.isA(PirType() | RType::real)) {
+        } else if (type.isA(PirType() | RType::real)) {
             res = boxReal(res);
         } else {
             std::cout << "Failed to convert int/float to " << type << "\n";
@@ -4602,14 +4602,9 @@ void LowerFunctionLLVM::compile() {
                         auto expected = Representation::Of(st->val()) == t::Int
                                             ? INTSXP
                                             : REALSXP;
-                        auto reuse = builder.CreateAnd(
-                            builder.CreateNot(isObj(cur)),
-                            builder.CreateAnd(
-                                builder.CreateNot(shared(cur)),
-                                builder.CreateAnd(
-                                    builder.CreateICmpEQ(sexptype(cur),
-                                                         c(expected)),
-                                    isScalar(cur))));
+                        auto reuse =
+                            builder.CreateAnd(isSimpleScalar(cur, expected),
+                                              builder.CreateNot(shared(cur)));
                         builder.CreateCondBr(reuse, fastcase, fallback,
                                              branchMostlyTrue);
 
@@ -4655,11 +4650,18 @@ void LowerFunctionLLVM::compile() {
                 bool integerValueCase =
                     Representation::Of(pirVal) == Representation::Integer &&
                     pirVal->type.isA(RType::integer);
+                bool realValueCase =
+                    Representation::Of(pirVal) == Representation::Real &&
+                    pirVal->type.isA(RType::real);
                 auto setter = NativeBuiltins::stvar;
                 if (st->isStArg)
                     setter = NativeBuiltins::starg;
                 if (!st->isStArg && integerValueCase)
                     setter = NativeBuiltins::stvari;
+                if (!st->isStArg && realValueCase)
+                    setter = NativeBuiltins::stvarr;
+                bool unboxed =
+                    setter.llvmSignature->getFunctionParamType(1) != t::SEXP;
 
                 if (bindingsCache.count(environment)) {
                     auto offset = bindingsCache.at(environment).at(st->varName);
@@ -4689,30 +4691,33 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(hit2);
 
                     llvm::Value* newVal = nullptr;
-                    if (integerValueCase) {
-                        auto hitInt = BasicBlock::Create(C, "", fun);
-                        auto hitInt2 = BasicBlock::Create(C, "", fun);
-                        auto fallbackInt = BasicBlock::Create(C, "", fun);
-                        auto isScalarInt = builder.CreateAnd(
-                            builder.CreateICmpEQ(sexptype(val), c(INTSXP)),
-                            isScalar(val));
+                    if (integerValueCase || realValueCase) {
+                        auto hitUnbox = BasicBlock::Create(C, "", fun);
+                        auto hitUnbox2 = BasicBlock::Create(C, "", fun);
+                        auto fallbackUnbox = BasicBlock::Create(C, "", fun);
+                        auto storeType =
+                            integerValueCase ? RType::integer : RType::real;
+                        auto isScalarType = isSimpleScalar(
+                            val, integerValueCase ? INTSXP : REALSXP);
                         auto notShared = builder.CreateNot(shared(val));
                         builder.CreateCondBr(
-                            builder.CreateAnd(isScalarInt, notShared), hitInt,
-                            fallbackInt);
+                            builder.CreateAnd(isScalarType, notShared),
+                            hitUnbox, fallbackUnbox);
 
-                        builder.SetInsertPoint(hitInt);
+                        builder.SetInsertPoint(hitUnbox);
                         auto newValNative = load(pirVal);
-                        auto same = builder.CreateICmpEQ(
-                            newValNative,
-                            accessVector(val, c(0), RType::integer));
-                        builder.CreateCondBr(same, identical, hitInt2);
+                        auto oldVal = accessVector(val, c(0), storeType);
+                        auto same =
+                            integerValueCase
+                                ? builder.CreateICmpEQ(newValNative, oldVal)
+                                : builder.CreateFCmpOEQ(newValNative, oldVal);
+                        builder.CreateCondBr(same, identical, hitUnbox2);
 
-                        builder.SetInsertPoint(hitInt2);
-                        assignVector(val, c(0), newValNative, RType::integer);
+                        builder.SetInsertPoint(hitUnbox2);
+                        assignVector(val, c(0), newValNative, storeType);
                         builder.CreateBr(done);
 
-                        builder.SetInsertPoint(fallbackInt);
+                        builder.SetInsertPoint(fallbackUnbox);
                         newVal = loadSxp(pirVal);
                         builder.CreateBr(hit3);
                     } else {
@@ -4736,22 +4741,18 @@ void LowerFunctionLLVM::compile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(miss);
-                    call(setter, {constant(st->varName, t::SEXP),
-                                  setter.llvmSignature->getFunctionParamType(
-                                      1) == t::Int
-                                      ? load(pirVal)
-                                      : loadSxp(pirVal),
+                    llvm::Value* theValue =
+                        unboxed ? load(pirVal) : loadSxp(pirVal);
+                    call(setter, {constant(st->varName, t::SEXP), theValue,
                                   loadSxp(st->env())});
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(done);
 
                 } else {
-                    call(setter, {constant(st->varName, t::SEXP),
-                                  setter.llvmSignature->getFunctionParamType(
-                                      1) == t::Int
-                                      ? load(pirVal)
-                                      : loadSxp(pirVal),
+                    llvm::Value* theValue =
+                        unboxed ? load(pirVal) : loadSxp(pirVal);
+                    call(setter, {constant(st->varName, t::SEXP), theValue,
                                   loadSxp(st->env())});
                 }
                 break;

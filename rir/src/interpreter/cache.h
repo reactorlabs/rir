@@ -3,6 +3,7 @@
 
 #include "R/r.h"
 #include "instance.h"
+#include <type_traits>
 
 namespace rir {
 
@@ -44,12 +45,54 @@ cachedSetBindingCell(Immediate cacheIdx, BindingCache* cache, R_varloc_t loc) {
     cache->entry[cacheIdx] = loc.cell;
 }
 
-static inline void rirDefineVarWrapperI(SEXP symbol, int value, SEXP rho) {
+template <typename T>
+inline SEXP staticBox(T val);
+template <>
+inline SEXP staticBox(SEXP val) {
+    return val;
+}
+template <>
+inline SEXP staticBox(int val) {
+    return ScalarInteger(val);
+}
+template <>
+inline SEXP staticBox(double val) {
+    return ScalarReal(val);
+}
+
+template <typename T>
+inline void updateScalar(SEXP scalar, T value);
+template <>
+inline void updateScalar(SEXP scalar, int value) {
+    *INTEGER(scalar) = value;
+}
+inline void updateScalar(SEXP scalar, double value) { *REAL(scalar) = value; }
+inline void updateScalar(SEXP scalar, SEXP value) {
+    assert(false && "unreachable");
+}
+
+template <typename T>
+inline SEXPTYPE sexptypeOf(T);
+template <>
+inline SEXPTYPE sexptypeOf(int) {
+    return INTSXP;
+}
+template <>
+inline SEXPTYPE sexptypeOf(double) {
+    return REALSXP;
+}
+template <>
+inline SEXPTYPE sexptypeOf(SEXP) {
+    assert(false && "unreachable");
+}
+
+template <typename T>
+static inline void rirDefineVarWrapper(SEXP symbol, T value, SEXP rho) {
     if (rho == R_EmptyEnv)
         return;
 
     if (OBJECT(rho) || HASHTAB(rho) != R_NilValue) {
-        auto val = ScalarInteger(value);
+        auto val = staticBox(value);
         PROTECT(val);
         INCREMENT_NAMED(val);
         Rf_defineVar(symbol, val, rho);
@@ -57,16 +100,20 @@ static inline void rirDefineVarWrapperI(SEXP symbol, int value, SEXP rho) {
         return;
     }
 
+    constexpr auto unboxed = !std::is_same<T, SEXP>::value;
     if (rho == R_BaseNamespace || rho == R_BaseEnv) {
         auto cur = SYMVALUE(symbol);
-        if (IS_SIMPLE_SCALAR(cur, INTSXP) && !MAYBE_SHARED(cur)) {
-            ENSURE_NAMED(cur);
-            if (*INTEGER(cur) == value)
+        if (unboxed) {
+            if (IS_SIMPLE_SCALAR(cur, sexptypeOf(value)) &&
+                !MAYBE_SHARED(cur)) {
+                ENSURE_NAMED(cur);
+                updateScalar(cur, value);
                 return;
-            *INTEGER(cur) = value;
-            return;
+            }
         }
-        auto val = ScalarInteger(value);
+        auto val = staticBox(value);
+        if (!unboxed && SYMVALUE(symbol) == val)
+            return;
         INCREMENT_NAMED(val);
         Rf_defineVar(symbol, val, rho);
         return;
@@ -80,18 +127,22 @@ static inline void rirDefineVarWrapperI(SEXP symbol, int value, SEXP rho) {
     while (frame != R_NilValue) {
         if (TAG(frame) == symbol) {
             SEXP cur = CAR(frame);
-            if (!MAYBE_SHARED(cur) && IS_SIMPLE_SCALAR(cur, INTSXP)) {
-                // subassign.c primitives and instructions clear the name
-                // expecting a store to happen later Thus, the increment must be
-                // done always
-                ENSURE_NAMED(cur);
-                if (*INTEGER(cur) == value) {
+            if (unboxed) {
+                if (!MAYBE_SHARED(cur) &&
+                    IS_SIMPLE_SCALAR(cur, sexptypeOf(value))) {
+                    // subassign.c primitives and instructions clear the name
+                    // expecting a store to happen later Thus, the increment
+                    // must be done always
+                    ENSURE_NAMED(cur);
+                    updateScalar(cur, value);
                     return;
                 }
-                *INTEGER(cur) = value;
+            }
+            auto val = staticBox(value);
+            if (!unboxed && cur == val) {
+                ENSURE_NAMED(cur);
                 return;
             }
-            auto val = ScalarInteger(value);
             INCREMENT_NAMED(val);
             // we don't handle these
             if (BINDING_IS_LOCKED(frame) || IS_ACTIVE_BINDING(frame)) {
@@ -109,69 +160,10 @@ static inline void rirDefineVarWrapperI(SEXP symbol, int value, SEXP rho) {
 
     if (FRAME_IS_LOCKED(rho))
         Rf_error("cannot add bindings to a locked environment");
-    auto val = ScalarInteger(value);
+    auto val = staticBox(value);
     PROTECT(val);
     INCREMENT_NAMED(val);
     SET_FRAME(rho, Rf_cons(val, FRAME(rho)));
-    UNPROTECT(1);
-    SET_TAG(FRAME(rho), symbol);
-}
-
-static inline void rirDefineVarWrapper(SEXP symbol, SEXP value, SEXP rho) {
-    if (rho == R_EmptyEnv)
-        return;
-
-    if (OBJECT(rho) || HASHTAB(rho) != R_NilValue) {
-        PROTECT(value);
-        INCREMENT_NAMED(value);
-        Rf_defineVar(symbol, value, rho);
-        UNPROTECT(1);
-        return;
-    }
-
-    if (rho == R_BaseNamespace || rho == R_BaseEnv) {
-        if (SYMVALUE(symbol) == value)
-            return;
-        INCREMENT_NAMED(value);
-        Rf_defineVar(symbol, value, rho);
-        return;
-    }
-
-    if (IS_SPECIAL_SYMBOL(symbol))
-        UNSET_NO_SPECIAL_SYMBOLS(rho);
-
-    /* First check for an existing binding */
-    SEXP frame = FRAME(rho);
-    while (frame != R_NilValue) {
-        if (TAG(frame) == symbol) {
-            SEXP cur = CAR(frame);
-            if (cur == value) {
-                // subassign.c primitives and instructions clear the name
-                // expecting a store to happen later Thus, the increment must be
-                // done always
-                ENSURE_NAMED(value);
-                return;
-            }
-            INCREMENT_NAMED(value);
-            // we don't handle these
-            if (BINDING_IS_LOCKED(frame) || IS_ACTIVE_BINDING(frame)) {
-                PROTECT(value);
-                Rf_defineVar(symbol, value, rho);
-                UNPROTECT(1);
-                return;
-            }
-            SETCAR(frame, value);
-            SET_MISSING(frame, 0); /* Over-ride */
-            return;
-        }
-        frame = CDR(frame);
-    }
-
-    if (FRAME_IS_LOCKED(rho))
-        Rf_error("cannot add bindings to a locked environment");
-    PROTECT(value);
-    INCREMENT_NAMED(value);
-    SET_FRAME(rho, Rf_cons(value, FRAME(rho)));
     UNPROTECT(1);
     SET_TAG(FRAME(rho), symbol);
 }

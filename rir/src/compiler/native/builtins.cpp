@@ -194,10 +194,16 @@ NativeBuiltin NativeBuiltins::stvar = {
     (void*)&stvarImpl,
 };
 
-void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapperI(a, val, c); }
+void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapper(a, val, c); }
 NativeBuiltin NativeBuiltins::stvari = {
     "stvari",
     (void*)&stvarImplI,
+};
+
+void stvarImplR(SEXP a, double val, SEXP c) { rirDefineVarWrapper(a, val, c); }
+NativeBuiltin NativeBuiltins::stvarr = {
+    "stvarr",
+    (void*)&stvarImplR,
 };
 
 void stargImpl(SEXP sym, SEXP val, SEXP env) {
@@ -503,17 +509,9 @@ NativeBuiltin NativeBuiltins::createClosure = {
     (void*)&createClosureImpl,
 };
 
-SEXP newLglImpl(int i) {
-    auto res = Rf_allocVector(LGLSXP, 1);
-    LOGICAL(res)[0] = i;
-    return res;
-}
+SEXP newLglImpl(int i) { return ScalarLogical(i); }
 
-SEXP newIntImpl(int i) {
-    auto res = Rf_allocVector(INTSXP, 1);
-    INTEGER(res)[0] = i;
-    return res;
-}
+SEXP newIntImpl(int i) { return ScalarInteger(i); }
 
 SEXP newIntDebugImpl(int i, void* debug) {
     std::cout << (char*)debug << "\n";
@@ -523,36 +521,15 @@ SEXP newIntDebugImpl(int i, void* debug) {
 }
 
 SEXP newLglFromRealImpl(double d) {
-    auto res = Rf_allocVector(LGLSXP, 1);
-    if (d != d)
-        LOGICAL(res)[0] = NA_LOGICAL;
-    else
-        LOGICAL(res)[0] = d;
-    return res;
+    return ScalarLogical(d != d ? NA_LOGICAL : d);
 }
 
 SEXP newIntFromRealImpl(double d) {
-    auto res = Rf_allocVector(INTSXP, 1);
-    if (d != d)
-        INTEGER(res)[0] = NA_INTEGER;
-    else
-        INTEGER(res)[0] = d;
-    return res;
+    return ScalarInteger(d != d ? NA_INTEGER : d);
 }
 
-SEXP newRealImpl(double i) {
-    auto res = Rf_allocVector(REALSXP, 1);
-    REAL(res)[0] = i;
-    return res;
-}
-SEXP newRealFromIntImpl(int i) {
-    auto res = Rf_allocVector(REALSXP, 1);
-    if (i == NA_INTEGER)
-        REAL(res)[0] = NAN;
-    else
-        REAL(res)[0] = i;
-    return res;
-}
+SEXP newRealImpl(double i) { return ScalarReal(i); }
+SEXP newRealFromIntImpl(int i) { return ScalarReal(i == NA_INTEGER ? NAN : i); }
 
 NativeBuiltin NativeBuiltins::newIntFromReal = {
     "newIntFromReal",
