@@ -209,10 +209,6 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
         return convertToPointer(co);
 
     auto i = Pool::insert(co);
-    if (TYPEOF(co) == INTSXP || TYPEOF(co) == REALSXP || TYPEOF(co) == STRSXP) {
-        co = Pool::get(i);
-        return convertToPointer(co);
-    }
     llvm::Value* pos = builder.CreateLoad(constantpool);
     pos = builder.CreateBitCast(dataPtr(pos, false),
                                 PointerType::get(t::SEXP, 0));

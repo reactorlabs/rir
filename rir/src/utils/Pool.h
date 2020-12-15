@@ -19,26 +19,10 @@ namespace rir {
 class Pool {
     static std::unordered_map<double, BC::PoolIdx> numbers;
     static std::unordered_map<int, BC::PoolIdx> ints;
-    static std::unordered_map<std::string, BC::PoolIdx> strings;
     static std::unordered_map<SEXP, size_t> contents;
 
   public:
     static BC::PoolIdx insert(SEXP e) {
-        if (IS_SIMPLE_SCALAR(e, INTSXP))
-            return getInt(INTEGER(e)[0]);
-        if (IS_SIMPLE_SCALAR(e, REALSXP))
-            return getNum(REAL(e)[0]);
-        if (IS_SIMPLE_SCALAR(e, STRSXP)) {
-            auto c = CHAR(STRING_ELT(e, 0));
-            auto f = strings.find(c);
-            if (f != strings.end())
-                return f->second;
-            size_t i = cp_pool_add(globalContext(), e);
-            SET_NAMED(e, 2);
-            strings[c] = i;
-            return i;
-        }
-
         if (contents.count(e))
             return contents.at(e);
 

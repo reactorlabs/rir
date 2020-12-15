@@ -7,7 +7,6 @@ namespace rir {
 
 std::unordered_map<double, unsigned> Pool::numbers;
 std::unordered_map<int, unsigned> Pool::ints;
-std::unordered_map<std::string, unsigned> Pool::strings;
 std::unordered_map<SEXP, size_t> Pool::contents;
 
 BC::PoolIdx Pool::getNum(double n) {
