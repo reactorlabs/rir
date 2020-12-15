@@ -348,6 +348,8 @@ class LowerFunctionLLVM {
     void checkMissing(llvm::Value* v);
     void checkUnbound(llvm::Value* v);
 
+    llvm::Value* checkDoubleToInt(llvm::Value*);
+
     llvm::CallInst* call(const NativeBuiltin& builtin,
                          const std::vector<llvm::Value*>& args);
     llvm::Value* callRBuiltin(SEXP builtin, const std::vector<Value*>& args,

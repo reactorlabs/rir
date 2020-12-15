@@ -1197,6 +1197,23 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
     builder.SetInsertPoint(notNa);
 }
 
+llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld) {
+    auto gt = builder.CreateFCmpOGT(ld, c((double)INT_MIN - 1));
+    auto lt = builder.CreateFCmpOLT(ld, c((double)INT_MAX + 1));
+    auto inrange = builder.CreateAnd(lt, gt);
+    auto conv = createSelect2(inrange,
+                              [&]() {
+                                  // converting to signed int is not undefined
+                                  // here since we first check that it does not
+                                  // overflow
+                                  auto conv = builder.CreateFPToSI(ld, t::i64);
+                                  conv = builder.CreateSIToFP(conv, t::Double);
+                                  return builder.CreateFCmpOEQ(ld, conv);
+                              },
+                              [&]() { return builder.getFalse(); });
+    return conv;
+}
+
 void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto ok = BasicBlock::Create(C, "", fun);
@@ -4788,22 +4805,149 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::ColonInputEffects:
-                setVal(i, call(NativeBuiltins::colonInputEffects,
-                               {loadSxp(i->arg(0).val()),
-                                loadSxp(i->arg(1).val()), c(i->srcIdx)}));
-                break;
+            case Tag::ColonInputEffects: {
+                auto a = i->arg(0).val();
+                auto b = i->arg(1).val();
+                if (Representation::Of(a) == t::SEXP ||
+                    Representation::Of(b) == t::SEXP) {
+                    setVal(i, call(NativeBuiltins::colonInputEffects,
+                                   {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
+                    break;
+                }
 
-            case Tag::ColonCastLhs:
-                setVal(i, call(NativeBuiltins::colonCastLhs,
-                               {loadSxp(i->arg(0).val())}));
-                break;
+                // Native version of colonInputEffects
+                auto checkRhs = [&]() -> llvm::Value* {
+                    if (Representation::Of(b) == Representation::Real) {
+                        auto ld = builder.CreateFPToSI(load(b), t::i64);
+                        return builder.CreateICmpNE(ld, c(INT_MAX, 64));
+                    }
+                    assert(Representation::Of(b) == Representation::Integer);
+                    return builder.CreateICmpNE(load(b), c(INT_MAX));
+                };
 
-            case Tag::ColonCastRhs:
-                setVal(i, call(NativeBuiltins::colonCastRhs,
-                               {loadSxp(i->arg(0).val()),
-                                loadSxp(i->arg(1).val())}));
+                auto sequenceIsReal =
+                    Representation::Of(a) != Representation::Real
+                        ? builder.getFalse()
+                        : builder.CreateNot(checkDoubleToInt(load(a)));
+
+                auto res = createSelect2(
+                    sequenceIsReal,
+                    [&]() -> llvm::Value* {
+                        // If the lhs is truly real, then the sequence is
+                        // real and we always go into fastcase
+                        return builder.getTrue();
+                    },
+                    [&]() -> llvm::Value* {
+                        auto sequenceIsAmbiguous =
+                            Representation::Of(b) == Representation::Real
+                                ? builder.CreateNot(checkDoubleToInt(load(b)))
+                                : builder.getFalse();
+
+                        return createSelect2(
+                            sequenceIsAmbiguous,
+                            [&]() -> llvm::Value* {
+                                // If the lhs is integer and the rhs is
+                                // real we don't support it as fastcase
+                                return builder.getFalse();
+                            },
+                            // This is the case where both sides are int-ish,
+                            // we need to check for overflow here.
+                            checkRhs);
+                    });
+
+                setVal(i, builder.CreateZExt(res, t::i32));
                 break;
+            }
+
+            case Tag::ColonCastLhs: {
+                auto a = i->arg(0).val();
+                if (Representation::Of(a) == t::SEXP ||
+                    Representation::Of(i) == t::SEXP) {
+                    setVal(i, call(NativeBuiltins::colonCastLhs, {loadSxp(a)}));
+                    break;
+                }
+                auto ld = load(a);
+
+                auto naBr = BasicBlock::Create(C, "", fun);
+                auto contBr = BasicBlock::Create(C, "", fun);
+                nacheck(ld, a->type, naBr, contBr);
+
+                builder.SetInsertPoint(naBr);
+                auto msg = builder.CreateGlobalString("NA/NaN argument");
+                call(NativeBuiltins::error,
+                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+                builder.CreateUnreachable();
+
+                builder.SetInsertPoint(contBr);
+                setVal(i, convert(ld, i->type));
+                break;
+            }
+
+            case Tag::ColonCastRhs: {
+                auto a = i->arg(0).val();
+                auto b = i->arg(1).val();
+                if (Representation::Of(a) == t::SEXP ||
+                    Representation::Of(b) == t::SEXP ||
+                    Representation::Of(a) != Representation::Of(b) ||
+                    Representation::Of(i) == t::SEXP) {
+                    setVal(i, call(NativeBuiltins::colonCastRhs,
+                                   {loadSxp(a), loadSxp(b)}));
+                    break;
+                }
+
+                auto ldb = load(b);
+
+                auto naBr = BasicBlock::Create(C, "", fun);
+                auto contBr = BasicBlock::Create(C, "", fun);
+                nacheck(ldb, b->type, naBr, contBr);
+
+                builder.SetInsertPoint(naBr);
+                auto msg = builder.CreateGlobalString("NA/NaN argument");
+                call(NativeBuiltins::error,
+                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+                builder.CreateUnreachable();
+
+                builder.SetInsertPoint(contBr);
+                auto lda = load(a);
+                bool real = Representation::Of(a) == Representation::Real;
+
+                // This is such a mess, but unfortunately a more or less literal
+                // translation of the corresponding bytecode...
+                auto increasing = real ? builder.CreateFCmpOLE(lda, ldb)
+                                       : builder.CreateICmpSLE(lda, ldb);
+
+                auto upwards = [&]() {
+                    if (real) {
+                        return builder.CreateFAdd(
+                            lda, builder.CreateFAdd(
+                                     builder.CreateIntrinsic(
+                                         Intrinsic::floor, {ldb->getType()},
+                                         {builder.CreateFSub(ldb, lda)}),
+                                     c(1.0)));
+                    }
+                    return builder.CreateAdd(
+                        lda,
+                        builder.CreateAdd(builder.CreateSub(ldb, lda), c(1)));
+                };
+
+                auto downwards = [&]() {
+                    if (real) {
+                        return builder.CreateFSub(
+                            lda, builder.CreateFSub(
+                                     builder.CreateIntrinsic(
+                                         Intrinsic::floor, {ldb->getType()},
+                                         {builder.CreateFSub(lda, ldb)}),
+                                     c(1.0)));
+                    }
+                    return builder.CreateSub(
+                        lda,
+                        builder.CreateSub(builder.CreateSub(ldb, lda), c(1)));
+                };
+
+                auto res = createSelect2(increasing, upwards, downwards);
+                setVal(i, res);
+                break;
+            }
 
             case Tag::Names:
                 setVal(i,
