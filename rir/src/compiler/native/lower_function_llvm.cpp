@@ -208,19 +208,12 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
     if (TYPEOF(co) == SYMSXP || eternal.count(co))
         return convertToPointer(co);
 
-    // Insert to pool and get normalized address
     auto i = Pool::insert(co);
-    auto p = Pool::get(i);
-    return convertToPointer(p);
-
-    // If we ever start cleaning up the constant pool we could use the following
-    // code to indirectly load from cp: llvm::Value* pos =
-    // builder.CreateLoad(constantpool); pos =
-    // builder.CreateBitCast(dataPtr(pos, false),
-    //                             PointerType::get(t::SEXP, 0));
-    // pos = builder.CreateGEP(pos, c(i));
-    // auto res = builder.CreateLoad(pos);
-    // return res;
+    llvm::Value* pos = builder.CreateLoad(constantpool);
+    pos = builder.CreateBitCast(dataPtr(pos, false),
+                                PointerType::get(t::SEXP, 0));
+    pos = builder.CreateGEP(pos, c(i));
+    return builder.CreateLoad(pos);
 }
 
 llvm::Value* LowerFunctionLLVM::nodestackPtr() {
