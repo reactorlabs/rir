@@ -112,10 +112,14 @@ static inline void rirDefineVarWrapper(SEXP symbol, T value, SEXP rho) {
             }
         }
         auto val = staticBox(value);
-        if (!unboxed && SYMVALUE(symbol) == val)
+        if (!unboxed && SYMVALUE(symbol) == val) {
+            ENSURE_NAMED(val);
             return;
+        }
         INCREMENT_NAMED(val);
+        PROTECT(val);
         Rf_defineVar(symbol, val, rho);
+        UNPROTECT(1);
         return;
     }
 
