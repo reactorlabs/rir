@@ -596,6 +596,12 @@ static void createFakeCONS(SEXPREC& res, SEXP cdr) {
     res.u.listsxp.cdrval = cdr;
 }
 
+#define FAKE_ARGS1(res, a1)                                                    \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, R_NilValue);                                  \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    res = &__a1__cell__
+
 #define FAKE_ARGS2(res, a1, a2)                                                \
     SEXPREC __a2__cell__;                                                      \
     createFakeCONS(__a2__cell__, R_NilValue);                                  \
@@ -683,7 +689,8 @@ NativeBuiltin NativeBuiltins::unop = {
 
 static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
     SEXP res = nullptr;
-    SEXP arglist = CONS_NR(argument, R_NilValue);
+    SEXP arglist;
+    FAKE_ARGS1(arglist, argument);
     SEXP call = src_pool_at(globalContext(), srcIdx);
     PROTECT(arglist);
     OPERATION_FALLBACK("!");
@@ -699,10 +706,8 @@ NativeBuiltin NativeBuiltins::notEnv = {
 
 static SEXP notImpl(SEXP argument) {
     SEXP res = nullptr;
-    SEXPREC arglistStruct;
-    createFakeCONS(arglistStruct, R_NilValue);
-    arglistStruct.u.listsxp.carval = argument;
-    SEXP arglist = &arglistStruct;
+    SEXP arglist;
+    FAKE_ARGS1(arglist, argument);
     SEXP env = R_NilValue;
     SEXP call = R_NilValue;
     // Why we do not need a protect here?
@@ -716,8 +721,8 @@ NativeBuiltin NativeBuiltins::notOp = {"not", (void*)&notImpl};
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
                          BinopKind kind) {
     SEXP res = nullptr;
-    SEXP arglist2 = CONS_NR(rhs, R_NilValue);
-    SEXP arglist = CONS_NR(lhs, arglist2);
+    SEXP arglist;
+    FAKE_ARGS2(arglist, lhs, rhs);
     SEXP call = src_pool_at(globalContext(), srcIdx);
 
     PROTECT(arglist);
