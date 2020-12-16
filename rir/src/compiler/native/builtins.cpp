@@ -150,11 +150,12 @@ NativeBuiltin NativeBuiltins::ldvar = {
     (void*)&ldvarImpl,
 };
 
+const unsigned long NativeBuiltins::bindingsCacheFails;
 SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
-    if (*cache != (SEXP)1) {
+    if (*cache != (SEXP)NativeBuiltins::bindingsCacheFails) {
         R_varloc_t loc = R_findVarLocInFrame(env, sym);
         if (R_VARLOC_IS_NULL(loc)) {
-            *cache = (SEXP)1;
+            *cache = (SEXP)(((uintptr_t)*cache) + 1);
         } else {
             *cache = loc.cell;
             if (CAR(*cache) != R_UnboundValue) {

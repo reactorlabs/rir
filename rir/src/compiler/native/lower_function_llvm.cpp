@@ -3901,7 +3901,8 @@ void LowerFunctionLLVM::compile() {
 
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
-                            builder.CreatePtrToInt(cache, t::i64), c(1, 64)),
+                            builder.CreatePtrToInt(cache, t::i64),
+                            c(NativeBuiltins::bindingsCacheFails)),
                         miss, hit1, branchMostlyFalse);
                     builder.SetInsertPoint(hit1);
                     auto val = car(cache);
@@ -4678,7 +4679,8 @@ void LowerFunctionLLVM::compile() {
 
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
-                            builder.CreatePtrToInt(cache, t::i64), c(1, 64)),
+                            builder.CreatePtrToInt(cache, t::i64),
+                            c(NativeBuiltins::bindingsCacheFails)),
                         miss, hit1, branchMostlyFalse);
 
                     builder.SetInsertPoint(hit1);

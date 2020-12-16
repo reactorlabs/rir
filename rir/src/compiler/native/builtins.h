@@ -178,6 +178,8 @@ struct NativeBuiltins {
     static NativeBuiltin clsEq;
 
     static NativeBuiltin checkType;
+
+    static constexpr unsigned long bindingsCacheFails = 2;
 };
 
 }
