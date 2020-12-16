@@ -510,7 +510,14 @@ NativeBuiltin NativeBuiltins::createClosure = {
     (void*)&createClosureImpl,
 };
 
-SEXP newLglImpl(int i) { return ScalarLogical(i); }
+SEXP newLglImpl(int i) {
+    if (i == 1)
+        return R_TrueValue;
+    if (i == NA_INTEGER)
+        return R_LogicalNAValue;
+    SLOWASSERT(i == 0);
+    return R_FalseValue;
+}
 
 SEXP newIntImpl(int i) { return ScalarInteger(i); }
 
@@ -522,7 +529,7 @@ SEXP newIntDebugImpl(int i, void* debug) {
 }
 
 SEXP newLglFromRealImpl(double d) {
-    return ScalarLogical(d != d ? NA_LOGICAL : d);
+    return ScalarLogical(d != d ? NA_LOGICAL : d == 0.0 ? 0 : 1);
 }
 
 SEXP newIntFromRealImpl(double d) {

@@ -363,8 +363,10 @@ class Instruction : public Value {
             // Everything but numbers throws an error
             t = t & PirType::num().notMissing();
             // e.g. TRUE + TRUE == 2
-            if (m.maybe(RType::logical))
-                t = t | RType::integer;
+            if (m.maybe(RType::logical)) {
+                t = t.orT(RType::integer);
+                t = t.notT(RType::logical);
+            }
             // the binop result becomes NA if it can't be represented in a
             // fixpoint integer (e.g. INT_MAX + 1 == NA)
             // * the condition checks iff at least one of the arguments is an

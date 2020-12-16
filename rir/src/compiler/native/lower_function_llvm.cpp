@@ -697,6 +697,8 @@ llvm::Value* LowerFunctionLLVM::accessVector(llvm::Value* vector,
 llvm::Value* LowerFunctionLLVM::assignVector(llvm::Value* vector,
                                              llvm::Value* position,
                                              llvm::Value* value, PirType type) {
+    insn_assert(builder.CreateNot(shared(vector)),
+                "assigning to shared vector");
     return builder.CreateStore(value,
                                vectorPositionPtr(vector, position, type));
 }
