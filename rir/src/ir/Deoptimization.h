@@ -20,23 +20,12 @@ struct FrameInfo {
     FrameInfo() {}
     FrameInfo(Opcode* pc, Code* code, size_t stackSize, bool promise)
         : pc(pc), code(code), stackSize(stackSize), inPromise(promise) {}
-
-    static FrameInfo deserialize(const Opcode* anchor, SEXP refTable,
-                                 R_inpstream_t inp);
-    void serialize(const Opcode* anchor, SEXP refTable,
-                   R_outpstream_t out) const;
 };
 
 struct DeoptMetadata {
     void print(std::ostream& out) const;
     size_t numFrames;
     FrameInfo frames[];
-
-    // Must be manually deallocated
-    static SEXP deserialize(const Opcode* anchor, SEXP refTable,
-                            R_inpstream_t inp);
-    void serialize(const Opcode* anchor, SEXP refTable,
-                   R_outpstream_t out) const;
 };
 
 #pragma pack(pop)

@@ -9,9 +9,6 @@
 #include <sstream>
 
 namespace rir {
-std::unordered_map<UUID, Code*> allCodes;
-
-Code* Code::withUid(UUID uid) { return allCodes.at(uid); }
 
 // cppcheck-suppress uninitMemberVar; symbol=data
 Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
@@ -21,12 +18,11 @@ Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      nativeCode(nullptr), uid(UUID::random()), funInvocationCount(0),
-      deoptCount(0), src(srcIdx), trivialExpr(nullptr), stackLength(0),
-      localsCount(localsCnt), bindingCacheSize(bindingsCnt), codeSize(cs),
-      srcLength(sourceLength), extraPoolSize(0) {
+      nativeCode(nullptr), funInvocationCount(0), deoptCount(0), src(srcIdx),
+      trivialExpr(nullptr), stackLength(0), localsCount(localsCnt),
+      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
-    allCodes.emplace(uid, this);
     if (src && TYPEOF(src) == SYMSXP)
         trivialExpr = src;
 }
@@ -51,7 +47,6 @@ Code* Code::New(Immediate ast) { return New(ast, 0, 0, 0, 0); }
 Code::~Code() {
     // TODO: Not sure if this is actually called
     // Otherwise the pointer will leak a few bytes
-    allCodes.erase(uid);
 }
 
 unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
@@ -98,7 +93,6 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     SEXP store = Rf_allocVector(EXTERNALSXP, size);
     PROTECT(store);
     Code* code = new (DATAPTR(store)) Code;
-    code->uid = UUID::deserialize(refTable, inp);
     code->nativeCode = nullptr; // not serialized for now
     code->funInvocationCount = InInteger(inp);
     code->deoptCount = InInteger(inp);
@@ -130,7 +124,6 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
                   NumLocals, CODE_MAGIC};
     code->setEntry(0, extraPool);
     UNPROTECT(2);
-    allCodes.emplace(code->uid, code);
 
     return code;
 }
@@ -138,7 +131,6 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
 void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, size());
     // Header
-    uid.serialize(refTable, out);
     OutInteger(out, funInvocationCount);
     OutInteger(out, deoptCount);
     OutInteger(out, src);
