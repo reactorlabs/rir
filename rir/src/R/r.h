@@ -18,6 +18,17 @@
 #undef eval
 #undef cons
 
+#undef PREXPR
+inline SEXP PREXPR(SEXP pr) {
+    // bypassing PREXPR from Gnur, which causes code objects to be converted to
+    // AST
+    SLOWASSERT(TYPEOF(pr) == PROMSXP);
+    auto res = pr->u.promsxp.expr;
+    if (TYPEOF(res) == BCODESXP)
+        return R_PromiseExpr(pr);
+    return res;
+}
+
 extern "C" {
 extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;

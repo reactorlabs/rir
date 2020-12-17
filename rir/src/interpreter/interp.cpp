@@ -682,6 +682,22 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
+static SEXP getSymbolIfTrivialPromise(SEXP val) {
+    auto pr = PREXPR(val);
+    auto ppr = Code::check(pr);
+    SEXP sym = nullptr;
+    if (isSymbol(pr)) {
+        sym = pr;
+    } else if (ppr) {
+        if (ppr->trivialExpr && isSymbol(ppr->trivialExpr)) {
+            sym = ppr->trivialExpr;
+        }
+    }
+    if (!sym)
+        SLOWASSERT(!isSymbol(R_PromiseExpr(val)));
+    return sym;
+}
+
 void inferCurrentContext(CallContext& call, size_t formalNargs,
                          InterpreterInstance* ctx) {
     Context& given = call.givenContext;
@@ -718,8 +734,6 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                 // reflection) evaluating this promise does not trigger
                 // reflection either.
                 while (true) {
-                    SEXP sym = nullptr;
-                    auto pr = Code::check(PREXPR(prom));
                     SEXP v = PRVALUE(prom);
 
                     if (v == R_MissingArg) {
@@ -732,12 +746,7 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                     // expression (i.e. just a name lookup) and if that lookup
                     // can be easily resolved.
                     if (v == R_UnboundValue) {
-                        if (TYPEOF(PREXPR(prom)) == SYMSXP) {
-                            sym = PREXPR(prom);
-                        } else if (pr) {
-                            sym = pr->trivialExpr;
-                        }
-                        if (sym) {
+                        if (auto sym = getSymbolIfTrivialPromise(prom)) {
                             if (auto le = LazyEnvironment::check(
                                     prom->u.promsxp.env)) {
                                 v = le->getArg(sym);
@@ -747,8 +756,11 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                         }
                     }
 
-                    if (pr && pr->flags.contains(Code::NoReflection))
-                        reflectionPossible = false;
+                    if (reflectionPossible) {
+                        auto pr = Code::check(PREXPR(prom));
+                        if (pr && pr->flags.contains(Code::NoReflection))
+                            reflectionPossible = false;
+                    }
 
                     // This is truly lazy and we did not manage to lookup
                     // anything
@@ -1476,15 +1488,16 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
         return false;
 
     val = findRootPromise(val);
-    if (!isSymbol(PREXPR(val))) {
+    auto sym = getSymbolIfTrivialPromise(val);
+    if (!sym) {
         return false;
     } else {
-        if (PREXPR(val) == R_MissingArg)
+        if (sym == R_MissingArg)
             return true;
         if (auto le = LazyEnvironment::check(val->u.promsxp.env)) {
-            return le->isMissing(PREXPR(val));
+            return le->isMissing(sym);
         }
-        return R_isMissing(PREXPR(val), PRENV(val));
+        return R_isMissing(sym, PRENV(val));
     }
 }
 
