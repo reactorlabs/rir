@@ -2666,7 +2666,7 @@ void LowerFunctionLLVM::compile() {
                     switch (b->builtinId) {
                     case blt("vector"): {
                         auto l = b->arg(1).val();
-                        if (l->type.isA(PirType::simpleScalarInt())) {
+                        if (l->type.isA(PirType::simpleScalar())) {
                             if (auto con = LdConst::Cast(b->arg(0).val())) {
                                 if (TYPEOF(con->c()) == STRSXP &&
                                     XLENGTH(con->c()) == 1) {
@@ -2683,12 +2683,18 @@ void LowerFunctionLLVM::compile() {
                                     case RAWSXP:
                                         setVal(
                                             i,
-                                            call(NativeBuiltins::makeVector,
-                                                 {c(type),
-                                                  builder.CreateZExt(
-                                                      load(l, Representation::
-                                                                  Integer),
-                                                      t::i64)}));
+                                            call(
+                                                NativeBuiltins::makeVector,
+                                                {c(type),
+                                                 Representation::Of(l) ==
+                                                         Representation::Real
+                                                     ? builder.CreateFPToUI(
+                                                           load(l), t::i64)
+                                                     : builder.CreateZExt(
+                                                           load(l,
+                                                                Representation::
+                                                                    Integer),
+                                                           t::i64)}));
                                         fastcase = true;
                                         break;
                                     default: {}
