@@ -2739,28 +2739,67 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("is.vector"):
-                        if (auto cnst = LdConst::Cast(b->arg(1).val())) {
-                            if (!b->arg(0).val()->type.maybeHasAttrs()) {
-                                if (TYPEOF(cnst->c()) == STRSXP &&
-                                    LENGTH(cnst->c()) == 1) {
-                                    auto kind = STRING_ELT(cnst->c(), 0);
-                                    if (std::string("any") == CHAR(kind)) {
-                                        if (arep == Representation::Sexp) {
-                                            setVal(i, builder.CreateSelect(
-                                                          isVector(aval),
-                                                          constant(R_TrueValue,
-                                                                   orep),
-                                                          constant(R_FalseValue,
-                                                                   orep)));
-                                        } else {
-                                            setVal(i,
-                                                   constant(R_TrueValue, orep));
-                                        }
-                                        fastcase = true;
-                                    }
-                                }
+                        auto cnst = LdConst::Cast(b->arg(1).val());
+                        if (!cnst)
+                            break;
+
+                        if (TYPEOF(cnst->c()) != STRSXP ||
+                            LENGTH(cnst->c()) != 1)
+                            break;
+
+                        auto kind = STRING_ELT(cnst->c(), 0);
+                        if (std::string("any") != CHAR(kind))
+                            break;
+
+                        if (arep == Representation::Sexp) {
+                            llvm::Value* res;
+                            auto isvec = isVector(aval);
+                            auto v = b->arg(0).val();
+                            if (!v->type.maybeHasAttrs()) {
+                                res = builder.CreateSelect(
+                                    isvec, constant(R_TrueValue, orep),
+                                    constant(R_FalseValue, orep));
+                            } else {
+                                res = createSelect2(
+                                    isvec,
+                                    [&]() -> llvm::Value* {
+                                        auto a = attr(aval);
+                                        auto zero = builder.CreateICmpEQ(
+                                            a, constant(R_NilValue, t::SEXP));
+                                        return createSelect2(
+                                            zero,
+                                            [&]() -> llvm::Value* {
+                                                return constant(R_TrueValue,
+                                                                orep);
+                                            },
+                                            [&]() -> llvm::Value* {
+                                                auto one = builder.CreateICmpEQ(
+                                                    cdr(a), constant(R_NilValue,
+                                                                     t::SEXP));
+                                                auto names =
+                                                    builder.CreateICmpEQ(
+                                                        tag(a),
+                                                        constant(R_NamesSymbol,
+                                                                 t::SEXP));
+                                                auto onlyNamesAtrrs =
+                                                    builder.CreateAnd(one,
+                                                                      names);
+                                                return builder.CreateSelect(
+                                                    onlyNamesAtrrs,
+                                                    constant(R_TrueValue, orep),
+                                                    constant(R_FalseValue,
+                                                             orep));
+                                            });
+                                    },
+                                    [&]() -> llvm::Value* {
+                                        return constant(R_FalseValue, orep);
+                                    });
                             }
+                            setVal(i, res);
+                        } else {
+                            setVal(i, constant(R_TrueValue, orep));
                         }
+                        fastcase = true;
                         break;
                     }
                     if (fastcase) {
