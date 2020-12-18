@@ -4511,7 +4511,6 @@ void LowerFunctionLLVM::compile() {
                     Representation::Of(i) == t::SEXP)
                     fastcase = false;
 
-                fastcase = false;
                 if (fastcase) {
                     auto fallback = BasicBlock::Create(C, "", fun);
                     done = BasicBlock::Create(C, "", fun);
