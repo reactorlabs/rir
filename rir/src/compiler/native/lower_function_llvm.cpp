@@ -1296,10 +1296,25 @@ llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool potect) {
     return call(NativeBuiltins::newRealFromInt, {v});
 }
 llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v, bool protect) {
-    if (v->getType() == t::Int)
-        return call(NativeBuiltins::newLgl, {v});
+    if (v->getType() == t::Int) {
+        insn_assert(
+            builder.CreateOr(
+                builder.CreateICmpEQ(v, c(0)),
+                builder.CreateOr(builder.CreateICmpEQ(v, c(1)),
+                                 builder.CreateICmpEQ(v, c(NA_LOGICAL)))),
+            "expected unboxed logical to be 0,1, or NA");
+        return builder.CreateSelect(
+            builder.CreateICmpEQ(v, c(0)), constant(R_FalseValue, t::SEXP),
+            builder.CreateSelect(builder.CreateICmpEQ(v, c(NA_LOGICAL)),
+                                 constant(R_LogicalNAValue, t::SEXP),
+                                 constant(R_TrueValue, t::SEXP)));
+    }
     assert(v->getType() == t::Double);
-    return call(NativeBuiltins::newLglFromReal, {v});
+    return builder.CreateSelect(
+        builder.CreateFCmpOEQ(v, c(0.0)), constant(R_FalseValue, t::SEXP),
+        builder.CreateSelect(builder.CreateFCmpUNE(v, v),
+                             constant(R_LogicalNAValue, t::SEXP),
+                             constant(R_TrueValue, t::SEXP)));
 }
 llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v, bool protect) {
     assert(v->getType() == t::Int);

@@ -90,10 +90,8 @@ struct NativeBuiltins {
 
     static NativeBuiltin newInt;
     static NativeBuiltin newIntDebug;
-    static NativeBuiltin newLgl;
     static NativeBuiltin newReal;
     static NativeBuiltin newIntFromReal;
-    static NativeBuiltin newLglFromReal;
     static NativeBuiltin newRealFromInt;
 
     static NativeBuiltin makeVector;

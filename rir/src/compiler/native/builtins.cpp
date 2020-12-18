@@ -510,15 +510,6 @@ NativeBuiltin NativeBuiltins::createClosure = {
     (void*)&createClosureImpl,
 };
 
-SEXP newLglImpl(int i) {
-    if (i == 1)
-        return R_TrueValue;
-    if (i == NA_INTEGER)
-        return R_LogicalNAValue;
-    SLOWASSERT(i == 0);
-    return R_FalseValue;
-}
-
 SEXP newIntImpl(int i) { return ScalarInteger(i); }
 
 SEXP newIntDebugImpl(int i, void* debug) {
@@ -526,10 +517,6 @@ SEXP newIntDebugImpl(int i, void* debug) {
     auto res = Rf_allocVector(INTSXP, 1);
     INTEGER(res)[0] = i;
     return res;
-}
-
-SEXP newLglFromRealImpl(double d) {
-    return ScalarLogical(d != d ? NA_LOGICAL : d == 0.0 ? 0 : 1);
 }
 
 SEXP newIntFromRealImpl(double d) {
@@ -547,10 +534,6 @@ NativeBuiltin NativeBuiltins::newRealFromInt = {
     "newRealFromInt",
     (void*)&newRealFromIntImpl,
 };
-NativeBuiltin NativeBuiltins::newLglFromReal = {
-    "newLglFromReal",
-    (void*)&newLglFromRealImpl,
-};
 NativeBuiltin NativeBuiltins::newInt = {
     "newInt",
     (void*)&newIntImpl,
@@ -562,10 +545,6 @@ NativeBuiltin NativeBuiltins::newIntDebug = {
 NativeBuiltin NativeBuiltins::newReal = {
     "newReal",
     (void*)&newRealImpl,
-};
-NativeBuiltin NativeBuiltins::newLgl = {
-    "newLgl",
-    (void*)&newLglImpl,
 };
 
 #define OPERATION_FALLBACK(op)                                                 \
