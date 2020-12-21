@@ -1078,6 +1078,13 @@ llvm::Value* LowerFunctionLLVM::shared(llvm::Value* v) {
     return builder.CreateICmpUGT(named, c(1ul));
 }
 
+llvm::Value* LowerFunctionLLVM::cloneIfShared(llvm::Value* v) {
+    auto s = shared(v);
+    return createSelect2(
+        s, [&]() { return call(NativeBuiltins::shallowDuplicate, {v}); },
+        [&]() { return v; });
+}
+
 void LowerFunctionLLVM::ensureNamedIfNeeded(Instruction* i, llvm::Value* val) {
     if ((Representation::Of(i) == t::SEXP && variables_.count(i) &&
          variables_.at(i).initialized)) {
@@ -1759,12 +1766,14 @@ llvm::Value* LowerFunctionLLVM::fastVeceltOkNative(llvm::Value* v) {
     checkIsSexp(v, "in IsFastVeceltOkNative");
     auto attrs = attr(v);
     auto isNil = builder.CreateICmpEQ(attrs, constant(R_NilValue, t::SEXP));
-    auto isMatr1 =
-        builder.CreateICmpEQ(tag(attrs), constant(R_DimSymbol, t::SEXP));
-    auto isMatr2 =
-        builder.CreateICmpEQ(cdr(attrs), constant(R_NilValue, t::SEXP));
-    auto isMatr = builder.CreateAnd(isMatr1, isMatr2);
-    return builder.CreateOr(isNil, isMatr);
+    return createSelect2(isNil, [&]() { return builder.getTrue(); },
+                         [&]() {
+                             auto isMatr1 = builder.CreateICmpEQ(
+                                 tag(attrs), constant(R_DimSymbol, t::SEXP));
+                             auto isMatr2 = builder.CreateICmpEQ(
+                                 cdr(attrs), constant(R_NilValue, t::SEXP));
+                             return builder.CreateAnd(isMatr1, isMatr2);
+                         });
 };
 
 llvm::Value* LowerFunctionLLVM::isAltrep(llvm::Value* v) {
@@ -4381,15 +4390,11 @@ void LowerFunctionLLVM::compile() {
 
                 if (fastcase) {
                     auto fallback = BasicBlock::Create(C, "", fun);
-                    auto hit = BasicBlock::Create(C, "", fun);
                     done = BasicBlock::Create(C, "", fun);
 
                     llvm::Value* vector = load(subAssign->lhs());
-                    if (Representation::Of(subAssign->lhs()) == t::SEXP) {
-                        builder.CreateCondBr(shared(vector), fallback, hit,
-                                             branchMostlyFalse);
-                        builder.SetInsertPoint(hit);
-                    }
+                    if (Representation::Of(subAssign->lhs()) == t::SEXP)
+                        vector = cloneIfShared(vector);
 
                     auto ncol = builder.CreateZExt(
                         call(NativeBuiltins::matrixNcols, {vector}), t::i64);
@@ -4507,10 +4512,7 @@ void LowerFunctionLLVM::compile() {
                             builder.SetInsertPoint(hit2);
                         }
 
-                        auto hit3 = BasicBlock::Create(C, "", fun);
-                        builder.CreateCondBr(shared(vector), fallback, hit3,
-                                             branchMostlyFalse);
-                        builder.SetInsertPoint(hit3);
+                        vector = cloneIfShared(vector);
                     }
 
                     llvm::Value* index = computeAndCheckIndex(subAssign->idx(),
@@ -4582,11 +4584,7 @@ void LowerFunctionLLVM::compile() {
                         builder.CreateCondBr(isAltrep(vector), fallback, hit1,
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit1);
-
-                        auto hit3 = BasicBlock::Create(C, "", fun);
-                        builder.CreateCondBr(shared(vector), fallback, hit3,
-                                             branchMostlyFalse);
-                        builder.SetInsertPoint(hit3);
+                        vector = cloneIfShared(vector);
                     }
 
                     llvm::Value* index = computeAndCheckIndex(subAssign->idx(),

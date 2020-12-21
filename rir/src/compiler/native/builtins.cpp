@@ -974,7 +974,10 @@ NativeBuiltin NativeBuiltins::asLogicalBlt = {"aslogical",
 size_t lengthImpl(SEXP e) { return Rf_length(e); }
 
 NativeBuiltin NativeBuiltins::length = {
-    "length", (void*)&lengthImpl, nullptr, {llvm::Attribute::ReadOnly}};
+    "length",
+    (void*)&lengthImpl,
+    nullptr,
+    {llvm::Attribute::ReadOnly, llvm::Attribute::ArgMemOnly}};
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     if (!pir::Parameter::DEOPT_CHAOS) {
@@ -2240,18 +2243,20 @@ NativeBuiltin NativeBuiltins::endClosureContext = {
 };
 
 int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }
-NativeBuiltin NativeBuiltins::matrixNcols = {
-    "ncols",
-    (void*)ncolsImpl,
-    nullptr,
-    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
+NativeBuiltin NativeBuiltins::matrixNcols = {"ncols",
+                                             (void*)ncolsImpl,
+                                             nullptr,
+                                             {llvm::Attribute::ReadOnly,
+                                              llvm::Attribute::Speculatable,
+                                              llvm::Attribute::ArgMemOnly}};
 
 int nrowsImpl(SEXP v) { return getMatrixDim(v).row; }
-NativeBuiltin NativeBuiltins::matrixNrows = {
-    "nrows",
-    (void*)nrowsImpl,
-    nullptr,
-    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
+NativeBuiltin NativeBuiltins::matrixNrows = {"nrows",
+                                             (void*)nrowsImpl,
+                                             nullptr,
+                                             {llvm::Attribute::ReadOnly,
+                                              llvm::Attribute::Speculatable,
+                                              llvm::Attribute::ArgMemOnly}};
 
 SEXP makeVectorImpl(int mode, size_t len) {
     auto s = Rf_allocVector(mode, len);
@@ -2354,13 +2359,12 @@ SEXP xlength_Impl(SEXP val) {
 NativeBuiltin NativeBuiltins::xlength_ = {
     "xlength_",
     (void*)&xlength_Impl,
-};
+    nullptr,
+    {llvm::Attribute::ArgMemOnly, llvm::Attribute::ReadOnly}};
 
 SEXP getAttribImpl(SEXP val, SEXP sym) { return Rf_getAttrib(val, sym); }
 NativeBuiltin NativeBuiltins::getAttrb = {
-    "getAttrib",
-    (void*)&getAttribImpl,
-};
+    "getAttrib", (void*)&getAttribImpl, nullptr, {llvm::Attribute::ArgMemOnly}};
 
 void nonLocalReturnImpl(SEXP res, SEXP env) {
     Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
@@ -2402,5 +2406,10 @@ void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
 
 NativeBuiltin NativeBuiltins::checkType = {
     "checkType", (void*)&checkTypeImpl, nullptr, {}};
+
+NativeBuiltin NativeBuiltins::shallowDuplicate = {"shallowDuplicate",
+                                                  (void*)&Rf_shallow_duplicate,
+                                                  nullptr,
+                                                  {llvm::Attribute::NoAlias}};
 }
 }

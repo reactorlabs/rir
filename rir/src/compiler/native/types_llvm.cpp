@@ -348,6 +348,8 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::checkType.llvmSignature = llvm::FunctionType::get(
         t::t_void, {t::SEXP, t::i64, t::charPtr}, false);
 
+    NativeBuiltins::shallowDuplicate.llvmSignature = t::sexp_sexp;
+
     return 1;
 }
 

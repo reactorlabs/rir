@@ -177,6 +177,8 @@ struct NativeBuiltins {
 
     static NativeBuiltin checkType;
 
+    static NativeBuiltin shallowDuplicate;
+
     static constexpr unsigned long bindingsCacheFails = 2;
 };
 

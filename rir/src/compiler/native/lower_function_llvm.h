@@ -335,6 +335,7 @@ class LowerFunctionLLVM {
         return dead;
     }
 
+    llvm::Value* cloneIfShared(llvm::Value*);
     void ensureNamed(llvm::Value* v);
     void ensureNamedIfNeeded(Instruction* i, llvm::Value* val = nullptr);
     llvm::Value* shared(llvm::Value* v);
