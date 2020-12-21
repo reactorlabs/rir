@@ -59,6 +59,7 @@ struct NativeBuiltins {
     static NativeBuiltin createMissingBindingCell;
 
     static NativeBuiltin ldvar;
+    static NativeBuiltin ldvarGlobal;
     static NativeBuiltin ldvarForUpdate;
     static NativeBuiltin ldvarCacheMiss;
     static NativeBuiltin stvar;

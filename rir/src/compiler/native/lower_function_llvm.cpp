@@ -973,7 +973,17 @@ void LowerFunctionLLVM::setCar(llvm::Value* x, llvm::Value* y,
         fast();
         return;
     }
-    writeBarrier(x, y, fast, [&]() { call(NativeBuiltins::setCar, {x, y}); });
+    writeBarrier(x, y, fast, [&]() {
+        auto skip = BasicBlock::Create(C, "", fun);
+        auto update = BasicBlock::Create(C, "", fun);
+        builder.CreateCondBr(builder.CreateICmpNE(car(x), y), update, skip);
+
+        builder.SetInsertPoint(update);
+        call(NativeBuiltins::setCar, {x, y});
+        builder.CreateBr(skip);
+
+        builder.SetInsertPoint(skip);
+    });
 }
 
 void LowerFunctionLLVM::setCdr(llvm::Value* x, llvm::Value* y,
@@ -986,7 +996,17 @@ void LowerFunctionLLVM::setCdr(llvm::Value* x, llvm::Value* y,
         fast();
         return;
     }
-    writeBarrier(x, y, fast, [&]() { call(NativeBuiltins::setCdr, {x, y}); });
+    writeBarrier(x, y, fast, [&]() {
+        auto skip = BasicBlock::Create(C, "", fun);
+        auto update = BasicBlock::Create(C, "", fun);
+        builder.CreateCondBr(builder.CreateICmpNE(cdr(x), y), update, skip);
+
+        builder.SetInsertPoint(update);
+        call(NativeBuiltins::setCdr, {x, y});
+        builder.CreateBr(skip);
+
+        builder.SetInsertPoint(skip);
+    });
 }
 
 void LowerFunctionLLVM::setTag(llvm::Value* x, llvm::Value* y,
@@ -1034,10 +1054,14 @@ llvm::Value* LowerFunctionLLVM::isSimpleScalar(llvm::Value* v, SEXPTYPE t) {
         c(0, 64),
         builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS)))));
 
-    auto noAttrib =
-        builder.CreateICmpEQ(attr(v), constant(R_NilValue, t::SEXP));
+    isScalar = builder.CreateAnd(okType, isScalar);
 
-    return builder.CreateAnd(okType, builder.CreateAnd(isScalar, noAttrib));
+    return createSelect2(isScalar,
+                         [&]() {
+                             return builder.CreateICmpEQ(
+                                 attr(v), constant(R_NilValue, t::SEXP));
+                         },
+                         [&]() { return builder.getFalse(); });
 }
 
 llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
@@ -3996,6 +4020,9 @@ void LowerFunctionLLVM::compile() {
                     builder.CreateBr(done);
                     builder.SetInsertPoint(done);
                     res = phi();
+                } else if (i->env() == Env::global()) {
+                    res = call(NativeBuiltins::ldvarGlobal,
+                               {constant(varName, t::SEXP)});
                 } else {
                     auto setter = needsLdVarForUpdate.count(i)
                                       ? NativeBuiltins::ldvarForUpdate

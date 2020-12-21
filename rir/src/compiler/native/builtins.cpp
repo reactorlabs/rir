@@ -150,6 +150,13 @@ NativeBuiltin NativeBuiltins::ldvar = {
     (void*)&ldvarImpl,
 };
 
+SEXP ldvarGlobalImpl(SEXP a) { return Rf_findVar(a, R_GlobalEnv); }
+
+NativeBuiltin NativeBuiltins::ldvarGlobal = {
+    "ldvarGlobal",
+    (void*)&ldvarGlobalImpl,
+};
+
 const unsigned long NativeBuiltins::bindingsCacheFails;
 SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
     if (*cache != (SEXP)NativeBuiltins::bindingsCacheFails) {
