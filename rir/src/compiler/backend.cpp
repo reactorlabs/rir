@@ -52,15 +52,23 @@ static void approximateNeedsLdVarForUpdate(
             if (auto vec =
                     Instruction::Cast(i->arg(1).val()->followCastsAndForce())) {
                 if (auto ld = LdVar::Cast(vec)) {
-                    if (auto su = vec->hasSingleUse()) {
+                    if (auto su = i->hasSingleUse()) {
                         if (auto st = StVar::Cast(su)) {
                             if (ld->env() != st->env())
                                 needsLdVarForUpdate.insert(vec);
                             break;
                         }
+                        if (StVarSuper::Cast(su)) {
+                            break;
+                        }
                     }
-                    if (ld->env() != i->env())
-                        needsLdVarForUpdate.insert(vec);
+                    if (auto mk = MkEnv::Cast(ld->env()))
+                        if (mk->stub &&
+                            mk->arg(mk->indexOf(ld->varName)).val() !=
+                                UnboundValue::instance())
+                            break;
+
+                    needsLdVarForUpdate.insert(vec);
                 }
             }
             break;
