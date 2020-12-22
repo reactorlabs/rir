@@ -4596,7 +4596,7 @@ void LowerFunctionLLVM::compile() {
                 // Missing cases: store int into double vect / store double into
                 // int vect
                 bool fastcase =
-                    idxType.isA(PirType::intReal().notObject().scalar()) &&
+                    idxType.isA(PirType::intRealLgl().notObject().scalar()) &&
                     valType.isScalar() && !vecType.maybeObj() &&
                     ((vecType.isA(RType::integer) &&
                       valType.isA(RType::integer)) ||

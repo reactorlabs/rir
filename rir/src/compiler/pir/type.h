@@ -218,6 +218,9 @@ struct PirType {
     void merge(const ObservedValues& other);
     void merge(SEXPTYPE t);
 
+    static constexpr PirType intRealLgl() {
+        return PirType(RType::integer) | RType::real | RType::logical;
+    }
     static constexpr PirType intReal() {
         return PirType(RType::integer) | RType::real;
     }
