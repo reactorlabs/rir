@@ -1,5 +1,6 @@
 #include "backend.h"
 #include "R/BuiltinIds.h"
+#include "analysis/dead.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/analysis/last_env.h"
 #include "compiler/analysis/reference_count.h"
@@ -85,12 +86,30 @@ static bool coinFlip() {
 };
 
 static void lower(Code* code) {
+    DeadInstructions representAsReal(
+        code, 1, Effects::Any(),
+        DeadInstructions::IgnoreUsesThatDontObserveIntVsReal);
+
     Visitor::runPostChange(code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
             if ((*it)->frameState() && !Deopt::Cast(*it))
                 (*it)->clearFrameState();
+
+            auto t = (*it)->type;
+            if (t.isA(PirType::simpleScalar())) {
+                // In the case we have an instruction that might statically
+                // return int or double, but there is no instruction that could
+                // observe the difference we might as well set the type to
+                // double to avoid boxing.
+                if (t.maybe(PirType::simpleScalarInt()) &&
+                    t.maybe(PirType::simpleScalarReal()) &&
+                    representAsReal.isDead(*it)) {
+                    (*it)->type = t & PirType::simpleScalarReal();
+                }
+            }
+
             if (auto b = CallSafeBuiltin::Cast(*it)) {
                 if (b->builtinId == blt("length") && next != bb->end()) {
                     if (auto t = IsType::Cast(*(it + 1))) {

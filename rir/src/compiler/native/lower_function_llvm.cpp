@@ -3707,7 +3707,14 @@ void LowerFunctionLLVM::compile() {
                     }
                     setVal(i, builder.CreateZExt(res, t::Int));
                 } else {
-                    setVal(i, c(1));
+                    if (Representation::Of(arg) == t::Double &&
+                        arg->type.maybe(RType::real) &&
+                        !t->typeTest.maybe(RType::real)) {
+                        setVal(i, builder.CreateZExt(
+                                      checkDoubleToInt(load(arg)), t::Int));
+                    } else {
+                        setVal(i, c(1));
+                    }
                 }
                 break;
             }

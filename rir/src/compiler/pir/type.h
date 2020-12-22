@@ -314,7 +314,8 @@ struct PirType {
         return isRType() && t_.r == o;
     }
     RIR_INLINE constexpr bool maybe(PirType type) const {
-        return (*this & type).isA(type);
+        auto inter = (*this & type);
+        return !inter.isVoid();
     }
     RIR_INLINE constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
@@ -538,11 +539,8 @@ struct PirType {
         t_.r = RTypeSet(rtype);
     }
 
-    bool isVoid() const {
-        if (isRType())
-            return t_.r.empty();
-        else
-            return t_.n.empty();
+    constexpr bool isVoid() const {
+        return isRType() ? t_.r.empty() : t_.n.empty();
     }
 
     static const PirType voyd() { return PirType(NativeTypeSet()); }
