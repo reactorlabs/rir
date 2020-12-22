@@ -1056,12 +1056,10 @@ llvm::Value* LowerFunctionLLVM::isSimpleScalar(llvm::Value* v, SEXPTYPE t) {
 
     isScalar = builder.CreateAnd(okType, isScalar);
 
-    return createSelect2(isScalar,
-                         [&]() {
-                             return builder.CreateICmpEQ(
-                                 attr(v), constant(R_NilValue, t::SEXP));
-                         },
-                         [&]() { return builder.getFalse(); });
+    auto noAttrib =
+        builder.CreateICmpEQ(attr(v), constant(R_NilValue, t::SEXP));
+
+    return builder.CreateAnd(isScalar, noAttrib);
 }
 
 llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
