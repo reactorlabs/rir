@@ -84,6 +84,11 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 if ("prod" == name)
                                     inferred = inferred.orT(RType::real)
                                                    .notT(RType::integer);
+                                if ("abs" == name) {
+                                    if (inferred.maybe(RType::cplx))
+                                        inferred = inferred.orT(RType::real)
+                                                       .notT(RType::cplx);
+                                }
                                 break;
                             }
                         }
