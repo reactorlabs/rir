@@ -5024,11 +5024,11 @@ void LowerFunctionLLVM::compile() {
                 };
                 auto downwards = [&]() {
                     return builder.CreateFSub(
-                        lda, builder.CreateFSub(
-                                 builder.CreateIntrinsic(
+                        builder.CreateFSub(
+                            lda, builder.CreateIntrinsic(
                                      Intrinsic::floor, {ldb->getType()},
-                                     {builder.CreateFSub(lda, ldb)}),
-                                 c(1.0)));
+                                     {builder.CreateFSub(lda, ldb)})),
+                        c(1.0));
                 };
 
                 auto res = createSelect2(increasing, upwards, downwards);
