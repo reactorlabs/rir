@@ -327,7 +327,7 @@ BC_NOARGS(V, _)
     inline static BC pick(uint32_t);
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
-    inline static BC isType(TypeChecks);
+    inline static BC isNonObj();
     inline static BC call(size_t nargs, SEXP ast, const Context& given);
     inline static BC callDots(size_t nargs, const std::vector<SEXP>& names,
                               SEXP ast, const Context& given);
@@ -574,7 +574,6 @@ BC_NOARGS(V, _)
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
-        case Opcode::istype_:
         case Opcode::put_:
         case Opcode::record_call_:
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
@@ -587,6 +586,7 @@ BC_NOARGS(V, _)
             memcpy(reinterpret_cast<void*>(&immediate.typeFeedback), pc,
                    sizeof(ObservedValues));
             break;
+        case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)
 #undef V

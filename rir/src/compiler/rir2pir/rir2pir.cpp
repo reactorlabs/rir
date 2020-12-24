@@ -1013,17 +1013,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Is(bc.immediate.i, pop())));
         break;
 
-    case Opcode::istype_: {
-        switch (bc.immediate.i) {
-        case (uint32_t)TypeChecks::NotObject: {
-            push(insert(
-                new IsType(PirType::val().notMissing().notObject(), pop())));
-            break;
-        default:
-            log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
-            assert(false && "Recompiling PIR not supported for now.");
-        }
-        }
+    case Opcode::isnonobj_: {
+        push(
+            insert(new IsType(PirType::val().notMissing().notObject(), pop())));
         break;
     }
 

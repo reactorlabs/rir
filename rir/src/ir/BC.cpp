@@ -16,6 +16,7 @@ namespace rir {
 void BC::write(CodeStream& cs) const {
     cs.insert(bc);
     switch (bc) {
+    case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
         BC_NOARGS(V, _)
 #undef V
@@ -98,7 +99,6 @@ void BC::write(CodeStream& cs) const {
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::is_:
-    case Opcode::istype_:
     case Opcode::put_:
         cs.insert(immediate.i);
         return;
@@ -128,6 +128,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         unsigned size = BC::fixedSize(*code);
         ImmediateArguments& i = *(ImmediateArguments*)(code + 1);
         switch (*code) {
+        case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
             BC_NOARGS(V, _)
 #undef V
@@ -191,7 +192,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
-        case Opcode::istype_:
         case Opcode::put_:
         case Opcode::starg_:
         case Opcode::starg_cached_:
@@ -226,6 +226,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         unsigned size = BC::fixedSize(*code);
         ImmediateArguments i = bc.immediate;
         switch (*code) {
+        case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
             BC_NOARGS(V, _)
 #undef V
@@ -285,7 +286,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
-        case Opcode::istype_:
         case Opcode::put_:
         case Opcode::starg_:
         case Opcode::starg_cached_:
@@ -437,18 +437,7 @@ void BC::print(std::ostream& out) const {
         out << immediate.i;
         break;
     case Opcode::is_:
-    case Opcode::istype_:
-        switch (static_cast<TypeChecks>(immediate.i)) {
-#define V(TypeCheck)                                                           \
-    case TypeChecks::TypeCheck:                                                \
-        out << #TypeCheck;                                                     \
-        break;
-            TYPE_CHECKS(V)
-#undef V
-        default:
-            out << type2char(immediate.i);
-            break;
-        }
+        out << type2char(immediate.i);
         break;
     case Opcode::record_call_: {
         ObservedCallees prof = immediate.callFeedback;
@@ -495,6 +484,7 @@ void BC::print(std::ostream& out) const {
         break;
     }
 
+    case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
         BC_NOARGS(V, _)
 #undef V

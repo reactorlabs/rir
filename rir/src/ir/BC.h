@@ -211,13 +211,7 @@ BC BC::is(uint32_t i) {
     im.i = i;
     return BC(Opcode::is_, im);
 }
-BC BC::isType(TypeChecks i) {
-    assert(static_cast<uint32_t>(i) > MAX_NUM_SEXPTYPE &&
-           "Invalid type in istype_");
-    ImmediateArguments im;
-    im.i = static_cast<uint32_t>(i);
-    return BC(Opcode::istype_, im);
-}
+BC BC::isNonObj() { return BC(Opcode::isnonobj_); }
 BC BC::put(uint32_t i) {
     ImmediateArguments im;
     im.i = i;

@@ -1643,8 +1643,6 @@ class FLI(IsType, 1, Effects::None()) {
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
           typeTest(type) {}
 
-    TypeChecks typeChecks() const;
-
     void printArgs(std::ostream& out, bool tty) const override;
 
     bool isTypecheck() const override final { return true; }

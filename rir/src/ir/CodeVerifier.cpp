@@ -134,7 +134,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::is_:
-    case Opcode::istype_:
+    case Opcode::isnonobj_:
     case Opcode::put_:
     case Opcode::nop_:
     case Opcode::ret_:
