@@ -3799,15 +3799,16 @@ void LowerFunctionLLVM::compile() {
 
                 if (r == Representation::Real) {
                     auto narg = load(arg, r);
-                    auto isNotNa = builder.CreateFCmpUEQ(narg, narg);
-                    narg = builder.CreateFPToSI(narg, t::Int);
+                    nacheck(narg, arg->type, isNa);
+                    narg = builder.CreateZExt(
+                        builder.CreateFCmpONE(c(0.0), narg), t::Int);
                     setVal(i, narg);
-                    builder.CreateCondBr(isNotNa, done, isNa, branchMostlyTrue);
+                    builder.CreateBr(done);
                 } else {
                     auto narg = load(arg, Representation::Integer);
-                    auto isNotNa = builder.CreateICmpNE(narg, c(NA_INTEGER));
+                    nacheck(narg, arg->type, isNa);
                     setVal(i, narg);
-                    builder.CreateCondBr(isNotNa, done, isNa, branchMostlyTrue);
+                    builder.CreateBr(done);
                 }
 
                 builder.SetInsertPoint(isNa);
