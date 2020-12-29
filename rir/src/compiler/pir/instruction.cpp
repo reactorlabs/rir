@@ -149,6 +149,7 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
             CASE(ExecuteCode, "X")
             CASE(DependsOnAssume, "d")
             CASE(MutatesArgument, "M")
+            CASE(UpdatesMetadata, "m")
 #undef CASE
         }
     }
