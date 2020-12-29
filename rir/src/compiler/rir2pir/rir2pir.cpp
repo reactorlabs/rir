@@ -818,6 +818,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         assert(TYPEOF(target) == BUILTINSXP);
         push(insert(BuiltinCallFactory::New(env, target, args, ast)));
+
+        if (target->u.primsxp.offset == blt("stop")) {
+            insert(new Unreachable());
+            stack.clear();
+        }
         break;
     }
 
@@ -1383,7 +1388,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             if (!insert.getCurrentBB()->isEmpty()) {
                 auto last = insert.getCurrentBB()->last();
 
-                if (Deopt::Cast(last)) {
+                if (Deopt::Cast(last) || Unreachable::Cast(last)) {
                     finger = end;
                     continue;
                 }

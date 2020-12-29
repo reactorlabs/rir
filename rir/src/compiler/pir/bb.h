@@ -90,6 +90,7 @@ class BB {
 
     bool isExit() const { return !next0 && !next1; }
     bool isDeopt() const;
+    bool isEndUnreachable() const;
     bool isBranch() const { return next0 && next1; }
     bool isCheckpoint() const;
     bool isMerge() const { return predecessors().size() > 1; }

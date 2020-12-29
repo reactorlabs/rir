@@ -1106,6 +1106,13 @@ class Return
         : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{ret}}) {}
 };
 
+class Unreachable : public FixedLenInstruction<Tag::Unreachable, Unreachable, 0,
+                                               Effects::NoneI(), HasEnvSlot::No,
+                                               Controlflow::Exit> {
+  public:
+    explicit Unreachable() : FixedLenInstruction(PirType::voyd(), {{}}, {{}}) {}
+};
+
 class Promise;
 class FLIE(MkArg, 2, Effects::None()) {
     Promise* prom_;

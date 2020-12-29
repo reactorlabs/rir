@@ -5071,6 +5071,10 @@ void LowerFunctionLLVM::compile() {
                                {loadSxp(i->arg(0).val())}));
                 break;
 
+            case Tag::Unreachable:
+                builder.CreateUnreachable();
+                break;
+
             case Tag::Int3:
             case Tag::PrintInvocation:
                 assert(false);
