@@ -304,23 +304,22 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     anyChange = true;
                     i->replaceUsesWith(i->arg(0).val());
                     next = bb->remove(ip);
+                } else if (isStaticallyTrue(a)) {
+                    n = new AsLogical(b, i->srcIdx);
+                } else if (isStaticallyFalse(a)) {
+                    n = new LdConst(R_FalseValue);
+                } else if (isStaticallyTrue(b)) {
+                    n = new AsLogical(a, i->srcIdx);
+                } else if (isStaticallyFalse(b)) {
+                    ip = bb->insert(ip, new AsLogical(a, i->srcIdx));
+                    ip++;
+                    next = ip + 1;
+                    n = new LdConst(R_FalseValue);
                 }
-                //                else if (isStaticallyTrue(a)) {
-                //                    n = new AsLogical(b, i->srcIdx);
-                //                } else if (isStaticallyFalse(a)) {
-                //                    n = new LdConst(R_FalseValue);
-                //                } else if (isStaticallyTrue(b)) {
-                //                    n = new AsLogical(a, i->srcIdx);
-                //                } else if (isStaticallyFalse(b)) {
-                //                    ip = bb->insert(ip, new AsLogical(a,
-                //                    i->srcIdx)); n = new
-                //                    LdConst(R_FalseValue);
-                //                }
                 if (n) {
                     anyChange = true;
                     i->replaceUsesWith(n);
                     bb->replace(ip, n);
-                    next = ip + 1;
                 }
             }
             if (LOr::Cast(i)) {
@@ -331,22 +330,22 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     anyChange = true;
                     i->replaceUsesWith(i->arg(0).val());
                     next = bb->remove(ip);
+                } else if (isStaticallyTrue(a)) {
+                    n = new LdConst(R_TrueValue);
+                } else if (isStaticallyFalse(a)) {
+                    n = new AsLogical(b, i->srcIdx);
+                } else if (isStaticallyTrue(b)) {
+                    ip = bb->insert(ip, new AsLogical(a, i->srcIdx));
+                    ip++;
+                    next = ip + 1;
+                    n = new LdConst(R_TrueValue);
+                } else if (isStaticallyFalse(b)) {
+                    n = new AsLogical(a, i->srcIdx);
                 }
-                //                else if (isStaticallyTrue(a)) {
-                //                    n = new LdConst(R_TrueValue);
-                //                } else if (isStaticallyFalse(a)) {
-                //                    n = new AsLogical(b, i->srcIdx);
-                //                } else if (isStaticallyTrue(b)) {
-                //                    ip = bb->insert(ip, new AsLogical(a,
-                //                    i->srcIdx)); n = new LdConst(R_TrueValue);
-                //                } else if (isStaticallyFalse(b)) {
-                //                    n = new AsLogical(a, i->srcIdx);
-                //                }
                 if (n) {
                     anyChange = true;
                     i->replaceUsesWith(n);
                     bb->replace(ip, n);
-                    next = ip + 1;
                 }
             }
 
@@ -422,21 +421,20 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     next = bb->remove(ip);
                 }
             }
-            //            if (auto isTest = Is::Cast(i)) {
-            //                auto arg = isTest->arg<0>().val();
-            //                if (arg->type.isA(isTest->lowerBound())) {
-            //                    anyChange = true;
-            //                    auto n = new LdConst(R_TrueValue, i->type);
-            //                    i->replaceUsesWith(n);
-            //                    bb->replace(ip, n);
-            //                } else if (!arg->type.maybe(isTest->upperBound()))
-            //                {
-            //                    anyChange = true;
-            //                    auto n = new LdConst(R_FalseValue, i->type);
-            //                    i->replaceUsesWith(n);
-            //                    bb->replace(ip, n);
-            //                }
-            //            }
+            if (auto isTest = Is::Cast(i)) {
+                auto arg = isTest->arg<0>().val();
+                if (arg->type.isA(isTest->lowerBound())) {
+                    anyChange = true;
+                    auto n = new LdConst(R_TrueValue, i->type);
+                    i->replaceUsesWith(n);
+                    bb->replace(ip, n);
+                } else if (!arg->type.maybe(isTest->upperBound())) {
+                    anyChange = true;
+                    auto n = new LdConst(R_FalseValue, i->type);
+                    i->replaceUsesWith(n);
+                    bb->replace(ip, n);
+                }
+            }
             if (auto assume = Assume::Cast(i)) {
                 if (assume->arg<0>().val() == True::instance() &&
                     assume->assumeTrue) {
