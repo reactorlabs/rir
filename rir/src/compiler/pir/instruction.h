@@ -285,7 +285,9 @@ class Instruction : public Value {
     void
     replaceUsesIn(Value* val, BB* target,
                   const std::function<void(Instruction*, size_t)>& postAction =
-                      [](Instruction*, size_t) {});
+                      [](Instruction*, size_t) {},
+                  const std::function<bool(Instruction*)>& replaceOnly =
+                      [](Instruction*) { return true; });
     void replaceUsesOfValue(Value* old, Value* rpl);
 
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
