@@ -1970,11 +1970,23 @@ void LowerFunctionLLVM::compile() {
             }
         });
 
+        std::unordered_map<PushContext*, PopContext*> contextResTy;
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto pop = PopContext::Cast(i)) {
-                auto res = pop->result();
                 auto push = pop->push();
-                auto resStore = topAlloca(Representation::Of(res));
+                contextResTy[push] = pop;
+            }
+        });
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto push = PushContext::Cast(i)) {
+                auto popI = contextResTy.find(push);
+                PopContext* pop = nullptr;
+                if (popI != contextResTy.end())
+                    pop = popI->second;
+                Representation resRep = Representation::Sexp;
+                if (pop)
+                    resRep = Representation::Of(pop->result());
+                auto resStore = topAlloca(resRep);
                 auto rcntxt = topAlloca(t::RCNTXT);
                 contexts[push] = {rcntxt, resStore,
                                   BasicBlock::Create(C, "", fun)};
@@ -1987,10 +1999,12 @@ void LowerFunctionLLVM::compile() {
                             liveness.live(push, j)) {
                             contexts[push].savedSexpPos[j] = numLocals++;
                         }
-                        if (!liveness.live(push, j) && liveness.live(pop, j))
+                        if (!liveness.live(push, j) && pop &&
+                            liveness.live(pop, j))
                             escapesInlineContext.insert(j);
                         if (!variables_.count(j) &&
-                            (liveness.live(push, j) || liveness.live(pop, j)))
+                            (liveness.live(push, j) ||
+                             (pop && liveness.live(pop, j))))
                             createVariable(j, true);
                     }
                 });
