@@ -363,8 +363,10 @@ class Instruction : public Value {
             // Everything but numbers throws an error
             t = t & PirType::num().notMissing();
             // e.g. TRUE + TRUE == 2
-            if (m.maybe(RType::logical))
-                t = t | RType::integer;
+            if (m.maybe(RType::logical)) {
+                t = t.orT(RType::integer);
+                t = t.notT(RType::logical);
+            }
             // the binop result becomes NA if it can't be represented in a
             // fixpoint integer (e.g. INT_MAX + 1 == NA)
             // * the condition checks iff at least one of the arguments is an
@@ -1641,8 +1643,6 @@ class FLI(IsType, 1, Effects::None()) {
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
           typeTest(type) {}
 
-    TypeChecks typeChecks() const;
-
     void printArgs(std::ostream& out, bool tty) const override;
 
     bool isTypecheck() const override final { return true; }
@@ -1989,10 +1989,20 @@ class CallInstruction {
     static CallInstruction* CastCall(Value* v);
 
     virtual size_t nCallArgs() const = 0;
+
+    typedef std::function<void(SEXP, Value*)> NamedArgumentValueIterator;
+    typedef std::function<void(SEXP, InstrArg&)> MutableNamedArgumentIterator;
+
+    void eachCallArg(const Instruction::ArgumentValueIterator& it) const {
+        eachNamedCallArg([&](SEXP, Value* v) { it(v); });
+    }
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) {
+        eachNamedCallArg([&](SEXP, InstrArg& a) { it(a); });
+    }
+
     virtual void
-    eachCallArg(const Instruction::ArgumentValueIterator& it) const = 0;
-    virtual void
-    eachCallArg(const Instruction::MutableArgumentIterator& it) = 0;
+    eachNamedCallArg(const NamedArgumentValueIterator& it) const = 0;
+    virtual void eachNamedCallArg(const MutableNamedArgumentIterator& it) = 0;
     virtual const InstrArg& callArg(size_t pos) const = 0;
     virtual InstrArg& callArg(size_t pos) = 0;
     virtual Closure* tryGetCls() const { return nullptr; }
@@ -2034,14 +2044,13 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
     }
 
     size_t nCallArgs() const override { return nargs() - 3; };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 2).val());
+            it(R_NilValue, arg(i + 2).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 2));
+            it(R_NilValue, arg(i + 2));
     }
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
@@ -2084,14 +2093,13 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
               const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
 
     size_t nCallArgs() const override { return nargs() - 2; };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 1).val());
+            it(names[i], arg(i + 1).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 1));
+            it(names[i], arg(i + 1));
     }
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
@@ -2126,14 +2134,13 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
                Value* runtimeClosure = Tombstone::closure());
 
     size_t nCallArgs() const override { return nargs() - 3; };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 2).val());
+            it(R_NilValue, arg(i + 2).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 2));
+            it(R_NilValue, arg(i + 2));
     }
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
@@ -2173,14 +2180,13 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     int builtinId;
 
     size_t nCallArgs() const override { return nargs() - 1; };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i).val());
+            it(R_NilValue, arg(i).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i));
+            it(R_NilValue, arg(i));
     }
 
     const InstrArg& callArg(size_t pos) const override final {
@@ -2215,12 +2221,14 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
     int builtinId;
 
     size_t nCallArgs() const override { return nargs(); };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
-        eachArg(it);
+
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(R_NilValue, arg(i).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
-        eachArg(it);
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(R_NilValue, arg(i));
     }
 
     const InstrArg& callArg(size_t pos) const override final {

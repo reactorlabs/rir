@@ -153,8 +153,9 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     }
 }
 
-PirType::PirType(const void* pos) : PirType() {
-    memcpy(reinterpret_cast<void*>(this), pos, sizeof(*this));
+PirType::PirType(uint64_t i) : PirType() {
+    static_assert(sizeof(*this) <= sizeof(uint64_t), "PirType is too big");
+    memcpy(reinterpret_cast<void*>(this), &i, sizeof(*this));
     assert((isRType() || !t_.n.empty()) && "corrupted pir type");
 }
 

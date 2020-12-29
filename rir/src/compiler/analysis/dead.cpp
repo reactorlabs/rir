@@ -55,6 +55,14 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
                         addToDead = false;
                     break;
                 }
+                case IgnoreUsesThatDontObserveIntVsReal:
+                    if (std::find(IgnoreIntVsReal.begin(),
+                                  IgnoreIntVsReal.end(),
+                                  use->tag) == IgnoreIntVsReal.end() &&
+                        !use->effects.includes(Effect::ExecuteCode) &&
+                        isAlive(use))
+                        addToDead = false;
+                    break;
                 case CountAll:
                     if (isAlive(use))
                         addToDead = false;

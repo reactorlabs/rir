@@ -3,9 +3,7 @@
 
 #include "BuiltinIds.h"
 
-#include <R.h>
-#define USE_RINTERNALS
-#include <Rinternals.h>
+#include "R/r.h"
 
 #include <cassert>
 

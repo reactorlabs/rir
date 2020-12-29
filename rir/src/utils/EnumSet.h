@@ -131,7 +131,7 @@ class EnumSet {
 
     explicit constexpr operator Store() const { return set_; }
 
-    RIR_INLINE bool empty() const { return set_ == 0; }
+    RIR_INLINE constexpr bool empty() const { return set_ == 0; }
 
     RIR_INLINE std::size_t count() const { return __builtin_popcount(set_); }
 

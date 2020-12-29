@@ -875,8 +875,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         BC::Label nonObjBranch = cs.mkLabel();
         BC::Label contBranch = cs.mkLabel();
 
-        cs << BC::dup() << BC::isType(TypeChecks::NotObject) << BC::recordTest()
-           << BC::brtrue(nonObjBranch) << BC::br(objBranch);
+        cs << BC::dup() << BC::isNonObj() << BC::recordTest()
+           << BC::brfalse(objBranch) << BC::br(nonObjBranch);
 
         cs << objBranch;
 

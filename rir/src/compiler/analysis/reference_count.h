@@ -1,7 +1,7 @@
 #ifndef PIR_REFERENCE_COUNT_H
 #define PIR_REFERENCE_COUNT_H
 
-#include "../pir/pir_impl.h"
+#include "../pir/pir.h"
 #include "dead.h"
 #include "generic_static_analysis.h"
 #include "utils/Map.h"
@@ -173,8 +173,8 @@ class StaticReferenceCount
     DominanceGraph dom;
 
   public:
-    StaticReferenceCount(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("StaticReferenceCountAnalysis", cls, cls, log),
+    StaticReferenceCount(ClosureVersion* cls, Code* code, LogStream& log)
+        : StaticAnalysis("StaticReferenceCountAnalysis", cls, code, log),
           dom(cls) {
         globalState = new NeedsRefcountAdjustment;
     }

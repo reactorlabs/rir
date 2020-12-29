@@ -19,7 +19,7 @@ class Promise : public Code {
     }
 
     unsigned srcPoolIdx() const;
-    rir::Code* rirSrc() { return rirSrc_; }
+    rir::Code* rirSrc() const override final { return rirSrc_; }
 
     LdFunctionEnv* env() const;
 

@@ -45,39 +45,17 @@ class State {
 
     void check() const { assert(ostack >= 0 and "Too many pops"); }
 
-    void advance(Code* code,
-                 std::unordered_map<Opcode*, int32_t>& pushContextStackHeight) {
-        auto oldPc = pc;
+    void advance(Code* code) {
         BC bc = BC::advance(&pc, code);
         // Those two instructions deal with cleanly returning from the function
         // themselves, so we can ignore leftover values on the stack. Note that
         // ret_ should not be added here, as it requires the stack to have
         // *only* the result value left.
-        if (bc.bc == Opcode::return_ || bc.bc == Opcode::deopt_)
+        if (bc.bc == Opcode::return_)
             ostack = 0;
         else
             ostack -= bc.popCount();
         check();
-
-        if (bc.bc == Opcode::push_context_) {
-            uint32_t popCtxt =
-                *reinterpret_cast<Immediate*>(oldPc + 1 + sizeof(Immediate));
-            auto popCtxtPos = pc + popCtxt;
-            assert(*popCtxtPos == Opcode::pop_context_ ||
-                   *popCtxtPos == Opcode::int3_);
-            assert(!pushContextStackHeight.count(popCtxtPos) ||
-                   pushContextStackHeight.at(popCtxtPos) == ostack);
-            pushContextStackHeight[popCtxtPos] = ostack;
-        }
-
-        if (bc.bc == Opcode::pop_context_) {
-            int32_t* stackOffset = reinterpret_cast<int32_t*>(oldPc + 1);
-            if (*stackOffset == INT_MAX) {
-                assert(pushContextStackHeight.count(oldPc));
-                *stackOffset = ostack - pushContextStackHeight.at(oldPc);
-            }
-        }
-
         ostack += bc.pushCount();
     }
 
@@ -135,10 +113,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldvar_cached_:
     case Opcode::ldvar_for_update_cache_:
     case Opcode::ldvar_for_update_:
-    case Opcode::ldvar_noforce_:
-    case Opcode::ldvar_noforce_cached_:
     case Opcode::ldvar_super_:
-    case Opcode::ldvar_noforce_super_:
     case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::starg_cached_:
@@ -148,7 +123,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::call_:
     case Opcode::call_dots_:
     case Opcode::named_call_:
-    case Opcode::static_call_:
     case Opcode::call_builtin_:
     case Opcode::mk_promise_:
     case Opcode::mk_eager_promise_:
@@ -160,19 +134,9 @@ static Sources hasSources(Opcode bc) {
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::is_:
-    case Opcode::istype_:
+    case Opcode::isnonobj_:
     case Opcode::put_:
-    case Opcode::ldarg_:
-    case Opcode::stloc_:
-    case Opcode::movloc_:
     case Opcode::nop_:
-    case Opcode::mk_env_:
-    case Opcode::mk_stub_env_:
-    case Opcode::mk_dotlist_:
-    case Opcode::get_env_:
-    case Opcode::parent_env_:
-    case Opcode::set_env_:
-    case Opcode::materialize_env_:
     case Opcode::ret_:
     case Opcode::names_:
     case Opcode::set_names_:
@@ -193,28 +157,16 @@ static Sources hasSources(Opcode bc) {
     case Opcode::invisible_:
     case Opcode::visible_:
     case Opcode::endloop_:
-    case Opcode::isstubenv_:
-    case Opcode::check_missing_:
     case Opcode::lgl_and_:
     case Opcode::lgl_or_:
     case Opcode::record_call_:
     case Opcode::record_type_:
     case Opcode::record_test_:
-    case Opcode::deopt_:
-    case Opcode::record_deopt_:
-    case Opcode::pop_context_:
-    case Opcode::push_context_:
     case Opcode::clear_binding_cache_:
-    case Opcode::ldvar_noforce_stubbed_:
-    case Opcode::stvar_stubbed_:
-    case Opcode::starg_stubbed_:
-    case Opcode::assert_type_:
-    case Opcode::update_promise_:
     case Opcode::colon_cast_lhs_:
     case Opcode::colon_cast_rhs_:
         return Sources::NotNeeded;
 
-    case Opcode::ldloc_:
     case Opcode::aslogical_:
     case Opcode::asbool_:
     case Opcode::missing_:
@@ -235,7 +187,6 @@ SIMPLE_INSTRUCTIONS(V, _)
 void CodeVerifier::calculateAndVerifyStack(Code* code) {
     State max; // max state
     std::map<Opcode*, State> state;
-    std::unordered_map<Opcode*, int32_t> pushContextStackHeight;
     std::stack<State> q;
 
     Opcode* cptr = code->code();
@@ -262,7 +213,7 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
             Opcode* pc = i.pc;
             assert(pc >= code->code() && pc < code->endCode());
             BC cur = BC::decode(pc, code);
-            i.advance(code, pushContextStackHeight);
+            i.advance(code);
             max.updateMax(i);
             if (cur.isExit()) {
                 i.checkClear();
@@ -341,9 +292,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                     cptr + cur.size() + off > end)
                     Rf_error("RIR Verifier: Branch outside closure");
             }
-            if (*cptr == Opcode::ldvar_ || *cptr == Opcode::ldvar_noforce_ ||
-                *cptr == Opcode::ldvar_super_ ||
-                *cptr == Opcode::ldvar_noforce_super_ ||
+            if (*cptr == Opcode::ldvar_ || *cptr == Opcode::ldvar_super_ ||
                 *cptr == Opcode::ldvar_for_update_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
                 if (*argsIndex >= cp_pool_length(ctx))
@@ -356,7 +305,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
             }
             if (*cptr == Opcode::ldvar_cached_ ||
                 *cptr == Opcode::stvar_cached_ ||
-                *cptr == Opcode::ldvar_noforce_cached_ ||
                 *cptr == Opcode::starg_cached_ ||
                 *cptr == Opcode::ldvar_for_update_cache_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
@@ -396,17 +344,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                             Rf_error(
                                 "RIR Verifier: Calling target not a symbol");
                     }
-                }
-            }
-            if (*cptr == Opcode::mk_env_ || *cptr == Opcode::mk_stub_env_) {
-                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
-                for (size_t i = 0, e = nargs; i != e; ++i) {
-                    uint32_t offset = cur.mkEnvExtra().names[i];
-                    SEXP name = cp_pool_at(ctx, offset);
-                    if (TYPEOF(name) != SYMSXP && (TYPEOF(name) != LISTSXP &&
-                                                   TYPEOF(CAR(name)) != SYMSXP))
-                        Rf_error(
-                            "RIR Verifier: environment argument not a symbol");
                 }
             }
 

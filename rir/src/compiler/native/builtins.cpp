@@ -150,11 +150,19 @@ NativeBuiltin NativeBuiltins::ldvar = {
     (void*)&ldvarImpl,
 };
 
+SEXP ldvarGlobalImpl(SEXP a) { return Rf_findVar(a, R_GlobalEnv); }
+
+NativeBuiltin NativeBuiltins::ldvarGlobal = {
+    "ldvarGlobal",
+    (void*)&ldvarGlobalImpl,
+};
+
+const unsigned long NativeBuiltins::bindingsCacheFails;
 SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
-    if (*cache != (SEXP)1) {
+    if (*cache != (SEXP)NativeBuiltins::bindingsCacheFails) {
         R_varloc_t loc = R_findVarLocInFrame(env, sym);
         if (R_VARLOC_IS_NULL(loc)) {
-            *cache = (SEXP)1;
+            *cache = (SEXP)(((uintptr_t)*cache) + 1);
         } else {
             *cache = loc.cell;
             if (CAR(*cache) != R_UnboundValue) {
@@ -173,16 +181,37 @@ NativeBuiltin NativeBuiltins::ldvarCacheMiss = {
     (void*)&ldvarCachedImpl,
 };
 
+void stvarSuperImpl(SEXP a, SEXP val, SEXP env) {
+    auto le = LazyEnvironment::check(env);
+    assert(!le || !le->materialized());
+    SEXP superEnv;
+    if (le)
+        superEnv = le->getParent();
+    else
+        superEnv = ENCLOS(env);
+    rirSetVarWrapper(a, val, superEnv);
+}
+NativeBuiltin NativeBuiltins::stvarSuper = {
+    "stvarSuper",
+    (void*)&stvarSuperImpl,
+};
+
 void stvarImpl(SEXP a, SEXP val, SEXP c) { rirDefineVarWrapper(a, val, c); }
 NativeBuiltin NativeBuiltins::stvar = {
     "stvar",
     (void*)&stvarImpl,
 };
 
-void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapperI(a, val, c); }
+void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapper(a, val, c); }
 NativeBuiltin NativeBuiltins::stvari = {
     "stvari",
     (void*)&stvarImplI,
+};
+
+void stvarImplR(SEXP a, double val, SEXP c) { rirDefineVarWrapper(a, val, c); }
+NativeBuiltin NativeBuiltins::stvarr = {
+    "stvarr",
+    (void*)&stvarImplR,
 };
 
 void stargImpl(SEXP sym, SEXP val, SEXP env) {
@@ -488,17 +517,7 @@ NativeBuiltin NativeBuiltins::createClosure = {
     (void*)&createClosureImpl,
 };
 
-SEXP newLglImpl(int i) {
-    auto res = Rf_allocVector(LGLSXP, 1);
-    LOGICAL(res)[0] = i;
-    return res;
-}
-
-SEXP newIntImpl(int i) {
-    auto res = Rf_allocVector(INTSXP, 1);
-    INTEGER(res)[0] = i;
-    return res;
-}
+SEXP newIntImpl(int i) { return ScalarInteger(i); }
 
 SEXP newIntDebugImpl(int i, void* debug) {
     std::cout << (char*)debug << "\n";
@@ -507,37 +526,12 @@ SEXP newIntDebugImpl(int i, void* debug) {
     return res;
 }
 
-SEXP newLglFromRealImpl(double d) {
-    auto res = Rf_allocVector(LGLSXP, 1);
-    if (d != d)
-        LOGICAL(res)[0] = NA_LOGICAL;
-    else
-        LOGICAL(res)[0] = d;
-    return res;
-}
-
 SEXP newIntFromRealImpl(double d) {
-    auto res = Rf_allocVector(INTSXP, 1);
-    if (d != d)
-        INTEGER(res)[0] = NA_INTEGER;
-    else
-        INTEGER(res)[0] = d;
-    return res;
+    return ScalarInteger(d != d ? NA_INTEGER : d);
 }
 
-SEXP newRealImpl(double i) {
-    auto res = Rf_allocVector(REALSXP, 1);
-    REAL(res)[0] = i;
-    return res;
-}
-SEXP newRealFromIntImpl(int i) {
-    auto res = Rf_allocVector(REALSXP, 1);
-    if (i == NA_INTEGER)
-        REAL(res)[0] = NAN;
-    else
-        REAL(res)[0] = i;
-    return res;
-}
+SEXP newRealImpl(double i) { return ScalarReal(i); }
+SEXP newRealFromIntImpl(int i) { return ScalarReal(i == NA_INTEGER ? NAN : i); }
 
 NativeBuiltin NativeBuiltins::newIntFromReal = {
     "newIntFromReal",
@@ -546,10 +540,6 @@ NativeBuiltin NativeBuiltins::newIntFromReal = {
 NativeBuiltin NativeBuiltins::newRealFromInt = {
     "newRealFromInt",
     (void*)&newRealFromIntImpl,
-};
-NativeBuiltin NativeBuiltins::newLglFromReal = {
-    "newLglFromReal",
-    (void*)&newLglFromRealImpl,
 };
 NativeBuiltin NativeBuiltins::newInt = {
     "newInt",
@@ -562,10 +552,6 @@ NativeBuiltin NativeBuiltins::newIntDebug = {
 NativeBuiltin NativeBuiltins::newReal = {
     "newReal",
     (void*)&newRealImpl,
-};
-NativeBuiltin NativeBuiltins::newLgl = {
-    "newLgl",
-    (void*)&newLglImpl,
 };
 
 #define OPERATION_FALLBACK(op)                                                 \
@@ -602,6 +588,12 @@ static void createFakeCONS(SEXPREC& res, SEXP cdr) {
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
 }
+
+#define FAKE_ARGS1(res, a1)                                                    \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, R_NilValue);                                  \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    res = &__a1__cell__
 
 #define FAKE_ARGS2(res, a1, a2)                                                \
     SEXPREC __a2__cell__;                                                      \
@@ -690,7 +682,8 @@ NativeBuiltin NativeBuiltins::unop = {
 
 static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
     SEXP res = nullptr;
-    SEXP arglist = CONS_NR(argument, R_NilValue);
+    SEXP arglist;
+    FAKE_ARGS1(arglist, argument);
     SEXP call = src_pool_at(globalContext(), srcIdx);
     PROTECT(arglist);
     OPERATION_FALLBACK("!");
@@ -706,10 +699,8 @@ NativeBuiltin NativeBuiltins::notEnv = {
 
 static SEXP notImpl(SEXP argument) {
     SEXP res = nullptr;
-    SEXPREC arglistStruct;
-    createFakeCONS(arglistStruct, R_NilValue);
-    arglistStruct.u.listsxp.carval = argument;
-    SEXP arglist = &arglistStruct;
+    SEXP arglist;
+    FAKE_ARGS1(arglist, argument);
     SEXP env = R_NilValue;
     SEXP call = R_NilValue;
     // Why we do not need a protect here?
@@ -723,8 +714,8 @@ NativeBuiltin NativeBuiltins::notOp = {"not", (void*)&notImpl};
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
                          BinopKind kind) {
     SEXP res = nullptr;
-    SEXP arglist2 = CONS_NR(rhs, R_NilValue);
-    SEXP arglist = CONS_NR(lhs, arglist2);
+    SEXP arglist;
+    FAKE_ARGS2(arglist, lhs, rhs);
     SEXP call = src_pool_at(globalContext(), srcIdx);
 
     PROTECT(arglist);
@@ -990,7 +981,10 @@ NativeBuiltin NativeBuiltins::asLogicalBlt = {"aslogical",
 size_t lengthImpl(SEXP e) { return Rf_length(e); }
 
 NativeBuiltin NativeBuiltins::length = {
-    "length", (void*)&lengthImpl, nullptr, {llvm::Attribute::ReadOnly}};
+    "length",
+    (void*)&lengthImpl,
+    nullptr,
+    {llvm::Attribute::ReadOnly, llvm::Attribute::ArgMemOnly}};
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     if (!pir::Parameter::DEOPT_CHAOS) {
@@ -2256,18 +2250,20 @@ NativeBuiltin NativeBuiltins::endClosureContext = {
 };
 
 int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }
-NativeBuiltin NativeBuiltins::matrixNcols = {
-    "ncols",
-    (void*)ncolsImpl,
-    nullptr,
-    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
+NativeBuiltin NativeBuiltins::matrixNcols = {"ncols",
+                                             (void*)ncolsImpl,
+                                             nullptr,
+                                             {llvm::Attribute::ReadOnly,
+                                              llvm::Attribute::Speculatable,
+                                              llvm::Attribute::ArgMemOnly}};
 
 int nrowsImpl(SEXP v) { return getMatrixDim(v).row; }
-NativeBuiltin NativeBuiltins::matrixNrows = {
-    "nrows",
-    (void*)nrowsImpl,
-    nullptr,
-    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
+NativeBuiltin NativeBuiltins::matrixNrows = {"nrows",
+                                             (void*)nrowsImpl,
+                                             nullptr,
+                                             {llvm::Attribute::ReadOnly,
+                                              llvm::Attribute::Speculatable,
+                                              llvm::Attribute::ArgMemOnly}};
 
 SEXP makeVectorImpl(int mode, size_t len) {
     auto s = Rf_allocVector(mode, len);
@@ -2370,13 +2366,12 @@ SEXP xlength_Impl(SEXP val) {
 NativeBuiltin NativeBuiltins::xlength_ = {
     "xlength_",
     (void*)&xlength_Impl,
-};
+    nullptr,
+    {llvm::Attribute::ArgMemOnly, llvm::Attribute::ReadOnly}};
 
 SEXP getAttribImpl(SEXP val, SEXP sym) { return Rf_getAttrib(val, sym); }
 NativeBuiltin NativeBuiltins::getAttrb = {
-    "getAttrib",
-    (void*)&getAttribImpl,
-};
+    "getAttrib", (void*)&getAttribImpl, nullptr, {llvm::Attribute::ArgMemOnly}};
 
 void nonLocalReturnImpl(SEXP res, SEXP env) {
     Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
@@ -2398,5 +2393,30 @@ NativeBuiltin NativeBuiltins::clsEq = {
     (void*)&clsEqImpl,
     nullptr,
     {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
+
+void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
+    assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
+    pir::PirType typ(type);
+    if (!typ.isInstance(val)) {
+        std::cerr << "type assert failed\n";
+        std::cerr << "got " << pir::PirType(val) << " but expexted a " << typ
+                  << ":\n";
+        Rf_PrintValue(val);
+        std::cout << (PRVALUE(val) == R_UnboundValue) << " / "
+                  << (PRVALUE(val) == R_MissingArg) << "\n";
+        if (msg)
+            std::cout << msg;
+
+        assert(false);
+    }
+}
+
+NativeBuiltin NativeBuiltins::checkType = {
+    "checkType", (void*)&checkTypeImpl, nullptr, {}};
+
+NativeBuiltin NativeBuiltins::shallowDuplicate = {"shallowDuplicate",
+                                                  (void*)&Rf_shallow_duplicate,
+                                                  nullptr,
+                                                  {llvm::Attribute::NoAlias}};
 }
 }

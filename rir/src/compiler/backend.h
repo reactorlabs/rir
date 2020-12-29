@@ -12,26 +12,23 @@
 namespace rir {
 namespace pir {
 
-class Pir2RirCompiler {
+class Backend {
   public:
-    explicit Pir2RirCompiler(StreamLogger& logger) : logger(logger) {}
-    Pir2RirCompiler(const Pir2RirCompiler&) = delete;
-    Pir2RirCompiler& operator=(const Pir2RirCompiler&) = delete;
+    explicit Backend(StreamLogger& logger) : logger(logger) {}
+    Backend(const Backend&) = delete;
+    Backend& operator=(const Backend&) = delete;
 
-    rir::Function* compile(ClosureVersion* cls, bool dryRun);
-
-    StreamLogger& logger;
-
-    Function* alreadyCompiled(ClosureVersion* cls) {
-        return done.count(cls) ? done.at(cls) : nullptr;
-    }
-    bool isCompiling(ClosureVersion* cls) { return done.count(cls); }
+    rir::Function* compile(ClosureVersion* cls);
 
     void needsPatching(ClosureVersion* c, size_t i) { fixup[c].insert(i); }
 
   private:
     std::unordered_map<ClosureVersion*, Function*> done;
     std::unordered_map<ClosureVersion*, std::unordered_set<size_t>> fixup;
+
+    StreamLogger& logger;
+
+    rir::Function* doCompile(ClosureVersion* cls, ClosureStreamLogger& log);
 };
 
 } // namespace pir

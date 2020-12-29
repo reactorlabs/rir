@@ -2,12 +2,12 @@
 #define PIR_PIR_H
 
 #include <stdint.h>
-#include "type.h"
 // Forward declaration of PIR types. Use for headers.
 
 namespace rir {
 namespace pir {
 
+struct PirType;
 class Closure;
 class ClosureVersion;
 class BB;
@@ -18,6 +18,9 @@ class Env;
 class Instruction;
 class LazyEnv;
 class Module;
+class MkEnv;
+class MkArg;
+class LogStream;
 }
 }
 

@@ -3,7 +3,6 @@
 #include "../analysis/query.h"
 #include "../analysis/verifier.h"
 #include "../pir/pir_impl.h"
-#include "../pir2rir/pir2rir.h"
 #include "../util/visitor.h"
 #include "R/Protect.h"
 #include "R/RList.h"
@@ -375,6 +374,7 @@ class MockBB : public BB {
             // ~Code wants to delete something
             entry = new MockBB;
         }
+        rir::Code* rirSrc() const override final { return nullptr; }
     };
 
   public:

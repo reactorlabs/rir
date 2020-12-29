@@ -678,67 +678,6 @@ void Is::printArgs(std::ostream& out, bool tty) const {
     out << ", " << Rf_type2char(sexpTag);
 }
 
-TypeChecks IsType::typeChecks() const {
-    auto t = typeTest;
-    auto in = arg(0).val();
-    assert(!t.isVoid() && !t.maybeLazy());
-    assert(t.maybeNAOrNaN() || !in->type.maybeNAOrNaN());
-    if (t.isA(PirType(RType::logical).orAttribs())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
-            return TypeChecks::LogicalSimpleScalar;
-        } else {
-            return TypeChecks::LogicalNonObject;
-        }
-    } else if (t.isA(PirType(RType::logical).orAttribs().orPromiseWrapped())) {
-        assert(t.maybeNAOrNaN() &&
-               "need to add non-NaN promise-wrapped typecheck");
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
-            return TypeChecks::LogicalSimpleScalarWrapped;
-        } else {
-            return TypeChecks::LogicalNonObjectWrapped;
-        }
-    } else if (t.isA(PirType(RType::integer).orAttribs())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
-            return TypeChecks::IntegerSimpleScalar;
-        } else {
-            return TypeChecks::IntegerNonObject;
-        }
-    } else if (t.isA(PirType(RType::integer).orAttribs().orPromiseWrapped())) {
-        assert(t.maybeNAOrNaN() &&
-               "need to add non-NaN promise-wrapped typecheck");
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
-            return TypeChecks::IntegerSimpleScalarWrapped;
-        } else {
-            return TypeChecks::IntegerNonObjectWrapped;
-        }
-    } else if (t.isA(PirType(RType::real).orAttribs())) {
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
-            return TypeChecks::RealSimpleScalar;
-        } else {
-            return TypeChecks::RealNonObject;
-        }
-    } else if (t.isA(PirType(RType::real).orAttribs().orPromiseWrapped())) {
-        assert(t.maybeNAOrNaN() &&
-               "need to add non-NaN promise-wrapped typecheck");
-        if (t.isScalar() && !t.maybeHasAttrs() && !in->type.isScalar()) {
-            return TypeChecks::RealSimpleScalarWrapped;
-        } else {
-            return TypeChecks::RealNonObjectWrapped;
-        }
-    } else if (in->type.notMissing().notObject().isA(t)) {
-        return TypeChecks::NotObject;
-    } else if (in->type.notMissing().notPromiseWrapped().notObject().isA(t)) {
-        return TypeChecks::NotObjectWrapped;
-    } else if (in->type.notMissing().noAttribs().isA(t)) {
-        return TypeChecks::NoAttribsExceptDim;
-    } else if (in->type.notMissing().notPromiseWrapped().noAttribs().isA(t)) {
-        return TypeChecks::NoAttribsExceptDimWrapped;
-    } else {
-        t.print(std::cout);
-        assert(false && "IsType used for unsupported type check");
-    }
-}
-
 void IsType::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
         out << " isA " << typeTest;
@@ -839,7 +778,9 @@ static void printCallArgs(std::ostream& out, const CallInstruction* call) {
 
     size_t i = 0;
     size_t n = call->nCallArgs();
-    call->eachCallArg([&](Value* v) {
+    call->eachNamedCallArg([&](SEXP name, Value* v) {
+        if (name != R_NilValue)
+            out << CHAR(PRINTNAME(name)) << "=";
         v->printRef(out);
         if (i < n - 1)
             out << ", ";
@@ -1081,14 +1022,17 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
 }
 
 Context CallInstruction::inferAvailableAssumptions() const {
-    Context given;
-    if (!hasNamedArgs())
-        given.add(Assumption::CorrectOrderOfArguments);
+    auto callee = tryGetCls();
 
-    if (auto cls = tryGetCls()) {
-        if (cls->nargs() >= nCallArgs()) {
+    Context given;
+    // If we know the callee, we can verify arg order and statically matching
+    if (!hasNamedArgs() || callee)
+        given.add(Assumption::CorrectOrderOfArguments);
+    if (callee) {
+        given.add(Assumption::StaticallyArgmatched);
+        if (callee->nargs() >= nCallArgs()) {
             given.add(Assumption::NotTooManyArguments);
-            auto missing = cls->nargs() - nCallArgs();
+            auto missing = callee->nargs() - nCallArgs();
             given.numMissing(missing);
         }
     }
@@ -1096,21 +1040,38 @@ Context CallInstruction::inferAvailableAssumptions() const {
     // Make some optimistic assumptions, they might be reset below...
     given.add(Assumption::NoExplicitlyMissingArgs);
 
-    bool hasDotsArg = false;
     size_t i = 0;
-    eachCallArg([&](Value* arg) {
-        if (arg->type.maybe(RType::expandedDots))
-            hasDotsArg = true;
-        else
+    eachNamedCallArg([&](SEXP name, Value* arg) {
+        if (arg->type.maybe(RType::expandedDots)) {
+            // who knows to how many args this expands...
+            given.remove(Assumption::CorrectOrderOfArguments);
+            given.remove(Assumption::StaticallyArgmatched);
+            given.remove(Assumption::NotTooManyArguments);
+            given.numMissing(0);
+        } else {
             arg->callArgTypeToContext(given, i);
+        }
+
+        if (callee) {
+            if (callee->formals().names().size() > i) {
+                auto formal = callee->formals().names()[i];
+                if (formal == R_DotsSymbol) {
+                    // If the callee expects `...` then we can only statically
+                    // statisfy that with an explicit (unexpanded) dots list!
+                    if (!arg->type.isA(RType::dots)) {
+                        given.remove(Assumption::CorrectOrderOfArguments);
+                        given.remove(Assumption::StaticallyArgmatched);
+                    }
+                } else if (name != R_NilValue && formal != name) {
+                    // we could be more clever here, but for now we just assume
+                    // if any of the formal names does not match the passed name
+                    // then it's not in the correct order.
+                    given.remove(Assumption::CorrectOrderOfArguments);
+                }
+            }
+        }
         ++i;
     });
-
-    if (hasDotsArg) {
-        given.remove(Assumption::CorrectOrderOfArguments);
-        given.remove(Assumption::NotTooManyArguments);
-        given.numMissing(0);
-    }
 
     return given;
 }
@@ -1170,18 +1131,11 @@ void Call::printArgs(std::ostream& out, bool tty) const {
 
 void NamedCall::printArgs(std::ostream& out, bool tty) const {
     cls()->printRef(out);
-    size_t nargs = nCallArgs();
-    size_t i = 0;
-    out << "(";
-    eachCallArg([&](Value* a) {
-        if (names[i] != R_NilValue)
-            out << CHAR(PRINTNAME(names.at(i))) << " = ";
-        a->printRef(out);
-        if (i < nargs - 1)
-            out << ", ";
-        i++;
-    });
-    out << ") ";
+    printCallArgs(out, this);
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
+    }
 }
 
 void Checkpoint::printArgs(std::ostream& out, bool tty) const {

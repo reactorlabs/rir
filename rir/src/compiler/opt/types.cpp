@@ -84,6 +84,11 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 if ("prod" == name)
                                     inferred = inferred.orT(RType::real)
                                                    .notT(RType::integer);
+                                if ("abs" == name) {
+                                    if (inferred.maybe(RType::cplx))
+                                        inferred = inferred.orT(RType::real)
+                                                       .notT(RType::cplx);
+                                }
                                 break;
                             }
                         }
@@ -156,6 +161,47 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                         inferred = i->mergedInputType(getType).collectionType(
                             c->nCallArgs());
                         break;
+                    }
+
+                    if ("vector" == name) {
+                        bool handled = false;
+                        if (auto con = LdConst::Cast(c->arg(0).val())) {
+                            if (TYPEOF(con->c()) == STRSXP &&
+                                XLENGTH(con->c()) == 1) {
+                                handled = true;
+                                SEXPTYPE type =
+                                    str2type(CHAR(STRING_ELT(con->c(), 0)));
+                                switch (type) {
+                                case LGLSXP:
+                                    inferred = RType::logical;
+                                    break;
+                                case INTSXP:
+                                    inferred = RType::integer;
+                                    break;
+                                case REALSXP:
+                                    inferred = RType::real;
+                                    break;
+                                case CPLXSXP:
+                                    inferred = RType::cplx;
+                                    break;
+                                case STRSXP:
+                                    inferred = RType::str;
+                                    break;
+                                case VECSXP:
+                                    inferred = RType::vec;
+                                    break;
+                                case RAWSXP:
+                                    inferred = RType::raw;
+                                    break;
+                                default:
+                                    assert(false);
+                                    handled = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if (handled)
+                            break;
                     }
 
                     if ("strsplit" == name) {

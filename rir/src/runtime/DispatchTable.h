@@ -185,10 +185,14 @@ struct DispatchTable
 
     void serialize(SEXP refTable, R_outpstream_t out) const {
         HashAdd(container(), refTable);
-        OutInteger(out, size());
-        for (size_t i = 0; i < size(); i++) {
-            get(i)->serialize(refTable, out);
-        }
+        size_t n = 0;
+        for (size_t i = 0; i < size(); i++)
+            if (!get(i)->body()->nativeCode)
+                n++;
+        OutInteger(out, n);
+        for (size_t i = 0; i < size(); i++)
+            if (!get(i)->body()->nativeCode)
+                get(i)->serialize(refTable, out);
     }
 
     Context userDefinedContext() const { return userDefinedContext_; }

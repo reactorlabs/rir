@@ -16,7 +16,7 @@ class JitLLVM {
     static llvm::LLVMContext C;
     static void createModule();
     static llvm::Module& module();
-    static void* tryCompile(llvm::Function*);
+    static void* compile(llvm::Function*);
     static llvm::Function* declare(ClosureVersion* v, const std::string& name,
                                    llvm::FunctionType* signature);
     static llvm::Function* getBuiltin(const NativeBuiltin&);

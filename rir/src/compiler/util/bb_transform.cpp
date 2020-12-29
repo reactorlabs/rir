@@ -102,27 +102,6 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
     return split;
 }
 
-void BBTransform::splitCriticalEdges(Code* fun) {
-    std::vector<std::pair<BB*, BB*>> edges;
-
-    // pred->bb is a critical edge if pred has multiple successors and bb
-    // has multiple predecessors
-    Visitor::run(fun->entry, [&](BB* bb) {
-        if (bb->isMerge()) {
-            for (const auto& pred : bb->predecessors()) {
-                if (pred->isBranch()) {
-                    // Don't split edges while iterating over the CFG!
-                    edges.emplace_back(std::make_pair(pred, bb));
-                }
-            }
-        }
-    });
-
-    for (const auto& e : edges) {
-        BBTransform::splitEdge(fun->nextBBId++, e.first, e.second, fun);
-    }
-}
-
 std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice,
                                               Value* context) {
     Value* found = nullptr;

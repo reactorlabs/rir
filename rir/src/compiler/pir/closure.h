@@ -3,8 +3,11 @@
 
 #include "code.h"
 #include "pir.h"
+
+#include "runtime/Code.h"
 #include "runtime/Context.h"
 #include "runtime/Function.h"
+
 #include <functional>
 #include <map>
 #include <sstream>

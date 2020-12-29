@@ -3,6 +3,8 @@
 
 #include "../pir/pir.h"
 #include "utils/Set.h"
+
+#include <functional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>

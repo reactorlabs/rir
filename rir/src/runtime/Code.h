@@ -4,7 +4,6 @@
 #include "PirTypeFeedback.h"
 #include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
-#include "utils/UUID.h"
 
 #include <cassert>
 #include <cstdint>
@@ -49,8 +48,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class CodeVerifier;
     static constexpr size_t NumLocals = 2;
 
-    static Code* withUid(UUID uid);
-
     Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned codeSize,
          unsigned sourceSize, size_t localsCnt, size_t bindingsCacheSize);
     ~Code();
@@ -65,6 +62,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     SEXP locals_[NumLocals];
 
   public:
+    static Code* New(SEXP ast, size_t codeSize, size_t sources, size_t locals,
+                     size_t bindingCache);
+    static Code* New(Immediate ast, size_t codeSize, size_t sources,
+                     size_t locals, size_t bindingCache);
+    static Code* New(Immediate ast);
+
     NativeCode nativeCode;
 
     static unsigned pad4(unsigned sizeInBytes) {
@@ -96,9 +99,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void pirTypeFeedback(PirTypeFeedback* map) {
         setEntry(1, map->container());
     }
-
-    // UID for persistence when serializing/deserializing
-    UUID uid;
 
     // number of invocations. only incremented if this code object is the body
     // of a function
