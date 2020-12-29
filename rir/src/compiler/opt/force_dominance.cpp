@@ -300,6 +300,8 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         AbstractResult res;
         auto apply = [&](Instruction* i) {
+            if (!i->effects.includes(Effect::LeakArg))
+                return;
             auto pc = PushContext::Cast(i);
             i->eachArg([&](Value* v_) {
                 auto v = v_->followCasts();
@@ -380,6 +382,33 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 namespace rir {
 namespace pir {
 
+/*
+ *  In General this is the strategy here:
+ *
+ *    a  = MkArg(exp)
+ *    e  = MkEnv(x=a)   // leak a
+ *    a2 = Cast(a)
+ *    f  = Force(a2)    // force a
+ *    PushContext(a)    // use a for promargs
+ *    use(a)            // use a
+ *    use(f)
+ *
+ *  === Inline Promise ==>
+ *
+ *    a   = MkArg(exp)
+ *    a'  = MkArg(exp)
+ *    e   = MkEnv(x=a)      // leak a
+ *    f'  = eval(exp)       // inlinee
+ *    a'' = MkArg(exp, a)   // synthesized updated promise
+ *    UpdatePromise(a, f')  // update to ensure leaked a is correct
+ *    PushContext(a')       // push context needs unmodified a
+ *    use(a'')              // normal uses get the synthesized version
+ *    use(f')               // uses of the value get the result
+ *
+ *  updatePromise and the duplication of mkarg only happens if needed.
+ *
+ */
+
 bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                            LogStream& log) const {
     SmallSet<Force*> toInline;
@@ -413,7 +442,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
                             if (!mk->isEager()) {
                                 if (!isHuge || mk->prom()->size() < 10) {
-                                    auto inl = a.isSafeToInline(mk, f);
+                                    auto b = analysis.before(i);
+                                    auto inl = b.isSafeToInline(mk, f);
                                     if (inl != ForcedBy::NotSafeToInline) {
                                         toInline.insert(f);
                                         if (inl ==
@@ -433,7 +463,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             next = bb->remove(ip);
                     }
                 }
-
                 ip = next;
             }
         });
@@ -442,6 +471,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     std::unordered_map<Force*, Value*> inlinedPromise;
     std::unordered_map<Instruction*, MkArg*> forcedMkArg;
     std::unordered_set<BB*> dead;
+    std::unordered_set<MkArg*> updated;
 
     // 1. Inline dominating promises
     Visitor::runPostChange(code->entry, [&](BB* bb) {
@@ -581,9 +611,11 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         forcedMkArg[mkarg] = fixedMkArg;
 
                         inlinedPromise[f] = promRes;
-                        if (needsUpdate.count(f))
+                        if (needsUpdate.count(f)) {
                             next = split->insert(
                                 next, new UpdatePromise(mkarg, promRes));
+                            updated.insert(mkarg);
+                        }
 
                         if (promRet.second->isNonLocalReturn())
                             dead.insert(split);
@@ -595,8 +627,12 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (mk->isEager()) {
                         anyChange = true;
                         auto eager = mk->eagerArg();
-                        cast->replaceUsesWith(eager);
-                        next = bb->remove(ip);
+                        auto nonReflective = [](Instruction* i) {
+                            return !i->effects.includes(Effect::Reflection);
+                        };
+                        cast->replaceUsesIn(eager, bb,
+                                            [](Instruction*, size_t) {},
+                                            nonReflective);
                     }
                 }
             }
@@ -608,9 +644,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
-            auto f = Force::Cast(*ip);
             auto next = ip + 1;
-            if (f) {
+            if (auto f = Force::Cast(*ip)) {
                 // If this force instruction is dominated by another force
                 // we can replace it with the dominating instruction
                 auto dom = dominatedBy.find(f);
@@ -624,6 +659,19 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                     next = bb->remove(ip);
                 }
+            } else if (auto p = PushContext::Cast(*ip)) {
+                // Promargs need unchanged argument promise. If we updated a
+                // promise we need to duplicate it.
+                p->eachArg([&](InstrArg& arg) {
+                    if (auto a = MkArg::Cast(arg.val())) {
+                        if (updated.count(a)) {
+                            auto n = a->clone();
+                            ip = bb->insert(ip, n) + 1;
+                            arg.val() = n;
+                            next = ip + 1;
+                        }
+                    }
+                });
             }
             ip = next;
         }
@@ -631,7 +679,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     // 3. replace remaining uses of the mkarg itself
     for (auto m : forcedMkArg) {
-        m.first->replaceDominatedUses(m.second);
+        m.first->replaceDominatedUses(m.second, {Tag::PushContext});
     }
 
     // 4. remove BB's that became dead due to non local return

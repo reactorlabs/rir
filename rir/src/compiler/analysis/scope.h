@@ -31,6 +31,7 @@ struct ScopeAnalysisResults {
 class ScopeAnalysisState {
     AbstractREnvironmentHierarchy envs;
     AbstractPirValue returnValue;
+    std::unordered_map<MkArg*, AbstractPirValue> updatedProms;
 
     bool mayUseReflection = false;
 
@@ -47,6 +48,26 @@ class ScopeAnalysisState {
         }
         if (!returnValue.isUnknown() && other.returnValue.isUnknown()) {
             returnValue.taint();
+            res.lostPrecision();
+        }
+
+        for (auto u = updatedProms.begin(); u != updatedProms.end(); u++) {
+            if (u->second.isUnknown())
+                continue;
+            auto f = other.updatedProms.find(u->first);
+            if (f == other.updatedProms.end()) {
+                u->second.taint();
+                res.lostPrecision();
+            } else {
+                res.max(u->second.merge(f->second));
+            }
+        }
+        if (updatedProms.size() != other.updatedProms.size()) {
+            for (auto u = other.updatedProms.begin();
+                 u != other.updatedProms.end(); u++) {
+                if (!updatedProms.count(u->first))
+                    updatedProms[u->first] = AbstractPirValue::tainted();
+            }
             res.lostPrecision();
         }
 
