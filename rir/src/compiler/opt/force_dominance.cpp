@@ -595,8 +595,12 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (mk->isEager()) {
                         anyChange = true;
                         auto eager = mk->eagerArg();
-                        cast->replaceUsesWith(eager);
-                        next = bb->remove(ip);
+                        auto nonReflective = [](Instruction* i) {
+                            return !i->effects.includes(Effect::Reflection);
+                        };
+                        cast->replaceUsesIn(eager, bb,
+                                            [](Instruction*, size_t) {},
+                                            nonReflective);
                     }
                 }
             }

@@ -375,12 +375,15 @@ void Instruction::replaceDominatedUses(Instruction* replace,
 
 void Instruction::replaceUsesIn(
     Value* replace, BB* start,
-    const std::function<void(Instruction*, size_t)>& postAction) {
+    const std::function<void(Instruction*, size_t)>& postAction,
+    const std::function<bool(Instruction*)>& replaceOnly) {
     checkReplace(this, replace);
     Visitor::run(start, [&](BB* bb) {
         for (auto& i : *bb) {
             std::vector<size_t> changed;
             size_t pos = 0;
+            if (!replaceOnly(i))
+                continue;
             i->eachArg([&](InstrArg& arg) {
                 if (arg.val() == this) {
                     arg.val() = replace;
