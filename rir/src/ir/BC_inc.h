@@ -117,6 +117,30 @@ class BC {
     static constexpr size_t MAX_JMP = (1L << ((8 * sizeof(Jmp)) - 1)) - 1;
     static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(Jmp)) - 1));
 
+    enum class RirTypecheck : Immediate {
+        isNILSXP = NILSXP,
+        isLGLSXP = LGLSXP,
+        isREALSXP = REALSXP,
+        isSTRSXP = STRSXP,
+        isINTSXP = INTSXP,
+        isCPLXSXP = CPLXSXP,
+        isRAWSXP = RAWSXP,
+        isEXPRSXP = EXPRSXP,
+        isVECSXP = VECSXP,
+        isLISTSXP = LISTSXP,
+
+        isNonObject = 200,
+        isVector = 201,
+        isFactor = 202
+    };
+    static constexpr std::array<RirTypecheck, 8> isVectorTypes = {
+        RirTypecheck::isLGLSXP,  RirTypecheck::isINTSXP,
+        RirTypecheck::isREALSXP, RirTypecheck::isCPLXSXP,
+        RirTypecheck::isSTRSXP,  RirTypecheck::isRAWSXP,
+        RirTypecheck::isVECSXP,  RirTypecheck::isEXPRSXP};
+
+    friend std::ostream& operator<<(std::ostream&, RirTypecheck);
+
     // This is only used internally in the BC handle objects
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
@@ -129,6 +153,7 @@ class BC {
         ArgIdx arg_idx;
         Jmp offset;
         uint32_t i;
+        RirTypecheck typecheck;
         NumLocals loc;
         ObservedCallees callFeedback;
         ObservedValues typeFeedback;
@@ -324,8 +349,7 @@ BC_NOARGS(V, _)
     inline static BC put(uint32_t);
     inline static BC pick(uint32_t);
     inline static BC pull(uint32_t);
-    inline static BC is(uint32_t);
-    inline static BC isNonObj();
+    inline static BC is(RirTypecheck);
     inline static BC call(size_t nargs, SEXP ast, const Context& given);
     inline static BC callDots(size_t nargs, const std::vector<SEXP>& names,
                               SEXP ast, const Context& given);
@@ -584,7 +608,6 @@ BC_NOARGS(V, _)
             memcpy(reinterpret_cast<void*>(&immediate.typeFeedback), pc,
                    sizeof(ObservedValues));
             break;
-        case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)
 #undef V

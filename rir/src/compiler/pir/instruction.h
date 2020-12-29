@@ -1625,15 +1625,19 @@ class FLI(Inc, 1, Effects::None()) {
 
 class FLI(Is, 1, Effects::None()) {
   public:
-    Is(uint32_t sexpTag, Value* v)
+    Is(BC::RirTypecheck typecheck, Value* v)
         : FixedLenInstruction(PirType::simpleScalarLogical(),
                               {{PirType::val()}}, {{v}}),
-          sexpTag(sexpTag) {}
-    uint32_t sexpTag;
+          typecheck(typecheck) {}
+    BC::RirTypecheck typecheck;
+    PirType upperBound() const;
+    PirType lowerBound() const;
 
     void printArgs(std::ostream& out, bool tty) const override;
 
-    size_t gvnBase() const override { return hash_combine(tagHash(), sexpTag); }
+    size_t gvnBase() const override {
+        return hash_combine(tagHash(), typecheck);
+    }
 };
 
 class FLI(IsType, 1, Effects::None()) {

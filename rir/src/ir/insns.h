@@ -279,11 +279,6 @@ DEF_INSTR(asast_, 0, 1, 1, 1)
 DEF_INSTR(is_, 1, 1, 1, 1)
 
 /**
- * isnonobj_:: check if TOS is no obj type, push T/F
- */
-DEF_INSTR(isnonobj_, 0, 1, 1, 1)
-
-/**
  * missing_ :: check if symb is missing
  */
 DEF_INSTR(missing_, 1, 0, 1, 1)

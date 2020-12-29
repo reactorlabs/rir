@@ -42,7 +42,7 @@ enum class RType : uint8_t {
     _UNUSED_,
 
     nil,
-    cons,
+    list,
 
     sym,
     chr,
@@ -65,6 +65,7 @@ enum class RType : uint8_t {
     code,
     env,
     ast,
+    expressions,
 
     dots,
     expandedDots,
@@ -238,7 +239,10 @@ struct PirType {
             .orObject()
             .orAttribs();
     }
-    static constexpr PirType vecs() { return num() | RType::str | RType::vec; }
+    static constexpr PirType vecs() {
+        return num() | RType::str | RType::raw | RType::vec |
+               RType::expressions;
+    }
     static constexpr PirType closure() { return RType::closure; }
 
     static constexpr PirType dotsArg() {
@@ -279,7 +283,7 @@ struct PirType {
 
     static constexpr PirType valOrLazy() { return val().orLazy(); }
     static constexpr PirType list() {
-        return PirType(RType::cons) | RType::nil;
+        return PirType(RType::list) | RType::nil;
     }
     // Note: This includes any R type, but not native types
     static constexpr PirType any() { return val().orLazy(); }
@@ -467,7 +471,7 @@ struct PirType {
             // NULL
             return RType::nil;
         }
-        if (isA((num() | RType::str | RType::cons | RType::code).orAttribs())) {
+        if (isA((num() | RType::str | RType::list | RType::code).orAttribs())) {
             // If the index is out of bounds, NA is returned (even if both args
             // are non-NA) so we must add orNAOrNaN()
             if (idx.isA(PirType(RType::str).scalar()))
@@ -494,7 +498,7 @@ struct PirType {
             // NULL
             return RType::nil;
         }
-        if (isA((num() | RType::str | RType::cons | RType::code).orAttribs())) {
+        if (isA((num() | RType::str | RType::list | RType::code).orAttribs())) {
             return scalar();
         } else if (isA(PirType(RType::vec).orAttribs())) {
             return val().notMissing();
@@ -644,8 +648,11 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
     case RType::code:
         out << "code";
         break;
-    case RType::cons:
-        out << "cons";
+    case RType::expressions:
+        out << "expressions";
+        break;
+    case RType::list:
+        out << "list";
         break;
     case RType::prom:
         out << "prom";

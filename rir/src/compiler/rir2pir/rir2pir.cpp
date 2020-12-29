@@ -1010,14 +1010,26 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::is_:
-        push(insert(new Is(bc.immediate.i, pop())));
+        if (bc.immediate.typecheck == BC::RirTypecheck::isNonObject) {
+            push(insert(
+                new IsType(PirType::val().notMissing().notObject(), pop())));
+        } else if (bc.immediate.typecheck == BC::RirTypecheck::isVector) {
+            std::vector<Instruction*> tests;
+            for (auto type : BC::isVectorTypes) {
+                tests.push_back(insert(new Is(type, top())));
+            }
+            pop();
+            auto res = tests.back();
+            tests.pop_back();
+            while (!tests.empty()) {
+                res = insert(new LOr(res, tests.back()));
+                tests.pop_back();
+            }
+            push(res);
+        } else {
+            push(insert(new Is(bc.immediate.typecheck, pop())));
+        }
         break;
-
-    case Opcode::isnonobj_: {
-        push(
-            insert(new IsType(PirType::val().notMissing().notObject(), pop())));
-        break;
-    }
 
     case Opcode::pull_: {
         size_t i = bc.immediate.i;
