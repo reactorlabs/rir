@@ -1,7 +1,7 @@
 #include "builtins.h"
 
 #include "compiler/parameter.h"
-#include "interpreter/ArgsLazyData.h"
+#include "interpreter/LazyArglist.h"
 #include "interpreter/LazyEnvironment.h"
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
@@ -75,34 +75,6 @@ SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
     if (contextPos > 0) {
         if (auto cptr = getFunctionContext(contextPos - 1)) {
             cptr->cloenv = res;
-            if (cptr->promargs == symbol::delayedArglist) {
-                auto promargs = arglist;
-                bool hasMissing = false;
-                auto a = arglist;
-                while (a != R_NilValue) {
-                    if (CAR(a) == R_MissingArg)
-                        hasMissing = true;
-                    a = CDR(a);
-                }
-
-                if (hasMissing) {
-                    // For the promargs we need to strip missing
-                    // arguments from the list, otherwise nargs()
-                    // reports the wrong value.
-                    promargs = Rf_shallow_duplicate(arglist);
-                    auto p = promargs;
-                    auto a = arglist;
-                    auto prev = p;
-                    while (p != R_NilValue) {
-                        if (MISSING(a))
-                            SETCDR(prev, CDR(p));
-                        prev = p;
-                        p = CDR(p);
-                        a = CDR(a);
-                    }
-                }
-                cptr->promargs = promargs;
-            }
         }
     }
 
@@ -178,11 +150,19 @@ NativeBuiltin NativeBuiltins::ldvar = {
     (void*)&ldvarImpl,
 };
 
+SEXP ldvarGlobalImpl(SEXP a) { return Rf_findVar(a, R_GlobalEnv); }
+
+NativeBuiltin NativeBuiltins::ldvarGlobal = {
+    "ldvarGlobal",
+    (void*)&ldvarGlobalImpl,
+};
+
+const unsigned long NativeBuiltins::bindingsCacheFails;
 SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
-    if (*cache != (SEXP)1) {
+    if (*cache != (SEXP)NativeBuiltins::bindingsCacheFails) {
         R_varloc_t loc = R_findVarLocInFrame(env, sym);
         if (R_VARLOC_IS_NULL(loc)) {
-            *cache = (SEXP)1;
+            *cache = (SEXP)(((uintptr_t)*cache) + 1);
         } else {
             *cache = loc.cell;
             if (CAR(*cache) != R_UnboundValue) {
@@ -201,16 +181,37 @@ NativeBuiltin NativeBuiltins::ldvarCacheMiss = {
     (void*)&ldvarCachedImpl,
 };
 
+void stvarSuperImpl(SEXP a, SEXP val, SEXP env) {
+    auto le = LazyEnvironment::check(env);
+    assert(!le || !le->materialized());
+    SEXP superEnv;
+    if (le)
+        superEnv = le->getParent();
+    else
+        superEnv = ENCLOS(env);
+    rirSetVarWrapper(a, val, superEnv);
+}
+NativeBuiltin NativeBuiltins::stvarSuper = {
+    "stvarSuper",
+    (void*)&stvarSuperImpl,
+};
+
 void stvarImpl(SEXP a, SEXP val, SEXP c) { rirDefineVarWrapper(a, val, c); }
 NativeBuiltin NativeBuiltins::stvar = {
     "stvar",
     (void*)&stvarImpl,
 };
 
-void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapperI(a, val, c); }
+void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapper(a, val, c); }
 NativeBuiltin NativeBuiltins::stvari = {
     "stvari",
     (void*)&stvarImplI,
+};
+
+void stvarImplR(SEXP a, double val, SEXP c) { rirDefineVarWrapper(a, val, c); }
+NativeBuiltin NativeBuiltins::stvarr = {
+    "stvarr",
+    (void*)&stvarImplR,
 };
 
 void stargImpl(SEXP sym, SEXP val, SEXP env) {
@@ -516,17 +517,7 @@ NativeBuiltin NativeBuiltins::createClosure = {
     (void*)&createClosureImpl,
 };
 
-SEXP newLglImpl(int i) {
-    auto res = Rf_allocVector(LGLSXP, 1);
-    LOGICAL(res)[0] = i;
-    return res;
-}
-
-SEXP newIntImpl(int i) {
-    auto res = Rf_allocVector(INTSXP, 1);
-    INTEGER(res)[0] = i;
-    return res;
-}
+SEXP newIntImpl(int i) { return ScalarInteger(i); }
 
 SEXP newIntDebugImpl(int i, void* debug) {
     std::cout << (char*)debug << "\n";
@@ -535,37 +526,12 @@ SEXP newIntDebugImpl(int i, void* debug) {
     return res;
 }
 
-SEXP newLglFromRealImpl(double d) {
-    auto res = Rf_allocVector(LGLSXP, 1);
-    if (d != d)
-        LOGICAL(res)[0] = NA_LOGICAL;
-    else
-        LOGICAL(res)[0] = d;
-    return res;
-}
-
 SEXP newIntFromRealImpl(double d) {
-    auto res = Rf_allocVector(INTSXP, 1);
-    if (d != d)
-        INTEGER(res)[0] = NA_INTEGER;
-    else
-        INTEGER(res)[0] = d;
-    return res;
+    return ScalarInteger(d != d ? NA_INTEGER : d);
 }
 
-SEXP newRealImpl(double i) {
-    auto res = Rf_allocVector(REALSXP, 1);
-    REAL(res)[0] = i;
-    return res;
-}
-SEXP newRealFromIntImpl(int i) {
-    auto res = Rf_allocVector(REALSXP, 1);
-    if (i == NA_INTEGER)
-        REAL(res)[0] = NAN;
-    else
-        REAL(res)[0] = i;
-    return res;
-}
+SEXP newRealImpl(double i) { return ScalarReal(i); }
+SEXP newRealFromIntImpl(int i) { return ScalarReal(i == NA_INTEGER ? NAN : i); }
 
 NativeBuiltin NativeBuiltins::newIntFromReal = {
     "newIntFromReal",
@@ -574,10 +540,6 @@ NativeBuiltin NativeBuiltins::newIntFromReal = {
 NativeBuiltin NativeBuiltins::newRealFromInt = {
     "newRealFromInt",
     (void*)&newRealFromIntImpl,
-};
-NativeBuiltin NativeBuiltins::newLglFromReal = {
-    "newLglFromReal",
-    (void*)&newLglFromRealImpl,
 };
 NativeBuiltin NativeBuiltins::newInt = {
     "newInt",
@@ -590,10 +552,6 @@ NativeBuiltin NativeBuiltins::newIntDebug = {
 NativeBuiltin NativeBuiltins::newReal = {
     "newReal",
     (void*)&newRealImpl,
-};
-NativeBuiltin NativeBuiltins::newLgl = {
-    "newLgl",
-    (void*)&newLglImpl,
 };
 
 #define OPERATION_FALLBACK(op)                                                 \
@@ -630,6 +588,12 @@ static void createFakeCONS(SEXPREC& res, SEXP cdr) {
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
 }
+
+#define FAKE_ARGS1(res, a1)                                                    \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, R_NilValue);                                  \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    res = &__a1__cell__
 
 #define FAKE_ARGS2(res, a1, a2)                                                \
     SEXPREC __a2__cell__;                                                      \
@@ -718,7 +682,8 @@ NativeBuiltin NativeBuiltins::unop = {
 
 static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
     SEXP res = nullptr;
-    SEXP arglist = CONS_NR(argument, R_NilValue);
+    SEXP arglist;
+    FAKE_ARGS1(arglist, argument);
     SEXP call = src_pool_at(globalContext(), srcIdx);
     PROTECT(arglist);
     OPERATION_FALLBACK("!");
@@ -734,10 +699,8 @@ NativeBuiltin NativeBuiltins::notEnv = {
 
 static SEXP notImpl(SEXP argument) {
     SEXP res = nullptr;
-    SEXPREC arglistStruct;
-    createFakeCONS(arglistStruct, R_NilValue);
-    arglistStruct.u.listsxp.carval = argument;
-    SEXP arglist = &arglistStruct;
+    SEXP arglist;
+    FAKE_ARGS1(arglist, argument);
     SEXP env = R_NilValue;
     SEXP call = R_NilValue;
     // Why we do not need a protect here?
@@ -751,8 +714,8 @@ NativeBuiltin NativeBuiltins::notOp = {"not", (void*)&notImpl};
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
                          BinopKind kind) {
     SEXP res = nullptr;
-    SEXP arglist2 = CONS_NR(rhs, R_NilValue);
-    SEXP arglist = CONS_NR(lhs, arglist2);
+    SEXP arglist;
+    FAKE_ARGS2(arglist, lhs, rhs);
     SEXP call = src_pool_at(globalContext(), srcIdx);
 
     PROTECT(arglist);
@@ -1018,7 +981,10 @@ NativeBuiltin NativeBuiltins::asLogicalBlt = {"aslogical",
 size_t lengthImpl(SEXP e) { return Rf_length(e); }
 
 NativeBuiltin NativeBuiltins::length = {
-    "length", (void*)&lengthImpl, nullptr, {llvm::Attribute::ReadOnly}};
+    "length",
+    (void*)&lengthImpl,
+    nullptr,
+    {llvm::Attribute::ReadOnly, llvm::Attribute::ArgMemOnly}};
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     if (!pir::Parameter::DEOPT_CHAOS) {
@@ -1150,12 +1116,15 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
         PROTECT(args);
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset_dflt(call, symbol::Bracket, args, env);
+        }
         UNPROTECT(1);
     } else {
         SEXP args;
         FAKE_ARGS2(args, vector, index);
+        forceAll(args, globalContext());
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
     return res;
@@ -1177,9 +1146,12 @@ SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1204,9 +1176,12 @@ SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1231,9 +1206,12 @@ SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1254,9 +1232,12 @@ SEXP extract12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset_dflt(call, symbol::Bracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
     UNPROTECT(1);
@@ -1278,9 +1259,12 @@ SEXP extract13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::Bracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset_dflt(call, symbol::Bracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
     UNPROTECT(1);
@@ -1301,9 +1285,12 @@ SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1341,9 +1328,12 @@ SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1381,9 +1371,12 @@ SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
         SEXP call = src_pool_at(globalContext(), srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
                             globalContext());
-        if (!res)
+        if (!res) {
+            forceAll(args, globalContext());
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
+        }
     } else {
+        forceAll(args, globalContext());
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1469,8 +1462,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
     R_bcstack_t* args = ostack_cell_at(ctx, nargs + missing - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
-    ArgsLazyData lazyArgs(nargs, args, nullptr, globalContext());
-    SEXP arglist = (SEXP)&lazyArgs;
+    LazyArglistOnStack lazyArgs(nargs, args, ast);
 
     assert(fun->signature().envCreation ==
            FunctionSignature::Environment::CalleeCreated);
@@ -1481,7 +1473,8 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
     // could get overwritten while we are executing it.
     PROTECT(fun->container());
 
-    initClosureContext(ast, &cntxt, symbol::delayedEnv, env, arglist, callee);
+    initClosureContext(ast, &cntxt, symbol::delayedEnv, env, lazyArgs.asSexp(),
+                       callee);
     R_Srcref = getAttrib(callee, symbol::srcref);
 
     // TODO debug
@@ -2208,6 +2201,7 @@ int forSeqSizeImpl(SEXP seq) {
         res = Rf_length(seq);
     } else {
         Rf_errorcall(R_NilValue, "invalid for() loop sequence");
+        return 0;
     }
     // TODO: Even when the for loop sequence is an object, R won't
     // dispatch on it. Since in RIR we use the normals extract2_1
@@ -2225,14 +2219,19 @@ int forSeqSizeImpl(SEXP seq) {
 NativeBuiltin NativeBuiltins::forSeqSize = {"forSeqSize",
                                             (void*)&forSeqSizeImpl};
 
-void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op) {
+void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op,
+                            size_t nargs) {
+    auto lazyArglist =
+        LazyArglistOnHeap::New(nargs, ostack_cell_at(ctx, nargs - 1), ast);
+    ostack_popn(globalContext(), nargs);
+
     auto global = (RCNTXT*)R_GlobalContext;
     if (global->callflag == CTXT_GENERIC)
         Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv,
-                        global->sysparent, symbol::delayedArglist, op);
+                        global->sysparent, lazyArglist, op);
     else
         Rf_begincontext(cntxt, CTXT_RETURN, ast, symbol::delayedEnv, sysparent,
-                        symbol::delayedArglist, op);
+                        lazyArglist, op);
 }
 
 NativeBuiltin NativeBuiltins::initClosureContext = {
@@ -2251,18 +2250,20 @@ NativeBuiltin NativeBuiltins::endClosureContext = {
 };
 
 int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }
-NativeBuiltin NativeBuiltins::matrixNcols = {
-    "ncols",
-    (void*)ncolsImpl,
-    nullptr,
-    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
+NativeBuiltin NativeBuiltins::matrixNcols = {"ncols",
+                                             (void*)ncolsImpl,
+                                             nullptr,
+                                             {llvm::Attribute::ReadOnly,
+                                              llvm::Attribute::Speculatable,
+                                              llvm::Attribute::ArgMemOnly}};
 
 int nrowsImpl(SEXP v) { return getMatrixDim(v).row; }
-NativeBuiltin NativeBuiltins::matrixNrows = {
-    "nrows",
-    (void*)nrowsImpl,
-    nullptr,
-    {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
+NativeBuiltin NativeBuiltins::matrixNrows = {"nrows",
+                                             (void*)nrowsImpl,
+                                             nullptr,
+                                             {llvm::Attribute::ReadOnly,
+                                              llvm::Attribute::Speculatable,
+                                              llvm::Attribute::ArgMemOnly}};
 
 SEXP makeVectorImpl(int mode, size_t len) {
     auto s = Rf_allocVector(mode, len);
@@ -2365,13 +2366,12 @@ SEXP xlength_Impl(SEXP val) {
 NativeBuiltin NativeBuiltins::xlength_ = {
     "xlength_",
     (void*)&xlength_Impl,
-};
+    nullptr,
+    {llvm::Attribute::ArgMemOnly, llvm::Attribute::ReadOnly}};
 
 SEXP getAttribImpl(SEXP val, SEXP sym) { return Rf_getAttrib(val, sym); }
 NativeBuiltin NativeBuiltins::getAttrb = {
-    "getAttrib",
-    (void*)&getAttribImpl,
-};
+    "getAttrib", (void*)&getAttribImpl, nullptr, {llvm::Attribute::ArgMemOnly}};
 
 void nonLocalReturnImpl(SEXP res, SEXP env) {
     Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
@@ -2393,5 +2393,30 @@ NativeBuiltin NativeBuiltins::clsEq = {
     (void*)&clsEqImpl,
     nullptr,
     {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
+
+void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
+    assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
+    pir::PirType typ(type);
+    if (!typ.isInstance(val)) {
+        std::cerr << "type assert failed\n";
+        std::cerr << "got " << pir::PirType(val) << " but expexted a " << typ
+                  << ":\n";
+        Rf_PrintValue(val);
+        std::cout << (PRVALUE(val) == R_UnboundValue) << " / "
+                  << (PRVALUE(val) == R_MissingArg) << "\n";
+        if (msg)
+            std::cout << msg;
+
+        assert(false);
+    }
+}
+
+NativeBuiltin NativeBuiltins::checkType = {
+    "checkType", (void*)&checkTypeImpl, nullptr, {}};
+
+NativeBuiltin NativeBuiltins::shallowDuplicate = {"shallowDuplicate",
+                                                  (void*)&Rf_shallow_duplicate,
+                                                  nullptr,
+                                                  {llvm::Attribute::NoAlias}};
 }
 }

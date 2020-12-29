@@ -36,20 +36,21 @@ class EnumSet {
     static constexpr Store AnyI() { return static_cast<Store>(Any()); }
 
     static constexpr EnumSet Any() {
-        return ((1 << ((Store)(Element::LAST) + 1)) - 1) &
-               ~((1 << (Store)Element::FIRST) - 1);
+        return EnumSet(((1 << ((Store)(Element::LAST) + 1)) - 1) &
+                       ~((1 << (Store)Element::FIRST) - 1));
     }
 
     constexpr EnumSet() {}
     EnumSet(const EnumSet& other) noexcept = default;
 
-    constexpr EnumSet(Element e) : set_(1UL << static_cast<size_t>(e)) {
+    constexpr explicit EnumSet(Element e)
+        : set_(1UL << static_cast<size_t>(e)) {
         static_assert(sizeof(*this) == sizeof(Store),
                       "No room for extra stuff");
     }
 
     static_assert(!std::is_same<Element, Store>::value, "That is confusing");
-    constexpr EnumSet(const Store& s) : set_(s) {}
+    constexpr explicit EnumSet(const Store& s) : set_(s) {}
 
     RIR_INLINE Element max() const {
         for (size_t i = static_cast<size_t>(Element::LAST) - 1;
@@ -84,6 +85,10 @@ class EnumSet {
 
     RIR_INLINE bool constexpr includes(const EnumSet& s) const {
         return (s.set_ & set_) == s.set_;
+    }
+
+    RIR_INLINE bool constexpr includes(const Element& e) const {
+        return (EnumSet(e).set_ & set_) == EnumSet(e).set_;
     }
 
     RIR_INLINE bool operator==(const Element& t) const {
@@ -126,7 +131,7 @@ class EnumSet {
 
     explicit constexpr operator Store() const { return set_; }
 
-    RIR_INLINE bool empty() const { return set_ == 0; }
+    RIR_INLINE constexpr bool empty() const { return set_ == 0; }
 
     RIR_INLINE std::size_t count() const { return __builtin_popcount(set_); }
 
@@ -137,7 +142,7 @@ class EnumSet {
 
       public:
         Iterator(const EnumSet& e, size_t i) : i(i), e(e) {}
-        Iterator(const EnumSet& e)
+        explicit Iterator(const EnumSet& e)
             : i(static_cast<size_t>(Element::FIRST)), e(e) {
             seekNext();
         }

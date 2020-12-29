@@ -363,8 +363,10 @@ class Instruction : public Value {
             // Everything but numbers throws an error
             t = t & PirType::num().notMissing();
             // e.g. TRUE + TRUE == 2
-            if (m.maybe(RType::logical))
-                t = t | RType::integer;
+            if (m.maybe(RType::logical)) {
+                t = t.orT(RType::integer);
+                t = t.notT(RType::logical);
+            }
             // the binop result becomes NA if it can't be represented in a
             // fixpoint integer (e.g. INT_MAX + 1 == NA)
             // * the condition checks iff at least one of the arguments is an
@@ -523,10 +525,12 @@ class InstructionImplementation : public Instruction {
 
   public:
     InstructionImplementation(PirType resultType, unsigned srcIdx)
-        : Instruction(ITAG, resultType, INITIAL_EFFECTS, srcIdx), args_({}) {}
+        : Instruction(ITAG, resultType, Effects(INITIAL_EFFECTS), srcIdx),
+          args_({}) {}
     InstructionImplementation(PirType resultType, const ArgStore& args,
                               unsigned srcIdx)
-        : Instruction(ITAG, resultType, INITIAL_EFFECTS, srcIdx), args_(args) {}
+        : Instruction(ITAG, resultType, Effects(INITIAL_EFFECTS), srcIdx),
+          args_(args) {}
 
     InstructionImplementation& operator=(InstructionImplementation&) = delete;
     InstructionImplementation() = delete;
@@ -612,7 +616,7 @@ class FixedLenInstruction
         return arg(POS);
     }
 
-    FixedLenInstruction(PirType resultType, unsigned srcIdx = 0)
+    explicit FixedLenInstruction(PirType resultType, unsigned srcIdx = 0)
         : Super(resultType, {}, srcIdx) {
         static_assert(ARGS == 0, "This instruction expects more arguments");
     }
@@ -708,7 +712,7 @@ class VarLenInstruction
         args_.pop_back();
     }
 
-    VarLenInstruction(PirType return_type, unsigned srcIdx = 0)
+    explicit VarLenInstruction(PirType return_type, unsigned srcIdx = 0)
         : Super(return_type, srcIdx) {}
 };
 
@@ -1220,8 +1224,9 @@ class FLIE(Force, 3, Effects::Any()) {
         return type & getType(input()).forced();
     }
     Effects inferEffects(const GetType& getType) const override final {
-        auto e =
-            getType(input()).maybeLazy() ? effects : Effect::DependsOnAssume;
+        auto e = getType(input()).maybeLazy()
+                     ? effects
+                     : Effects(Effect::DependsOnAssume);
         if (auto mk = MkArg::Cast(input()->followCastsAndForce())) {
             if (mk->noReflection)
                 e.reset(Effect::Reflection);
@@ -1366,10 +1371,11 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(
-            getType,
-            type & (getType(vector()).mergeWithConversion(getType(val()))),
-            type);
+        return ifNonObjectArgs(getType,
+                               type & (getType(vector())
+                                           .mergeWithConversion(getType(val()))
+                                           .orNotScalar()),
+                               type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1391,7 +1397,8 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     PirType inferType(const GetType& getType) const override final {
         return ifNonObjectArgs(
             getType,
-            type & (getType(vector()).mergeWithConversion(getType(val()))),
+            type & (getType(vector()).mergeWithConversion(getType(val())))
+                       .orNotScalar(),
             type);
     }
     Effects inferEffects(const GetType& getType) const override final {
@@ -1414,9 +1421,11 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(
-            getType,
-            type & (getType(lhs()).mergeWithConversion(getType(rhs()))), type);
+        return ifNonObjectArgs(getType,
+                               type & (getType(lhs())
+                                           .mergeWithConversion(getType(rhs()))
+                                           .orNotScalar()),
+                               type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1438,9 +1447,11 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(
-            getType,
-            type & (getType(lhs()).mergeWithConversion(getType(rhs()))), type);
+        return ifNonObjectArgs(getType,
+                               type & (getType(lhs())
+                                           .mergeWithConversion(getType(rhs()))
+                                           .orNotScalar()),
+                               type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1463,9 +1474,11 @@ class FLIE(Subassign1_3D, 6, Effects::Any()) {
     Value* idx3() const { return arg(4).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(
-            getType,
-            type & (getType(lhs()).mergeWithConversion(getType(rhs()))), type);
+        return ifNonObjectArgs(getType,
+                               type & (getType(lhs())
+                                           .mergeWithConversion(getType(rhs()))
+                                           .orNotScalar()),
+                               type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1476,7 +1489,7 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
   public:
     Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
-                                         {{PirType::val(), PirType::val()}},
+                                         {{PirType::val(), PirType::any()}},
                                          {{vec, idx}}, env, srcIdx) {}
     Value* vec() const { return arg(0).val(); }
     Value* idx() const { return arg(1).val(); }
@@ -1496,7 +1509,7 @@ class FLIE(Extract2_1D, 3, Effects::Any()) {
   public:
     Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
-                                         {{PirType::val(), PirType::val()}},
+                                         {{PirType::val(), PirType::any()}},
                                          {{vec, idx}}, env, srcIdx) {}
     Value* vec() const { return arg(0).val(); }
     Value* idx() const { return arg(1).val(); }
@@ -1521,7 +1534,7 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
                 unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
               PirType::valOrLazy(),
-              {{PirType::val(), PirType::val(), PirType::val()}},
+              {{PirType::val(), PirType::any(), PirType::any()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
     Value* vec() const { return arg(0).val(); }
     Value* idx1() const { return arg(1).val(); }
@@ -1549,7 +1562,7 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
                 unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
               PirType::valOrLazy(),
-              {{PirType::val(), PirType::val(), PirType::val()}},
+              {{PirType::val(), PirType::any(), PirType::any()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
     Value* vec() const { return arg(0).val(); }
     Value* idx1() const { return arg(1).val(); }
@@ -1576,8 +1589,8 @@ class FLIE(Extract1_3D, 5, Effects::Any()) {
     Extract1_3D(Value* vec, Value* idx1, Value* idx2, Value* idx3, Value* env,
                 unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
-                                         {{PirType::val(), PirType::val(),
-                                           PirType::val(), PirType::val()}},
+                                         {{PirType::val(), PirType::any(),
+                                           PirType::any(), PirType::any()}},
                                          {{vec, idx1, idx2, idx3}}, env,
                                          srcIdx) {}
     Value* vec() const { return arg(0).val(); }
@@ -1629,8 +1642,6 @@ class FLI(IsType, 1, Effects::None()) {
     IsType(PirType type, Value* v)
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
           typeTest(type) {}
-
-    TypeChecks typeChecks() const;
 
     void printArgs(std::ostream& out, bool tty) const override;
 
@@ -1978,10 +1989,20 @@ class CallInstruction {
     static CallInstruction* CastCall(Value* v);
 
     virtual size_t nCallArgs() const = 0;
+
+    typedef std::function<void(SEXP, Value*)> NamedArgumentValueIterator;
+    typedef std::function<void(SEXP, InstrArg&)> MutableNamedArgumentIterator;
+
+    void eachCallArg(const Instruction::ArgumentValueIterator& it) const {
+        eachNamedCallArg([&](SEXP, Value* v) { it(v); });
+    }
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) {
+        eachNamedCallArg([&](SEXP, InstrArg& a) { it(a); });
+    }
+
     virtual void
-    eachCallArg(const Instruction::ArgumentValueIterator& it) const = 0;
-    virtual void
-    eachCallArg(const Instruction::MutableArgumentIterator& it) = 0;
+    eachNamedCallArg(const NamedArgumentValueIterator& it) const = 0;
+    virtual void eachNamedCallArg(const MutableNamedArgumentIterator& it) = 0;
     virtual const InstrArg& callArg(size_t pos) const = 0;
     virtual InstrArg& callArg(size_t pos) = 0;
     virtual Closure* tryGetCls() const { return nullptr; }
@@ -2023,14 +2044,13 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
     }
 
     size_t nCallArgs() const override { return nargs() - 3; };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 2).val());
+            it(R_NilValue, arg(i + 2).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 2));
+            it(R_NilValue, arg(i + 2));
     }
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
@@ -2073,14 +2093,13 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
               const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
 
     size_t nCallArgs() const override { return nargs() - 2; };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 1).val());
+            it(names[i], arg(i + 1).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 1));
+            it(names[i], arg(i + 1));
     }
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
@@ -2115,14 +2134,13 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
                Value* runtimeClosure = Tombstone::closure());
 
     size_t nCallArgs() const override { return nargs() - 3; };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 2).val());
+            it(R_NilValue, arg(i + 2).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 2));
+            it(R_NilValue, arg(i + 2));
     }
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
@@ -2157,19 +2175,18 @@ typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
 class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
   public:
-    SEXP blt;
+    SEXP builtinSexp;
     const CCODE builtin;
     int builtinId;
 
     size_t nCallArgs() const override { return nargs() - 1; };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i).val());
+            it(R_NilValue, arg(i).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i));
+            it(R_NilValue, arg(i));
     }
 
     const InstrArg& callArg(size_t pos) const override final {
@@ -2199,17 +2216,19 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
                                Effect::Visibility | Effect::DependsOnAssume),
     public CallInstruction {
   public:
-    SEXP blt;
+    SEXP builtinSexp;
     const CCODE builtin;
     int builtinId;
 
     size_t nCallArgs() const override { return nargs(); };
-    void eachCallArg(const Instruction::ArgumentValueIterator& it)
-        const override {
-        eachArg(it);
+
+    void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(R_NilValue, arg(i).val());
     }
-    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
-        eachArg(it);
+    void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(R_NilValue, arg(i));
     }
 
     const InstrArg& callArg(size_t pos) const override final {
@@ -2226,6 +2245,8 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
     Value* frameStateOrTs() const override final {
         return Tombstone::framestate();
     }
+
+    size_t gvnBase() const override;
 };
 
 class BuiltinCallFactory {
@@ -2269,14 +2290,14 @@ class VLIE(MkEnv, Effects::None()) {
         : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names),
           missing(missing) {
         for (unsigned i = 0; i < varName.size(); ++i) {
-            pushArg(args[i], PirType::any());
+            MkEnv::pushArg(args[i], PirType::any());
         }
     }
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args)
         : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names) {
         for (unsigned i = 0; i < varName.size(); ++i) {
-            pushArg(args[i], PirType::any());
+            MkEnv::pushArg(args[i], PirType::any());
         }
     }
 
@@ -2333,12 +2354,23 @@ class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
         : FixedLenInstructionWithEnvSlot(NativeType::test, e) {}
 };
 
-class FLIE(PushContext, 3, Effect::ChangesContexts) {
+class VLIE(PushContext, Effect::ChangesContexts) {
   public:
-    PushContext(Value* ast, Value* op, Value* sysparent)
-        : FixedLenInstructionWithEnvSlot(NativeType::context,
-                                         {{PirType::any(), PirType::closure()}},
-                                         {{ast, op}}, sysparent) {}
+    PushContext(Value* ast, Value* op, CallInstruction* call, Value* sysparent)
+        : VarLenInstructionWithEnvSlot(NativeType::context, sysparent) {
+        call->eachCallArg([&](Value* v) { pushArg(v, PirType::any()); });
+        pushArg(ast, PirType::any());
+        pushArg(op, PirType::closure());
+    }
+
+    size_t narglist() const { return nargs() - 3; }
+
+    Value* op() const {
+        auto op = arg(nargs() - 2).val();
+        assert(op->type.isA(PirType::closure()));
+        return op;
+    }
+    Value* ast() const { return arg(nargs() - 3).val(); }
 };
 
 class FLI(PopContext, 2, Effect::ChangesContexts) {

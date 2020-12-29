@@ -1,4 +1,4 @@
-if (Sys.getenv("PIR_ENABLE_PROFILER") != "1" || Sys.getenv("PIR_NATIVE_BACKEND") != "1") {
+if (Sys.getenv("PIR_ENABLE_PROFILER") != "1") {
   print("test only works with profiler enabled")
   q()
 }

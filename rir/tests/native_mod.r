@@ -1,6 +1,3 @@
-if (Sys.getenv("PIR_NATIVE_BACKEND") != "1") {
-# libjit backend is broken...
-
 g = function() {
   f = function(a,b) {
     r = a %% b
@@ -40,5 +37,3 @@ g = function() {
 
 for (i in 1:10)
   g()
-
-}

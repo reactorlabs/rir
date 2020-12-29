@@ -9,9 +9,10 @@
 
 #include "R/Funtab.h"
 #include "R/Serialize.h"
+#include "compiler/backend.h"
 #include "compiler/compiler.h"
+#include "compiler/log/debug.h"
 #include "compiler/parameter.h"
-#include "compiler/pir2rir/pir2rir.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
@@ -290,14 +291,13 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
+    pir::Backend backend(logger);
     cmp.compileClosure(what, name, assumptions,
                        [&](pir::ClosureVersion* c) {
                            logger.flush();
                            cmp.optimizeModule();
 
-                           // compile back to rir
-                           pir::Pir2RirCompiler p2r(logger);
-                           auto fun = p2r.compile(c, dryRun);
+                           auto fun = backend.compile(c);
 
                            // Install
                            if (dryRun)
@@ -345,7 +345,7 @@ REXPORT SEXP pirCompileWrapper(SEXP what, SEXP name, SEXP debugFlags,
     pir::DebugOptions opts = PirDebug;
 
     if (debugFlags != R_NilValue) {
-        opts.flags = *INTEGER(debugFlags);
+        opts.flags = pir::DebugOptions::DebugFlags(*INTEGER(debugFlags));
     }
     if (debugStyle != R_NilValue) {
         if (!parseDebugStyle(CHAR(PRINTNAME(debugStyle)), opts.style)) {
@@ -424,8 +424,9 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Context& assumptions,
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(closure))
-        return pirCompile(closure, assumptions, n,
-                          PirDebug | pir::DebugFlag::DryRun);
+        return pirCompile(
+            closure, assumptions, n,
+            PirDebug | pir::DebugOptions::DebugFlags(pir::DebugFlag::DryRun));
     else
         return closure;
 }
@@ -494,6 +495,45 @@ REXPORT SEXP rirPrintBuiltinIds() {
     std::cout << "    else\n        errorWrongBuiltin();\n";
     std::cout << "    return -1;\n}\n} // namespace rir\n#endif\n";
     return R_NilValue;
+}
+
+REXPORT SEXP rirSetUserContext(SEXP f, SEXP userContext) {
+
+    if (TYPEOF(f) != CLOSXP)
+        Rf_error("f not closure");
+
+    if (TYPEOF(BODY(f)) != EXTERNALSXP) {
+        rirCompile(f, CLOENV(f));
+    }
+
+    if (TYPEOF(userContext) != INTSXP || LENGTH(userContext) != 2)
+        Rf_error("userDefinedContext should be an Integer Array of size 2");
+
+    Context newContext;
+    auto p = (int*)((void*)&newContext);
+    *p = INTEGER(userContext)[0];
+    p++;
+    *p = INTEGER(userContext)[1];
+
+    auto tbl = DispatchTable::unpack(BODY(f));
+    auto newTbl = tbl->newWithUserContext(newContext);
+    SET_BODY(f, newTbl->container());
+    return R_NilValue;
+}
+
+REXPORT SEXP rirCreateSimpleIntContext() {
+    Context newContext = Context();
+    newContext.setSimpleInt(0);
+
+    int* p = (int*)((void*)&newContext);
+    int n1 = *p;
+    p++;
+    int n2 = *p;
+
+    auto res = Rf_allocVector(INTSXP, 2);
+    INTEGER(res)[0] = n1;
+    INTEGER(res)[1] = n2;
+    return res;
 }
 
 bool startup() {

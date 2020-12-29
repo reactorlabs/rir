@@ -15,7 +15,7 @@ class SmallSet {
     typedef typename std::vector<T>::const_iterator const_iterator;
 
     SmallSet() {}
-    SmallSet(std::initializer_list<T> in) : container(in) {}
+    explicit SmallSet(std::initializer_list<T> in) : container(in) {}
 
     void insert(T t) {
         for (const auto& e : container)

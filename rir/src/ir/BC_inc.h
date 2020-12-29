@@ -92,13 +92,6 @@ class BC {
         Immediate ast;
         Context given;
     };
-    struct StaticCallFixedArgs {
-        NumArgs nargs;
-        Immediate ast;
-        Context given;
-        Immediate targetClosure;
-        Immediate versionHint;
-    };
     struct CallBuiltinFixedArgs {
         NumArgs nargs;
         Immediate ast;
@@ -109,31 +102,7 @@ class BC {
         Immediate expected;
         Immediate id;
     };
-    struct AssertTypeArgs {
-        static_assert(
-            sizeof(pir::PirType) == sizeof(Immediate) * 2,
-            "PirType must fit in 2 immediates, or change assert_type_ size");
-        Immediate typeData1;
-        Immediate typeData2;
-        SignedImmediate instr;
-
-        pir::PirType pirType() const { return pir::PirType(&typeData1); }
-        void setPirType(pir::PirType typ) {
-            memcpy(&typeData1, &typ, sizeof(pir::PirType));
-        }
-    };
     typedef Immediate NumLocals;
-    struct LocalsCopy {
-        Immediate target;
-        Immediate source;
-    };
-    struct MkDotlistFixedArgs {
-        NumArgs nargs;
-    };
-    struct MkEnvFixedArgs {
-        NumArgs nargs;
-        SignedImmediate context;
-    };
     struct PoolAndCachePositionRange {
         PoolIdx poolIndex;
         CacheIdx cacheIndex;
@@ -152,26 +121,20 @@ class BC {
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
     union ImmediateArguments {
-        MkEnvFixedArgs mkEnvFixedArgs;
-        MkDotlistFixedArgs mkDotlistFixedArgs;
-        StaticCallFixedArgs staticCallFixedArgs;
         CallFixedArgs callFixedArgs;
         CallBuiltinFixedArgs callBuiltinFixedArgs;
         GuardFunArgs guard_fun_args;
-        AssertTypeArgs assertTypeArgs;
         PoolIdx pool;
         FunIdx fun;
         ArgIdx arg_idx;
         Jmp offset;
         uint32_t i;
         NumLocals loc;
-        LocalsCopy loc_cpy;
         ObservedCallees callFeedback;
         ObservedValues typeFeedback;
         ObservedTest testFeedback;
         PoolAndCachePositionRange poolAndCache;
         CachePositionRange cacheIdx;
-        DeoptReason deoptReason;
         ImmediateArguments() {
             memset(reinterpret_cast<void*>(this), 0,
                    sizeof(ImmediateArguments));
@@ -211,14 +174,6 @@ class BC {
             return immediate.callFixedArgs.nargs * sizeof(FunIdx) +
                    fixedSize(bc);
 
-        if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
-            return immediate.mkEnvFixedArgs.nargs * sizeof(FunIdx) +
-                   fixedSize(bc);
-
-        if (bc == Opcode::mk_dotlist_)
-            return immediate.mkDotlistFixedArgs.nargs * sizeof(FunIdx) +
-                   fixedSize(bc);
-
         // the others have no variable length part
         return fixedSize(bc);
     }
@@ -229,14 +184,8 @@ class BC {
         if (bc == Opcode::call_ || bc == Opcode::named_call_ ||
             bc == Opcode::call_dots_)
             return immediate.callFixedArgs.nargs + 1;
-        if (bc == Opcode::static_call_)
-            return immediate.staticCallFixedArgs.nargs;
         if (bc == Opcode::call_builtin_)
             return immediate.callBuiltinFixedArgs.nargs;
-        if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
-            return immediate.mkEnvFixedArgs.nargs + 1;
-        if (bc == Opcode::mk_dotlist_)
-            return immediate.mkDotlistFixedArgs.nargs;
         if (bc == Opcode::popn_)
             return immediate.i;
         return popCount(bc);
@@ -269,8 +218,7 @@ class BC {
 
     bool isCall() const {
         return bc == Opcode::call_ || bc == Opcode::named_call_ ||
-               bc == Opcode::call_dots_ || bc == Opcode::static_call_ ||
-               bc == Opcode::call_builtin_;
+               bc == Opcode::call_dots_ || bc == Opcode::call_builtin_;
     }
 
     bool hasPromargs() const {
@@ -300,10 +248,7 @@ class BC {
 
     bool isPure() { return isPure(bc); }
 
-    bool isExit() const {
-        return bc == Opcode::ret_ || bc == Opcode::return_ ||
-               bc == Opcode::deopt_;
-    }
+    bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
 
     // This code performs the same as `BC::decode(pc).size()`, but for
     // performance reasons, it avoids actually creating the BC object.
@@ -322,19 +267,6 @@ class BC {
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
             return 1 + (4 + nargs) * sizeof(Immediate);
-        }
-        case Opcode::mk_stub_env_:
-        case Opcode::mk_env_: {
-            pc++;
-            Immediate nargs;
-            memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (2 + nargs) * sizeof(Immediate);
-        }
-        case Opcode::mk_dotlist_: {
-            pc++;
-            Immediate nargs;
-            memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (1 + nargs) * sizeof(Immediate);
         }
         default: {}
         }
@@ -361,7 +293,6 @@ BC_NOARGS(V, _)
     inline static BC recordBinop();
     inline static BC recordType();
     inline static BC recordTest();
-    inline static BC recordDeopt(const DeoptReason& reason);
     inline static BC popn(unsigned n);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
@@ -370,31 +301,19 @@ BC_NOARGS(V, _)
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
-    inline static BC ldvarNoForceStubbed(unsigned pos);
     inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdate(SEXP sym);
-    inline static BC ldvarNoForce(SEXP sym);
-    inline static BC ldvarNoForceCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarSuper(SEXP sym);
-    inline static BC ldvarNoForceSuper(SEXP sym);
     inline static BC ldddvar(SEXP sym);
-    inline static BC ldarg(uint32_t offset);
-    inline static BC ldloc(uint32_t offset);
-    inline static BC stloc(uint32_t offset);
-    inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC mkPromise(FunIdx prom);
     inline static BC mkEagerPromise(FunIdx prom);
     inline static BC starg(SEXP sym);
-    inline static BC stvarStubbed(unsigned stubbed);
-    inline static BC stargStubbed(unsigned stubbed);
     inline static BC stvar(SEXP sym);
     inline static BC stargCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
-    inline static BC pushContext(Jmp);
-    inline static BC popContext(Jmp);
     inline static BC beginloop(Jmp);
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
@@ -406,22 +325,14 @@ BC_NOARGS(V, _)
     inline static BC pick(uint32_t);
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
-    inline static BC isType(TypeChecks);
-    inline static BC deopt(SEXP);
+    inline static BC isNonObj();
     inline static BC call(size_t nargs, SEXP ast, const Context& given);
     inline static BC callDots(size_t nargs, const std::vector<SEXP>& names,
                               SEXP ast, const Context& given);
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
                           SEXP ast, const Context& given);
-    inline static BC staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
-                                SEXP targetVersion, const Context& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
-    inline static BC mkEnv(const std::vector<SEXP>& names,
-                           const std::vector<bool>& missing,
-                           SignedImmediate contextPos, bool stub);
-    inline static BC mkDotlist(const std::vector<SEXP>& names);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
-    inline static BC assertType(pir::PirType typ, SignedImmediate instr);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -459,9 +370,6 @@ BC_NOARGS(V, _)
 
   public:
     MkEnvExtraInformation& mkEnvExtra() const {
-        assert((bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_ ||
-                bc == Opcode::mk_dotlist_) &&
-               "Not a varlen call instruction");
         assert(extraInformation.get() &&
                "missing extra information. created through decodeShallow?");
         return *static_cast<MkEnvExtraInformation*>(extraInformation.get());
@@ -507,12 +415,6 @@ BC_NOARGS(V, _)
             extraInformation.reset(new CallFeedbackExtraInformation);
             break;
         }
-        case Opcode::mk_dotlist_:
-        case Opcode::mk_stub_env_:
-        case Opcode::mk_env_: {
-            extraInformation.reset(new MkEnvExtraInformation);
-            break;
-        }
         default: {}
         }
     }
@@ -532,20 +434,6 @@ BC_NOARGS(V, _)
                     callExtra().callArgumentNames.push_back(readImmediate(&pc));
             }
 
-            break;
-        }
-        case Opcode::mk_stub_env_:
-        case Opcode::mk_env_: {
-            pc += sizeof(MkEnvFixedArgs);
-            for (size_t i = 0; i < immediate.mkEnvFixedArgs.nargs; ++i)
-                mkEnvExtra().names.push_back(readImmediate(&pc));
-            break;
-        }
-
-        case Opcode::mk_dotlist_: {
-            pc += sizeof(MkDotlistFixedArgs);
-            for (size_t i = 0; i < immediate.mkDotlistFixedArgs.nargs; ++i)
-                mkEnvExtra().names.push_back(readImmediate(&pc));
             break;
         }
 
@@ -639,13 +527,10 @@ BC_NOARGS(V, _)
         case Opcode::clear_binding_cache_:
             memcpy(&immediate.cacheIdx, pc, sizeof(CachePositionRange));
             break;
-        case Opcode::deopt_:
         case Opcode::push_:
         case Opcode::ldfun_:
         case Opcode::ldvar_:
-        case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
-        case Opcode::ldvar_noforce_super_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
         case Opcode::starg_:
@@ -654,7 +539,6 @@ BC_NOARGS(V, _)
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
-        case Opcode::ldvar_noforce_cached_:
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
@@ -668,24 +552,9 @@ BC_NOARGS(V, _)
             memcpy(&immediate.callFixedArgs,
                    reinterpret_cast<CallFixedArgs*>(pc), sizeof(CallFixedArgs));
             break;
-        case Opcode::mk_stub_env_:
-        case Opcode::mk_env_:
-            memcpy(&immediate.mkEnvFixedArgs, pc, sizeof(MkEnvFixedArgs));
-            break;
-        case Opcode::mk_dotlist_:
-            memcpy(&immediate.mkDotlistFixedArgs, pc,
-                   sizeof(MkDotlistFixedArgs));
-            break;
         case Opcode::call_builtin_:
             memcpy(&immediate.callBuiltinFixedArgs, pc,
                    sizeof(CallBuiltinFixedArgs));
-            break;
-        case Opcode::static_call_:
-            memcpy(reinterpret_cast<void*>(&immediate.staticCallFixedArgs), pc,
-                   sizeof(StaticCallFixedArgs));
-            break;
-        case Opcode::record_deopt_:
-            memcpy(&immediate.deoptReason, pc, sizeof(DeoptReason));
             break;
         case Opcode::guard_fun_:
             memcpy(&immediate.guard_fun_args, pc, sizeof(GuardFunArgs));
@@ -699,31 +568,11 @@ BC_NOARGS(V, _)
         case Opcode::brtrue_:
         case Opcode::brfalse_:
         case Opcode::beginloop_:
-        case Opcode::push_context_:
-        case Opcode::pop_context_:
-            memcpy(&immediate.offset, pc, sizeof(Jmp));
-            break;
         case Opcode::popn_:
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
-        case Opcode::istype_:
         case Opcode::put_:
-        case Opcode::ldvar_noforce_stubbed_:
-        case Opcode::stvar_stubbed_:
-        case Opcode::starg_stubbed_:
-            memcpy(&immediate.i, pc, sizeof(uint32_t));
-            break;
-        case Opcode::ldarg_:
-            memcpy(&immediate.arg_idx, pc, sizeof(ArgIdx));
-            break;
-        case Opcode::ldloc_:
-        case Opcode::stloc_:
-            memcpy(&immediate.loc, pc, sizeof(NumLocals));
-            break;
-        case Opcode::movloc_:
-            memcpy(&immediate.loc_cpy, pc, sizeof(LocalsCopy));
-            break;
         case Opcode::record_call_:
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;
@@ -735,12 +584,10 @@ BC_NOARGS(V, _)
             memcpy(reinterpret_cast<void*>(&immediate.typeFeedback), pc,
                    sizeof(ObservedValues));
             break;
+        case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
 BC_NOARGS(V, _)
 #undef V
-            break;
-        case Opcode::assert_type_:
-            memcpy(&immediate.assertTypeArgs, pc, sizeof(AssertTypeArgs));
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

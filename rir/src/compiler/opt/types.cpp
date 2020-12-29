@@ -44,7 +44,8 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                 switch (i->tag) {
                 case Tag::CallSafeBuiltin: {
                     auto c = CallSafeBuiltin::Cast(i);
-                    std::string name = getBuiltinName(getBuiltinNr(c->blt));
+                    std::string name =
+                        getBuiltinName(getBuiltinNr(c->builtinSexp));
 
                     static const std::unordered_set<std::string> bitwise = {
                         "bitwiseXor", "bitwiseShiftL", "bitwiseShiftLR",
@@ -83,6 +84,11 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 if ("prod" == name)
                                     inferred = inferred.orT(RType::real)
                                                    .notT(RType::integer);
+                                if ("abs" == name) {
+                                    if (inferred.maybe(RType::cplx))
+                                        inferred = inferred.orT(RType::real)
+                                                       .notT(RType::cplx);
+                                }
                                 break;
                             }
                         }
@@ -157,6 +163,47 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                         break;
                     }
 
+                    if ("vector" == name) {
+                        bool handled = false;
+                        if (auto con = LdConst::Cast(c->arg(0).val())) {
+                            if (TYPEOF(con->c()) == STRSXP &&
+                                XLENGTH(con->c()) == 1) {
+                                handled = true;
+                                SEXPTYPE type =
+                                    str2type(CHAR(STRING_ELT(con->c(), 0)));
+                                switch (type) {
+                                case LGLSXP:
+                                    inferred = RType::logical;
+                                    break;
+                                case INTSXP:
+                                    inferred = RType::integer;
+                                    break;
+                                case REALSXP:
+                                    inferred = RType::real;
+                                    break;
+                                case CPLXSXP:
+                                    inferred = RType::cplx;
+                                    break;
+                                case STRSXP:
+                                    inferred = RType::str;
+                                    break;
+                                case VECSXP:
+                                    inferred = RType::vec;
+                                    break;
+                                case RAWSXP:
+                                    inferred = RType::raw;
+                                    break;
+                                default:
+                                    assert(false);
+                                    handled = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if (handled)
+                            break;
+                    }
+
                     if ("strsplit" == name) {
                         inferred = RType::vec;
                         break;
@@ -165,25 +212,34 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     inferred = i->inferType(getType);
                     break;
                 }
+#define V(instr) case Tag::instr:
+                    VECTOR_RW_INSTRUCTIONS(V);
+                    {
+                        inferred = i->inferType(getType);
 
-                case Tag::Extract1_1D: {
-                    inferred = i->inferType(getType);
-                    auto e = Extract1_1D::Cast(i);
-                    if (!inferred.isScalar() &&
-                        getType(e->vec()).isA(PirType::num()) &&
-                        // named arguments produce named result
-                        !getType(e->vec()).maybeHasAttrs() &&
-                        getType(e->idx()).isScalar()) {
-                        auto range = rangeAnalysis.before(e).range;
-                        if (range.count(e->idx())) {
-                            if (range.at(e->idx()).first > 0) {
-                                // Negative numbers as indices make the extract
-                                // return a vector. Only positive are safe.
-                                inferred.setScalar();
+                        // These return primitive values, unless overwritten by
+                        // objects
+                        if (!i->arg(0).val()->type.maybeObj())
+                            inferred = inferred & PirType::val();
+
+                        if (auto e = Extract1_1D::Cast(i)) {
+                            if (!inferred.isScalar() &&
+                                getType(e->vec()).isA(PirType::num()) &&
+                                // named arguments produce named result
+                                !getType(e->vec()).maybeHasAttrs() &&
+                                getType(e->idx()).isScalar()) {
+                                auto range = rangeAnalysis.before(e).range;
+                                if (range.count(e->idx())) {
+                                    if (range.at(e->idx()).first > 0) {
+                                        // Negative numbers as indices make the
+                                        // extract return a vector. Only
+                                        // positive are safe.
+                                        inferred.setScalar();
+                                    }
+                                }
                             }
                         }
-                    }
-                    break;
+                        break;
                 }
 
                 default:

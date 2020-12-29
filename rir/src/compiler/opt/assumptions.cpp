@@ -127,7 +127,7 @@ struct AvailableAssumptions
     AvailableAssumptions(ClosureVersion* cls, Code* code, LogStream& log)
         : StaticAnalysis("AvailableAssumptions", cls, code, log) {}
     AbstractResult apply(IntersectionSet<AAssumption>& state,
-                         Instruction* i) const {
+                         Instruction* i) const override {
         AbstractResult res;
         if (auto a = Assume::Cast(i)) {
             AAssumption am(a);

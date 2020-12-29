@@ -10,7 +10,7 @@ class RVectorIter {
   public:
     SEXP operator*();
     void operator++() { pos++; }
-    bool operator!=(RVectorIter& other) {
+    bool operator!=(const RVectorIter& other) {
         return vector != other.vector || pos != other.pos;
     }
     RVectorIter(RVector* vector, size_t pos) : vector(vector), pos(pos) {}

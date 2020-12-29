@@ -14,51 +14,12 @@ DEF_INSTR(invalid_, 0, 0, 0, 0)
  */
 DEF_INSTR(nop_, 0, 0, 0, 1)
 
-DEF_INSTR(push_context_, 1, 2, 0, 0)
-DEF_INSTR(pop_context_, 1, 1, 1, 0)
-
-/**
- * mk_env_:: create a new environment with the parent and all locals taken
- * from stack and the argument names as immediates.
- */
-DEF_INSTR(mk_env_, 2, -1, 1, 0)
-
-/*
- *  creates a dotsxp with provided names
- */
-DEF_INSTR(mk_dotlist_, 1, -1, 1, 0)
-
 /*
  * clear_binding_cache_. Clear binding cache entries from start to start+size
  * (two
  * immediates).
  */
 DEF_INSTR(clear_binding_cache_, 2, 0, 0, 0)
-
-/**
- * make_stub_env_:: create a fake environment for speculative purposes
- */
-DEF_INSTR(mk_stub_env_, 2, -1, 1, 1)
-
-/**
- * parent_env_:: push lexically outer env to tos
- */
-DEF_INSTR(parent_env_, 0, 0, 1, 1)
-
-/**
- * get_env_:: push current env to tos
- */
-DEF_INSTR(get_env_, 0, 0, 1, 1)
-
-/**
- * set_env_:: make tos environment the current env
- */
-DEF_INSTR(set_env_, 0, 1, 0, 0)
-
-/**
- * materialize_env_:: materializes the current env
- */
-DEF_INSTR(materialize_env_, 0, 0, 1, 0)
 
 /**
  * ldfun_:: take immediate CP index of symbol, find function bound to that name
@@ -70,11 +31,6 @@ DEF_INSTR(ldfun_, 1, 0, 1, 0)
  * ldvar_:: take immediate CP index of symbol, finding binding in env and push.
  */
 DEF_INSTR(ldvar_, 1, 0, 1, 0)
-
-/**
- * ldvar_:: load from the stubbed env at a fixed offset
- */
-DEF_INSTR(ldvar_noforce_stubbed_, 1, 0, 1, 0)
 
 /**
  * ldvar_:: like ldvar.
@@ -90,42 +46,16 @@ DEF_INSTR(ldvar_for_update_cache_, 2, 0, 1, 0)
 DEF_INSTR(ldvar_for_update_, 1, 0, 1, 0)
 
 /**
- * ldvar_noforce_:: like ldvar_ but don't force if promise or fail if missing
- */
-DEF_INSTR(ldvar_noforce_, 1, 0, 1, 1)
-
-/**
- * ldvar_noforce_cache:: like ldvar_cache but additionaly stores a unique cache
- * binding number.
- */
-DEF_INSTR(ldvar_noforce_cached_, 2, 0, 1, 1)
-
-/**
  * ldvar_super_:: take immediate CP index of symbol, finding binding in
  * enclosing env and push.
  */
 DEF_INSTR(ldvar_super_, 1, 0, 1, 0)
 
 /**
- * ldvar_noforce_super_:: like ldvar_super_ but no force
- */
-DEF_INSTR(ldvar_noforce_super_, 1, 0, 1, 1)
-
-/**
  * ldddvar_:: loads the ellipsis values (such as ..1, ..2) and pushes them on
  * stack.
  */
 DEF_INSTR(ldddvar_, 1, 0, 1, 0)
-
-/**
- * ldarg_:: load argument
- */
-DEF_INSTR(ldarg_, 1, 0, 1, 0)
-
-/**
- * ldloc_:: push local variable on stack
- */
-DEF_INSTR(ldloc_, 1, 0, 1, 1)
 
 /**
  * stvar_:: assign tos to the immediate symbol.
@@ -144,12 +74,6 @@ DEF_INSTR(starg_cached_, 2, 1, 0, 0)
 DEF_INSTR(stvar_, 1, 1, 0, 0)
 
 /**
- * stvar_:: assign tos to the stubbed environment at a fixed offset
- */
-DEF_INSTR(stvar_stubbed_, 1, 1, 0, 0)
-DEF_INSTR(starg_stubbed_, 1, 1, 0, 0)
-
-/**
  * stvar_cache:: like stvar but the var may be in the cache.
  */
 DEF_INSTR(stvar_cached_, 2, 1, 0, 0)
@@ -159,16 +83,6 @@ DEF_INSTR(stvar_cached_, 2, 1, 0, 0)
  * enclosing environment
  */
 DEF_INSTR(stvar_super_, 1, 1, 0, 1)
-
-/**
- * stloc_:: store top of stack to local variable
- */
-DEF_INSTR(stloc_, 1, 1, 0, 1)
-
-/**
- * movloc_:: copy one local into another
- */
-DEF_INSTR(movloc_, 2, 0, 0, 1)
 
 /**
  * call_:: Call instruction. Takes n arguments on the stack
@@ -194,12 +108,6 @@ DEF_INSTR(named_call_, 4, -1, 1, 0)
 DEF_INSTR(call_dots_, 4, -1, 1, 0)
 
 /**
- * static_call_:: Like call_, but the callee is statically known
- *                and is accessed via the immediate callsite
- */
-DEF_INSTR(static_call_, 6, -1, 1, 0)
-
-/**
  * call_builtin_:: Like static call, but calls a builtin
  */
 DEF_INSTR(call_builtin_, 3, -1, 1, 0)
@@ -221,7 +129,6 @@ DEF_INSTR(check_closure_, 0, 1, 1, 1)
  */
 DEF_INSTR(mk_eager_promise_, 1, 1, 1, 1)
 DEF_INSTR(mk_promise_, 1, 0, 1, 1)
-DEF_INSTR(update_promise_, 0, 2, 0, 0)
 
 /**
  * force_:: pop from objet stack, evaluate, push promise's value
@@ -372,24 +279,14 @@ DEF_INSTR(asast_, 0, 1, 1, 1)
 DEF_INSTR(is_, 1, 1, 1, 1)
 
 /**
- * istype_:: check if TOS is a given type, push T/F
+ * isnonobj_:: check if TOS is no obj type, push T/F
  */
-DEF_INSTR(istype_, 1, 1, 1, 1)
-
-/**
- * isstubenv_:: check if TOS is an env stub, push T/F
- */
-DEF_INSTR(isstubenv_, 0, 1, 1, 1)
+DEF_INSTR(isnonobj_, 0, 1, 1, 1)
 
 /**
  * missing_ :: check if symb is missing
  */
 DEF_INSTR(missing_, 1, 0, 1, 1)
-
-/**
- * check_missing_ :: check if TOS is missing
- */
-DEF_INSTR(check_missing_, 0, 0, 0, 1)
 
 /**
  * brtrue_:: pop object stack, if TRUE branch to immediate offset
@@ -554,11 +451,6 @@ DEF_INSTR(return_, 0, 1, 0, 0)
  */
 DEF_INSTR(ret_, 0, 1, 0, 1)
 
-/**
- * deopt_ :: jumps to the immediate bc location
- */
-DEF_INSTR(deopt_, 1, -1, 0, 0)
-
 /*
  * recording bytecodes are used to collect information
  * They keep a struct from RuntimeFeedback.h inline, that's why they are quite
@@ -567,14 +459,8 @@ DEF_INSTR(deopt_, 1, -1, 0, 0)
 DEF_INSTR(record_call_, 4, 1, 1, 0)
 DEF_INSTR(record_type_, 1, 1, 1, 0)
 DEF_INSTR(record_test_, 1, 1, 1, 0)
-DEF_INSTR(record_deopt_, 4, 1, 0, 0)
 
 DEF_INSTR(int3_, 0, 0, 0, 0)
 DEF_INSTR(printInvocation_, 0, 0, 0, 0)
-
-/*
- * assert_type_ :: asserts that tos has the immediate PIR type
- */
-DEF_INSTR(assert_type_, 3, 1, 1, 1)
 
 #undef DEF_INSTR

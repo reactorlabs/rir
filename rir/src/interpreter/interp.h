@@ -123,5 +123,13 @@ bool isColonFastcase(SEXP, SEXP);
 SEXP colonCastLhs(SEXP lhs);
 SEXP colonCastRhs(SEXP newLhs, SEXP rhs);
 
+inline void forceAll(SEXP list, InterpreterInstance* ctx) {
+    while (list != R_NilValue) {
+        if (TYPEOF(CAR(list)) == PROMSXP)
+            SETCAR(list, evaluatePromise(CAR(list), ctx));
+        list = CDR(list);
+    }
+}
+
 } // namespace rir
 #endif // RIR_INTERPRETER_C_H

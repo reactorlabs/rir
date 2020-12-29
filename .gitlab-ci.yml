@@ -20,7 +20,7 @@ sanity:
   needs:
     - rir_container
   script:
-    - /opt/rir/tools/cppcheck --xml
+    - /opt/rir/tools/cppcheck
     - /opt/rir/build/release/bin/tests
 
 rir_container:
@@ -28,7 +28,7 @@ rir_container:
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
   services:
     - docker:19.03.0-dind
   before_script:
@@ -38,7 +38,7 @@ rir_container:
     - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   tags:
-    - build
+    - dockerInDocker
 
 benchmark_container:
   stage: Build benchmark container
@@ -47,11 +47,13 @@ benchmark_container:
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
   services:
     - docker:19.03.0-dind
   before_script:
     - docker info
+  tags:
+    - dockerInDocker
   script:
     - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
     - cd container/benchmark
@@ -63,7 +65,6 @@ test_release_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_NATIVE_BACKEND: 0
     PIR_INLINER_INLINE_UNLIKELY: 1
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
@@ -90,7 +91,6 @@ test_release_2:
     PIR_INLINER_INLINE_UNLIKELY: 1
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
-    PIR_NATIVE_BACKEND: 0
   stage: Run tests
   needs:
     - sanity
@@ -111,7 +111,6 @@ tests_debug:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_NATIVE_BACKEND: 0
   stage: Run tests
   needs:
     - sanity
@@ -141,7 +140,6 @@ tests_fullverify:
     GIT_STRATEGY: none
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
-    PIR_NATIVE_BACKEND: 0
   stage: Run tests
   needs:
     - sanity
@@ -171,11 +169,10 @@ test_features_1:
     - schedules
   script:
     - cd /opt/rir/build/debugopt
-    - PIR_NATIVE_BACKEND=0 ./bin/tests
-#    - PIR_NATIVE_BACKEND=1 PIR_ENABLE_PROFILER=1 ./bin/tests
+#    - PIR_ENABLE_PROFILER=1 ./bin/tests
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
-    - PIR_WARMUP=2 PIR_NATIVE_BACKEND=0 PIR_DEOPT_CHAOS=400 ./bin/gnur-make-tests check
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=400 ./bin/gnur-make-tests check
     - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=1 ./bin/tests
@@ -196,7 +193,7 @@ test_features_2:
     - schedules
   script:
     - cd /opt/rir/build/release
-    - PIR_NATIVE_BACKEND=0 ./bin/gnur-make-tests check
+    - ./bin/gnur-make-tests check
 
 # Run ubsan and gc torture
 test_sanitize1:
@@ -213,7 +210,7 @@ test_sanitize1:
     - schedules
   script:
     - cd /opt/rir/build/sanitize
-    - PIR_NATIVE_BACKEND=0 ENABLE_VALGRIND=1 ./bin/tests
+    - ENABLE_VALGRIND=1 ./bin/tests
     - R_GCTORTURE=1000 bin/tests
 
 # Run ubsan and gc torture
@@ -221,7 +218,6 @@ test_sanitize2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_NATIVE_BACKEND: 0
   stage: Run tests
   needs:
     - sanity
@@ -259,8 +255,6 @@ test_benchmarks:
   stage: Run tests
   needs:
     - benchmark_container
-  except:
-    - schedules
   script:
     - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:RIR e:PIR -r -SN -wu 0 --iterations 2"
     - PIR_DEOPT_CHAOS=200 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR -r -SN -wu 0 --iterations 2"
@@ -274,7 +268,7 @@ deploy:
   image: docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
   services:
     - docker:19.03.0-dind
   before_script:
@@ -289,6 +283,8 @@ deploy:
     - docker pull registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
     - docker tag registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA registry.gitlab.com/rirvm/rir_mirror/benchmark:master
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:master
+  tags:
+    - dockerInDocker
   only:
     - master
 

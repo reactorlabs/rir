@@ -3,8 +3,11 @@
 
 #include "code.h"
 #include "pir.h"
+
+#include "runtime/Code.h"
 #include "runtime/Context.h"
 #include "runtime/Function.h"
+
 #include <functional>
 #include <map>
 #include <sstream>
@@ -27,9 +30,9 @@ class Closure {
     friend class Module;
 
     Closure(const std::string& name, rir::Function* function, SEXP formals,
-            SEXP srcRef);
+            SEXP srcRef, Context userContext);
     Closure(const std::string& name, SEXP closure, rir::Function* function,
-            Env* env);
+            Env* env, Context userContext);
 
     void invariant() const;
 
@@ -41,8 +44,13 @@ class Closure {
     const FormalArgs formals_;
 
     std::map<const Context, ClosureVersion*> versions;
+    Context userContext_;
 
   public:
+    bool matchesUserContext(Context c) const {
+        return c.smaller(this->userContext_);
+    }
+
     SEXP rirClosure() const {
         assert(origin_ && "Inner function does not have a source rir closure");
         return origin_;

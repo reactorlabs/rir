@@ -259,27 +259,6 @@ void PassStreamLogger::pirOptimizations(const Pass* pass) {
     }
 }
 
-void ClosureStreamLogger::finalRIR(Function* fun) {
-    if (options.includes(DebugFlag::PrintFinalRir)) {
-        preparePrint();
-        section("Final RIR");
-        fun->disassemble(out().out);
-        out() << "\n";
-    }
-}
-
-void ClosureStreamLogger::afterAllocator(
-    Code* code, std::function<void(std::ostream&)> allocDebug) {
-    if (options.includes(DebugFlag::PrintAllocator)) {
-        preparePrint();
-        section("PIR SSA allocator");
-        code->printCode(out().out, out().tty(),
-                        options.includes(DebugFlag::OmitDeoptBranches));
-        out() << "\n";
-        allocDebug(out().out);
-    }
-}
-
 void ClosureStreamLogger::CSSA(Code* code) {
     if (options.includes(DebugFlag::PrintCSSA)) {
         preparePrint();

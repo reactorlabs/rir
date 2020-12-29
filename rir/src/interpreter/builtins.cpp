@@ -1,5 +1,5 @@
 #include "builtins.h"
-#include "ArgsLazyData.h"
+#include "LazyArglist.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "interp.h"
@@ -88,6 +88,35 @@ R_xlen_t asVecSize(SEXP x) {
     return -999; /* which gives error in the caller */
 }
 
+enum class IsVectorCheck {
+    unsupported,
+    any,
+    numeric,
+    integer,
+    logical,
+    character,
+};
+
+static IsVectorCheck whichIsVectorCheck(SEXP str) {
+    if (!isString(str) || LENGTH(str) != 1)
+        return IsVectorCheck::unsupported;
+    auto stype = CHAR(STRING_ELT(str, 0));
+    if (std::string("any") == stype) {
+        return IsVectorCheck::any;
+    } else if (std::string("numeric") == stype) {
+        return IsVectorCheck::numeric;
+    } else if (std::string("integer") == stype) {
+        return IsVectorCheck::integer;
+    } else if (std::string("logical") == stype) {
+        return IsVectorCheck::logical;
+    } else if (std::string("double") == stype) {
+        return IsVectorCheck::numeric;
+    } else if (std::string("character") == stype) {
+        return IsVectorCheck::character;
+    }
+    return IsVectorCheck::unsupported;
+}
+
 SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(!call.hasNames());
     return nullptr;
@@ -97,7 +126,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(!call.hasNames());
 
     static constexpr size_t MAXARGS = 8;
-    std::array<SEXP, MAXARGS> args;
+    SEXP args[MAXARGS];
     auto nargs = call.suppliedArgs;
 
     if (nargs > MAXARGS)
@@ -139,6 +168,10 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
     }
+
+    case blt("baseenv"): {
+        return R_BaseEnv;
+    }
     }
 
     if (hasAttrib)
@@ -154,8 +187,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
              cptr = cptr->nextcontext) {
             if ((cptr->callflag & CTXT_FUNCTION) &&
                 cptr->cloenv == call.callerEnv) {
-                if (auto l = ArgsLazyDataContent::check(cptr->promargs)) {
-                    nargs = l->length;
+                if (auto l = LazyArglist::check(cptr->promargs)) {
+                    nargs = l->nargs();
                     break;
                 }
                 nargs = Rf_length(cptr->promargs);
@@ -169,15 +202,21 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 1)
             return nullptr;
 
+        size_t res;
         switch (TYPEOF(args[0])) {
         case INTSXP:
         case REALSXP:
         case LGLSXP:
-            return Rf_ScalarInteger(XLENGTH(args[0]));
+        case STRSXP:
+            res = XLENGTH(args[0]);
+            break;
         default:
-            return nullptr;
+            res = Rf_length(args[0]);
+            break;
         }
-        assert(false);
+        if (res >= INT_MAX)
+            return Rf_ScalarReal(res);
+        return Rf_ScalarInteger(res);
     }
 
     case blt("c"): {
@@ -306,7 +345,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 1)
             return nullptr;
         auto x = args[0];
-        SEXP s = R_NilValue;
+        SEXP s;
         if (isInteger(x) || isLogical(x)) {
             /* integer or logical ==> return integer,
                factor was covered by Math.factor. */
@@ -348,8 +387,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 2)
             return nullptr;
 
-        auto a = args[0];
-        auto b = args[1];
+        SEXP a = args[0];
+        SEXP b = args[1];
 
         if (XLENGTH(a) != 1 || XLENGTH(b) != 1)
             return nullptr;
@@ -393,8 +432,10 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     case blt("as.character"): {
         if (nargs != 1)
             return nullptr;
-        if (TYPEOF(args[0]) == STRSXP)
-            return args[0];
+        if (TYPEOF(args[0]) == STRSXP) {
+            SEXP r = args[0];
+            return r;
+        }
         if (IS_SIMPLE_SCALAR(args[0], INTSXP)) {
             auto i = INTEGER(args[0])[0];
             if (i >= 0 && i < 1000) {
@@ -409,7 +450,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
                     ENSURE_NAMEDMAX(res);
                     stringCache[i] = res;
                 }
-                return stringCache[i];
+                SEXP r = stringCache[i];
+                return r;
             }
             if (i > -10000 && i < 100000) {
                 char buf[6];
@@ -426,8 +468,10 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     case blt("as.integer"): {
         if (nargs != 1)
             return nullptr;
-        if (TYPEOF(args[0]) == INTSXP)
-            return args[0];
+        if (TYPEOF(args[0]) == INTSXP) {
+            SEXP r = args[0];
+            return r;
+        }
         break;
     }
 
@@ -514,13 +558,59 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     }
 
     case blt("is.vector"): {
-        if (nargs != 1)
+        bool res = false;
+        if (nargs < 1 || nargs > 2)
             return nullptr;
 
         auto arg = args[0];
-        if (XLENGTH(arg) != 1)
+        if (nargs == 1) {
+            res = isVector(arg);
+        } else {
+            auto which = whichIsVectorCheck(args[1]);
+            switch (which) {
+            case IsVectorCheck::any:
+                res = isVector(arg);
+                break;
+            case IsVectorCheck::numeric:
+                res = (isNumeric(arg) && !isLogical(arg));
+                break;
+            case IsVectorCheck::integer:
+                res = isInteger(arg);
+                break;
+            case IsVectorCheck::logical:
+                res = isLogical(arg);
+                break;
+            case IsVectorCheck::character:
+                res = isString(arg);
+                break;
+            case IsVectorCheck::unsupported:
+                return nullptr;
+            }
+        }
+
+        if (!res)
+            return R_FalseValue;
+
+        auto a = ATTRIB(arg);
+        while (a != R_NilValue) {
+            if (TAG(a) != R_NamesSymbol)
+                return R_FalseValue;
+            a = CDR(a);
+        }
+        return R_TrueValue;
+    }
+
+    case blt("as.logical"): {
+        if (nargs != 1)
             return nullptr;
-        return TYPEOF(arg) == VECSXP ? R_TrueValue : R_FalseValue;
+        auto arg = args[0];
+        if (TYPEOF(arg) != LGLSXP)
+            return nullptr;
+        if (ATTRIB(arg) == R_NilValue)
+            return arg;
+        arg = MAYBE_REFERENCED(arg) ? duplicate(arg) : arg;
+        CLEAR_ATTRIB(arg);
+        return arg;
     }
 
     case blt("list"): {
@@ -616,6 +706,61 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         return bitwiseOp(bitShiftR(), args[0], args[1], false);
     }
+
+    case blt("row"): {
+        if (nargs != 1)
+            return nullptr;
+        SEXP dim = args[0];
+        int nprot = 0;
+        if (!isInteger(dim)) {
+            PROTECT(dim = coerceVector(dim, INTSXP));
+            nprot++;
+        }
+        if (LENGTH(dim) != 2)
+            Rf_error("a matrix-like object is required as argument to 'row'");
+
+        int nr = INTEGER(dim)[0], nc = INTEGER(dim)[1];
+        if (nprot)
+            UNPROTECT(nprot);
+
+        SEXP ans = allocMatrix(INTSXP, nr, nc);
+
+        R_xlen_t NR = nr;
+        for (int i = 0; i < nr; i++)
+            for (int j = 0; j < nc; j++)
+                INTEGER(ans)[i + j * NR] = i + 1;
+        return ans;
+    }
+
+    case blt("col"): {
+        if (nargs != 1)
+            return nullptr;
+        SEXP dim = args[0];
+        int nprot = 0;
+        if (!isInteger(dim)) {
+            PROTECT(dim = coerceVector(dim, INTSXP));
+            nprot++;
+        }
+        if (LENGTH(dim) != 2)
+            Rf_error("a matrix-like object is required as argument to 'col'");
+
+        int nr = INTEGER(dim)[0], nc = INTEGER(dim)[1];
+        if (nprot)
+            UNPROTECT(nprot);
+
+        SEXP ans = allocMatrix(INTSXP, nr, nc);
+
+        R_xlen_t NR = nr;
+        for (int i = 0; i < nr; i++)
+            for (int j = 0; j < nc; j++)
+                INTEGER(ans)[i + j * NR] = j + 1;
+        return ans;
+    }
+    case blt("dim"): {
+        if (nargs != 1)
+            return nullptr;
+        return getAttrib(args[0], R_DimNamesSymbol);
+    }
     }
     return nullptr;
 }
@@ -647,6 +792,7 @@ bool supportsFastBuiltinCall(SEXP b) {
     case blt("is.function"):
     case blt("is.na"):
     case blt("is.vector"):
+    case blt("as.logical"):
     case blt("list"):
     case blt("rep.int"):
     case blt("islistfactor"):
@@ -655,6 +801,10 @@ bool supportsFastBuiltinCall(SEXP b) {
     case blt("bitwiseXor"):
     case blt("bitwiseShiftL"):
     case blt("bitwiseShiftR"):
+    case blt("baseenv"):
+    case blt("col"):
+    case blt("row"):
+    case blt("dim"):
         return true;
     default: {}
     }

@@ -22,7 +22,7 @@ class RListIter {
 
     RListIter operator+(unsigned n);
 
-    bool operator!=(RListIter& other) { return pos != other.pos; }
+    bool operator!=(const RListIter& other) { return pos != other.pos; }
 };
 
 class RList {
@@ -31,7 +31,7 @@ class RList {
   public:
     explicit RList(SEXP list);
 
-    RListIter begin() { return RListIter(list); }
+    RListIter begin() const { return RListIter(list); }
 
     SEXP operator[](size_t idx);
 
@@ -40,7 +40,7 @@ class RList {
         return end;
     }
 
-    size_t length() {
+    size_t length() const {
         size_t len = 0;
         for (auto b = begin(); b != end(); ++b)
             ++len;

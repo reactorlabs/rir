@@ -2,7 +2,7 @@
 #include "R/RList.h"
 #include "R/r.h"
 
-#include "interpreter/ArgsLazyData.h"
+#include "interpreter/LazyArglist.h"
 #include "interpreter/LazyEnvironment.h"
 #include "utils/capture_out.h"
 
@@ -77,7 +77,7 @@ void printRBacktrace() {
     while (ctx) {
         std::cerr << "* Context " << ctx;
 
-        if (rir::ArgsLazyDataContent::unpack(ctx->promargs)) {
+        if (rir::LazyArglist::check(ctx->promargs)) {
             std::cerr << ", (lazy promargs)\n";
         } else {
             std::cerr << "\n  ARGS: ";

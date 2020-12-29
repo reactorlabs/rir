@@ -47,6 +47,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                 ClosureVersion* inlinee = nullptr;
                 Value* staticEnv = nullptr;
 
+                bool hasDotslistArg = false;
                 const FrameState* callerFrameState = nullptr;
                 if (auto call = Call::Cast(*it)) {
                     auto mkcls =
@@ -108,8 +109,11 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                             continue;
                         }
                     }
-                    call->eachCallArg(
-                        [&](Value* v) { assert(!ExpandDots::Cast(v)); });
+                    call->eachCallArg([&](Value* v) {
+                        assert(!ExpandDots::Cast(v));
+                        if (DotsList::Cast(v))
+                            hasDotslistArg = true;
+                    });
                     callerFrameState = call->frameState();
                 } else {
                     continue;
@@ -189,10 +193,12 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                         // distinctions
                         static auto profitable =
                             std::unordered_set<std::string>(
-                                {"matrix", "array", "vector"});
+                                {"matrix", "array", "vector", "cat"});
                         if (profitable.count(inlineeCls->name()))
-                            weight *= 0.2;
+                            weight *= 0.4;
                     }
+                    if (hasDotslistArg)
+                        weight *= 0.4;
                 }
 
                 // No recursive inlining
@@ -404,7 +410,8 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
                         assert(op);
                         auto ast = new LdConst(rir::Pool::get(theCall->srcIdx));
-                        auto ctx = new PushContext(ast, op, theCall->env());
+                        auto ctx = new PushContext(ast, op, theCallInstruction,
+                                                   theCall->env());
                         copy->insert(copy->begin() + insertPos, ctx);
                         copy->insert(copy->begin() + insertPos, ast);
                         auto popc = new PopContext(inlineeRes, ctx);

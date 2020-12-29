@@ -1,6 +1,5 @@
 #include "safe_force.h"
 #include "R/RList.h"
-#include "R/Sexp.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 

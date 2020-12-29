@@ -99,16 +99,10 @@ class LoopDetection {
         iterator end() { return body_.end(); }
         const_iterator begin() const { return body_.begin(); }
         const_iterator end() const { return body_.end(); }
-        void print(std::ostream& out, bool tty) {
-            out << "==========\nLoop Start:\n";
-            for (auto bb : body_) {
-                bb->print(out, tty);
-            }
-            out << "==========\nLoop End";
-        }
+        void print(std::ostream& out, bool tty);
     };
 
-    LoopDetection(Code* code, bool determineNesting = false);
+    explicit LoopDetection(Code* code, bool determineNesting = false);
 
     LoopDetection(const LoopDetection&) = delete;
     LoopDetection& operator=(const LoopDetection&) = delete;

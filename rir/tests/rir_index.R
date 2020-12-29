@@ -47,6 +47,12 @@ f2 <- rir.compile(function(a, b) {
 })
 f2(o, 1)
 
+o <- 1
+class(o) <- "foo"
+f2 <- rir.compile(function(a) {
+    a[[stop("should not be evaled")]];
+})
+f2(o)
 
 o <- 123
 class(o) <- "Bar"

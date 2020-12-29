@@ -98,8 +98,7 @@ struct ObservedTest {
                 seen = Both;
             return;
         }
-        if (seen != Both)
-            seen = Both;
+        seen = Both;
     }
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
@@ -172,34 +171,6 @@ struct ObservedValues {
 };
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
-
-#define TYPE_CHECKS(V)                                                         \
-    V(LogicalNonObject)                                                        \
-    V(LogicalNonObjectWrapped)                                                 \
-    V(LogicalSimpleScalar)                                                     \
-    V(LogicalSimpleScalarWrapped)                                              \
-    V(IntegerNonObject)                                                        \
-    V(IntegerNonObjectWrapped)                                                 \
-    V(IntegerSimpleScalar)                                                     \
-    V(IntegerSimpleScalarWrapped)                                              \
-    V(RealNonObject)                                                           \
-    V(RealNonObjectWrapped)                                                    \
-    V(RealSimpleScalar)                                                        \
-    V(RealSimpleScalarWrapped)                                                 \
-    V(NotObject)                                                               \
-    V(NotObjectWrapped)                                                        \
-    V(NoAttribsExceptDim)                                                      \
-    V(NoAttribsExceptDimWrapped)
-
-
-enum class TypeChecks : uint32_t {
-    // Must be bigger than smallest sexptype
-    _START_ = 3326,
-#define V(TypeCheck) TypeCheck,
-    TYPE_CHECKS(V)
-#undef V
-        _END_
-};
 
 enum class Opcode : uint8_t;
 

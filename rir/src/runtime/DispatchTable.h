@@ -40,6 +40,14 @@ struct DispatchTable
     }
 
     Function* dispatch(Context a) const {
+        if (!a.smaller(userDefinedContext_)) {
+#ifdef DEBUG_DISPATCH
+            std::cout << "DISPATCH trying: " << a
+                      << " vs annotation: " << userDefinedContext_ << "\n";
+#endif
+            Rf_error("Provided context does not satisfy user defined context");
+        }
+
         for (size_t i = 1; i < size(); ++i) {
 #ifdef DEBUG_DISPATCH
             std::cout << "DISPATCH trying: " << a << " vs " << get(i)->context()
@@ -62,7 +70,7 @@ struct DispatchTable
         setEntry(0, f->container());
     }
 
-    bool contains(const Context& assumptions) {
+    bool contains(const Context& assumptions) const {
         for (size_t i = 0; i < size(); ++i)
             if (get(i)->context() == assumptions)
                 return true;
@@ -153,9 +161,9 @@ struct DispatchTable
     }
 
     static DispatchTable* create(size_t capacity = 20) {
-        size_t size =
+        size_t sz =
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
-        SEXP s = Rf_allocVector(EXTERNALSXP, size);
+        SEXP s = Rf_allocVector(EXTERNALSXP, sz);
         return new (INTEGER(s)) DispatchTable(capacity);
     }
 
@@ -176,10 +184,37 @@ struct DispatchTable
 
     void serialize(SEXP refTable, R_outpstream_t out) const {
         HashAdd(container(), refTable);
-        OutInteger(out, size());
-        for (size_t i = 0; i < size(); i++) {
-            get(i)->serialize(refTable, out);
+        size_t n = 0;
+        for (size_t i = 0; i < size(); i++)
+            if (!get(i)->body()->nativeCode)
+                n++;
+        OutInteger(out, n);
+        for (size_t i = 0; i < size(); i++)
+            if (!get(i)->body()->nativeCode)
+                get(i)->serialize(refTable, out);
+    }
+
+    Context userDefinedContext() const { return userDefinedContext_; }
+    DispatchTable* newWithUserContext(Context udc) {
+
+        auto clone = create(this->capacity());
+        clone->setEntry(0, this->getEntry(0));
+
+        auto j = 1;
+        for (size_t i = 1; i < size(); i++) {
+            if (get(i)->context().smaller(udc)) {
+                clone->setEntry(j, getEntry(i));
+                j++;
+            }
         }
+
+        clone->size_ = j;
+        clone->userDefinedContext_ = udc;
+        return clone;
+    }
+
+    Context combineContextWith(Context anotherContext) {
+        return userDefinedContext_ | anotherContext;
     }
 
   private:
@@ -192,6 +227,7 @@ struct DispatchTable
               cap) {}
 
     size_t size_ = 0;
+    Context userDefinedContext_;
 };
 #pragma pack(pop)
 } // namespace rir

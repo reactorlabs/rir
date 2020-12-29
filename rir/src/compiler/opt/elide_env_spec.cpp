@@ -25,7 +25,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
         if (i->envOnlyForObj())
             return true;
         if (auto blt = CallBuiltin::Cast(i))
-            if (SafeBuiltinsList::nonObject(blt->blt))
+            if (SafeBuiltinsList::nonObject(blt->builtinSexp))
                 return true;
         return false;
     };
@@ -98,8 +98,8 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                             std::vector<Value*> args;
                             blt->eachCallArg(
                                 [&](Value* v) { args.push_back(v); });
-                            auto safe = new CallSafeBuiltin(blt->blt, args,
-                                                            blt->srcIdx);
+                            auto safe = new CallSafeBuiltin(blt->builtinSexp,
+                                                            args, blt->srcIdx);
                             blt->replaceUsesWith(safe);
                             bb->replace(ip, safe);
                         } else {
@@ -158,7 +158,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (std::find(allowed.begin(), allowed.end(), i->tag) ==
                             allowed.end() ||
                         !i->hasEnv() || i->env() != m ||
-                        (bt && !supportsFastBuiltinCall(bt->blt))) {
+                        (bt && !supportsFastBuiltinCall(bt->builtinSexp))) {
                         bool ok = false;
                         if (auto mkarg = MkArg::Cast(i)) {
                             ok = Visitor::check(

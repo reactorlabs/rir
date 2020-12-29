@@ -111,25 +111,25 @@ class BB {
         setFalseBranch(falseBranch);
     }
 
-    BB* trueBranch() {
+    BB* trueBranch() const {
         assert(next0 && next1);
         return next0;
     }
-    BB* falseBranch() {
+    BB* falseBranch() const {
         assert(next0 && next1);
         return next1;
     }
-    BB* getBranch(bool condition) {
+    BB* getBranch(bool condition) const {
         if (condition)
             return trueBranch();
         return falseBranch();
     }
 
-    BB* mainBranch() {
+    BB* mainBranch() const {
         SLOWASSERT(isCheckpoint());
         return trueBranch();
     }
-    BB* deoptBranch() {
+    BB* deoptBranch() const {
         SLOWASSERT(isCheckpoint());
         return falseBranch();
     }

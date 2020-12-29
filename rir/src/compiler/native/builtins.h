@@ -59,10 +59,13 @@ struct NativeBuiltins {
     static NativeBuiltin createMissingBindingCell;
 
     static NativeBuiltin ldvar;
+    static NativeBuiltin ldvarGlobal;
     static NativeBuiltin ldvarForUpdate;
     static NativeBuiltin ldvarCacheMiss;
     static NativeBuiltin stvar;
+    static NativeBuiltin stvarSuper;
     static NativeBuiltin stvari;
+    static NativeBuiltin stvarr;
     static NativeBuiltin defvar;
     static NativeBuiltin starg;
     static NativeBuiltin ldfun;
@@ -88,10 +91,8 @@ struct NativeBuiltins {
 
     static NativeBuiltin newInt;
     static NativeBuiltin newIntDebug;
-    static NativeBuiltin newLgl;
     static NativeBuiltin newReal;
     static NativeBuiltin newIntFromReal;
-    static NativeBuiltin newLglFromReal;
     static NativeBuiltin newRealFromInt;
 
     static NativeBuiltin makeVector;
@@ -174,6 +175,12 @@ struct NativeBuiltins {
     static NativeBuiltin nonLocalReturn;
 
     static NativeBuiltin clsEq;
+
+    static NativeBuiltin checkType;
+
+    static NativeBuiltin shallowDuplicate;
+
+    static constexpr unsigned long bindingsCacheFails = 2;
 };
 
 }

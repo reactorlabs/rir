@@ -156,22 +156,30 @@ struct PirType {
     constexpr PirType() : flags_(topRTypeFlags()), t_(RTypeSet()) {}
 
     // cppcheck-suppress noExplicitConstructor
-    constexpr PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    constexpr PirType(const RType& t)
+        : flags_(defaultRTypeFlags()), t_(RTypeSet(t)) {}
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
     constexpr PirType(const RTypeSet& t, const FlagSet& f) : flags_(f), t_(t) {}
 
     // cppcheck-suppress noExplicitConstructor
-    constexpr PirType(const NativeType& t) : t_(t) {}
+    constexpr PirType(const NativeType& t) : t_(NativeTypeSet(t)) {}
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const NativeTypeSet& t) : t_(t) {}
 
     explicit PirType(SEXP);
     constexpr PirType(const PirType& other)
         : flags_(other.flags_), t_(other.t_) {}
-    explicit PirType(const void* pos);
 
-    constexpr PirType& operator=(const PirType& o) {
+    explicit PirType(uint64_t);
+    uint64_t serialize() {
+        uint64_t i;
+        static_assert(sizeof(*this) <= sizeof(uint64_t), "PirType is too big");
+        memcpy(&i, this, sizeof(*this));
+        return i;
+    }
+
+    PirType& operator=(const PirType& o) {
         flags_ = o.flags_;
         if (isRType())
             t_.r = o.t_.r;
@@ -210,6 +218,9 @@ struct PirType {
     void merge(const ObservedValues& other);
     void merge(SEXPTYPE t);
 
+    static constexpr PirType intRealLgl() {
+        return PirType(RType::integer) | RType::real | RType::logical;
+    }
     static constexpr PirType intReal() {
         return PirType(RType::integer) | RType::real;
     }
@@ -306,7 +317,8 @@ struct PirType {
         return isRType() && t_.r == o;
     }
     RIR_INLINE constexpr bool maybe(PirType type) const {
-        return (*this & type).isA(type);
+        auto inter = (*this & type);
+        return !inter.isVoid();
     }
     RIR_INLINE constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
@@ -530,11 +542,8 @@ struct PirType {
         t_.r = RTypeSet(rtype);
     }
 
-    bool isVoid() const {
-        if (isRType())
-            return t_.r.empty();
-        else
-            return t_.n.empty();
+    constexpr bool isVoid() const {
+        return isRType() ? t_.r.empty() : t_.n.empty();
     }
 
     static const PirType voyd() { return PirType(NativeTypeSet()); }

@@ -102,7 +102,7 @@ PassScheduler::PassScheduler() {
     add<CleanupFramestate>();
     add<CleanupCheckpoints>();
 
-    nextPhase("Final", 100);
+    nextPhase("Final", 120);
     // ==== Phase 4) Final round of default opts
     addDefaultOpt();
     add<ElideEnvSpec>();
@@ -110,6 +110,7 @@ PassScheduler::PassScheduler() {
 
     nextPhase("Final post");
     addDefaultPostPhaseOpt();
+    add<Cleanup>();
     add<CleanupCheckpoints>();
 
     nextPhase("done");

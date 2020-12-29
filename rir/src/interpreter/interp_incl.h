@@ -36,14 +36,16 @@ SEXP rirForcePromise(SEXP);
 
 SEXP argsLazyCreation(void* rirDataWrapper);
 
+struct LazyArglist;
 SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
-                                         const Immediate* names,
+                                         LazyArglist* argsStore,
+                                         const Immediate* names, SEXP ast,
                                          bool eagerCallee,
+                                         bool recreateOriginalPromargs,
                                          InterpreterInstance* ctx);
 
 SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
-                       const Opcode* pc, InterpreterInstance* ctx,
-                       R_bcstack_t* localsBase, SEXP stub);
+                       const Opcode* pc, InterpreterInstance* ctx, SEXP stub);
 
 SEXP rirDecompile(SEXP s);
 
@@ -54,7 +56,10 @@ SEXP copyBySerial(SEXP x);
 
 SEXP materialize(SEXP rirDataWrapper);
 
-SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc = nullptr);
+SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc);
+inline SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx) {
+    return evaluatePromise(e, ctx, nullptr);
+}
 inline SEXP evaluatePromise(SEXP e) {
     return evaluatePromise(e, globalContext());
 }

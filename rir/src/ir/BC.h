@@ -25,11 +25,6 @@ BC_NOARGS(V, _)
 BC BC::recordCall() { return BC(Opcode::record_call_); }
 BC BC::recordType() { return BC(Opcode::record_type_); }
 BC BC::recordTest() { return BC(Opcode::record_test_); }
-BC BC::recordDeopt(const DeoptReason& reason) {
-    ImmediateArguments i;
-    i.deoptReason = reason;
-    return BC(Opcode::record_deopt_, i);
-}
 
 BC BC::popn(unsigned n) {
     ImmediateArguments i;
@@ -70,21 +65,6 @@ BC BC::ldddvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
 }
-BC BC::stargStubbed(unsigned pos) {
-    ImmediateArguments i;
-    i.i = pos;
-    return BC(Opcode::starg_stubbed_, i);
-}
-BC BC::stvarStubbed(unsigned pos) {
-    ImmediateArguments i;
-    i.i = pos;
-    return BC(Opcode::stvar_stubbed_, i);
-}
-BC BC::ldvarNoForceStubbed(unsigned pos) {
-    ImmediateArguments i;
-    i.i = pos;
-    return BC(Opcode::ldvar_noforce_stubbed_, i);
-}
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -115,55 +95,12 @@ BC BC::ldvarForUpdate(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_for_update_, i);
 }
-BC BC::ldvarNoForce(SEXP sym) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateArguments i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::ldvar_noforce_, i);
-}
-BC BC::ldvarNoForceCached(SEXP sym, uint32_t cacheSlot) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateArguments i;
-    i.poolAndCache.poolIndex = Pool::insert(sym);
-    i.poolAndCache.cacheIndex = cacheSlot;
-    return BC(Opcode::ldvar_noforce_cached_, i);
-}
 BC BC::ldvarSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_super_, i);
-}
-BC BC::ldvarNoForceSuper(SEXP sym) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateArguments i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::ldvar_noforce_super_, i);
-}
-BC BC::ldarg(uint32_t offset) {
-    ImmediateArguments i;
-    i.arg_idx = offset;
-    return BC(Opcode::ldarg_, i);
-}
-BC BC::ldloc(uint32_t offset) {
-    ImmediateArguments im;
-    im.loc = offset;
-    return BC(Opcode::ldloc_, im);
-}
-BC BC::stloc(uint32_t offset) {
-    ImmediateArguments im;
-    im.loc = offset;
-    return BC(Opcode::stloc_, im);
-}
-BC BC::copyloc(uint32_t target, uint32_t source) {
-    ImmediateArguments im;
-    im.loc_cpy.target = target;
-    im.loc_cpy.source = source;
-    return BC(Opcode::movloc_, im);
 }
 BC BC::guardName(SEXP sym, SEXP expected) {
     ImmediateArguments i;
@@ -243,16 +180,6 @@ BC BC::br(Jmp j) {
     i.offset = j;
     return BC(Opcode::br_, i);
 }
-BC BC::pushContext(Jmp j) {
-    ImmediateArguments i;
-    i.offset = j;
-    return BC(Opcode::push_context_, i);
-}
-BC BC::popContext(Jmp stackOffset) {
-    ImmediateArguments i;
-    i.offset = stackOffset;
-    return BC(Opcode::pop_context_, i);
-}
 BC BC::beginloop(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
@@ -284,13 +211,7 @@ BC BC::is(uint32_t i) {
     im.i = i;
     return BC(Opcode::is_, im);
 }
-BC BC::isType(TypeChecks i) {
-    assert(static_cast<uint32_t>(i) > MAX_NUM_SEXPTYPE &&
-           "Invalid type in istype_");
-    ImmediateArguments im;
-    im.i = static_cast<uint32_t>(i);
-    return BC(Opcode::istype_, im);
-}
+BC BC::isNonObj() { return BC(Opcode::isnonobj_); }
 BC BC::put(uint32_t i) {
     ImmediateArguments im;
     im.i = i;
@@ -329,20 +250,6 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
     cur.callExtra().callArgumentNames = nameIdxs;
     return cur;
 }
-BC BC::staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
-                  SEXP targetVersion, const Context& given) {
-    assert(!targetVersion || Function::unpack(targetVersion));
-    assert(TYPEOF(targetClosure) == CLOSXP);
-    auto target =
-        targetVersion ? Pool::insert(targetVersion) : Pool::makeSpace();
-    ImmediateArguments im;
-    im.staticCallFixedArgs.nargs = nargs;
-    im.staticCallFixedArgs.ast = Pool::insert(ast);
-    im.staticCallFixedArgs.targetClosure = Pool::insert(targetClosure);
-    im.staticCallFixedArgs.versionHint = target;
-    im.staticCallFixedArgs.given = given;
-    return BC(Opcode::static_call_, im);
-}
 BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     assert(TYPEOF(builtin) == BUILTINSXP);
     ImmediateArguments im;
@@ -352,61 +259,11 @@ BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     return BC(Opcode::call_builtin_, im);
 }
 
-BC BC::mkDotlist(const std::vector<SEXP>& names) {
-    ImmediateArguments im;
-    im.mkDotlistFixedArgs.nargs = names.size();
-    std::vector<PoolIdx> nameIdxs;
-    for (auto n : names)
-        nameIdxs.push_back(Pool::insert(n));
-    BC cur;
-    cur = BC(Opcode::mk_dotlist_, im);
-    cur.mkEnvExtra().names = nameIdxs;
-    return cur;
-}
-
-BC BC::mkEnv(const std::vector<SEXP>& names, const std::vector<bool>& missing,
-             SignedImmediate contextPos, bool stub) {
-    ImmediateArguments im;
-    im.mkEnvFixedArgs.nargs = names.size();
-    im.mkEnvFixedArgs.context = contextPos;
-    std::vector<PoolIdx> nameIdxs;
-    size_t pos = 0;
-    for (auto n : names) {
-        // bindings which need the missing flag set are indicated by wrapping
-        // the name in a cons cell.
-        if (missing[pos])
-            n = CONS_NR(n, R_NilValue);
-        auto p = Pool::insert(n);
-        nameIdxs.push_back(p);
-        pos++;
-    }
-    BC cur;
-    if (stub)
-        cur = BC(Opcode::mk_stub_env_, im);
-    else
-        cur = BC(Opcode::mk_env_, im);
-    cur.mkEnvExtra().names = nameIdxs;
-    return cur;
-}
-
 BC BC::clearBindingCache(CacheIdx start, unsigned size) {
     ImmediateArguments im;
     im.cacheIdx.start = start;
     im.cacheIdx.size = size;
     return BC(Opcode::clear_binding_cache_, im);
-}
-
-BC BC::deopt(SEXP deoptMetadata) {
-    ImmediateArguments i;
-    i.pool = Pool::insert(deoptMetadata);
-    return BC(Opcode::deopt_, i);
-}
-
-BC BC::assertType(pir::PirType typ, SignedImmediate instr) {
-    ImmediateArguments i;
-    i.assertTypeArgs.setPirType(typ);
-    i.assertTypeArgs.instr = instr;
-    return BC(Opcode::assert_type_, i);
 }
 
 } // namespace rir

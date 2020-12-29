@@ -19,11 +19,13 @@ using namespace rir::pir;
 // Checks (using the local state of the caller) if forcing a promise can have
 // reflective effects
 static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
-                         ScopeAnalysis& analysis, ScopeAnalysisState& state) {
+                         const ScopeAnalysis& analysis,
+                         const ScopeAnalysisState& state) {
     // Note that the entry block is empty and jumps to the next block; this is
     // to ensure that it has no predecessors.
     auto entry = code->entry;
-    assert(entry->isEmpty() && entry->isJmp() && !entry->next()->isEmpty());
+    assert(entry->isEmpty() && entry->isJmp() &&
+           !((const BB*)entry)->next()->isEmpty());
     auto funEnv = LdFunctionEnv::Cast(*entry->next()->begin());
 
     return Visitor::check(code->entry, [&](Instruction* i) {
@@ -379,10 +381,12 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (bb->isDeopt()) {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {
+                            std::unordered_set<Tag> allowed(
+                                {Tag::FrameState, Tag::StVar, Tag::IsEnvStub});
+                            if (!mk->stub)
+                                allowed.insert(Tag::LdVar);
                             if (mk->context == 1 && mk->bb() != bb &&
-                                mk->usesAreOnly(code->entry,
-                                                {Tag::FrameState, Tag::StVar,
-                                                 Tag::IsEnvStub})) {
+                                mk->usesAreOnly(code->entry, allowed)) {
                                 analysis.tryMaterializeEnv(
                                     before, mk,
                                     [&](const std::unordered_map<
@@ -670,8 +674,8 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     args.push_back(v);
                             }
                         });
-                        auto safe =
-                            new CallSafeBuiltin(b->blt, args, b->srcIdx);
+                        auto safe = new CallSafeBuiltin(b->builtinSexp, args,
+                                                        b->srcIdx);
                         assert(!b->type.maybePromiseWrapped() ||
                                safe->type.maybePromiseWrapped());
                         b->replaceUsesWith(safe);

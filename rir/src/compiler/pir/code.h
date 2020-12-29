@@ -3,7 +3,12 @@
 
 #include "pir.h"
 
+#include <cstddef>
+#include <iostream>
+
 namespace rir {
+struct Code;
+
 namespace pir {
 
 /*
@@ -25,6 +30,8 @@ class Code {
     virtual ~Code();
 
     virtual size_t size() const;
+
+    virtual rir::Code* rirSrc() const = 0;
 };
 
 }

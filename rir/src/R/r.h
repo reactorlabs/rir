@@ -18,6 +18,17 @@
 #undef eval
 #undef cons
 
+#undef PREXPR
+inline SEXP PREXPR(SEXP pr) {
+    // bypassing PREXPR from Gnur, which causes code objects to be converted to
+    // AST
+    SLOWASSERT(TYPEOF(pr) == PROMSXP);
+    auto res = pr->u.promsxp.expr;
+    if (TYPEOF(res) == BCODESXP)
+        return R_PromiseExpr(pr);
+    return res;
+}
+
 extern "C" {
 extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;
@@ -80,5 +91,17 @@ typedef struct {
 LibExtern AccuracyInfo R_AccuracyInfo;
 
 extern int R_PPStackTop;
+
+#define CLEAR_ATTRIB(x)                                                        \
+    do {                                                                       \
+        SEXP __x__ = (x);                                                      \
+        if (ATTRIB(__x__) != R_NilValue) {                                     \
+            SET_ATTRIB(__x__, R_NilValue);                                     \
+            if (OBJECT(__x__))                                                 \
+                SET_OBJECT(__x__, 0);                                          \
+            if (IS_S4_OBJECT(__x__))                                           \
+                UNSET_S4_OBJECT(__x__);                                        \
+        }                                                                      \
+    } while (0)
 
 #endif

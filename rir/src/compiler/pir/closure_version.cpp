@@ -163,5 +163,9 @@ std::ostream& operator<<(std::ostream& out,
     return out;
 }
 
+rir::Code* ClosureVersion::rirSrc() const {
+    return owner()->rirFunction()->body();
+}
+
 } // namespace pir
 } // namespace rir

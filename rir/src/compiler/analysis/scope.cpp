@@ -383,7 +383,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                    "New call instruction not handled?");
             auto safe = false;
             if (auto builtin = CallBuiltin::Cast(i)) {
-                if (SafeBuiltinsList::nonObject(builtin->blt)) {
+                if (SafeBuiltinsList::nonObject(builtin->builtinSexp)) {
                     safe = true;
                     builtin->eachCallArg([&](Value* arg) {
                         lookup(
