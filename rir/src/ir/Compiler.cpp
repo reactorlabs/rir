@@ -1165,7 +1165,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (expr.hasTag()) {
             auto supplied = CHAR(PRINTNAME(expr.tag()));
             auto ns = strlen(supplied);
-            if (ns > strlen("EXPR") || strncmp(supplied, "FORMAL", ns)) {
+            if (ns > strlen("EXPR") || strncmp(supplied, "EXPR", ns)) {
                 ctx.emitError(std::string("supplied argument name '")
                                   .append(supplied)
                                   .append("' does not match 'EXPR'")
