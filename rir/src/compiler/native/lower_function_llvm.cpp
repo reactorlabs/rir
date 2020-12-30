@@ -1989,7 +1989,8 @@ void LowerFunctionLLVM::compile() {
                 auto resStore = topAlloca(resRep);
                 auto rcntxt = topAlloca(t::RCNTXT);
                 contexts[push] = {rcntxt, resStore,
-                                  BasicBlock::Create(C, "", fun)};
+                                  pop ? BasicBlock::Create(C, "", fun)
+                                      : nullptr};
 
                 // Everything which is live at the Push context needs to be
                 // mutable, to be able to restore on restart
@@ -3135,7 +3136,6 @@ void LowerFunctionLLVM::compile() {
                     return res;
                 });
                 builder.CreateUnreachable();
-                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
                 break;
             }
 
@@ -3596,7 +3596,6 @@ void LowerFunctionLLVM::compile() {
                 call(NativeBuiltins::nonLocalReturn,
                      {loadSxp(i->arg(0).val()), loadSxp(i->env())});
                 builder.CreateUnreachable();
-                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
                 break;
             }
 
@@ -5007,7 +5006,6 @@ void LowerFunctionLLVM::compile() {
                 call(NativeBuiltins::error,
                      {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                 builder.CreateUnreachable();
-                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
 
                 builder.SetInsertPoint(contBr);
                 setVal(i, convert(ld, i->type));
@@ -5036,7 +5034,6 @@ void LowerFunctionLLVM::compile() {
                 call(NativeBuiltins::error,
                      {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                 builder.CreateUnreachable();
-                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
 
                 builder.SetInsertPoint(contBr);
 
@@ -5090,7 +5087,6 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Unreachable:
                 builder.CreateUnreachable();
-                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
                 break;
 
             case Tag::Int3:
