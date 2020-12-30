@@ -77,6 +77,10 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                 if (next->hasEnv() && next->env() == envInstr)
                     break;
+                if (auto u = UpdatePromise::Cast(next)) {
+                    if (u->mkarg()->env() == envInstr)
+                        break;
+                }
 
                 if (PushContext::Cast(next))
                     envInstr->context++;
