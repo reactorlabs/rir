@@ -3134,8 +3134,8 @@ void LowerFunctionLLVM::compile() {
                                 convertToPointer(m), paramArgs()});
                     return res;
                 });
-                res->setTailCall(true);
                 builder.CreateUnreachable();
+                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
                 break;
             }
 
@@ -3596,6 +3596,7 @@ void LowerFunctionLLVM::compile() {
                 call(NativeBuiltins::nonLocalReturn,
                      {loadSxp(i->arg(0).val()), loadSxp(i->env())});
                 builder.CreateUnreachable();
+                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
                 break;
             }
 
@@ -5006,6 +5007,7 @@ void LowerFunctionLLVM::compile() {
                 call(NativeBuiltins::error,
                      {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                 builder.CreateUnreachable();
+                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
 
                 builder.SetInsertPoint(contBr);
                 setVal(i, convert(ld, i->type));
@@ -5034,6 +5036,7 @@ void LowerFunctionLLVM::compile() {
                 call(NativeBuiltins::error,
                      {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                 builder.CreateUnreachable();
+                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
 
                 builder.SetInsertPoint(contBr);
 
@@ -5087,6 +5090,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Unreachable:
                 builder.CreateUnreachable();
+                builder.CreateRet(convertToPointer(nullptr, t::SEXP));
                 break;
 
             case Tag::Int3:
