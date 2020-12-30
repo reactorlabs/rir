@@ -15,10 +15,16 @@ static bool taintsEnvironment(Instruction* i) {
         LdFun::Cast(i))
         return false;
 
-    if (auto call = CallBuiltin::Cast(i)) {
-        if (SafeBuiltinsList::nonObject(call->builtinId)) {
+    int builtinId = -1;
+
+    if (auto call = CallBuiltin::Cast(i))
+        builtinId = call->builtinId;
+    if (auto call = CallSafeBuiltin::Cast(i))
+        builtinId = call->builtinId;
+    if (builtinId != -1) {
+        if (SafeBuiltinsList::nonObjectIdempotent(builtinId)) {
             auto taints = false;
-            call->eachCallArg([&](Value* arg) {
+            CallInstruction::CastCall(i)->eachCallArg([&](Value* arg) {
                 if (arg->type.maybeObj())
                     taints = true;
             });

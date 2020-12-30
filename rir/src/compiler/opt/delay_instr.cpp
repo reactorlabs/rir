@@ -1,6 +1,7 @@
 #include "../pir/pir_impl.h"
 #include "../util/visitor.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/util/safe_builtins_list.h"
 #include "pass_definitions.h"
 
 namespace rir {
@@ -11,8 +12,15 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
     bool anyChange = false;
 
     auto isTarget = [](Instruction* j) {
-        if (CallSafeBuiltin::Cast(j))
-            return !j->hasObservableEffects();
+        int builtinId = -1;
+        if (auto call = CallBuiltin::Cast(j))
+            builtinId = call->builtinId;
+        if (auto call = CallSafeBuiltin::Cast(j))
+            builtinId = call->builtinId;
+        if (builtinId != -1) {
+            return SafeBuiltinsList::nonObjectIdempotent(builtinId) &&
+                   !j->hasObservableEffects();
+        }
         return LdFun::Cast(j) || MkArg::Cast(j) || DotsList::Cast(j) ||
                FrameState::Cast(j) || CastType::Cast(j) || MkEnv::Cast(j);
     };

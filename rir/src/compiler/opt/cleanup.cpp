@@ -6,6 +6,7 @@
 #include "pass_definitions.h"
 
 #include "R/r.h"
+#include "compiler/analysis/cfg.h"
 #include "pass_definitions.h"
 
 #include <unordered_map>

@@ -46,7 +46,7 @@ using namespace rir::pir;
  */
 
 struct ForcedBy {
-    rir::SmallMap<Value*, Force*> forcedBy;
+    rir::SmallMap<Value*, Value*> forcedBy;
     rir::SmallSet<Value*> inScope;
     rir::SmallSet<Value*> escaped;
 
@@ -97,7 +97,7 @@ struct ForcedBy {
         return changed;
     }
 
-    bool forcedAt(Value* val, Force* force) {
+    bool forcedAt(Value* val, Value* force) {
         rir::SmallSet<Phi*> seen;
         std::function<bool(Value*, bool)> apply = [&](Value* val, bool phiArg) {
             bool res = false;
@@ -239,7 +239,7 @@ struct ForcedBy {
         return f == getDominatingForce(f);
     }
 
-    Force* getDominatingForce(Force* f) const {
+    Value* getDominatingForce(Force* f) const {
         auto a = f->arg<0>().val()->followCasts();
         auto res = forcedBy.find(a);
         if (res == forcedBy.end())
@@ -325,6 +325,9 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                 }
             }
             apply(i);
+        } else if (auto u = UpdatePromise::Cast(i)) {
+            if (state.forcedAt(u->mkarg(), u))
+                res.update();
         } else if (auto f = Force::Cast(i)) {
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
                 if (arg->type.maybeLazy()) {
@@ -413,9 +416,10 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                            LogStream& log) const {
     SmallSet<Force*> toInline;
     SmallSet<Force*> needsUpdate;
-    SmallMap<Force*, Force*> dominatedBy;
+    SmallMap<Force*, Value*> dominatedBy;
     bool anyChange = false;
 
+    std::unordered_map<MkArg*, CastType*> removedUpdates;
     bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
     {
         ForceDominanceAnalysis analysis(cls, code, log);
@@ -458,9 +462,19 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             dominatedBy[f] = dom;
                     }
                 } else if (auto u = UpdatePromise::Cast(i)) {
-                    if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
-                        if (!analysis.before(i).escaped.count(mkarg))
-                            next = bb->remove(ip);
+                    auto mkarg = u->mkarg();
+                    assert(!mkarg->usedInPromargsList);
+                    if (!analysis.before(i).escaped.count(mkarg)) {
+                        auto newMk = MkArg::Cast(mkarg->clone());
+                        bb->replace(ip, newMk);
+                        auto val = u->arg(1).val();
+                        newMk->eagerArg(val);
+                        auto newC =
+                            new CastType(newMk, CastType::Upcast, RType::prom,
+                                         val->type.orPromiseWrapped());
+                        ip = bb->insert(ip, newC);
+                        removedUpdates[mkarg] = newC;
+                        next = ip + 1;
                     }
                 }
                 ip = next;
@@ -651,8 +665,11 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto dom = dominatedBy.find(f);
                 if (dom != dominatedBy.end()) {
                     assert(f != dom->second);
-                    if (inlinedPromise.count(dom->second)) {
-                        f->replaceUsesWith(inlinedPromise.at(dom->second));
+                    auto otherForce = Force::Cast(dom->second);
+                    if (inlinedPromise.count(otherForce)) {
+                        f->replaceUsesWith(inlinedPromise.at(otherForce));
+                    } else if (auto up = UpdatePromise::Cast(dom->second)) {
+                        f->replaceUsesWith(up->arg(1).val());
                     } else {
                         dom->second->type = dom->second->type & f->type;
                         f->replaceUsesWith(dom->second);
@@ -687,6 +704,22 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     // 4. remove BB's that became dead due to non local return
     BBTransform::removeDeadBlocks(code, dead);
+
+    // If we removed some UpdatePromise instructions it might be neccessary to
+    // patch up some casts that still point to the old MkArg.
+    if (!removedUpdates.empty()) {
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto c = CastType::Cast(i)) {
+                if (c->kind == CastType::Upcast)
+                    if (auto m = MkArg::Cast(c->followCasts())) {
+                        auto r = removedUpdates.find(m);
+                        if (r != removedUpdates.end())
+                            c->replaceDominatedUses(r->second);
+                    }
+            }
+        });
+    }
+
     return anyChange;
 }
 
