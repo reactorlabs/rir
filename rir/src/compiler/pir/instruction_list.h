@@ -53,6 +53,7 @@
     V(ExpandDots)                                                              \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
+    V(CheckTrueFalse)                                                          \
     V(ColonInputEffects)                                                       \
     V(ColonCastLhs)                                                            \
     V(ColonCastRhs)                                                            \

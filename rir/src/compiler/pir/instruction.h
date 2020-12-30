@@ -1302,12 +1302,22 @@ class FLI(AsLogical, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
+class FLI(AsTest, 1, Effects::None()) {
   public:
     Value* val() const { return arg<0>().val(); }
 
     explicit AsTest(Value* in)
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}) {}
+
+    size_t gvnBase() const override { return tagHash(); }
+};
+
+class FLI(CheckTrueFalse, 1, Effects() | Effect::Error | Effect::Warn) {
+  public:
+    Value* val() const { return arg<0>().val(); }
+
+    explicit CheckTrueFalse(Value* in)
+        : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{in}}) {}
 
     Effects inferEffects(const GetType& getType) const override final {
         if (getType(val()).isScalar())
