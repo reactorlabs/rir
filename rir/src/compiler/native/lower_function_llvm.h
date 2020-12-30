@@ -407,7 +407,7 @@ class LowerFunctionLLVM {
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-        BinopKind kind);
+        BinopKind kind, bool testNa = true);
 
     void compile();
 

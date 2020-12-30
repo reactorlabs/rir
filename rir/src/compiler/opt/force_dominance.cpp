@@ -707,7 +707,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     // patch up some casts that still point to the old MkArg.
     if (!removedUpdates.empty()) {
         DominanceGraph dom(code);
-        static size_t pos = 0;
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto c = CastType::Cast(i)) {
                 if (c->kind == CastType::Upcast)
@@ -715,12 +714,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         assert(!m->usedInPromargsList);
                         auto r = removedUpdates.find(m);
                         if (r != removedUpdates.end()) {
-                            pos++;
-                            // if (pos < 45) {
-                            c->replaceDominatedUses(r->second, dom, {}, true);
-                            //}
-                            // if (pos == 44)
-                            //  code->printCode(std::cout, false, false);
+                            c->replaceDominatedUses(r->second, dom);
                         }
                     }
             }

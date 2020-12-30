@@ -277,6 +277,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::asbool_:
+        insert(new CheckTrueFalse(top()));
         push(insert(new AsTest(pop())));
         break;
 

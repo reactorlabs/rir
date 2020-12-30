@@ -125,6 +125,17 @@ static bool isStaticallyFalse(Value* i) {
     return false;
 }
 
+static bool isStaticallyNA(Value* i) {
+    if (auto ld = LdConst::Cast(i)) {
+        if (convertsToLogicalWithoutWarning(ld->c())) {
+            auto a = ld->c();
+            if (Rf_length(a) == 1 && Rf_asLogical(a) == NA_LOGICAL)
+                return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 namespace rir {
 namespace pir {
@@ -296,6 +307,16 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     return false;
                 }
             };
+            if (CheckTrueFalse::Cast(i)) {
+                if (isStaticallyNA(i->arg(0).val())) {
+                    bb->insert(ip + 1, new Unreachable());
+                    ip += 2;
+                    while (ip != bb->end())
+                        ip = bb->remove(ip);
+                    next = bb->end();
+                    bb->deleteSuccessors();
+                }
+            }
             if (LAnd::Cast(i)) {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
@@ -377,16 +398,16 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     anyChange = true;
                 }
             });
-            if (AsTest::Cast(i)) {
-                auto a = i->arg(0).val();
-                if (isStaticallyTrue(a) || isStaticallyFalse(a)) {
-                    i->replaceUsesWith(isStaticallyTrue(a)
+            FOLD_UNARY(AsTest, [&](SEXP arg) {
+                if (convertsToLogicalWithoutWarning(arg)) {
+                    auto res = Rf_asLogical(arg);
+                    i->replaceUsesWith(res != FALSE
                                            ? (Value*)True::instance()
                                            : (Value*)False::instance());
                     next = bb->remove(ip);
                     anyChange = true;
                 }
-            };
+            });
             if (Identical::Cast(i)) {
                 // Those are targeting the checks for default argument
                 // evaluation after inlining
