@@ -643,7 +643,10 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
             returned = unboxRealIntLgl(returned, PirType(RType::real).scalar());
         }
         builder.CreateStore(returned, data.result);
-        builder.CreateBr(data.popContextTarget);
+        if (data.popContextTarget)
+            builder.CreateBr(data.popContextTarget);
+        else
+            builder.CreateUnreachable();
     }
 
     builder.SetInsertPoint(cont);
