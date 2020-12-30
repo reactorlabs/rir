@@ -5,7 +5,6 @@
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 
-
 namespace rir {
 
 #define DISPATCH_TABLE_MAGIC (unsigned)0xd7ab1e00

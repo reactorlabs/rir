@@ -57,6 +57,7 @@
     V(ColonCastLhs)                                                            \
     V(ColonCastRhs)                                                            \
     V(IsEnvStub)                                                               \
+    V(Unreachable)                                                             \
     V(Return)                                                                  \
     V(NonLocalReturn)                                                          \
     V(MkArg)                                                                   \

@@ -1970,11 +1970,23 @@ void LowerFunctionLLVM::compile() {
             }
         });
 
+        std::unordered_map<PushContext*, PopContext*> contextResTy;
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto pop = PopContext::Cast(i)) {
-                auto res = pop->result();
                 auto push = pop->push();
-                auto resStore = topAlloca(Representation::Of(res));
+                contextResTy[push] = pop;
+            }
+        });
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto push = PushContext::Cast(i)) {
+                auto popI = contextResTy.find(push);
+                PopContext* pop = nullptr;
+                if (popI != contextResTy.end())
+                    pop = popI->second;
+                Representation resRep = Representation::Sexp;
+                if (pop)
+                    resRep = Representation::Of(pop->result());
+                auto resStore = topAlloca(resRep);
                 auto rcntxt = topAlloca(t::RCNTXT);
                 contexts[push] = {rcntxt, resStore,
                                   BasicBlock::Create(C, "", fun)};
@@ -1987,10 +1999,12 @@ void LowerFunctionLLVM::compile() {
                             liveness.live(push, j)) {
                             contexts[push].savedSexpPos[j] = numLocals++;
                         }
-                        if (!liveness.live(push, j) && liveness.live(pop, j))
+                        if (!liveness.live(push, j) && pop &&
+                            liveness.live(pop, j))
                             escapesInlineContext.insert(j);
                         if (!variables_.count(j) &&
-                            (liveness.live(push, j) || liveness.live(pop, j)))
+                            (liveness.live(push, j) ||
+                             (pop && liveness.live(pop, j))))
                             createVariable(j, true);
                     }
                 });
@@ -3726,17 +3740,23 @@ void LowerFunctionLLVM::compile() {
                 llvm::Value* res;
                 if (Representation::Of(arg) == Representation::Sexp) {
                     auto argNative = loadSxp(arg);
-                    auto expectedTypeNative = c(is->sexpTag);
-                    auto typeNative = sexptype(argNative);
-                    switch (is->sexpTag) {
-                    case NILSXP:
-                    case LGLSXP:
-                    case REALSXP:
+                    switch (is->typecheck) {
+                    case BC::RirTypecheck::isNILSXP:
+                    case BC::RirTypecheck::isLGLSXP:
+                    case BC::RirTypecheck::isREALSXP:
+                    case BC::RirTypecheck::isSTRSXP:
+                    case BC::RirTypecheck::isINTSXP:
+                    case BC::RirTypecheck::isCPLXSXP:
+                    case BC::RirTypecheck::isRAWSXP:
+                    case BC::RirTypecheck::isEXPRSXP: {
+                        auto typeNative = sexptype(argNative);
+                        auto expectedTypeNative = c((SEXPTYPE)is->typecheck);
                         res = builder.CreateICmpEQ(typeNative,
                                                    expectedTypeNative);
                         break;
-
-                    case VECSXP: {
+                    }
+                    case BC::RirTypecheck::isVECSXP: {
+                        auto typeNative = sexptype(argNative);
                         auto operandLhs =
                             builder.CreateICmpEQ(typeNative, c(VECSXP));
                         auto operandRhs =
@@ -3745,7 +3765,8 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
 
-                    case LISTSXP: {
+                    case BC::RirTypecheck::isLISTSXP: {
+                        auto typeNative = sexptype(argNative);
                         auto operandLhs =
                             builder.CreateICmpEQ(typeNative, c(LISTSXP));
                         auto operandRhs =
@@ -3754,8 +3775,16 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
 
-                    default:
+                    case BC::RirTypecheck::isVector:
+                    case BC::RirTypecheck::isNonObject:
+                        // These are decomposed into smaller operations in
+                        // rir2pir
                         assert(false);
+                        res = builder.getFalse();
+                        break;
+
+                    case BC::RirTypecheck::isFactor:
+                        // TODO
                         res = builder.getFalse();
                         break;
                     }
@@ -3767,11 +3796,14 @@ void LowerFunctionLLVM::compile() {
                            Representation::Of(i) == Representation::Real);
 
                     bool matchInt =
-                        (is->sexpTag == INTSXP) && i->type.isA(RType::integer);
+                        (is->typecheck == BC::RirTypecheck::isINTSXP) &&
+                        i->type.isA(RType::integer);
                     bool matchLgl =
-                        (is->sexpTag == LGLSXP) && i->type.isA(RType::logical);
+                        (is->typecheck == BC::RirTypecheck::isLGLSXP) &&
+                        i->type.isA(RType::logical);
                     bool matchReal =
-                        (is->sexpTag == REALSXP) && i->type.isA(RType::real);
+                        (is->typecheck == BC::RirTypecheck::isREALSXP) &&
+                        i->type.isA(RType::real);
 
                     res = (matchInt || matchLgl || matchReal)
                               ? builder.getTrue()
@@ -5051,6 +5083,10 @@ void LowerFunctionLLVM::compile() {
             case Tag::XLength:
                 setVal(i, call(NativeBuiltins::xlength_,
                                {loadSxp(i->arg(0).val())}));
+                break;
+
+            case Tag::Unreachable:
+                builder.CreateUnreachable();
                 break;
 
             case Tag::Int3:

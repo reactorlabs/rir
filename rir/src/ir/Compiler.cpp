@@ -173,6 +173,16 @@ class CompilerContext {
         code.pop();
         return res;
     }
+
+    void emitError(const char* msg, SEXP ast) {
+        cs() << BC::push(R_TrueValue) << BC::push(Rf_mkString(msg))
+             << BC::callBuiltin(2, ast, getBuiltinFun("stop")) << BC::return_();
+    }
+    void emitWarning(const char* msg, SEXP ast) {
+        cs() << BC::push(R_TrueValue) << BC::push(R_FalseValue)
+             << BC::push(R_FalseValue) << BC::push(Rf_mkString(msg))
+             << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
+    }
 };
 
 struct LoadArgsResult {
@@ -829,7 +839,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (voidContext)
             cs << BC::pop();
         else
-            cs << BC::is(NILSXP);
+            cs << BC::is(BC::RirTypecheck::isNILSXP);
         return true;
     }
 
@@ -839,7 +849,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (voidContext)
             cs << BC::pop();
         else
-            cs << BC::is(VECSXP);
+            cs << BC::is(BC::RirTypecheck::isVECSXP);
         return true;
     }
 
@@ -849,7 +859,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (voidContext)
             cs << BC::pop();
         else
-            cs << BC::is(LISTSXP);
+            cs << BC::is(BC::RirTypecheck::isLISTSXP);
         return true;
     }
 
@@ -875,8 +885,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         BC::Label nonObjBranch = cs.mkLabel();
         BC::Label contBranch = cs.mkLabel();
 
-        cs << BC::dup() << BC::isNonObj() << BC::recordTest()
-           << BC::brfalse(objBranch) << BC::br(nonObjBranch);
+        cs << BC::dup() << BC::is(BC::RirTypecheck::isNonObject)
+           << BC::recordTest() << BC::brfalse(objBranch)
+           << BC::br(nonObjBranch);
 
         cs << objBranch;
 
@@ -1102,6 +1113,182 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                << BC::push(R_NilValue);
             return true;
         }
+    }
+
+    if (fun == symbol::Switch) {
+        /* # A high level overview
+         * # Assume argLen > 1:
+         *   compile arg[0]
+         *   if (arg[0] is not length-1 vector) br vecECont
+         *   error(...)
+         *   # unreachable
+         * vecECont:
+         *   # this check is currently skipped
+         *   if (not isFactor(arg[0])) br facWCont
+         *   warning(...)
+         * facWCont:
+         *   if (isString(arg[0])) br str
+         *   asInteger(arg[0])
+         *   if (value == 1) br label[0]
+         *   ...
+         *   if (value == n) br label[n-1]
+         *   br nil
+         *
+         * str:
+         *   if (value == group[0]) br groupLabels[0]
+         *   ...
+         *   if (value == group[k]) br groupLabels[k]
+         *   br default label[dftLabelIdx] # or nil if no default
+         *
+         * label[i]:
+         *   # if arg[i+1] is missing, we must came from integer case
+         *   # error(...)
+         *   pop # pop evaluated 1st arg
+         *   compile expression[i]
+         *   br cont
+         * ...
+         *
+         * nil:
+         *   # stack is [1stArg]
+         *   push R_NilValue
+         *
+         * cont:
+         *   # stack is [retval]
+         */
+        int argLen = args.length();
+        // argLen error/warning is statically determinable
+        if (argLen == 0) {
+            ctx.emitError("'EXPR' is missing", ast);
+            return true;
+        }
+        auto expr = args.begin();
+        if (expr.hasTag()) {
+            auto supplied = CHAR(PRINTNAME(expr.tag()));
+            auto ns = strlen(supplied);
+            if (ns > strlen("EXPR") || strncmp(supplied, "EXPR", ns)) {
+                ctx.emitError(std::string("supplied argument name '")
+                                  .append(supplied)
+                                  .append("' does not match 'EXPR'")
+                                  .c_str(),
+                              ast);
+                return true;
+            }
+        }
+        // when 1st arg is string, switch behaves like C/C++ switch/case.
+        // Cases like `x=, y=, z=20` are grouped together.
+        // groups[-1] is not used, for impl convenience
+        std::vector<std::vector<SEXP>> groups = {{}};
+        std::vector<BC::Label> groupLabels; // eval/return for each group
+        std::vector<SEXP> expressions;      // return value ast for each group
+        std::vector<BC::Label> labels;      // eval/return for each arg
+        std::vector<bool> argMissing(argLen-1, true);
+        int dftLabelIdx = -1; // index into `labels` for default return arg
+        bool dupDflt = false;
+        BC::Label vecArityBr = cs.mkLabel();
+        BC::Label vecErrorBr = cs.mkLabel();
+        BC::Label vecEContBr = cs.mkLabel();
+        BC::Label facWContBr = cs.mkLabel();
+        BC::Label strBr  = cs.mkLabel();
+        BC::Label nilBr  = cs.mkLabel();
+        BC::Label contBr = cs.mkLabel();
+
+        // find default and group args
+        int argIdx = 0;
+        for (auto arg = args.begin() + 1; arg != args.end(); ++arg, ++argIdx) {
+            auto label = cs.mkLabel();
+            labels.push_back(label);
+            if (!arg.hasTag()) {
+                dupDflt |= (dftLabelIdx != -1);
+                dftLabelIdx = argIdx;
+            } else {
+                groups.back().push_back(arg.tag());
+            }
+            if (*arg != R_MissingArg) { // tag must be present if value is not
+                argMissing[argIdx] = false;
+                expressions.push_back(*arg);
+                groupLabels.push_back(label);
+                groups.push_back({}); // start new group
+            }
+        }
+
+        /******************* INSTRUCTIONS START HERE *********************/
+        compileExpr(ctx, args[0]);
+
+        // !isVector(x)
+        cs << BC::dup() << BC::is(BC::RirTypecheck::isVector)
+           << BC::recordTest() << BC::brtrue(vecArityBr);
+        cs << BC::br(vecErrorBr);
+
+        // ... || LENGTH(x) != 1
+        cs << vecArityBr << BC::dup() << BC::xlength_() << BC::push(1)
+           << BC::eq();
+        cs.addSrc(R_NilValue); // to make code verifier happy
+        cs << BC::recordTest() << BC::brtrue(vecEContBr);
+
+        cs << vecErrorBr;
+        ctx.emitError("EXPR must be a length 1 vector", ast);
+
+        // isFactor(x)
+        cs << vecEContBr;
+
+        cs << BC::dup() << BC::is(BC::RirTypecheck::isFactor)
+           << BC::recordTest() << BC::brfalse(facWContBr);
+
+        ctx.emitWarning("EXPR is a \"factor\", treated as integer.\n Consider "
+                        "using 'switch(as.character( * ), ...)' instead.",
+                        ast);
+
+        cs << facWContBr;
+
+        if (argLen == 1) { // inserted here to mimic behavior of builtin impl
+            ctx.emitWarning("'switch' with no alternatives", ast);
+            cs << BC::br(nilBr);
+        }
+        cs << BC::dup() << BC::is(BC::RirTypecheck::isSTRSXP)
+           << BC::recordTest() << BC::brtrue(strBr);
+        // TODO needs Rf_asInteger, builtin as.integer behaves differently
+        // `raw(1)` errors on asInteger, but not on `as.integer`
+        cs << BC::callBuiltin(1, ast, getBuiltinFun("as.integer"));
+
+        // currently stack is [arg[0]] (converted to integer)
+        for (size_t i = 0; i < labels.size(); ++i) {
+            cs << BC::dup() << BC::push(Rf_ScalarInteger(i + 1)) << BC::eq();
+            cs.addSrc(R_NilValue); // call argument for builtin
+            cs << BC::asbool() << BC::recordTest() << BC::brtrue(labels[i]);
+        }
+        cs << BC::br(nilBr) << strBr;
+        if (dupDflt) {
+            ctx.emitError("duplicate 'switch' defaults", ast);
+        } else {
+            for (size_t i = 0; i < expressions.size(); ++i) {
+                for (auto& n : groups[i]) {
+                    cs << BC::dup() << BC::push(n) << BC::eq();
+                    cs.addSrc(R_NilValue); // call argument for builtin
+                    cs << BC::asbool() << BC::recordTest()
+                       << BC::brtrue(groupLabels[i]);
+                }
+            }
+            auto fallbackLabel = (dftLabelIdx == -1) ? nilBr : labels[dftLabelIdx];
+            cs << BC::br(fallbackLabel);
+        }
+
+        for (size_t i=0, j=0; i < labels.size(); ++i) {
+            cs << labels[i];
+            if (argMissing[i]) {
+                ctx.emitError("empty alternative in numeric switch", ast);
+                continue;
+            } else {
+                cs << BC::pop();
+                compileExpr(ctx, expressions[j++]);
+                cs << BC::br(contBr);
+            }
+        }
+
+        cs << nilBr << BC::pop() << BC::push(R_NilValue);
+        cs << contBr;
+        if (voidContext)
+            cs << BC::pop();
+        return true;
     }
 
     if (fun == symbol::Internal) {

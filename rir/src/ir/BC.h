@@ -205,13 +205,11 @@ BC BC::pick(uint32_t i) {
     im.i = i;
     return BC(Opcode::pick_, im);
 }
-BC BC::is(uint32_t i) {
-    assert(i < MAX_NUM_SEXPTYPE && "Invalid SEXPTYPE in is_");
+BC BC::is(RirTypecheck i) {
     ImmediateArguments im;
-    im.i = i;
+    im.typecheck = i;
     return BC(Opcode::is_, im);
 }
-BC BC::isNonObj() { return BC(Opcode::isnonobj_); }
 BC BC::put(uint32_t i) {
     ImmediateArguments im;
     im.i = i;

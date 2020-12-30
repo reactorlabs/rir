@@ -111,7 +111,7 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice,
         if (!bb->isExit())
             return;
 
-        if (bb->isDeopt())
+        if (bb->isDeopt() || bb->isEndUnreachable())
             return;
 
         // non-local returns become local returs through inlining only if the

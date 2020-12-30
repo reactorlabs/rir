@@ -108,6 +108,8 @@ enum class Effect : uint8_t {
     // Instruction might execute more R code
     ExecuteCode,
 
+    UpdatesMetadata,
+
     // If we speculatively optimize an instruction then we must set this flag
     // to avoid it getting hoisted over its assumption. Take care when removing
     // or masking this flag. Most of the time it is not correct to remove it,
@@ -195,6 +197,7 @@ class Instruction : public Value {
         // Yes visibility is a global effect. We try to preserve it. But geting
         // it wrong is not a strong correctness issue.
         e.reset(Effect::Visibility);
+        e.reset(Effect::UpdatesMetadata);
         return e;
     }
 
@@ -835,7 +838,7 @@ struct RirStack {
     Stack::iterator end() { return stack.end(); }
 };
 
-class FLI(RecordDeoptReason, 1, Effects::Any()) {
+class FLI(RecordDeoptReason, 1, Effect(Effect::UpdatesMetadata)) {
   public:
     DeoptReason reason;
     RecordDeoptReason(const DeoptReason& r, Value* value)
@@ -847,7 +850,8 @@ class FLI(RecordDeoptReason, 1, Effects::Any()) {
  *  Collects metadata about the current state of variables
  *  eventually needed for deoptimization purposes
  */
-class VLIE(FrameState, Effects(Effect::LeaksEnv) | Effect::ReadsEnv) {
+class VLIE(FrameState,
+           Effects(Effect::LeaksEnv) | Effect::ReadsEnv | Effect::LeakArg) {
   public:
     bool inlined = false;
     Opcode* pc;
@@ -1013,7 +1017,8 @@ class FLI(ChkClosure, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLIE(StVarSuper, 2, Effects() | Effect::ReadsEnv | Effect::WritesEnv) {
+class FLIE(StVarSuper, 2,
+           Effects() | Effect::ReadsEnv | Effect::WritesEnv | Effect::LeakArg) {
   public:
     StVarSuper(SEXP name, Value* val, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
@@ -1048,7 +1053,7 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     int minReferenceCount() const override { return 1; }
 };
 
-class FLIE(StVar, 2, Effect::WritesEnv) {
+class FLIE(StVar, 2, Effects(Effect::WritesEnv) | Effect::LeakArg) {
   public:
     bool isStArg = false;
 
@@ -1108,6 +1113,13 @@ class Return
         : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{ret}}) {}
 };
 
+class Unreachable : public FixedLenInstruction<Tag::Unreachable, Unreachable, 0,
+                                               Effects::NoneI(), HasEnvSlot::No,
+                                               Controlflow::Exit> {
+  public:
+    explicit Unreachable() : FixedLenInstruction(PirType::voyd(), {{}}, {{}}) {}
+};
+
 class Promise;
 class FLIE(MkArg, 2, Effects::None()) {
     Promise* prom_;
@@ -1142,11 +1154,13 @@ class FLIE(MkArg, 2, Effects::None()) {
     bool usesPromEnv() const;
 };
 
-class FLI(UpdatePromise, 2, Effect::MutatesArgument) {
+class FLI(UpdatePromise, 2,
+          Effects(Effect::MutatesArgument) | Effect::LeakArg) {
   public:
     UpdatePromise(MkArg* prom, Value* v)
         : FixedLenInstruction(PirType::voyd(), {{RType::prom, PirType::val()}},
                               {{prom, v}}) {}
+    MkArg* mkarg() const { return MkArg::Cast(arg(0).val()); }
 };
 
 class FLIE(MkCls, 4, Effects::None()) {
@@ -1627,15 +1641,19 @@ class FLI(Inc, 1, Effects::None()) {
 
 class FLI(Is, 1, Effects::None()) {
   public:
-    Is(uint32_t sexpTag, Value* v)
+    Is(BC::RirTypecheck typecheck, Value* v)
         : FixedLenInstruction(PirType::simpleScalarLogical(),
                               {{PirType::val()}}, {{v}}),
-          sexpTag(sexpTag) {}
-    uint32_t sexpTag;
+          typecheck(typecheck) {}
+    BC::RirTypecheck typecheck;
+    PirType upperBound() const;
+    PirType lowerBound() const;
 
     void printArgs(std::ostream& out, bool tty) const override;
 
-    size_t gvnBase() const override { return hash_combine(tagHash(), sexpTag); }
+    size_t gvnBase() const override {
+        return hash_combine(tagHash(), typecheck);
+    }
 };
 
 class FLI(IsType, 1, Effects::None()) {
@@ -2257,7 +2275,7 @@ class BuiltinCallFactory {
                             const std::vector<Value*>& args, unsigned srcIdx);
 };
 
-class VLIE(MkEnv, Effects::None()) {
+class VLIE(MkEnv, Effect::LeakArg) {
   public:
     std::vector<SEXP> varName;
     std::vector<bool> missing;
@@ -2356,7 +2374,8 @@ class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
         : FixedLenInstructionWithEnvSlot(NativeType::test, e) {}
 };
 
-class VLIE(PushContext, Effect::ChangesContexts) {
+class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
+                            Effect::LeaksEnv) {
   public:
     PushContext(Value* ast, Value* op, CallInstruction* call, Value* sysparent)
         : VarLenInstructionWithEnvSlot(NativeType::context, sysparent) {
@@ -2404,7 +2423,7 @@ class FLI(ExpandDots, 1, Effects::None()) {
                               {{dots}}) {}
 };
 
-class VLI(DotsList, Effects::None()) {
+class VLI(DotsList, Effect::LeakArg) {
   public:
     std::vector<SEXP> names;
     DotsList() : VarLenInstruction(RType::dots) {}

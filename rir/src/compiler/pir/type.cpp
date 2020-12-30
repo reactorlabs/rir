@@ -24,7 +24,7 @@ void PirType::merge(SEXPTYPE sexptype) {
         t_.r.set(RType::sym);
         break;
     case LISTSXP:
-        t_.r.set(RType::cons);
+        t_.r.set(RType::list);
         break;
     case CLOSXP:
     // TODO: maybe have different types for those three?

@@ -96,6 +96,10 @@ bool BB::isDeopt() const {
     return !isEmpty() && (Deopt::Cast(last()) || ScheduledDeopt::Cast(last()));
 }
 
+bool BB::isEndUnreachable() const {
+    return !isEmpty() && (Unreachable::Cast(last()));
+}
+
 bool BB::isCheckpoint() const { return isBranch() && Checkpoint::Cast(last()); }
 bool BB::isNonLocalReturn() const {
     return isExit() && NonLocalReturn::Cast(last());

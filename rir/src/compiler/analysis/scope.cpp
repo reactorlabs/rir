@@ -224,6 +224,10 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         if (!res.result.isUnknown()) {
             handled = true;
         }
+    } else if (auto up = UpdatePromise::Cast(i)) {
+        effect.max(state.updatedProms[up->mkarg()].merge(
+            AbstractPirValue(up->arg(1).val(), up, depth)));
+        handled = true;
     } else if (Force::Cast(i)) {
         // First try to figure out what we force. If it's a non lazy thing, we
         // do not need to bother.
@@ -281,29 +285,37 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                     updateReturnValue(AbstractPirValue::tainted());
                     handled = true;
                 } else {
-                    if (depth < MAX_DEPTH && force->strict) {
-                        if (ld->id < args.size())
-                            arg = args[ld->id];
+                    if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
+                        auto upd = state.updatedProms.find(mkarg);
+                        if (upd == state.updatedProms.end()) {
+                            if (depth < MAX_DEPTH && force->strict) {
+                                if (ld->id < args.size())
+                                    arg = args[ld->id];
 
-                        // We are certain that we do force something here. Let's
-                        // peek through the argument and see if we find a
-                        // promise. If so, we will analyze it.
-                        if (auto mkarg =
-                                MkArg::Cast(arg->followCastsAndForce())) {
-                            auto stateCopy = state;
-                            stateCopy.mayUseReflection = false;
-                            ScopeAnalysis prom(closure, mkarg->prom(),
-                                               mkarg->env(), stateCopy,
-                                               globalState, depth + 1, log);
-                            prom();
+                                // We are certain that we do force something
+                                // here. Let's peek through the argument and see
+                                // if we find a promise. If so, we will analyze
+                                // it.
+                                auto stateCopy = state;
+                                stateCopy.mayUseReflection = false;
+                                ScopeAnalysis prom(closure, mkarg->prom(),
+                                                   mkarg->env(), stateCopy,
+                                                   globalState, depth + 1, log);
+                                prom();
 
-                            auto res = prom.result();
+                                auto res = prom.result();
 
-                            state.mergeCall(code, res);
-                            updateReturnValue(res.returnValue);
+                                state.mergeCall(code, res);
+                                updateReturnValue(res.returnValue);
+                                effect.max(state.updatedProms[mkarg].merge(
+                                    res.returnValue));
+                                handled = true;
+                                effect.update();
+                                effect.keepSnapshot = true;
+                            }
+                        } else if (!upd->second.isUnknown()) {
+                            updateReturnValue(upd->second);
                             handled = true;
-                            effect.update();
-                            effect.keepSnapshot = true;
                         }
                     }
                 }

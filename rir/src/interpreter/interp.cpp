@@ -2966,33 +2966,43 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP val = ostack_pop(ctx);
             Immediate type = readImmediate();
             advanceImmediate();
-            bool res;
-            switch (type) {
-            case NILSXP:
-            case LGLSXP:
-            case REALSXP:
+            bool res = false;
+            switch ((BC::RirTypecheck)type) {
+            case BC::RirTypecheck::isNILSXP:
+            case BC::RirTypecheck::isLGLSXP:
+            case BC::RirTypecheck::isREALSXP:
+            case BC::RirTypecheck::isSTRSXP:
+            case BC::RirTypecheck::isINTSXP:
+            case BC::RirTypecheck::isCPLXSXP:
+            case BC::RirTypecheck::isRAWSXP:
+            case BC::RirTypecheck::isEXPRSXP:
                 res = TYPEOF(val) == type;
                 break;
 
-            case VECSXP:
+            case BC::RirTypecheck::isVECSXP:
                 res = TYPEOF(val) == VECSXP || TYPEOF(val) == LISTSXP;
                 break;
 
-            case LISTSXP:
+            case BC::RirTypecheck::isLISTSXP:
                 res = TYPEOF(val) == LISTSXP || TYPEOF(val) == NILSXP;
                 break;
+            case BC::RirTypecheck::isNonObject:
+                res = !isObject(val);
+                break;
+            case BC::RirTypecheck::isFactor:
+                res = TYPEOF(val) == INTSXP && inherits(val, "factor");
+                break;
+            case BC::RirTypecheck::isVector:
+                res = Rf_isVector(val);
+                break;
+#ifdef ENABLE_SLOWASSERT
             default:
                 assert(false);
                 res = false;
                 break;
+#endif
             }
             ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
-            NEXT();
-        }
-
-        INSTRUCTION(isnonobj_) {
-            SEXP val = ostack_pop(ctx);
-            ostack_push(ctx, isObject(val) ? R_FalseValue : R_TrueValue);
             NEXT();
         }
 

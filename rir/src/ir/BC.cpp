@@ -16,7 +16,6 @@ namespace rir {
 void BC::write(CodeStream& cs) const {
     cs.insert(bc);
     switch (bc) {
-    case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
         BC_NOARGS(V, _)
 #undef V
@@ -128,7 +127,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         unsigned size = BC::fixedSize(*code);
         ImmediateArguments& i = *(ImmediateArguments*)(code + 1);
         switch (*code) {
-        case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
             BC_NOARGS(V, _)
 #undef V
@@ -226,7 +224,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         unsigned size = BC::fixedSize(*code);
         ImmediateArguments i = bc.immediate;
         switch (*code) {
-        case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
             BC_NOARGS(V, _)
 #undef V
@@ -437,7 +434,7 @@ void BC::print(std::ostream& out) const {
         out << immediate.i;
         break;
     case Opcode::is_:
-        out << type2char(immediate.i);
+        out << (BC::RirTypecheck)immediate.i;
         break;
     case Opcode::record_call_: {
         ObservedCallees prof = immediate.callFeedback;
@@ -484,7 +481,6 @@ void BC::print(std::ostream& out) const {
         break;
     }
 
-    case Opcode::isnonobj_:
 #define V(NESTED, name, name_) case Opcode::name_##_:
         BC_NOARGS(V, _)
 #undef V
@@ -506,5 +502,34 @@ void BC::print(std::ostream& out) const {
     }
     out << "\n";
 }
+
+std::ostream& operator<<(std::ostream& out, BC::RirTypecheck t) {
+    switch (t) {
+    case BC::RirTypecheck::isFactor:
+        out << "Factor";
+        break;
+    case BC::RirTypecheck::isNonObject:
+        out << "NonObject";
+        break;
+    case BC::RirTypecheck::isVector:
+        out << "NonObject";
+        break;
+    case BC::RirTypecheck::isNILSXP:
+    case BC::RirTypecheck::isLGLSXP:
+    case BC::RirTypecheck::isREALSXP:
+    case BC::RirTypecheck::isSTRSXP:
+    case BC::RirTypecheck::isINTSXP:
+    case BC::RirTypecheck::isCPLXSXP:
+    case BC::RirTypecheck::isRAWSXP:
+    case BC::RirTypecheck::isEXPRSXP:
+    case BC::RirTypecheck::isVECSXP:
+    case BC::RirTypecheck::isLISTSXP:
+        out << type2char((int)t);
+        break;
+    }
+    return out;
+}
+
+constexpr std::array<BC::RirTypecheck, 8> BC::isVectorTypes;
 
 } // namespace rir

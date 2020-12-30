@@ -149,6 +149,7 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
             CASE(ExecuteCode, "X")
             CASE(DependsOnAssume, "d")
             CASE(MutatesArgument, "M")
+            CASE(UpdatesMetadata, "m")
 #undef CASE
         }
     }
@@ -678,7 +679,48 @@ void DotsList::printArgs(std::ostream& out, bool tty) const {
 
 void Is::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
-    out << ", " << Rf_type2char(sexpTag);
+    out << ", " << typecheck;
+}
+
+PirType Is::upperBound() const {
+    switch (typecheck) {
+    case BC::RirTypecheck::isNILSXP:
+        return RType::nil;
+    case BC::RirTypecheck::isLGLSXP:
+        return RType::logical;
+    case BC::RirTypecheck::isINTSXP:
+        return RType::integer;
+    case BC::RirTypecheck::isREALSXP:
+        return RType::real;
+    case BC::RirTypecheck::isCPLXSXP:
+        return RType::cplx;
+    case BC::RirTypecheck::isSTRSXP:
+        return RType::str;
+    case BC::RirTypecheck::isRAWSXP:
+        return RType::raw;
+    case BC::RirTypecheck::isLISTSXP:
+        return PirType(RType::vec) | RType::list;
+    case BC::RirTypecheck::isVECSXP:
+        return PirType(RType::list) | RType::nil;
+    case BC::RirTypecheck::isEXPRSXP:
+        return RType::expressions;
+    case BC::RirTypecheck::isNonObject:
+        return PirType::any().notObject();
+    case BC::RirTypecheck::isVector:
+        return PirType::vecs();
+    // an over-approximation
+    case BC::RirTypecheck::isFactor:
+        return PirType(RType::integer).orObject();
+    }
+    assert(false);
+    return PirType::any();
+}
+
+PirType Is::lowerBound() const {
+    // there is no precise under-approximation
+    if (typecheck == BC::RirTypecheck::isFactor)
+        return PirType::bottom();
+    return upperBound();
 }
 
 void IsType::printArgs(std::ostream& out, bool tty) const {
