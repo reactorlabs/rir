@@ -1,7 +1,6 @@
 #include "env.h"
+#include "R/Printing.h"
 #include "pir_impl.h"
-
-#include "utils/capture_out.h"
 
 #include <cassert>
 
@@ -26,10 +25,7 @@ void Env::printRef(std::ostream& out) const {
     } else if (rho == R_BaseNamespace) {
         out << "BaseNamespace";
     } else {
-        std::string val;
-        CaptureOut rec;
-        Rf_PrintValue(rho);
-        val = rec();
+        auto val = Print::dumpSexp(rho);
         out << val.substr(0, val.length() - 1);
     }
 }

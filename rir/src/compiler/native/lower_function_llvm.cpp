@@ -643,7 +643,10 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
             returned = unboxRealIntLgl(returned, PirType(RType::real).scalar());
         }
         builder.CreateStore(returned, data.result);
-        builder.CreateBr(data.popContextTarget);
+        if (data.popContextTarget)
+            builder.CreateBr(data.popContextTarget);
+        else
+            builder.CreateUnreachable();
     }
 
     builder.SetInsertPoint(cont);
@@ -1989,7 +1992,8 @@ void LowerFunctionLLVM::compile() {
                 auto resStore = topAlloca(resRep);
                 auto rcntxt = topAlloca(t::RCNTXT);
                 contexts[push] = {rcntxt, resStore,
-                                  BasicBlock::Create(C, "", fun)};
+                                  pop ? BasicBlock::Create(C, "", fun)
+                                      : nullptr};
 
                 // Everything which is live at the Push context needs to be
                 // mutable, to be able to restore on restart
@@ -3134,7 +3138,6 @@ void LowerFunctionLLVM::compile() {
                                 convertToPointer(m), paramArgs()});
                     return res;
                 });
-                res->setTailCall(true);
                 builder.CreateUnreachable();
                 break;
             }

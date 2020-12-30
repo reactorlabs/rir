@@ -1126,6 +1126,7 @@ class FLIE(MkArg, 2, Effects::None()) {
 
   public:
     bool noReflection = false;
+    bool usedInPromargsList = false;
 
     MkArg(Promise* prom, Value* v, Value* env);
 
@@ -1147,7 +1148,9 @@ class FLIE(MkArg, 2, Effects::None()) {
 
     Value* promEnv() const { return env(); }
 
-    size_t gvnBase() const override { return hash_combine(tagHash(), prom_); }
+    size_t gvnBase() const override {
+        return hash_combine(hash_combine(tagHash(), prom_), usedInPromargsList);
+    }
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 

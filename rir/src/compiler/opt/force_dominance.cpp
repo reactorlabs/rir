@@ -665,7 +665,10 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 p->eachArg([&](InstrArg& arg) {
                     if (auto a = MkArg::Cast(arg.val())) {
                         if (updated.count(a)) {
-                            auto n = a->clone();
+                            auto n = MkArg::Cast(a->clone());
+                            // This is to prevent GVN from collapsing the two
+                            // promises again
+                            n->usedInPromargsList = true;
                             ip = bb->insert(ip, n) + 1;
                             arg.val() = n;
                             next = ip + 1;
