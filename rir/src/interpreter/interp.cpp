@@ -2,7 +2,6 @@
 #include "LazyArglist.h"
 #include "LazyEnvironment.h"
 #include "R/Funtab.h"
-#include "R/Printing.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "cache.h"

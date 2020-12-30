@@ -5,12 +5,12 @@
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
+#include "R/Printing.h"
 #include "R/Symbols.h"
 #include "api.h"
 #include "compiler/analysis/cfg.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
-#include "utils/capture_out.h"
 
 #include <algorithm>
 #include <cassert>
@@ -526,13 +526,7 @@ void LdConst::printArgs(std::ostream& out, bool tty) const {
         out << "unboundValue";
         return;
     }
-    std::string val;
-    {
-        CaptureOut rec;
-        Rf_PrintValue(Pool::get(idx));
-        val = rec.oneline(40);
-    }
-    out << val;
+    out << Print::dumpSexp(Pool::get(idx), 40);
 }
 
 void Branch::printArgs(std::ostream& out, bool tty) const {

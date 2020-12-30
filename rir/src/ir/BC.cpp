@@ -397,11 +397,11 @@ void BC::print(std::ostream& out) const {
         auto args = immediate.callBuiltinFixedArgs;
         BC::NumArgs nargs = args.nargs;
         auto target = Pool::get(args.builtin);
-        out << nargs << " : " << dumpSexp(target).c_str();
+        out << nargs << " : " << Print::dumpSexp(target).c_str();
         break;
     }
     case Opcode::push_:
-        out << dumpSexp(immediateConst());
+        out << Print::dumpSexp(immediateConst());
         break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:

@@ -207,7 +207,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
 
         unsigned s = getSrcIdxAt(pc, true);
         if (s != 0)
-            out << "   ; " << dumpSexp(src_pool_at(globalContext(), s)) << "\n"
+            out << "   ; " << Print::dumpSexp(src_pool_at(globalContext(), s))
+                << "\n"
                 << std::setw(OFFSET_WIDTH) << "";
 
         // Print call ast
@@ -215,7 +216,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
         case Opcode::call_:
         case Opcode::named_call_:
             out << "   ; "
-                << dumpSexp(Pool::get(bc.immediate.callFixedArgs.ast)) << "\n"
+                << Print::dumpSexp(Pool::get(bc.immediate.callFixedArgs.ast))
+                << "\n"
                 << std::setw(OFFSET_WIDTH) << "";
             break;
         default: {}
