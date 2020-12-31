@@ -653,7 +653,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         auto eager = mk->eagerArg();
                         eager->type = eager->type & cast->type;
                         auto nonReflective = [](Instruction* i) {
-                            return !i->effects.includes(Effect::Reflection);
+                            return !i->effects.includes(Effect::Reflection) &&
+                                   !i->effects.includes(Effect::LeakArg);
                         };
                         cast->replaceUsesIn(eager, bb,
                                             [](Instruction*, size_t) {},
