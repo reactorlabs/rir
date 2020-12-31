@@ -7,7 +7,7 @@ stages:
   - Cleanup
   - Benchmark
 variables:
-  REBENCH_OPTIONS: "-S -df $CI_PROJECT_DIR/benchmarks.data --commit-id=$CI_COMMIT_SHA --branch=master"
+  REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   REBENCH_RUN_BL: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
 
@@ -256,9 +256,9 @@ test_benchmarks:
   needs:
     - benchmark_container
   script:
-    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:RIR e:PIR -r -SN -wu 0 --iterations 2"
-    - PIR_DEOPT_CHAOS=200 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR -r -SN -wu 0 --iterations 2"
-    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -r -SN -wu 0 --iterations 3"
+    - PIR_ENABLE=0 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:RIR-LLVM -R -r --iterations 2"
+    - PIR_DEOPT_CHAOS=200 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
+    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
   retry: 2
 
 deploy:
@@ -311,38 +311,6 @@ benchmark_llvm:
     - benchmarks.data
     expire_in: 24 month
   retry: 2
-
-benchmark_pir:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    - schedules
-  tags:
-    - benchmarks
-  script:
-    - $REBENCH_RUN "e:PIR $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 6 month
-
-benchmark_rir:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  variables:
-    GIT_STRATEGY: none
-  only:
-    - schedules
-  tags:
-    - benchmarks
-  script:
-    - $REBENCH_RUN "e:RIR $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 6 month
 
 benchmark_gnur:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
