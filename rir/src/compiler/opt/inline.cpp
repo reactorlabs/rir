@@ -119,11 +119,6 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                     continue;
                 }
 
-                // TODO: wtf is going on here????
-                if (inlineeCls->name().size() >= 7 &&
-                    inlineeCls->name().substr(0, 7) == "allTrue")
-                    continue;
-
                 if (dontInline(inlineeCls))
                     continue;
 

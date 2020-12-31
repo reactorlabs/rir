@@ -624,12 +624,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         assert(f);
                         f->replaceUsesWith(promRes);
                         split->remove(split->begin());
-
                         next = split->begin();
-                        MkArg* fixedMkArg =
-                            new MkArg(mkarg->prom(), promRes, mkarg->promEnv());
-                        next = split->insert(next, fixedMkArg);
-                        next++;
 
                         if (needsUpdate.count(f)) {
                             next = split->insert(
@@ -637,6 +632,11 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             next++;
                             updated.insert(mkarg);
                         }
+
+                        MkArg* fixedMkArg =
+                            new MkArg(mkarg->prom(), promRes, mkarg->promEnv());
+                        next = split->insert(next, fixedMkArg);
+                        next++;
 
                         forcedMkArg[mkarg] = fixedMkArg;
                         inlinedPromise[f] = {promRes, fixedMkArg};
@@ -738,16 +738,15 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     if (!removedUpdates.empty()) {
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto c = CastType::Cast(i)) {
-                if (c->kind == CastType::Upcast)
-                    if (auto m = MkArg::Cast(c->followCasts())) {
-                        assert(!m->usedInPromargsList);
-                        auto r = removedUpdates.find(m);
-                        if (r != removedUpdates.end()) {
-                            r->second->type = r->second->type & c->type;
-                            assert(!r->second->type.isVoid());
-                            c->replaceDominatedUses(r->second, domGraph);
-                        }
+                if (auto m = MkArg::Cast(c->followCasts())) {
+                    assert(!m->usedInPromargsList);
+                    auto r = removedUpdates.find(m);
+                    if (r != removedUpdates.end()) {
+                        r->second->type = r->second->type & c->type;
+                        assert(!r->second->type.isVoid());
+                        c->replaceDominatedUses(r->second, domGraph);
                     }
+                }
             }
         });
     }

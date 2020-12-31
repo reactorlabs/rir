@@ -8,6 +8,17 @@
 namespace rir {
 namespace pir {
 
+static bool envInterference(Value* e1, Value* e2) {
+    while (e1 && Env::isAnyEnv(e1) && e1 != Env::nil()) {
+        if (e1 == e2) {
+            return true;
+            break;
+        }
+        e1 = Env::parentEnv(e1);
+    }
+    return false;
+}
+
 bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                      LogStream&) const {
     bool anyChange = false;
@@ -40,6 +51,12 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (Branch::Cast(next) || Return::Cast(next) ||
                     Deopt::Cast(next) || Checkpoint::Cast(next))
                     break;
+
+                // Otherwise when we remove an update-promise we will wrongly
+                // update this env
+                if (UpdatePromise::Cast(next)) {
+                    break;
+                }
 
                 auto consumeStVar = [&](StVar* st) {
                     bool exists = false;
@@ -75,10 +92,8 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 }
 
-                if (next->hasEnv() && next->env() == envInstr)
-                    break;
-                if (auto u = UpdatePromise::Cast(next)) {
-                    if (u->mkarg()->env() == envInstr)
+                if (next->hasEnv()) {
+                    if (envInterference(envInstr, next->env()))
                         break;
                 }
 

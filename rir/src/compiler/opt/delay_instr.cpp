@@ -64,7 +64,7 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
                     // We can only move mkArgs that have an updatePromise if we
                     // can prove wether every target deopt unambigously always
                     // requires or not the update promise
-                    bool safeUpdatePromises = true;
+                    bool safeUpdatePromises = false;
                     for (const auto& updatePromise :
                          updatePromises[candidate]) {
                         auto& updateTargets =
