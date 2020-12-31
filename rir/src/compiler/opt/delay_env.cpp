@@ -12,7 +12,6 @@ static bool envInterference(Value* e1, Value* e2) {
     while (e1 && Env::isAnyEnv(e1) && e1 != Env::nil()) {
         if (e1 == e2) {
             return true;
-            break;
         }
         e1 = Env::parentEnv(e1);
     }
