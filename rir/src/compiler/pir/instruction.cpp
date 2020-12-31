@@ -319,19 +319,25 @@ void Instruction::replaceDominatedUses(Instruction* replace,
 void Instruction::replaceDominatedUses(Instruction* replace,
                                        const DominanceGraph& dom,
                                        const std::initializer_list<Tag>& skip) {
+    return replaceDominatedUses(replace, replace, dom, skip);
+}
+
+void Instruction::replaceDominatedUses(Value* replace, Instruction* pos,
+                                       const DominanceGraph& dom,
+                                       const std::initializer_list<Tag>& skip) {
     checkReplace(this, replace);
 
     auto start = false;
 
-    auto stop = replace->bb() != bb() ? bb() : nullptr;
-    Visitor::run(replace->bb(), stop, [&](BB* bb) {
-        if (!dom.dominates(replace->bb(), bb))
+    auto stop = pos->bb() != bb() ? bb() : nullptr;
+    Visitor::run(pos->bb(), stop, [&](BB* bb) {
+        if (!dom.dominates(pos->bb(), bb))
             return;
         for (auto& i : *bb) {
             // First we need to find the position of the replacee, only after
             // this instruction is in scope we should start replacing
             if (!start) {
-                if (i == replace)
+                if (i == pos)
                     start = true;
                 continue;
             }
@@ -363,7 +369,7 @@ void Instruction::replaceDominatedUses(Instruction* replace,
             if (i == this)
                 return;
         }
-        assert(start);
+        assert(start || replace != pos);
     });
 
     // Propagate typefeedback

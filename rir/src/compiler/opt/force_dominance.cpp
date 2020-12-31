@@ -98,6 +98,7 @@ struct ForcedBy {
     }
 
     bool forcedAt(Value* val, Value* force) {
+        assert(Force::Cast(force) || UpdatePromise::Cast(force));
         rir::SmallSet<Phi*> seen;
         std::function<bool(Value*, bool)> apply = [&](Value* val, bool phiArg) {
             bool res = false;
@@ -247,7 +248,9 @@ struct ForcedBy {
         if (res->second == ambiguous()) {
             return nullptr;
         }
-        return res->second;
+        auto force = res->second;
+        assert(Force::Cast(force) || UpdatePromise::Cast(force));
+        return force;
     }
 
     enum PromiseInlineable {
@@ -484,7 +487,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
         });
     }
 
-    std::unordered_map<Force*, Value*> inlinedPromise;
+    std::unordered_map<Force*, std::pair<Value*, Instruction*>> inlinedPromise;
     std::unordered_map<Instruction*, MkArg*> forcedMkArg;
     std::unordered_set<BB*> dead;
     std::unordered_set<MkArg*> updated;
@@ -636,7 +639,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
 
                         forcedMkArg[mkarg] = fixedMkArg;
-                        inlinedPromise[f] = promRes;
+                        inlinedPromise[f] = {promRes, fixedMkArg};
 
                         if (promRet.second->isNonLocalReturn())
                             dead.insert(split);
@@ -672,27 +675,31 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (auto f = Force::Cast(*ip)) {
                 // If this force instruction is dominated by another force
                 // we can replace it with the dominating instruction
+                // Important: only occurences after the forcing (e.g. after
+                // force, after update promise, or after inlining of the
+                // promise) must be updated! This location is indicated by
+                // "pos".
                 auto dom = dominatedBy.find(f);
                 if (dom != dominatedBy.end()) {
                     assert(f != dom->second);
                     auto otherForce = Force::Cast(dom->second);
-                    Value* v;
-                    if (inlinedPromise.count(otherForce)) {
-                        v = otherForce;
+                    Value* v = nullptr;
+                    Instruction* pos;
+                    auto wasInlined = inlinedPromise.find(otherForce);
+                    if (wasInlined != inlinedPromise.end()) {
+                        v = wasInlined->second.first;
+                        pos = wasInlined->second.second;
                     } else if (auto up = UpdatePromise::Cast(dom->second)) {
                         v = up->arg(1).val();
-                    } else {
-                        v = dom->second;
+                        pos = up;
+                    } else if (auto f = Force::Cast(dom->second)) {
+                        v = f;
+                        pos = f;
                     }
+                    assert(v);
                     v->type = f->type & v->type;
                     assert(!v->type.isVoid());
-                    auto vi = Instruction::Cast(v);
-                    if (vi) {
-                        f->replaceDominatedUses(vi, domGraph);
-                    } else {
-                        f->replaceUsesWith(v);
-                        next = bb->remove(ip);
-                    }
+                    f->replaceDominatedUses(v, pos, domGraph);
                     anyChange = true;
                 }
             } else if (auto p = PushContext::Cast(*ip)) {

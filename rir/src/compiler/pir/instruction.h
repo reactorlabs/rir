@@ -280,6 +280,9 @@ class Instruction : public Value {
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
+    void replaceDominatedUses(Value* replacement, Instruction* pos,
+                              const DominanceGraph& dom,
+                              const std::initializer_list<Tag>& skip = {});
     void replaceDominatedUses(Instruction* replacement,
                               const DominanceGraph& dom,
                               const std::initializer_list<Tag>& skip = {});
