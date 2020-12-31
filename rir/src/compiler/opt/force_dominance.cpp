@@ -500,6 +500,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         anyChange = true;
                         Value* eager = mkarg->eagerArg();
                         f->replaceUsesWith(eager);
+                        eager->type = f->type & eager->type;
                         next = bb->remove(ip);
                     } else if (toInline.count(f)) {
                         anyChange = true;
@@ -647,6 +648,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (mk->isEager()) {
                         anyChange = true;
                         auto eager = mk->eagerArg();
+                        eager->type = eager->type & cast->type;
                         auto nonReflective = [](Instruction* i) {
                             return !i->effects.includes(Effect::Reflection);
                         };
@@ -660,6 +662,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
     });
 
+    DominanceGraph domGraph(code);
+
     // 2. replace dominated promises
     Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
@@ -672,15 +676,24 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (dom != dominatedBy.end()) {
                     assert(f != dom->second);
                     auto otherForce = Force::Cast(dom->second);
+                    Value* v;
                     if (inlinedPromise.count(otherForce)) {
-                        f->replaceUsesWith(inlinedPromise.at(otherForce));
+                        v = otherForce;
                     } else if (auto up = UpdatePromise::Cast(dom->second)) {
-                        f->replaceUsesWith(up->arg(1).val());
+                        v = up->arg(1).val();
                     } else {
-                        dom->second->type = dom->second->type & f->type;
-                        f->replaceUsesWith(dom->second);
+                        v = dom->second;
                     }
-                    next = bb->remove(ip);
+                    v->type = f->type & v->type;
+                    assert(!v->type.isVoid());
+                    auto vi = Instruction::Cast(v);
+                    if (vi) {
+                        f->replaceDominatedUses(vi, domGraph);
+                    } else {
+                        f->replaceUsesWith(v);
+                        next = bb->remove(ip);
+                    }
+                    anyChange = true;
                 }
             } else if (auto p = PushContext::Cast(*ip)) {
                 // Promargs need unchanged argument promise. If we updated a
@@ -703,10 +716,18 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
     });
 
+    // 3. replace remaining uses of the mkarg itself
+    for (auto m : forcedMkArg) {
+        m.first->replaceDominatedUses(m.second, domGraph,
+                                      {Tag::UpdatePromise, Tag::PushContext});
+    }
+
+    // 4. remove BB's that became dead due to non local return
+    BBTransform::removeDeadBlocks(code, dead);
+
     // If we removed some UpdatePromise instructions it might be neccessary to
     // patch up some casts that still point to the old MkArg.
     if (!removedUpdates.empty()) {
-        DominanceGraph dom(code);
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto c = CastType::Cast(i)) {
                 if (c->kind == CastType::Upcast)
@@ -714,21 +735,14 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         assert(!m->usedInPromargsList);
                         auto r = removedUpdates.find(m);
                         if (r != removedUpdates.end()) {
-                            c->replaceDominatedUses(r->second, dom);
+                            r->second->type = r->second->type & c->type;
+                            assert(!r->second->type.isVoid());
+                            c->replaceDominatedUses(r->second, domGraph);
                         }
                     }
             }
         });
     }
-
-    // 3. replace remaining uses of the mkarg itself
-    for (auto m : forcedMkArg) {
-        m.first->replaceDominatedUses(m.second,
-                                      {Tag::UpdatePromise, Tag::PushContext});
-    }
-
-    // 4. remove BB's that became dead due to non local return
-    BBTransform::removeDeadBlocks(code, dead);
 
     return anyChange;
 }

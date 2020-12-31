@@ -84,7 +84,7 @@ struct ObservedTest {
     ObservedTest() : seen(0), unused(0) {}
 
     RIR_INLINE void record(SEXP e) {
-        if (e == R_TrueValue) {
+        if (e != R_FalseValue) {
             if (seen == None)
                 seen = OnlyTrue;
             else if (seen != OnlyTrue)
