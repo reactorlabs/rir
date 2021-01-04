@@ -2862,6 +2862,7 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                 }
+
                 if (b->builtinId == blt("c") && !b->type.maybeHasAttrs()) {
                     bool allScalar = true;
                     b->eachArg([&](Value* v) {
@@ -2895,19 +2896,27 @@ void LowerFunctionLLVM::compile() {
                 }
 
                 if (b->builtinId == blt("list")) {
-                    auto res = call(NativeBuiltins::makeVector,
-                                    {c(VECSXP), c(b->nCallArgs(), 64)});
-                    protectTemp(res);
-                    auto pos = 0;
-                    auto resT = PirType(RType::vec).notObject();
-
+                    bool maybeObj = false;
                     b->eachCallArg([&](Value* v) {
-                        assignVector(res, c(pos), loadSxp(v), resT);
-                        pos++;
+                        if (v->type.maybeObj()) {
+                            maybeObj = true;
+                        }
                     });
-                    setVal(i, res);
-                    fixVisibility();
-                    break;
+                    if (!maybeObj) {
+                        auto res = call(NativeBuiltins::makeVector,
+                                        {c(VECSXP), c(b->nCallArgs(), 64)});
+                        protectTemp(res);
+                        auto pos = 0;
+                        auto resT = PirType(RType::vec).notObject();
+
+                        b->eachCallArg([&](Value* v) {
+                            assignVector(res, c(pos), loadSxp(v), resT);
+                            pos++;
+                        });
+                        setVal(i, res);
+                        fixVisibility();
+                        break;
+                    }
                 }
 
                 setVal(i, callTheBuiltin());
