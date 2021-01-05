@@ -141,6 +141,15 @@ static void lower(Code* code) {
                     else
                         break;
                 }
+            } else if (auto id = Identical::Cast(*it)) {
+                if (auto ld1 = LdConst::Cast(id->arg(0).val())) {
+                    if (auto ld2 = LdConst::Cast(id->arg(1).val())) {
+                        id->replaceUsesWith(ld1->c() == ld2->c()
+                                                ? (Value*)True::instance()
+                                                : (Value*)False::instance());
+                        next = bb->remove(it);
+                    }
+                }
             } else if (auto st = StVar::Cast(*it)) {
                 auto mk = MkEnv::Cast(st->env());
                 if (mk && mk->stub)
@@ -152,31 +161,36 @@ static void lower(Code* code) {
                 newDeopt->consumeFrameStates(deopt);
                 bb->replace(it, newDeopt);
             } else if (auto expect = Assume::Cast(*it)) {
-                auto expectation = expect->assumeTrue;
-                std::string debugMessage;
-                if (Parameter::DEBUG_DEOPTS) {
-                    debugMessage = "DEOPT, assumption ";
-                    {
-                        std::stringstream dump;
-                        if (auto i = Instruction::Cast(expect->condition())) {
-                            dump << "\n";
-                            i->printRecursive(dump, 4);
-                            dump << "\n";
-                        } else {
-                            expect->condition()->printRef(dump);
+                if (expect->arg(0).val() == True::instance()) {
+                    next = bb->remove(it);
+                } else {
+                    auto expectation = expect->assumeTrue;
+                    std::string debugMessage;
+                    if (Parameter::DEBUG_DEOPTS) {
+                        debugMessage = "DEOPT, assumption ";
+                        {
+                            std::stringstream dump;
+                            if (auto i =
+                                    Instruction::Cast(expect->condition())) {
+                                dump << "\n";
+                                i->printRecursive(dump, 4);
+                                dump << "\n";
+                            } else {
+                                expect->condition()->printRef(dump);
+                            }
+                            debugMessage += dump.str();
                         }
-                        debugMessage += dump.str();
+                        debugMessage += " failed\n";
                     }
-                    debugMessage += " failed\n";
+                    BBTransform::lowerExpect(
+                        code, bb, it, expect, expectation,
+                        expect->checkpoint()->bb()->falseBranch(), debugMessage,
+                        Parameter::DEOPT_CHAOS && coinFlip());
+                    // lowerExpect splits the bb from current position. There
+                    // remains nothing to process. Breaking seems more robust
+                    // than trusting the modified iterator.
+                    break;
                 }
-                BBTransform::lowerExpect(
-                    code, bb, it, expect, expectation,
-                    expect->checkpoint()->bb()->falseBranch(), debugMessage,
-                    Parameter::DEOPT_CHAOS && coinFlip());
-                // lowerExpect splits the bb from current position. There
-                // remains nothing to process. Breaking seems more robust
-                // than trusting the modified iterator.
-                break;
             }
 
             it = next;

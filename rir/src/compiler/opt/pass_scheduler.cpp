@@ -32,11 +32,11 @@ PassScheduler::PassScheduler() {
         add<ScopeResolution>();
         add<LoadElision>();
         add<GVN>();
-        add<Constantfold>();
         add<DeadStoreRemoval>();
 
         add<Inline>();
         add<ForceDominance>();
+        add<Constantfold>();
         add<OptimizeContexts>();
 
         add<OptimizeVisibility>();
