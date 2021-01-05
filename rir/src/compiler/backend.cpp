@@ -163,8 +163,7 @@ static void lower(Code* code) {
                 if (Parameter::DEBUG_DEOPTS) {
                     std::stringstream msgs;
                     msgs << "DEOPT:\n";
-                    deopt->printRecursive(msgs, 1);
-                    code->printCode(msgs, 0, 0);
+                    deopt->printRecursive(msgs, 3);
                     static std::vector<std::string> leak;
                     leak.push_back(msgs.str());
                     SEXP msg = Rf_mkString(leak.back().c_str());

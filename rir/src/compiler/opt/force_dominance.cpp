@@ -289,13 +289,18 @@ struct ForcedBy {
         NotSafeToInline
     };
 
-    PromiseInlineable isSafeToInline(MkArg* a, Force* f) const {
+    PromiseInlineable isSafeToInline(MkArg* a, Force* f,
+                                     const ForcedBy& finalState) const {
         auto e = escaped.find(a);
         if (e == escaped.end())
             return SafeToInline;
         if (e->second.empty())
             return NotSafeToInline;
-        return SafeToInlineWithUpdate;
+        // We can only patch escaped proms if this force is dominating on all
+        // paths
+        if (finalState.isDominatingForce(f))
+            return SafeToInlineWithUpdate;
+        return NotSafeToInline;
     }
 
     void print(std::ostream& out, bool tty) const {
@@ -348,23 +353,12 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         AbstractResult res;
         auto apply = [&](Instruction* i) {
-            if (!i->effects.includes(Effect::LeakArg))
+            if (!i->effects.includes(Effect::LeakArg) && !MkEnv::Cast(i))
                 return;
-            auto pc = PushContext::Cast(i);
-            i->eachArg([&](Value* v_) {
-                auto v = v_->followCasts();
-                auto instruction = Instruction::Cast(v);
-                if (MkArg::Cast(v) || LdArg::Cast(v) ||
-                    (instruction && instruction->type.maybeLazy())) {
-                    // Pushcontext captures the arglist, which contains the
-                    // originally passed arguments. These must not be
-                    // updated!
-                    if (pc && pc->ast() != v_ && pc->op() != v_)
-                        return;
-                    if (auto m = MkArg::Cast(v))
-                        if (state.escape(m, i))
-                            res.update();
-                }
+            i->eachArg([&](Value* v) {
+                if (auto m = MkArg::Cast(v->followCasts()))
+                    if (state.escape(m, i))
+                        res.update();
             });
         };
 
@@ -376,7 +370,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                 mk->eachLocalVar([&](SEXP name, Value* a, bool) {
                     if (name != st->varName)
                         return;
-                    if (auto mka = MkArg::Cast(a)) {
+                    if (auto mka = MkArg::Cast(a->followCasts())) {
                         handledEscape = true;
                         auto e = state.escaped.find(mka);
                         if (e == state.escaped.end())
@@ -393,7 +387,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                         return;
                     // Accessing an escaped promise, leaks it further and we
                     // need abandon escape analysis...
-                    if (auto mka = MkArg::Cast(a)) {
+                    if (auto mka = MkArg::Cast(a->followCasts())) {
                         handledEscape = true;
                         auto e = state.escaped.find(mka);
                         if (e == state.escaped.end())
@@ -453,10 +447,11 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else if (auto mk = MkArg::Cast(i)) {
             if (state.declare(mk))
                 res.update();
-        } else if (auto e = MkEnv::Cast(i)) {
-            if (!e->stub)
-                apply(e);
-        } else if (CastType::Cast(i) || Deopt::Cast(i)) { /* do nothing */ 
+        } else if (PushContext::Cast(i) || CastType::Cast(i) ||
+                   Deopt::Cast(i)) { /* do nothing */
+            // Pushcontext captures the arglist, which contains the
+            // originally passed arguments. These must not be
+            // updated!
         } else {
             if (i->type.maybeLazy()) {
                 if (state.declare(i))
@@ -464,9 +459,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             }
             apply(i);
 
-            if (i->effects.contains(Effect::Force)) {
-                if (state.sideeffect())
-                    res.taint();
+            if (i->effects.contains(Effect::ReadsEnv)) {
+                if (!IsEnvStub::Cast(i))
+                    if (state.sideeffect())
+                        res.taint();
             }
 
             if (i->effects.includes(Effect::Force) &&
@@ -541,14 +537,15 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                 if (auto f = Force::Cast(i)) {
                     auto a = analysis.resultIgnoringUnreachableExits(
-                        i, analysis.cfg);
+                        f, analysis.cfg);
                     if (a.isDominatingForce(f)) {
                         f->strict = true;
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
                             if (!mk->isEager()) {
                                 if (!isHuge || mk->prom()->size() < 10) {
                                     auto b = analysis.before(i);
-                                    auto inl = b.isSafeToInline(mk, f);
+                                    auto inl = b.isSafeToInline(
+                                        mk, f, analysis.result());
                                     if (inl != ForcedBy::NotSafeToInline) {
                                         toInline.insert(f);
                                         if (inl ==
@@ -721,7 +718,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (u != needsUpdate.end()) {
                             for (auto m : u->second) {
                                 m->eachLocalVar([&](SEXP name, Value* a, bool) {
-                                    if (a == mkarg) {
+                                    if (a->followCasts() == mkarg) {
                                         pos = split->insert(
                                             pos, new StVar(name, upcast, m));
                                         pos++;
@@ -795,6 +792,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         auto repl = r->second.second;
                         repl->type = repl->type & c->type;
                         c->replaceDominatedUses(repl, dom);
+                        SLOWASSERT(c->usesAreOnly(repl->bb(), {Tag::MkEnv}));
                     }
                 }
             }
