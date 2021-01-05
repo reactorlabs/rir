@@ -6,6 +6,7 @@
 #include "pass_definitions.h"
 #include "utils/Map.h"
 #include "utils/Set.h"
+#include <unordered_set>
 
 namespace {
 
@@ -48,7 +49,7 @@ using namespace rir::pir;
 struct ForcedBy {
     rir::SmallMap<Value*, Force*> forcedBy;
     rir::SmallSet<Value*> inScope;
-    rir::SmallSet<Value*> escaped;
+    std::unordered_map<MkArg*, rir::SmallSet<MkEnv*>> escaped;
 
     std::vector<size_t> argumentForceOrder;
     bool ambiguousForceOrder = false;
@@ -69,7 +70,11 @@ struct ForcedBy {
             f->second = nullptr;
             changed = true;
         }
-        auto e = escaped.find(arg);
+        auto mk = MkArg::Cast(arg);
+        if (!mk)
+            return changed;
+
+        auto e = escaped.find(mk);
         if (e != escaped.end()) {
             escaped.erase(e);
             changed = true;
@@ -84,12 +89,14 @@ struct ForcedBy {
         // been forced
 
         for (auto& e : escaped) {
-            auto f = forcedBy.find(e);
+            auto f = forcedBy.find(e.first);
             if (f == forcedBy.end()) {
-                forcedBy.insert(e, ambiguous());
+                forcedBy.insert(e.first, ambiguous());
+                e.second.clear();
                 changed = true;
             } else if (!f->second) {
                 f->second = ambiguous();
+                e.second.clear();
                 changed = true;
             }
         }
@@ -123,10 +130,21 @@ struct ForcedBy {
         return apply(val, false);
     }
 
-    bool escape(Value* val) {
+    bool escape(MkArg* val, Instruction* where) {
         auto f = forcedBy.find(val);
-        if ((f == forcedBy.end() || !f->second) && !escaped.count(val)) {
-            escaped.insert(val);
+        if ((f == forcedBy.end() || !f->second)) {
+            if (auto mk = MkEnv::Cast(where)) {
+                auto existing = escaped.find(val);
+                if (existing == escaped.end()) {
+                    escaped[val].insert(mk);
+                } else if (!existing->second.empty()) { // empty set = ambiguous
+                    if (existing->second.count(mk))
+                        return false;
+                    existing->second.insert(mk);
+                }
+            } else {
+                escaped[val].clear();
+            }
             return true;
         }
 
@@ -140,6 +158,7 @@ struct ForcedBy {
     AbstractResult merge(const ForcedBy& other, bool exitMerge = false) {
         AbstractResult res;
 
+        rir::SmallSet<MkArg*> gotAmbiguous;
         for (auto& e : forcedBy) {
             if (!e.second)
                 continue;
@@ -151,11 +170,15 @@ struct ForcedBy {
             if (o == other.forcedBy.end() || !o->second) {
                 if (!exitMerge && other.inScope.count(v)) {
                     e.second = ambiguous();
+                    if (auto m = MkArg::Cast(e.first))
+                        gotAmbiguous.insert(m);
                     res.lostPrecision();
                 }
             } else if (o->second) {
                 if (f != o->second) {
                     e.second = ambiguous();
+                    if (auto m = MkArg::Cast(e.first))
+                        gotAmbiguous.insert(m);
                     res.lostPrecision();
                 }
             }
@@ -175,9 +198,19 @@ struct ForcedBy {
             }
         }
 
-        for (auto& e : other.escaped) {
-            if (!escaped.count(e)) {
-                escaped.insert(e);
+        for (auto& e : escaped) {
+            if (e.second.empty())
+                continue;
+            auto o = other.escaped.find(e.first);
+            if (o == other.escaped.end() || o->second.empty() ||
+                e.second != o->second || gotAmbiguous.count(e.first)) {
+                e.second.clear();
+                res.update();
+            }
+        }
+        for (auto& o : other.escaped) {
+            if (!escaped.count(o.first)) {
+                escaped[o.first];
                 res.update();
             }
         }
@@ -257,7 +290,12 @@ struct ForcedBy {
     };
 
     PromiseInlineable isSafeToInline(MkArg* a, Force* f) const {
-        return escaped.count(a) ? SafeToInlineWithUpdate : SafeToInline;
+        auto e = escaped.find(a);
+        if (e == escaped.end())
+            return SafeToInline;
+        if (e->second.empty())
+            return NotSafeToInline;
+        return SafeToInlineWithUpdate;
     }
 
     void print(std::ostream& out, bool tty) const {
@@ -269,8 +307,18 @@ struct ForcedBy {
         out << "\n";
         out << "Escaped proms: ";
         for (auto& p : escaped) {
-            p->printRef(out);
-            out << " ";
+            p.first->printRef(out);
+            out << " (";
+            if (p.second.empty()) {
+                out << "ambiguous";
+            } else {
+                for (auto m : p.second) {
+                    m->printRef(out);
+                    if (m != *(p.second.end() - 1))
+                        out << ",";
+                }
+            }
+            out << ") ";
         }
         out << "\n";
         for (auto& e : forcedBy) {
@@ -313,8 +361,9 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                     // updated!
                     if (pc && pc->ast() != v_ && pc->op() != v_)
                         return;
-                    if (state.escape(instruction))
-                        res.update();
+                    if (auto m = MkArg::Cast(v))
+                        if (state.escape(m, i))
+                            res.update();
                 }
             });
         };
@@ -396,13 +445,12 @@ namespace pir {
  *  === Inline Promise ==>
  *
  *    a   = MkArg(exp)
- *    a'  = MkArg(exp)
  *    e   = MkEnv(x=a)      // leak a
  *    f'  = eval(exp)       // inlinee
- *    a'' = MkArg(exp, a)   // synthesized updated promise
- *    UpdatePromise(a, f')  // update to ensure leaked a is correct
- *    PushContext(a')       // push context needs unmodified a
- *    use(a'')              // normal uses get the synthesized version
+ *    a'  = MkArg(exp, f')  // synthesized updated promise
+ *    StVar(x=a', e)        // update to ensure leaked a is correct
+ *    PushContext(a)        // push context needs unmodified a
+ *    use(a')               // normal uses get the synthesized version
  *    use(f')               // uses of the value get the result
  *
  *  updatePromise and the duplication of mkarg only happens if needed.
@@ -413,6 +461,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                            LogStream& log) const {
     SmallSet<Force*> toInline;
     SmallMap<Force*, Force*> dominatedBy;
+    SmallMap<Force*, SmallSet<MkEnv*>> needsUpdate;
     bool anyChange = false;
 
     bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
@@ -443,8 +492,12 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 if (!isHuge || mk->prom()->size() < 10) {
                                     auto b = analysis.before(i);
                                     auto inl = b.isSafeToInline(mk, f);
-                                    if (inl == ForcedBy::SafeToInline) {
+                                    if (inl != ForcedBy::NotSafeToInline) {
                                         toInline.insert(f);
+                                        if (inl ==
+                                            ForcedBy::SafeToInlineWithUpdate) {
+                                            needsUpdate[f] = b.escaped.at(mk);
+                                        }
                                     }
                                 }
                             }
@@ -462,7 +515,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     std::unordered_map<Force*, Value*> inlinedPromise;
     std::unordered_map<Instruction*, MkArg*> forcedMkArg;
     std::unordered_set<BB*> dead;
-    std::unordered_set<MkArg*> updated;
 
     // 1. Inline dominating promises
     Visitor::runPostChange(code->entry, [&](BB* bb) {
@@ -596,10 +648,27 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         f->replaceUsesWith(promRes);
                         split->remove(split->begin());
 
+                        auto pos = split->begin();
                         MkArg* fixedMkArg =
                             new MkArg(mkarg->prom(), promRes, mkarg->promEnv());
-                        next = split->insert(split->begin(), fixedMkArg);
+                        pos = split->insert(pos, fixedMkArg);
+                        pos++;
                         forcedMkArg[mkarg] = fixedMkArg;
+
+                        auto u = needsUpdate.find(f);
+                        if (u != needsUpdate.end()) {
+                            for (auto m : u->second) {
+                                m->eachLocalVar([&](SEXP name, Value* a, bool) {
+                                    if (a == mkarg) {
+                                        pos = split->insert(
+                                            pos,
+                                            new StVar(name, fixedMkArg, m));
+                                        pos++;
+                                    }
+                                });
+                            }
+                        }
+                        next = pos;
 
                         inlinedPromise[f] = promRes;
 
@@ -645,22 +714,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                     next = bb->remove(ip);
                 }
-            } else if (auto p = PushContext::Cast(*ip)) {
-                // Promargs need unchanged argument promise. If we updated a
-                // promise we need to duplicate it.
-                p->eachArg([&](InstrArg& arg) {
-                    if (auto a = MkArg::Cast(arg.val())) {
-                        if (updated.count(a)) {
-                            auto n = MkArg::Cast(a->clone());
-                            // This is to prevent GVN from collapsing the two
-                            // promises again
-                            n->usedInPromargsList = true;
-                            ip = bb->insert(ip, n) + 1;
-                            arg.val() = n;
-                            next = ip + 1;
-                        }
-                    }
-                });
             }
             ip = next;
         }
