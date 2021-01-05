@@ -260,7 +260,7 @@ struct ForcedBy {
         return escaped.count(a) ? SafeToInlineWithUpdate : SafeToInline;
     }
 
-    void print(std::ostream& out, bool tty) {
+    void print(std::ostream& out, bool tty) const {
         out << "Known proms: ";
         for (auto& p : inScope) {
             p->printRef(out);

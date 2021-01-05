@@ -99,11 +99,11 @@ class StaticAnalysis {
         const_cast<StaticAnalysis*>(this)->cache.emplace(i, state);
         const_cast<StaticAnalysis*>(this)->cacheQueue.push_back(i);
     }
+    std::unordered_map<BB*, AbstractState> exitpoints;
+    AbstractState exitpoint;
 
   protected:
     GlobalAbstractState* globalState = nullptr;
-    std::unordered_map<BB*, AbstractState> exitpoints;
-    AbstractState exitpoint;
 
     bool done = false;
     LogStream& log;
@@ -147,7 +147,8 @@ class StaticAnalysis {
         bool foundAny = false;
         AbstractState exitState;
         for (auto& exit : exitpoints) {
-            if (cfg.isPredecessor(instruction->bb(), exit.first)) {
+            if (instruction->bb() == exit.first ||
+                cfg.isPredecessor(instruction->bb(), exit.first)) {
                 if (foundAny) {
                     exitState.mergeExit(exit.second);
                 } else {

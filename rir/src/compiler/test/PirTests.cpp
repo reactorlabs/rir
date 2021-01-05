@@ -1053,16 +1053,14 @@ static Test tests[] = {
                                 "}",
                                 "4");
          }),
-    //    Test(
-    //        "Elide ldfun through promise",
-    //        []() { return test42("{f <- function() 42L; (function(x)
-    //        x())(f)}"); }),
+    Test(
+        "Elide ldfun through promise",
+        []() { return test42("{f <- function() 42L; (function(x) x())(f)}"); }),
     Test("Constantfolding1", []() { return test42("{if (1<2) 42L}"); }),
-    //    Test("Constantfolding2",
-    //         []() {
-    //             return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y;
-    //             f(a,b)}");
-    //         }),
+    Test("Constantfolding2",
+         []() {
+             return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
+         }),
     Test("Test dead store analysis", &testDeadStore),
     Test("Test type rules", &testTypeRules)};
 } // namespace
