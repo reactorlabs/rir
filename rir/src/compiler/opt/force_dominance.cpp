@@ -367,6 +367,63 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                 }
             });
         };
+
+        // StVar overriding promise means the promise does not count as escaped
+        // anymore
+        bool handledEscape = false;
+        if (auto st = StVar::Cast(i)) {
+            if (auto mk = MkEnv::Cast(st->env())) {
+                mk->eachLocalVar([&](SEXP name, Value* a, bool) {
+                    if (name != st->varName)
+                        return;
+                    if (auto mka = MkArg::Cast(a)) {
+                        handledEscape = true;
+                        auto e = state.escaped.find(mka);
+                        if (e == state.escaped.end())
+                            return;
+                        state.escaped.erase(e);
+                        res.update();
+                    }
+                });
+            }
+        } else if (auto ld = LdVar::Cast(i)) {
+            if (auto mk = MkEnv::Cast(ld->env())) {
+                mk->eachLocalVar([&](SEXP name, Value* a, bool) {
+                    if (name != ld->varName)
+                        return;
+                    // Accessing an escaped promise, leaks it further and we
+                    // need abandon escape analysis...
+                    if (auto mka = MkArg::Cast(a)) {
+                        handledEscape = true;
+                        auto e = state.escaped.find(mka);
+                        if (e == state.escaped.end())
+                            return;
+                        if (e->second.empty())
+                            return;
+                        res.update();
+                        e->second.clear();
+                    }
+                });
+                if (!handledEscape) {
+                    // Access goes past local envs, no need to worry
+                    // TODO: maybe do this recursive?
+                    if (!MkEnv::Cast(mk->lexicalEnv()))
+                        handledEscape = true;
+                }
+            }
+        }
+
+        // In case there is an environment access we loose track of which proms
+        // are escaped to where.
+        if (i->effects.includes(Effect::ReadsEnv) && !handledEscape) {
+            for (auto& e : state.escaped) {
+                if (!e.second.empty()) {
+                    res.update();
+                    e.second.clear();
+                }
+            }
+        }
+
         if (auto phi = Phi::Cast(i)) {
             if (phi->type.maybeLazy()) {
                 if (state.forcedBy.count(phi) == 0 && state.declare(phi)) {
@@ -448,7 +505,7 @@ namespace pir {
  *    e   = MkEnv(x=a)      // leak a
  *    f'  = eval(exp)       // inlinee
  *    a'  = MkArg(exp, f')  // synthesized updated promise
- *    StVar(x=a', e)        // update to ensure leaked a is correct
+ *    StVar(x=a', e)        // update to ensure leaked a is fixed
  *    PushContext(a)        // push context needs unmodified a
  *    use(a')               // normal uses get the synthesized version
  *    use(f')               // uses of the value get the result
