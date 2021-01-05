@@ -570,7 +570,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     }
 
     std::unordered_map<Force*, Value*> inlinedPromise;
-    std::unordered_map<Instruction*, MkArg*> forcedMkArg;
+    std::unordered_map<MkArg*, std::pair<MkArg*, CastType*>> forcedMkArg;
     std::unordered_set<BB*> dead;
 
     // 1. Inline dominating promises
@@ -710,7 +710,12 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             new MkArg(mkarg->prom(), promRes, mkarg->promEnv());
                         pos = split->insert(pos, fixedMkArg);
                         pos++;
-                        forcedMkArg[mkarg] = fixedMkArg;
+                        CastType* upcast = new CastType(
+                            fixedMkArg, CastType::Upcast, RType::prom,
+                            promRes->type.orPromiseWrapped());
+                        pos = split->insert(pos, upcast);
+                        pos++;
+                        forcedMkArg[mkarg] = {fixedMkArg, upcast};
 
                         auto u = needsUpdate.find(f);
                         if (u != needsUpdate.end()) {
@@ -718,8 +723,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 m->eachLocalVar([&](SEXP name, Value* a, bool) {
                                     if (a == mkarg) {
                                         pos = split->insert(
-                                            pos,
-                                            new StVar(name, fixedMkArg, m));
+                                            pos, new StVar(name, upcast, m));
                                         pos++;
                                     }
                                 });
@@ -777,8 +781,24 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     });
 
     // 3. replace remaining uses of the mkarg itself
-    for (auto m : forcedMkArg) {
-        m.first->replaceDominatedUses(m.second, {Tag::PushContext});
+    if (!forcedMkArg.empty()) {
+        DominanceGraph dom(code);
+        for (auto m : forcedMkArg) {
+            m.first->replaceDominatedUses(m.second.first, dom,
+                                          {Tag::PushContext});
+        }
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto c = CastType::Cast(i)) {
+                if (auto m = MkArg::Cast(c->arg(0).val())) {
+                    auto r = forcedMkArg.find(m);
+                    if (r != forcedMkArg.end()) {
+                        auto repl = r->second.second;
+                        repl->type = repl->type & c->type;
+                        c->replaceDominatedUses(repl, dom);
+                    }
+                }
+            }
+        });
     }
 
     // 4. remove BB's that became dead due to non local return
