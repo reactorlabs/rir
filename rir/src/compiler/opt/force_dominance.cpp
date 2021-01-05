@@ -444,11 +444,11 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 if (!isHuge || mk->prom()->size() < 10) {
                                     auto b = analysis.before(i);
                                     auto inl = b.isSafeToInline(mk, f);
-                                    if (inl != ForcedBy::NotSafeToInline) {
+                                    if (inl == ForcedBy::SafeToInline) {
                                         toInline.insert(f);
-                                        if (inl ==
-                                            ForcedBy::SafeToInlineWithUpdate)
-                                            needsUpdate.insert(f);
+                                        // if (inl ==
+                                        //     ForcedBy::SafeToInlineWithUpdate)
+                                        //     needsUpdate.insert(f);
                                     }
                                 }
                             }

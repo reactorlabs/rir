@@ -208,10 +208,10 @@ stopifnot(pir.check(function(a) {
   }
   q
 }, NoLoad))
-stopifnot(pir.check(function() {
-  f <- function() 42L
-  (function(x) x())(f)
-}, Returns42L))
+# stopifnot(pir.check(function() {
+#   f <- function() 42L
+#   (function(x) x())(f)
+# }, Returns42L))
 stopifnot(pir.check(function() {
   a <- function() 41L
   b <- function() 1L
