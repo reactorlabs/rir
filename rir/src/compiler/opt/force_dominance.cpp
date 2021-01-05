@@ -412,7 +412,6 @@ namespace pir {
 bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                            LogStream& log) const {
     SmallSet<Force*> toInline;
-    SmallSet<Force*> needsUpdate;
     SmallMap<Force*, Force*> dominatedBy;
     bool anyChange = false;
 
@@ -446,9 +445,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     auto inl = b.isSafeToInline(mk, f);
                                     if (inl == ForcedBy::SafeToInline) {
                                         toInline.insert(f);
-                                        // if (inl ==
-                                        //     ForcedBy::SafeToInlineWithUpdate)
-                                        //     needsUpdate.insert(f);
                                     }
                                 }
                             }
@@ -456,11 +452,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     } else if (auto dom = a.getDominatingForce(f)) {
                         if (f != dom)
                             dominatedBy[f] = dom;
-                    }
-                } else if (auto u = UpdatePromise::Cast(i)) {
-                    if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
-                        if (!analysis.before(i).escaped.count(mkarg))
-                            next = bb->remove(ip);
                     }
                 }
                 ip = next;
@@ -611,11 +602,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         forcedMkArg[mkarg] = fixedMkArg;
 
                         inlinedPromise[f] = promRes;
-                        if (needsUpdate.count(f)) {
-                            next = split->insert(
-                                next, new UpdatePromise(mkarg, promRes));
-                            updated.insert(mkarg);
-                        }
 
                         if (promRet.second->isNonLocalReturn())
                             dead.insert(split);

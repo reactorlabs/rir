@@ -4034,13 +4034,6 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::UpdatePromise: {
-                auto val = loadSxp(i->arg(1).val());
-                ensureShared(val);
-                setCar(loadSxp(i->arg(0).val()), val);
-                break;
-            }
-
             case Tag::LdVarSuper: {
                 auto ld = LdVarSuper::Cast(i);
 

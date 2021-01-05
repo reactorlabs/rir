@@ -19,10 +19,6 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
     const UsesTree dataDependencies(code);
 
     std::unordered_map<Instruction*, SmallSet<BB*>> usedOnlyInDeopt;
-    std::unordered_map<Instruction*, SmallSet<Instruction*>> updatePromises;
-    std::unordered_map<Instruction*, SmallSet<BB*>> udatePromiseTargets;
-    const DominanceGraph dom(code);
-    const CFG cfg(code);
     bool changed = true;
 
     while (changed) {
@@ -35,11 +31,8 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto uses = instructionUses.second;
                 auto addToDeopt = true;
                 for (auto use : uses) {
-                    if (UpdatePromise::Cast(use)) {
-                        updatePromises[candidate].insert(use);
-                    } else if (Phi::Cast(use) ||
-                               (!use->bb()->isDeopt() &&
-                                !usedOnlyInDeopt.count(use))) {
+                    if (Phi::Cast(use) || (!use->bb()->isDeopt() &&
+                                           !usedOnlyInDeopt.count(use))) {
                         addToDeopt = false;
                     }
                 }
@@ -53,27 +46,7 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 deoptUses.insert(deoptUse);
                         }
                     }
-                    // We can only move mkArgs that have an updatePromise if we
-                    // can prove wether every target deopt unambigously always
-                    // requires or not the update promise
-                    bool safeUpdatePromises = true;
-                    for (const auto& updatePromise :
-                         updatePromises[candidate]) {
-                        auto& updateTargets =
-                            udatePromiseTargets[updatePromise];
-                        for (auto deoptTarget : deoptUses) {
-                            if (dom.strictlyDominates(updatePromise->bb(),
-                                                      deoptTarget))
-                                updateTargets.insert(deoptTarget);
-                            else if (cfg.isPredecessor(updatePromise->bb(),
-                                                       deoptTarget))
-                                safeUpdatePromises = false;
-                        }
-                    }
-                    if (safeUpdatePromises)
-                        changed = true;
-                    else
-                        usedOnlyInDeopt.erase(candidate);
+                    changed = true;
                 }
             }
         }
@@ -128,22 +101,6 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
                         targetBB->insert(insertPosition, newInstr) + 1;
                     instruction->replaceUsesIn(newInstr, targetBB);
                     replacements[instruction].insert({targetBB, newInstr});
-                    for (auto updatePromise : updatePromises[instruction]) {
-                        if (udatePromiseTargets[updatePromise].count(
-                                targetBB)) {
-                            if (updatePromise->bb() == bb)
-                                continue;
-                            auto newInstr =
-                                UpdatePromise::Cast(updatePromise->clone());
-                            newInstr->eachArg([&](InstrArg& arg) {
-                                replaceArgs(arg, replacements, targetBB);
-                            });
-                            seek(newInstr);
-                            assert(bb != targetBB);
-                            insertPosition =
-                                targetBB->insert(insertPosition, newInstr) + 1;
-                        }
-                    }
                 }
             }
             ip = next;

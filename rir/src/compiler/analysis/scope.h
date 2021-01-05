@@ -31,7 +31,7 @@ struct ScopeAnalysisResults {
 class ScopeAnalysisState {
     AbstractREnvironmentHierarchy envs;
     AbstractPirValue returnValue;
-    std::unordered_map<MkArg*, AbstractPirValue> updatedProms;
+    std::unordered_map<MkArg*, AbstractPirValue> forcedPromise;
 
     bool mayUseReflection = false;
 
@@ -51,22 +51,22 @@ class ScopeAnalysisState {
             res.lostPrecision();
         }
 
-        for (auto u = updatedProms.begin(); u != updatedProms.end(); u++) {
+        for (auto u = forcedPromise.begin(); u != forcedPromise.end(); u++) {
             if (u->second.isUnknown())
                 continue;
-            auto f = other.updatedProms.find(u->first);
-            if (f == other.updatedProms.end()) {
+            auto f = other.forcedPromise.find(u->first);
+            if (f == other.forcedPromise.end()) {
                 u->second.taint();
                 res.lostPrecision();
             } else {
                 res.max(u->second.merge(f->second));
             }
         }
-        if (updatedProms.size() != other.updatedProms.size()) {
-            for (auto u = other.updatedProms.begin();
-                 u != other.updatedProms.end(); u++) {
-                if (!updatedProms.count(u->first))
-                    updatedProms[u->first] = AbstractPirValue::tainted();
+        if (forcedPromise.size() != other.forcedPromise.size()) {
+            for (auto u = other.forcedPromise.begin();
+                 u != other.forcedPromise.end(); u++) {
+                if (!forcedPromise.count(u->first))
+                    forcedPromise[u->first] = AbstractPirValue::tainted();
             }
             res.lostPrecision();
         }
