@@ -26,9 +26,9 @@ PassScheduler::PassScheduler() {
         add<EagerCalls>();
 
         add<Inline>();
-        add<ForceDominance>();
         add<OptimizeContexts>();
 
+        add<ForceDominance>();
         add<ScopeResolution>();
         add<LoadElision>();
         add<GVN>();
@@ -36,7 +36,6 @@ PassScheduler::PassScheduler() {
         add<DeadStoreRemoval>();
 
         add<Inline>();
-        add<ForceDominance>();
         add<OptimizeContexts>();
 
         add<OptimizeVisibility>();
