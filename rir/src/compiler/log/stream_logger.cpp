@@ -38,7 +38,10 @@ StreamLogger::~StreamLogger() {
     }
 }
 
-FileLogStream::~FileLogStream() { fstream.close(); }
+FileLogStream::~FileLogStream() {
+    fstream.flush();
+    fstream.close();
+}
 bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 bool SimpleLogStream::tty() { return ConsoleColor::isTTY(out); }
 

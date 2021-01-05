@@ -159,7 +159,32 @@ static void lower(Code* code) {
                 // ScheduledDeopt.
                 auto newDeopt = new ScheduledDeopt();
                 newDeopt->consumeFrameStates(deopt);
+
+                if (Parameter::DEBUG_DEOPTS) {
+                    std::stringstream msgs;
+                    msgs << "DEOPT:\n";
+                    deopt->printRecursive(msgs, 1);
+                    code->printCode(msgs, 0, 0);
+                    static std::vector<std::string> leak;
+                    leak.push_back(msgs.str());
+                    SEXP msg = Rf_mkString(leak.back().c_str());
+                    static SEXP print =
+                        Rf_findFun(Rf_install("cat"), R_GlobalEnv);
+                    auto ldprint = new LdConst(print);
+                    Instruction* ldmsg = new LdConst(msg);
+                    it = bb->insert(it, ldmsg) + 1;
+                    it = bb->insert(it, ldprint) + 1;
+                    // Hack to silence the verifier.
+                    ldmsg = new CastType(ldmsg, CastType::Downcast,
+                                         PirType::any(), RType::prom);
+                    it = bb->insert(it, ldmsg) + 1;
+                    it =
+                        bb->insert(it, new Call(Env::global(), ldprint, {ldmsg},
+                                                Tombstone::framestate(), 0));
+                    it++;
+                }
                 bb->replace(it, newDeopt);
+                next = it + 1;
             } else if (auto expect = Assume::Cast(*it)) {
                 if (expect->arg(0).val() == True::instance()) {
                     next = bb->remove(it);

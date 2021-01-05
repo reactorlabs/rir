@@ -1258,10 +1258,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             BB* branch = insert.createBB();
             BB* fall = insert.createBB();
 
-            if (swapTrueFalse)
+            if (swapTrueFalse) {
                 insert.setBranch(fall, branch);
-            else
+                assumeBB0 = !assumeBB0;
+            } else {
                 insert.setBranch(branch, fall);
+            }
 
             if (deoptCondition && !inPromise() && !inlining()) {
                 auto deopt = assumeBB0 ? insert.getCurrentBB()->falseBranch()
