@@ -277,8 +277,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::asbool_:
-        insert(new CheckTrueFalse(top()));
-        push(insert(new AsTest(pop())));
+        push(insert(new CheckTrueFalse(pop())));
         break;
 
     case Opcode::aslogical_:
@@ -1221,14 +1220,31 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 continue;
             }
 
-            Instruction* condition = nullptr;
+            bool swapTrueFalse = false;
+            Instruction* deoptCondition = nullptr;
+            bool assumeBB0 = false;
 
             // Conditional jump
             switch (bc.bc) {
             case Opcode::brtrue_:
             case Opcode::brfalse_: {
                 auto v = cur.stack.pop();
-                condition = Instruction::Cast(v);
+                if (auto c = Instruction::Cast(v)) {
+                    if (c->typeFeedback.value == True::instance()) {
+                        assumeBB0 = bc.bc == Opcode::brtrue_;
+                        deoptCondition = c;
+                    }
+                    if (c->typeFeedback.value == False::instance()) {
+                        assumeBB0 = bc.bc == Opcode::brfalse_;
+                        deoptCondition = c;
+                    }
+                }
+
+                if (!v->type.isA(NativeType::test)) {
+                    v = insert(new AsTest(v, bc.bc == Opcode::brtrue_));
+                } else {
+                    swapTrueFalse = bc.bc == Opcode::brfalse_;
+                }
                 insert(new Branch(v));
                 break;
             }
@@ -1242,46 +1258,29 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             BB* branch = insert.createBB();
             BB* fall = insert.createBB();
 
-            switch (bc.bc) {
-            case Opcode::brtrue_:
-                insert.setBranch(branch, fall);
-                break;
-            case Opcode::brfalse_:
+            if (swapTrueFalse)
                 insert.setBranch(fall, branch);
-                break;
-            default:
-                assert(false);
-            }
+            else
+                insert.setBranch(branch, fall);
 
-            if (condition) {
-                BB* deopt = nullptr;
-                if (!inPromise()) {
-                    if (condition->typeFeedback.value == True::instance())
-                        deopt = insert.getCurrentBB()->falseBranch();
-                    else if (condition->typeFeedback.value == False::instance())
-                        deopt = insert.getCurrentBB()->trueBranch();
-                }
+            if (deoptCondition && !inPromise() && !inlining()) {
+                auto deopt = assumeBB0 ? insert.getCurrentBB()->falseBranch()
+                                       : insert.getCurrentBB()->trueBranch();
+                insert.enterBB(deopt);
 
-                if (deopt && !inlining()) {
-                    insert.enterBB(deopt);
+                auto sp = insert.registerFrameState(
+                    srcCode, (deopt == fall) ? nextPos : trg, cur.stack,
+                    inPromise());
+                auto offset = (uintptr_t)deoptCondition->typeFeedback.origin -
+                              (uintptr_t)srcCode;
+                DeoptReason reason = {DeoptReason::DeadBranchReached, srcCode,
+                                      (uint32_t)offset};
+                insert(new RecordDeoptReason(reason, deoptCondition));
+                insert(new Deopt(sp));
 
-                    auto sp = insert.registerFrameState(
-                        srcCode, (deopt == fall) ? nextPos : trg, cur.stack,
-                        inPromise());
-                    auto offset = (uintptr_t)condition->typeFeedback.origin -
-                                  (uintptr_t)srcCode;
-                    DeoptReason reason = {DeoptReason::DeadBranchReached,
-                                          srcCode, (uint32_t)offset};
-                    Value* actual = condition;
-                    if (auto c = AsTest::Cast(condition))
-                        actual = c->arg(0).val();
-                    insert(new RecordDeoptReason(reason, actual));
-                    insert(new Deopt(sp));
-
-                    insert.enterBB(deopt == fall ? branch : fall);
-                    finger = (deopt == fall) ? trg : nextPos;
-                    continue;
-                }
+                insert.enterBB(deopt == fall ? branch : fall);
+                finger = (deopt == fall) ? trg : nextPos;
+                continue;
             }
 
             pushWorklist(branch, trg);

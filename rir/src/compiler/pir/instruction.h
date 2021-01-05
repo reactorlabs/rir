@@ -85,7 +85,7 @@ enum class HasEnvSlot : uint8_t { Yes, No };
 enum class Effect : uint8_t {
     // Changes R_Visible
     Visibility,
-    // Instruction might produce a warning. Example: AsTest warns if the
+    // Instruction might produce a warning. Example: CheckTrueFalse warns if the
     // vector used in an if condition has length > 1
     Warn,
     // Instruction might produce an error. Example: ForSeqSize raises an
@@ -1305,9 +1305,16 @@ class FLI(AsLogical, 1, Effect::Error) {
 class FLI(AsTest, 1, Effects::None()) {
   public:
     Value* val() const { return arg<0>().val(); }
+    const bool testTrue;
 
-    explicit AsTest(Value* in)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}) {}
+    AsTest(Value* in, bool testTrue_)
+        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}),
+          testTrue(testTrue_) {}
+
+    std::string name() const override final {
+        return std::string("Is") + (testTrue ? "True" : "False") + "(" +
+               InstructionImplementation::name() + ")";
+    }
 
     size_t gvnBase() const override { return tagHash(); }
 };
@@ -1317,7 +1324,8 @@ class FLI(CheckTrueFalse, 1, Effects() | Effect::Error | Effect::Warn) {
     Value* val() const { return arg<0>().val(); }
 
     explicit CheckTrueFalse(Value* in)
-        : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{in}}) {}
+        : FixedLenInstruction(PirType::simpleScalarLogical(),
+                              {{PirType::val()}}, {{in}}) {}
 
     Effects inferEffects(const GetType& getType) const override final {
         if (getType(val()).isScalar())

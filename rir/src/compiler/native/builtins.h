@@ -111,7 +111,6 @@ struct NativeBuiltins {
 
     static NativeBuiltin is;
     static NativeBuiltin isMissing;
-    static NativeBuiltin asTest;
     static NativeBuiltin checkTrueFalse;
     static NativeBuiltin asLogicalBlt;
 

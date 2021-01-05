@@ -308,13 +308,19 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
             };
             if (CheckTrueFalse::Cast(i)) {
-                if (isStaticallyNA(i->arg(0).val())) {
+                auto a = i->arg(0).val();
+                if (isStaticallyNA(a)) {
                     bb->insert(ip + 1, new Unreachable());
                     ip += 2;
                     while (ip != bb->end())
                         ip = bb->remove(ip);
                     next = bb->end();
                     bb->deleteSuccessors();
+                } else if (isStaticallyTrue(a) || isStaticallyFalse(a)) {
+                    auto replace = isStaticallyTrue(a)
+                                       ? new LdConst(R_TrueValue)
+                                       : new LdConst(R_FalseValue);
+                    i->replaceUsesAndSwapWith(replace, ip);
                 }
             }
             if (LAnd::Cast(i)) {
@@ -393,17 +399,17 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (convertsToLogicalWithoutWarning(arg)) {
                     auto res = Rf_asLogical(arg);
                     auto c = new LdConst(Rf_ScalarLogical(res));
-                    i->replaceUsesWith(c);
-                    bb->replace(ip, c);
+                    i->replaceUsesAndSwapWith(c, ip);
                     anyChange = true;
                 }
             });
             FOLD_UNARY(AsTest, [&](SEXP arg) {
                 if (convertsToLogicalWithoutWarning(arg)) {
                     auto res = Rf_asLogical(arg);
-                    i->replaceUsesWith(res != FALSE
-                                           ? (Value*)True::instance()
-                                           : (Value*)False::instance());
+                    auto compare = AsTest::Cast(i)->testTrue;
+                    auto replace = (res == compare) ? (Value*)True::instance()
+                                                    : (Value*)False::instance();
+                    i->replaceUsesWith(replace);
                     next = bb->remove(ip);
                     anyChange = true;
                 }

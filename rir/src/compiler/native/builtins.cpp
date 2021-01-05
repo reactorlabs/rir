@@ -928,34 +928,7 @@ NativeBuiltin NativeBuiltins::isMissing = {
     (void*)&isMissingImpl,
 };
 
-int astestImpl(SEXP val) {
-    int cond = NA_LOGICAL;
-    assert(XLENGTH(val) > 0);
-    if (XLENGTH(val) > 0) {
-        switch (TYPEOF(val)) {
-        case LGLSXP:
-            cond = LOGICAL(val)[0];
-            break;
-        case INTSXP:
-            cond = INTEGER(val)[0]; // relies on NA_INTEGER == NA_LOGICAL
-            break;
-        default:
-            cond = Rf_asLogical(val);
-        }
-    }
-    if (cond == NA_LOGICAL) {
-        return true;
-    }
-
-    return cond;
-}
-
-NativeBuiltin NativeBuiltins::asTest = {
-    "astest",
-    (void*)&astestImpl,
-};
-
-void checkTrueFalseImpl(SEXP val) {
+int checkTrueFalseImpl(SEXP val) {
     int cond = NA_LOGICAL;
     if (XLENGTH(val) > 1)
         Rf_warningcall(
@@ -986,6 +959,7 @@ void checkTrueFalseImpl(SEXP val) {
             // TODO: pass srcid
             R_NilValue, msg);
     }
+    return cond;
 }
 
 NativeBuiltin NativeBuiltins::checkTrueFalse = {

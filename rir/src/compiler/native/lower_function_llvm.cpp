@@ -3873,60 +3873,54 @@ void LowerFunctionLLVM::compile() {
                 assert(Representation::Of(i) == Representation::Integer);
 
                 auto arg = i->arg(0).val();
+                llvm::Value* res;
 
                 if (Representation::Of(arg) == Representation::Sexp) {
                     auto a = loadSxp(arg);
-                    call(NativeBuiltins::checkTrueFalse, {a});
-                    break;
-                }
-
-                auto r = Representation::Of(arg);
-
-                auto done = BasicBlock::Create(C, "", fun);
-                auto isNa = BasicBlock::Create(C, "asTestIsNa", fun);
-
-                if (r == Representation::Real) {
-                    auto narg = load(arg, r);
-                    nacheck(narg, arg->type, isNa);
-                    builder.CreateBr(done);
+                    res = call(NativeBuiltins::checkTrueFalse, {a});
                 } else {
-                    auto narg = load(arg, Representation::Integer);
-                    nacheck(narg, arg->type, isNa);
-                    builder.CreateBr(done);
+                    auto r = Representation::Of(arg);
+
+                    auto done = BasicBlock::Create(C, "", fun);
+                    auto isNa = BasicBlock::Create(C, "asTestIsNa", fun);
+
+                    if (r == Representation::Real) {
+                        auto narg = load(arg, r);
+                        nacheck(narg, arg->type, isNa);
+                        res = builder.CreateFCmpUNE(c(0.0), narg);
+                        builder.CreateBr(done);
+                    } else {
+                        auto narg = load(arg, Representation::Integer);
+                        nacheck(narg, arg->type, isNa);
+                        res = builder.CreateICmpNE(c(0), narg);
+                        builder.CreateBr(done);
+                    }
+
+                    builder.SetInsertPoint(isNa);
+                    auto msg = builder.CreateGlobalString(
+                        "missing value where TRUE/FALSE needed");
+                    call(NativeBuiltins::error,
+                         {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+                    builder.CreateRet(
+                        builder.CreateIntToPtr(c(nullptr), t::SEXP));
+
+                    builder.SetInsertPoint(done);
                 }
-
-                builder.SetInsertPoint(isNa);
-                auto msg = builder.CreateGlobalString(
-                    "missing value where TRUE/FALSE needed");
-                call(NativeBuiltins::error,
-                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
-                builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
-
-                builder.SetInsertPoint(done);
+                setVal(i, builder.CreateZExt(res, t::Int));
                 break;
             }
 
             case Tag::AsTest: {
                 assert(Representation::Of(i) == Representation::Integer);
                 auto arg = i->arg(0).val();
-
-                if (Representation::Of(arg) == Representation::Sexp) {
-                    auto a = loadSxp(arg);
-                    setVal(i, call(NativeBuiltins::asTest, {a}));
-                    break;
-                }
-                auto r = Representation::Of(arg);
-
-                if (r == Representation::Real) {
-                    auto narg = load(arg, r);
-                    narg = builder.CreateZExt(
-                        builder.CreateFCmpUNE(c(0.0), narg), t::Int);
-                    setVal(i, narg);
-                } else {
-                    auto narg = load(arg, Representation::Integer);
-                    setVal(i, builder.CreateZExt(
-                                  builder.CreateICmpNE(c(0), narg), t::Int));
-                }
+                auto argRep = Representation::Of(arg);
+                auto testTrue = AsTest::Cast(i)->testTrue;
+                setVal(i, builder.CreateZExt(
+                              builder.CreateICmpEQ(
+                                  load(arg),
+                                  testTrue ? constant(R_TrueValue, argRep)
+                                           : constant(R_FalseValue, argRep)),
+                              t::Int));
                 break;
             }
 
