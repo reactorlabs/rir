@@ -356,80 +356,9 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         AbstractResult res;
-        auto apply = [&](Instruction* i) {
-            if (!i->effects.includes(Effect::LeakArg) && !MkEnv::Cast(i))
-                return;
-            i->eachArg([&](Value* v) {
-                if (auto m = MkArg::Cast(v->followCasts()))
-                    if (state.escape(m, i))
-                        res.update();
-            });
-        };
 
-        // StVar overriding promise means the promise does not count as escaped
-        // anymore
-        bool handledEscape = false;
-        if (auto st = StVar::Cast(i)) {
-            if (auto mk = MkEnv::Cast(st->env())) {
-                mk->eachLocalVar([&](SEXP name, Value* a, bool) {
-                    if (name != st->varName)
-                        return;
-                    if (auto mka = MkArg::Cast(a->followCasts())) {
-                        handledEscape = true;
-                        auto e = state.escaped.find(mka);
-                        if (e == state.escaped.end())
-                            return;
-                        state.escaped.erase(e);
-                        res.update();
-                    }
-                });
-            }
-        } else if (auto ld = LdVar::Cast(i)) {
-            if (auto mk = MkEnv::Cast(ld->env())) {
-                mk->eachLocalVar([&](SEXP name, Value* a, bool) {
-                    if (name != ld->varName)
-                        return;
-                    // Accessing an escaped promise, leaks it further and we
-                    // need abandon escape analysis...
-                    if (auto mka = MkArg::Cast(a->followCasts())) {
-                        handledEscape = true;
-                        auto e = state.escaped.find(mka);
-                        if (e == state.escaped.end())
-                            return;
-                        if (e->second.empty())
-                            return;
-                        res.update();
-                        e->second.clear();
-                    }
-                });
-                if (!handledEscape) {
-                    // Access goes past local envs, no need to worry
-                    // TODO: maybe do this recursive?
-                    if (!MkEnv::Cast(mk->lexicalEnv()))
-                        handledEscape = true;
-                }
-            }
-        }
-
-        // In case there is an environment access we loose track of which proms
-        // are escaped to where.
-        if (i->effects.includes(Effect::ReadsEnv) && !handledEscape) {
-            for (auto& e : state.escaped) {
-                if (!e.second.empty()) {
-                    res.update();
-                    e.second.clear();
-                }
-            }
-        }
-
-        if (auto phi = Phi::Cast(i)) {
-            if (phi->type.maybeLazy()) {
-                if (state.forcedBy.count(phi) == 0 && state.declare(phi)) {
-                    res.update();
-                }
-            }
-            apply(i);
-        } else if (auto f = Force::Cast(i)) {
+        // 1. Keep track of when a prom is forced
+        if (auto f = Force::Cast(i)) {
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
                 if (arg->type.maybeLazy()) {
                     if (state.forcedAt(arg, f))
@@ -448,36 +377,132 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                         res.update();
                 }
             }
+        }
+
+        // 3. If this instruction can force, taint all escaped, unevaluated
+        // proms
+        if (i->effects.contains(Effect::Force)) {
+            if (state.sideeffect())
+                res.taint();
+        }
+
+        // 2. If this instruction accesses an environment, taint all escape
+        // information, because after a random env access we cannot rely on the
+        // information where the promises escaped to.
+        if (i->effects.includes(Effect::ReadsEnv)) {
+            // StVar overriding promise means the promise does not count as
+            // escaped anymore
+            bool handledEscapeTaint = false;
+            if (auto st = StVar::Cast(i)) {
+                if (auto mk = MkEnv::Cast(st->env())) {
+                    mk->eachLocalVar([&](SEXP name, Value* a, bool) {
+                        if (name != st->varName)
+                            return;
+                        if (auto mka = MkArg::Cast(a->followCasts())) {
+                            handledEscapeTaint = true;
+                            auto e = state.escaped.find(mka);
+                            if (e == state.escaped.end())
+                                return;
+                            state.escaped.erase(e);
+                            res.update();
+                        }
+                    });
+                }
+            } else if (auto ld = LdVar::Cast(i)) {
+                if (auto mk = MkEnv::Cast(ld->env())) {
+                    mk->eachLocalVar([&](SEXP name, Value* a, bool) {
+                        if (name != ld->varName)
+                            return;
+                        // Accessing an escaped promise, leaks it further and we
+                        // need abandon escape analysis...
+                        if (auto mka = MkArg::Cast(a->followCasts())) {
+                            handledEscapeTaint = true;
+                            auto e = state.escaped.find(mka);
+                            if (e == state.escaped.end())
+                                return;
+                            if (e->second.empty())
+                                return;
+                            res.update();
+                            e->second.clear();
+                        }
+                    });
+                    if (!handledEscapeTaint) {
+                        // Access goes past local envs, no need to worry
+                        // TODO: maybe do this recursive?
+                        if (!MkEnv::Cast(mk->lexicalEnv()))
+                            handledEscapeTaint = true;
+                    }
+                }
+            } else if (IsEnvStub::Cast(i) || MkEnv::Cast(i) ||
+                       FrameState::Cast(i)) {
+                // These instructions do not leak the env further
+                handledEscapeTaint = true;
+            }
+
+            // In case there is an environment access we loose track of which
+            // proms are escaped to where.
+            if (!handledEscapeTaint) {
+                for (auto& e : state.escaped) {
+                    if (!e.second.empty()) {
+                        res.taint();
+                        e.second.clear();
+                    }
+                }
+            }
+        }
+
+        // 3. Figure out where promises escape to
+        std::function<void(Instruction*)> traceEscapes = [&](Instruction* i) {
+            if (!i->effects.includes(Effect::LeakArg) && !MkEnv::Cast(i))
+                return;
+            i->eachArg([&](Value* v) {
+                if (auto m = MkArg::Cast(v->followCasts()))
+                    if (state.escape(m, i))
+                        res.update();
+                if (auto fs = FrameState::Cast(v->followCasts()))
+                    traceEscapes(fs);
+            });
+        };
+        if (auto phi = Phi::Cast(i)) {
+            if (phi->type.maybeLazy()) {
+                if (state.forcedBy.count(phi) == 0 && state.declare(phi)) {
+                    res.update();
+                }
+            }
+            traceEscapes(i);
         } else if (auto mk = MkArg::Cast(i)) {
             if (state.declare(mk))
                 res.update();
+        } else if (auto a = Assume::Cast(i)) {
+            // In case of deopt promises can escape through the last checkpoint
+            auto cp = a->checkpoint();
+            auto d = cp->deoptBranch();
+            while (!d->isExit())
+                d = d->next();
+            traceEscapes(d->last());
         } else if (PushContext::Cast(i) || CastType::Cast(i) ||
-                   Deopt::Cast(i)) { /* do nothing */
+                   FrameState::Cast(i)) {
+            // Do nothing...
             // Pushcontext captures the arglist, which contains the
             // originally passed arguments. These must not be
             // updated!
+            // FrameState is handled when used (see traceEscapes)
         } else {
             if (i->type.maybeLazy()) {
                 if (state.declare(i))
                     res.update();
             }
-            apply(i);
+            traceEscapes(i);
+        }
 
-            if (i->effects.contains(Effect::ReadsEnv)) {
-                if (!IsEnvStub::Cast(i))
-                    if (state.sideeffect())
-                        res.taint();
-            }
-
-            if (i->effects.includes(Effect::Force) &&
-                !state.ambiguousForceOrder &&
-                state.argumentForceOrder.size() < closure->effectiveNArgs()) {
-                // After the first effect we give up on recording force order,
-                // since we can't use it to turn the arguments into eager ones
-                // anyway. Otherwise we would reorder effects.
-                state.ambiguousForceOrder = true;
-                res.taint();
-            }
+        // 4. Side analysis: check if force order gets tainted
+        if (i->effects.includes(Effect::Force) && !state.ambiguousForceOrder &&
+            state.argumentForceOrder.size() < closure->effectiveNArgs()) {
+            // After the first effect we give up on recording force order,
+            // since we can't use it to turn the arguments into eager ones
+            // anyway. Otherwise we would reorder effects.
+            state.ambiguousForceOrder = true;
+            res.taint();
         }
         return res;
     }
@@ -742,18 +767,33 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 }
             } else if (auto cast = CastType::Cast(*ip)) {
-                if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
-                    if (mk->isEager()) {
-                        anyChange = true;
-                        auto eager = mk->eagerArg();
-                        auto nonReflective = [](Instruction* i) {
-                            // StVar used for updating leaked proms
-                            return !StVar::Cast(i) &&
-                                   !i->effects.includes(Effect::Reflection);
-                        };
-                        cast->replaceUsesIn(eager, bb,
-                                            [](Instruction*, size_t) {},
-                                            nonReflective);
+                // Only replace upcasts, or we loose information
+                if (cast->kind == CastType::Upcast) {
+                    if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
+                        if (mk->isEager()) {
+                            anyChange = true;
+                            auto eager = mk->eagerArg();
+                            auto allowedToReplace = [&](Instruction* i) {
+                                if (Phi::Cast(i) ||
+                                    i->effects.includes(Effect::LeakArg) ||
+                                    i->effects.includes(Effect::Reflection)) {
+                                    return false;
+                                }
+                                // if the eager input might be missing, then we
+                                // can only replace for target instructions
+                                // which check for missingness, or we might
+                                // wrongly skip that missingness check through
+                                // the cast.
+                                if (eager->type.maybeMissing())
+                                    return Force::Cast(i) ||
+                                           ChkMissing::Cast(i) ||
+                                           Identical::Cast(i);
+                                return true;
+                            };
+                            cast->replaceUsesIn(eager, bb,
+                                                [](Instruction*, size_t) {},
+                                                allowedToReplace);
+                        }
                     }
                 }
             }
