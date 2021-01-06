@@ -1057,14 +1057,15 @@ class FLIE(StVar, 2, Effects(Effect::WritesEnv) | Effect::LeakArg) {
   public:
     bool isStArg = false;
 
-    StVar(SEXP name, Value* val, Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
-                                         {{val}}, env),
+    StVar(SEXP name, Value* val, Value* env, PirType expected = PirType::val())
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{expected}}, {{val}},
+                                         env),
           varName(name) {}
 
-    StVar(const char* name, Value* val, Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
-                                         {{val}}, env),
+    StVar(const char* name, Value* val, Value* env,
+          PirType expected = PirType::val())
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{expected}}, {{val}},
+                                         env),
           varName(Rf_install(name)) {}
 
     SEXP varName;

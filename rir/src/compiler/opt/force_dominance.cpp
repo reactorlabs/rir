@@ -725,7 +725,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 m->eachLocalVar([&](SEXP name, Value* a, bool) {
                                     if (a->followCasts() == mkarg) {
                                         pos = split->insert(
-                                            pos, new StVar(name, upcast, m));
+                                            pos, new StVar(name, upcast, m,
+                                                           PirType::any()));
                                         pos++;
                                     }
                                 });
@@ -746,7 +747,9 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         anyChange = true;
                         auto eager = mk->eagerArg();
                         auto nonReflective = [](Instruction* i) {
-                            return !i->effects.includes(Effect::Reflection);
+                            // StVar used for updating leaked proms
+                            return !StVar::Cast(i) &&
+                                   !i->effects.includes(Effect::Reflection);
                         };
                         cast->replaceUsesIn(eager, bb,
                                             [](Instruction*, size_t) {},
