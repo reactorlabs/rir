@@ -139,11 +139,13 @@ struct ForcedBy {
         return apply(val, false);
     }
 
-    bool escape(MkArg* val, Instruction* where) {
+    bool escape(MkArg* val, Value* where) {
         auto f = forcedBy.find(val);
         if ((f == forcedBy.end() || !f->second)) {
+            auto existing = escaped.find(val);
+            if (auto st = StVar::Cast(where))
+                where = st->env();
             if (auto mk = MkEnv::Cast(where)) {
-                auto existing = escaped.find(val);
                 if (existing == escaped.end()) {
                     escaped[val].insert(mk);
                 } else if (!existing->second.empty()) { // empty set = ambiguous
@@ -152,6 +154,8 @@ struct ForcedBy {
                     existing->second.insert(mk);
                 }
             } else {
+                if (existing != escaped.end() && existing->second.empty())
+                    return false;
                 escaped[val].clear();
             }
             return true;
@@ -379,14 +383,17 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             }
         }
 
-        // 3. If this instruction can force, taint all escaped, unevaluated
-        // proms
-        if (i->effects.contains(Effect::Force)) {
-            if (state.sideeffect())
+        // 2. If this instruction can force, taint all escaped, unevaluated
+        // proms. Here we (slightly unsoundly) assume that forces do not
+        // reflectively force other, unrelated promises.
+        if (i->effects.contains(Effect::Force) && !LdFun::Cast(i) &&
+            !Force::Cast(i)) {
+            if (state.sideeffect()) {
                 res.taint();
+            }
         }
 
-        // 2. If this instruction accesses an environment, taint all escape
+        // 3. If this instruction accesses an environment, taint all escape
         // information, because after a random env access we cannot rely on the
         // information where the promises escaped to.
         if (i->effects.includes(Effect::ReadsEnv)) {
@@ -434,7 +441,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                     }
                 }
             } else if (IsEnvStub::Cast(i) || MkEnv::Cast(i) ||
-                       FrameState::Cast(i)) {
+                       FrameState::Cast(i) || Deopt::Cast(i)) {
                 // These instructions do not leak the env further
                 handledEscapeTaint = true;
             }
