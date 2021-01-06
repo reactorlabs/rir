@@ -1312,7 +1312,7 @@ class FLI(CheckTrueFalse, 1, Effects() | Effect::Error | Effect::Warn) {
     Value* val() const { return arg<0>().val(); }
 
     explicit CheckTrueFalse(Value* in)
-        : FixedLenInstruction(PirType::simpleScalarLogical(),
+        : FixedLenInstruction(PirType::simpleScalarLogical().notNAOrNaN(),
                               {{PirType::val()}}, {{in}}) {}
 
     Effects inferEffects(const GetType& getType) const override final {

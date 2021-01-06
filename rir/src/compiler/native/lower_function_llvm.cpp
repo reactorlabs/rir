@@ -3901,6 +3901,7 @@ void LowerFunctionLLVM::compile() {
                         "missing value where TRUE/FALSE needed");
                     call(NativeBuiltins::error,
                          {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+                    builder.CreateUnreachable();
                     builder.CreateRet(
                         builder.CreateIntToPtr(c(nullptr), t::SEXP));
 
@@ -3915,11 +3916,13 @@ void LowerFunctionLLVM::compile() {
                 auto arg = i->arg(0).val();
                 auto argRep = Representation::Of(arg);
                 auto testTrue = AsTest::Cast(i)->testTrue;
+                auto compare = testTrue ? constant(R_TrueValue, argRep)
+                                        : constant(R_FalseValue, argRep);
+                auto val = load(arg);
                 setVal(i, builder.CreateZExt(
-                              builder.CreateICmpEQ(
-                                  load(arg),
-                                  testTrue ? constant(R_TrueValue, argRep)
-                                           : constant(R_FalseValue, argRep)),
+                              Representation::Of(arg) == Representation::Real
+                                  ? builder.CreateFCmpOEQ(val, compare)
+                                  : builder.CreateICmpEQ(val, compare),
                               t::Int));
                 break;
             }
@@ -3937,7 +3940,7 @@ void LowerFunctionLLVM::compile() {
                     res = call(NativeBuiltins::asLogicalBlt, {loadSxp(arg)});
                 } else if (r1 == Representation::Real) {
                     auto phi = phiBuilder(t::Int);
-                    auto nin = load(arg, Representation::Real);
+                    auto nin = load(arg);
 
                     auto done = BasicBlock::Create(C, "", fun);
                     auto isNaBr = BasicBlock::Create(C, "isNa", fun);
@@ -3960,7 +3963,7 @@ void LowerFunctionLLVM::compile() {
                     res = phi();
                 } else {
                     assert(r1 == Representation::Integer);
-                    res = load(arg, Representation::Integer);
+                    res = load(arg);
                     if (!arg->type.isA(RType::logical)) {
                         res = builder.CreateSelect(
                             builder.CreateICmpEQ(res, c(NA_INTEGER)),
@@ -5184,23 +5187,30 @@ void LowerFunctionLLVM::compile() {
             if (!Phi::Cast(i))
                 ensureNamedIfNeeded(i);
 
-            if (Parameter::RIR_CHECK_PIR_TYPES > 0 &&
-                Representation::Of(i) == t::SEXP) {
-                if (variables_.count(i) && i->type != PirType::voyd() &&
-                    i->type != RType::expandedDots &&
-                    i->type != NativeType::context && !CastType::Cast(i) &&
-                    !LdConst::Cast(i)) {
-                    static std::vector<std::string> leaky;
-                    const char* msg = nullptr;
-                    if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
-                        std::stringstream str;
-                        i->printRecursive(str, 2);
-                        leaky.push_back(str.str());
-                        msg = leaky.back().c_str();
+            if (Parameter::RIR_CHECK_PIR_TYPES > 0) {
+                if (Representation::Of(i) == t::SEXP) {
+                    if (variables_.count(i) && i->type != PirType::voyd() &&
+                        i->type != RType::expandedDots &&
+                        i->type != NativeType::context && !CastType::Cast(i) &&
+                        !LdConst::Cast(i)) {
+                        static std::vector<std::string> leaky;
+                        const char* msg = nullptr;
+                        if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
+                            std::stringstream str;
+                            i->printRecursive(str, 2);
+                            leaky.push_back(str.str());
+                            msg = leaky.back().c_str();
+                        }
+                        call(NativeBuiltins::checkType,
+                             {load(i), c(i->type.serialize()),
+                              convertToPointer(msg)});
                     }
-                    call(NativeBuiltins::checkType,
-                         {load(i), c(i->type.serialize()),
-                          convertToPointer(msg)});
+                }
+                if (i->type.isA(NativeType::test)) {
+                    auto ok =
+                        builder.CreateOr(builder.CreateICmpEQ(load(i), c(0)),
+                                         builder.CreateICmpEQ(load(i), c(1)));
+                    insn_assert(ok, "Variable of type test has invalid range");
                 }
             }
 

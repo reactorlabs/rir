@@ -959,7 +959,7 @@ int checkTrueFalseImpl(SEXP val) {
             // TODO: pass srcid
             R_NilValue, msg);
     }
-    return cond;
+    return cond ? 1 : 0;
 }
 
 NativeBuiltin NativeBuiltins::checkTrueFalse = {
