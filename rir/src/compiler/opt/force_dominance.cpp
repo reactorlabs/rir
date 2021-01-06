@@ -126,6 +126,16 @@ struct ForcedBy {
             }
             if (phiArg)
                 force = ambiguous();
+
+            // Don't keep taps on forced proms anymore
+            if (auto mk = MkArg::Cast(val)) {
+                auto e = escaped.find(mk);
+                if (e != escaped.end()) {
+                    escaped.erase(e);
+                    res = true;
+                }
+            }
+
             auto f = forcedBy.find(val);
             if (f == forcedBy.end()) {
                 forcedBy.insert(val, force);
@@ -581,6 +591,9 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
                             if (!mk->isEager()) {
                                 if (!isHuge || mk->prom()->size() < 10) {
+                                    // We need to know if the promise escaped
+                                    // before the force. After the force the
+                                    // analysis deletes escape information.
                                     auto b = analysis.before(i);
                                     auto inl = b.isSafeToInline(mk, f);
                                     if (inl != ForcedBy::NotSafeToInline) {
@@ -588,6 +601,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         if (inl ==
                                             ForcedBy::SafeToInlineWithUpdate) {
                                             needsUpdate[f] = b.escaped.at(mk);
+                                            assert(!needsUpdate[f].empty());
                                         }
                                     }
                                 }
