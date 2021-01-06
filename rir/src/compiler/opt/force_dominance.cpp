@@ -1,5 +1,7 @@
+#include "../analysis/available_checkpoints.h"
 #include "../analysis/generic_static_analysis.h"
 #include "../analysis/query.h"
+#include "../analysis/reachability.h"
 #include "../parameter.h"
 #include "../pir/pir_impl.h"
 #include "compiler/util/bb_transform.h"
@@ -296,18 +298,13 @@ struct ForcedBy {
         NotSafeToInline
     };
 
-    PromiseInlineable isSafeToInline(MkArg* a, Force* f,
-                                     const ForcedBy& finalState) const {
+    PromiseInlineable isSafeToInline(MkArg* a, Force* f) const {
         auto e = escaped.find(a);
         if (e == escaped.end())
             return SafeToInline;
         if (e->second.empty())
             return NotSafeToInline;
-        // We can only patch escaped proms if this force is dominating on all
-        // paths
-        if (finalState.isDominatingForce(f))
-            return SafeToInlineWithUpdate;
-        return NotSafeToInline;
+        return SafeToInlineWithUpdate;
     }
 
     void print(std::ostream& out, bool tty) const {
@@ -527,6 +524,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
     {
         ForceDominanceAnalysis analysis(cls, code, log);
+        AvailableCheckpoints cp(cls, code, log);
+        Reachability reachable(analysis.cfg, cp);
         analysis();
 
         auto result = analysis.result();
@@ -543,16 +542,15 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto i = *ip;
 
                 if (auto f = Force::Cast(i)) {
-                    auto a = analysis.resultIgnoringUnreachableExits(
-                        f, analysis.cfg);
+                    auto a =
+                        analysis.resultIgnoringUnreachableExits(f, reachable);
                     if (a.isDominatingForce(f)) {
                         f->strict = true;
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
                             if (!mk->isEager()) {
                                 if (!isHuge || mk->prom()->size() < 10) {
                                     auto b = analysis.before(i);
-                                    auto inl = b.isSafeToInline(
-                                        mk, f, analysis.result());
+                                    auto inl = b.isSafeToInline(mk, f);
                                     if (inl != ForcedBy::NotSafeToInline) {
                                         toInline.insert(f);
                                         if (inl ==

@@ -9,6 +9,7 @@
 #include "R/r.h"
 #include "abstract_result.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/analysis/reachability.h"
 #include "compiler/log/stream_logger.h"
 
 #include <stack>
@@ -37,6 +38,8 @@ namespace pir {
  * Anything else depends on the requirements of the apply function, which is
  * provided by the subclass that specializes StaticAnalysis.
  */
+
+class AvailableCheckpoints;
 
 enum class AnalysisDebugLevel {
     None,
@@ -139,16 +142,16 @@ class StaticAnalysis {
         return exitpoint;
     }
 
-    const AbstractState resultIgnoringUnreachableExits(Instruction* instruction,
-                                                       const CFG& cfg) const {
+    const AbstractState
+    resultIgnoringUnreachableExits(Instruction* instruction,
+                                   const Reachability& reachable) const {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
         bool foundAny = false;
         AbstractState exitState;
         for (auto& exit : exitpoints) {
-            if (instruction->bb() == exit.first ||
-                cfg.isPredecessor(instruction->bb(), exit.first)) {
+            if (reachable(instruction, exit.first)) {
                 if (foundAny) {
                     exitState.mergeExit(exit.second);
                 } else {
