@@ -89,6 +89,13 @@ struct ForcedBy {
         // been forced
 
         for (auto& e : escaped) {
+            bool stubbed = !e.second.empty();
+            for (auto env : e.second) {
+                if (!env->stub)
+                    stubbed = false;
+            }
+            if (stubbed)
+                continue;
             auto f = forcedBy.find(e.first);
             if (f == forcedBy.end()) {
                 forcedBy.insert(e.first, ambiguous());
