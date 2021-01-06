@@ -5187,7 +5187,7 @@ void LowerFunctionLLVM::compile() {
             if (!Phi::Cast(i))
                 ensureNamedIfNeeded(i);
 
-            if (Parameter::RIR_CHECK_PIR_TYPES > 0) {
+            if (Parameter::RIR_CHECK_PIR_TYPES > 0 && !i->type.isVoid()) {
                 if (Representation::Of(i) == t::SEXP) {
                     if (variables_.count(i) && i->type != PirType::voyd() &&
                         i->type != RType::expandedDots &&
