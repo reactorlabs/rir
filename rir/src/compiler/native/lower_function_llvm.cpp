@@ -5187,10 +5187,10 @@ void LowerFunctionLLVM::compile() {
             if (!Phi::Cast(i))
                 ensureNamedIfNeeded(i);
 
-            if (Parameter::RIR_CHECK_PIR_TYPES > 0 && !i->type.isVoid()) {
+            if (Parameter::RIR_CHECK_PIR_TYPES > 0 && !i->type.isVoid() &&
+                variables_.count(i)) {
                 if (Representation::Of(i) == t::SEXP) {
-                    if (variables_.count(i) && i->type != PirType::voyd() &&
-                        i->type != RType::expandedDots &&
+                    if (i->type != RType::expandedDots &&
                         i->type != NativeType::context && !CastType::Cast(i) &&
                         !LdConst::Cast(i)) {
                         static std::vector<std::string> leaky;
