@@ -12,13 +12,17 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
     bool anyChange = false;
 
     auto isTarget = [](Instruction* j) {
-        if (j->hasObservableEffects())
-            return false;
-        if (auto call = CallBuiltin::Cast(j)) {
-            return SafeBuiltinsList::idempotent(call->builtinId);
-        }
-        if (auto call = CallSafeBuiltin::Cast(j)) {
-            return SafeBuiltinsList::nonObjectIdempotent(call->builtinId);
+        int builtinId = -1;
+        if (auto call = CallBuiltin::Cast(j))
+            builtinId = call->builtinId;
+        if (auto call = CallSafeBuiltin::Cast(j))
+            builtinId = call->builtinId;
+        if (builtinId != -1) {
+            if (j->hasObservableEffects())
+                return false;
+            if (j->mergedInputType().maybeObj())
+                return SafeBuiltinsList::nonObjectIdempotent(builtinId);
+            return SafeBuiltinsList::idempotent(builtinId);
         }
         return LdFun::Cast(j) || DotsList::Cast(j) || MkArg::Cast(j) ||
                FrameState::Cast(j) || CastType::Cast(j);

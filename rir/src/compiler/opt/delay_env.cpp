@@ -8,16 +8,6 @@
 namespace rir {
 namespace pir {
 
-static bool envInterference(Value* e1, Value* e2) {
-    while (e1 && Env::isAnyEnv(e1) && e1 != Env::nil()) {
-        if (e1 == e2) {
-            return true;
-        }
-        e1 = Env::parentEnv(e1);
-    }
-    return false;
-}
-
 bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                      LogStream&) const {
     bool anyChange = false;
@@ -85,9 +75,8 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 }
 
-                if (next->hasEnv())
-                    if (envInterference(next->env(), envInstr))
-                        break;
+                if (next->hasEnv() && next->env() == envInstr)
+                    break;
 
                 if (PushContext::Cast(next))
                     envInstr->context++;
