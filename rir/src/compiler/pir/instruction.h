@@ -2482,7 +2482,11 @@ class VLI(Phi, Effects::None()) {
         SLOWASSERT(std::find(input.begin(), input.end(), in) == input.end() &&
                    "Duplicate PHI input block");
         input.push_back(in);
-        args_.push_back(InstrArg(arg, arg->type));
+        args_.push_back(InstrArg(arg, arg->type.isRType()
+                                          ? (arg->type.maybePromiseWrapped()
+                                                 ? PirType::any()
+                                                 : PirType::val())
+                                          : arg->type));
     }
     BB* inputAt(size_t i) const { return input.at(i); }
     void updateInputAt(size_t i, BB* bb) {

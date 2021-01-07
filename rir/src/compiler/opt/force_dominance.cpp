@@ -4,6 +4,7 @@
 #include "../parameter.h"
 #include "../pir/pir_impl.h"
 #include "compiler/util/bb_transform.h"
+#include "compiler/util/safe_builtins_list.h"
 #include "pass_definitions.h"
 #include "utils/Map.h"
 #include "utils/Set.h"
@@ -277,20 +278,31 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             anyChange = true;
                             auto eager = mk->eagerArg();
                             auto allowedToReplace = [&](Instruction* i) {
-                                if (Phi::Cast(i) ||
-                                    i->effects.includes(Effect::LeakArg) ||
+                                if (Force::Cast(i) || LdFun::Cast(i))
+                                    return true;
+                                int builtinId = -1;
+                                if (auto b = CallBuiltin::Cast(i))
+                                    builtinId = b->builtinId;
+                                if (auto b = CallSafeBuiltin::Cast(i))
+                                    builtinId = b->builtinId;
+                                if (builtinId) {
+                                    if (eager->type.maybeObj())
+                                        if (SafeBuiltinsList::always(builtinId))
+                                            return true;
+                                    if (SafeBuiltinsList::nonObject(builtinId))
+                                        return true;
+                                }
+                                if (i->effects.includes(Effect::LeakArg) ||
                                     i->effects.includes(Effect::Reflection)) {
                                     return false;
                                 }
-                                // if the eager input might be missing, then we
-                                // can only replace for target instructions
-                                // which check for missingness, or we might
-                                // wrongly skip that missingness check through
-                                // the cast.
-                                if (eager->type.maybeMissing())
-                                    return Force::Cast(i) ||
-                                           ChkMissing::Cast(i) ||
-                                           Identical::Cast(i);
+                                // Depromised and promised missing do not behave
+                                // the same (promised missing does not cause
+                                // default arguments to be used)! So let's only
+                                // replace this for instructions which are
+                                // stripping the promise anyway.
+                                if (eager == MissingArg::instance())
+                                    return false;
                                 return true;
                             };
                             cast->replaceUsesIn(eager, bb,
