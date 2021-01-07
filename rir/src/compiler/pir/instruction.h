@@ -2049,8 +2049,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
 
     Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
          Value* fs, unsigned srcIdx)
-        : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv,
-                                       srcIdx) {
+        : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
         assert(fs);
         pushArg(fs, NativeType::frameState);
         pushArg(fun, RType::closure);
