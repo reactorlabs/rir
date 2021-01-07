@@ -20,22 +20,6 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
     std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
     std::deque<Promise*> todoUsedProms;
 
-    // Do this first so dead code elimination will remove the dependencies
-    Visitor::run(code->entry, [&](Instruction* i) {
-        if (auto c = CastType::Cast(i)) {
-            if (c->kind == CastType::Upcast) {
-                if (auto mk = MkArg::Cast(c->arg(0).val())) {
-                    if (mk->isEager() && mk->prom()->trivial() &&
-                        !mk->hasEnv()) {
-                        // these are their own ast-expression, so substitute and
-                        // similar will not give us trouble
-                        c->replaceUsesWith(mk->eagerArg());
-                    }
-                }
-            }
-        }
-    });
-
     DeadInstructions dead(code, 3, Effects(Effect::Visibility));
     bool anyChange = false;
 

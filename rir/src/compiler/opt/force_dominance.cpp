@@ -41,6 +41,21 @@ namespace pir {
 
 bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                            LogStream& log) const {
+    // Do this first so dead code elimination will remove the dependencies
+    Visitor::run(code->entry, [&](Instruction* i) {
+        if (auto c = CastType::Cast(i)) {
+            if (c->kind == CastType::Upcast) {
+                if (auto mk = MkArg::Cast(c->arg(0).val())) {
+                    if (mk->isEager() && mk->prom()->trivial()) {
+                        // these are their own ast-expression, so substitute and
+                        // similar will not give us trouble
+                        c->replaceUsesWith(mk->eagerArg());
+                    }
+                }
+            }
+        }
+    });
+
     SmallSet<Force*> toInline;
     SmallMap<Force*, Force*> dominatedBy;
     SmallMap<Force*, SmallSet<MkEnv*>> needsUpdate;
