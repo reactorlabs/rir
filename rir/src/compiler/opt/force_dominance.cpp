@@ -60,6 +60,39 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
             cls->properties.argumentForceOrder = result.argumentForceOrder;
         }
 
+        // Break up as many promise dependencies as possible
+        Visitor::run(code->entry, [&](BB* bb) {
+            if (!bb->isExit())
+                return;
+            auto it = bb->begin();
+            while (it != bb->end()) {
+                auto next = it + 1;
+                auto i = *it;
+                int argnum = 0;
+                i->eachArg([&](InstrArg& arg) {
+                    if (auto mk = MkArg::Cast(arg.val())) {
+                        auto a = analysis.resultIgnoringUnreachableExits(
+                            i, reachable);
+                        if (a.isUnused(mk)) {
+                            auto repl = mk->clone();
+                            if (auto phi = Phi::Cast(i)) {
+                                auto inp = phi->inputAt(argnum);
+                                assert(inp != bb);
+                                inp->append(repl);
+                            } else {
+                                it = bb->insert(it, repl);
+                                it++;
+                            }
+                            arg.val() = repl;
+                            next = it + 1;
+                        }
+                    }
+                    argnum++;
+                });
+                it = next;
+            }
+        });
+
         VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {

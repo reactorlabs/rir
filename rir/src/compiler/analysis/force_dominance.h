@@ -290,6 +290,16 @@ struct ForcedBy {
         return f == getDominatingForce(f);
     }
 
+    bool isUnused(MkArg* a) const {
+        auto force = forcedBy.find(a);
+        if (force == forcedBy.end() || !force->second) {
+            auto e = escaped.find(a);
+            if (e == escaped.end())
+                return true;
+        }
+        return false;
+    }
+
     Force* getDominatingForce(Force* f) const {
         auto a = f->arg<0>().val()->followCasts();
         auto res = forcedBy.find(a);
