@@ -1078,8 +1078,8 @@ class FLIE(StVar, 2, Effects(Effect::WritesEnv) | Effect::LeakArg) {
 // Pseudo Instruction. Is actually a StVar with a flag set.
 class StArg : public StVar {
   public:
-    StArg(SEXP name, Value* val, Value* env) : StVar(name, val, env) {
-        arg<0>().type() = PirType::any();
+    StArg(SEXP name, Value* val, Value* env)
+        : StVar(name, val, env, PirType::any()) {
         isStArg = true;
     }
 };

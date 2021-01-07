@@ -411,7 +411,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         // 3. If this instruction accesses an environment, taint all escape
         // information, because after a random env access we cannot rely on the
         // information where the promises escaped to.
-        if (i->effects.includes(Effect::ReadsEnv)) {
+        if (i->effects.includes(Effect::ReadsEnv) && !Deopt::Cast(i)) {
             // StVar overriding promise means the promise does not count as
             // escaped anymore
             bool handledEscapeTaint = false;
@@ -495,13 +495,6 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else if (auto mk = MkArg::Cast(i)) {
             if (state.declare(mk))
                 res.update();
-        } else if (auto a = Assume::Cast(i)) {
-            // In case of deopt promises can escape through the last checkpoint
-            auto cp = a->checkpoint();
-            auto d = cp->deoptBranch();
-            while (!d->isExit())
-                d = d->next();
-            traceEscapes(d->last());
         } else if (PushContext::Cast(i) || CastType::Cast(i) ||
                    FrameState::Cast(i)) {
             // Do nothing...

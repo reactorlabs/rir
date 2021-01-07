@@ -302,8 +302,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 m->eachLocalVar([&](SEXP name, Value* a, bool) {
                                     if (a->followCasts() == mkarg) {
                                         pos = split->insert(
-                                            pos, new StVar(name, upcast, m,
-                                                           PirType::any()));
+                                            pos, new StArg(name, upcast, m));
                                         pos++;
                                     }
                                 });

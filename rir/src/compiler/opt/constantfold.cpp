@@ -414,6 +414,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     anyChange = true;
                 }
             });
+
             if (Identical::Cast(i)) {
                 // Those are targeting the checks for default argument
                 // evaluation after inlining
