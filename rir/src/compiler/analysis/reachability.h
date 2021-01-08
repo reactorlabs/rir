@@ -19,7 +19,9 @@ class Reachability {
     Reachability(ClosureVersion*, Code* code, LogStream& log);
     Reachability(const CFG&, const AvailableCheckpoints&);
     ~Reachability();
-    bool operator()(Instruction*, BB*) const;
+
+    // Checks if basic block b is reachable from right *before* instruction a
+    bool operator()(Instruction* a, BB* b) const;
 };
 
 } // namespace pir

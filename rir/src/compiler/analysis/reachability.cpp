@@ -24,10 +24,9 @@ bool Reachability::operator()(Instruction* a, BB* b) const {
         return true;
     if (cfg.isPredecessor(a->bb(), b))
         return true;
-    if (auto c = cp.at(a)) {
+    if (auto c = cp.at(a))
         if (cfg.isPredecessor(c->bb(), b))
             return true;
-    }
     return false;
 }
 

@@ -95,8 +95,10 @@ void AbstractPirValue::print(std::ostream& out, bool tty) const {
     for (auto it = vals.begin(); it != vals.end();) {
         auto vo = *it;
         vo.val->printRef(out);
-        out << "@";
-        vo.origin->printRef(out);
+        if (vo.origin) {
+            out << "@";
+            vo.origin->printRef(out);
+        }
         it++;
         if (it != vals.end())
             out << "|";

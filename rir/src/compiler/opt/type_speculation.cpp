@@ -26,7 +26,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         speculate;
 
     auto dom = DominanceGraph(code);
-    Visitor::run(code->entry, [&](Instruction* i) {
+    VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
         if (i->typeFeedback.used || i->typeFeedback.type.isVoid() ||
             i->type.isA(i->typeFeedback.type))
             return;
@@ -105,7 +105,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
     });
 
     bool anyChange = false;
-    Visitor::run(code->entry, [&](BB* bb) {
+    VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
         if (!speculate.count(bb))
             return;
 

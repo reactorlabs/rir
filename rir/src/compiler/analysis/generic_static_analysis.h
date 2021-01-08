@@ -349,7 +349,12 @@ class StaticAnalysis {
                         if (DEBUG_LEVEL == AnalysisDebugLevel::Taint) {
                             AbstractState old = state;
                             res = compute(state, i);
-                            logTaintChange(old, state, res, i);
+                            if (!Deopt::Cast(i)) {
+                                AbstractState old2 = old;
+                                auto changed = old2.merge(state);
+                                if (changed > AbstractResult::None)
+                                    logTaintChange(old, state, res, i);
+                            }
                         } else {
                             res = compute(state, i);
                             logChange(state, res, i);
