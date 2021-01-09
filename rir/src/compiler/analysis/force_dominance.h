@@ -495,8 +495,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else if (auto mk = MkArg::Cast(i)) {
             if (state.declare(mk))
                 res.update();
-        } else if (PushContext::Cast(i) || CastType::Cast(i) ||
-                   FrameState::Cast(i)) {
+        } else if (CastType::Cast(i) || FrameState::Cast(i)) {
             // Do nothing...
             // Pushcontext captures the arglist, which contains the
             // originally passed arguments. These must not be

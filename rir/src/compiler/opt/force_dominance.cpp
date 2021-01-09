@@ -391,8 +391,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     if (!forcedMkArg.empty()) {
         DominanceGraph dom(code);
         for (auto m : forcedMkArg) {
-            m.first->replaceDominatedUses(m.second.first, dom,
-                                          {Tag::PushContext});
+            m.first->replaceDominatedUses(m.second.first, dom);
         }
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto c = CastType::Cast(i)) {
