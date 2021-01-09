@@ -114,9 +114,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldvar_for_update_cache_:
     case Opcode::ldvar_for_update_:
     case Opcode::ldvar_super_:
-    case Opcode::starg_:
     case Opcode::stvar_:
-    case Opcode::starg_cached_:
     case Opcode::stvar_cached_:
     case Opcode::stvar_super_:
     case Opcode::guard_fun_:
@@ -304,7 +302,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
             }
             if (*cptr == Opcode::ldvar_cached_ ||
                 *cptr == Opcode::stvar_cached_ ||
-                *cptr == Opcode::starg_cached_ ||
                 *cptr == Opcode::ldvar_for_update_cache_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
                 if (*argsIndex >= cp_pool_length(ctx))

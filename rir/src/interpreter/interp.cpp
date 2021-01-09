@@ -2197,49 +2197,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(starg_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            SEXP val = ostack_top(ctx);
-
-            assert(!LazyEnvironment::check(env));
-
-            SEXP sym = cp_pool_at(ctx, id);
-            // In case there is a local binding we must honor missingness which
-            // defineVar does not
-            if (env != R_BaseEnv && env != R_BaseNamespace) {
-                R_varloc_t loc = R_findVarLocInFrame(env, sym);
-                if (!R_VARLOC_IS_NULL(loc) && !BINDING_IS_LOCKED(loc.cell) &&
-                    !IS_ACTIVE_BINDING(loc.cell)) {
-                    SEXP cur = CAR(loc.cell);
-                    if (cur != val) {
-                        INCREMENT_NAMED(val);
-                        SETCAR(loc.cell, val);
-                    }
-                    ostack_pop(ctx);
-                    NEXT();
-                }
-            }
-
-            rirDefineVarWrapper(sym, val, env);
-            ostack_pop(ctx);
-
-            NEXT();
-        }
-
-        INSTRUCTION(starg_cached_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate cacheIndex = readImmediate();
-            advanceImmediate();
-            SEXP val = ostack_pop(ctx);
-
-            assert(!LazyEnvironment::check(env));
-            cachedSetVar(val, env, id, cacheIndex, ctx, bindingCache, true);
-
-            NEXT();
-        }
-
         INSTRUCTION(stvar_super_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();

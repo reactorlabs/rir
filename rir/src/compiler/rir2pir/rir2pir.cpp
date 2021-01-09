@@ -244,15 +244,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::starg_:
-    case Opcode::starg_cached_:
-        if (bc.immediateConst() == symbol::c)
-            compiler.seenC = true;
-        forceIfPromised(0);
-        v = pop();
-        insert(new StArg(bc.immediateConst(), v, env));
-        break;
-
     case Opcode::stvar_:
     case Opcode::stvar_cached_:
         if (bc.immediateConst() == symbol::c)
