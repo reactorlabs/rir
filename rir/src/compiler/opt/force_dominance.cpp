@@ -8,6 +8,7 @@
 #include "pass_definitions.h"
 #include "utils/Map.h"
 #include "utils/Set.h"
+#include <unordered_map>
 #include <unordered_set>
 
 namespace rir {
@@ -41,6 +42,8 @@ namespace pir {
 
 bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                            LogStream& log) const {
+    bool anyChange = false;
+
     // Do this first so dead code elimination will remove the dependencies
     Visitor::run(code->entry, [&](Instruction* i) {
         if (auto c = CastType::Cast(i)) {
@@ -50,16 +53,15 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         // these are their own ast-expression, so substitute and
                         // similar will not give us trouble
                         c->replaceUsesWith(mk->eagerArg());
+                        anyChange = true;
                     }
                 }
             }
         }
     });
 
-    SmallSet<Force*> toInline;
-    SmallSet<Force*> needsUpdate;
-    SmallMap<Force*, Force*> dominatedBy;
-    bool anyChange = false;
+    std::unordered_map<Force*, ForcedBy::PromiseInlineable> toInline;
+    SmallMap<Force*, Instruction*> dominatedBy;
 
     bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
     {
@@ -125,15 +127,11 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     // We need to know if the promise escaped
                                     // before the force. After the force the
                                     // analysis deletes escape information.
-                                    auto b = analysis.before(i);
-                                    auto inl = b.isSafeToInline(mk, f);
-                                    if (inl != ForcedBy::NotSafeToInline) {
-                                        toInline.insert(f);
-                                        if (inl ==
-                                            ForcedBy::SafeToInlineWithUpdate) {
-                                            needsUpdate[f] = b.escaped.at(mk);
-                                            assert(!needsUpdate[f].empty());
-                                        }
+                                    auto inl = a.isSafeToInline(mk, f);
+                                    if (inl.kind !=
+                                        ForcedBy::PromiseInlineable::
+                                            NotSafeToInline) {
+                                        toInline.emplace(f, inl);
                                     }
                                 }
                             }
@@ -144,7 +142,9 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 } else if (auto u = UpdatePromise::Cast(i)) {
                     if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
-                        if (!analysis.before(i).escaped.count(mkarg))
+                        auto a = analysis.resultIgnoringUnreachableExits(
+                            mkarg, reachable);
+                        if (!a.escaped.count(mkarg))
                             next = bb->remove(ip);
                     }
                 }
@@ -299,16 +299,11 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             promRes->type.orPromiseWrapped());
                         pos = split->insert(pos, upcast);
                         pos++;
-                        forcedMkArg[mkarg] = {fixedMkArg, upcast};
 
-                        auto u = needsUpdate.find(f);
-                        if (u != needsUpdate.end()) {
-                            if (u->second.empty()) {
-                            pos = split->insert(
-                                pos, new UpdatePromise(mkarg, promRes));
-                            pos++;
-                            } else {
-                            for (auto m : u->second) {
+                        auto u = toInline.at(f);
+                        if (u.kind == ForcedBy::PromiseInlineable::
+                                          SafeToInlineWithUpdate) {
+                            if (auto m = MkEnv::Cast(u.escapedAt())) {
                                 m->eachLocalVar([&](SEXP name, Value* a, bool) {
                                     if (a->followCasts() == mkarg) {
                                         pos = split->insert(
@@ -316,7 +311,14 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         pos++;
                                     }
                                 });
-                            }
+                            } else if (PushContext::Cast(u.escapedAt())) {
+                                // Escapes to non-environment, let's update
+                                // existing promise
+                                pos = split->insert(
+                                    pos, new UpdatePromise(mkarg, promRes));
+                                pos++;
+                            } else {
+                                assert(false && "Cannot deal with this leak");
                             }
                         }
                         next = pos;
@@ -385,13 +387,19 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto dom = dominatedBy.find(f);
                 if (dom != dominatedBy.end()) {
                     assert(f != dom->second);
-                    if (inlinedPromise.count(dom->second)) {
-                        f->replaceUsesWith(inlinedPromise.at(dom->second));
-                    } else {
-                        dom->second->type = dom->second->type & f->type;
-                        f->replaceUsesWith(dom->second);
+                    if (auto otherForce = Force::Cast(dom->second)) {
+                        if (inlinedPromise.count(otherForce)) {
+                            f->replaceUsesWith(inlinedPromise.at(otherForce));
+                        } else {
+                            dom->second->type = dom->second->type & f->type;
+                            f->replaceUsesWith(dom->second);
+                        }
+                        next = bb->remove(ip);
+                    } else if (auto otherUpdate =
+                                   UpdatePromise::Cast(dom->second)) {
+                        f->replaceUsesWith(otherUpdate->arg(1).val());
+                        next = bb->remove(ip);
                     }
-                    next = bb->remove(ip);
                 }
             }
             ip = next;

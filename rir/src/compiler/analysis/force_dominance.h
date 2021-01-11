@@ -46,7 +46,7 @@ namespace pir {
 struct ForcedBy {
     rir::SmallMap<Value*, Instruction*> forcedBy;
     rir::SmallSet<Value*> inScope;
-    std::unordered_map<MkArg*, rir::SmallSet<MkEnv*>> escaped;
+    std::unordered_map<MkArg*, Instruction*> escaped;
 
     std::vector<size_t> argumentForceOrder;
     bool ambiguousForceOrder = false;
@@ -79,6 +79,11 @@ struct ForcedBy {
         return changed;
     }
 
+    bool isForced(MkArg* m) const {
+        auto f = forcedBy.find(m);
+        return f != forcedBy.end() && f->second;
+    }
+
     bool sideeffect() {
         bool changed = false;
         // when we execute an instruction that could force promises as a
@@ -86,21 +91,18 @@ struct ForcedBy {
         // been forced
 
         for (auto& e : escaped) {
-            bool stubbed = !e.second.empty();
-            for (auto env : e.second) {
-                if (!env->stub)
-                    stubbed = false;
-            }
-            if (stubbed)
+            // stubbed envs are guarded from external access
+            if (e.second && MkEnv::Cast(e.second) &&
+                MkEnv::Cast(e.second)->stub)
                 continue;
             auto f = forcedBy.find(e.first);
             if (f == forcedBy.end()) {
                 forcedBy.insert(e.first, ambiguous());
-                e.second.clear();
+                e.second = nullptr;
                 changed = true;
             } else if (!f->second) {
                 f->second = ambiguous();
-                e.second.clear();
+                e.second = nullptr;
                 changed = true;
             }
         }
@@ -121,16 +123,6 @@ struct ForcedBy {
             }
             if (phiArg)
                 force = ambiguous();
-
-            // Don't keep taps on forced proms anymore
-            if (auto mk = MkArg::Cast(val)) {
-                auto e = escaped.find(mk);
-                if (e != escaped.end()) {
-                    escaped.erase(e);
-                    res = true;
-                }
-            }
-
             auto f = forcedBy.find(val);
             if (f == forcedBy.end()) {
                 forcedBy.insert(val, force);
@@ -150,22 +142,26 @@ struct ForcedBy {
             auto existing = escaped.find(val);
             if (auto st = StVar::Cast(where))
                 where = st->env();
-            if (auto mk = MkEnv::Cast(where)) {
+            if (MkEnv::Cast(where) || PushContext::Cast(where)) {
+                auto wherei = Instruction::Cast(where);
                 if (existing == escaped.end()) {
-                    escaped[val].insert(mk);
-                } else if (!existing->second.empty()) { // empty set = ambiguous
-                    if (existing->second.count(mk))
+                    escaped[val] = wherei;
+                    return true;
+                } else if (existing->second) {
+                    if (existing->second == wherei)
                         return false;
-                    existing->second.insert(mk);
-                }
-            } else {
-                if (existing != escaped.end() && existing->second.empty())
+                    existing->second = nullptr;
+                    return true;
+                } else {
+                    // null means ambiguous
                     return false;
-                escaped[val].clear();
+                }
             }
+            if (existing != escaped.end() && !existing->second)
+                return false;
+            escaped[val] = nullptr;
             return true;
         }
-
         return false;
     }
 
@@ -217,18 +213,25 @@ struct ForcedBy {
         }
 
         for (auto& e : escaped) {
-            if (e.second.empty())
+            if (!e.second)
                 continue;
             auto o = other.escaped.find(e.first);
-            if (o == other.escaped.end() || o->second.empty() ||
-                e.second != o->second || gotAmbiguous.count(e.first)) {
-                e.second.clear();
+            if (o == other.escaped.end() || !o->second) {
+                if (!exitMerge && other.inScope.count(e.first)) {
+                    e.second = nullptr;
+                    res.update();
+                }
+            } else if (e.second != o->second || gotAmbiguous.count(e.first)) {
+                e.second = nullptr;
                 res.update();
             }
         }
         for (auto& o : other.escaped) {
             if (!escaped.count(o.first)) {
-                escaped[o.first];
+                if (exitMerge)
+                    escaped.emplace(o);
+                else
+                    escaped[o.first] = nullptr;
                 res.update();
             }
         }
@@ -300,7 +303,7 @@ struct ForcedBy {
         return false;
     }
 
-    Force* getDominatingForce(Force* f) const {
+    Instruction* getDominatingForce(Force* f) const {
         auto a = f->arg<0>().val()->followCasts();
         auto res = forcedBy.find(a);
         if (res == forcedBy.end())
@@ -311,19 +314,32 @@ struct ForcedBy {
         return res->second;
     }
 
-    enum PromiseInlineable {
-        SafeToInline,
-        SafeToInlineWithUpdate,
-        NotSafeToInline
+    struct PromiseInlineable {
+        enum Kind { SafeToInline, SafeToInlineWithUpdate, NotSafeToInline };
+        const Kind kind;
+
+        PromiseInlineable(Kind kind, Instruction* e = nullptr)
+            : kind(kind), escaped(e) {
+            assert(!e || kind == SafeToInlineWithUpdate);
+        }
+
+        Instruction* escapedAt() {
+            assert(kind == SafeToInlineWithUpdate);
+            return escaped;
+        }
+
+      private:
+        Instruction* escaped = nullptr;
     };
 
     PromiseInlineable isSafeToInline(MkArg* a, Force* f) const {
         auto e = escaped.find(a);
         if (e == escaped.end())
-            return SafeToInline;
-        if (e->second.empty())
-            return NotSafeToInline;
-        return SafeToInlineWithUpdate;
+            return PromiseInlineable::SafeToInline;
+        if (!e->second)
+            return PromiseInlineable::NotSafeToInline;
+        return PromiseInlineable(PromiseInlineable::SafeToInlineWithUpdate,
+                                 e->second);
     }
 
     void print(std::ostream& out, bool tty) const {
@@ -337,14 +353,10 @@ struct ForcedBy {
         for (auto& p : escaped) {
             p.first->printRef(out);
             out << " (";
-            if (p.second.empty()) {
+            if (!p.second) {
                 out << "ambiguous";
             } else {
-                for (auto m : p.second) {
-                    m->printRef(out);
-                    if (m != *(p.second.end() - 1))
-                        out << ",";
-                }
+                p.second->printRef(out);
             }
             out << ") ";
         }
@@ -377,9 +389,11 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         AbstractResult res;
 
         // 1. Keep track of when a prom is forced
+        bool forceHandled = false;
         if (auto f = Force::Cast(i)) {
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
                 if (arg->type.maybeLazy()) {
+                    forceHandled = true;
                     if (state.forcedAt(arg, f))
                         res.update();
                 }
@@ -392,22 +406,23 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                     Instruction::Cast(f->arg<0>().val()->followCasts());
                 if (MkArg::Cast(f->arg<0>().val()->followCasts()) ||
                     (instruction && instruction->type.maybeLazy())) {
+                    forceHandled = true;
                     if (state.forcedAt(instruction, f))
                         res.update();
                 }
             }
         } else if (auto f = UpdatePromise::Cast(i)) {
-            if (auto mk = MkArg::Cast(f->arg<0>().val()->followCasts()))
+            if (auto mk = MkArg::Cast(f->arg<0>().val()->followCasts())) {
+                forceHandled = true;
                 if (state.forcedAt(mk, f))
                     res.update();
+            }
         }
 
-
         // 2. If this instruction can force, taint all escaped, unevaluated
-        // proms. Here we (slightly unsoundly) assume that forces do not
-        // reflectively force other, unrelated promises.
+        // proms.
         if (i->effects.contains(Effect::Force) && !LdFun::Cast(i) &&
-            !Force::Cast(i)) {
+            !(forceHandled && Force::Cast(i))) {
             if (state.sideeffect()) {
                 res.taint();
             }
@@ -417,62 +432,15 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         // information, because after a random env access we cannot rely on the
         // information where the promises escaped to.
         if (i->effects.includes(Effect::ReadsEnv) && !Deopt::Cast(i)) {
-            // StVar overriding promise means the promise does not count as
-            // escaped anymore
-            bool handledEscapeTaint = false;
-            if (auto st = StVar::Cast(i)) {
-                if (auto mk = MkEnv::Cast(st->env())) {
-                    mk->eachLocalVar([&](SEXP name, Value* a, bool) {
-                        if (name != st->varName)
-                            return;
-                        if (auto mka = MkArg::Cast(a->followCasts())) {
-                            handledEscapeTaint = true;
-                            auto e = state.escaped.find(mka);
-                            if (e == state.escaped.end())
-                                return;
-                            state.escaped.erase(e);
-                            res.update();
-                        }
-                    });
-                }
-            } else if (auto ld = LdVar::Cast(i)) {
-                if (auto mk = MkEnv::Cast(ld->env())) {
-                    mk->eachLocalVar([&](SEXP name, Value* a, bool) {
-                        if (name != ld->varName)
-                            return;
-                        // Accessing an escaped promise, leaks it further and we
-                        // need abandon escape analysis...
-                        if (auto mka = MkArg::Cast(a->followCasts())) {
-                            handledEscapeTaint = true;
-                            auto e = state.escaped.find(mka);
-                            if (e == state.escaped.end())
-                                return;
-                            if (e->second.empty())
-                                return;
-                            res.update();
-                            e->second.clear();
-                        }
-                    });
-                    if (!handledEscapeTaint) {
-                        // Access goes past local envs, no need to worry
-                        // TODO: maybe do this recursive?
-                        if (!MkEnv::Cast(mk->lexicalEnv()))
-                            handledEscapeTaint = true;
-                    }
-                }
-            } else if (IsEnvStub::Cast(i) || MkEnv::Cast(i) ||
-                       FrameState::Cast(i) || Deopt::Cast(i)) {
-                // These instructions do not leak the env further
-                handledEscapeTaint = true;
-            }
-
-            // In case there is an environment access we loose track of which
-            // proms are escaped to where.
-            if (!handledEscapeTaint) {
+            if (!IsEnvStub::Cast(i) && !MkEnv::Cast(i) &&
+                !PushContext::Cast(i) && !FrameState::Cast(i) &&
+                !Deopt::Cast(i)) {
+                // In case there is an environment access we loose track of
+                // which proms are escaped to where.
                 for (auto& e : state.escaped) {
-                    if (!e.second.empty()) {
+                    if (!state.isForced(e.first) && e.second) {
                         res.taint();
-                        e.second.clear();
+                        e.second = nullptr;
                     }
                 }
             }
@@ -500,11 +468,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else if (auto mk = MkArg::Cast(i)) {
             if (state.declare(mk))
                 res.update();
+        } else if (Force::Cast(i) && forceHandled) {
+            // Do nothing...
         } else if (CastType::Cast(i) || FrameState::Cast(i)) {
             // Do nothing...
-            // Pushcontext captures the arglist, which contains the
-            // originally passed arguments. These must not be
-            // updated!
             // FrameState is handled when used (see traceEscapes)
         } else {
             if (i->type.maybeLazy()) {
