@@ -318,6 +318,7 @@ struct ForcedBy {
         enum Kind { SafeToInline, SafeToInlineWithUpdate, NotSafeToInline };
         const Kind kind;
 
+        // cppcheck-suppress noExplicitConstructor
         PromiseInlineable(Kind kind, Instruction* e = nullptr)
             : kind(kind), escaped(e) {
             assert(!e || kind == SafeToInlineWithUpdate);
