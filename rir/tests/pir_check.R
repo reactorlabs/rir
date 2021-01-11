@@ -278,9 +278,9 @@ mandelbrot <- function(size) {
 }
 
 # TODO: FIXXXXX
-# stopifnot(
-#   pir.check(mandelbrot, NoExternalCalls, NoPromise, NoStore, warmup=function(f) {f(13);f(27)})
-# )
+stopifnot(
+  pir.check(mandelbrot, NoExternalCalls, NoPromise, NoStore, warmup=function(f) {f(13);f(27)})
+)
 
 # New tests
 stopifnot(pir.check(function() {

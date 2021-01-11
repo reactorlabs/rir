@@ -51,7 +51,7 @@ struct ForcedBy {
     std::vector<size_t> argumentForceOrder;
     bool ambiguousForceOrder = false;
 
-    static Force* ambiguous() {
+    static Instruction* ambiguous() {
         static Force f(Nil::instance(), Env::nil(), Tombstone::framestate());
         return &f;
     }
@@ -81,7 +81,7 @@ struct ForcedBy {
 
     bool isForced(MkArg* m) const {
         auto f = forcedBy.find(m);
-        return f != forcedBy.end() && f->second;
+        return f != forcedBy.end() && f->second && f->second != ambiguous();
     }
 
     bool sideeffect() {
@@ -91,6 +91,8 @@ struct ForcedBy {
         // been forced
 
         for (auto& e : escaped) {
+            if (!inScope.count(e.first))
+                continue;
             // stubbed envs are guarded from external access
             if (e.second && MkEnv::Cast(e.second) &&
                 MkEnv::Cast(e.second)->stub)
@@ -98,11 +100,11 @@ struct ForcedBy {
             auto f = forcedBy.find(e.first);
             if (f == forcedBy.end()) {
                 forcedBy.insert(e.first, ambiguous());
-                e.second = nullptr;
+                e.second = ambiguous();
                 changed = true;
             } else if (!f->second) {
                 f->second = ambiguous();
-                e.second = nullptr;
+                e.second = ambiguous();
                 changed = true;
             }
         }
@@ -137,29 +139,26 @@ struct ForcedBy {
     }
 
     bool escape(MkArg* val, Value* where) {
-        auto f = forcedBy.find(val);
-        if ((f == forcedBy.end() || !f->second)) {
+        if (!isForced(val)) {
             auto existing = escaped.find(val);
-            if (auto st = StVar::Cast(where))
-                where = st->env();
             if (MkEnv::Cast(where) || PushContext::Cast(where)) {
                 auto wherei = Instruction::Cast(where);
                 if (existing == escaped.end()) {
                     escaped[val] = wherei;
                     return true;
-                } else if (existing->second) {
+                } else if (existing->second != ambiguous()) {
+                    assert(existing->second);
                     if (existing->second == wherei)
                         return false;
-                    existing->second = nullptr;
+                    existing->second = ambiguous();
                     return true;
                 } else {
-                    // null means ambiguous
                     return false;
                 }
             }
-            if (existing != escaped.end() && !existing->second)
+            if (existing != escaped.end() && existing->second == ambiguous())
                 return false;
-            escaped[val] = nullptr;
+            escaped[val] = ambiguous();
             return true;
         }
         return false;
@@ -213,26 +212,29 @@ struct ForcedBy {
         }
 
         for (auto& e : escaped) {
-            if (!e.second)
+            assert(e.second);
+            if (e.second == ambiguous())
                 continue;
             auto o = other.escaped.find(e.first);
-            if (o == other.escaped.end() || !o->second) {
+            if (o == other.escaped.end()) {
                 if (!exitMerge && other.inScope.count(e.first)) {
-                    e.second = nullptr;
+                    e.second = ambiguous();
                     res.update();
                 }
             } else if (e.second != o->second || gotAmbiguous.count(e.first)) {
-                e.second = nullptr;
+                e.second = ambiguous();
                 res.update();
             }
         }
         for (auto& o : other.escaped) {
             if (!escaped.count(o.first)) {
-                if (exitMerge)
+                if (exitMerge) {
                     escaped.emplace(o);
-                else
-                    escaped[o.first] = nullptr;
-                res.update();
+                    res.update();
+                } else if (inScope.count(o.first)) {
+                    escaped[o.first] = ambiguous();
+                    res.update();
+                }
             }
         }
 
@@ -294,8 +296,7 @@ struct ForcedBy {
     }
 
     bool isUnused(MkArg* a) const {
-        auto force = forcedBy.find(a);
-        if (force == forcedBy.end() || !force->second) {
+        if (isForced(a)) {
             auto e = escaped.find(a);
             if (e == escaped.end())
                 return true;
@@ -337,7 +338,7 @@ struct ForcedBy {
         auto e = escaped.find(a);
         if (e == escaped.end())
             return PromiseInlineable::SafeToInline;
-        if (!e->second)
+        if (e->second == ambiguous())
             return PromiseInlineable::NotSafeToInline;
         return PromiseInlineable(PromiseInlineable::SafeToInlineWithUpdate,
                                  e->second);
@@ -354,7 +355,7 @@ struct ForcedBy {
         for (auto& p : escaped) {
             p.first->printRef(out);
             out << " (";
-            if (!p.second) {
+            if (p.second == ambiguous()) {
                 out << "ambiguous";
             } else {
                 p.second->printRef(out);
@@ -390,6 +391,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         AbstractResult res;
 
         // 1. Keep track of when a prom is forced
+        if (auto mk = MkArg::Cast(i)) {
+            if (state.declare(mk))
+                res.update();
+        }
         bool forceHandled = false;
         if (auto f = Force::Cast(i)) {
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
@@ -423,7 +428,8 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         // 2. If this instruction can force, taint all escaped, unevaluated
         // proms.
         if (i->effects.contains(Effect::Force) && !LdFun::Cast(i) &&
-            !(forceHandled && Force::Cast(i))) {
+            !(forceHandled && Force::Cast(i)) && !FrameState::Cast(i) &&
+            !Deopt::Cast(i)) {
             if (state.sideeffect()) {
                 res.taint();
             }
@@ -431,17 +437,18 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 
         // 3. If this instruction accesses an environment, taint all escape
         // information, because after a random env access we cannot rely on the
-        // information where the promises escaped to.
-        if (i->effects.includes(Effect::ReadsEnv) && !Deopt::Cast(i)) {
+        // iformation where the promises escaped to.
+        if (i->effects.includes(Effect::ReadsEnv)) {
             if (!IsEnvStub::Cast(i) && !MkEnv::Cast(i) &&
                 !PushContext::Cast(i) && !FrameState::Cast(i) &&
                 !Deopt::Cast(i)) {
                 // In case there is an environment access we loose track of
                 // which proms are escaped to where.
                 for (auto& e : state.escaped) {
-                    if (!state.isForced(e.first) && e.second) {
+                    if (!state.isForced(e.first) &&
+                        e.second != ForcedBy::ambiguous()) {
                         res.taint();
-                        e.second = nullptr;
+                        e.second = ForcedBy::ambiguous();
                     }
                 }
             }
@@ -466,9 +473,6 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                 }
             }
             traceEscapes(i);
-        } else if (auto mk = MkArg::Cast(i)) {
-            if (state.declare(mk))
-                res.update();
         } else if (Force::Cast(i) && forceHandled) {
             // Do nothing...
         } else if (CastType::Cast(i) || FrameState::Cast(i)) {
