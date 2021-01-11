@@ -1155,6 +1155,15 @@ class FLIE(MkArg, 2, Effects::None()) {
     bool usesPromEnv() const;
 };
 
+class FLI(UpdatePromise, 2,
+          Effects(Effect::MutatesArgument) | Effect::LeakArg) {
+  public:
+    UpdatePromise(MkArg* prom, Value* v)
+        : FixedLenInstruction(PirType::voyd(), {{RType::prom, PirType::val()}},
+                              {{prom, v}}) {}
+    MkArg* mkarg() const { return MkArg::Cast(arg(0).val()); }
+};
+
 class FLIE(MkCls, 4, Effects::None()) {
   public:
     MkCls(Value* fml, Value* code, Value* src, Value* lexicalEnv)

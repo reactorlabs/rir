@@ -20,7 +20,8 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
     std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
     std::deque<Promise*> todoUsedProms;
 
-    DeadInstructions dead(code, 3, Effects(Effect::Visibility));
+    DeadInstructions dead(code, 3, Effects(Effect::Visibility),
+                          DeadInstructions::IgnoreUpdatePromise);
     bool anyChange = false;
 
     Visitor::run(
@@ -113,6 +114,11 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                     } else {
                         usedProms.insert(arg->prom()->id);
                         todoUsedProms.push_back(arg->prom());
+                    }
+                } else if (auto upd = UpdatePromise::Cast(i)) {
+                    if (dead.isDead(upd->arg(0).val())) {
+                        removed = true;
+                        next = bb->remove(ip);
                     }
                 } else if (auto tt = IsType::Cast(i)) {
                     auto arg = tt->arg<0>().val();

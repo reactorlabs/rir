@@ -49,6 +49,12 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
                         isAlive(use))
                         addToDead = false;
                     break;
+                case IgnoreUpdatePromise: {
+                    auto up = UpdatePromise::Cast(use);
+                    if (!(up && up->arg(0).val() == candidate) && isAlive(use))
+                        addToDead = false;
+                    break;
+                }
                 case IgnoreUsesThatDontObserveIntVsReal:
                     if (std::find(IgnoreIntVsReal.begin(),
                                   IgnoreIntVsReal.end(),

@@ -30,8 +30,8 @@ namespace pir {
  *    e   = MkEnv(x=a)      // leak a
  *    f'  = eval(exp)       // inlinee
  *    a'  = MkArg(exp, f')  // synthesized updated promise
- *    StVar(x=a', e)        // update to ensure leaked a is fixed
- *    PushContext(a)        // push context needs unmodified a
+ *    StVar(x=a', e)        // update to ensure leaked a is fixed.
+ *                          // (if the leak isn't just mkenv, use UpdatePromise)
  *    use(a')               // normal uses get the synthesized version
  *    use(f')               // uses of the value get the result
  *
@@ -57,8 +57,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     });
 
     SmallSet<Force*> toInline;
+    SmallSet<Force*> needsUpdate;
     SmallMap<Force*, Force*> dominatedBy;
-    SmallMap<Force*, SmallSet<MkEnv*>> needsUpdate;
     bool anyChange = false;
 
     bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
@@ -141,6 +141,11 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     } else if (auto dom = a.getDominatingForce(f)) {
                         if (f != dom)
                             dominatedBy[f] = dom;
+                    }
+                } else if (auto u = UpdatePromise::Cast(i)) {
+                    if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
+                        if (!analysis.before(i).escaped.count(mkarg))
+                            next = bb->remove(ip);
                     }
                 }
                 ip = next;
@@ -298,6 +303,11 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                         auto u = needsUpdate.find(f);
                         if (u != needsUpdate.end()) {
+                            if (u->second.empty()) {
+                            pos = split->insert(
+                                pos, new UpdatePromise(mkarg, promRes));
+                            pos++;
+                            } else {
                             for (auto m : u->second) {
                                 m->eachLocalVar([&](SEXP name, Value* a, bool) {
                                     if (a->followCasts() == mkarg) {
@@ -306,6 +316,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         pos++;
                                     }
                                 });
+                            }
                             }
                         }
                         next = pos;

@@ -44,7 +44,7 @@ namespace pir {
  */
 
 struct ForcedBy {
-    rir::SmallMap<Value*, Force*> forcedBy;
+    rir::SmallMap<Value*, Instruction*> forcedBy;
     rir::SmallSet<Value*> inScope;
     std::unordered_map<MkArg*, rir::SmallSet<MkEnv*>> escaped;
 
@@ -108,7 +108,7 @@ struct ForcedBy {
         return changed;
     }
 
-    bool forcedAt(Value* val, Force* force) {
+    bool forcedAt(Value* val, Instruction* force) {
         rir::SmallSet<Phi*> seen;
         std::function<bool(Value*, bool)> apply = [&](Value* val, bool phiArg) {
             bool res = false;
@@ -396,7 +396,12 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                         res.update();
                 }
             }
+        } else if (auto f = UpdatePromise::Cast(i)) {
+            if (auto mk = MkArg::Cast(f->arg<0>().val()->followCasts()))
+                if (state.forcedAt(mk, f))
+                    res.update();
         }
+
 
         // 2. If this instruction can force, taint all escaped, unevaluated
         // proms. Here we (slightly unsoundly) assume that forces do not

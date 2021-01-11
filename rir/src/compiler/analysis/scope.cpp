@@ -224,6 +224,10 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         if (!res.result.isUnknown()) {
             handled = true;
         }
+    } else if (auto up = UpdatePromise::Cast(i)) {
+        effect.max(state.forcedPromise[up->mkarg()].merge(
+            AbstractPirValue(up->arg(1).val(), up, depth)));
+        handled = true;
     } else if (Force::Cast(i)) {
         // First try to figure out what we force. If it's a non lazy thing, we
         // do not need to bother.
