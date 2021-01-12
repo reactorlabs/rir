@@ -144,8 +144,8 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
                     // If this arg has a default, then test if the argument is
                     // missing and if so, load the default arg.
                     auto a = builder(new LdArg(i));
-                    auto testMissing =
-                        builder(new Identical(a, MissingArg::instance()));
+                    auto testMissing = builder(new Identical(
+                        a, MissingArg::instance(), PirType::any()));
                     builder(new Branch(testMissing));
 
                     auto isMissing = builder.createBB();

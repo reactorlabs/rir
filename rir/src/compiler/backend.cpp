@@ -279,10 +279,6 @@ static void toCSSA(Code* code) {
                         auto copy = pred->insert(pred->end(), new LdConst(val));
 
                         phi->arg(i).val() = *copy;
-
-                        if (phi->arg(i).type() == NativeType::test) {
-                            (*copy)->type = phi->arg(i).type();
-                        }
                     }
                 }
                 auto phiCopy = new PirCopy(phi);

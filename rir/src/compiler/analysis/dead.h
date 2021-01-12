@@ -26,7 +26,7 @@ constexpr static std::initializer_list<Tag> IgnoreIntVsReal = {
     Tag::Eq,
     Tag::Neq,
     Tag::AsLogical,
-    Tag::AsTest,
+    Tag::Identical,
     Tag::CheckTrueFalse,
     Tag::LAnd,
     Tag::LOr,

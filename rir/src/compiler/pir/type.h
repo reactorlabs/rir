@@ -79,12 +79,11 @@ enum class RType : uint8_t {
 enum class NativeType : uint8_t {
     _UNUSED_,
 
-    test,
     checkpoint,
     frameState,
     context,
 
-    FIRST = test,
+    FIRST = checkpoint,
     LAST = context,
 };
 
@@ -259,6 +258,9 @@ struct PirType {
 
     static constexpr PirType simpleScalarLogical() {
         return PirType(RType::logical).scalar();
+    }
+    static constexpr PirType test() {
+        return simpleScalarLogical().notNAOrNaN();
     }
 
     static constexpr PirType simpleScalarString() {
@@ -602,9 +604,6 @@ inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     switch (t) {
     case NativeType::context:
         out << "ct";
-        break;
-    case NativeType::test:
-        out << "t";
         break;
     case NativeType::checkpoint:
         out << "cp";

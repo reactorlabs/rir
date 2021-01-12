@@ -219,6 +219,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             push(UnboundValue::instance());
         } else if (c == R_MissingArg) {
             push(MissingArg::instance());
+        } else if (c == R_NilValue) {
+            push(Nil::instance());
+        } else if (c == R_TrueValue ||
+                   (IS_SIMPLE_SCALAR(c, LGLSXP) && *LOGICAL(c) == 1)) {
+            push(True::instance());
+        } else if (c == R_FalseValue ||
+                   (IS_SIMPLE_SCALAR(c, LGLSXP) && *LOGICAL(c) == 0)) {
+            push(False::instance());
         } else if (c == R_DotsSymbol) {
             auto d = insert(new LdDots(insert.env));
             push(insert(new ExpandDots(d)));
@@ -608,7 +616,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 guarded = body;
             }
 
-            auto t = new Identical(guarded, expected);
+            auto t = new Identical(guarded, expected, PirType::any());
             pos = bb->insert(pos, t);
             pos++;
 
@@ -965,7 +973,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::identical_noforce_: {
         auto rhs = pop();
         auto lhs = pop();
-        push(insert(new Identical(lhs, rhs)));
+        push(insert(new Identical(lhs, rhs, PirType::any())));
         break;
     }
 
@@ -1218,8 +1226,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                     }
                 }
 
-                if (!v->type.isA(NativeType::test)) {
-                    v = insert(new AsTest(v, bc.bc == Opcode::brtrue_));
+                if (!v->type.isA(PirType::test())) {
+                    v = insert(new Identical(v,
+                                             bc.bc == Opcode::brtrue_
+                                                 ? (Value*)True::instance()
+                                                 : (Value*)False::instance(),
+                                             PirType::val()));
                 } else {
                     swapTrueFalse = bc.bc == Opcode::brfalse_;
                 }
@@ -1524,6 +1536,8 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
                 });
                 if (allTheSame) {
                     p->replaceUsesWith(allTheSame);
+                    if (ret == p)
+                        ret = allTheSame;
                     it = bb->remove(it);
                     changed = true;
                     continue;

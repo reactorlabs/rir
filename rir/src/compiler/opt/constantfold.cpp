@@ -17,10 +17,14 @@
 #include <unordered_set>
 namespace {
 using namespace rir::pir;
-static LdConst* isConst(Value* instr) {
+static SEXP isConst(Value* instr) {
     instr = instr->followCastsAndForce();
+
+    if (instr->asRValue())
+        return instr->asRValue();
+
     if (auto cst = LdConst::Cast(instr)) {
-        return cst;
+        return cst->c();
     }
     return nullptr;
 }
@@ -29,13 +33,20 @@ static LdConst* isConst(Value* instr) {
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val())) {                   \
                 if (auto rhs = isConst(instr->arg<1>().val())) {               \
-                    auto res = Rf_eval(                                        \
-                        Rf_lang3(Operation, lhs->c(), rhs->c()), R_BaseEnv);   \
-                    cmp.preserve(res);                                         \
-                    auto resi = new LdConst(res);                              \
-                    anyChange = true;                                          \
-                    instr->replaceUsesWith(resi);                              \
-                    bb->replace(ip, resi);                                     \
+                    auto res =                                                 \
+                        Rf_eval(Rf_lang3(Operation, lhs, rhs), R_BaseEnv);     \
+                    if (res == R_TrueValue || res == R_FalseValue) {           \
+                        instr->replaceUsesWith(                                \
+                            res == R_TrueValue ? (Value*)True::instance()      \
+                                               : (Value*)False::instance());   \
+                        next = bb->remove(ip);                                 \
+                    } else {                                                   \
+                        cmp.preserve(res);                                     \
+                        auto resi = new LdConst(res);                          \
+                        anyChange = true;                                      \
+                        instr->replaceUsesWith(resi);                          \
+                        bb->replace(ip, resi);                                 \
+                    }                                                          \
                 }                                                              \
             }                                                                  \
         }                                                                      \
@@ -44,7 +55,7 @@ static LdConst* isConst(Value* instr) {
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto arg = isConst(instr->arg<0>().val()))                     \
-                Operation(arg->c());                                           \
+                Operation(arg);                                                \
         }                                                                      \
     } while (false)
 #define FOLD_BINARY(Instruction, Operation)                                    \
@@ -52,7 +63,7 @@ static LdConst* isConst(Value* instr) {
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val())) {                   \
                 if (auto rhs = isConst(instr->arg<1>().val())) {               \
-                    Operation(lhs->c(), rhs->c());                             \
+                    Operation(lhs, rhs);                                       \
                 }                                                              \
             }                                                                  \
         }                                                                      \
@@ -61,11 +72,11 @@ static LdConst* isConst(Value* instr) {
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val())) {                   \
-                if (Operation(lhs->c(), instr->arg<1>().val()))                \
+                if (Operation(lhs, instr->arg<1>().val()))                     \
                     break;                                                     \
             }                                                                  \
             if (auto rhs = isConst(instr->arg<1>().val())) {                   \
-                Operation(rhs->c(), instr->arg<0>().val());                    \
+                Operation(rhs, instr->arg<0>().val());                         \
             }                                                                  \
         }                                                                      \
     } while (false)
@@ -126,6 +137,8 @@ static bool isStaticallyFalse(Value* i) {
 }
 
 static bool isStaticallyNA(Value* i) {
+    if (i == NaLogical::instance())
+        return true;
     if (auto ld = LdConst::Cast(i)) {
         if (convertsToLogicalWithoutWarning(ld->c())) {
             auto a = ld->c();
@@ -243,7 +256,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                                         input.otherPhi));
                                             }
                                         }
-                                        phi->type = NativeType::test;
+                                        phi->type = PirType::test();
                                         targetForPhi->insert(
                                             targetForPhi->begin(), phi);
                                     }
@@ -307,6 +320,26 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     return false;
                 }
             };
+            if (auto ld = LdConst::Cast(i)) {
+                auto c = ld->c();
+                Value* r = nullptr;
+                if (c == R_NilValue)
+                    r = Nil::instance();
+                else if (c == R_TrueValue)
+                    r = True::instance();
+                else if (c == R_FalseValue)
+                    r = False::instance();
+                else if (c == R_MissingArg)
+                    r = MissingArg::instance();
+                else if (c == R_UnboundValue)
+                    r = UnboundValue::instance();
+                else if (c == R_LogicalNAValue)
+                    r = NaLogical::instance();
+                if (r) {
+                    i->replaceUsesWith(r);
+                    next = bb->remove(ip);
+                }
+            }
             if (CheckTrueFalse::Cast(i)) {
                 auto a = i->arg(0).val();
                 if (isStaticallyNA(a)) {
@@ -318,15 +351,16 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     bb->deleteSuccessors();
                 } else if (isStaticallyTrue(a) || isStaticallyFalse(a)) {
                     auto replace = isStaticallyTrue(a)
-                                       ? new LdConst(R_TrueValue)
-                                       : new LdConst(R_FalseValue);
-                    i->replaceUsesAndSwapWith(replace, ip);
+                                       ? (Value*)True::instance()
+                                       : (Value*)False::instance();
+                    i->replaceUsesWith(replace);
+                    next = bb->remove(ip);
                 }
             }
             if (LAnd::Cast(i)) {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
-                Instruction* n = nullptr;
+                Value* n = nullptr;
                 if (a == b) {
                     anyChange = true;
                     i->replaceUsesWith(i->arg(0).val());
@@ -334,45 +368,51 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 } else if (isStaticallyTrue(a)) {
                     n = new AsLogical(b, i->srcIdx);
                 } else if (isStaticallyFalse(a)) {
-                    n = new LdConst(R_FalseValue);
+                    n = False::instance();
                 } else if (isStaticallyTrue(b)) {
                     n = new AsLogical(a, i->srcIdx);
                 } else if (isStaticallyFalse(b)) {
                     ip = bb->insert(ip, new AsLogical(a, i->srcIdx));
                     ip++;
                     next = ip + 1;
-                    n = new LdConst(R_FalseValue);
+                    n = False::instance();
                 }
                 if (n) {
                     anyChange = true;
                     i->replaceUsesWith(n);
-                    bb->replace(ip, n);
+                    if (auto j = Instruction::Cast(n))
+                        bb->replace(ip, j);
+                    else
+                        next = bb->remove(ip);
                 }
             }
             if (LOr::Cast(i)) {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
-                Instruction* n = nullptr;
+                Value* n = nullptr;
                 if (a == b) {
                     anyChange = true;
                     i->replaceUsesWith(i->arg(0).val());
                     next = bb->remove(ip);
                 } else if (isStaticallyTrue(a)) {
-                    n = new LdConst(R_TrueValue);
+                    n = True::instance();
                 } else if (isStaticallyFalse(a)) {
                     n = new AsLogical(b, i->srcIdx);
                 } else if (isStaticallyTrue(b)) {
                     ip = bb->insert(ip, new AsLogical(a, i->srcIdx));
                     ip++;
                     next = ip + 1;
-                    n = new LdConst(R_TrueValue);
+                    n = True::instance();
                 } else if (isStaticallyFalse(b)) {
                     n = new AsLogical(a, i->srcIdx);
                 }
                 if (n) {
                     anyChange = true;
                     i->replaceUsesWith(n);
-                    bb->replace(ip, n);
+                    if (auto j = Instruction::Cast(n))
+                        bb->replace(ip, j);
+                    else
+                        next = bb->remove(ip);
                 }
             }
 
@@ -400,17 +440,6 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     auto res = Rf_asLogical(arg);
                     auto c = new LdConst(Rf_ScalarLogical(res));
                     i->replaceUsesAndSwapWith(c, ip);
-                    anyChange = true;
-                }
-            });
-            FOLD_UNARY(AsTest, [&](SEXP arg) {
-                if (convertsToLogicalWithoutWarning(arg)) {
-                    auto res = Rf_asLogical(arg);
-                    auto compare = AsTest::Cast(i)->testTrue;
-                    auto replace = (res == compare) ? (Value*)True::instance()
-                                                    : (Value*)False::instance();
-                    i->replaceUsesWith(replace);
-                    next = bb->remove(ip);
                     anyChange = true;
                 }
             });
@@ -453,14 +482,14 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 auto arg = isTest->arg<0>().val();
                 if (arg->type.isA(isTest->lowerBound())) {
                     anyChange = true;
-                    auto n = new LdConst(R_TrueValue, i->type);
+                    auto n = True::instance();
                     i->replaceUsesWith(n);
-                    bb->replace(ip, n);
+                    next = bb->remove(ip);
                 } else if (!arg->type.maybe(isTest->upperBound())) {
                     anyChange = true;
-                    auto n = new LdConst(R_FalseValue, i->type);
+                    auto n = False::instance();
                     i->replaceUsesWith(n);
-                    bb->replace(ip, n);
+                    next = bb->remove(ip);
                 }
             }
             if (auto assume = Assume::Cast(i)) {
@@ -476,25 +505,26 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             }
             if (auto cl = Colon::Cast(i)) {
                 if (auto a = isConst(cl->arg(0).val())) {
-                    if (TYPEOF(a->c()) == REALSXP && Rf_length(a->c()) == 1 &&
-                        REAL(a->c())[0] == (double)(int)REAL(a->c())[0]) {
+                    if (TYPEOF(a) == REALSXP && Rf_length(a) == 1 &&
+                        REAL(a)[0] == (double)(int)REAL(a)[0]) {
                         anyChange = true;
-                        ip = bb->insert(ip, new LdConst((int)REAL(a->c())[0]));
+                        ip = bb->insert(ip, new LdConst((int)REAL(a)[0]));
                         cl->arg(0).val() = *ip;
                         ip++;
                     }
                 }
                 if (auto a = isConst(cl->arg(1).val())) {
-                    if (TYPEOF(a->c()) == REALSXP && Rf_length(a->c()) == 1 &&
-                        REAL(a->c())[0] == (double)(int)REAL(a->c())[0]) {
+                    if (TYPEOF(a) == REALSXP && Rf_length(a) == 1 &&
+                        REAL(a)[0] == (double)(int)REAL(a)[0]) {
                         anyChange = true;
-                        ip = bb->insert(ip, new LdConst((int)REAL(a->c())[0]));
+                        ip = bb->insert(ip, new LdConst((int)REAL(a)[0]));
                         cl->arg(1).val() = *ip;
                         ip++;
                     }
                 }
                 next = ip + 1;
             }
+
             if (CallSafeBuiltin::Cast(i) || CallBuiltin::Cast(i)) {
                 int builtinId = CallBuiltin::Cast(i)
                                     ? CallBuiltin::Cast(i)->builtinId
@@ -549,10 +579,10 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         i->replaceUsesWith(i->arg(0).val());
                         next = bb->remove(ip);
                     } else if (auto con = isConst(i->arg(0).val())) {
-                        auto t = TYPEOF(con->c());
+                        auto t = TYPEOF(con);
                         if (t == REALSXP || t == INTSXP || t == LGLSXP) {
                             auto res = Rf_eval(
-                                Rf_lang2(Rf_install("as.character"), con->c()),
+                                Rf_lang2(Rf_install("as.character"), con),
                                 R_BaseEnv);
                             anyChange = true;
                             i->replaceUsesAndSwapWith(new LdConst(res), ip);
@@ -567,20 +597,19 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         i->replaceUsesWith(i->arg(0).val());
                         next = bb->remove(ip);
                     } else if (auto con = isConst(i->arg(0).val())) {
-                        if (IS_SIMPLE_SCALAR(con->c(), REALSXP)) {
-                            if (REAL(con->c())[0] == REAL(con->c())[0]) {
+                        if (IS_SIMPLE_SCALAR(con, REALSXP)) {
+                            if (REAL(con)[0] == REAL(con)[0]) {
                                 anyChange = true;
                                 i->replaceUsesAndSwapWith(
-                                    new LdConst((int)REAL(con->c())[0]), ip);
+                                    new LdConst((int)REAL(con)[0]), ip);
                             } else {
                                 anyChange = true;
                                 i->replaceUsesAndSwapWith(
                                     new LdConst(NA_INTEGER), ip);
                             }
-                        } else if (IS_SIMPLE_SCALAR(con->c(), INTSXP)) {
+                        } else if (IS_SIMPLE_SCALAR(con, INTSXP)) {
                             anyChange = true;
-                            i->replaceUsesAndSwapWith(new LdConst(con->c()),
-                                                      ip);
+                            i->replaceUsesAndSwapWith(new LdConst(con), ip);
                         }
                     }
                 } else if (builtinId == blt("is.vector") && nargs == 2) {
@@ -597,77 +626,85 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         staticStringEqual(CHAR(STRING_ELT(mode->c(), 0)),
                                           "any")) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("is.function") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::closure)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     } else if (!t.maybe(RType::closure)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("is.character") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::str)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     } else if (!t.maybe(RType::str)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("is.logical") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::logical)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     } else if (!t.maybe(RType::logical)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("is.double") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::real)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     } else if (!t.maybe(RType::real)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("is.integer") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(PirType(RType::integer).noAttribs())) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     } else if (!t.maybe(RType::integer)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("is.complex") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::cplx)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     } else if (!t.maybe(RType::cplx)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("is.character") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (t.isA(RType::str)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     } else if (!t.maybe(RType::str)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("is.atomic") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
@@ -677,25 +714,26 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         RType::str | RType::raw;
                     if (t.isA(atomicType)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_TrueValue), ip);
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     } else if (!t.maybe(atomicType)) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("anyNA") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (!t.maybeNAOrNaN()) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("is.object") && nargs == 1) {
                     auto t = i->arg(0).val()->type;
                     if (!t.maybeObj()) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if ((builtinId == blt("is.na") ||
                             builtinId == blt("is.nan")) &&
@@ -706,8 +744,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             .orAttribs();
                     if (typeThatDoesntError.isA(t) && !t.maybeNAOrNaN()) {
                         anyChange = true;
-                        i->replaceUsesAndSwapWith(new LdConst(R_FalseValue),
-                                                  ip);
+                        i->replaceUsesWith(False::instance());
+                        next = bb->remove(ip);
                     }
                 } else if (builtinId == blt("bodyCode") && nargs == 1) {
                     auto in = i->arg(0).val()->followCastsAndForce();
@@ -752,8 +790,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             }
             if (auto not_ = Not::Cast(i)) {
                 Value* arg = not_->arg<0>().val();
-                if (auto varg = isConst(arg)) {
-                    SEXP carg = varg->c();
+                if (auto carg = isConst(arg)) {
                     if (IS_SIMPLE_SCALAR(carg, LGLSXP) ||
                         IS_SIMPLE_SCALAR(carg, INTSXP) ||
                         IS_SIMPLE_SCALAR(carg, REALSXP)) {
