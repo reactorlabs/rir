@@ -1,12 +1,12 @@
 #include "builtins.h"
 
 #include "compiler/parameter.h"
-#include "interpreter/LazyArglist.h"
-#include "interpreter/LazyEnvironment.h"
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
 #include "ir/Deoptimization.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
 #include "R/Funtab.h"

@@ -12,9 +12,9 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 
-#include "LazyEnvironment.h"
 #include "instance.h"
 #include "interp_incl.h"
+#include "runtime/LazyEnvironment.h"
 #include "safe_force.h"
 
 namespace rir {

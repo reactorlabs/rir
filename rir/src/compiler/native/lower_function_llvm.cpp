@@ -10,12 +10,12 @@
 #include "R/r.h"
 
 #include "builtins.h"
-#include "interpreter/LazyArglist.h"
-#include "interpreter/LazyEnvironment.h"
 #include "interpreter/builtins.h"
 #include "interpreter/instance.h"
 
 #include "runtime/DispatchTable.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
 #include "compiler/parameter.h"
