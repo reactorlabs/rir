@@ -938,6 +938,14 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
         runtimeClosure()->printRef(out);
         out << " ";
     }
+
+    if (!argOrderOrig.empty()) {
+        out << "{ ";
+        for (auto a : argOrderOrig)
+            out << ArglistOrder::decodeArg(a)
+                << (ArglistOrder::isArgNamed(a) ? "n " : " ");
+        out << "} ";
+    }
 }
 
 void Force::printArgs(std::ostream& out, bool tty) const {
@@ -1020,10 +1028,11 @@ ClosureVersion* StaticCall::tryOptimisticDispatch() const {
 }
 
 StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
-                       const std::vector<Value*>& args, FrameState* fs,
-                       unsigned srcIdx, Value* runtimeClosure)
+                       const std::vector<Value*>& args,
+                       ArglistOrder::CallArglistOrder&& argOrderOrig,
+                       FrameState* fs, unsigned srcIdx, Value* runtimeClosure)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls), givenContext(givenContext) {
+      cls_(cls), argOrderOrig(argOrderOrig), givenContext(givenContext) {
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);

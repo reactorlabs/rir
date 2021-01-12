@@ -7,6 +7,7 @@
 
 #include "compiler/pir/pir.h"
 
+#include "R/Protect.h"
 #include "runtime/Code.h"
 
 #include "compiler/analysis/liveness.h"
@@ -53,6 +54,8 @@ class LowerFunctionLLVM {
     };
     std::unordered_map<Value*, ContextData> contexts;
 
+    std::vector<ArglistOrder::CallArglistOrder> argReordering;
+
     std::unordered_map<Value*, std::unordered_map<SEXP, size_t>> bindingsCache;
     llvm::Value* bindingsCacheBase = nullptr;
 
@@ -60,6 +63,8 @@ class LowerFunctionLLVM {
     llvm::MDNode* branchAlwaysFalse;
     llvm::MDNode* branchMostlyTrue;
     llvm::MDNode* branchMostlyFalse;
+
+    Protect p_;
 
   public:
     PirTypeFeedback* pirTypeFeedback = nullptr;
@@ -414,6 +419,18 @@ class LowerFunctionLLVM {
     llvm::Value* createSelect2(llvm::Value* cond,
                                std::function<llvm::Value*()> trueValueAction,
                                std::function<llvm::Value*()> falseValueAction);
+
+    bool hasArgReordering() const { return !argReordering.empty(); }
+    std::vector<ArglistOrder::CallArglistOrder> const&
+    getArgReordering() const {
+        return argReordering;
+    }
+    ArglistOrder::CallId
+    pushArgReordering(ArglistOrder::CallArglistOrder const& reordering) {
+        auto res = argReordering.size();
+        argReordering.push_back(reordering);
+        return res;
+    }
 
   private:
     bool vectorTypeSupport(Value* v);
