@@ -1,6 +1,7 @@
 #ifndef RIR_CODE_H
 #define RIR_CODE_H
 
+#include "ArglistOrder.h"
 #include "PirTypeFeedback.h"
 #include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
@@ -46,7 +47,8 @@ typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
     friend class CodeVerifier;
-    static constexpr size_t NumLocals = 2;
+    // extra pool, pir type feedback, arg reordering info
+    static constexpr size_t NumLocals = 3;
 
     Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned codeSize,
          unsigned sourceSize, size_t localsCnt, size_t bindingsCacheSize);
@@ -55,9 +57,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
   private:
     Code() : Code(NULL, 0, 0, 0, 0, 0, 0) {}
     /*
-     * This array contains the GC reachable pointers. Currently there are two
+     * This array contains the GC reachable pointers. Currently there are three
      * of them.
-     * 0 : the extra pool for attaching additional GC'd object to the code.
+     * 0 : the extra pool for attaching additional GC'd object to the code
+     * 1 : pir type feedback
+     * 2 : call argument reordering metadata
      */
     SEXP locals_[NumLocals];
 
@@ -88,16 +92,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void registerDeopt() {
         if (deoptCount < UINT_MAX)
             deoptCount++;
-    }
-
-    PirTypeFeedback* pirTypeFeedback() const {
-        SEXP map = getEntry(1);
-        if (!map)
-            return nullptr;
-        return PirTypeFeedback::unpack(map);
-    }
-    void pirTypeFeedback(PirTypeFeedback* map) {
-        setEntry(1, map->container());
     }
 
     // number of invocations. only incremented if this code object is the body
@@ -169,6 +163,25 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     Code* getPromise(size_t idx) const {
         return unpack(getExtraPoolEntry(idx));
     }
+
+    PirTypeFeedback* pirTypeFeedback() const {
+        SEXP map = getEntry(1);
+        if (!map)
+            return nullptr;
+        return PirTypeFeedback::unpack(map);
+    }
+    void pirTypeFeedback(PirTypeFeedback* map) {
+        setEntry(1, map->container());
+    }
+
+    ArglistOrder* arglistOrder() const {
+        SEXP data = getEntry(2);
+        if (!data)
+            return nullptr;
+        return ArglistOrder::unpack(data);
+    }
+    void arglistOrder(ArglistOrder* data) { setEntry(2, data->container()); }
+    SEXP arglistOrderContainer() const { return getEntry(2); }
 
     size_t size() const {
         return sizeof(Code) + pad4(codeSize) + srcLength * sizeof(SrclistEntry);

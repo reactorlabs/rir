@@ -235,6 +235,22 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
         pc = BC::next(pc);
     }
 
+    if (nativeCode) {
+        out << "nativeCode " << (void*)nativeCode << "\n";
+    }
+
+    if (auto a = arglistOrder()) {
+        out << "arglistOrder:\n";
+        for (size_t i = 0; i < a->nCalls; i++) {
+            out << "  id " << i << ": ";
+            for (size_t j = 0; j < a->originalArglistLength(i); j++) {
+                out << ArglistOrder::decodeArg(a->index(i, j))
+                    << (ArglistOrder::isArgNamed(a->index(i, j)) ? "n " : " ");
+            }
+            out << "\n";
+        }
+    }
+
     for (auto i : promises) {
         auto c = getPromise(i);
         out << "\n[Prom (index " << prefix << i << ")]\n";
