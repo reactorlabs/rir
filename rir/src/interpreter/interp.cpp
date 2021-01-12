@@ -357,6 +357,8 @@ struct ArglistView {
     }
 
     std::pair<SEXP, SEXP> getArgAndName(size_t i, SEXP a, bool reorder) {
+        bool omitName =
+            reorder && !ArglistOrder::isArgNamed(reordering->index(id, i));
         if (reorder)
             i = ArglistOrder::decodeArg(reordering->index(id, i));
         if (i >= lengthWithDots)
@@ -371,11 +373,11 @@ struct ArglistView {
             }
         }
         auto arg = inDots ? *(dots.begin() + i) : getArgFromStore(i);
-        auto name = R_NilValue;
-        if (!reorder || ArglistOrder::isArgNamed(reordering->index(id, i)))
-            name = inDots ? (dots.begin() + i).tag()
-                          : (names ? cp_pool_at(ctx, names[i])
-                                   : (ast ? TAG(a) : R_NilValue));
+        auto name = inDots ? (dots.begin() + i).tag()
+                           : (names ? cp_pool_at(ctx, names[i])
+                                    : (ast ? TAG(a) : R_NilValue));
+        if (omitName)
+            name = R_NilValue;
         return std::make_pair(arg, name);
     }
 
