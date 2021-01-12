@@ -9,7 +9,6 @@
 #include "R/r.h"
 #include "abstract_result.h"
 #include "compiler/analysis/cfg.h"
-#include "compiler/analysis/reachability.h"
 #include "compiler/log/stream_logger.h"
 
 #include <stack>
@@ -142,16 +141,16 @@ class StaticAnalysis {
         return exitpoint;
     }
 
-    const AbstractState
-    resultIgnoringUnreachableExits(Instruction* instruction,
-                                   const Reachability& reachable) const {
+    const AbstractState resultIgnoringUnreachableExits(Instruction* instruction,
+                                                       const CFG& cfg) const {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
         bool foundAny = false;
         AbstractState exitState;
         for (auto& exit : exitpoints) {
-            if (reachable(instruction, exit.first)) {
+            if (instruction->bb() == exit.first ||
+                cfg.isPredecessor(instruction->bb(), exit.first)) {
                 if (foundAny) {
                     exitState.mergeExit(exit.second);
                 } else {

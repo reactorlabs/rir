@@ -1,6 +1,5 @@
 #include "../analysis/force_dominance.h"
 #include "../analysis/available_checkpoints.h"
-#include "../analysis/reachability.h"
 #include "../parameter.h"
 #include "../pir/pir_impl.h"
 #include "compiler/util/bb_transform.h"
@@ -66,9 +65,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
     {
         ForceDominanceAnalysis analysis(cls, code, log);
-        AvailableCheckpoints cp(cls, code, log);
-        Reachability reachable(analysis.cfg, cp);
-        analysis();
 
         auto result = analysis.result();
         if (code == cls) {
@@ -89,7 +85,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 i->eachArg([&](InstrArg& arg) {
                     if (auto mk = MkArg::Cast(arg.val())) {
                         auto a = analysis.resultIgnoringUnreachableExits(
-                            i, reachable);
+                            i, analysis.cfg);
                         if (a.isUnused(mk)) {
                             auto repl = mk->clone();
                             if (auto phi = Phi::Cast(i)) {
@@ -117,8 +113,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto i = *ip;
 
                 if (auto f = Force::Cast(i)) {
-                    auto a =
-                        analysis.resultIgnoringUnreachableExits(f, reachable);
+                    auto a = analysis.resultIgnoringUnreachableExits(
+                        f, analysis.cfg);
                     if (a.isDominatingForce(f)) {
                         f->strict = true;
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
@@ -143,7 +139,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 } else if (auto u = UpdatePromise::Cast(i)) {
                     if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
                         auto a = analysis.resultIgnoringUnreachableExits(
-                            mkarg, reachable);
+                            mkarg, analysis.cfg);
                         if (!a.escaped.count(mkarg))
                             next = bb->remove(ip);
                     }

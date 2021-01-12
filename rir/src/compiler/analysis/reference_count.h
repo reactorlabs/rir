@@ -286,6 +286,7 @@ class StaticReferenceCount
         case Tag::StVarSuper:
         case Tag::MkEnv:
         case Tag::MkArg:
+        case Tag::UpdatePromise:
         case Tag::ForSeqSize:
         case Tag::ScheduledDeopt:
         case Tag::PopContext:
