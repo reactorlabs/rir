@@ -467,7 +467,6 @@ void JitLLVM::createModule() {
 }
 
 void* JitLLVM::compile(llvm::Function* fun) {
-    JitLLVMImplementation::instance();
     return JitLLVMImplementation::instance().compile(fun);
 }
 

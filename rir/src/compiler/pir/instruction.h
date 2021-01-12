@@ -2056,7 +2056,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         pushArg(fun, RType::closure);
 
         // Calling builtins with names or ... is not supported by callBuiltin,
-        // that's why those calls go through the normall call BC.
+        // that's why those calls go through the normal call BC.
         auto argtype =
             PirType(RType::prom) | RType::missing | RType::expandedDots;
         if (auto con = LdConst::Cast(fun))
