@@ -23,6 +23,8 @@ class Promise : public Code {
 
     LdFunctionEnv* env() const;
 
+    bool trivial() const;
+
   private:
     rir::Code* rirSrc_;
     const unsigned srcPoolIdx_;

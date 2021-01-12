@@ -22,7 +22,6 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     DeadInstructions dead(code, 3, Effects(Effect::Visibility),
                           DeadInstructions::IgnoreUpdatePromise);
-
     bool anyChange = false;
 
     Visitor::run(

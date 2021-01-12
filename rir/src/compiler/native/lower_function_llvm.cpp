@@ -1407,7 +1407,7 @@ void LowerFunctionLLVM::compileRelop(
     Instruction* i,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-    BinopKind kind) {
+    BinopKind kind, bool testNa) {
     auto rep = Representation::Of(i);
     auto lhs = i->arg(0).val();
     auto rhs = i->arg(1).val();
@@ -1429,15 +1429,19 @@ void LowerFunctionLLVM::compileRelop(
         return;
     }
 
-    auto isNaBr = BasicBlock::Create(C, "isNa", fun);
+    BasicBlock* isNaBr = nullptr;
+    if (testNa)
+        isNaBr = BasicBlock::Create(C, "isNa", fun);
     auto done = BasicBlock::Create(C, "", fun);
 
     auto res = phiBuilder(t::Int);
     auto a = load(lhs, lhsRep);
     auto b = load(rhs, rhsRep);
 
-    nacheck(a, lhs->type, isNaBr);
-    nacheck(b, rhs->type, isNaBr);
+    if (testNa) {
+        nacheck(a, lhs->type, isNaBr);
+        nacheck(b, rhs->type, isNaBr);
+    }
 
     if (a->getType() == t::Int && b->getType() == t::Int) {
         res.addInput(builder.CreateZExt(intInsert(a, b), t::Int));
@@ -1451,9 +1455,11 @@ void LowerFunctionLLVM::compileRelop(
 
     builder.CreateBr(done);
 
-    builder.SetInsertPoint(isNaBr);
-    res.addInput(c(NA_INTEGER));
-    builder.CreateBr(done);
+    if (testNa) {
+        builder.SetInsertPoint(isNaBr);
+        res.addInput(c(NA_INTEGER));
+        builder.CreateBr(done);
+    }
 
     builder.SetInsertPoint(done);
     if (rep == Representation::Sexp) {
@@ -3394,34 +3400,81 @@ void LowerFunctionLLVM::compile() {
             case Tag::LAnd:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 a = builder.CreateZExt(
-                                     builder.CreateICmpNE(a, c(0)), t::Int);
-                                 b = builder.CreateZExt(
-                                     builder.CreateICmpNE(b, c(0)), t::Int);
-                                 return builder.CreateAnd(a, b);
+                                 auto afalse = builder.CreateICmpEQ(a, c(0));
+                                 auto bfalse = builder.CreateICmpEQ(b, c(0));
+                                 return createSelect2(
+                                     builder.CreateOr(afalse, bfalse),
+                                     [&]() { return c(0); },
+                                     [&]() {
+                                         auto aNa = builder.CreateICmpEQ(
+                                             a, c(NA_LOGICAL));
+                                         auto bNa = builder.CreateICmpEQ(
+                                             b, c(NA_LOGICAL));
+                                         return createSelect2(
+                                             builder.CreateOr(aNa, bNa),
+                                             []() { return c(NA_LOGICAL); },
+                                             []() { return c(1); });
+                                     });
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 a = builder.CreateZExt(
-                                     builder.CreateFCmpUNE(a, c(0.0)), t::Int);
-                                 b = builder.CreateZExt(
-                                     builder.CreateFCmpUNE(b, c(0.0)), t::Int);
-                                 return builder.CreateAnd(a, b);
+                                 auto afalse = builder.CreateFCmpUEQ(a, c(0.0));
+                                 auto bfalse = builder.CreateFCmpUEQ(b, c(0.0));
+                                 return createSelect2(
+                                     builder.CreateOr(afalse, bfalse),
+                                     [&]() { return c(0); },
+                                     [&]() {
+                                         auto aNa = builder.CreateFCmpUNE(a, b);
+                                         auto bNa = builder.CreateFCmpUNE(b, b);
+                                         return createSelect2(
+                                             builder.CreateOr(aNa, bNa),
+                                             []() { return c(NA_LOGICAL); },
+                                             []() { return c(1); });
+                                     });
                              },
-                             BinopKind::LAND);
+                             BinopKind::LAND, false);
                 break;
             case Tag::LOr:
-                compileRelop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateOr(a, b);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 a = builder.CreateZExt(
-                                     builder.CreateFCmpUNE(a, c(0.0)), t::Int);
-                                 b = builder.CreateZExt(
-                                     builder.CreateFCmpUNE(b, c(0.0)), t::Int);
-                                 return builder.CreateOr(a, b);
-                             },
-                             BinopKind::LOR);
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto afalse = builder.CreateICmpEQ(a, c(0));
+                        auto bfalse = builder.CreateICmpEQ(b, c(0));
+                        auto aNa = builder.CreateICmpEQ(a, c(NA_LOGICAL));
+                        auto bNa = builder.CreateICmpEQ(b, c(NA_LOGICAL));
+                        auto atrue = builder.CreateAnd(
+                            builder.CreateNot(afalse), builder.CreateNot(aNa));
+                        auto btrue = builder.CreateAnd(
+                            builder.CreateNot(bfalse), builder.CreateNot(bNa));
+                        return createSelect2(
+                            builder.CreateOr(atrue, btrue),
+                            [&]() { return c(1); },
+                            [&]() {
+                                return createSelect2(
+                                    builder.CreateOr(aNa, bNa),
+                                    []() { return c(NA_LOGICAL); },
+                                    []() { return c(0); });
+                            });
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto afalse = builder.CreateFCmpUEQ(a, c(0.0));
+                        auto bfalse = builder.CreateFCmpUEQ(b, c(0.0));
+                        auto aNa = builder.CreateFCmpUNE(a, b);
+                        auto bNa = builder.CreateFCmpUNE(b, b);
+                        auto atrue = builder.CreateAnd(
+                            builder.CreateNot(afalse), builder.CreateNot(aNa));
+                        auto btrue = builder.CreateAnd(
+                            builder.CreateNot(bfalse), builder.CreateNot(bNa));
+                        return createSelect2(
+                            builder.CreateOr(atrue, btrue),
+                            [&]() { return c(1); },
+                            [&]() {
+                                return createSelect2(
+                                    builder.CreateOr(aNa, bNa),
+                                    []() { return c(NA_LOGICAL); },
+                                    []() { return c(0); });
+                            });
+                    },
+                    BinopKind::LOR, false);
                 break;
             case Tag::IDiv:
                 compileBinop(
@@ -3816,44 +3869,61 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::AsTest: {
+            case Tag::CheckTrueFalse: {
                 assert(Representation::Of(i) == Representation::Integer);
 
                 auto arg = i->arg(0).val();
+                llvm::Value* res;
 
                 if (Representation::Of(arg) == Representation::Sexp) {
                     auto a = loadSxp(arg);
-                    setVal(i, call(NativeBuiltins::asTest, {a}));
-                    break;
-                }
-
-                auto r = Representation::Of(arg);
-
-                auto done = BasicBlock::Create(C, "", fun);
-                auto isNa = BasicBlock::Create(C, "asTestIsNa", fun);
-
-                if (r == Representation::Real) {
-                    auto narg = load(arg, r);
-                    nacheck(narg, arg->type, isNa);
-                    narg = builder.CreateZExt(
-                        builder.CreateFCmpONE(c(0.0), narg), t::Int);
-                    setVal(i, narg);
-                    builder.CreateBr(done);
+                    res = call(NativeBuiltins::checkTrueFalse, {a});
                 } else {
-                    auto narg = load(arg, Representation::Integer);
-                    nacheck(narg, arg->type, isNa);
-                    setVal(i, narg);
-                    builder.CreateBr(done);
+                    auto r = Representation::Of(arg);
+
+                    auto done = BasicBlock::Create(C, "", fun);
+                    auto isNa = BasicBlock::Create(C, "asTestIsNa", fun);
+
+                    if (r == Representation::Real) {
+                        auto narg = load(arg, r);
+                        nacheck(narg, arg->type, isNa);
+                        res = builder.CreateFCmpUNE(c(0.0), narg);
+                        builder.CreateBr(done);
+                    } else {
+                        auto narg = load(arg, Representation::Integer);
+                        nacheck(narg, arg->type, isNa);
+                        res = builder.CreateICmpNE(c(0), narg);
+                        builder.CreateBr(done);
+                    }
+
+                    builder.SetInsertPoint(isNa);
+                    auto msg = builder.CreateGlobalString(
+                        "missing value where TRUE/FALSE needed");
+                    call(NativeBuiltins::error,
+                         {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+                    builder.CreateUnreachable();
+                    builder.CreateRet(
+                        builder.CreateIntToPtr(c(nullptr), t::SEXP));
+
+                    builder.SetInsertPoint(done);
                 }
+                setVal(i, builder.CreateZExt(res, t::Int));
+                break;
+            }
 
-                builder.SetInsertPoint(isNa);
-                auto msg = builder.CreateGlobalString(
-                    "missing value where TRUE/FALSE needed");
-                call(NativeBuiltins::error,
-                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
-                builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
-
-                builder.SetInsertPoint(done);
+            case Tag::AsTest: {
+                assert(Representation::Of(i) == Representation::Integer);
+                auto arg = i->arg(0).val();
+                auto argRep = Representation::Of(arg);
+                auto testTrue = AsTest::Cast(i)->testTrue;
+                auto compare = testTrue ? constant(R_TrueValue, argRep)
+                                        : constant(R_FalseValue, argRep);
+                auto val = load(arg);
+                setVal(i, builder.CreateZExt(
+                              Representation::Of(arg) == Representation::Real
+                                  ? builder.CreateFCmpOEQ(val, compare)
+                                  : builder.CreateICmpEQ(val, compare),
+                              t::Int));
                 break;
             }
 
@@ -3870,7 +3940,7 @@ void LowerFunctionLLVM::compile() {
                     res = call(NativeBuiltins::asLogicalBlt, {loadSxp(arg)});
                 } else if (r1 == Representation::Real) {
                     auto phi = phiBuilder(t::Int);
-                    auto nin = load(arg, Representation::Real);
+                    auto nin = load(arg);
 
                     auto done = BasicBlock::Create(C, "", fun);
                     auto isNaBr = BasicBlock::Create(C, "isNa", fun);
@@ -3893,7 +3963,7 @@ void LowerFunctionLLVM::compile() {
                     res = phi();
                 } else {
                     assert(r1 == Representation::Integer);
-                    res = load(arg, Representation::Integer);
+                    res = load(arg);
                     if (!arg->type.isA(RType::logical)) {
                         res = builder.CreateSelect(
                             builder.CreateICmpEQ(res, c(NA_INTEGER)),
@@ -3973,7 +4043,6 @@ void LowerFunctionLLVM::compile() {
                 setCar(loadSxp(i->arg(0).val()), val);
                 break;
             }
-
             case Tag::LdVarSuper: {
                 auto ld = LdVarSuper::Cast(i);
 
@@ -5124,23 +5193,30 @@ void LowerFunctionLLVM::compile() {
             if (!Phi::Cast(i))
                 ensureNamedIfNeeded(i);
 
-            if (Parameter::RIR_CHECK_PIR_TYPES > 0 &&
-                Representation::Of(i) == t::SEXP) {
-                if (variables_.count(i) && i->type != PirType::voyd() &&
-                    i->type != RType::expandedDots &&
-                    i->type != NativeType::context && !CastType::Cast(i) &&
-                    !LdConst::Cast(i)) {
-                    static std::vector<std::string> leaky;
-                    const char* msg = nullptr;
-                    if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
-                        std::stringstream str;
-                        i->printRecursive(str, 2);
-                        leaky.push_back(str.str());
-                        msg = leaky.back().c_str();
+            if (Parameter::RIR_CHECK_PIR_TYPES > 0 && !i->type.isVoid() &&
+                variables_.count(i)) {
+                if (Representation::Of(i) == t::SEXP) {
+                    if (i->type != RType::expandedDots &&
+                        i->type != NativeType::context && !CastType::Cast(i) &&
+                        !LdConst::Cast(i)) {
+                        static std::vector<std::string> leaky;
+                        const char* msg = nullptr;
+                        if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
+                            std::stringstream str;
+                            i->printRecursive(str, 2);
+                            leaky.push_back(str.str());
+                            msg = leaky.back().c_str();
+                        }
+                        call(NativeBuiltins::checkType,
+                             {load(i), c(i->type.serialize()),
+                              convertToPointer(msg)});
                     }
-                    call(NativeBuiltins::checkType,
-                         {load(i), c(i->type.serialize()),
-                          convertToPointer(msg)});
+                }
+                if (i->type.isA(NativeType::test)) {
+                    auto ok =
+                        builder.CreateOr(builder.CreateICmpEQ(load(i), c(0)),
+                                         builder.CreateICmpEQ(load(i), c(1)));
+                    insn_assert(ok, "Variable of type test has invalid range");
                 }
             }
 

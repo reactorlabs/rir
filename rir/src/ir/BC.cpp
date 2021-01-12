@@ -49,7 +49,6 @@ void BC::write(CodeStream& cs) const {
     case Opcode::ldvar_for_update_:
     case Opcode::ldvar_super_:
     case Opcode::stvar_:
-    case Opcode::starg_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
         cs.insert(immediate.pool);
@@ -58,7 +57,6 @@ void BC::write(CodeStream& cs) const {
     case Opcode::ldvar_cached_:
     case Opcode::ldvar_for_update_cache_:
     case Opcode::stvar_cached_:
-    case Opcode::starg_cached_:
         cs.insert(immediate.poolAndCache);
         return;
 
@@ -191,8 +189,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
-        case Opcode::starg_:
-        case Opcode::starg_cached_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             InBytes(inp, code + 1, size - 1);
@@ -284,8 +280,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
-        case Opcode::starg_:
-        case Opcode::starg_cached_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             if (size != 0)
@@ -409,7 +403,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::ldvar_super_:
     case Opcode::ldddvar_:
     case Opcode::stvar_:
-    case Opcode::starg_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
         out << CHAR(PRINTNAME(immediateConst()));
@@ -417,7 +410,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::ldvar_cached_:
     case Opcode::ldvar_for_update_cache_:
     case Opcode::stvar_cached_:
-    case Opcode::starg_cached_:
         out << CHAR(PRINTNAME(immediateConst())) << "{"
             << immediate.poolAndCache.cacheIndex << "}";
         break;

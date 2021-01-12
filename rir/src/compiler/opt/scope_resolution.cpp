@@ -342,12 +342,23 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (!v->type.maybePromiseWrapped() &&
                             !v->type.maybeMissing()) {
                             notMissing = true;
+                        } else {
+                            // If we find the root promise, we know if it is
+                            // missing or not!
+                            if (auto mk =
+                                    MkArg::Cast(res.result.singleValue()
+                                                    .val->followCasts())) {
+                                if (mk->isEager() &&
+                                    mk->eagerArg() != MissingArg::instance())
+                                    notMissing = true;
+                            }
                         }
                     }
                     if (!res.result.type.maybeMissing() &&
                         !res.result.type.maybePromiseWrapped()) {
                         notMissing = true;
                     }
+
                     if (notMissing) {
                         // Missing still returns TRUE, if the argument was
                         // initially missing, but then overwritten by a default

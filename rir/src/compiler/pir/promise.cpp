@@ -26,5 +26,22 @@ LdFunctionEnv* Promise::env() const {
     return e;
 }
 
+bool Promise::trivial() const {
+    auto bb = entry;
+    if (bb->isEmpty())
+        bb = bb->next();
+    for (auto i : *bb) {
+        switch (i->tag) {
+        case Tag::LdConst:
+        case Tag::Visible:
+        case Tag::Return:
+            break;
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace pir
 } // namespace rir

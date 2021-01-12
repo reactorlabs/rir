@@ -2,6 +2,7 @@
 #define RIR_R_PRINT
 
 #include "R/r.h"
+#include <string>
 
 namespace rir {
 

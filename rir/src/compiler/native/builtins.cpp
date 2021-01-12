@@ -928,7 +928,7 @@ NativeBuiltin NativeBuiltins::isMissing = {
     (void*)&isMissingImpl,
 };
 
-int astestImpl(SEXP val) {
+int checkTrueFalseImpl(SEXP val) {
     int cond = NA_LOGICAL;
     if (XLENGTH(val) > 1)
         Rf_warningcall(
@@ -959,13 +959,12 @@ int astestImpl(SEXP val) {
             // TODO: pass srcid
             R_NilValue, msg);
     }
-
-    return cond;
+    return cond ? 1 : 0;
 }
 
-NativeBuiltin NativeBuiltins::asTest = {
-    "astest",
-    (void*)&astestImpl,
+NativeBuiltin NativeBuiltins::checkTrueFalse = {
+    "checkTrueFalse",
+    (void*)&checkTrueFalseImpl,
 };
 
 int asLogicalImpl(SEXP a) {

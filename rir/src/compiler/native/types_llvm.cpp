@@ -235,7 +235,7 @@ int initializeTypes(LLVMContext& context) {
     NativeBuiltins::binopEnv.llvmSignature = t::sexp_sexp3int2;
 
     NativeBuiltins::isMissing.llvmSignature = t::int_sexpsexp;
-    NativeBuiltins::asTest.llvmSignature = t::int_sexp;
+    NativeBuiltins::checkTrueFalse.llvmSignature = t::int_sexp;
     NativeBuiltins::asLogicalBlt.llvmSignature = t::int_sexp;
 
     NativeBuiltins::length.llvmSignature =

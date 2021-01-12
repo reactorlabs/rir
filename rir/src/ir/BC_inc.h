@@ -333,9 +333,7 @@ BC_NOARGS(V, _)
     inline static BC ldddvar(SEXP sym);
     inline static BC mkPromise(FunIdx prom);
     inline static BC mkEagerPromise(FunIdx prom);
-    inline static BC starg(SEXP sym);
     inline static BC stvar(SEXP sym);
-    inline static BC stargCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
@@ -557,7 +555,6 @@ BC_NOARGS(V, _)
         case Opcode::ldvar_super_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
-        case Opcode::starg_:
         case Opcode::stvar_super_:
         case Opcode::ldvar_for_update_:
         case Opcode::missing_:
@@ -566,7 +563,6 @@ BC_NOARGS(V, _)
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
-        case Opcode::starg_cached_:
             memcpy(&immediate.poolAndCache, pc,
                    sizeof(PoolAndCachePositionRange));
             break;

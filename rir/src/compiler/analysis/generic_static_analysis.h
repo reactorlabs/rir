@@ -38,6 +38,8 @@ namespace pir {
  * provided by the subclass that specializes StaticAnalysis.
  */
 
+class AvailableCheckpoints;
+
 enum class AnalysisDebugLevel {
     None,
     Taint,
@@ -99,11 +101,11 @@ class StaticAnalysis {
         const_cast<StaticAnalysis*>(this)->cache.emplace(i, state);
         const_cast<StaticAnalysis*>(this)->cacheQueue.push_back(i);
     }
+    std::unordered_map<BB*, AbstractState> exitpoints;
+    AbstractState exitpoint;
 
   protected:
     GlobalAbstractState* globalState = nullptr;
-    std::unordered_map<BB*, AbstractState> exitpoints;
-    AbstractState exitpoint;
 
     bool done = false;
     LogStream& log;
@@ -147,7 +149,8 @@ class StaticAnalysis {
         bool foundAny = false;
         AbstractState exitState;
         for (auto& exit : exitpoints) {
-            if (cfg.isPredecessor(instruction->bb(), exit.first)) {
+            if (instruction->bb() == exit.first ||
+                cfg.isPredecessor(instruction->bb(), exit.first)) {
                 if (foundAny) {
                     exitState.mergeExit(exit.second);
                 } else {
@@ -345,7 +348,12 @@ class StaticAnalysis {
                         if (DEBUG_LEVEL == AnalysisDebugLevel::Taint) {
                             AbstractState old = state;
                             res = compute(state, i);
-                            logTaintChange(old, state, res, i);
+                            if (!Deopt::Cast(i)) {
+                                AbstractState old2 = old;
+                                auto changed = old2.merge(state);
+                                if (changed > AbstractResult::None)
+                                    logTaintChange(old, state, res, i);
+                            }
                         } else {
                             res = compute(state, i);
                             logChange(state, res, i);

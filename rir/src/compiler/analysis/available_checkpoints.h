@@ -37,7 +37,7 @@ class FwdAvailableCheckpoints
         return AvailableCheckpointsApply::apply(state, i);
     }
 
-    Checkpoint* reaching(Instruction* i) {
+    Checkpoint* reaching(Instruction* i) const {
         return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).get();
     }
 };
@@ -53,10 +53,10 @@ class RwdAvailableCheckpoints
         return AvailableCheckpointsApply::apply(state, i);
     }
 
-    Checkpoint* reachingThrough(Instruction* i) {
+    Checkpoint* reachingThrough(Instruction* i) const {
         return StaticAnalysis::at<PositioningStyle::AfterInstruction>(i).get();
     }
-    Checkpoint* reaching(Instruction* i) {
+    Checkpoint* reaching(Instruction* i) const {
         return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).get();
     }
 };
@@ -69,15 +69,15 @@ class AvailableCheckpoints {
     AvailableCheckpoints(ClosureVersion* cls, Code* code, LogStream& log)
         : fwd(cls, code, log), rwd(cls, code, log) {}
 
-    Checkpoint* at(Instruction* i) { return fwd.reaching(i); }
+    Checkpoint* at(Instruction* i) const { return fwd.reaching(i); }
     Checkpoint* next(Instruction* i, Instruction* dependency,
-                     const DominanceGraph& dom) {
+                     const DominanceGraph& dom) const {
         Checkpoint* res = next(i);
         if (res && dom.dominates(dependency->bb(), res->bb()))
             return res;
         return nullptr;
     }
-    Checkpoint* next(Instruction* i) {
+    Checkpoint* next(Instruction* i) const {
         // Search for the next cp only in main path, not the deopt branch
         if (auto cp = Checkpoint::Cast(i)) {
             auto n = cp->nextBB();

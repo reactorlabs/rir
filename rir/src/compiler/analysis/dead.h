@@ -12,12 +12,25 @@ namespace pir {
 constexpr static std::initializer_list<Tag> TypecheckInstrsList = {
     Tag::IsType, Tag::CastType, Tag::FrameState};
 constexpr static std::initializer_list<Tag> BoxedUsesInstrsList = {
-    Tag::MkEnv,     Tag::StVar, Tag::UpdatePromise, Tag::Call,
-    Tag::NamedCall, Tag::MkArg, Tag::DotsList,      Tag::FrameState};
+    Tag::MkEnv, Tag::StVar,    Tag::UpdatePromise, Tag::Call,      Tag::NamedCall,
+    Tag::MkArg, Tag::DotsList, Tag::FrameState};
 constexpr static std::initializer_list<Tag> IgnoreIntVsReal = {
-    Tag::ColonCastLhs, Tag::ColonCastRhs, Tag::CastType, Tag::IsType, Tag::Lte,
-    Tag::Lt,           Tag::Gt,           Tag::Gte,      Tag::Eq,     Tag::Neq,
-    Tag::AsLogical,    Tag::AsTest,       Tag::LAnd,     Tag::LOr,    Tag::Not};
+    Tag::ColonCastLhs,
+    Tag::ColonCastRhs,
+    Tag::CastType,
+    Tag::IsType,
+    Tag::Lte,
+    Tag::Lt,
+    Tag::Gt,
+    Tag::Gte,
+    Tag::Eq,
+    Tag::Neq,
+    Tag::AsLogical,
+    Tag::AsTest,
+    Tag::CheckTrueFalse,
+    Tag::LAnd,
+    Tag::LOr,
+    Tag::Not};
 
 class DeadInstructions {
     std::unordered_set<Instruction*> unused_;

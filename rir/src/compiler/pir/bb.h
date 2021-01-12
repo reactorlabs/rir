@@ -6,6 +6,7 @@
 
 #include "utils/Set.h"
 #include <unordered_set>
+#include <iostream>
 
 namespace rir {
 namespace pir {

@@ -125,6 +125,17 @@ static bool isStaticallyFalse(Value* i) {
     return false;
 }
 
+static bool isStaticallyNA(Value* i) {
+    if (auto ld = LdConst::Cast(i)) {
+        if (convertsToLogicalWithoutWarning(ld->c())) {
+            auto a = ld->c();
+            if (Rf_length(a) == 1 && Rf_asLogical(a) == NA_LOGICAL)
+                return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 namespace rir {
 namespace pir {
@@ -296,6 +307,22 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     return false;
                 }
             };
+            if (CheckTrueFalse::Cast(i)) {
+                auto a = i->arg(0).val();
+                if (isStaticallyNA(a)) {
+                    bb->insert(ip + 1, new Unreachable());
+                    ip += 2;
+                    while (ip != bb->end())
+                        ip = bb->remove(ip);
+                    next = bb->end();
+                    bb->deleteSuccessors();
+                } else if (isStaticallyTrue(a) || isStaticallyFalse(a)) {
+                    auto replace = isStaticallyTrue(a)
+                                       ? new LdConst(R_TrueValue)
+                                       : new LdConst(R_FalseValue);
+                    i->replaceUsesAndSwapWith(replace, ip);
+                }
+            }
             if (LAnd::Cast(i)) {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
@@ -372,21 +399,22 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (convertsToLogicalWithoutWarning(arg)) {
                     auto res = Rf_asLogical(arg);
                     auto c = new LdConst(Rf_ScalarLogical(res));
-                    i->replaceUsesWith(c);
-                    bb->replace(ip, c);
+                    i->replaceUsesAndSwapWith(c, ip);
                     anyChange = true;
                 }
             });
-            if (AsTest::Cast(i)) {
-                auto a = i->arg(0).val();
-                if (isStaticallyTrue(a) || isStaticallyFalse(a)) {
-                    i->replaceUsesWith(isStaticallyTrue(a)
-                                           ? (Value*)True::instance()
-                                           : (Value*)False::instance());
+            FOLD_UNARY(AsTest, [&](SEXP arg) {
+                if (convertsToLogicalWithoutWarning(arg)) {
+                    auto res = Rf_asLogical(arg);
+                    auto compare = AsTest::Cast(i)->testTrue;
+                    auto replace = (res == compare) ? (Value*)True::instance()
+                                                    : (Value*)False::instance();
+                    i->replaceUsesWith(replace);
                     next = bb->remove(ip);
                     anyChange = true;
                 }
-            };
+            });
+
             if (Identical::Cast(i)) {
                 // Those are targeting the checks for default argument
                 // evaluation after inlining

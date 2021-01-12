@@ -212,3 +212,37 @@ findGeneric()
 findGeneric()
 findGeneric()
 findGeneric()
+
+
+f1 <- function(x) x && F
+f2 <- function(x) F && x
+f3 <- function(x) x || T
+f4 <- function(x) T || x
+
+f5 <- function() NA && F
+f6 <- function() F && NA
+f7 <- function() NA || T
+f8 <- function() T || NA
+
+f9 <- function() all(NA)
+f10 <- function() all(NA) && !anyNA(NA)
+f11 <- function(x) all(x) && !anyNA(x)
+
+
+for (i in 1:10) {
+  stopifnot(identical(f1(NA), F))
+  stopifnot(identical(f2(NA), F))
+  stopifnot(identical(f3(NA), T))
+  stopifnot(identical(f4(NA), T))
+
+  stopifnot(identical(f5(), F))
+  stopifnot(identical(f6(), F))
+  stopifnot(identical(f7(), T))
+  stopifnot(identical(f8(), T))
+
+  stopifnot(identical(f9(), NA))
+  stopifnot(identical(f10(), F))
+  stopifnot(identical(f11(NA), F))
+  stopifnot(identical(f11(F), F))
+  stopifnot(identical(f11(T), T))
+}

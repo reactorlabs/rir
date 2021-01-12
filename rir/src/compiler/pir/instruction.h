@@ -85,7 +85,7 @@ enum class HasEnvSlot : uint8_t { Yes, No };
 enum class Effect : uint8_t {
     // Changes R_Visible
     Visibility,
-    // Instruction might produce a warning. Example: AsTest warns if the
+    // Instruction might produce a warning. Example: CheckTrueFalse warns if the
     // vector used in an if condition has length > 1
     Warn,
     // Instruction might produce an error. Example: ForSeqSize raises an
@@ -1057,14 +1057,15 @@ class FLIE(StVar, 2, Effects(Effect::WritesEnv) | Effect::LeakArg) {
   public:
     bool isStArg = false;
 
-    StVar(SEXP name, Value* val, Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
-                                         {{val}}, env),
+    StVar(SEXP name, Value* val, Value* env, PirType expected = PirType::val())
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{expected}}, {{val}},
+                                         env),
           varName(name) {}
 
-    StVar(const char* name, Value* val, Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
-                                         {{val}}, env),
+    StVar(const char* name, Value* val, Value* env,
+          PirType expected = PirType::val())
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{expected}}, {{val}},
+                                         env),
           varName(Rf_install(name)) {}
 
     SEXP varName;
@@ -1077,8 +1078,8 @@ class FLIE(StVar, 2, Effects(Effect::WritesEnv) | Effect::LeakArg) {
 // Pseudo Instruction. Is actually a StVar with a flag set.
 class StArg : public StVar {
   public:
-    StArg(SEXP name, Value* val, Value* env) : StVar(name, val, env) {
-        arg<0>().type() = PirType::any();
+    StArg(SEXP name, Value* val, Value* env)
+        : StVar(name, val, env, PirType::any()) {
         isStArg = true;
     }
 };
@@ -1126,7 +1127,6 @@ class FLIE(MkArg, 2, Effects::None()) {
 
   public:
     bool noReflection = false;
-    bool usedInPromargsList = false;
 
     MkArg(Promise* prom, Value* v, Value* env);
 
@@ -1148,9 +1148,7 @@ class FLIE(MkArg, 2, Effects::None()) {
 
     Value* promEnv() const { return env(); }
 
-    size_t gvnBase() const override {
-        return hash_combine(hash_combine(tagHash(), prom_), usedInPromargsList);
-    }
+    size_t gvnBase() const override { return hash_combine(tagHash(), prom_); }
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
@@ -1302,12 +1300,30 @@ class FLI(AsLogical, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(AsTest, 1, Effects() | Effect::Error | Effect::Warn) {
+class FLI(AsTest, 1, Effects::None()) {
+  public:
+    Value* val() const { return arg<0>().val(); }
+    const bool testTrue;
+
+    AsTest(Value* in, bool testTrue_)
+        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}),
+          testTrue(testTrue_) {}
+
+    std::string name() const override final {
+        return std::string("Is") + (testTrue ? "True" : "False") + "(" +
+               InstructionImplementation::name() + ")";
+    }
+
+    size_t gvnBase() const override { return tagHash(); }
+};
+
+class FLI(CheckTrueFalse, 1, Effects() | Effect::Error | Effect::Warn) {
   public:
     Value* val() const { return arg<0>().val(); }
 
-    explicit AsTest(Value* in)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}) {}
+    explicit CheckTrueFalse(Value* in)
+        : FixedLenInstruction(PirType::simpleScalarLogical().notNAOrNaN(),
+                              {{PirType::val()}}, {{in}}) {}
 
     Effects inferEffects(const GetType& getType) const override final {
         if (getType(val()).isScalar())
@@ -2042,8 +2058,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
 
     Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
          Value* fs, unsigned srcIdx)
-        : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv,
-                                       srcIdx) {
+        : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
         assert(fs);
         pushArg(fs, NativeType::frameState);
         pushArg(fun, RType::closure);
@@ -2475,7 +2490,11 @@ class VLI(Phi, Effects::None()) {
         SLOWASSERT(std::find(input.begin(), input.end(), in) == input.end() &&
                    "Duplicate PHI input block");
         input.push_back(in);
-        args_.push_back(InstrArg(arg, arg->type));
+        args_.push_back(InstrArg(arg, arg->type.isRType()
+                                          ? (arg->type.maybePromiseWrapped()
+                                                 ? PirType::any()
+                                                 : PirType::val())
+                                          : arg->type));
     }
     BB* inputAt(size_t i) const { return input.at(i); }
     void updateInputAt(size_t i, BB* bb) {

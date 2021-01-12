@@ -225,7 +225,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             handled = true;
         }
     } else if (auto up = UpdatePromise::Cast(i)) {
-        effect.max(state.updatedProms[up->mkarg()].merge(
+        effect.max(state.forcedPromise[up->mkarg()].merge(
             AbstractPirValue(up->arg(1).val(), up, depth)));
         handled = true;
     } else if (Force::Cast(i)) {
@@ -286,8 +286,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                     handled = true;
                 } else {
                     if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
-                        auto upd = state.updatedProms.find(mkarg);
-                        if (upd == state.updatedProms.end()) {
+                        auto upd = state.forcedPromise.find(mkarg);
+                        if (upd == state.forcedPromise.end()) {
                             if (depth < MAX_DEPTH && force->strict) {
                                 if (ld->id < args.size())
                                     arg = args[ld->id];
@@ -307,7 +307,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
 
                                 state.mergeCall(code, res);
                                 updateReturnValue(res.returnValue);
-                                effect.max(state.updatedProms[mkarg].merge(
+                                effect.max(state.forcedPromise[mkarg].merge(
                                     res.returnValue));
                                 handled = true;
                                 effect.update();

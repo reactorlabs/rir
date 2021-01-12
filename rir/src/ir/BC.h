@@ -138,21 +138,6 @@ BC BC::missing(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
-BC BC::starg(SEXP sym) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateArguments i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::starg_, i);
-}
-BC BC::stargCached(SEXP sym, uint32_t cacheSlot) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateArguments i;
-    i.poolAndCache.poolIndex = Pool::insert(sym);
-    i.poolAndCache.cacheIndex = cacheSlot;
-    return BC(Opcode::starg_cached_, i);
-}
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
