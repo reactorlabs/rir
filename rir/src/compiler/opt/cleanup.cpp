@@ -84,6 +84,19 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                                                 b->srcIdx),
                             ip);
                     }
+                } else if (auto tst = CheckTrueFalse::Cast(i)) {
+                    if (tst->arg(0).val()->type.isA(PirType::test())) {
+                        removed = true;
+                        tst->replaceUsesWith(tst->arg(0).val());
+                        next = bb->remove(ip);
+                    }
+                } else if (auto lgl = AsLogical::Cast(i)) {
+                    if (lgl->arg(0).val()->type.isA(
+                            PirType::simpleScalar().notNAOrNaN())) {
+                        removed = true;
+                        lgl->replaceUsesWith(lgl->arg(0).val());
+                        next = bb->remove(ip);
+                    }
                 } else if (auto missing = ChkMissing::Cast(i)) {
                     Value* arg = missing->arg<0>().val();
                     if (!arg->type.maybeMissing()) {
@@ -136,6 +149,16 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                         tt->replaceUsesWith(arg);
                         removed = true;
                         next = bb->remove(ip);
+                    }
+                } else if (auto br = Branch::Cast(i)) {
+                    if (auto n = Not::Cast(br->arg(0).val())) {
+                        if (n->arg(0).val()->type.isA(PirType::test())) {
+                            br->arg(0).val() = n->arg(0).val();
+                            auto a = bb->getBranch(true);
+                            auto b = bb->getBranch(false);
+                            bb->deleteSuccessors();
+                            bb->setSuccessors({b, a});
+                        }
                     }
                 } else if (auto env = MkEnv::Cast(i)) {
                     static std::unordered_set<Tag> tags{Tag::IsEnvStub};
