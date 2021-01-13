@@ -7,6 +7,7 @@
 #include "ir/BC_inc.h"
 #include "ir/Deoptimization.h"
 #include "pir.h"
+#include "runtime/ArglistOrder.h"
 #include "singleton_values.h"
 #include "tag.h"
 #include "value.h"
@@ -2047,6 +2048,12 @@ class CallInstruction {
     virtual Closure* tryGetCls() const { return nullptr; }
     virtual Context inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
+    virtual bool isReordered() const { return false; }
+    virtual ArglistOrder::CallArglistOrder const& getArgOrderOrig() const {
+        assert(false);
+        static ArglistOrder::CallArglistOrder empty;
+        return empty;
+    }
     ClosureVersion* tryDispatch(Closure*) const;
 };
 
@@ -2064,7 +2071,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         pushArg(fun, RType::closure);
 
         // Calling builtins with names or ... is not supported by callBuiltin,
-        // that's why those calls go through the normall call BC.
+        // that's why those calls go through the normal call BC.
         auto argtype =
             PirType(RType::prom) | RType::missing | RType::expandedDots;
         if (auto con = LdConst::Cast(fun))
@@ -2156,6 +2163,7 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
 // specified as `cls_`, args passed as promises.
 class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* cls_;
+    ArglistOrder::CallArglistOrder argOrderOrig;
 
   public:
     Context givenContext;
@@ -2168,8 +2176,9 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* tryGetCls() const override final { return cls(); }
 
     StaticCall(Value * callerEnv, Closure * cls, Context givenContext,
-               const std::vector<Value*>& args, FrameState* fs, unsigned srcIdx,
-               Value* runtimeClosure = Tombstone::closure());
+               const std::vector<Value*>& args,
+               ArglistOrder::CallArglistOrder&& argOrderOrig, FrameState* fs,
+               unsigned srcIdx, Value* runtimeClosure = Tombstone::closure());
 
     size_t nCallArgs() const override { return nargs() - 3; };
     void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
@@ -2187,6 +2196,12 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     InstrArg& callArg(size_t pos) override final {
         assert(pos < nCallArgs());
         return arg(pos + 2);
+    }
+
+    bool isReordered() const override final { return !argOrderOrig.empty(); }
+    ArglistOrder::CallArglistOrder const& getArgOrderOrig()
+        const override final {
+        return argOrderOrig;
     }
 
     PirType inferType(const GetType& getType) const override final;
@@ -2394,12 +2409,17 @@ class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
 
 class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
                             Effect::LeaksEnv) {
+    ArglistOrder::CallArglistOrder argOrderOrig;
+
   public:
     PushContext(Value* ast, Value* op, CallInstruction* call, Value* sysparent)
         : VarLenInstructionWithEnvSlot(NativeType::context, sysparent) {
         call->eachCallArg([&](Value* v) { pushArg(v, PirType::any()); });
         pushArg(ast, PirType::any());
         pushArg(op, PirType::closure());
+        if (call->isReordered()) {
+            argOrderOrig = call->getArgOrderOrig();
+        }
     }
 
     size_t narglist() const { return nargs() - 3; }
@@ -2410,6 +2430,11 @@ class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
         return op;
     }
     Value* ast() const { return arg(nargs() - 3).val(); }
+
+    bool isReordered() const { return !argOrderOrig.empty(); }
+    ArglistOrder::CallArglistOrder const& getArgOrderOrig() const {
+        return argOrderOrig;
+    }
 };
 
 class FLI(PopContext, 2, Effect::ChangesContexts) {

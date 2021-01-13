@@ -1,7 +1,7 @@
 #include "type.h"
-#include "../../interpreter/LazyEnvironment.h"
 #include "../parameter.h"
 #include "R/r.h"
+#include "runtime/LazyEnvironment.h"
 
 extern "C" Rboolean(Rf_isObject)(SEXP s);
 

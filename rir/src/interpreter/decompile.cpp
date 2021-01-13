@@ -1,5 +1,3 @@
-#include "LazyArglist.h"
-#include "LazyEnvironment.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
@@ -8,6 +6,8 @@
 #include "interp_incl.h"
 #include "ir/Deoptimization.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
 #include <R/r.h>

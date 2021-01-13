@@ -938,6 +938,14 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
         runtimeClosure()->printRef(out);
         out << " ";
     }
+
+    if (!argOrderOrig.empty()) {
+        out << "{ ";
+        for (auto a : argOrderOrig)
+            out << ArglistOrder::decodeArg(a)
+                << (ArglistOrder::isArgNamed(a) ? "n " : " ");
+        out << "} ";
+    }
 }
 
 void Force::printArgs(std::ostream& out, bool tty) const {
@@ -1020,10 +1028,11 @@ ClosureVersion* StaticCall::tryOptimisticDispatch() const {
 }
 
 StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
-                       const std::vector<Value*>& args, FrameState* fs,
-                       unsigned srcIdx, Value* runtimeClosure)
+                       const std::vector<Value*>& args,
+                       ArglistOrder::CallArglistOrder&& argOrderOrig,
+                       FrameState* fs, unsigned srcIdx, Value* runtimeClosure)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls), givenContext(givenContext) {
+      cls_(cls), argOrderOrig(argOrderOrig), givenContext(givenContext) {
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
@@ -1123,7 +1132,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     pushArg(fun, RType::closure);
 
     // Calling builtins with names or ... is not supported by callBuiltin,
-    // that's why those calls go through the normall call BC.
+    // that's why those calls go through the normal call BC.
     auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
@@ -1145,7 +1154,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     pushArg(fun, RType::closure);
 
     // Calling builtins with names or ... is not supported by callBuiltin,
-    // that's why those calls go through the normall call BC.
+    // that's why those calls go through the normal call BC.
     auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)

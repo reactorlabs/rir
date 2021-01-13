@@ -10,12 +10,12 @@
 #include "R/r.h"
 
 #include "builtins.h"
-#include "interpreter/LazyArglist.h"
-#include "interpreter/LazyEnvironment.h"
 #include "interpreter/builtins.h"
 #include "interpreter/instance.h"
 
 #include "runtime/DispatchTable.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
 #include "compiler/parameter.h"
@@ -547,11 +547,15 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         arglist.push_back(ct->arg(i).val());
     }
 
+    auto callId = ArglistOrder::NOT_REORDERED;
+    if (ct->isReordered())
+        callId = pushArgReordering(ct->getArgOrderOrig());
+
     withCallFrame(arglist,
                   [&]() -> llvm::Value* {
-                      return call(
-                          NativeBuiltins::initClosureContext,
-                          {ast, data.rcntxt, sysparent, op, c(ct->narglist())});
+                      return call(NativeBuiltins::initClosureContext,
+                                  {c(callId), paramCode(), ast, data.rcntxt,
+                                   sysparent, op, c(ct->narglist())});
                   },
                   false);
 
@@ -1686,12 +1690,17 @@ bool LowerFunctionLLVM::compileDotcall(
     auto namesConst = c(newNames);
     auto namesStore = globalConst(namesConst);
 
+    auto callId = ArglistOrder::NOT_REORDERED;
+    if (calli->isReordered())
+        callId = pushArgReordering(calli->getArgOrderOrig());
+
     setVal(i,
            withCallFrame(
                args,
                [&]() -> llvm::Value* {
                    return call(NativeBuiltins::dotsCall,
                                {
+                                   c(callId),
                                    paramCode(),
                                    c(i->srcIdx),
                                    callee(),
@@ -2941,9 +2950,14 @@ void LowerFunctionLLVM::compile() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
                 Context asmpt = b->inferAvailableAssumptions();
+
+                auto callId = ArglistOrder::NOT_REORDERED;
+                if (b->isReordered())
+                    callId = pushArgReordering(b->getArgOrderOrig());
+
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(NativeBuiltins::call,
-                                       {paramCode(), c(b->srcIdx),
+                                       {c(callId), paramCode(), c(b->srcIdx),
                                         loadSxp(b->cls()), loadSxp(b->env()),
                                         c(b->nCallArgs()), c(asmpt.toI())});
                        }));
@@ -2966,10 +2980,15 @@ void LowerFunctionLLVM::compile() {
                 auto namesConst = c(names);
                 auto namesStore = globalConst(namesConst);
 
+                auto callId = ArglistOrder::NOT_REORDERED;
+                if (b->isReordered())
+                    callId = pushArgReordering(b->getArgOrderOrig());
+
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(
                                NativeBuiltins::namedCall,
                                {
+                                   c(callId),
                                    paramCode(),
                                    c(b->srcIdx),
                                    loadSxp(b->cls()),
@@ -2991,14 +3010,18 @@ void LowerFunctionLLVM::compile() {
                 calli->eachCallArg([&](Value* v) { args.push_back(v); });
                 Context asmpt = calli->inferAvailableAssumptions();
 
+                auto callId = ArglistOrder::NOT_REORDERED;
+                if (calli->isReordered())
+                    callId = pushArgReordering(calli->getArgOrderOrig());
+
                 if (!target->owner()->hasOriginClosure()) {
                     setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                               return call(NativeBuiltins::call,
-                                           {paramCode(), c(calli->srcIdx),
-                                            loadSxp(calli->runtimeClosure()),
-                                            loadSxp(calli->env()),
-                                            c(calli->nCallArgs()),
-                                            c(asmpt.toI())});
+                               return call(
+                                   NativeBuiltins::call,
+                                   {c(callId), paramCode(), c(calli->srcIdx),
+                                    loadSxp(calli->runtimeClosure()),
+                                    loadSxp(calli->env()),
+                                    c(calli->nCallArgs()), c(asmpt.toI())});
                            }));
                     break;
                 }
@@ -3016,6 +3039,7 @@ void LowerFunctionLLVM::compile() {
                         }
                     }
                     if (nativeTarget) {
+                        // TODO: callId is not used here.. should it be?
                         llvm::Value* trg = JitLLVM::get(target);
                         if (trg &&
                             target->properties.includes(
@@ -3040,6 +3064,8 @@ void LowerFunctionLLVM::compile() {
                         auto res = withCallFrame(args, [&]() {
                             return call(NativeBuiltins::nativeCallTrampoline,
                                         {
+                                            c(callId),
+                                            paramCode(),
                                             constant(callee, t::SEXP),
                                             c(idx),
                                             c(calli->srcIdx),
@@ -3058,6 +3084,7 @@ void LowerFunctionLLVM::compile() {
                            return call(
                                NativeBuiltins::call,
                                {
+                                   c(callId),
                                    paramCode(),
                                    c(calli->srcIdx),
                                    builder.CreateIntToPtr(
@@ -5274,6 +5301,7 @@ void LowerFunctionLLVM::compile() {
     }
     if (!variableMapping.empty()) {
         pirTypeFeedback = PirTypeFeedback::New(codes, variableMapping);
+        p_(pirTypeFeedback->container());
 #ifdef DEBUG_REGISTER_MAP
         for (auto m : variableMapping) {
             auto origin = registerMap->getOriginOfSlot(m.first);

@@ -3,6 +3,7 @@
 
 #include "R/r.h"
 #include "ir/BC_inc.h"
+#include "runtime/ArglistOrder.h"
 
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
 
@@ -34,15 +35,12 @@ SEXP rirEval(SEXP f, SEXP env);
 SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP rirForcePromise(SEXP);
 
-SEXP argsLazyCreation(void* rirDataWrapper);
-
-struct LazyArglist;
-SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
-                                         LazyArglist* argsStore,
-                                         const Immediate* names, SEXP ast,
-                                         bool eagerCallee,
-                                         bool recreateOriginalPromargs,
-                                         InterpreterInstance* ctx);
+SEXP createLegacyArglist(ArglistOrder::CallId id, size_t length,
+                         const R_bcstack_t* stackArgs, SEXP* heapArgs,
+                         const Immediate* names, SEXP ast,
+                         ArglistOrder* reordering, bool eagerCallee,
+                         bool recreateOriginalPromargs,
+                         InterpreterInstance* ctx);
 
 SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
                        const Opcode* pc, InterpreterInstance* ctx, SEXP stub);

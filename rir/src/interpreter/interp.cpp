@@ -1,6 +1,4 @@
 #include "interp.h"
-#include "LazyArglist.h"
-#include "LazyEnvironment.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
@@ -9,6 +7,8 @@
 #include "compiler/parameter.h"
 #include "event_counters.h"
 #include "ir/Deoptimization.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
 #include "utils/Pool.h"
@@ -241,9 +241,8 @@ static void endClosureDebug(SEXP call, SEXP op, SEXP rho) {
     // TODO!!!
 }
 
-/** Given argument code offsets, creates the argslist from their promises.
+/** Given argument code offsets, creates the arglist from their promises.
  */
-// TODO unnamed only at this point
 static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
                                     SEXP name) {
     SLOWASSERT(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
@@ -266,6 +265,53 @@ static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
+SEXP materialize(SEXP rirDataWrapper) {
+    if (auto promargs = LazyArglist::check(rirDataWrapper)) {
+        return promargs->createArglist(globalContext());
+    }
+    if (auto lazyEnv = LazyEnvironment::check(rirDataWrapper)) {
+        auto createEnvironment = [](InterpreterInstance* ctx, SEXP wrapper_) {
+            auto wrapper = LazyEnvironment::unpack(wrapper_);
+            assert(!wrapper->materialized());
+
+            SEXP arglist = R_NilValue;
+            auto names = wrapper->names;
+            for (size_t i = 0; i < wrapper->nargs; ++i) {
+                SEXP val = wrapper->getArg(i);
+                if (val == R_UnboundValue)
+                    continue;
+                SEXP name = cp_pool_at(ctx, names[i]);
+                bool isMissing = wrapper->missing[i];
+                if (TYPEOF(name) == LISTSXP) {
+                    name = CAR(name);
+                }
+                arglist = CONS_NR(val, arglist);
+                SET_TAG(arglist, name);
+                SET_MISSING(arglist, isMissing ? 2 : 0);
+            }
+
+            SEXP environment =
+                Rf_NewEnvironment(R_NilValue, arglist, wrapper->getParent());
+            wrapper->materialized(environment);
+            return environment;
+        };
+        auto newEnv = createEnvironment(globalContext(), rirDataWrapper);
+        Rf_setAttrib(newEnv, symbol::delayedEnv, rirDataWrapper);
+        lazyEnv->clear();
+        RCNTXT* cur = (RCNTXT*)R_GlobalContext;
+        while (cur) {
+            if (cur->cloenv == rirDataWrapper)
+                cur->cloenv = newEnv;
+            if (cur->sysparent == rirDataWrapper)
+                cur->sysparent = newEnv;
+            cur = cur->nextcontext;
+        }
+        return newEnv;
+    }
+    assert(false);
+    return nullptr;
+}
+
 static SEXP materializeCallerEnv(CallContext& callCtx,
                                  InterpreterInstance* ctx) {
     if (auto le = LazyEnvironment::check(callCtx.callerEnv)) {
@@ -280,15 +326,85 @@ static SEXP materializeCallerEnv(CallContext& callCtx,
     return callCtx.callerEnv;
 }
 
-SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
-                                         LazyArglist* argsStore,
-                                         const Immediate* names, SEXP ast,
-                                         bool eagerCallee,
-                                         bool recreateOriginalPromargs,
-                                         InterpreterInstance* ctx) {
-    assert((args || argsStore) &&
-           "Cannot materialize promargs for statically reordered "
-           "arguments. Static Call to UseMethod function?");
+struct ArglistView {
+  private:
+    SEXP getArgFromStore(size_t i) {
+        return onStack ? ostack_at_cell(stackArgs + i) : heapArgs[i];
+    }
+
+  public:
+    ArglistView(ArglistOrder::CallId id, size_t length,
+                const R_bcstack_t* stackArgs, SEXP* heapArgs,
+                const Immediate* names, SEXP ast, ArglistOrder* reordering,
+                bool recreateOriginalPromargs, InterpreterInstance* ctx)
+        : id(id), onStack(stackArgs), stackArgs(stackArgs), heapArgs(heapArgs),
+          names(names), ast(ast), reordering(reordering),
+          recreateOriginalPromargs(recreateOriginalPromargs), ctx(ctx) {
+        for (size_t i = 0; i < length; ++i) {
+            auto arg = getArgFromStore(i);
+            if (TYPEOF(arg) == DOTSXP) {
+                assert(!haveDots);
+                haveDots = true;
+                dots = RList(arg);
+                dotsRange.first = i;
+                auto dotsLength = dots.length();
+                dotsRange.second = i + dotsLength;
+                lengthWithDots += dotsLength;
+            } else {
+                lengthWithDots++;
+            }
+        }
+    }
+
+    std::pair<SEXP, SEXP> getArgAndName(size_t i, SEXP a, bool reorder) {
+        bool omitName =
+            reorder && !ArglistOrder::isArgNamed(reordering->index(id, i));
+        if (reorder)
+            i = ArglistOrder::decodeArg(reordering->index(id, i));
+        if (i >= lengthWithDots)
+            return std::make_pair(R_MissingArg, R_NilValue);
+        bool inDots = false;
+        if (recreateOriginalPromargs && haveDots) {
+            if (dotsRange.first <= i && i < dotsRange.second) {
+                i -= dotsRange.first;
+                inDots = true;
+            } else if (i >= dotsRange.second) {
+                i -= (dotsRange.second - dotsRange.first - 1);
+            }
+        }
+        auto arg = inDots ? *(dots.begin() + i) : getArgFromStore(i);
+        auto name = inDots ? (dots.begin() + i).tag()
+                           : (names ? cp_pool_at(ctx, names[i])
+                                    : (ast ? TAG(a) : R_NilValue));
+        if (omitName)
+            name = R_NilValue;
+        return std::make_pair(arg, name);
+    }
+
+    ArglistOrder::CallId id;
+    bool onStack;
+    const R_bcstack_t* stackArgs;
+    SEXP* heapArgs;
+    const Immediate* names;
+    SEXP ast;
+    ArglistOrder* reordering;
+    bool recreateOriginalPromargs;
+    InterpreterInstance* ctx;
+
+    bool haveDots = false;
+    RList dots = RList(R_NilValue);
+    std::pair<unsigned, unsigned> dotsRange = std::make_pair(0, 0);
+    size_t lengthWithDots = 0;
+};
+
+SEXP createLegacyArglist(ArglistOrder::CallId id, size_t length,
+                         const R_bcstack_t* stackArgs, SEXP* heapArgs,
+                         const Immediate* names, SEXP ast,
+                         ArglistOrder* reordering, bool eagerCallee,
+                         bool recreateOriginalPromargs,
+                         InterpreterInstance* ctx) {
+    assert((stackArgs && !heapArgs) || (!stackArgs && heapArgs));
+    assert(id == ArglistOrder::NOT_REORDERED || reordering);
     assert((!recreateOriginalPromargs || ast) &&
            "need ast to recreate promargs");
     SEXP result = R_NilValue;
@@ -298,18 +414,23 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
     if (ast)
         a = CDR(ast);
 
-    for (size_t i = 0; i < length; ++i) {
+    bool reorder =
+        recreateOriginalPromargs && id != ArglistOrder::NOT_REORDERED;
 
-        SEXP name =
-            names ? cp_pool_at(ctx, names[i]) : (ast ? TAG(a) : R_NilValue);
+    ArglistView args(id, length, stackArgs, heapArgs, names, ast, reordering,
+                     recreateOriginalPromargs, ctx);
+
+    size_t nargs = reorder ? reordering->originalArglistLength(id) : length;
+    for (size_t i = 0; i < nargs; ++i) {
+        auto getArg = args.getArgAndName(i, a, reorder);
+        auto arg = getArg.first;
+        auto name = getArg.second;
 
         SEXP expr = R_NilValue;
         if (ast) {
             expr = CAR(a);
             a = CDR(a);
         }
-
-        SEXP arg = args ? ostack_at_cell(args + i) : argsStore->getEntry(i);
 
         // This can happen if context dispatch padded the call with "synthetic"
         // missings to be able to call a version which expects more args
@@ -324,7 +445,7 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
         // argmatched call, where dots gets pre-created by the caller. Under
         // normal conditions the only legal way of passing a DOTSXP is by
         // passing the expression `...` as an argument.
-        if (recreateOriginalPromargs && TYPEOF(arg) == DOTSXP &&
+        if (recreateOriginalPromargs && !reorder && TYPEOF(arg) == DOTSXP &&
             expr != R_DotsSymbol) {
             while (arg != R_NilValue) {
                 auto v = CAR(arg);
@@ -351,66 +472,19 @@ SEXP createLegacyArgsListFromStackValues(size_t length, const R_bcstack_t* args,
     return result;
 }
 
-SEXP materialize(SEXP rirDataWrapper) {
-    auto createEnvironment = [](InterpreterInstance* ctx, SEXP wrapper_) {
-        auto wrapper = LazyEnvironment::unpack(wrapper_);
-        assert(!wrapper->materialized());
-
-        SEXP arglist = R_NilValue;
-        auto names = wrapper->names;
-        for (size_t i = 0; i < wrapper->nargs; ++i) {
-            SEXP val = wrapper->getArg(i);
-            if (val == R_UnboundValue)
-                continue;
-            SEXP name = cp_pool_at(ctx, names[i]);
-            bool isMissing = wrapper->missing[i];
-            if (TYPEOF(name) == LISTSXP) {
-                name = CAR(name);
-            }
-            arglist = CONS_NR(val, arglist);
-            SET_TAG(arglist, name);
-            SET_MISSING(arglist, isMissing ? 2 : 0);
-        }
-
-        SEXP environment =
-            Rf_NewEnvironment(R_NilValue, arglist, wrapper->getParent());
-        wrapper->materialized(environment);
-        return environment;
-    };
-
-    if (auto promargs = LazyArglist::check(rirDataWrapper)) {
-        return promargs->createArgsLists(globalContext());
-    } else if (auto lazyEnv = LazyEnvironment::check(rirDataWrapper)) {
-        auto newEnv = createEnvironment(globalContext(), rirDataWrapper);
-        Rf_setAttrib(newEnv, symbol::delayedEnv, rirDataWrapper);
-        lazyEnv->clear();
-        RCNTXT* cur = (RCNTXT*)R_GlobalContext;
-        while (cur) {
-            if (cur->cloenv == rirDataWrapper)
-                cur->cloenv = newEnv;
-            if (cur->sysparent == rirDataWrapper)
-                cur->sysparent = newEnv;
-            cur = cur->nextcontext;
-        }
-        return newEnv;
-    }
-    assert(false);
-    return nullptr;
-}
-
 SEXP createPromargsFromStackValues(CallContext& call,
                                    InterpreterInstance* ctx) {
-    return createLegacyArgsListFromStackValues(
-        call.suppliedArgs, call.stackArgs, nullptr, call.names, call.ast,
-        call.hasEagerCallee(),
+    return createLegacyArglist(
+        call.callId, call.suppliedArgs, call.stackArgs, nullptr, call.names,
+        call.ast, call.caller->arglistOrder(), call.hasEagerCallee(),
         call.givenContext.includes(Assumption::StaticallyArgmatched), ctx);
 }
 
 SEXP createEnvironmentFrameFromStackValues(CallContext& call,
                                            InterpreterInstance* ctx) {
-    return createLegacyArgsListFromStackValues(
-        call.suppliedArgs, call.stackArgs, nullptr, call.names, call.ast, false,
-        false, ctx);
+    return createLegacyArglist(ArglistOrder::NOT_REORDERED, call.suppliedArgs,
+                               call.stackArgs, nullptr, call.names, call.ast,
+                               nullptr, false, false, ctx);
 }
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
@@ -567,8 +641,8 @@ static RIR_INLINE SEXP legacySpecialCall(CallContext& call,
     return result;
 }
 
-static RIR_INLINE SEXP legacyCallWithArgslist(CallContext& call, SEXP argslist,
-                                              InterpreterInstance* ctx) {
+static RIR_INLINE SEXP legacyCallWithArglist(CallContext& call, SEXP arglist,
+                                             InterpreterInstance* ctx) {
     if (TYPEOF(call.callee) == BUILTINSXP) {
         // get the ccode
         CCODE f = getBuiltin(call.callee);
@@ -577,7 +651,7 @@ static RIR_INLINE SEXP legacyCallWithArgslist(CallContext& call, SEXP argslist,
             R_Visible = static_cast<Rboolean>(flag != 1);
         // call it
         SEXP result =
-            f(call.ast, call.callee, argslist, materializeCallerEnv(call, ctx));
+            f(call.ast, call.callee, arglist, materializeCallerEnv(call, ctx));
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         return result;
@@ -585,15 +659,15 @@ static RIR_INLINE SEXP legacyCallWithArgslist(CallContext& call, SEXP argslist,
 
     assert(TYPEOF(call.callee) == CLOSXP &&
            TYPEOF(BODY(call.callee)) != EXTERNALSXP);
-    return Rf_applyClosure(call.ast, call.callee, argslist,
+    return Rf_applyClosure(call.ast, call.callee, arglist,
                            materializeCallerEnv(call, ctx), R_NilValue);
 }
 
 static RIR_INLINE SEXP legacyCall(CallContext& call, InterpreterInstance* ctx) {
-    // create the argslist
-    SEXP argslist = createPromargsFromStackValues(call, ctx);
-    PROTECT(argslist);
-    SEXP res = legacyCallWithArgslist(call, argslist, ctx);
+    // create the arglist
+    SEXP arglist = createPromargsFromStackValues(call, ctx);
+    PROTECT(arglist);
+    SEXP res = legacyCallWithArglist(call, arglist, ctx);
     UNPROTECT(1);
     return res;
 }
@@ -961,15 +1035,10 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     }
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
-    LazyArglistOnStack lazyPromargs(call.suppliedArgs, call.stackArgs,
-                                    call.ast);
-    if (call.givenContext.includes(Assumption::StaticallyArgmatched)) {
-        // Currently we cannot recreate the original arglist if we
-        // statically reordered arguments. TODO this needs to be fixed
-        // by remembering the original order.
-        // cppcheck-suppress unreadVariable
-        lazyPromargs.content.wrong = true;
-    }
+    LazyArglistOnStack lazyPromargs(
+        call.callId,
+        call.caller ? call.caller->arglistOrderContainer() : nullptr,
+        call.suppliedArgs, call.stackArgs, call.ast);
 
     SEXP result;
     if (!needsEnv) {
@@ -1364,11 +1433,11 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
             flag = getFlag(prim);                                              \
         }                                                                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
-        SEXP argslist = CONS_NR(val, R_NilValue);                              \
-        ostack_push(ctx, argslist);                                            \
+        SEXP arglist = CONS_NR(val, R_NilValue);                               \
+        ostack_push(ctx, arglist);                                             \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        res = blt(call, prim, argslist, env);                                  \
+        res = blt(call, prim, arglist, env);                                   \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
         ostack_pop(ctx);                                                       \
@@ -2251,8 +2320,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Context given(pc);
             pc += sizeof(Context);
 
-            CallContext call(c, ostack_at(ctx, n), n, ast,
-                             ostack_cell_at(ctx, (long)n - 1), env, given, ctx);
+            CallContext call(ArglistOrder::NOT_REORDERED, c, ostack_at(ctx, n),
+                             n, ast, ostack_cell_at(ctx, (long)n - 1), env,
+                             given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
@@ -2277,9 +2347,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             pc += sizeof(Context);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, ostack_at(ctx, n), n, ast,
-                             ostack_cell_at(ctx, (long)n - 1), names, env,
-                             given, ctx);
+            CallContext call(ArglistOrder::NOT_REORDERED, c, ostack_at(ctx, n),
+                             n, ast, ostack_cell_at(ctx, (long)n - 1), names,
+                             env, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
@@ -2318,7 +2388,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                     names = (Immediate*)DATAPTR(namesStore);
                 pushed = 1;
             }
-            CallContext call(c, callee, n, ast,
+            CallContext call(ArglistOrder::NOT_REORDERED, c, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), names, env,
                              given, ctx);
             res = doCall(call, ctx);
@@ -2342,7 +2412,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
-            CallContext call(c, callee, n, ast,
+            CallContext call(ArglistOrder::NOT_REORDERED, c, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), env, Context(),
                              ctx);
             res = builtinCall(call, ctx);
@@ -3769,7 +3839,8 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
         }
     }
 
-    CallContext call(nullptr, op, nargs, ast, ostack_cell_at(ctx, nargs - 1),
+    CallContext call(ArglistOrder::NOT_REORDERED, nullptr, op, nargs, ast,
+                     ostack_cell_at(ctx, nargs - 1),
                      names.empty() ? nullptr : names.data(), rho, Context(),
                      ctx);
     call.arglist = arglist;

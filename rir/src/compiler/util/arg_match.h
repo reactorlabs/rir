@@ -5,6 +5,7 @@
 #include "R/RList.h"
 #include "compiler/pir/builder.h"
 #include "ir/BC_inc.h"
+#include "runtime/ArglistOrder.h"
 
 namespace rir {
 namespace pir {
@@ -12,7 +13,8 @@ namespace pir {
 struct ArgumentMatcher {
     static bool reorder(Builder& insert, SEXP formals,
                         const std::vector<BC::PoolIdx>& actualNames,
-                        std::vector<Value*>& given);
+                        std::vector<Value*>& given,
+                        ArglistOrder::CallArglistOrder& argOrderOrig);
 };
 
 } // namespace pir
