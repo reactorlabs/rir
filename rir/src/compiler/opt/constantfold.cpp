@@ -466,6 +466,34 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             i->replaceUsesWith(False::instance());
                             next = bb->remove(ip);
                         }
+                    } else if (isConst(i->arg(0).val()) &&
+                               isConst(i->arg(0).val()) == R_TrueValue &&
+                               i->arg(1).val()->type.isA(PirType::test())) {
+                        iterAnyChange = true;
+                        i->replaceUsesWith(i->arg(1).val());
+                        next = bb->remove(ip);
+                    } else if (isConst(i->arg(1).val()) &&
+                               isConst(i->arg(1).val()) == R_TrueValue &&
+                               i->arg(0).val()->type.isA(PirType::test())) {
+                        iterAnyChange = true;
+                        i->replaceUsesWith(i->arg(0).val());
+                        next = bb->remove(ip);
+                    } else if (isConst(i->arg(0).val()) &&
+                               isConst(i->arg(0).val()) == R_FalseValue &&
+                               i->arg(1).val()->type.isA(PirType::test())) {
+                        iterAnyChange = true;
+                        auto neg =
+                            new Not(i->arg(1).val(), Env::elided(), i->srcIdx);
+                        neg->type = PirType::test();
+                        i->replaceUsesAndSwapWith(neg, ip);
+                    } else if (isConst(i->arg(1).val()) &&
+                               isConst(i->arg(1).val()) == R_FalseValue &&
+                               i->arg(0).val()->type.isA(PirType::test())) {
+                        iterAnyChange = true;
+                        auto neg =
+                            new Not(i->arg(0).val(), Env::elided(), i->srcIdx);
+                        neg->type = PirType::test();
+                        i->replaceUsesAndSwapWith(neg, ip);
                     } else {
                         FOLD_BINARY(Identical, [&](SEXP a, SEXP b) {
                             iterAnyChange = true;
