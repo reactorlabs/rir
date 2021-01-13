@@ -2145,8 +2145,14 @@ void LowerFunctionLLVM::compile() {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
 
-                auto ai = depromise(a);
-                auto bi = depromise(b);
+                auto ai = load(a);
+                auto bi = load(b);
+                if (Representation::Of(a) == t::SEXP &&
+                    a->type.maybePromiseWrapped())
+                    ai = depromise(ai, a->type);
+                if (Representation::Of(b) == t::SEXP &&
+                    b->type.maybePromiseWrapped())
+                    bi = depromise(bi, b->type);
 
                 // Not needed so far. Needs some care to ensure NA == NA holds
                 assert(ai->getType() != t::Double &&
