@@ -513,7 +513,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         Visitor::check(code->entry, [](Instruction* i) {
                             return !PushContext::Cast(i);
                         });
-                    if (notInlined) {
+                    if (notInlined && !cls->owner()->formals().hasDots()) {
                         auto nargsC =
                             new LdConst(ScalarInteger(cls->effectiveNArgs()));
                         anyChange = true;
