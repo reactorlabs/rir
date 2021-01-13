@@ -411,7 +411,8 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     {
         llvm::PassManagerBuilder builder;
 
-        builder.OptLevel = 0;
+        // Needs at least 1 or the custom module passes are not added
+        builder.OptLevel = 1;
         builder.SizeLevel = 0;
         builder.Inliner = llvm::createFunctionInliningPass();
         TM->adjustPassManager(builder);
