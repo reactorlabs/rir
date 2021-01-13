@@ -3908,8 +3908,6 @@ void LowerFunctionLLVM::compile() {
                     call(NativeBuiltins::error,
                          {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                     builder.CreateUnreachable();
-                    builder.CreateRet(
-                        builder.CreateIntToPtr(c(nullptr), t::SEXP));
 
                     builder.SetInsertPoint(done);
                 }
