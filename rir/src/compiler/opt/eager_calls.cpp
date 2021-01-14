@@ -48,7 +48,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             ++ip;
         }
 
-        auto test = new Identical(given, expected);
+        auto test = new Identical(given, expected, PirType::any());
         ip = bb->insert(ip, test);
         ++ip;
 

@@ -166,6 +166,7 @@ class Instruction : public Value {
     Effects effects;
 
   public:
+    bool deleted = false;
     void clearEffects() { effects.reset(); }
     void clearVisibility() { effects.reset(Effect::Visibility); }
     void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
@@ -802,6 +803,7 @@ class FLI(LdConst, 0, Effects::None()) {
     explicit LdConst(double i);
     void printArgs(std::ostream& out, bool tty) const override;
     int minReferenceCount() const override { return MAX_REFCOUNT; }
+    SEXP asRValue() const override { return c(); }
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -1090,8 +1092,7 @@ class Branch
                                  HasEnvSlot::No, Controlflow::Branch> {
   public:
     explicit Branch(Value* test)
-        : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
-    }
+        : FixedLenInstruction(PirType::voyd(), {{PirType::test()}}, {{test}}) {}
     void printArgs(std::ostream& out, bool tty) const override;
     void printGraphArgs(std::ostream& out, bool tty) const override;
     void printGraphBranches(std::ostream& out, size_t bbId) const override;
@@ -1301,23 +1302,6 @@ class FLI(AsLogical, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(AsTest, 1, Effects::None()) {
-  public:
-    Value* val() const { return arg<0>().val(); }
-    const bool testTrue;
-
-    AsTest(Value* in, bool testTrue_)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}),
-          testTrue(testTrue_) {}
-
-    std::string name() const override final {
-        return std::string("Is") + (testTrue ? "True" : "False") + "(" +
-               InstructionImplementation::name() + ")";
-    }
-
-    size_t gvnBase() const override { return tagHash(); }
-};
-
 class FLI(CheckTrueFalse, 1, Effects() | Effect::Error | Effect::Warn) {
   public:
     Value* val() const { return arg<0>().val(); }
@@ -1338,7 +1322,7 @@ class FLI(CheckTrueFalse, 1, Effects() | Effect::Error | Effect::Warn) {
 class FLI(ColonInputEffects, 2, Effects() | Effect::Error | Effect::Warn) {
   public:
     explicit ColonInputEffects(Value* lhs, Value* rhs, unsigned srcIdx)
-        : FixedLenInstruction(NativeType::test,
+        : FixedLenInstruction(PirType::test(),
                               {{PirType::val(), PirType::val()}}, {{lhs, rhs}},
                               srcIdx) {}
 
@@ -1680,7 +1664,7 @@ class FLI(IsType, 1, Effects::None()) {
   public:
     const PirType typeTest;
     IsType(PirType type, Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
+        : FixedLenInstruction(PirType::test(), {{PirType::any()}}, {{v}}),
           typeTest(type) {}
 
     void printArgs(std::ostream& out, bool tty) const override;
@@ -1751,9 +1735,8 @@ class FLI(Nop, 0, Effects::Any()) {
 
 class FLI(Identical, 2, Effects::None()) {
   public:
-    Identical(Value* a, Value* b)
-        : FixedLenInstruction(NativeType::test,
-                              {{PirType::any(), PirType::any()}}, {{a, b}}) {}
+    Identical(Value* a, Value* b, PirType t)
+        : FixedLenInstruction(PirType::test(), {{t, t}}, {{a, b}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -2404,7 +2387,7 @@ class FLIE(MaterializeEnv, 1, Effects::None()) {
 class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
   public:
     explicit IsEnvStub(MkEnv* e)
-        : FixedLenInstructionWithEnvSlot(NativeType::test, e) {}
+        : FixedLenInstructionWithEnvSlot(PirType::test(), e) {}
 };
 
 class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
@@ -2589,7 +2572,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
     bool assumeTrue = true;
     Assume(Value* test, Value* checkpoint)
         : FixedLenInstruction(PirType::voyd(),
-                              {{NativeType::test, NativeType::checkpoint}},
+                              {{PirType::test(), NativeType::checkpoint}},
                               {{test, checkpoint}}) {}
 
     Checkpoint* checkpoint() const { return Checkpoint::Cast(arg(1).val()); }

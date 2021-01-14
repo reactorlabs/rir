@@ -371,18 +371,19 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         initiallyMissing = m;
                                 });
                             if (!initiallyMissing) {
-                                auto theFalse = new LdConst(R_FalseValue);
-                                missing->replaceUsesAndSwapWith(theFalse, ip);
-                                replacedValue[missing] = theFalse;
+                                missing->replaceUsesWith(False::instance());
+                                replacedValue[missing] = False::instance();
+                                ;
+                                next = bb->remove(ip);
                                 anyChange = true;
                             }
                         }
                     } else {
                         res.result.ifSingleValue([&](Value* v) {
                             if (v == MissingArg::instance()) {
-                                auto theTruth = new LdConst(R_TrueValue);
-                                missing->replaceUsesAndSwapWith(theTruth, ip);
-                                replacedValue[missing] = theTruth;
+                                missing->replaceUsesWith(True::instance());
+                                replacedValue[missing] = True::instance();
+                                next = bb->remove(ip);
                                 anyChange = true;
                             }
                         });

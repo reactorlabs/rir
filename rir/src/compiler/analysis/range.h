@@ -98,17 +98,24 @@ class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
             if (!br)
                 return;
 
-            auto t = AsTest::Cast(br->arg(0).val());
+            auto t = Identical::Cast(br->arg(0).val());
             if (!t)
                 return;
 
+            bool brtrue = t->arg(1).val() == True::instance();
+            bool brfalse = t->arg(1).val() == False::instance();
+            if (!brtrue && !brfalse)
+                return;
+
+            bool holds = i->bb() == pred->trueBranch();
+            if (brfalse)
+                holds = !holds;
             Instruction* condition = Instruction::Cast(t->arg(0).val());
             if (!condition)
                 return;
 
-            bool holds = i->bb() == pred->trueBranch();
             if (auto n = Not::Cast(condition)) {
-                holds = false;
+                holds = !holds;
                 condition = Instruction::Cast(n->arg(0).val());
             }
             if (!condition)

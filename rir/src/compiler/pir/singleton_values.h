@@ -71,7 +71,7 @@ class True : public SingletonValue<True> {
 
   private:
     friend class SingletonValue;
-    True() : SingletonValue(NativeType::test, Tag::True) {}
+    True() : SingletonValue(PirType::test(), Tag::True) {}
 };
 
 class False : public SingletonValue<False> {
@@ -82,7 +82,7 @@ class False : public SingletonValue<False> {
 
   private:
     friend class SingletonValue;
-    False() : SingletonValue(NativeType::test, Tag::False) {}
+    False() : SingletonValue(PirType::test(), Tag::False) {}
 };
 
 class NaLogical : public SingletonValue<NaLogical> {

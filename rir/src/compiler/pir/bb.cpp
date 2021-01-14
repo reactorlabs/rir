@@ -123,6 +123,7 @@ void BB::append(Instruction* i) {
 
 BB::Instrs::iterator BB::remove(Instrs::iterator it) {
     deleted.push_back(*it);
+    (*it)->deleted = true;
     return instrs.erase(it);
 }
 

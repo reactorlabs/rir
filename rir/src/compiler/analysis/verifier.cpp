@@ -199,12 +199,18 @@ class TheVerifier {
     }
 
     void verify(Instruction* i, BB* bb, bool inPromise) {
-
         if (i->bb() != bb) {
             std::cerr << "Error: instruction '";
             i->print(std::cerr);
             std::cerr << "' is supposed to point to BB " << bb
                       << " but points to " << i->bb() << "\n";
+            ok = false;
+        }
+
+        if (i->deleted) {
+            std::cerr << "Error: instruction '";
+            i->print(std::cerr);
+            std::cerr << "' was deleted but still reachable\n";
             ok = false;
         }
 

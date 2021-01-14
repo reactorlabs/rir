@@ -366,21 +366,11 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
         } else {
             assert(false);
         }
-    } else if (val == True::instance())
-        res = constant(R_TrueValue, needed);
-    else if (val == False::instance())
-        res = constant(R_FalseValue, needed);
-    else if (val == MissingArg::instance())
-        res = constant(R_MissingArg, t::SEXP);
-    else if (val == UnboundValue::instance())
-        res = constant(R_UnboundValue, t::SEXP);
-    else if (auto ld = LdConst::Cast(val))
+    } else if (val->asRValue()) {
+        res = constant(val->asRValue(), needed);
+    } else if (auto ld = LdConst::Cast(val)) {
         res = constant(ld->c(), needed);
-    else if (val == NaLogical::instance())
-        res = constant(R_LogicalNAValue, needed);
-    else if (val == Nil::instance())
-        res = constant(R_NilValue, needed);
-    else {
+    } else {
         val->printRef(std::cerr);
         assert(false);
     }
@@ -427,10 +417,10 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
                needed == t::SEXP) {
         if (type.isA(PirType() | RType::integer)) {
             res = boxInt(res);
+        } else if (type.isA(PirType::test())) {
+            res = boxTst(res);
         } else if (type.isA(PirType() | RType::logical)) {
             res = boxLgl(res);
-        } else if (type.isA(NativeType::test)) {
-            res = boxTst(res);
         } else if (type.isA(PirType() | RType::real)) {
             res = boxReal(res);
         } else {
@@ -2154,51 +2144,38 @@ void LowerFunctionLLVM::compile() {
             case Tag::Identical: {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
-                auto cc = LdConst::Cast(a);
-                if (!cc)
-                    cc = LdConst::Cast(b);
 
-                if (cc) {
-                    auto v = cc == a ? b : a;
-                    auto vi = depromise(v);
-                    auto res =
-                        builder.CreateICmpEQ(constant(cc->c(), t::SEXP), vi);
-                    if (TYPEOF(cc->c()) == CLOSXP) {
-                        res = createSelect2(
-                            res, [&]() { return builder.getTrue(); },
-                            [&]() {
-                                return createSelect2(
-                                    builder.CreateICmpEQ(sexptype(vi),
-                                                         c(CLOSXP)),
-                                    [&]() {
-                                        return call(
-                                            NativeBuiltins::clsEq,
-                                            {constant(cc->c(), t::SEXP), vi});
-                                    },
-                                    [&]() { return builder.getFalse(); });
-                            });
-                    }
-                    setVal(i, builder.CreateZExt(res, t::Int));
-                    break;
-                }
+                auto ai = load(a);
+                auto bi = load(b);
+                if (Representation::Of(a) == t::SEXP &&
+                    a->type.maybePromiseWrapped())
+                    ai = depromise(ai, a->type);
+                if (Representation::Of(b) == t::SEXP &&
+                    b->type.maybePromiseWrapped())
+                    bi = depromise(bi, b->type);
 
-                auto ai = depromise(a);
-                auto bi = depromise(b);
+                // Not needed so far. Needs some care to ensure NA == NA holds
+                assert(ai->getType() != t::Double &&
+                       ai->getType() != t::Double);
 
                 auto res = builder.CreateICmpEQ(ai, bi);
-                res = createSelect2(
-                    res, [&]() { return builder.getTrue(); },
-                    [&]() {
-                        auto cls = builder.CreateAnd(
-                            builder.CreateICmpEQ(sexptype(ai), c(CLOSXP)),
-                            builder.CreateICmpEQ(sexptype(bi), c(CLOSXP)));
-                        return createSelect2(
-                            cls,
-                            [&]() {
-                                return call(NativeBuiltins::clsEq, {ai, bi});
-                            },
-                            [&]() { return builder.getFalse(); });
-                    });
+                if (a->type.maybe(RType::closure) ||
+                    b->type.maybe(RType::closure)) {
+                    res = createSelect2(
+                        res, [&]() { return builder.getTrue(); },
+                        [&]() {
+                            auto cls = builder.CreateAnd(
+                                builder.CreateICmpEQ(sexptype(ai), c(CLOSXP)),
+                                builder.CreateICmpEQ(sexptype(bi), c(CLOSXP)));
+                            return createSelect2(
+                                cls,
+                                [&]() {
+                                    return call(NativeBuiltins::clsEq,
+                                                {ai, bi});
+                                },
+                                [&]() { return builder.getFalse(); });
+                        });
+                }
                 setVal(i, builder.CreateZExt(res, t::Int));
                 break;
             }
@@ -3938,22 +3915,6 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::AsTest: {
-                assert(Representation::Of(i) == Representation::Integer);
-                auto arg = i->arg(0).val();
-                auto argRep = Representation::Of(arg);
-                auto testTrue = AsTest::Cast(i)->testTrue;
-                auto compare = testTrue ? constant(R_TrueValue, argRep)
-                                        : constant(R_FalseValue, argRep);
-                auto val = load(arg);
-                setVal(i, builder.CreateZExt(
-                              Representation::Of(arg) == Representation::Real
-                                  ? builder.CreateFCmpOEQ(val, compare)
-                                  : builder.CreateICmpEQ(val, compare),
-                              t::Int));
-                break;
-            }
-
             case Tag::AsLogical: {
                 auto arg = i->arg(0).val();
 
@@ -5239,7 +5200,7 @@ void LowerFunctionLLVM::compile() {
                               convertToPointer(msg)});
                     }
                 }
-                if (i->type.isA(NativeType::test)) {
+                if (i->type.isA(PirType::test())) {
                     auto ok =
                         builder.CreateOr(builder.CreateICmpEQ(load(i), c(0)),
                                          builder.CreateICmpEQ(load(i), c(1)));
