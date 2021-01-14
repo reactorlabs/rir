@@ -5,6 +5,8 @@
 
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Analysis/BasicAliasAnalysis.h>
+#include <llvm/Analysis/CFLAndersAliasAnalysis.h>
+#include <llvm/Analysis/CFLSteensAliasAnalysis.h>
 #include <llvm/Analysis/Passes.h>
 #include <llvm/Analysis/ScopedNoAliasAA.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
@@ -252,7 +254,7 @@ class JitLLVMImplementation {
     optimizeModule(std::unique_ptr<llvm::Module> M);
 };
 
-static void pirPassSchedule(const PassManagerBuilder&,
+static void pirPassSchedule(const PassManagerBuilder& b,
                             legacy::PassManagerBase& PM_) {
     legacy::PassManagerBase* PM = &PM_;
 
@@ -260,31 +262,29 @@ static void pirPassSchedule(const PassManagerBuilder&,
     // https://github.com/JuliaLang/julia/blob/235784a49b6ed8ab5677f42887e08c84fdc12c5c/src/aotcompile.cpp#L607
     // for inspiration
 
-    PM->add(createDeadInstEliminationPass());
-    PM->add(createCFGSimplificationPass());
-
-    if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
-        PM->add(createSROAPass());
-        PM->add(createConstantPropagationPass());
-        PM->add(createPromoteMemoryToRegisterPass());
-    }
+    PM->add(createEntryExitInstrumenterPass());
 
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 1) {
-        PM->add(createScopedNoAliasAAWrapperPass());
+        PM->add(createCFLSteensAAWrapperPass());
         PM->add(createTypeBasedAAWrapperPass());
+        PM->add(createScopedNoAliasAAWrapperPass());
+    } else {
         PM->add(createBasicAAWrapperPass());
     }
 
+    PM->add(createCFGSimplificationPass());
+    PM->add(createSROAPass());
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
-        PM->add(createCFGSimplificationPass());
-        PM->add(createDeadCodeEliminationPass());
-        PM->add(createSROAPass());
-
-        PM->add(createMemCpyOptPass());
-
-        PM->add(createInstructionCombiningPass());
-        PM->add(createCFGSimplificationPass());
+        PM->add(createConstantPropagationPass());
+        PM->add(createPromoteMemoryToRegisterPass());
     }
+    PM->add(createEarlyCSEPass());
+    PM->add(createLowerExpectIntrinsicPass());
+
+    PM->add(createDeadInstEliminationPass());
+    PM->add(createDeadCodeEliminationPass());
+    PM->add(createInstructionCombiningPass());
+    PM->add(createCFGSimplificationPass());
 
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL < 2)
         return;
@@ -411,8 +411,7 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     {
         llvm::PassManagerBuilder builder;
 
-        // Needs at least 1 or the custom module passes are not added
-        builder.OptLevel = 1;
+        builder.OptLevel = 0;
         builder.SizeLevel = 0;
         builder.Inliner = llvm::createFunctionInliningPass();
         TM->adjustPassManager(builder);
@@ -420,12 +419,6 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
         // Start with some custom passes tailored to our backend
         builder.addExtension(PassManagerBuilder::EP_EarlyAsPossible,
                              pirPassSchedule);
-        builder.addExtension(
-            PassManagerBuilder::EP_ModuleOptimizerEarly,
-            [](const PassManagerBuilder&, PassManagerBase& PM) {
-                PM.add(createHotColdSplittingPass());
-                PM.add(new NooptCold());
-            });
 
         PM->add(
             new TargetLibraryInfoWrapperPass(Triple(TM->getTargetTriple())));
@@ -433,6 +426,8 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
             createTargetTransformInfoWrapperPass(TM->getTargetIRAnalysis()));
 
         builder.populateFunctionPassManager(*PM);
+        MPM.add(createHotColdSplittingPass());
+        MPM.add(new NooptCold());
         builder.populateModulePassManager(MPM);
         builder.populateLTOPassManager(MPM);
     }
