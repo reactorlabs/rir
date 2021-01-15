@@ -263,22 +263,22 @@ static void pirPassSchedule(const PassManagerBuilder& b,
     // for inspiration
 
     PM->add(createEntryExitInstrumenterPass());
+    PM->add(createDeadInstEliminationPass());
+    PM->add(createCFGSimplificationPass());
 
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 1) {
-        PM->add(createCFLSteensAAWrapperPass());
+        PM->add(createCFLAndersAAWrapperPass());
         PM->add(createTypeBasedAAWrapperPass());
         PM->add(createScopedNoAliasAAWrapperPass());
     } else {
         PM->add(createBasicAAWrapperPass());
     }
 
-    PM->add(createCFGSimplificationPass());
     PM->add(createSROAPass());
+    PM->add(createEarlyCSEPass());
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
         PM->add(createConstantPropagationPass());
-        PM->add(createPromoteMemoryToRegisterPass());
     }
-    PM->add(createEarlyCSEPass());
     PM->add(createLowerExpectIntrinsicPass());
 
     PM->add(createDeadInstEliminationPass());
@@ -344,7 +344,6 @@ static void pirPassSchedule(const PassManagerBuilder& b,
     PM->add(createLoopLoadEliminationPass());
     PM->add(createCFGSimplificationPass());
     PM->add(createSLPVectorizerPass());
-    PM->add(createVectorCombinePass());
 
     PM->add(createSpeculativeExecutionIfHasBranchDivergencePass());
     PM->add(createAggressiveDCEPass());
