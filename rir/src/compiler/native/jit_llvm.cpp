@@ -267,7 +267,7 @@ static void pirPassSchedule(const PassManagerBuilder& b,
     PM->add(createCFGSimplificationPass());
 
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 1) {
-        PM->add(createCFLAndersAAWrapperPass());
+        PM->add(createCFLSteensAAWrapperPass());
         PM->add(createTypeBasedAAWrapperPass());
         PM->add(createScopedNoAliasAAWrapperPass());
     } else {
@@ -277,6 +277,7 @@ static void pirPassSchedule(const PassManagerBuilder& b,
     PM->add(createSROAPass());
     PM->add(createEarlyCSEPass());
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
+        PM->add(createPromoteMemoryToRegisterPass());
         PM->add(createConstantPropagationPass());
     }
     PM->add(createLowerExpectIntrinsicPass());
