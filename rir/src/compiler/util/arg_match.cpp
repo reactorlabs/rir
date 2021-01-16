@@ -74,14 +74,12 @@ bool ArgumentMatcher::reorder(MaybeDots maybeDots, SEXP formals,
     // ... we gobble up all the remaining args. Otherwise we bind untagged
     // values in order to any unmatched formals.
 
-    havedots = false;
     fai = 0;
     auto f = formals_.begin();
     auto s = supplied.begin();
-    while (f != RList::end() && s != supplied.end() && !havedots) {
+    while (f != RList::end() && s != supplied.end()) {
         if (f.tag() == R_DotsSymbol) {
             // Skip ... matching until all tags done
-            havedots = true;
             break;
         } else if (actuals[fai].kind != ActualArg::Missing) {
             // Already matched by tag, skip to next formal
@@ -109,7 +107,8 @@ bool ArgumentMatcher::reorder(MaybeDots maybeDots, SEXP formals,
         for (auto& s : supplied)
             if (!s.used)
                 dots.push_back(ActualArg(s));
-        actuals[dotsi] = ActualArg::Dots();
+        if (!dots.empty())
+            actuals[dotsi] = ActualArg::Dots();
     } else {
         // Check that all arguments are used
         for (auto& s : supplied)
