@@ -18,11 +18,12 @@ struct ArgumentMatcher {
         size_t index;
         int8_t used;
     };
+    // cppcheck-suppress uninitMemberVar
     struct ActualArg {
         enum { Missing, Index, Dotslist } kind;
         Arg arg;
         ActualArg() : kind(Missing) {}
-        ActualArg(Arg a) : kind(Index), arg(a) {}
+        explicit ActualArg(const Arg& a) : kind(Index), arg(a) {}
         static ActualArg Dots() {
             ActualArg a;
             a.kind = Dotslist;
