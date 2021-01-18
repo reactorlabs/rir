@@ -2384,10 +2384,9 @@ void nonLocalReturnImpl(SEXP res, SEXP env) {
     Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
 }
 
-NativeBuiltin NativeBuiltins::nonLocalReturn = {"nonLocalReturn",
-                                                (void*)&nonLocalReturnImpl,
-                                                nullptr,
-                                                {llvm::Attribute::NoReturn}};
+// Not tagged NoReturn to avoid hot/cold splitting to assume it is cold
+NativeBuiltin NativeBuiltins::nonLocalReturn = {
+    "nonLocalReturn", (void*)&nonLocalReturnImpl, nullptr};
 
 bool clsEqImpl(SEXP lhs, SEXP rhs) {
     SLOWASSERT(TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP);

@@ -334,6 +334,7 @@ static void pirPassSchedule(const PassManagerBuilder& b,
     PM->add(createInstructionCombiningPass());
     PM->add(createJumpThreadingPass());
     PM->add(createDeadStoreEliminationPass());
+    PM->add(createTailCallEliminationPass());
 
     // see if all of the constant folding has exposed more loops
     // to simplification and deletion
