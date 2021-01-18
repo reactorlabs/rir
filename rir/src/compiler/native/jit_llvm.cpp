@@ -275,7 +275,7 @@ static void pirPassSchedule(const PassManagerBuilder& b,
     }
 
     PM->add(createSROAPass());
-    PM->add(createEarlyCSEPass());
+    PM->add(createEarlyCSEPass(true));
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
         PM->add(createPromoteMemoryToRegisterPass());
         PM->add(createConstantPropagationPass());
@@ -405,6 +405,9 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     M->setTargetTriple(TM->getTargetTriple().str());
     M->setDataLayout(TM->createDataLayout());
 
+    llvm::legacy::PassManager PreMPM;
+    PreMPM.add(createHotColdSplittingPass());
+    PreMPM.add(new NooptCold());
     llvm::legacy::PassManager MPM;
     auto PM = std::make_unique<legacy::FunctionPassManager>(M.get());
 
@@ -426,25 +429,23 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
             createTargetTransformInfoWrapperPass(TM->getTargetIRAnalysis()));
 
         builder.populateFunctionPassManager(*PM);
-        MPM.add(createHotColdSplittingPass());
-        MPM.add(new NooptCold());
         builder.populateModulePassManager(MPM);
         builder.populateLTOPassManager(MPM);
     }
 
     PM->doInitialization();
+    PreMPM.run(*M);
     for (auto& F : *M) {
         PM->run(F);
 #ifdef ENABLE_SLOWASSERT
-            verifyFunction(F);
+        verifyFunction(F);
 #endif
-        }
-        PM->doFinalization();
-
-        MPM.run(*M);
-
-        return M;
     }
+    PM->doFinalization();
+    MPM.run(*M);
+
+    return M;
+}
 
 } // namespace
 
