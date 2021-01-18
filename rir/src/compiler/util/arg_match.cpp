@@ -1,7 +1,6 @@
 #include "arg_match.h"
-#include "R/Protect.h"
+#include "R/RList.h"
 #include "compiler/pir/pir_impl.h"
-#include "utils/Pool.h"
 
 namespace rir {
 namespace pir {
