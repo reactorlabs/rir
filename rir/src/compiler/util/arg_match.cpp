@@ -134,7 +134,7 @@ bool ArgumentMatcher::reorder(MaybeDots maybeDots, SEXP formals,
     argOrderOrig.resize(given.size());
     size_t pos = 0;
     f = formals_.begin();
-    constexpr bool DEBUG = true;
+    constexpr bool DEBUG = false;
     if (DEBUG)
         std::cout << "MATCHED : ";
     for (auto a : actuals) {
