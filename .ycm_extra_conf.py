@@ -15,7 +15,7 @@ def Settings( **kwargs ):
        '-DMEASURE',
        '-I'+DirectoryOfThisScript()+'/rir/src',
        '-isystem'+DirectoryOfThisScript()+'/external/custom-r/include',
-       '-isystem'+DirectoryOfThisScript()+'/external/llvm-8.0.0/include',
+       '-isystem'+DirectoryOfThisScript()+'/external/llvm-11.0.0/include',
        '-Wall',
        '-Wuninitialized',
        '-Wundef',

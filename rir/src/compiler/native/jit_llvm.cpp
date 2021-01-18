@@ -5,6 +5,8 @@
 
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Analysis/BasicAliasAnalysis.h>
+#include <llvm/Analysis/CFLAndersAliasAnalysis.h>
+#include <llvm/Analysis/CFLSteensAliasAnalysis.h>
 #include <llvm/Analysis/Passes.h>
 #include <llvm/Analysis/ScopedNoAliasAA.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
@@ -87,7 +89,7 @@ class JitLLVMImplementation {
     JitLLVMImplementation()
         : Resolver(createLegacyLookupResolver(
               ES,
-              [this](const std::string& Name) -> llvm::JITSymbol {
+              [this](const llvm::StringRef& Name) {
                   return findMangledSymbol(Name);
               },
               [](Error Err) {
@@ -126,7 +128,6 @@ class JitLLVMImplementation {
         assert(!funs.count(v));
         auto f = Function::Create(signature, Function::ExternalLinkage, name,
                                   JitLLVMImplementation::instance().module);
-        f->addFnAttr(Attribute::NoUnwind);
         funs[v] = f;
         return f;
     }
@@ -142,7 +143,6 @@ class JitLLVMImplementation {
         auto f =
             Function::Create(b.llvmSignature, Function::ExternalLinkage, b.name,
                              JitLLVMImplementation::instance().module);
-        f->addFnAttr(Attribute::NoUnwind);
         for (auto a : b.attrs)
             f->addFnAttr(a);
 
@@ -201,8 +201,8 @@ class JitLLVMImplementation {
     }
 
   private:
-    JITSymbol findMangledSymbol(const std::string& Name) {
-        auto l = builtins_.find(Name);
+    JITSymbol findMangledSymbol(const llvm::StringRef& Name) {
+        auto l = builtins_.find(Name.str());
         if (l != builtins_.end()) {
             return JITSymbol((uintptr_t)l->second.second,
                              JITSymbolFlags::Exported |
@@ -227,13 +227,14 @@ class JitLLVMImplementation {
         // more sense in a REPL where we want to bind to the newest available
         // definition.
         if (moduleKey != (unsigned long)-1)
-            if (auto Sym = CompileLayer.findSymbolIn(moduleKey, Name,
+            if (auto Sym = CompileLayer.findSymbolIn(moduleKey, Name.str(),
                                                      ExportedSymbolsOnly))
                 return Sym;
 
         // If we can't find the symbol in the JIT, try looking in the host
         // process.
-        if (auto SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(Name))
+        if (auto SymAddr =
+                RTDyldMemoryManager::getSymbolAddressInProcess(Name.str()))
             return JITSymbol(SymAddr, JITSymbolFlags::Exported);
 
 #ifdef _WIN32
@@ -253,7 +254,7 @@ class JitLLVMImplementation {
     optimizeModule(std::unique_ptr<llvm::Module> M);
 };
 
-static void pirPassSchedule(const PassManagerBuilder&,
+static void pirPassSchedule(const PassManagerBuilder& b,
                             legacy::PassManagerBase& PM_) {
     legacy::PassManagerBase* PM = &PM_;
 
@@ -261,31 +262,30 @@ static void pirPassSchedule(const PassManagerBuilder&,
     // https://github.com/JuliaLang/julia/blob/235784a49b6ed8ab5677f42887e08c84fdc12c5c/src/aotcompile.cpp#L607
     // for inspiration
 
+    PM->add(createEntryExitInstrumenterPass());
     PM->add(createDeadInstEliminationPass());
     PM->add(createCFGSimplificationPass());
 
-    if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
-        PM->add(createSROAPass());
-        PM->add(createConstantPropagationPass());
-        PM->add(createPromoteMemoryToRegisterPass());
-    }
-
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 1) {
-        PM->add(createScopedNoAliasAAWrapperPass());
+        PM->add(createCFLSteensAAWrapperPass());
         PM->add(createTypeBasedAAWrapperPass());
+        PM->add(createScopedNoAliasAAWrapperPass());
+    } else {
         PM->add(createBasicAAWrapperPass());
     }
 
+    PM->add(createSROAPass());
+    PM->add(createEarlyCSEPass(true));
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
-        PM->add(createCFGSimplificationPass());
-        PM->add(createDeadCodeEliminationPass());
-        PM->add(createSROAPass());
-
-        PM->add(createMemCpyOptPass());
-
-        PM->add(createInstructionCombiningPass());
-        PM->add(createCFGSimplificationPass());
+        PM->add(createPromoteMemoryToRegisterPass());
+        PM->add(createConstantPropagationPass());
     }
+    PM->add(createLowerExpectIntrinsicPass());
+
+    PM->add(createDeadInstEliminationPass());
+    PM->add(createDeadCodeEliminationPass());
+    PM->add(createInstructionCombiningPass());
+    PM->add(createCFGSimplificationPass());
 
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL < 2)
         return;
@@ -334,6 +334,7 @@ static void pirPassSchedule(const PassManagerBuilder&,
     PM->add(createInstructionCombiningPass());
     PM->add(createJumpThreadingPass());
     PM->add(createDeadStoreEliminationPass());
+    PM->add(createTailCallEliminationPass());
 
     // see if all of the constant folding has exposed more loops
     // to simplification and deletion
@@ -345,8 +346,6 @@ static void pirPassSchedule(const PassManagerBuilder&,
     PM->add(createLoopLoadEliminationPass());
     PM->add(createCFGSimplificationPass());
     PM->add(createSLPVectorizerPass());
-    // might need this after LLVM 11:
-    // PM->add(createVectorCombinePass());
 
     PM->add(createSpeculativeExecutionIfHasBranchDivergencePass());
     PM->add(createAggressiveDCEPass());
@@ -407,8 +406,11 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     M->setTargetTriple(TM->getTargetTriple().str());
     M->setDataLayout(TM->createDataLayout());
 
+    llvm::legacy::PassManager PreMPM;
+    PreMPM.add(createHotColdSplittingPass());
+    PreMPM.add(new NooptCold());
     llvm::legacy::PassManager MPM;
-    auto PM = llvm::make_unique<legacy::FunctionPassManager>(M.get());
+    auto PM = std::make_unique<legacy::FunctionPassManager>(M.get());
 
     {
         llvm::PassManagerBuilder builder;
@@ -421,12 +423,6 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
         // Start with some custom passes tailored to our backend
         builder.addExtension(PassManagerBuilder::EP_EarlyAsPossible,
                              pirPassSchedule);
-        builder.addExtension(
-            PassManagerBuilder::EP_ModuleOptimizerEarly,
-            [](const PassManagerBuilder&, PassManagerBase& PM) {
-                PM.add(createHotColdSplittingPass());
-                PM.add(new NooptCold());
-            });
 
         PM->add(
             new TargetLibraryInfoWrapperPass(Triple(TM->getTargetTriple())));
@@ -439,18 +435,18 @@ JitLLVMImplementation::optimizeModule(std::unique_ptr<llvm::Module> M) {
     }
 
     PM->doInitialization();
+    PreMPM.run(*M);
     for (auto& F : *M) {
         PM->run(F);
 #ifdef ENABLE_SLOWASSERT
-            verifyFunction(F);
+        verifyFunction(F);
 #endif
-        }
-        PM->doFinalization();
-
-        MPM.run(*M);
-
-        return M;
     }
+    PM->doFinalization();
+    MPM.run(*M);
+
+    return M;
+}
 
 } // namespace
 

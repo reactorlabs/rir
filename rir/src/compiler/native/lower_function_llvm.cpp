@@ -230,7 +230,7 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
     auto stackptr = nodestackPtr();
     // set type tag to 0
     builder.CreateMemSet(builder.CreateGEP(stackptr, c(-args.size())), c(0, 8),
-                         args.size() * sizeof(R_bcstack_t), 1);
+                         args.size() * sizeof(R_bcstack_t), MaybeAlign(1));
     auto pos = -args.size();
     for (auto arg = args.begin(); arg != args.end(); arg++) {
         // store the value
@@ -254,7 +254,7 @@ void LowerFunctionLLVM::incStack(int i, bool zero) {
     auto cur = nodestackPtr();
     auto offset = sizeof(R_bcstack_t) * i;
     if (zero)
-        builder.CreateMemSet(cur, c(0, 8), offset, 1);
+        builder.CreateMemSet(cur, c(0, 8), offset, MaybeAlign(1));
     auto up = builder.CreateGEP(cur, c(i));
     builder.CreateStore(up, nodestackPtrAddr);
 }
@@ -284,7 +284,8 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
         });
     }
 
-    auto f = convertToPointer((void*)builtinFun, t::builtinFunctionPtr);
+    auto fPtr = convertToPointer((void*)builtinFun, t::builtinFunctionPtr);
+    auto f = FunctionCallee(t::builtinFunction, fPtr);
 
     auto arglist = constant(R_NilValue, t::SEXP);
     for (auto v = args.rbegin(); v != args.rend(); v++) {
@@ -592,7 +593,8 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         auto setjmpFun =
             JitLLVM::getFunctionDeclaration("__sigsetjmp", setjmpType, builder);
 #endif
-        auto longjmp = builder.CreateCall(setjmpFun, {setjmpBuf, c(0)});
+        auto callee = FunctionCallee(setjmpType, setjmpFun);
+        auto longjmp = builder.CreateCall(callee, {setjmpBuf, c(0)});
 
         builder.CreateCondBr(builder.CreateICmpEQ(longjmp, c(0)), cont,
                              didLongjmp);
@@ -3017,7 +3019,7 @@ void LowerFunctionLLVM::compile() {
                     }
                     if (nativeTarget) {
                         // TODO: callId is not used here.. should it be?
-                        llvm::Value* trg = JitLLVM::get(target);
+                        auto trg = JitLLVM::get(target);
                         if (trg &&
                             target->properties.includes(
                                 ClosureVersion::Property::NoReflection)) {
@@ -3906,8 +3908,6 @@ void LowerFunctionLLVM::compile() {
                     call(NativeBuiltins::error,
                          {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                     builder.CreateUnreachable();
-                    builder.CreateRet(
-                        builder.CreateIntToPtr(c(nullptr), t::SEXP));
 
                     builder.SetInsertPoint(done);
                 }
