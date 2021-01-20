@@ -109,28 +109,27 @@ bool DotDotDots::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                     anyChange = true;
                     if (hasNames) {
-                        Value* cls = nullptr;
                         if (auto c = Call::Cast(i)) {
-                            cls = c->cls();
-                        } else if (auto c = NamedCall::Cast(i)) {
-                            cls = c->cls();
-                        }
-                        assert(cls);
-                        auto nc = new NamedCall(i->env(), cls, args, names,
-                                                i->srcIdx);
-                        i->replaceUsesAndSwapWith(nc, ip);
-                    } else {
-                        if (auto c = Call::Cast(i)) {
-                            Value* fs = c->frameState();
-                            if (!fs)
-                                fs = Tombstone::framestate();
-                            auto nc = new Call(i->env(), c->cls(), args, fs,
-                                               i->srcIdx);
+                            auto nc =
+                                new NamedCall(i->env(), c->cls(), args, names,
+                                              c->frameStateOrTs(), i->srcIdx);
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else if (auto c = NamedCall::Cast(i)) {
                             auto nc =
-                                new Call(i->env(), c->cls(), args,
-                                         Tombstone::framestate(), i->srcIdx);
+                                new NamedCall(i->env(), c->cls(), args, names,
+                                              c->frameStateOrTs(), i->srcIdx);
+                            i->replaceUsesAndSwapWith(nc, ip);
+                        } else {
+                            assert(false);
+                        }
+                    } else {
+                        if (auto c = Call::Cast(i)) {
+                            auto nc = new Call(i->env(), c->cls(), args,
+                                               c->frameStateOrTs(), i->srcIdx);
+                            i->replaceUsesAndSwapWith(nc, ip);
+                        } else if (auto c = NamedCall::Cast(i)) {
+                            auto nc = new Call(i->env(), c->cls(), args,
+                                               c->frameStateOrTs(), i->srcIdx);
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else if (auto b = CallBuiltin::Cast(i)) {
                             auto nc = BuiltinCallFactory::New(

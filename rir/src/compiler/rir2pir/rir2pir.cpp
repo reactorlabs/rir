@@ -639,14 +639,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ast = bc.immediate.callFixedArgs.ast;
         auto emitGenericCall = [&]() {
             popn(toPop);
+            Value* fs = inlining()
+                           ? (Value*)Tombstone::framestate()
+                           : (Value*)insert.registerFrameState(
+                                  srcCode, nextPos, stack, inPromise());
             if (namedArguments) {
                 push(insert(new NamedCall(env, callee, args, callArgumentNames,
-                                          bc.immediate.callFixedArgs.ast)));
+                                          fs, bc.immediate.callFixedArgs.ast)));
             } else {
-                Value* fs = inlining()
-                                ? (Value*)Tombstone::framestate()
-                                : (Value*)insert.registerFrameState(
-                                      srcCode, nextPos, stack, inPromise());
                 push(insert(new Call(env, callee, args, fs,
                                      bc.immediate.callFixedArgs.ast)));
             }
