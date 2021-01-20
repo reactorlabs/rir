@@ -25,8 +25,10 @@ bool DotDotDots::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             if (auto calli = CallInstruction::CastCall(*ip)) {
                 // Not sure how this would work, since this optimization changes
                 // the number of arguments...
-                if (StaticCall::Cast(*ip))
-                    break;
+                if (StaticCall::Cast(*ip)) {
+                    ip = next;
+                    continue;
+                }
                 auto i = Instruction::Cast(*ip);
                 auto namedCall = NamedCall::Cast(i);
 
