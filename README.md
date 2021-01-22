@@ -93,6 +93,8 @@ If you need to debug issues in the llvm backend then it is useful to run `make s
 
 Assertions in native code are disabled in release builds.
 
+If there are any issues with LLVM includes, you can `rm -rf external/llvm-11*` and then run `make setup` again.
+
 ### Building on macOS with GCC 9
 
 By default macOS will build gnuR and rir with clang, while Linux always uses GCC. There might be some differences between the 2 compilers. However, you can force macOS to use GCC via the following:
