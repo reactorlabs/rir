@@ -117,11 +117,14 @@ if [ ! -d $LLVM_DIR ]; then
         ln -s $F llvm-11
     else
         V=`lsb_release -r -s`
+        if [ "$V" == "18.04" ]; then
+          V="16.04"
+        fi
         if [ "$BUILD_LLVM_FROM_SRC" == "1" ]; then
           V=""
         fi
-        if [ "$V" == "20.04" || "$V" == "16.04" ]; then
-          F="clang+llvm-11.0.1-x86_64-linux-gnu-ubuntu-20.04"
+        if [ "$V" == "20.04" ] || [ "$V" == "16.04" ]; then
+          F="clang+llvm-11.0.1-x86_64-linux-gnu-ubuntu-$V"
           if [ ! -f "$F" ]; then
               curl -L https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.1/$F.tar.xz > $F.tar.xz
           fi

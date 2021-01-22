@@ -1,4 +1,4 @@
-# RIR
+# Ř
 
 To give it a spin try
 
@@ -6,14 +6,24 @@ To give it a spin try
 
 ## Building from Source
 
+This is currently only tested on Ubuntu.
+
     git clone https://github.com/reactorlabs/rir
     cd rir
     cmake -DCMAKE_BUILD_TYPE=build_type .    # possible build_types: release, debugopt, debug
     # Fetch and build dependencies. This will build gnur from source, which takes a while.
-    # To build llvm from source (for debug symbols) do:
+    # To build llvm from source (for debug symbols) set the following. This can take a long time to build.
     # export BUILD_LLVM_FROM_SRC=1
     make setup
+    # Run cmake again, this should now say "Found LLVM 11"
+    cmake .
     make
+
+Now run Ř with
+
+    bin/R
+
+If you want to develop Ř then it is highly recommended to use off-tree builds and ninja instead of make. See further down (Hacking).
 
 ### macOS
 
@@ -32,31 +42,15 @@ To run tests from gnur with rir enabled as a jit:
 
     bin/gnur-make check-devel
 
-## Playing with RIR
-
-To run R with RIR use
-
-    bin/R
-
-This loads a normal R environment with RIR replacing the R bytecode compiler
-and interpreter.
-
 ## Are we fast?
 
 Check out our [performance dashboard](https://speed.r-vm.net) to see how we compare to GNU R and FastR in terms of performance.
 
-## Hacking
-
-To make changes to this repository please open a pull request. Ask somebody to
-review your changes and make sure ci is green.
-
-Caveat: we use submodules. If you are in the habit of blindly `git commit .` you are up for surprises. Please make sure that you do not by accident commit an updated submodule reference for external/custom-r.
-
 ## PIR optimizer
 
-To try out the [PIR optimizer](documentation/pir.md) you can use `pir.compile` to optimize a RIR compiled closure.
+To try out the [PIR optimizer](documentation/pir.md) you can use `pir.compile` to optimize a Ř compiled closure.
 Or you can pass the environment variable PIR_ENABLE, and set it to 'on' or 'force'.
-Those flags will either use the PIR optimizer for hot RIR functions, or always.
+Those flags will either use the PIR optimizer for hot Ř functions, or always.
 
 To print intermediate debug information, you have a number of options:
 * Use the shorthand flags on `pir.compile`, such as `WARN`, or `P_FINAL`.
@@ -64,29 +58,40 @@ To print intermediate debug information, you have a number of options:
 * Or for even specific debugging use the `debugFlags` argument of `pir.compile`. Debug flags can be created using `pir.debugFlags`, for example to debug the register allocator, you could use `pir.compile(f, debugFlags=pir.debugFlags(PrintFinalPir=TRUE,DebugAllocator=TRUE))`.
 * To change the default debug flags at runtime use `pir.setDebugFlags(pir.debugFlags(...))`.
 
+For instance to show all functions that are optimized use:
+
+    PIR_DEBUG=PrintPirAfterOpt bin/R
+
 We periodically [benchmark](documentation/benchmarking.md) the performance of the optimizer.
 The documenation also contains the information for running the benchmarks locally.
 
+## Hacking
+
+To make changes to this repository please open a pull request. Ask somebody to
+review your changes and make sure [CI](https://gitlab.com/rirvm/rir_mirror/pipelines) is green.
+
+Caveat: we use submodules. If you are in the habit of blindly `git commit .` you are up for surprises. Please make sure that you do not by accident commit an updated submodule reference for external/custom-r.
+
 ### Off-Tree builds
 
+It is highly recommended to use off-tree builds for hacking Ř.
 You can have multiple builds at the same time.
-If you want to use that feature, you need to *not* run cmake in the main directory.
-Instead do this:
-
-     git clone https://github.com/reactorlabs/rir
-     cd rir
-     mkdir -p build/debug build/release
-     cd build/debug
-     cmake -DCMAKE_BUILD_TYPE=debug ../..
-     make setup && make
-     cd ../release
-     cmake -DCMAKE_BUILD_TYPE=release ../..
+Follow the build instructions as above, but run cmake in a separate directory.
+For instance you can create a sub-directory called `build`, cd into that
+directory, then replace `.` with `..` in all the cmake commands from the build instructions.
+This will build Ř in the `build` directory. You can then have multiple build directories, with different build types.
 
 ### Building with ninja
 
 For faster build use ninja. To generate ninja files instead of makefiles add `-GNinja` to the cmake commands.
 
 Using ninja means GCC and Clang will disable color output. To force color, run cmake with `-DFORCE_COLORED_OUTPUT=true`.
+
+### LLVM backend
+
+If you need to debug issues in the llvm backend then it is useful to run `make setup` with `BUILD_LLVM_FROM_SRC=1` set. This will give you debug symbols for LLVM, which unfortunately increases linking time. To switch between source and prebuilt LLVM you can switch the `llvm-11` symlink between `llvm-11-build` and `clang+llvm...ubuntu-...`. After the switch a `make clean` is needed.
+
+Assertions in native code are disabled in release builds.
 
 ### Building on macOS with GCC 9
 
@@ -97,9 +102,9 @@ By default macOS will build gnuR and rir with clang, while Linux always uses GCC
 
 ### Making changes to gnur
 
-R with RIR patches is a submodule under external/custom-r. This is how you edit:
+R with Ř patches is a submodule under external/custom-r. This is how you edit:
 
-    # Assuming you are making changes in you local RIR branch
+    # Assuming you are making changes in you local Ř branch
     cd external/custom-r
     # By default submodules are checked out headless. We use a
     # branch to keep track of our changes to R, that is based on
@@ -115,7 +120,7 @@ R with RIR patches is a submodule under external/custom-r. This is how you edit:
     # now the updated submodule needs to be commited to rir 
     git commit external/custom-r -m "bump R module version"
     git push my-rir-remote my-rir-feature-branch
-    # Now you can create a PR with the R changes & potential RIR 
+    # Now you can create a PR with the R changes & potential Ř 
     # changes in my-feature-branch
 
 If you want to test your R changes on ci, before pushing to the main branch on the gnur repository you can also push to a feature branch on gnur first. E.g.:
