@@ -1938,13 +1938,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                                                   c->bindingCacheSize));
         bindingCache->length = c->bindingCacheSize;
         // Optimized functions explicitly manage the cache
-        if (env != symbol::delayedEnv)
+        if (env != symbol::delayedEnv) {
             clearCache(bindingCache);
-
 #ifdef DEBUG_ENV_ALLOC
-        if (env != symbol::delayedEnv)
             Measuring::countEvent("env allocated");
 #endif
+        }
     }
 
     // make sure there is enough room on the stack
