@@ -8,8 +8,10 @@ To give it a spin try
 
     git clone https://github.com/reactorlabs/rir
     cd rir
-    cmake -DCMAKE_BUILD_TYPE=debugopt .
+    cmake -DCMAKE_BUILD_TYPE=build_type .    # possible build_types: release, debugopt, debug
     # Fetch and build dependencies. This will build gnur from source, which takes a while.
+    # To build llvm from source (for debug symbols) do:
+    # export BUILD_LLVM_FROM_SRC=1
     make setup
     make
 
@@ -37,17 +39,16 @@ To run R with RIR use
     bin/R
 
 This loads a normal R environment with RIR replacing the R bytecode compiler
-and interpreter. If you want to automatically compile functions when they
-are executed use
+and interpreter.
 
-    R_ENABLE_JIT=2 bin/R
+## Are we fast?
 
-Functions compiled to RIR can be inspected using `rir.disassemble`.
+Check out our [performance dashboard](https://speed.r-vm.net) to see how we compare to GNU R and FastR in terms of performance.
 
 ## Hacking
 
 To make changes to this repository please open a pull request. Ask somebody to
-review your changes and make sure travis is green.
+review your changes and make sure ci is green.
 
 Caveat: we use submodules. If you are in the habit of blindly `git commit .` you are up for surprises. Please make sure that you do not by accident commit an updated submodule reference for external/custom-r.
 
@@ -117,19 +118,19 @@ R with RIR patches is a submodule under external/custom-r. This is how you edit:
     # Now you can create a PR with the R changes & potential RIR 
     # changes in my-feature-branch
 
-If you want to test your R changes on travis, before pushing to the main branch on the gnur repository you can also push to a feature branch on gnur first. E.g.:
+If you want to test your R changes on ci, before pushing to the main branch on the gnur repository you can also push to a feature branch on gnur first. E.g.:
 
     git checkout -b my-rir-feature-branch
     cd external/custom-r
     git checkout -b my-gnur-feature-branch
-    # edit and commit. Need to push, or travis will not be able to access the submodule reference
+    # edit and commit. Need to push, or ci will not be able to access the submodule reference
     git push origin my-gnur-feature-branch
     cd ../..
     git commit external/custom-r -m "temp module version"
     git push my-rir-remote my-rir-feature-branch
 
     # Review....
-    # Now, with travis green, before merging, change it back:
+    # Now, with ci green, before merging, change it back:
 
     cd external/custom-r
     git checkout R-3.5.1-rir-patch
@@ -150,39 +151,3 @@ Fetch updated R:
     cd external/custom-r && make -j4 
 
 Or use `make setup`
-
-## Build Status
-
-![travis](https://api.travis-ci.org/reactorlabs/rir.svg?branch=master) ([travis](https://travis-ci.org/reactorlabs/rir))
-
-### Debugging a Travis build
-
-Debug mode has been enabled for our repository. To simplify the process, we have
-a script `tools/travis-debug.sh`.
-
-To set up, go to your [Travis-CI.org profile](https://travis-ci.org/profile)
-(note travis-ci.org, NOT travis-ci.com) and copy your API token. Paste it in
-a file `.travis_token` in the repository root.
-
-To use the debug script, first find the job you want to debug, e.g.:
-https://travis-ci.org/reactorlabs/rir/jobs/<job id>
-
-Now you can run `tools/travis-debug.sh <job id>` which will POST to the API
-endpoint and restart the build. Then you can go back to the job on the Travis
-website and use the SSH command to access the machine.
-
-The debug VM will be in a state before the `before_install` phase runs. You will
-have to manually run the build phases:
-
-```
-travis_run_before_install
-travis_run_install
-travis_run_before_script
-travis_run_script
-travis_run_after_success
-travis_run_after_failure
-travis_run_after_script
-```
-
-For more information, see:
-https://docs.travis-ci.com/user/running-build-in-debug-mode/
