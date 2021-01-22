@@ -123,10 +123,15 @@ if [ ! -d $LLVM_DIR ]; then
         if [ "$BUILD_LLVM_FROM_SRC" == "1" ]; then
           V=""
         fi
-        if [ "$V" == "20.04" ] || [ "$V" == "16.04" ]; then
-          F="clang+llvm-11.0.1-x86_64-linux-gnu-ubuntu-$V"
+        if [ "$V" == "20.10" ] || [ "$V" == "20.04" ] || [ "$V" == "16.04" ]; then
+          MINOR="1"
+          # For some reason there is no 11.0.1 download for 20.04
+          if [ "$V" == "20.04" ]; then
+            MINOR="0"
+          fi
+          F="clang+llvm-11.0.$MINOR-x86_64-linux-gnu-ubuntu-$V"
           if [ ! -f "$F" ]; then
-              curl -L https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.1/$F.tar.xz > $F.tar.xz
+              curl -L https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.$MINOR/$F.tar.xz > $F.tar.xz
           fi
           tar xf $F.tar.xz
           ln -s $F llvm-11
