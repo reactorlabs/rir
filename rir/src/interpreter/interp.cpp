@@ -5,13 +5,13 @@
 #include "cache.h"
 #include "compiler/compiler.h"
 #include "compiler/parameter.h"
-#include "event_counters.h"
 #include "ir/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
 #include "utils/Pool.h"
+#include "utils/measuring.h"
 
 #include <assert.h>
 #include <deque>
@@ -1066,13 +1066,15 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 }
 
 #ifdef DEBUG_SLOWCASES
-
 class SlowcaseCounter {
   public:
-    std::unordered_map<std::string, size_t> counter;
-
-    void count(const std::string& kind, CallContext& call,
-               InterpreterInstance* ctx) {
+    static void count(const std::string& kind, CallContext& call,
+                      InterpreterInstance* ctx) {
+        static bool init = false;
+        if (!init) {
+            Measuring::setEventThreshold(100);
+            init = true;
+        }
         std::stringstream message;
         message << "Fast case " << kind << " failed for "
                 << getBuiltinName(getBuiltinNr(call.callee)) << " ("
@@ -1090,25 +1092,9 @@ class SlowcaseCounter {
                 message << " arg0 : " << type2char(TYPEOF(arg)) << " a "
                         << (ATTRIB(arg) != R_NilValue);
         }
-        if (!counter.count(message.str()))
-            counter[message.str()] = 0;
-        counter[message.str()]++;
-    }
-
-    static constexpr size_t TRESHOLD = 100;
-    ~SlowcaseCounter() {
-        std::map<size_t, std::set<std::string>> order;
-        for (auto& e : counter)
-            if (e.second > TRESHOLD)
-                order[e.second].insert(e.first);
-        for (auto& o : order) {
-            for (auto& e : o.second) {
-                std::cout << o.first << " times: " << e << "\n";
-            }
-        }
+        Measuring::countEvent(message.str());
     }
 };
-SlowcaseCounter SLOWCASE_COUNTER;
 #endif
 
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
@@ -1121,7 +1107,7 @@ SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
             return res;
         }
 #ifdef DEBUG_SLOWCASES
-        SLOWCASE_COUNTER.count("builtin", call, ctx);
+        SlowcaseCounter::count("builtin", call, ctx);
 #endif
     }
     return legacyCall(call, ctx);
@@ -1134,7 +1120,7 @@ static RIR_INLINE SEXP specialCall(CallContext& call,
         if (res)
             return res;
 #ifdef DEBUG_SLOWCASES
-        SLOWCASE_COUNTER.count("special", call, ctx);
+        SlowcaseCounter::count("special", call, ctx);
 #endif
     }
     return legacySpecialCall(call, ctx);
@@ -1724,13 +1710,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     ostack_push(ctx, res);
 }
 
-#ifdef ENABLE_EVENT_COUNTERS
-static unsigned EnvAllocated =
-    EventCounters::instance().registerCounter("env allocated");
-static unsigned EnvStubAllocated =
-    EventCounters::instance().registerCounter("envstub allocated");
-#endif
-
 size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                                Immediate* names_, SEXP env, bool explicitDots) {
     std::vector<SEXP> args;
@@ -1962,9 +1941,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         if (env != symbol::delayedEnv)
             clearCache(bindingCache);
 
-#ifdef ENABLE_EVENT_COUNTERS
-        if (ENABLE_EVENT_COUNTERS && env != symbol::delayedEnv)
-            EventCounters::instance().count(EnvAllocated);
+#ifdef DEBUG_ENV_ALLOC
+        if (env != symbol::delayedEnv)
+            Measuring::countEvent("env allocated");
 #endif
     }
 

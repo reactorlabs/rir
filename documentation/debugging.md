@@ -31,7 +31,7 @@ completely disables the PIR optimizer. As follows are the different Options avai
         PrintIntoStdout            print without buffering (useful for crashes during compilation)
         PrintInstructionIds        have instructions print out their memory addresses, to track them across compilation passes
         OmitDeoptBranches          don't print deopt branches in closures
-        OnlyChanges                only print optimization passes/phases which actually change bytecode 
+        OnlyChanges                only print optimization passes/phases which actually change bytecode
         PrintEarlyRir              print after initial rir2pir translation
         PrintOptimizationPasses    print after every pass
         PrintOptimizationPhases    print before/after every phase of the compiler
@@ -50,8 +50,16 @@ completely disables the PIR optimizer. As follows are the different Options avai
         Standard   print pir in human-readable format, to view directly in console
         GraphViz   print pir in GraphViz, displaying all instructions within BBs
         GraphVizBB print pir in GraphViz, displaying only BB names and connections
+
+    PIR_MEASURING=
+        1          enable event and time measuring
+
+    PIR_MEASURING_LOGFILE=
+        filename   write the output to filename instead of std::cerr
+
     PIR_MEASURE_COMPILER=
         1          print overal time spend in different passes on shutdown
+
     RIR_CHECK_PIR_TYPES=
         0        Disable
         1        Assert that each PIR instruction conforms to its return type during runtime
