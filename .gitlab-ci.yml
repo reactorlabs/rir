@@ -305,6 +305,7 @@ benchmark_llvm:
   tags:
     - benchmarks
   script:
+    - ip a sh
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
