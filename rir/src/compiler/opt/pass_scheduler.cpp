@@ -28,6 +28,7 @@ PassScheduler::PassScheduler() {
         add<Inline>();
         add<OptimizeContexts>();
 
+        // add<InlineForcePromises>();
         add<ForceDominance>();
         add<ScopeResolution>();
         add<LoadElision>();

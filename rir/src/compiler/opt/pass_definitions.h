@@ -143,6 +143,8 @@ class PASS(TypeSpeculation, false);
 
 class PASS(PromiseSplitter, false);
 
+class PASS(InlineForcePromises, false);
+
 /*
  * Range analysis to detect and optimize code which will not create overflows /
  * underflows
