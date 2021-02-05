@@ -23,7 +23,6 @@ void PassScheduler::add(std::unique_ptr<const Pass>&& t) {
 PassScheduler::PassScheduler() {
     auto addDefaultOpt = [&]() {
         add<DotDotDots>();
-        add<MatchCallArgs>();
         add<EagerCalls>();
 
         add<Inline>();

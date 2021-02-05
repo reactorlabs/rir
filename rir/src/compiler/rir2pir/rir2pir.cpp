@@ -717,12 +717,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     [&](DotsList* d) { insert(d); }, FORMALS(ti.monomorphic),
                     {[&]() { return nargs; },
                      [&](size_t i) {
-                         SLOWASSERT(i < args.size());
+                         assert(i < args.size());
                          return args[i];
                      },
                      [&](size_t i) {
-                         SLOWASSERT(!namedArguments ||
-                                    i < callArgumentNames.size());
+                         assert(!namedArguments ||
+                                i < callArgumentNames.size());
                          return namedArguments ? Pool::get(callArgumentNames[i])
                                                : R_NilValue;
                      }},
