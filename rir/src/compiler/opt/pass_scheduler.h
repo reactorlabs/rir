@@ -14,7 +14,7 @@ class PassScheduler {
     struct Phase {
         Phase(const std::string& name, unsigned budget)
             : name(name), budget(budget), once(budget == 0) {}
-        const std::string& name;
+        std::string name;
         unsigned budget;
         bool once;
         typedef std::vector<std::unique_ptr<const Pass>> Passes;
