@@ -6,14 +6,16 @@ rir.markFunction <- function(what, which,
                              DisableInline=NA,
                              DisableAllSpecialization=NA,
                              DisableArgumentTypeSpecialization=NA,
-                             DisableNumArgumentsSepcialization=NA) {
+                             DisableNumArgumentsSepcialization=NA,
+                             Annotated=NA) {
     doIt = function(n) {
         .Call("rirMarkFunction", what, n,
               Reopt,
               ForceInline, DisableInline,
               DisableAllSpecialization,
               DisableArgumentTypeSpecialization,
-              DisableNumArgumentsSepcialization);
+              DisableNumArgumentsSepcialization,
+              Annotated);
     }
     if (missing(which)) {
         for (i in rir.functionVersions(what))

@@ -25,10 +25,11 @@ PassScheduler::PassScheduler() {
         add<DotDotDots>();
         add<EagerCalls>();
 
+        add<InlineForcePromises>();
         add<Inline>();
+
         add<OptimizeContexts>();
 
-        // add<InlineForcePromises>();
         add<ForceDominance>();
         add<ScopeResolution>();
         add<LoadElision>();

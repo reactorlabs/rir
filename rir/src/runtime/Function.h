@@ -82,6 +82,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     V(MarkOpt)                                                                 \
     V(ForceInline)                                                             \
     V(DisableInline)                                                           \
+    V(Annotated)                                                               \
     V(NotOptimizable)                                                          \
     V(NotInlineable)                                                           \
     V(Dead)                                                                    \

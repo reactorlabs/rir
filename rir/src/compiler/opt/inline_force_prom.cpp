@@ -426,57 +426,48 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     */
 
-    // SK *********
-    // Visitor::run(code->entry, [&](BB* bb) {
-    //     auto ip = bb->begin();
-    //     while (ip != bb->end()) {
-    //         auto next = ip + 1;
-
-    //         if (auto mkarg = MkArg::Cast(*ip)) {
-    //             anyChange = true;
-
-    //             auto forced =
-    //                     new Force(mkarg, mkarg->env(),
-    //                     Tombstone::framestate());
-
-    //             next = bb->insert(next, forced) + 1;
-
-    //             printf("forced!!");
-    //             mkarg->print();
-
-    //         }
-    //         ip = next;
-
-    //     }
-    // });
-    // ***
-
     Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;
 
-            if (auto call = Call::Cast(*ip)) {
-                assert(false);
+            if (auto call = CallInstruction::CastCall(*ip)) {
 
-                call->eachCallArg([&](InstrArg& v) {
-                    if (auto mkarg = MkArg::Cast(v.val())) {
-                        anyChange = true;
+                auto cls = call->tryGetCls();
 
-                        auto cast =
-                            new CastType(mkarg, CastType::Kind::Upcast,
-                                         RType::prom, PirType::valOrLazy());
+                if (cls) {
+                    // cls->print(std::cout,true);
+                    // assert(false &&  "aaa");
+                    // ??? this is just one function
+                    // version , I don't like relying on it. Maybe it's just to
+                    // start
+                    auto functionVersion = cls->rirFunction();
 
-                        auto forced = new Force(cast, mkarg->env(),
-                                                Tombstone::framestate());
-                        v.val() = forced;
-                        ip = bb->insert(ip, cast) + 1;
-                        ip = bb->insert(ip, forced) + 1;
-                        next = ip + 1;
+                    if (functionVersion->flags.contains(
+                            rir::Function::Flag::Annotated)) {
 
-                        printf("forced! \n");
+                        call->eachCallArg([&](InstrArg& v) {
+                            if (auto mkarg = MkArg::Cast(v.val())) {
+
+                                anyChange = true;
+
+                                auto cast = new CastType(
+                                    mkarg, CastType::Kind::Upcast, RType::prom,
+                                    PirType::valOrLazy());
+
+                                auto forced =
+                                    new Force(cast, mkarg->env(),
+                                              Tombstone::framestate());
+                                v.val() = forced;
+                                ip = bb->insert(ip, cast) + 1;
+                                ip = bb->insert(ip, forced) + 1;
+                                next = ip + 1;
+
+                                printf("forced! \n");
+                            }
+                        });
                     }
-                });
+                }
             }
             ip = next;
         }
@@ -484,11 +475,6 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     return anyChange;
 }
-
-// size_t Parameter::PROMISE_INLINER_MAX_SIZE =
-//     getenv("PIR_PROMISE_INLINER_MAX_SIZE")
-//         ? atoi(getenv("PIR_PROMISE_INLINER_MAX_SIZE"))
-//         : 3000;
 
 } // namespace pir
 } // namespace rir
