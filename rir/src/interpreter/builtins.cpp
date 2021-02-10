@@ -6,6 +6,10 @@
 #include <algorithm>
 #include <stdlib.h>
 
+extern "C" {
+extern Rboolean R_Visible;
+}
+
 namespace rir {
 
 struct bitShiftL {
@@ -118,7 +122,52 @@ static IsVectorCheck whichIsVectorCheck(SEXP str) {
 }
 
 SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
-    SLOWASSERT(!call.hasNames());
+    switch (call.callee->u.primsxp.offset) {
+    case blt("forceAndCall"): {
+
+        if (call.passedArgs < 2)
+            Rf_error("attempt to apply non-function");
+
+        auto nArg = call.stackArg(0);
+        if (TYPEOF(nArg) == PROMSXP)
+            nArg = evaluatePromise(nArg, ctx);
+        int n = asInteger(nArg);
+
+        auto fun = call.stackArg(1);
+        if (TYPEOF(fun) == PROMSXP)
+            fun = evaluatePromise(fun, ctx);
+        assert(call.stackArgs);
+
+        // Remove the first arg and create a new CallContext for the actual
+        // call.
+        auto ast = LCONS(CADDR(call.ast), CDDDR(call.ast));
+        PROTECT(ast);
+        CallContext innerCall(ArglistOrder::NOT_REORDERED, call.caller, fun,
+                              call.suppliedArgs - 2, ast, call.stackArgs + 2,
+                              call.names ? call.names + 2 : nullptr,
+                              call.callerEnv, call.givenContext, ctx);
+
+        if (TYPEOF(fun) == BUILTINSXP || TYPEOF(fun) == CLOSXP) {
+            for (int i = 0; i < n; i++) {
+                auto p = innerCall.stackArg(i);
+                if (TYPEOF(p) == PROMSXP)
+                    evaluatePromise(p);
+                else if (p == R_MissingArg)
+                    errorcall(innerCall.ast, ("argument %d is empty"), i);
+                else
+                    Rf_error("something weird happened");
+            }
+        } else if (TYPEOF(fun) != SPECIALSXP) {
+            Rf_error("attempt to apply non-function");
+        }
+        auto res = doCall(innerCall, ctx);
+        UNPROTECT(1);
+        R_Visible = (Rboolean) true;
+        return res;
+    }
+    default:
+        break;
+    }
     return nullptr;
 }
 

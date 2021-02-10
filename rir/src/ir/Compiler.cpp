@@ -202,7 +202,7 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                                       SEXP args, bool voidContext,
-                                      int skipArgs = 0);
+                                      int skipArgs = 0, int eager = 0);
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
                   std::function<void()> compileBody, bool peelLoop = false) {
@@ -1424,15 +1424,16 @@ SIMPLE_INSTRUCTIONS(V, _)
 }
 
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
-                                      SEXP args, bool voidContext,
-                                      int skipArgs) {
+                                      SEXP args, bool voidContext, int skipArgs,
+                                      int eager) {
     CodeStream& cs = ctx.cs();
 
     // Process arguments:
     // Arguments can be optionally named
 
     LoadArgsResult res;
-    RListIter arg = RList(args).begin();
+    RList argsList(args);
+    RListIter arg = argsList.begin();
 
     int i = skipArgs;
     arg = arg + skipArgs;
@@ -1450,17 +1451,22 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
             continue;
         }
 
-        // (1) Arguments are wrapped as Promises:
-        //     create a new Code object for the promise
-        Code* prom = compilePromise(ctx, *arg);
-        size_t idx = cs.addPromise(prom);
-
-        // (2) remember if the argument had a name associated
+        // remember if the argument had a name associated
         res.names.push_back(arg.tag());
         if (arg.tag() != R_NilValue)
             res.hasNames = true;
 
-        // (3) "safe force" the argument to get static assumptions
+        if (i < eager) {
+            compileExpr(ctx, *arg, false);
+            continue;
+        }
+
+        // Arguments are wrapped as Promises:
+        //     create a new Code object for the promise
+        Code* prom = compilePromise(ctx, *arg);
+        size_t idx = cs.addPromise(prom);
+
+        // "safe force" the argument to get static assumptions
         SEXP known = safeEval(*arg);
         // TODO: If we add more assumptions should probably abstract with
         // testArg in interp.cpp. For now they're both much different though
@@ -1506,7 +1512,13 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (Compiler::profile)
         cs << BC::recordCall();
 
-    auto info = compileLoadArgs(ctx, ast, fun, args, voidContext);
+    LoadArgsResult info;
+    if (fun == symbol::forceAndCall) {
+        // First arg certainly eager
+        info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0, 2);
+    } else {
+        info = compileLoadArgs(ctx, ast, fun, args, voidContext);
+    }
 
     if (info.hasDots) {
         cs << BC::callDots(info.numArgs, info.names, ast, info.assumptions);

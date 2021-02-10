@@ -1115,14 +1115,12 @@ SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
 
 static RIR_INLINE SEXP specialCall(CallContext& call,
                                    InterpreterInstance* ctx) {
-    if (!call.hasNames()) {
-        SEXP res = tryFastSpecialCall(call, ctx);
-        if (res)
-            return res;
+    SEXP res = tryFastSpecialCall(call, ctx);
+    if (res)
+        return res;
 #ifdef DEBUG_SLOWCASES
-        SlowcaseCounter::count("special", call, ctx);
+    SlowcaseCounter::count("special", call, ctx);
 #endif
-    }
     return legacySpecialCall(call, ctx);
 }
 
@@ -2355,7 +2353,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP callee = ostack_at(ctx, n);
             Immediate* names = names_;
             int pushed = 0;
-            if (TYPEOF(callee) != SPECIALSXP) {
+            if (TYPEOF(callee) != SPECIALSXP ||
+                // forceAndCall is fully handled in tryFastSpecialCall
+                // and expects expanded dots
+                callee->u.primsxp.offset == blt("forceAndCall")) {
                 n = expandDotDotDotCallArgs(
                     ctx, n, names_, env,
                     given.includes(Assumption::StaticallyArgmatched));
