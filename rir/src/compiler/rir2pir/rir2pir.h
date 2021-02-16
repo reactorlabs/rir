@@ -24,6 +24,10 @@ class Rir2Pir {
     Value* tryCreateArg(rir::Code* prom, Builder& insert, bool eager)
         __attribute__((warn_unused_result));
 
+    typedef std::unordered_map<
+        Value*, std::tuple<Checkpoint*, ObservedCallees, Opcode*>>
+        CallTargetFeedback;
+
   private:
     Value* tryInlinePromise(rir::Code* srcCode, Builder& insert)
         __attribute__((warn_unused_result));
@@ -57,10 +61,6 @@ class Rir2Pir {
         Context context;
     };
     std::unordered_map<MkFunCls*, DelayedCompilation> delayedCompilation;
-
-    typedef std::unordered_map<
-        Value*, std::tuple<Checkpoint*, ObservedCallees, Opcode*>>
-        CallTargetFeedback;
 
     bool compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                    rir::Code* srcCode, RirStack&, Builder&,
