@@ -635,6 +635,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (arity != -1 && arity != nargs)
                 monomorphicBuiltin = false;
         }
+        const std::unordered_set<int> supportedSpecials = {blt("forceAndCall")};
+        bool monomorphicSpecial =
+            ti.monomorphic && TYPEOF(ti.monomorphic) == SPECIALSXP &&
+            supportedSpecials.count(ti.monomorphic->u.primsxp.offset);
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto emitGenericCall = [&]() {
@@ -654,7 +658,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         // Insert a guard if we want to speculate
         if (monomorphicBuiltin || monomorphicClosure ||
-            monomorphicInnerFunction) {
+            monomorphicInnerFunction || monomorphicSpecial) {
             auto cp = std::get<Checkpoint*>(callTargetFeedback.at(callee));
             if (!cp)
                 cp = addCheckpoint(srcCode, pos, stack, insert);

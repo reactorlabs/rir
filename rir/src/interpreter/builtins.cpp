@@ -132,6 +132,8 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
         if (TYPEOF(nArg) == PROMSXP)
             nArg = evaluatePromise(nArg, ctx);
         int n = asInteger(nArg);
+        if (n == NA_INTEGER)
+            n = 0;
 
         auto fun = call.stackArg(1);
         if (TYPEOF(fun) == PROMSXP)
@@ -145,7 +147,7 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
         CallContext innerCall(ArglistOrder::NOT_REORDERED, call.caller, fun,
                               call.suppliedArgs - 2, ast, call.stackArgs + 2,
                               call.names ? call.names + 2 : nullptr,
-                              call.callerEnv, call.givenContext, ctx);
+                              call.callerEnv, Context(), ctx);
 
         if (TYPEOF(fun) == BUILTINSXP || TYPEOF(fun) == CLOSXP) {
             for (int i = 0; i < n; i++) {
