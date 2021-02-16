@@ -586,38 +586,55 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                             nForce = t < 0 || t != t ? 0 : t;
                                         }
                                     }
-                                    ip = bb->insert(
-                                        ip,
-                                        new ChkClosure(call->callArg(1).val()));
-                                    auto callee = *ip;
-                                    ip++;
-                                    std::vector<Value*> args;
-                                    for (unsigned i = 2; i < call->nCallArgs();
+
+                                    bool nodots = true;
+                                    for (unsigned i = 2;
+                                         i < call->nCallArgs() &&
+                                         i <= nForce + 2;
                                          ++i) {
-                                        if (i - 2 <= nForce) {
-                                            ip = bb->insert(
-                                                ip, new CastType(
+                                        if (call->callArg(i).val()->type.isA(
+                                                RType::expandedDots)) {
+                                            nodots = false;
+                                        }
+                                    }
+
+                                    if (nodots) {
+                                        ip = bb->insert(
+                                            ip, new ChkClosure(
+                                                    call->callArg(1).val()));
+                                        auto callee = *ip;
+                                        ip++;
+                                        std::vector<Value*> args;
+                                        for (unsigned i = 2;
+                                             i < call->nCallArgs(); ++i) {
+                                            if (i - 2 <= nForce) {
+                                                ip = bb->insert(
+                                                    ip,
+                                                    new CastType(
                                                         call->callArg(i).val(),
                                                         CastType::Upcast,
                                                         RType::prom,
                                                         PirType::any()));
-                                            ip = bb->insert(
-                                                ip + 1,
-                                                new Force(
-                                                    *ip, call->env(),
-                                                    Tombstone::framestate()));
-                                            args.push_back(*ip);
-                                            ip++;
-                                        } else {
-                                            args.push_back(
-                                                call->callArg(i).val());
+                                                ip = bb->insert(
+                                                    ip + 1,
+                                                    new Force(
+                                                        *ip, call->env(),
+                                                        Tombstone::
+                                                            framestate()));
+                                                args.push_back(*ip);
+                                                ip++;
+                                            } else {
+                                                args.push_back(
+                                                    call->callArg(i).val());
+                                            }
                                         }
+                                        auto newCall = new Call(
+                                            call->env(), callee, args,
+                                            call->frameState(), call->srcIdx);
+                                        call->replaceUsesAndSwapWith(newCall,
+                                                                     ip);
+                                        next = ip + 1;
                                     }
-                                    auto newCall = new Call(
-                                        call->env(), callee, args,
-                                        call->frameState(), call->srcIdx);
-                                    call->replaceUsesAndSwapWith(newCall, ip);
-                                    next = ip + 1;
                                 }
                             }
                         }
