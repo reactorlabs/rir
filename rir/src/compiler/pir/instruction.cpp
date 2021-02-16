@@ -1039,7 +1039,8 @@ Call::Call(Value* callerEnv, Value* fun, const std::vector<Value*>& args,
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
-    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
+                   PirType::val();
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
@@ -1060,7 +1061,8 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
-    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
+                   PirType::val();
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
@@ -1085,7 +1087,8 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
-    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
+                   PirType::val();
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
