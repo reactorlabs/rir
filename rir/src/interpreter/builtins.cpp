@@ -145,8 +145,6 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
         auto ast = LCONS(CADDR(call.ast), CDDDR(call.ast));
         PROTECT(ast);
         Context innerCtxt;
-        // To ensure that ... gets unpacked if needed
-        innerCtxt.add(Assumption::StaticallyArgmatched);
         CallContext innerCall(ArglistOrder::NOT_REORDERED, call.caller, fun,
                               call.suppliedArgs - 2, ast, call.stackArgs + 2,
                               call.names ? call.names + 2 : nullptr,

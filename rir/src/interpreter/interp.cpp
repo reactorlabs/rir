@@ -2353,10 +2353,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP callee = ostack_at(ctx, n);
             Immediate* names = names_;
             int pushed = 0;
-            if (TYPEOF(callee) != SPECIALSXP ||
-                // forceAndCall is fully handled in tryFastSpecialCall
-                // and expects expanded dots
-                callee->u.primsxp.offset == blt("forceAndCall")) {
+            if (needsExpandedDots(callee)) {
                 n = expandDotDotDotCallArgs(
                     ctx, n, names_, env,
                     given.includes(Assumption::StaticallyArgmatched));

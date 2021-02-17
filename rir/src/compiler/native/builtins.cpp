@@ -320,7 +320,7 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     auto given = Context(available);
     int pushed = 0;
 
-    if (TYPEOF(callee) != SPECIALSXP) {
+    if (needsExpandedDots(callee)) {
         nargs = expandDotDotDotCallArgs(
             ctx, nargs, names, env,
             given.includes(Assumption::StaticallyArgmatched));

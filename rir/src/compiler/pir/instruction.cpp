@@ -945,7 +945,7 @@ ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
             std::cout << "* " << v->context() << "\n";
         });
         std::cout << "Available assumptions at callsite: \n ";
-        std::cout << inferAvailableAssumptions << "\n";
+        std::cout << inferAvailableAssumptions() << "\n";
     }
 #endif
     if (res) {
