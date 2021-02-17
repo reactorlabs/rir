@@ -744,7 +744,7 @@ CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
       builtinSexp(builtin), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
-        this->pushArg(args[i], PirType::val());
+        this->pushArg(args[i], PirType::val() | RType::expandedDots);
 }
 
 size_t CallSafeBuiltin::gvnBase() const {
@@ -762,7 +762,7 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
       builtinSexp(builtin), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
-        this->pushArg(args[i], PirType::val());
+        this->pushArg(args[i], PirType::val() | RType::expandedDots);
 }
 
 Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
