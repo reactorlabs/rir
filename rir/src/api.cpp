@@ -50,11 +50,11 @@ bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 
 REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     if (!what || TYPEOF(what) != CLOSXP)
-        Rf_error("Not a rir compiled code");
+        Rf_error("Not a rir compiled code (Not CLOSXP)");
     DispatchTable* t = DispatchTable::check(BODY(what));
 
     if (!t)
-        Rf_error("Not a rir compiled code");
+        Rf_error("Not a rir compiled code (CLOSXP but not DispatchTable)");
 
     std::cout << "== closure " << what << " (dispatch table " << t << ", env "
               << CLOENV(what) << ") ==\n";

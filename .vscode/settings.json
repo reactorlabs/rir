@@ -107,6 +107,9 @@
     "memory_resource": "cpp",
     "*.def": "cpp",
     "*.inc": "cpp",
-    "*.gen": "cpp"
+    "*.gen": "cpp",
+    "csetjmp": "cpp",
+    "cfenv": "cpp",
+    "csignal": "cpp"
   }
 }

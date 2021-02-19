@@ -55,7 +55,7 @@ struct CallContext {
     const Code* caller;
     const size_t suppliedArgs;
     size_t passedArgs;
-    const R_bcstack_t* stackArgs;
+    /*const */ R_bcstack_t* stackArgs;
     const Immediate* names;
     SEXP callerEnv;
     const SEXP ast;
@@ -71,6 +71,13 @@ struct CallContext {
         return ostack_at_cell(stackArgs + i);
     }
 
+    void setStackArg(SEXP what, unsigned i) const {
+        assert(stackArgs && i < passedArgs);
+        //*(stackArgs + i) = what;
+        stackArgs->u.sxpval = what;
+        ostack_at_cell(stackArgs + i) = what;
+    }
+
     SEXP name(unsigned i, InterpreterInstance* ctx) const {
         assert(hasNames() && i < suppliedArgs);
         return cp_pool_at(ctx, names[i]);
@@ -81,6 +88,24 @@ struct CallContext {
             SEXP arg = stackArg(i);
             if (TYPEOF(arg) == PROMSXP) {
                 safeForcePromise(arg);
+            }
+        }
+    }
+
+    void depromiseArgs() const {
+        for (unsigned i = 0; i < passedArgs; i++) {
+            SEXP arg = stackArg(i);
+            if (TYPEOF(arg) == PROMSXP) {
+                // assert(false &&  "aaaa");
+                auto v = forcePromise(arg);
+                setStackArg(v, i);
+
+                // SEXP argM = stackArg(i);
+                // auto p = INTEGER(argM);
+                // std::cerr << *p;
+
+                // PROM LEAK?
+                // ostack_set(stackArgs, i, nullptr);
             }
         }
     }

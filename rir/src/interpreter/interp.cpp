@@ -963,6 +963,14 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                     FunctionSignature::Environment::CallerProvided;
     LazyArglistOnStack lazyPromargs(call.suppliedArgs, call.stackArgs,
                                     call.ast);
+
+    if (fun->flags.contains(Function::Annotated)) {
+        // Force arguments and depromise
+        // only stack??? ****************
+        // assert(false && "before deprom!");
+        call.depromiseArgs();
+    }
+
     if (call.givenContext.includes(Assumption::StaticallyArgmatched)) {
         // Currently we cannot recreate the original arglist if we
         // statically reordered arguments. TODO this needs to be fixed
