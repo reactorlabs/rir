@@ -94,7 +94,8 @@ void State::mergeIn(const State& incom, BB* incomBB) {
         Phi* p = Phi::Cast(stack.at(i));
         assert(p);
         Value* in = incom.stack.at(i);
-        p->addInput(incomBB, in);
+        if (in != Tombstone::unreachable())
+            p->addInput(incomBB, in);
     }
     incomBB->setNext(entryBB);
 }
@@ -1437,12 +1438,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     }
     assert(cur.stack.empty());
 
-    if (results.size() == 0) {
-        // Cannot compile functions with infinite loop
-        log.warn("Aborting, it looks like this function has an infinite loop");
-        return nullptr;
-    }
-
     Visitor::run(insert.code->entry, [&](Instruction* i) {
         Value* callee = nullptr;
         Context asmpt;
@@ -1486,7 +1481,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         return nullptr;
 
     Value* res;
-    if (results.size() == 1) {
+    if (results.size() == 0) {
+        insert.clearCurrentBB();
+        return Tombstone::unreachable();
+    } else if (results.size() == 1) {
         res = results.back().second;
         insert.reenterBB(results.back().first);
     } else {
@@ -1509,8 +1507,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 void Rir2Pir::finalize(Value* ret, Builder& insert) {
     assert(!finalized);
     assert(ret);
-    assert(insert.getCurrentBB()->isExit() &&
-           "Builder needs to be on an exit-block to insert return");
 
     bool changed = true;
     while (changed) {
@@ -1558,9 +1554,11 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
         });
     }
 
-    if (insert.getCurrentBB()->isEmpty() ||
-        !NonLocalReturn::Cast(insert.getCurrentBB()->last()))
+    if (insert.getCurrentBB()) {
+        assert(insert.getCurrentBB()->isEmpty() ||
+               !insert.getCurrentBB()->last()->exits());
         insert(new Return(ret));
+    }
 
     InsertCast c(insert.code, insert.env);
     c();

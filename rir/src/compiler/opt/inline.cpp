@@ -34,7 +34,6 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
         return cls->rirFunction()->flags.contains(rir::Function::NotInlineable);
     };
 
-    std::unordered_set<BB*> dead;
     Visitor::run(
         code->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
@@ -226,7 +225,6 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                     fuel--;
 
                 cls->inlinees++;
-                auto context = (*it)->env();
 
                 BB* split = BBTransform::split(cls->nextBBId++, bb, it, cls);
                 auto theCall = *split->begin();
@@ -385,15 +383,20 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
                     });
 
-                    auto inlineeRet =
-                        BBTransform::forInline(copy, split, context);
-                    if (inlineeRet.second->isNonLocalReturn())
-                        dead.insert(inlineeRet.second);
-                    Value* inlineeRes = inlineeRet.first;
-                    BB* inlineeReturnblock = inlineeRet.second;
+                    auto inlineeRes = BBTransform::forInline(
+                        copy, split, inlineeCls->closureEnv());
+
+                    bool noNormalReturn = false;
+                    if (inlineeRes == Tombstone::unreachable()) {
+                        inlineeRes = Nil::instance();
+                        noNormalReturn = true;
+                    }
+
                     if (allowInline == SafeToInline::NeedsContext) {
-                        size_t insertPos = 0;
                         Value* op = nullptr;
+                        auto prologue = BBTransform::split(
+                            cls->nextBBId++, copy, copy->begin(), cls);
+                        assert(prologue->isEmpty());
                         if (auto call = Call::Cast(theCall)) {
                             op = call->cls();
                         } else if (auto call = StaticCall::Cast(theCall)) {
@@ -403,20 +406,33 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                             } else {
                                 auto ld =
                                     new LdConst(call->cls()->rirClosure());
-                                copy->insert(copy->begin(), ld);
+                                prologue->append(ld);
                                 op = ld;
-                                insertPos++;
                             }
                         }
                         assert(op);
                         auto ast = new LdConst(rir::Pool::get(theCall->srcIdx));
                         auto ctx = new PushContext(ast, op, theCallInstruction,
                                                    theCall->env());
-                        copy->insert(copy->begin() + insertPos, ctx);
-                        copy->insert(copy->begin() + insertPos, ast);
+                        prologue->append(ast);
+                        prologue->append(ctx);
+
                         auto popc = new PopContext(inlineeRes, ctx);
-                        inlineeReturnblock->append(popc);
+                        split->insert(split->begin() + 1, popc);
                         popc->updateTypeAndEffects();
+
+                        if (noNormalReturn) {
+                            // No normal return, this means that pop-context
+                            // looks unreachable, even though it is reachable
+                            // through non-local returns.
+                            auto fake1 = new BB(cls, cls->nextBBId++);
+                            // avoids critical edge
+                            auto fake2 = new BB(cls, cls->nextBBId++);
+                            prologue->overrideNext(fake1);
+                            fake1->append(new Branch(OpaqueTrue::instance()));
+                            fake1->setSuccessors({fake2, split});
+                            fake2->setSuccessors({copy});
+                        }
                         inlineeRes = popc;
                     }
 
@@ -435,7 +451,6 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
             }
         });
 
-    BBTransform::removeDeadBlocks(code, dead);
     return anyChange;
     }
 

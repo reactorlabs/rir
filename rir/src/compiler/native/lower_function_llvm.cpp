@@ -369,6 +369,10 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
         }
     } else if (val->asRValue()) {
         res = constant(val->asRValue(), needed);
+    } else if (val == OpaqueTrue::instance()) {
+        static int one = 1;
+        // Something that is always true, but llvm does not know about
+        res = builder.CreateLoad(convertToPointer(&one, t::IntPtr));
     } else if (auto ld = LdConst::Cast(val)) {
         res = constant(ld->c(), needed);
     } else {
