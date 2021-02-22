@@ -239,6 +239,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                 bool needsEnvPatching = inlineeCls->closureEnv() != staticEnv;
 
                 bool failedToInline = false;
+                bool hasNonLocalReturn = false;
                 Visitor::run(copy, [&](BB* bb) {
                     auto ip = bb->begin();
                     while (!failedToInline && ip != bb->end()) {
@@ -251,6 +252,9 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 failedToInline = true;
                                 return;
                             }
+
+                            if (NonLocalReturn::Cast(i))
+                                hasNonLocalReturn = true;
 
                             // When inlining a frameState we need to chain it
                             // with the frameStates after the call to the
@@ -394,8 +398,9 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                     if (allowInline == SafeToInline::NeedsContext) {
                         Value* op = nullptr;
-                        auto prologue = BBTransform::split(
-                            cls->nextBBId++, copy, copy->begin(), cls);
+                        auto prologue = copy;
+                        copy = BBTransform::split(cls->nextBBId++, copy,
+                                                  copy->begin(), cls);
                         assert(prologue->isEmpty());
                         if (auto call = Call::Cast(theCall)) {
                             op = call->cls();
@@ -421,7 +426,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                         split->insert(split->begin() + 1, popc);
                         popc->updateTypeAndEffects();
 
-                        if (noNormalReturn) {
+                        if (noNormalReturn || hasNonLocalReturn) {
                             // No normal return, this means that pop-context
                             // looks unreachable, even though it is reachable
                             // through non-local returns.
