@@ -6,6 +6,7 @@
 #include "compiler/analysis/cfg.h"
 #include "compiler/analysis/query.h"
 #include "compiler/analysis/verifier.h"
+#include "compiler/opt/pass_definitions.h"
 #include "compiler/pir/builder.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/arg_match.h"
@@ -1375,7 +1376,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             }
             inner << (pos - srcCode->code());
 
-            auto mk = insert(new MkFunCls(nullptr, dt, insert.env));
+            auto mk = insert(new MkFunCls(nullptr, formals, dt, insert.env));
             cur.stack.push(mk);
 
             delayedCompilation[mk] = {dt,      inner.str(),
@@ -1447,6 +1448,38 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     }
     assert(cur.stack.empty());
 
+    Value* res;
+    if (results.size() == 0) {
+        res = Tombstone::unreachable();
+        insert.clearCurrentBB();
+    } else if (results.size() == 1) {
+        res = results.back().second;
+        insert.reenterBB(results.back().first);
+    } else {
+        BB* merge = insert.createBB();
+        insert.enterBB(merge);
+        Phi* phi = insert(new Phi());
+        for (auto r : results) {
+            r.first->setNext(merge);
+            phi->addInput(r.first, r.second);
+        }
+        phi->updateTypeAndEffects();
+        res = phi;
+    }
+
+    // The return is only added for the early opt passes to update the result
+    // value. Now we need to remove it again, because we don't know if it is
+    // needed (e.g. when we compile an inline promise it is not).
+    if (insert.getCurrentBB())
+        insert(new Return(res));
+
+    static EarlyConstantfold ecf;
+    if (!inPromise())
+        ecf.apply(compiler, cls, insert.code, log.out());
+
+    if (insert.getCurrentBB())
+        insert.getCurrentBB()->eraseLast();
+
     Visitor::run(insert.code->entry, [&](Instruction* i) {
         Value* callee = nullptr;
         Context asmpt;
@@ -1488,25 +1521,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     }
     if (failedToCompileInnerFun)
         return nullptr;
-
-    Value* res;
-    if (results.size() == 0) {
-        insert.clearCurrentBB();
-        return Tombstone::unreachable();
-    } else if (results.size() == 1) {
-        res = results.back().second;
-        insert.reenterBB(results.back().first);
-    } else {
-        BB* merge = insert.createBB();
-        insert.enterBB(merge);
-        Phi* phi = insert(new Phi());
-        for (auto r : results) {
-            r.first->setNext(merge);
-            phi->addInput(r.first, r.second);
-        }
-        phi->updateTypeAndEffects();
-        res = phi;
-    }
 
     results.clear();
 

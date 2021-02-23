@@ -15,7 +15,7 @@ class Closure;
     Pass {                                                                     \
       public:                                                                  \
         name() : Pass(#name){};                                                \
-        bool apply(Compiler&, ClosureVersion* function, Code* code,            \
+        bool apply(Compiler& cmp, ClosureVersion* function, Code* code,        \
                    LogStream& log) const final override;                       \
         bool runOnPromises() const final override {                            \
             return __runOnPromises__;                                          \
@@ -89,6 +89,9 @@ class PASS(ElideEnvSpec, false);
  * Constantfolding and dead branch removal.
  */
 class PASS(Constantfold, true);
+
+// Constantfolding to be used in rir2pi
+class PASS(EarlyConstantfold, true);
 
 /*
  * Generic instruction and controlflow cleanup pass.

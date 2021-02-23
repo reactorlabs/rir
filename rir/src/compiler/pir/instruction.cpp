@@ -9,6 +9,7 @@
 #include "R/Symbols.h"
 #include "api.h"
 #include "compiler/analysis/cfg.h"
+#include "runtime/DispatchTable.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
 
@@ -908,12 +909,14 @@ void ScheduledDeopt::printArgs(std::ostream& out, bool tty) const {
     }
 }
 
-MkFunCls::MkFunCls(Closure* cls, DispatchTable* originalBody, Value* lexicalEnv)
+MkFunCls::MkFunCls(Closure* cls, SEXP formals, DispatchTable* originalBody,
+                   Value* lexicalEnv)
     : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), cls(cls),
-      originalBody(originalBody) {}
+      originalBody(originalBody), formals(formals) {}
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) const {
-    out << *cls;
+    if (cls)
+        out << *cls;
     Instruction::printArgs(out, tty);
 }
 
@@ -977,6 +980,8 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
 
 Context CallInstruction::inferAvailableAssumptions() const {
     auto callee = tryGetCls();
+    rir::Function* localFun = nullptr;
+    SEXP formals = nullptr;
 
     Context given;
     // If we know the callee, we can verify arg order and statically matching
@@ -988,6 +993,17 @@ Context CallInstruction::inferAvailableAssumptions() const {
             given.add(Assumption::NotTooManyArguments);
             auto missing = callee->nargs() - nCallArgs();
             given.numMissing(missing);
+        }
+    } else {
+        if (auto mk = tryGetLocalCls()) {
+            localFun = mk->originalBody->baseline();
+            formals = mk->formals;
+            given.add(Assumption::StaticallyArgmatched);
+            if (localFun->nargs() >= nCallArgs()) {
+                given.add(Assumption::NotTooManyArguments);
+                auto missing = localFun->nargs() - nCallArgs();
+                given.numMissing(missing);
+            }
         }
     }
 
@@ -1023,7 +1039,25 @@ Context CallInstruction::inferAvailableAssumptions() const {
                     given.remove(Assumption::CorrectOrderOfArguments);
                 }
             }
+        } else if (localFun && formals) {
+            if (localFun->signature().numArguments > i) {
+                if (TAG(formals) == R_DotsSymbol) {
+                    // If the callee expects `...` then we can only statically
+                    // statisfy that with an explicit (unexpanded) dots list!
+                    if (!arg->type.isA(RType::dots)) {
+                        given.remove(Assumption::CorrectOrderOfArguments);
+                        given.remove(Assumption::StaticallyArgmatched);
+                    }
+                } else if (TAG(formals) != R_NilValue && TAG(formals) != name) {
+                    // we could be more clever here, but for now we just assume
+                    // if any of the formal names does not match the passed name
+                    // then it's not in the correct order.
+                    given.remove(Assumption::CorrectOrderOfArguments);
+                }
+                formals = CDR(formals);
+            }
         }
+
         ++i;
     });
 

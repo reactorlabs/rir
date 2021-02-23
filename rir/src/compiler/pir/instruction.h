@@ -1192,7 +1192,9 @@ class FLIE(MkFunCls, 1, Effects::None()) {
   public:
     Closure* cls;
     DispatchTable* originalBody;
-    MkFunCls(Closure* cls, DispatchTable* originalBody, Value* lexicalEnv);
+    SEXP formals;
+    MkFunCls(Closure* cls, SEXP formals, DispatchTable* originalBody,
+             Value* lexicalEnv);
     void printArgs(std::ostream&, bool tty) const override;
 
     Value* lexicalEnv() const { return env(); }
@@ -2033,6 +2035,7 @@ class CallInstruction {
     virtual const InstrArg& callArg(size_t pos) const = 0;
     virtual InstrArg& callArg(size_t pos) = 0;
     virtual Closure* tryGetCls() const { return nullptr; }
+    virtual MkFunCls* tryGetLocalCls() const { return nullptr; }
     virtual Context inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
     virtual bool isReordered() const { return false; }
@@ -2053,6 +2056,9 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
 
     Value* cls() const { return arg(1).val(); }
 
+    MkFunCls* tryGetLocalCls() const override final {
+        return MkFunCls::Cast(cls()->followCastsAndForce());
+    }
     Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
             return mk->cls;
@@ -2099,6 +2105,9 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
 
     Value* cls() const { return arg(1).val(); }
 
+    MkFunCls* tryGetLocalCls() const override final {
+        return MkFunCls::Cast(cls()->followCastsAndForce());
+    }
     Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
             return mk->cls;
