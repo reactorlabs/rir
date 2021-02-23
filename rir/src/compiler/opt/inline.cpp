@@ -424,6 +424,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                         auto popc = new PopContext(inlineeRes, ctx);
                         split->insert(split->begin() + 1, popc);
+                        popc->type = popc->type & theCall->type;
                         popc->updateTypeAndEffects();
 
                         if (noNormalReturn || hasNonLocalReturn) {

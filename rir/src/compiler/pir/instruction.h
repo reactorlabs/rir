@@ -2423,15 +2423,11 @@ class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
 class FLI(PopContext, 2, Effect::ChangesContexts) {
   public:
     PopContext(Value* res, PushContext* push)
-        : FixedLenInstruction(PirType::any(),
-                              {{PirType::any(), NativeType::context}},
+        : FixedLenInstruction(PirType::val(),
+                              {{PirType::val(), NativeType::context}},
                               {{res, push}}) {}
     PushContext* push() const { return PushContext::Cast(arg<1>().val()); }
     Value* result() const { return arg<0>().val(); }
-
-    PirType inferType(const GetType& getType) const override final {
-        return getType(result());
-    }
 };
 
 class FLIE(LdDots, 1, Effect::ReadsEnv) {
