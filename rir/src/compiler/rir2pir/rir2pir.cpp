@@ -1474,11 +1474,21 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         insert(new Return(res));
 
     static EarlyConstantfold ecf;
-    if (!inPromise())
+    static ScopeResolution sr;
+    if (!inPromise()) {
+        // EarlyConstantfold is used to expand specials such as forceAndCall
+        // which can be expressed in PIR.
         ecf.apply(compiler, cls, insert.code, log.out());
+        // This early pass of scope resolution helps to find local call targets
+        // and thus leads to better assumptions in the delayed compilation
+        // below.
+        sr.apply(compiler, cls, insert.code, log.out());
+    }
 
-    if (insert.getCurrentBB())
-        insert.getCurrentBB()->eraseLast();
+    if (auto last = insert.getCurrentBB()) {
+        res = Return::Cast(last->last())->arg(0).val();
+        last->eraseLast();
+    }
 
     Visitor::run(insert.code->entry, [&](Instruction* i) {
         Value* callee = nullptr;
@@ -1509,7 +1519,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     for (auto& delayed : delayedCompilation) {
         auto d = delayed.second;
         compiler.compileFunction(
-            d.dt, d.name, d.formals, d.srcRef, d.context,
+            d.dt, d.name, d.formals, d.srcRef,
+            d.context | Compiler::minimalContext,
             [&](ClosureVersion* innerF) {
                 delayed.first->cls = innerF->owner();
             },
