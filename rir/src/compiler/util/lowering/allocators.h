@@ -275,6 +275,7 @@ class SSAAllocator {
                             SlotNumber slot = allocation.at(ia);
                                 // Make sure the argument slot is initialized
                                 if (reg.count(slot) == 0) {
+                                    code->printCode(std::cout, true, false);
                                     std::cerr << "REG alloc fail: ";
                                     i->printRef(std::cerr);
                                     std::cerr << " is reading its argument ";
