@@ -964,10 +964,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     LazyArglistOnStack lazyPromargs(call.suppliedArgs, call.stackArgs,
                                     call.ast);
 
-    if (fun->flags.contains(Function::Annotated)) {
-        // Force arguments and depromise
-        // only stack??? ****************
-        // assert(false && "before deprom!");
+    // if (fun->flags.contains(Function::Annotated)) {
+    if (table->baseline()->flags.contains(Function::Annotated)) {
+        //     // Force arguments and depromise
         call.depromiseArgs();
     }
 

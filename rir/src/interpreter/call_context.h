@@ -73,8 +73,6 @@ struct CallContext {
 
     void setStackArg(SEXP what, unsigned i) const {
         assert(stackArgs && i < passedArgs);
-        //*(stackArgs + i) = what;
-        stackArgs->u.sxpval = what;
         ostack_at_cell(stackArgs + i) = what;
     }
 
@@ -96,16 +94,8 @@ struct CallContext {
         for (unsigned i = 0; i < passedArgs; i++) {
             SEXP arg = stackArg(i);
             if (TYPEOF(arg) == PROMSXP) {
-                // assert(false &&  "aaaa");
                 auto v = forcePromise(arg);
                 setStackArg(v, i);
-
-                // SEXP argM = stackArg(i);
-                // auto p = INTEGER(argM);
-                // std::cerr << *p;
-
-                // PROM LEAK?
-                // ostack_set(stackArgs, i, nullptr);
             }
         }
     }
