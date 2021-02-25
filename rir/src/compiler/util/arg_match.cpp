@@ -1,301 +1,196 @@
 #include "arg_match.h"
-#include "../pir/pir_impl.h"
-#include "R/Protect.h"
-#include "utils/Pool.h"
+#include "R/RList.h"
+#include "compiler/pir/pir_impl.h"
 
 namespace rir {
 namespace pir {
 
-#define ARGUSED(x) LEVELS(x)
-#define SET_ARGUSED(x, v) SETLEVELS(x, v)
-#define streql(s, t) (!strcmp((s), (t)))
-
 // cppcheck-suppress constParameter
-bool ArgumentMatcher::reorder(Builder& insert, SEXP formals,
-                              const std::vector<BC::PoolIdx>& actualNames,
-                              std::vector<Value*>& givenArgs,
+bool ArgumentMatcher::reorder(MaybeDots maybeDots, SEXP formals,
+                              GivenArglistAccessor given,
+                              std::vector<Value*>& matchedArgs,
                               ArglistOrder::CallArglistOrder& argOrderOrig) {
-    // Build up the list of supplied args. We use the names from actualNames
-    // and integers to represent the index into givenArgs.
-    SEXP supplied = R_NilValue;
-    for (int pos = givenArgs.size() - 1; pos >= 0; pos--) {
-        PROTECT(supplied);
-        SEXP idx = Rf_allocVector(INTSXP, 1);
-        INTEGER(idx)[0] = pos;
-        supplied = CONS_NR(idx, supplied);
-        if (actualNames.size() > (unsigned)pos)
-            SET_TAG(supplied, Pool::get(actualNames[pos]));
-        UNPROTECT(1);
+    // Build up the list of supplied args. We store the argument, its name, its
+    // index and a used flag.
+    std::vector<Arg> supplied;
+    for (size_t i = 0; i < given.size(); i++) {
+        supplied.push_back({given.getName(i), given.getArg(i), i, 0});
     }
 
-    // The following code is mostly a copy of Rf_machArgs from main/match.c,
-    // where errors have been replaced by 'return false'. Also our Protect
-    // wrapper is used and the unused argument list is not built.
-    Rboolean seendots;
-    size_t arg_i = 0;
-    SEXP f, a, b, actuals;
+    // The following code is a rewrite of Rf_machArgs from main/match.c,
+    // where errors have been replaced by 'return false'.
 
-    actuals = R_NilValue;
-    for (f = formals; f != R_NilValue; f = CDR(f), arg_i++) {
-        /* CONS_NR is used since argument lists created here are only
-           used internally and so should not increment reference
-           counts */
-        actuals = CONS_NR(R_MissingArg, actuals);
-        SET_MISSING(actuals, 1);
-    }
-    /* We use fargused instead of ARGUSED/SET_ARGUSED on elements of
-       formals to avoid modification of the formals SEXPs.  A gc can
-       cause matchArgs to be called from finalizer code, resulting in
-       another matchArgs call with the same formals.  In R-2.10.x, this
-       corrupted the ARGUSED data of the formals and resulted in an
-       incorrect "formal argument 'foo' matched by multiple actual
-       arguments" error.
-     */
-    int fargused[arg_i ? arg_i : 1]; // avoid undefined behaviour
-    memset(fargused, 0, sizeof(fargused));
+    RList formals_(formals);
+    std::vector<ActualArg> actuals(formals_.length());
+    std::vector<int8_t> fargused(actuals.size(), 0);
 
-    for (b = supplied; b != R_NilValue; b = CDR(b))
-        SET_ARGUSED(b, 0);
+    // First pass: exact matches by tag
+    // Grab matched arguments and check for multiple exact matches.
 
-    {
-        Protect p(actuals);
-        unsigned i;
-
-        /* First pass: exact matches by tag */
-        /* Grab matched arguments and check */
-        /* for multiple exact matches. */
-
-        f = formals;
-        a = actuals;
-        arg_i = 0;
-        while (f != R_NilValue) {
-            SEXP ftag = TAG(f);
-            const char* ftag_name = CHAR(PRINTNAME(ftag));
-            if (ftag != R_DotsSymbol && ftag != R_NilValue) {
-                for (b = supplied, i = 1; b != R_NilValue; b = CDR(b), i++) {
-                    SEXP btag = TAG(b);
-                    if (btag != R_NilValue) {
-                        const char* btag_name = CHAR(PRINTNAME(btag));
-                        if (streql(ftag_name, btag_name)) {
-                            if (fargused[arg_i] == 2) {
-                                return false;
-                            }
-                            if (ARGUSED(b) == 2) {
-                                return false;
-                            }
-                            SETCAR(a, CAR(b));
-                            if (CAR(b) != R_MissingArg)
-                                SET_MISSING(a, 0);
-                            SET_ARGUSED(b, 2);
-                            fargused[arg_i] = 2;
-                        }
-                    }
-                }
-            }
-            f = CDR(f);
-            a = CDR(a);
-            arg_i++;
-        }
-
-        /* Second pass: partial matches based on tags */
-        /* An exact match is required after first ... */
-        /* The location of the first ... is saved in "dots" */
-
-        SEXP dots = R_NilValue;
-        seendots = FALSE;
-        f = formals;
-        a = actuals;
-        arg_i = 0;
-        while (f != R_NilValue) {
-            if (fargused[arg_i] == 0) {
-                if (TAG(f) == R_DotsSymbol && !seendots) {
-                    /* Record where ... value goes */
-                    dots = a;
-                    seendots = TRUE;
-                } else {
-                    for (b = supplied, i = 1; b != R_NilValue;
-                         b = CDR(b), i++) {
-                        if (ARGUSED(b) != 2 && TAG(b) != R_NilValue &&
-                            pmatch(TAG(f), TAG(b), seendots)) {
+    size_t fai = 0;
+    for (auto f = formals_.begin(); f != RList::end(); ++f, ++fai) {
+        if (f.hasTag() && f.tag() != R_DotsSymbol) {
+            auto ftag = CHAR(PRINTNAME(f.tag()));
+            for (auto& s : supplied) {
+                if (s.name != R_NilValue) {
+                    auto stag = CHAR(PRINTNAME(s.name));
+                    if (!strcmp(ftag, stag)) {
+                        if (fargused[fai] == 2 || s.used == 2)
                             return false;
-                        }
+                        actuals[fai] = ActualArg(s);
+                        fargused[fai] = s.used = 2;
                     }
                 }
             }
-            f = CDR(f);
-            a = CDR(a);
-            arg_i++;
         }
+    }
 
-        /* Third pass: matches based on order */
-        /* All args specified in tag=value form */
-        /* have now been matched.  If we find ... */
-        /* we gobble up all the remaining args. */
-        /* Otherwise we bind untagged values in */
-        /* order to any unmatched formals. */
+    // Second pass: partial matches based on tags
+    // An exact match is required after first ...
+    // The location of the first ... is saved in "dotsi"
 
-        f = formals;
-        a = actuals;
-        b = supplied;
-        seendots = FALSE;
-
-        while (f != R_NilValue && b != R_NilValue && !seendots) {
-            if (TAG(f) == R_DotsSymbol) {
-                /* Skip ... matching until all tags done */
-                seendots = TRUE;
-                f = CDR(f);
-                a = CDR(a);
-            } else if (CAR(a) != R_MissingArg) {
-                /* Already matched by tag */
-                /* skip to next formal */
-                f = CDR(f);
-                a = CDR(a);
-            } else if (ARGUSED(b) || TAG(b) != R_NilValue) {
-                /* This value used or tagged , skip to next value */
-                /* The second test above is needed because we */
-                /* shouldn't consider tagged values for positional */
-                /* matches. */
-                /* The formal being considered remains the same */
-                b = CDR(b);
+    size_t dotsi = 0;
+    bool havedots = false;
+    fai = 0;
+    for (auto f = formals_.begin(); f != RList::end(); ++f, ++fai) {
+        if (fargused[fai] == 0) {
+            if (f.tag() == R_DotsSymbol && !havedots) {
+                // Record where ... value goes
+                dotsi = fai;
+                havedots = true;
             } else {
-                /* We have a positional match */
-                SETCAR(a, CAR(b));
-                if (CAR(b) != R_MissingArg)
-                    SET_MISSING(a, 0);
-                SET_ARGUSED(b, 1);
-                b = CDR(b);
-                f = CDR(f);
-                a = CDR(a);
+                for (auto& s : supplied) {
+                    if (s.used != 2 && s.name != R_NilValue &&
+                        pmatch(f.tag(), s.name, havedots ? TRUE : FALSE))
+                        return false;
+                }
             }
         }
+    }
 
-        if (dots != R_NilValue) {
-            /* Gobble up all unused actuals */
-            SET_MISSING(dots, 0);
-            i = 0;
-            for (a = supplied; a != R_NilValue; a = CDR(a))
-                if (!ARGUSED(a))
-                    i++;
+    // Third pass: matches based on order
+    // All args specified in tag=value form have now been matched. If we find
+    // ... we gobble up all the remaining args. Otherwise we bind untagged
+    // values in order to any unmatched formals.
 
-            if (i) {
-                a = allocList(i);
-                SET_TYPEOF(a, DOTSXP);
-                f = a;
-                for (b = supplied; b != R_NilValue; b = CDR(b))
-                    if (!ARGUSED(b)) {
-                        SETCAR(f, CAR(b));
-                        SET_TAG(f, TAG(b));
-                        f = CDR(f);
-                    }
-                SETCAR(dots, a);
-            }
+    fai = 0;
+    auto f = formals_.begin();
+    auto s = supplied.begin();
+    while (f != RList::end() && s != supplied.end()) {
+        if (f.tag() == R_DotsSymbol) {
+            // Skip ... matching until all tags done
+            break;
+        } else if (actuals[fai].kind != ActualArg::Missing) {
+            // Already matched by tag, skip to next formal
+            ++f;
+            ++fai;
+        } else if (s->used || s->name != R_NilValue) {
+            // This value used or tagged, skip to next value
+            // The second test above is needed because we shouldn't consider
+            // tagged values for positional matches.
+            // The formal being considered remains the same
+            ++s;
         } else {
-            /* Check that all arguments are used */
-            for (b = supplied; b != R_NilValue; b = CDR(b))
-                if (!ARGUSED(b))
-                    return false;
+            // We have a positional match
+            actuals[fai] = ActualArg(*s);
+            s->used = 1;
+            ++s;
+            ++f;
+            ++fai;
         }
     }
 
-    // End of copy/paste snippet. Collecting results.
-
-    RList result(actuals);
-    for (auto r : result) {
-        auto expected =
-            TYPEOF(r) == DOTSXP || r == R_MissingArg || TYPEOF(r) == INTSXP;
-        assert(expected && "Static argument matching bug, this "
-                           "actual value was not put there by us");
-        if (!expected)
-            return false;
-    }
-
-    // passing ... is impossible to statically match, we first need to figure
-    // out what's in the ... list.
-    for (auto r : result) {
-        if (TYPEOF(r) == INTSXP) {
-            int idx = INTEGER(r)[0];
-            if (ExpandDots::Cast(givenArgs[idx]))
+    std::vector<ActualArg> dots;
+    if (havedots) {
+        // Gobble up all unused actuals
+        for (auto& s : supplied)
+            if (!s.used)
+                dots.push_back(ActualArg(s));
+        if (!dots.empty())
+            actuals[dotsi] = ActualArg::Dots();
+    } else {
+        // Check that all arguments are used
+        for (auto& s : supplied)
+            if (!s.used)
                 return false;
-        }
-        if (TYPEOF(r) == DOTSXP) {
-            auto dal = RList(r);
-            for (auto da = dal.begin(); da != dal.end(); ++da) {
-                int idx = INTEGER(*da)[0];
-                if (ExpandDots::Cast(givenArgs[idx]))
+    }
+
+    // Passing ... is impossible to statically match, we first need to figure
+    // out what's in the ... list.
+    for (auto a : actuals) {
+        if (a.kind == ActualArg::Index) {
+            if (ExpandDots::Cast(a.arg.value))
+                return false;
+        } else if (a.kind == ActualArg::Dotslist) {
+            for (auto d : dots) {
+                if (ExpandDots::Cast(d.arg.value))
                     return false;
             }
         }
     }
 
-    std::vector<Value*> copy(givenArgs);
-    argOrderOrig.resize(givenArgs.size());
-    givenArgs.resize(result.length());
+    matchedArgs.clear();
+    argOrderOrig.resize(given.size());
     size_t pos = 0;
-    size_t reorderPos = 0;
-    const static bool DEBUG = false;
+    f = formals_.begin();
+    constexpr bool DEBUG = false;
     if (DEBUG)
         std::cout << "MATCHED : ";
-    f = formals;
-
-    for (auto r : result) {
+    for (auto a : actuals) {
         if (DEBUG)
-            std::cout << CHAR(PRINTNAME(TAG(f))) << "=";
-        if (TYPEOF(r) == INTSXP) {
-            int idx = INTEGER(r)[0];
-            argOrderOrig[idx] = ArglistOrder::encodeArg(
-                reorderPos++, actualNames.size() > (unsigned)idx &&
-                                  Pool::get(actualNames[idx]) != R_NilValue);
-            givenArgs[pos++] = copy[idx];
+            std::cout << CHAR(PRINTNAME(f.tag())) << "=";
+        if (a.kind == ActualArg::Index) {
+            argOrderOrig[a.arg.index] =
+                ArglistOrder::encodeArg(pos++, a.arg.name != R_NilValue);
+            matchedArgs.push_back(a.arg.value);
             if (DEBUG)
-                copy[idx]->printRef(std::cout);
-        } else if (r == R_MissingArg) {
-            reorderPos++;
-            givenArgs[pos++] = MissingArg::instance();
+                a.arg.value->printRef(std::cout);
+        } else if (a.kind == ActualArg::Missing) {
+            pos++;
+            matchedArgs.push_back(MissingArg::instance());
             if (DEBUG)
                 std::cout << "miss";
-        } else if (TYPEOF(r) == DOTSXP) {
+        } else if (a.kind == ActualArg::Dotslist) {
             // We pass individual arguments, but the callee receives them as
             // `...` list. Therefore we gobble all arguments up into a dotslist
             // and pass them as a single arg.
-            auto dal = RList(r);
             auto conv = new DotsList;
             if (DEBUG)
                 std::cout << "(";
-            for (auto da = dal.begin(); da != dal.end(); ++da) {
-                assert(TYPEOF(*da) == INTSXP);
-                int idx = INTEGER(*da)[0];
-                conv->addInput(da.tag(), copy[idx]);
-                argOrderOrig[idx] = ArglistOrder::encodeArg(
-                    reorderPos++, da.tag() != R_NilValue);
+            for (auto d = dots.begin(); d != dots.end(); ++d) {
+                assert(d->kind == ActualArg::Index);
+                argOrderOrig[d->arg.index] =
+                    ArglistOrder::encodeArg(pos++, d->arg.name != R_NilValue);
+                conv->addInput(d->arg.name, d->arg.value);
                 if (DEBUG) {
-                    if (da.tag() != R_NilValue)
-                        std::cout << CHAR(PRINTNAME(da.tag())) << "=";
-                    copy[idx]->printRef(std::cout);
-                    if (da + 1 != dal.end())
+                    if (d->arg.name != R_NilValue)
+                        std::cout << CHAR(PRINTNAME(d->arg.name)) << "=";
+                    d->arg.value->printRef(std::cout);
+                    if (d + 1 != dots.end())
                         std::cout << ", ";
                 }
             }
             if (DEBUG)
                 std::cout << ")";
-            givenArgs[pos++] = conv;
-            insert(conv);
+            matchedArgs.push_back(conv);
+            maybeDots(conv);
         } else {
             assert(false);
         }
-        f = CDR(f);
-        if (DEBUG && f != R_NilValue)
+        ++f;
+        if (DEBUG && f != RList::end())
             std::cout << ", ";
     }
     if (DEBUG) {
         std::cout << " { ";
-        for (auto arg : argOrderOrig)
-            std::cout << ArglistOrder::decodeArg(arg)
-                      << (ArglistOrder::isArgNamed(arg) ? "n " : " ");
+        for (auto a : argOrderOrig)
+            std::cout << ArglistOrder::decodeArg(a)
+                      << (ArglistOrder::isArgNamed(a) ? "n " : " ");
         std::cout << "}\n";
     }
 
-    while (!givenArgs.empty() && givenArgs.back() == MissingArg::instance())
-        givenArgs.pop_back();
+    while (!matchedArgs.empty() && matchedArgs.back() == MissingArg::instance())
+        matchedArgs.pop_back();
 
     return true;
 }

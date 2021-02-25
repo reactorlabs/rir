@@ -639,14 +639,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ast = bc.immediate.callFixedArgs.ast;
         auto emitGenericCall = [&]() {
             popn(toPop);
+            Value* fs = inlining()
+                           ? (Value*)Tombstone::framestate()
+                           : (Value*)insert.registerFrameState(
+                                  srcCode, nextPos, stack, inPromise());
             if (namedArguments) {
                 push(insert(new NamedCall(env, callee, args, callArgumentNames,
-                                          bc.immediate.callFixedArgs.ast)));
+                                          fs, bc.immediate.callFixedArgs.ast)));
             } else {
-                Value* fs = inlining()
-                                ? (Value*)Tombstone::framestate()
-                                : (Value*)insert.registerFrameState(
-                                      srcCode, nextPos, stack, inPromise());
                 push(insert(new Call(env, callee, args, fs,
                                      bc.immediate.callFixedArgs.ast)));
             }
@@ -713,15 +713,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                 bc.bc != Opcode::call_dots_;
 
             if (!correctOrder) {
-                if (namedArguments) {
-                    correctOrder = ArgumentMatcher::reorder(
-                        insert, FORMALS(ti.monomorphic), callArgumentNames,
-                        matchedArgs, argOrderOrig);
-                } else {
-                    correctOrder = ArgumentMatcher::reorder(
-                        insert, FORMALS(ti.monomorphic), {}, matchedArgs,
-                        argOrderOrig);
-                }
+                correctOrder = ArgumentMatcher::reorder(
+                    [&](DotsList* d) { insert(d); }, FORMALS(ti.monomorphic),
+                    {[&]() { return nargs; },
+                     [&](size_t i) {
+                         SLOWASSERT(i < args.size());
+                         return args[i];
+                     },
+                     [&](size_t i) {
+                         SLOWASSERT(!namedArguments ||
+                                    i < callArgumentNames.size());
+                         return namedArguments ? Pool::get(callArgumentNames[i])
+                                               : R_NilValue;
+                     }},
+                    matchedArgs, argOrderOrig);
             }
 
             if (!correctOrder || needed < matchedArgs.size()) {
