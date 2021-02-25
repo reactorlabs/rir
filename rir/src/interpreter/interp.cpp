@@ -966,7 +966,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     // if (fun->flags.contains(Function::Annotated)) {
     if (table->baseline()->flags.contains(Function::Annotated)) {
-        //     // Force arguments and depromise
+        // Force arguments and depromise
         call.depromiseArgs();
     }
 
