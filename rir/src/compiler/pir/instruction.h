@@ -1189,12 +1189,17 @@ class FLIE(MkCls, 4, Effects::None()) {
 };
 
 class FLIE(MkFunCls, 1, Effects::None()) {
-  public:
+  private:
     Closure* cls;
+
+  public:
+    Closure* tryGetCls() { return cls; }
+    void setCls(Closure* c) { cls = c; }
     DispatchTable* originalBody;
     SEXP formals;
-    MkFunCls(Closure* cls, SEXP formals, DispatchTable* originalBody,
-             Value* lexicalEnv);
+    SEXP srcRef;
+    MkFunCls(Closure* cls, SEXP formals, SEXP srcRef,
+             DispatchTable* originalBody, Value* lexicalEnv);
     void printArgs(std::ostream&, bool tty) const override;
 
     Value* lexicalEnv() const { return env(); }
@@ -2035,7 +2040,7 @@ class CallInstruction {
     virtual const InstrArg& callArg(size_t pos) const = 0;
     virtual InstrArg& callArg(size_t pos) = 0;
     virtual Closure* tryGetCls() const { return nullptr; }
-    virtual MkFunCls* tryGetLocalCls() const { return nullptr; }
+    virtual Value* tryGetClsArg() const { return nullptr; }
     virtual Context inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
     virtual bool isReordered() const { return false; }
@@ -2056,12 +2061,12 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
 
     Value* cls() const { return arg(1).val(); }
 
-    MkFunCls* tryGetLocalCls() const override final {
-        return MkFunCls::Cast(cls()->followCastsAndForce());
+    Value* tryGetClsArg() const override final {
+        return cls()->followCastsAndForce();
     }
     Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
-            return mk->cls;
+            return mk->tryGetCls();
         return nullptr;
     }
 
@@ -2105,12 +2110,12 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
 
     Value* cls() const { return arg(1).val(); }
 
-    MkFunCls* tryGetLocalCls() const override final {
-        return MkFunCls::Cast(cls()->followCastsAndForce());
+    Value* tryGetClsArg() const override final {
+        return cls()->followCastsAndForce();
     }
     Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
-            return mk->cls;
+            return mk->tryGetCls();
         return nullptr;
     }
 

@@ -3791,9 +3791,8 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::MkFunCls: {
                 auto mkFunction = MkFunCls::Cast(i);
-                auto closure = mkFunction->cls;
-                auto srcRef = constant(closure->srcRef(), t::SEXP);
-                auto formals = constant(closure->formals().original(), t::SEXP);
+                auto srcRef = constant(mkFunction->srcRef, t::SEXP);
+                auto formals = constant(mkFunction->formals, t::SEXP);
                 auto body =
                     constant(mkFunction->originalBody->container(), t::SEXP);
                 assert(DispatchTable::check(

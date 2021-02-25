@@ -45,7 +45,7 @@ static long isStaticForceAndCall(Call* call) {
     return -1;
 }
 
-bool EarlyConstantfold::apply(ClosureVersion* cls, Code* code,
+bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
                               LogStream&) const {
     bool anyChange = false;
 

@@ -909,10 +909,10 @@ void ScheduledDeopt::printArgs(std::ostream& out, bool tty) const {
     }
 }
 
-MkFunCls::MkFunCls(Closure* cls, SEXP formals, DispatchTable* originalBody,
-                   Value* lexicalEnv)
+MkFunCls::MkFunCls(Closure* cls, SEXP formals, SEXP srcRef,
+                   DispatchTable* originalBody, Value* lexicalEnv)
     : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), cls(cls),
-      originalBody(originalBody), formals(formals) {}
+      originalBody(originalBody), formals(formals), srcRef(srcRef) {}
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) const {
     if (cls)
@@ -995,9 +995,20 @@ Context CallInstruction::inferAvailableAssumptions() const {
             given.numMissing(missing);
         }
     } else {
-        if (auto mk = tryGetLocalCls()) {
-            localFun = mk->originalBody->baseline();
-            formals = mk->formals;
+        if (auto clsArg = tryGetClsArg()) {
+            if (auto mk = MkFunCls::Cast(clsArg)) {
+                localFun = mk->originalBody->baseline();
+                formals = mk->formals;
+            } else if (auto ld = LdConst::Cast(clsArg)) {
+                if (TYPEOF(ld->c()) == CLOSXP) {
+                    if (auto dt = DispatchTable::check(BODY(ld->c()))) {
+                        localFun = dt->baseline();
+                        formals = FORMALS(ld->c());
+                    }
+                }
+            }
+        }
+        if (localFun) {
             given.add(Assumption::StaticallyArgmatched);
             if (localFun->nargs() >= nCallArgs()) {
                 given.add(Assumption::NotTooManyArguments);

@@ -378,9 +378,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 [&](Value* v) { anyDots = anyDots || ExpandDots::Cast(v); });
             if (auto mk = MkFunCls::Cast(target))
                 if (!anyDots)
-                    if (mk->cls) { // happens in early scope resolution in
-                                   // rir2pir
-                        if (auto trg = call->tryDispatch(mk->cls))
+                    if (mk->tryGetCls()) {
+                        if (auto trg = call->tryDispatch(mk->tryGetCls()))
                             interProceduralAnalysis(trg, mk->lexicalEnv());
                     }
         } else if (auto call = StaticCall::Cast(i)) {

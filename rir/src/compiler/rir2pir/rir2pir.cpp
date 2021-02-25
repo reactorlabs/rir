@@ -429,6 +429,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::ldfun_: {
+        // Speculative inlining is too important, so let's ensure we have a cp
+        // here.
+        addCheckpoint(srcCode, pos, stack, insert);
         auto ld = insert(new LdFun(bc.immediateConst(), env));
         // Add early checkpoint for efficient speculative inlining. The goal is
         // to be able do move the ldfun into the deoptbranch later.
@@ -782,7 +785,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto delayed = delayedCompilation.find(innerc);
                 if (delayed == delayedCompilation.end())
                     return;
-                delayed->first->cls = f->owner();
+                delayed->first->setCls(f->owner());
                 delayedCompilation.erase(delayed);
             };
 
@@ -1376,7 +1379,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             }
             inner << (pos - srcCode->code());
 
-            auto mk = insert(new MkFunCls(nullptr, formals, dt, insert.env));
+            auto mk =
+                insert(new MkFunCls(nullptr, formals, srcRef, dt, insert.env));
             cur.stack.push(mk);
 
             delayedCompilation[mk] = {dt,      inner.str(),
@@ -1515,24 +1519,17 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         }
     });
 
-    bool failedToCompileInnerFun = false;
     for (auto& delayed : delayedCompilation) {
         auto d = delayed.second;
         compiler.compileFunction(
             d.dt, d.name, d.formals, d.srcRef,
             d.context | Compiler::minimalContext,
             [&](ClosureVersion* innerF) {
-                delayed.first->cls = innerF->owner();
+                delayed.first->setCls(innerF->owner());
             },
-            [&]() {
-                failedToCompileInnerFun = true;
-                log.warn("Aborting. Failed to compile inner function" + name);
-            },
+            [&]() { log.warn("Failed to compile inner function" + name); },
             outerFeedback);
     }
-    if (failedToCompileInnerFun)
-        return nullptr;
-
     results.clear();
 
     return res;
