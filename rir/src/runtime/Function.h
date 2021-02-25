@@ -102,10 +102,12 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     EnumSet<Flag> flags;
 
     void inheritFlags(const Function* other) {
-        static Flag inherited[] = {ForceInline, DisableInline,
+        static Flag inherited[] = {ForceInline,
+                                   DisableInline,
                                    DisableAllSpecialization,
                                    DisableArgumentTypeSpecialization,
-                                   DisableNumArgumentsSpezialization};
+                                   DisableNumArgumentsSpezialization,
+                                   Annotated};
         auto f = other->flags;
         for (auto flag : inherited)
             if (f.contains(flag))

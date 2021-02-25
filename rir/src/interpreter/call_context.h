@@ -94,11 +94,27 @@ struct CallContext {
     }
 
     void depromiseArgs() const {
+
+        // Both stackAergs and listargs should point to the same promises
+        // So forcing twice shouldn't execute the promise twice
+
+        // depromise on stack
         for (unsigned i = 0; i < passedArgs; i++) {
             SEXP arg = stackArg(i);
             if (TYPEOF(arg) == PROMSXP) {
                 auto v = forcePromise(arg);
                 setStackArg(v, i);
+            }
+        }
+
+        // depromise on listArgs (linked list of CONS)
+        if (arglist) {
+            for (SEXP c = arglist; c != R_NilValue; c = CDR(c)) {
+                SEXP each = CAR(c);
+                if (TYPEOF(each) == PROMSXP) {
+                    auto v = forcePromise(each);
+                    CAR(c) = v;
+                }
             }
         }
     }

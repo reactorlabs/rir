@@ -1036,8 +1036,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
 
-    // if (fun->flags.contains(Function::Annotated)) {
-    if (table->baseline()->flags.contains(Function::Annotated)) {
+    if (fun->flags.contains(Function::Annotated)) {
         // Force arguments and depromise
         call.depromiseArgs();
     }

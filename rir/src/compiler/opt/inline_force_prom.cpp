@@ -39,9 +39,8 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto cls = call->tryGetCls();
 
                 if (cls) {
-         
-                    auto functionVersion = cls->rirFunction();
 
+                    auto functionVersion = cls->rirFunction();
                     if (functionVersion->flags.contains(
                             rir::Function::Flag::Annotated)) {
 
@@ -61,7 +60,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 ip = bb->insert(ip, cast) + 1;
                                 ip = bb->insert(ip, forced) + 1;
                                 next = ip + 1;
-                              
+
 
                             }
                         });
