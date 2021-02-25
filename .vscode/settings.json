@@ -1,9 +1,9 @@
 {
   "git.ignoreLimitWarning": true, // custom-r
-  "C_Cpp.formatting": "Disabled",
-  "files.insertFinalNewline": false,
-  "files.trimFinalNewlines": false,
-  "files.trimTrailingWhitespace": false,
+  "C_Cpp.formatting": "clangFormat",
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
   "files.exclude": {
     "**/.git": true,
     "**/.svn": true,

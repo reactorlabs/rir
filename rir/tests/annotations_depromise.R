@@ -1,16 +1,16 @@
-f <- function(a) { 
-    
-    #a is supposed to be an unwrapped value 
+f <- function(a) {
+
+    #a is supposed to be an unwrapped value
     performStep(3)
- 
+
     a  # this makes sure a's evaluation is not causing any further effects.
     # this should be a Force(value) -> value
 
     performStep(4)
     a + 1L
-   
+
 }
-rir.compile(f) 
+rir.compile(f)
 rir.markFunction(f, Annotated=TRUE)
 
 
@@ -19,14 +19,14 @@ performStep <- function(n) {
 }
 
 g <- function() {
-   
+
     steps <<- integer();
     performStep(1)
-   
+
     result <- f({  performStep(2);  6L })
-    stopifnot(result == 7L) 
+    stopifnot(result == 7L)
     stopifnot(steps == c(1, 2, 3,4))
-  
+
 }
 
 g() # call to f will be interpreted

@@ -1,7 +1,7 @@
 #include "type.h"
-#include "../../interpreter/LazyEnvironment.h"
 #include "../parameter.h"
 #include "R/r.h"
+#include "runtime/LazyEnvironment.h"
 
 extern "C" Rboolean(Rf_isObject)(SEXP s);
 
@@ -199,9 +199,10 @@ bool PirType::isInstance(SEXP val) const {
             return maybe(RType::dots);
         if (LazyEnvironment::check(val))
             return PirType(RType::env).isA(*this);
+        if (*this == PirType::test()) {
+            return val == R_TrueValue || val == R_FalseValue;
+        }
         return PirType(val).isA(*this);
-    } else if (*this == NativeType::test) {
-        return val == R_TrueValue || val == R_FalseValue;
     } else {
         std::cerr << "can't check val is instance of " << *this << ", value:\n";
         Rf_PrintValue(val);

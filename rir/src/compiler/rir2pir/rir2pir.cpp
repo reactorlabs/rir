@@ -13,6 +13,7 @@
 #include "insert_cast.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
+#include "runtime/ArglistOrder.h"
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
 
@@ -93,7 +94,8 @@ void State::mergeIn(const State& incom, BB* incomBB) {
         Phi* p = Phi::Cast(stack.at(i));
         assert(p);
         Value* in = incom.stack.at(i);
-        p->addInput(incomBB, in);
+        if (in != Tombstone::unreachable())
+            p->addInput(incomBB, in);
     }
     incomBB->setNext(entryBB);
 }
@@ -182,6 +184,136 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
     return insert(new MkArg(prom, eagerVal, insert.env));
 }
 
+struct TargetInfo {
+    SEXP monomorphic;
+    size_t taken;
+    bool stableEnv;
+};
+static TargetInfo
+checkCallTarget(Value* callee, rir::Code* srcCode,
+                const Rir2Pir::CallTargetFeedback& callTargetFeedback) {
+    TargetInfo result = {nullptr, 0, false};
+    // See if the call feedback suggests a monomorphic target
+    // TODO: Deopts in promises are not supported by the promise inliner. So
+    // currently it does not pay off to put any deopts in there.
+    auto feedbackIt = callTargetFeedback.find(callee);
+    if (feedbackIt != callTargetFeedback.end()) {
+        auto& feedback = std::get<ObservedCallees>(feedbackIt->second);
+        result.taken = feedback.taken;
+        if (result.taken > 1) {
+            if (feedback.numTargets == 1) {
+                result.monomorphic = feedback.getTarget(srcCode, 0);
+                result.stableEnv = true;
+            } else if (feedback.numTargets > 1) {
+                SEXP first = nullptr;
+                bool stableBody = true;
+                bool stableEnv = true;
+                for (size_t i = 0; i < feedback.numTargets; ++i) {
+                    SEXP b = feedback.getTarget(srcCode, i);
+                    if (TYPEOF(b) == CLOSXP) {
+                        if (!first) {
+                            first = b;
+                        } else {
+                            if (BODY(first) != BODY(b))
+                                stableBody = false;
+                            if (CLOENV(first) != CLOENV(b))
+                                stableEnv = false;
+                        }
+                    } else {
+                        stableBody = stableEnv = false;
+                    }
+                }
+                if (stableBody)
+                    result.monomorphic = first;
+                if (stableEnv)
+                    result.stableEnv = true;
+            }
+        }
+    }
+    return result;
+}
+
+static Value* insertLdFunGuard(const TargetInfo& trg, Value* callee,
+                               bool replaceLdfunWithLdVar, Checkpoint* cp,
+                               rir::Code* srcCode, Opcode* pc) {
+    // We use ldvar instead of ldfun for the guard. The reason is that
+    // ldfun can force promises, which is a pain for our optimizer to
+    // deal with. If we use a ldvar here, the actual ldfun will be
+    // delayed into the deopt branch. Note that ldvar is conservative.
+    // If we find a non-function binding with the same name, we will
+    // deopt unneccessarily. In the case of `c` this is guaranteed to
+    // cause problems, since many variables are called "c". Therefore if
+    // we have seen any variable c we keep the ldfun in this case.
+    // TODO: Implement this with a dependency on the binding cell
+    // instead of an eager check.
+    auto bb = cp->nextBB();
+    auto pos = bb->begin();
+
+    auto calleeForGuard = callee;
+    if (replaceLdfunWithLdVar) {
+        auto ldfun = LdFun::Cast(callee);
+        assert(ldfun);
+        auto ldvar = new LdVar(ldfun->varName, ldfun->env());
+        pos = bb->insert(pos, ldvar);
+        pos++;
+        calleeForGuard = ldvar;
+    }
+    auto guardedCallee = calleeForGuard;
+
+    if (!trg.stableEnv) {
+        static SEXP b = nullptr;
+        if (!b) {
+            auto idx = blt("bodyCode");
+            b = Rf_allocSExp(BUILTINSXP);
+            b->u.primsxp.offset = idx;
+            R_PreserveObject(b);
+        }
+
+        // The "bodyCode" builtin will return R_NilValue for promises.
+        // It is therefore safe (ie. conservative with respect to the
+        // guard) to avoid forcing the result by casting it to a value.
+        auto casted = new CastType(calleeForGuard, CastType::Downcast,
+                                   PirType::any(), RType::closure);
+        pos = bb->insert(pos, casted);
+        pos++;
+
+        auto body = new CallSafeBuiltin(b, {casted}, 0);
+        body->effects.reset();
+        pos = bb->insert(pos, body);
+        pos++;
+
+        calleeForGuard = body;
+    }
+
+    auto expected = trg.stableEnv ? new LdConst(trg.monomorphic)
+                                  : new LdConst(BODY(trg.monomorphic));
+    pos = bb->insert(pos, expected) + 1;
+
+    auto t = new Identical(calleeForGuard, expected, PirType::any());
+    pos = bb->insert(pos, t) + 1;
+
+    auto assumption = new Assume(t, cp);
+    assumption->feedbackOrigin.push_back({srcCode, pc});
+    pos = bb->insert(pos, assumption) + 1;
+
+    if (trg.stableEnv)
+        return expected;
+
+    // The guard also ensures that this closure is not a promise thus we
+    // can force for free.
+    if (guardedCallee->type.maybePromiseWrapped()) {
+        auto forced =
+            new Force(guardedCallee, Env::elided(), Tombstone::framestate());
+        forced->effects.reset();
+        forced->effects.set(Effect::DependsOnAssume);
+        bb->insert(pos, forced);
+
+        guardedCallee = forced;
+    }
+
+    return guardedCallee;
+}
+
 bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         rir::Code* srcCode, RirStack& stack, Builder& insert,
                         CallTargetFeedback& callTargetFeedback) {
@@ -218,6 +350,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             push(UnboundValue::instance());
         } else if (c == R_MissingArg) {
             push(MissingArg::instance());
+        } else if (c == R_NilValue) {
+            push(Nil::instance());
+        } else if (c == R_TrueValue ||
+                   (IS_SIMPLE_SCALAR(c, LGLSXP) && *LOGICAL(c) == 1)) {
+            push(True::instance());
+        } else if (c == R_FalseValue ||
+                   (IS_SIMPLE_SCALAR(c, LGLSXP) && *LOGICAL(c) == 0)) {
+            push(False::instance());
         } else if (c == R_DotsSymbol) {
             auto d = insert(new LdDots(insert.env));
             push(insert(new ExpandDots(d)));
@@ -470,182 +610,59 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         }
 
-        size_t taken = -1;
-        SEXP monomorphic = nullptr;
-        SEXP monomorphicPolyenv = nullptr;
         auto callee = at(nargs);
-        // See if the call feedback suggests a monomorphic target
-        // TODO: Deopts in promises are not supported by the promise inliner. So
-        // currently it does not pay off to put any deopts in there.
-        auto feedbackIt = callTargetFeedback.find(callee);
-        if (feedbackIt != callTargetFeedback.end()) {
-            auto& feedback = std::get<ObservedCallees>(feedbackIt->second);
-            taken = feedback.taken;
-            if (taken > 1) {
-                if (feedback.numTargets == 1) {
-                    monomorphic = feedback.getTarget(srcCode, 0);
-                } else if (feedback.numTargets > 1) {
-                    bool success = true;
-                    SEXP e = nullptr;
-                    for (size_t i = 0; i < feedback.numTargets; ++i) {
-                        SEXP b = feedback.getTarget(srcCode, i);
-                        if (TYPEOF(b) == CLOSXP) {
-                            if (!e)
-                                e = b;
-                            else if (BODY(e) != BODY(b))
-                                success = false;
-                        } else {
-                            success = false;
-                        }
-                    }
-                    if (success)
-                        monomorphicPolyenv = e;
-                }
-            }
-        }
+        auto ti = checkCallTarget(callee, srcCode, callTargetFeedback);
 
-        bool staticCallee = false;
-        if (auto con = LdConst::Cast(callee)) {
-            monomorphic = con->c();
-            staticCallee = true;
-        }
+        auto ldfun = LdFun::Cast(callee);
+        if (ldfun)
+            ldfun->hint =
+                ti.monomorphic ? ti.monomorphic : symbol::ambiguousCallTarget;
+
+        // Deopt in promise not possible
+        if (inPromise())
+            ti.monomorphic = nullptr;
 
         bool monomorphicClosure =
-            monomorphic && isValidClosureSEXP(monomorphic);
-        bool monomorphicBuiltin = monomorphic &&
-                                  TYPEOF(monomorphic) == BUILTINSXP &&
+            ti.monomorphic && isValidClosureSEXP(ti.monomorphic);
+        bool monomorphicInnerFunction = monomorphicClosure && !ti.stableEnv;
+        bool monomorphicBuiltin = ti.monomorphic &&
+                                  TYPEOF(ti.monomorphic) == BUILTINSXP &&
                                   // TODO implement support for call_builtin_
                                   // with names
                                   bc.bc == Opcode::call_;
-
-        bool monomorphicInnerFunction =
-            monomorphicPolyenv && isValidClosureSEXP(monomorphicPolyenv);
-
-        if (monomorphicInnerFunction)
-            monomorphic = monomorphicPolyenv;
-
         if (monomorphicBuiltin) {
-            int arity = getBuiltinArity(monomorphic);
+            int arity = getBuiltinArity(ti.monomorphic);
             if (arity != -1 && arity != nargs)
                 monomorphicBuiltin = false;
         }
 
-        DispatchTable* target = nullptr;
-        if (monomorphicClosure || monomorphicInnerFunction) {
-            target = DispatchTable::unpack(BODY(monomorphic));
-        }
-
-        if (target) {
-            // TODO: this is a complete hack, but right now we don't have a
-            // better solution. What happens if we statically reorder
-            // arguments (and create dotdotdot lists) is that we loose the
-            // original promargs order. But for upon calling usemethod a
-            // second environment (and thus new argument matching) is done,
-            // which needs the original order. What we should do is to
-            // somehow record the original order before static shuffling,
-            // such that we can restore it in createLegaxyArgsList in the
-            // interpreter. At the moment however this will just result in
-            // an assert.
-            if (Query::needsPromargs(target->baseline())) {
-                monomorphicClosure = monomorphicInnerFunction = false;
-                monomorphic = monomorphicPolyenv = nullptr;
+        auto ast = bc.immediate.callFixedArgs.ast;
+        auto emitGenericCall = [&]() {
+            popn(toPop);
+            if (namedArguments) {
+                push(insert(new NamedCall(env, callee, args, callArgumentNames,
+                                          bc.immediate.callFixedArgs.ast)));
+            } else {
+                Value* fs = inlining()
+                                ? (Value*)Tombstone::framestate()
+                                : (Value*)insert.registerFrameState(
+                                      srcCode, nextPos, stack, inPromise());
+                push(insert(new Call(env, callee, args, fs,
+                                     bc.immediate.callFixedArgs.ast)));
             }
-        }
+        };
 
-        auto ldfun = LdFun::Cast(callee);
-        if (inPromise()) {
-            if (ldfun) {
-                ldfun->hint =
-                    monomorphic ? monomorphic : symbol::ambiguousCallTarget;
-            }
-            monomorphicBuiltin = monomorphicClosure = monomorphicInnerFunction =
-                false;
-            monomorphic = nullptr;
-        }
-
-        Assume* assumption = nullptr;
-        Value* guardedCallee = callee;
         // Insert a guard if we want to speculate
-        if (!staticCallee && (monomorphicBuiltin || monomorphicClosure ||
-                              monomorphicInnerFunction)) {
-            // We use ldvar instead of ldfun for the guard. The reason is that
-            // ldfun can force promises, which is a pain for our optimizer to
-            // deal with. If we use a ldvar here, the actual ldfun will be
-            // delayed into the deopt branch. Note that ldvar is conservative.
-            // If we find a non-function binding with the same name, we will
-            // deopt unneccessarily. In the case of `c` this is guaranteed to
-            // cause problems, since many variables are called "c". Therefore if
-            // we have seen any variable c we keep the ldfun in this case.
-            // TODO: Implement this with a dependency on the binding cell
-            // instead of an eager check.
+        if (monomorphicBuiltin || monomorphicClosure ||
+            monomorphicInnerFunction) {
             auto cp = std::get<Checkpoint*>(callTargetFeedback.at(callee));
             if (!cp)
                 cp = addCheckpoint(srcCode, pos, stack, insert);
-
-            auto bb = cp->nextBB();
-            auto pos = bb->begin();
-
-            auto expected = monomorphicInnerFunction
-                                ? new LdConst(BODY(monomorphic))
-                                : new LdConst(monomorphic);
-            pos = bb->insert(pos, expected);
-            pos++;
-
-            if (ldfun && (ldfun->varName != symbol::c || !compiler.seenC)) {
-                auto ldvar = new LdVar(ldfun->varName, ldfun->env());
-                pos = bb->insert(pos, ldvar);
-                pos++;
-                guardedCallee = ldvar;
-            }
-
-            Value* guarded = guardedCallee;
-            if (monomorphicInnerFunction) {
-                static SEXP b = nullptr;
-                if (!b) {
-                    auto idx = blt("bodyCode");
-                    b = Rf_allocSExp(BUILTINSXP);
-                    b->u.primsxp.offset = idx;
-                    R_PreserveObject(b);
-                }
-
-                // The "bodyCode" builtin will return R_NilValue for promises.
-                // It is therefore safe (ie. conservative with respect to the
-                // guard) to avoid forcing the result by casting it to a value.
-                auto casted = new CastType(guardedCallee, CastType::Downcast,
-                                           PirType::any(), RType::closure);
-                pos = bb->insert(pos, casted);
-                pos++;
-
-                auto body = new CallSafeBuiltin(b, {casted}, 0);
-                body->effects.reset();
-                pos = bb->insert(pos, body);
-                pos++;
-
-                guarded = body;
-            }
-
-            auto t = new Identical(guarded, expected);
-            pos = bb->insert(pos, t);
-            pos++;
-
-            assumption = new Assume(t, cp);
-            assumption->feedbackOrigin.push_back(
-                {srcCode, std::get<Opcode*>(callTargetFeedback.at(callee))});
-            pos = bb->insert(pos, assumption);
-            pos++;
-
-            // The guard also ensures that this closure is not a promise thus we
-            // can force for free.
-            if (guardedCallee->type.maybePromiseWrapped()) {
-                auto forced = new Force(guardedCallee, Env::elided(),
-                                        Tombstone::framestate());
-                forced->effects.reset();
-                forced->effects.set(Effect::DependsOnAssume);
-                pos = bb->insert(pos, forced);
-                pos++;
-
-                guardedCallee = forced;
-            }
+            bool replaceLdfunWithLdVar =
+                ldfun && (ldfun->varName != symbol::c || !compiler.seenC);
+            callee = insertLdFunGuard(
+                ti, callee, replaceLdfunWithLdVar, cp, srcCode,
+                std::get<Opcode*>(callTargetFeedback.at(callee)));
         }
 
         if (monomorphicBuiltin) {
@@ -670,15 +687,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     }
                 }
             }
-        }
 
-        size_t missingArgs = 0;
-        auto matchedArgs(args);
-        // Static argument name matching
-        // Currently we only match callsites with the correct number of
-        // arguments passed. Thus, we set those given assumptions below.
-        if (monomorphicClosure || monomorphicInnerFunction) {
-            auto formals = RList(FORMALS(monomorphic));
+            popn(toPop);
+            push(insert(
+                BuiltinCallFactory::New(env, ti.monomorphic, args, ast)));
+        } else if (monomorphicClosure || monomorphicInnerFunction) {
+            // (1) Argument Matching
+            //
+            size_t missingArgs = 0;
+            auto matchedArgs(args);
+            ArglistOrder::CallArglistOrder argOrderOrig;
+            // Static argument name matching
+            // Currently we only match callsites with the correct number of
+            // arguments passed. Thus, we set those given assumptions below.
+            auto formals = RList(FORMALS(ti.monomorphic));
             size_t needed = 0;
             bool hasDotsFormals = false;
             for (auto a = formals.begin(); a != formals.end(); ++a) {
@@ -693,43 +715,24 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (!correctOrder) {
                 if (namedArguments) {
                     correctOrder = ArgumentMatcher::reorder(
-                        insert, FORMALS(monomorphic), callArgumentNames,
-                        matchedArgs);
+                        insert, FORMALS(ti.monomorphic), callArgumentNames,
+                        matchedArgs, argOrderOrig);
                 } else {
                     correctOrder = ArgumentMatcher::reorder(
-                        insert, FORMALS(monomorphic), {}, matchedArgs);
+                        insert, FORMALS(ti.monomorphic), {}, matchedArgs,
+                        argOrderOrig);
                 }
             }
 
             if (!correctOrder || needed < matchedArgs.size()) {
-                monomorphicClosure = false;
-                monomorphicInnerFunction = false;
-                assert(assumption);
-                // Kill unnecessary speculation
-                assumption->arg<0>().val() = True::instance();
+                emitGenericCall();
+                break;
             }
 
             missingArgs = needed - matchedArgs.size();
-        }
 
-        // Emit the actual call
-        auto ast = bc.immediate.callFixedArgs.ast;
-        auto insertGenericCall = [&]() {
-            popn(toPop);
-            if (namedArguments) {
-                push(insert(new NamedCall(env, callee, args, callArgumentNames,
-                                          bc.immediate.callFixedArgs.ast)));
-            } else {
-                Value* fs = inlining()
-                                ? (Value*)Tombstone::framestate()
-                                : (Value*)insert.registerFrameState(
-                                      srcCode, nextPos, stack, inPromise());
-                push(insert(new Call(env, callee, args, fs,
-                                     bc.immediate.callFixedArgs.ast)));
-            }
-        };
-
-        if (monomorphicClosure || monomorphicInnerFunction) {
+            // (2)
+            // Emit Static Call
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
@@ -760,10 +763,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
                                                     inPromise());
                 push(insert(new StaticCall(
-                    insert.env, f->owner(), given, matchedArgs, fs, ast,
-                    monomorphicClosure ? Tombstone::closure()
-                                       : guardedCallee)));
-                auto innerc = MkFunCls::Cast(callee);
+                    insert.env, f->owner(), given, matchedArgs,
+                    std::move(argOrderOrig), fs, ast,
+                    monomorphicInnerFunction ? callee : Tombstone::closure())));
+                auto innerc = MkFunCls::Cast(callee->followCastsAndForce());
                 if (!innerc)
                     return;
                 auto delayed = delayedCompilation.find(innerc);
@@ -773,27 +776,27 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 delayedCompilation.erase(delayed);
             };
 
-            if (monomorphicClosure) {
-                compiler.compileClosure(monomorphic, name, given, apply,
-                                        insertGenericCall, outerFeedback);
-            } else {
+            if (monomorphicInnerFunction) {
                 compiler.compileFunction(
-                    target, name, FORMALS(monomorphic),
-                    Rf_getAttrib(monomorphic, symbol::srcref), given, apply,
-                    insertGenericCall, outerFeedback);
+                    DispatchTable::unpack(BODY(ti.monomorphic)), name,
+                    FORMALS(ti.monomorphic),
+                    Rf_getAttrib(ti.monomorphic, symbol::srcref), given, apply,
+                    emitGenericCall, outerFeedback);
+            } else {
+                compiler.compileClosure(ti.monomorphic, name, given, apply,
+                                        emitGenericCall, outerFeedback);
             }
-        } else if (monomorphicBuiltin) {
-            popn(toPop);
-            push(insert(BuiltinCallFactory::New(env, monomorphic, args, ast)));
         } else {
-            insertGenericCall();
+            emitGenericCall();
         }
-        if (taken != (size_t)-1 && srcCode->funInvocationCount)
+
+        if (ti.taken != (size_t)-1 && srcCode->funInvocationCount) {
             if (auto c = CallInstruction::CastCall(top())) {
                 // invocation count is already incremented before calling jit
-                c->taken =
-                    (double)taken / (double)(srcCode->funInvocationCount - 1);
+                c->taken = (double)ti.taken /
+                           (double)(srcCode->funInvocationCount - 1);
             }
+        }
         break;
     }
 
@@ -978,7 +981,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::identical_noforce_: {
         auto rhs = pop();
         auto lhs = pop();
-        push(insert(new Identical(lhs, rhs)));
+        push(insert(new Identical(lhs, rhs, PirType::any())));
         break;
     }
 
@@ -1231,8 +1234,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                     }
                 }
 
-                if (!v->type.isA(NativeType::test)) {
-                    v = insert(new AsTest(v, bc.bc == Opcode::brtrue_));
+                if (!v->type.isA(PirType::test())) {
+                    v = insert(new Identical(v,
+                                             bc.bc == Opcode::brtrue_
+                                                 ? (Value*)True::instance()
+                                                 : (Value*)False::instance(),
+                                             PirType::val()));
                 } else {
                     swapTrueFalse = bc.bc == Opcode::brfalse_;
                 }
@@ -1431,12 +1438,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     }
     assert(cur.stack.empty());
 
-    if (results.size() == 0) {
-        // Cannot compile functions with infinite loop
-        log.warn("Aborting, it looks like this function has an infinite loop");
-        return nullptr;
-    }
-
     Visitor::run(insert.code->entry, [&](Instruction* i) {
         Value* callee = nullptr;
         Context asmpt;
@@ -1480,7 +1481,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         return nullptr;
 
     Value* res;
-    if (results.size() == 1) {
+    if (results.size() == 0) {
+        insert.clearCurrentBB();
+        return Tombstone::unreachable();
+    } else if (results.size() == 1) {
         res = results.back().second;
         insert.reenterBB(results.back().first);
     } else {
@@ -1503,8 +1507,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 void Rir2Pir::finalize(Value* ret, Builder& insert) {
     assert(!finalized);
     assert(ret);
-    assert(insert.getCurrentBB()->isExit() &&
-           "Builder needs to be on an exit-block to insert return");
 
     bool changed = true;
     while (changed) {
@@ -1537,6 +1539,8 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
                 });
                 if (allTheSame) {
                     p->replaceUsesWith(allTheSame);
+                    if (ret == p)
+                        ret = allTheSame;
                     it = bb->remove(it);
                     changed = true;
                     continue;
@@ -1550,9 +1554,11 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
         });
     }
 
-    if (insert.getCurrentBB()->isEmpty() ||
-        !NonLocalReturn::Cast(insert.getCurrentBB()->last()))
+    if (insert.getCurrentBB()) {
+        assert(insert.getCurrentBB()->isEmpty() ||
+               !insert.getCurrentBB()->last()->exits());
         insert(new Return(ret));
+    }
 
     InsertCast c(insert.code, insert.env);
     c();

@@ -127,7 +127,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     Context context_;
 
     // !!! SEXPs traceable by the GC must be declared here !!!
-    // locals contains: origin, next, body
+    // locals contains: body
     CodeSEXP locals[NUM_PTRS];
     CodeSEXP defaultArg_[];
 };

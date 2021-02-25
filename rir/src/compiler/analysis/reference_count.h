@@ -264,7 +264,6 @@ class StaticReferenceCount
         case Tag::IsEnvStub:
         case Tag::ChkMissing:
         case Tag::Deopt:
-        case Tag::AsTest:
         case Tag::AsLogical:
         case Tag::Identical:
         case Tag::Is:

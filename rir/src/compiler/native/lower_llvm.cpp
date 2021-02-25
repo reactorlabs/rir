@@ -18,6 +18,8 @@ void LowerLLVM::compile(
     funCompiler.compile();
     if (funCompiler.pirTypeFeedback)
         target->pirTypeFeedback(funCompiler.pirTypeFeedback);
+    if (funCompiler.hasArgReordering())
+        target->arglistOrder(ArglistOrder::New(funCompiler.getArgReordering()));
     auto native = JitLLVM::compile(funCompiler.fun);
     target->nativeCode = (NativeCode)native;
 }

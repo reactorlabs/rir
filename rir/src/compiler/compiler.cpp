@@ -2,10 +2,10 @@
 #include "R/RList.h"
 #include "pir/pir_impl.h"
 #include "rir2pir/rir2pir.h"
+#include "utils/measuring.h"
 
 #include "compiler/analysis/query.h"
 #include "compiler/analysis/verifier.h"
-#include "compiler/log/perf_counter.h"
 #include "compiler/opt/pass_definitions.h"
 #include "compiler/opt/pass_scheduler.h"
 #include "compiler/parameter.h"
@@ -144,8 +144,8 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
                     // If this arg has a default, then test if the argument is
                     // missing and if so, load the default arg.
                     auto a = builder(new LdArg(i));
-                    auto testMissing =
-                        builder(new Identical(a, MissingArg::instance()));
+                    auto testMissing = builder(new Identical(
+                        a, MissingArg::instance(), PirType::any()));
                     builder(new Branch(testMissing));
 
                     auto isMissing = builder.createBB();
@@ -202,11 +202,8 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     return fail();
 }
 
+// Don't forget to pass PIR_MEASURING=1 too
 bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
-std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
-std::chrono::time_point<std::chrono::high_resolution_clock> endTime;
-std::unique_ptr<CompilerPerf> PERF = std::unique_ptr<CompilerPerf>(
-    MEASURE_COMPILER_PERF ? new CompilerPerf : nullptr);
 
 void Compiler::optimizeModule() {
     logger.flush();
@@ -219,16 +216,12 @@ void Compiler::optimizeModule() {
                 log.pirOptimizationsHeader(translation);
 
                 if (MEASURE_COMPILER_PERF)
-                    startTime = std::chrono::high_resolution_clock::now();
+                    Measuring::startTimer();
 
                 if (translation->apply(*this, v, log.out()))
                     changed = true;
-                if (MEASURE_COMPILER_PERF) {
-                    endTime = std::chrono::high_resolution_clock::now();
-                    std::chrono::duration<double> passDuration =
-                        endTime - startTime;
-                    PERF->addTime(translation->getName(), passDuration.count());
-                }
+                if (MEASURE_COMPILER_PERF)
+                    Measuring::countTimer(translation->getName());
 
                 log.pirOptimizations(translation);
                 log.flush();
@@ -247,7 +240,7 @@ void Compiler::optimizeModule() {
         return changed;
     });
     if (MEASURE_COMPILER_PERF)
-        startTime = std::chrono::high_resolution_clock::now();
+        Measuring::startTimer();
 
     module->eachPirClosure([&](Closure* c) {
         c->eachVersion([&](ClosureVersion* v) {
@@ -262,11 +255,8 @@ void Compiler::optimizeModule() {
         });
     });
 
-    if (MEASURE_COMPILER_PERF) {
-        endTime = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> passDuration = endTime - startTime;
-        PERF->addTime("Verification", passDuration.count());
-    }
+    if (MEASURE_COMPILER_PERF)
+        Measuring::countTimer("Verification");
 
     logger.flush();
 }

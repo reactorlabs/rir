@@ -1,12 +1,12 @@
 #include "builtins.h"
 
 #include "compiler/parameter.h"
-#include "interpreter/LazyArglist.h"
-#include "interpreter/LazyEnvironment.h"
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
 #include "ir/Deoptimization.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
 #include "R/Funtab.h"
@@ -346,8 +346,8 @@ static bool debugPrintCallBuiltinImpl = false;
 static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs) {
     auto ctx = globalContext();
-    CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
-                     Context(), ctx);
+    CallContext call(ArglistOrder::NOT_REORDERED, c, callee, nargs, ast,
+                     ostack_cell_at(ctx, nargs - 1), env, Context(), ctx);
     if (debugPrintCallBuiltinImpl) {
         debugPrintCallBuiltinImpl = false;
         std::cout << "call builtin " << nargs << " with\n";
@@ -383,12 +383,13 @@ static SEXP callImplCached(CallContext& call, Immediate cache) {
     return res;
 }
 
-static SEXP callImplCached(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                           size_t nargs, unsigned long available,
-                           Immediate cache) {
+static SEXP callImplCached(ArglistOrder::CallId callId, rir::Code* c,
+                           Immediate ast, SEXP callee, SEXP env, size_t nargs,
+                           unsigned long available, Immediate cache) {
     auto ctx = globalContext();
-    CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1), env,
-                     Context(available), ctx);
+    CallContext call(callId, c, callee, nargs, ast,
+                     ostack_cell_at(ctx, nargs - 1), env, Context(available),
+                     ctx);
 
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
@@ -396,22 +397,24 @@ static SEXP callImplCached(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     return callImplCached(call, cache);
 }
 
-static SEXP callImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                     size_t nargs, unsigned long available) {
-    return callImplCached(c, ast, callee, env, nargs, available, 0);
-};
+static SEXP callImpl(ArglistOrder::CallId callId, rir::Code* c, Immediate ast,
+                     SEXP callee, SEXP env, size_t nargs,
+                     unsigned long available) {
+    return callImplCached(callId, c, ast, callee, env, nargs, available, 0);
+}
 
 NativeBuiltin NativeBuiltins::call = {
     "call",
     (void*)&callImpl,
 };
 
-static SEXP namedCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                          size_t nargs, Immediate* names,
-                          unsigned long available) {
+static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
+                          Immediate ast, SEXP callee, SEXP env, size_t nargs,
+                          Immediate* names, unsigned long available) {
     auto ctx = globalContext();
-    CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
-                     names, env, Context(available), ctx);
+    CallContext call(callId, c, callee, nargs, ast,
+                     ostack_cell_at(ctx, nargs - 1), names, env,
+                     Context(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -425,9 +428,9 @@ NativeBuiltin NativeBuiltins::namedCall = {
     (void*)&namedCallImpl,
 };
 
-static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
-                         size_t nargs, Immediate* names,
-                         unsigned long available) {
+static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
+                         Immediate ast, SEXP callee, SEXP env, size_t nargs,
+                         Immediate* names, unsigned long available) {
     auto ctx = globalContext();
     auto given = Context(available);
     int pushed = 0;
@@ -444,8 +447,8 @@ static SEXP dotsCallImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
         pushed = 1;
     }
 
-    CallContext call(c, callee, nargs, ast, ostack_cell_at(ctx, nargs - 1),
-                     names, env, given, ctx);
+    CallContext call(callId, c, callee, nargs, ast,
+                     ostack_cell_at(ctx, nargs - 1), names, env, given, ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -1014,8 +1017,8 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     c->registerDeopt();
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
-    CallContext call(c, cls, /* nargs */ -1,
-                     src_pool_at(globalContext(), c->src), args,
+    CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
+                     /* nargs */ -1, src_pool_at(globalContext(), c->src), args,
                      (Immediate*)nullptr, env, Context(), globalContext());
 
     deoptFramesWithContext(globalContext(), &call, m, R_NilValue,
@@ -1421,7 +1424,8 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
-static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
+static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
+                                     SEXP callee, Immediate target,
                                      Immediate astP, SEXP env, size_t nargs,
                                      unsigned long available) {
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
@@ -1430,7 +1434,7 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
     auto fun = Function::unpack(Pool::get(target));
 
     auto ctx = globalContext();
-    CallContext call(fun->body(), callee, nargs, astP,
+    CallContext call(callId, c, callee, nargs, astP,
                      ostack_cell_at(ctx, nargs - 1), env, Context(available),
                      ctx);
 
@@ -1461,7 +1465,9 @@ static SEXP nativeCallTrampolineImpl(SEXP callee, Immediate target,
     R_bcstack_t* args = ostack_cell_at(ctx, nargs + missing - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
-    LazyArglistOnStack lazyArgs(nargs, args, ast);
+    LazyArglistOnStack lazyArgs(call.callId,
+                                call.caller->arglistOrderContainer(),
+                                call.suppliedArgs, call.stackArgs, call.ast);
 
     assert(fun->signature().envCreation ==
            FunctionSignature::Environment::CalleeCreated);
@@ -2218,10 +2224,12 @@ int forSeqSizeImpl(SEXP seq) {
 NativeBuiltin NativeBuiltins::forSeqSize = {"forSeqSize",
                                             (void*)&forSeqSizeImpl};
 
-void initClosureContextImpl(SEXP ast, RCNTXT* cntxt, SEXP sysparent, SEXP op,
+void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
+                            RCNTXT* cntxt, SEXP sysparent, SEXP op,
                             size_t nargs) {
     auto lazyArglist =
-        LazyArglistOnHeap::New(nargs, ostack_cell_at(ctx, nargs - 1), ast);
+        LazyArglistOnHeap::New(callId, c->arglistOrderContainer(), nargs,
+                               ostack_cell_at(ctx, nargs - 1), ast);
     ostack_popn(globalContext(), nargs);
 
     auto global = (RCNTXT*)R_GlobalContext;
@@ -2376,10 +2384,9 @@ void nonLocalReturnImpl(SEXP res, SEXP env) {
     Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
 }
 
-NativeBuiltin NativeBuiltins::nonLocalReturn = {"nonLocalReturn",
-                                                (void*)&nonLocalReturnImpl,
-                                                nullptr,
-                                                {llvm::Attribute::NoReturn}};
+// Not tagged NoReturn to avoid hot/cold splitting to assume it is cold
+NativeBuiltin NativeBuiltins::nonLocalReturn = {
+    "nonLocalReturn", (void*)&nonLocalReturnImpl, nullptr};
 
 bool clsEqImpl(SEXP lhs, SEXP rhs) {
     SLOWASSERT(TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP);

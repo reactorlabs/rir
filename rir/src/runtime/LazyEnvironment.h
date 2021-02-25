@@ -1,10 +1,10 @@
 #ifndef LAZY_ENVIRONMENT_H
 #define LAZY_ENVIRONMENT_H
 
-#include "../ir/BC_inc.h"
-#include "../runtime/RirRuntimeObject.h"
-#include "instance.h"
-#include "interp_incl.h"
+#include "interpreter/instance.h"
+#include "interpreter/interp_incl.h"
+#include "ir/BC_inc.h"
+#include "runtime/RirRuntimeObject.h"
 
 #include <cassert>
 #include <cstdint>

@@ -10,12 +10,12 @@
 #include "R/r.h"
 
 #include "builtins.h"
-#include "interpreter/LazyArglist.h"
-#include "interpreter/LazyEnvironment.h"
 #include "interpreter/builtins.h"
 #include "interpreter/instance.h"
 
 #include "runtime/DispatchTable.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
 #include "compiler/parameter.h"
@@ -230,7 +230,7 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
     auto stackptr = nodestackPtr();
     // set type tag to 0
     builder.CreateMemSet(builder.CreateGEP(stackptr, c(-args.size())), c(0, 8),
-                         args.size() * sizeof(R_bcstack_t), 1);
+                         args.size() * sizeof(R_bcstack_t), MaybeAlign(1));
     auto pos = -args.size();
     for (auto arg = args.begin(); arg != args.end(); arg++) {
         // store the value
@@ -254,7 +254,7 @@ void LowerFunctionLLVM::incStack(int i, bool zero) {
     auto cur = nodestackPtr();
     auto offset = sizeof(R_bcstack_t) * i;
     if (zero)
-        builder.CreateMemSet(cur, c(0, 8), offset, 1);
+        builder.CreateMemSet(cur, c(0, 8), offset, MaybeAlign(1));
     auto up = builder.CreateGEP(cur, c(i));
     builder.CreateStore(up, nodestackPtrAddr);
 }
@@ -284,7 +284,8 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
         });
     }
 
-    auto f = convertToPointer((void*)builtinFun, t::builtinFunctionPtr);
+    auto fPtr = convertToPointer((void*)builtinFun, t::builtinFunctionPtr);
+    auto f = FunctionCallee(t::builtinFunction, fPtr);
 
     auto arglist = constant(R_NilValue, t::SEXP);
     for (auto v = args.rbegin(); v != args.rend(); v++) {
@@ -366,21 +367,15 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
         } else {
             assert(false);
         }
-    } else if (val == True::instance())
-        res = constant(R_TrueValue, needed);
-    else if (val == False::instance())
-        res = constant(R_FalseValue, needed);
-    else if (val == MissingArg::instance())
-        res = constant(R_MissingArg, t::SEXP);
-    else if (val == UnboundValue::instance())
-        res = constant(R_UnboundValue, t::SEXP);
-    else if (auto ld = LdConst::Cast(val))
+    } else if (val->asRValue()) {
+        res = constant(val->asRValue(), needed);
+    } else if (val == OpaqueTrue::instance()) {
+        static int one = 1;
+        // Something that is always true, but llvm does not know about
+        res = builder.CreateLoad(convertToPointer(&one, t::IntPtr));
+    } else if (auto ld = LdConst::Cast(val)) {
         res = constant(ld->c(), needed);
-    else if (val == NaLogical::instance())
-        res = constant(R_LogicalNAValue, needed);
-    else if (val == Nil::instance())
-        res = constant(R_NilValue, needed);
-    else {
+    } else {
         val->printRef(std::cerr);
         assert(false);
     }
@@ -427,10 +422,10 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
                needed == t::SEXP) {
         if (type.isA(PirType() | RType::integer)) {
             res = boxInt(res);
+        } else if (type.isA(PirType::test())) {
+            res = boxTst(res);
         } else if (type.isA(PirType() | RType::logical)) {
             res = boxLgl(res);
-        } else if (type.isA(NativeType::test)) {
-            res = boxTst(res);
         } else if (type.isA(PirType() | RType::real)) {
             res = boxReal(res);
         } else {
@@ -514,21 +509,31 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
 void LowerFunctionLLVM::compilePopContext(Instruction* i) {
     auto popc = PopContext::Cast(i);
     auto data = contexts.at(popc->push());
-    auto arg = load(popc->result());
-    builder.CreateStore(arg, data.result);
+    auto res = popc->result();
+
+    builder.CreateStore(load(res, Representation::Of(i)), data.result);
     builder.CreateBr(data.popContextTarget);
 
     builder.SetInsertPoint(data.popContextTarget);
     llvm::Value* ret = builder.CreateLoad(data.result);
     llvm::Value* boxedRet = ret;
-    if (ret->getType() == t::Int) {
-        boxedRet = boxInt(ret, false);
-    } else if (ret->getType() == t::Double) {
-        boxedRet = boxReal(ret, false);
+    auto storeType = data.result->getType()->getPointerElementType();
+    if (storeType != t::SEXP) {
+        if (i->type.isA(PirType::test())) {
+            boxedRet = boxTst(ret, false);
+        } else if (i->type.isA(RType::logical)) {
+            boxedRet = boxLgl(ret, false);
+        } else if (i->type.isA(RType::integer)) {
+            boxedRet = boxInt(ret, false);
+        } else if (i->type.isA(RType::real)) {
+            boxedRet = boxReal(ret, false);
+        } else {
+            assert(false);
+        }
     }
     call(NativeBuiltins::endClosureContext, {data.rcntxt, boxedRet});
     inPushContext--;
-    setVal(i, ret);
+    setVal(i, Representation::Of(i) == t::SEXP ? boxedRet : ret);
 }
 
 void LowerFunctionLLVM::compilePushContext(Instruction* i) {
@@ -547,11 +552,15 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         arglist.push_back(ct->arg(i).val());
     }
 
+    auto callId = ArglistOrder::NOT_REORDERED;
+    if (ct->isReordered())
+        callId = pushArgReordering(ct->getArgOrderOrig());
+
     withCallFrame(arglist,
                   [&]() -> llvm::Value* {
-                      return call(
-                          NativeBuiltins::initClosureContext,
-                          {ast, data.rcntxt, sysparent, op, c(ct->narglist())});
+                      return call(NativeBuiltins::initClosureContext,
+                                  {c(callId), paramCode(), ast, data.rcntxt,
+                                   sysparent, op, c(ct->narglist())});
                   },
                   false);
 
@@ -598,7 +607,8 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         auto setjmpFun =
             JitLLVM::getFunctionDeclaration("__sigsetjmp", setjmpType, builder);
 #endif
-        auto longjmp = builder.CreateCall(setjmpFun, {setjmpBuf, c(0)});
+        auto callee = FunctionCallee(setjmpType, setjmpFun);
+        auto longjmp = builder.CreateCall(callee, {setjmpBuf, c(0)});
 
         builder.CreateCondBr(builder.CreateICmpEQ(longjmp, c(0)), cont,
                              didLongjmp);
@@ -728,7 +738,12 @@ llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
     insn_assert(isScalar(v), "expected scalar lgl");
 #endif
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
-    return builder.CreateLoad(pos);
+    auto unbox = builder.CreateLoad(pos);
+    // Normalize the unboxed lgl to 0,1,NA.
+    return builder.CreateSelect(
+        builder.CreateICmpEQ(unbox, c(0)), c(0),
+        builder.CreateSelect(builder.CreateICmpEQ(unbox, c(NA_LOGICAL)),
+                             c(NA_LOGICAL), c(1)));
 }
 llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
@@ -1686,12 +1701,17 @@ bool LowerFunctionLLVM::compileDotcall(
     auto namesConst = c(newNames);
     auto namesStore = globalConst(namesConst);
 
+    auto callId = ArglistOrder::NOT_REORDERED;
+    if (calli->isReordered())
+        callId = pushArgReordering(calli->getArgOrderOrig());
+
     setVal(i,
            withCallFrame(
                args,
                [&]() -> llvm::Value* {
                    return call(NativeBuiltins::dotsCall,
                                {
+                                   c(callId),
                                    paramCode(),
                                    c(i->srcIdx),
                                    callee(),
@@ -1994,7 +2014,7 @@ void LowerFunctionLLVM::compile() {
                     pop = popI->second;
                 Representation resRep = Representation::Sexp;
                 if (pop)
-                    resRep = Representation::Of(pop->result());
+                    resRep = Representation::Of(pop);
                 auto resStore = topAlloca(resRep);
                 auto rcntxt = topAlloca(t::RCNTXT);
                 contexts[push] = {rcntxt, resStore,
@@ -2145,51 +2165,38 @@ void LowerFunctionLLVM::compile() {
             case Tag::Identical: {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
-                auto cc = LdConst::Cast(a);
-                if (!cc)
-                    cc = LdConst::Cast(b);
 
-                if (cc) {
-                    auto v = cc == a ? b : a;
-                    auto vi = depromise(v);
-                    auto res =
-                        builder.CreateICmpEQ(constant(cc->c(), t::SEXP), vi);
-                    if (TYPEOF(cc->c()) == CLOSXP) {
-                        res = createSelect2(
-                            res, [&]() { return builder.getTrue(); },
-                            [&]() {
-                                return createSelect2(
-                                    builder.CreateICmpEQ(sexptype(vi),
-                                                         c(CLOSXP)),
-                                    [&]() {
-                                        return call(
-                                            NativeBuiltins::clsEq,
-                                            {constant(cc->c(), t::SEXP), vi});
-                                    },
-                                    [&]() { return builder.getFalse(); });
-                            });
-                    }
-                    setVal(i, builder.CreateZExt(res, t::Int));
-                    break;
-                }
+                auto ai = load(a);
+                auto bi = load(b);
+                if (Representation::Of(a) == t::SEXP &&
+                    a->type.maybePromiseWrapped())
+                    ai = depromise(ai, a->type);
+                if (Representation::Of(b) == t::SEXP &&
+                    b->type.maybePromiseWrapped())
+                    bi = depromise(bi, b->type);
 
-                auto ai = depromise(a);
-                auto bi = depromise(b);
+                // Not needed so far. Needs some care to ensure NA == NA holds
+                assert(ai->getType() != t::Double &&
+                       ai->getType() != t::Double);
 
                 auto res = builder.CreateICmpEQ(ai, bi);
-                res = createSelect2(
-                    res, [&]() { return builder.getTrue(); },
-                    [&]() {
-                        auto cls = builder.CreateAnd(
-                            builder.CreateICmpEQ(sexptype(ai), c(CLOSXP)),
-                            builder.CreateICmpEQ(sexptype(bi), c(CLOSXP)));
-                        return createSelect2(
-                            cls,
-                            [&]() {
-                                return call(NativeBuiltins::clsEq, {ai, bi});
-                            },
-                            [&]() { return builder.getFalse(); });
-                    });
+                if (a->type.maybe(RType::closure) ||
+                    b->type.maybe(RType::closure)) {
+                    res = createSelect2(
+                        res, [&]() { return builder.getTrue(); },
+                        [&]() {
+                            auto cls = builder.CreateAnd(
+                                builder.CreateICmpEQ(sexptype(ai), c(CLOSXP)),
+                                builder.CreateICmpEQ(sexptype(bi), c(CLOSXP)));
+                            return createSelect2(
+                                cls,
+                                [&]() {
+                                    return call(NativeBuiltins::clsEq,
+                                                {ai, bi});
+                                },
+                                [&]() { return builder.getFalse(); });
+                        });
+                }
                 setVal(i, builder.CreateZExt(res, t::Int));
                 break;
             }
@@ -2941,9 +2948,14 @@ void LowerFunctionLLVM::compile() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
                 Context asmpt = b->inferAvailableAssumptions();
+
+                auto callId = ArglistOrder::NOT_REORDERED;
+                if (b->isReordered())
+                    callId = pushArgReordering(b->getArgOrderOrig());
+
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(NativeBuiltins::call,
-                                       {paramCode(), c(b->srcIdx),
+                                       {c(callId), paramCode(), c(b->srcIdx),
                                         loadSxp(b->cls()), loadSxp(b->env()),
                                         c(b->nCallArgs()), c(asmpt.toI())});
                        }));
@@ -2966,10 +2978,15 @@ void LowerFunctionLLVM::compile() {
                 auto namesConst = c(names);
                 auto namesStore = globalConst(namesConst);
 
+                auto callId = ArglistOrder::NOT_REORDERED;
+                if (b->isReordered())
+                    callId = pushArgReordering(b->getArgOrderOrig());
+
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(
                                NativeBuiltins::namedCall,
                                {
+                                   c(callId),
                                    paramCode(),
                                    c(b->srcIdx),
                                    loadSxp(b->cls()),
@@ -2991,14 +3008,18 @@ void LowerFunctionLLVM::compile() {
                 calli->eachCallArg([&](Value* v) { args.push_back(v); });
                 Context asmpt = calli->inferAvailableAssumptions();
 
+                auto callId = ArglistOrder::NOT_REORDERED;
+                if (calli->isReordered())
+                    callId = pushArgReordering(calli->getArgOrderOrig());
+
                 if (!target->owner()->hasOriginClosure()) {
                     setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                               return call(NativeBuiltins::call,
-                                           {paramCode(), c(calli->srcIdx),
-                                            loadSxp(calli->runtimeClosure()),
-                                            loadSxp(calli->env()),
-                                            c(calli->nCallArgs()),
-                                            c(asmpt.toI())});
+                               return call(
+                                   NativeBuiltins::call,
+                                   {c(callId), paramCode(), c(calli->srcIdx),
+                                    loadSxp(calli->runtimeClosure()),
+                                    loadSxp(calli->env()),
+                                    c(calli->nCallArgs()), c(asmpt.toI())});
                            }));
                     break;
                 }
@@ -3016,7 +3037,8 @@ void LowerFunctionLLVM::compile() {
                         }
                     }
                     if (nativeTarget) {
-                        llvm::Value* trg = JitLLVM::get(target);
+                        // TODO: callId is not used here.. should it be?
+                        auto trg = JitLLVM::get(target);
                         if (trg &&
                             target->properties.includes(
                                 ClosureVersion::Property::NoReflection)) {
@@ -3040,6 +3062,8 @@ void LowerFunctionLLVM::compile() {
                         auto res = withCallFrame(args, [&]() {
                             return call(NativeBuiltins::nativeCallTrampoline,
                                         {
+                                            c(callId),
+                                            paramCode(),
                                             constant(callee, t::SEXP),
                                             c(idx),
                                             c(calli->srcIdx),
@@ -3058,6 +3082,7 @@ void LowerFunctionLLVM::compile() {
                            return call(
                                NativeBuiltins::call,
                                {
+                                   c(callId),
                                    paramCode(),
                                    c(calli->srcIdx),
                                    builder.CreateIntToPtr(
@@ -3902,28 +3927,10 @@ void LowerFunctionLLVM::compile() {
                     call(NativeBuiltins::error,
                          {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                     builder.CreateUnreachable();
-                    builder.CreateRet(
-                        builder.CreateIntToPtr(c(nullptr), t::SEXP));
 
                     builder.SetInsertPoint(done);
                 }
                 setVal(i, builder.CreateZExt(res, t::Int));
-                break;
-            }
-
-            case Tag::AsTest: {
-                assert(Representation::Of(i) == Representation::Integer);
-                auto arg = i->arg(0).val();
-                auto argRep = Representation::Of(arg);
-                auto testTrue = AsTest::Cast(i)->testTrue;
-                auto compare = testTrue ? constant(R_TrueValue, argRep)
-                                        : constant(R_FalseValue, argRep);
-                auto val = load(arg);
-                setVal(i, builder.CreateZExt(
-                              Representation::Of(arg) == Representation::Real
-                                  ? builder.CreateFCmpOEQ(val, compare)
-                                  : builder.CreateICmpEQ(val, compare),
-                              t::Int));
                 break;
             }
 
@@ -5212,7 +5219,7 @@ void LowerFunctionLLVM::compile() {
                               convertToPointer(msg)});
                     }
                 }
-                if (i->type.isA(NativeType::test)) {
+                if (i->type.isA(PirType::test())) {
                     auto ok =
                         builder.CreateOr(builder.CreateICmpEQ(load(i), c(0)),
                                          builder.CreateICmpEQ(load(i), c(1)));
@@ -5274,6 +5281,7 @@ void LowerFunctionLLVM::compile() {
     }
     if (!variableMapping.empty()) {
         pirTypeFeedback = PirTypeFeedback::New(codes, variableMapping);
+        p_(pirTypeFeedback->container());
 #ifdef DEBUG_REGISTER_MAP
         for (auto m : variableMapping) {
             auto origin = registerMap->getOriginOfSlot(m.first);

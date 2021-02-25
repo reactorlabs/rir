@@ -102,34 +102,18 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
     return split;
 }
 
-std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice,
-                                              Value* context) {
+Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context) {
     Value* found = nullptr;
     Instruction* ret;
-    BB* retBlock = nullptr;
     Visitor::run(inlinee, [&](BB* bb) {
         if (!bb->isExit())
             return;
 
-        if (bb->isDeopt() || bb->isEndUnreachable())
+        if (bb->isDeopt() || bb->isEndUnreachable() ||
+            NonLocalReturn::Cast(bb->last()))
             return;
 
-        // non-local returns become local returs through inlining only if the
-        // caller context matches the context of the non-local return.
-        // (contexts are identified by envs)
-        auto nlr = NonLocalReturn::Cast(bb->last());
-        if (nlr) {
-            if (nlr->env() == context) {
-                ret = nlr;
-            } else {
-                retBlock = bb;
-                return;
-            }
-        } else {
-            ret = Return::Cast(bb->last());
-        }
-        assert(ret);
-        retBlock = bb;
+        ret = Return::Cast(bb->last());
 
         // This transformation assumes that we have just one reachable return.
         // Assert that we do not find a second one.
@@ -142,10 +126,9 @@ std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice,
     });
     if (!found) {
         // can happen if we have only non local returns
-        return {Nil::instance(), retBlock};
+        return Tombstone::unreachable();
     }
-    assert(found);
-    return {found, retBlock};
+    return found;
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,

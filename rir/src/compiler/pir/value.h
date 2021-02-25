@@ -40,13 +40,11 @@ class Value {
     }
     virtual bool validIn(Code* code) const { return true; }
     virtual SEXP asRValue() const {
-        assert(false && "Not a singleton");
         return nullptr;
     }
 
     bool producesRirResult() const {
-        return type != PirType::voyd() &&
-               (type.isRType() || type == NativeType::test);
+        return type != PirType::voyd() && type.isRType();
     }
 
     static constexpr int MAX_REFCOUNT = 2;

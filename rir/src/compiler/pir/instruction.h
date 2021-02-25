@@ -7,6 +7,7 @@
 #include "ir/BC_inc.h"
 #include "ir/Deoptimization.h"
 #include "pir.h"
+#include "runtime/ArglistOrder.h"
 #include "singleton_values.h"
 #include "tag.h"
 #include "value.h"
@@ -165,6 +166,7 @@ class Instruction : public Value {
     Effects effects;
 
   public:
+    bool deleted = false;
     void clearEffects() { effects.reset(); }
     void clearVisibility() { effects.reset(Effect::Visibility); }
     void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }
@@ -801,6 +803,7 @@ class FLI(LdConst, 0, Effects::None()) {
     explicit LdConst(double i);
     void printArgs(std::ostream& out, bool tty) const override;
     int minReferenceCount() const override { return MAX_REFCOUNT; }
+    SEXP asRValue() const override { return c(); }
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -1089,8 +1092,7 @@ class Branch
                                  HasEnvSlot::No, Controlflow::Branch> {
   public:
     explicit Branch(Value* test)
-        : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
-    }
+        : FixedLenInstruction(PirType::voyd(), {{PirType::test()}}, {{test}}) {}
     void printArgs(std::ostream& out, bool tty) const override;
     void printGraphArgs(std::ostream& out, bool tty) const override;
     void printGraphBranches(std::ostream& out, size_t bbId) const override;
@@ -1300,23 +1302,6 @@ class FLI(AsLogical, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(AsTest, 1, Effects::None()) {
-  public:
-    Value* val() const { return arg<0>().val(); }
-    const bool testTrue;
-
-    AsTest(Value* in, bool testTrue_)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{in}}),
-          testTrue(testTrue_) {}
-
-    std::string name() const override final {
-        return std::string("Is") + (testTrue ? "True" : "False") + "(" +
-               InstructionImplementation::name() + ")";
-    }
-
-    size_t gvnBase() const override { return tagHash(); }
-};
-
 class FLI(CheckTrueFalse, 1, Effects() | Effect::Error | Effect::Warn) {
   public:
     Value* val() const { return arg<0>().val(); }
@@ -1337,7 +1322,7 @@ class FLI(CheckTrueFalse, 1, Effects() | Effect::Error | Effect::Warn) {
 class FLI(ColonInputEffects, 2, Effects() | Effect::Error | Effect::Warn) {
   public:
     explicit ColonInputEffects(Value* lhs, Value* rhs, unsigned srcIdx)
-        : FixedLenInstruction(NativeType::test,
+        : FixedLenInstruction(PirType::test(),
                               {{PirType::val(), PirType::val()}}, {{lhs, rhs}},
                               srcIdx) {}
 
@@ -1679,7 +1664,7 @@ class FLI(IsType, 1, Effects::None()) {
   public:
     const PirType typeTest;
     IsType(PirType type, Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{v}}),
+        : FixedLenInstruction(PirType::test(), {{PirType::any()}}, {{v}}),
           typeTest(type) {}
 
     void printArgs(std::ostream& out, bool tty) const override;
@@ -1750,9 +1735,8 @@ class FLI(Nop, 0, Effects::Any()) {
 
 class FLI(Identical, 2, Effects::None()) {
   public:
-    Identical(Value* a, Value* b)
-        : FixedLenInstruction(NativeType::test,
-                              {{PirType::any(), PirType::any()}}, {{a, b}}) {}
+    Identical(Value* a, Value* b, PirType t)
+        : FixedLenInstruction(PirType::test(), {{t, t}}, {{a, b}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -2047,6 +2031,12 @@ class CallInstruction {
     virtual Closure* tryGetCls() const { return nullptr; }
     virtual Context inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
+    virtual bool isReordered() const { return false; }
+    virtual ArglistOrder::CallArglistOrder const& getArgOrderOrig() const {
+        assert(false);
+        static ArglistOrder::CallArglistOrder empty;
+        return empty;
+    }
     ClosureVersion* tryDispatch(Closure*) const;
 };
 
@@ -2064,7 +2054,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         pushArg(fun, RType::closure);
 
         // Calling builtins with names or ... is not supported by callBuiltin,
-        // that's why those calls go through the normall call BC.
+        // that's why those calls go through the normal call BC.
         auto argtype =
             PirType(RType::prom) | RType::missing | RType::expandedDots;
         if (auto con = LdConst::Cast(fun))
@@ -2156,6 +2146,7 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
 // specified as `cls_`, args passed as promises.
 class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* cls_;
+    ArglistOrder::CallArglistOrder argOrderOrig;
 
   public:
     Context givenContext;
@@ -2168,8 +2159,9 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* tryGetCls() const override final { return cls(); }
 
     StaticCall(Value * callerEnv, Closure * cls, Context givenContext,
-               const std::vector<Value*>& args, FrameState* fs, unsigned srcIdx,
-               Value* runtimeClosure = Tombstone::closure());
+               const std::vector<Value*>& args,
+               ArglistOrder::CallArglistOrder&& argOrderOrig, FrameState* fs,
+               unsigned srcIdx, Value* runtimeClosure = Tombstone::closure());
 
     size_t nCallArgs() const override { return nargs() - 3; };
     void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
@@ -2187,6 +2179,12 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     InstrArg& callArg(size_t pos) override final {
         assert(pos < nCallArgs());
         return arg(pos + 2);
+    }
+
+    bool isReordered() const override final { return !argOrderOrig.empty(); }
+    ArglistOrder::CallArglistOrder const& getArgOrderOrig()
+        const override final {
+        return argOrderOrig;
     }
 
     PirType inferType(const GetType& getType) const override final;
@@ -2389,17 +2387,22 @@ class FLIE(MaterializeEnv, 1, Effects::None()) {
 class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
   public:
     explicit IsEnvStub(MkEnv* e)
-        : FixedLenInstructionWithEnvSlot(NativeType::test, e) {}
+        : FixedLenInstructionWithEnvSlot(PirType::test(), e) {}
 };
 
 class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
                             Effect::LeaksEnv) {
+    ArglistOrder::CallArglistOrder argOrderOrig;
+
   public:
     PushContext(Value* ast, Value* op, CallInstruction* call, Value* sysparent)
         : VarLenInstructionWithEnvSlot(NativeType::context, sysparent) {
         call->eachCallArg([&](Value* v) { pushArg(v, PirType::any()); });
         pushArg(ast, PirType::any());
         pushArg(op, PirType::closure());
+        if (call->isReordered()) {
+            argOrderOrig = call->getArgOrderOrig();
+        }
     }
 
     size_t narglist() const { return nargs() - 3; }
@@ -2410,20 +2413,21 @@ class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
         return op;
     }
     Value* ast() const { return arg(nargs() - 3).val(); }
+
+    bool isReordered() const { return !argOrderOrig.empty(); }
+    ArglistOrder::CallArglistOrder const& getArgOrderOrig() const {
+        return argOrderOrig;
+    }
 };
 
 class FLI(PopContext, 2, Effect::ChangesContexts) {
   public:
     PopContext(Value* res, PushContext* push)
-        : FixedLenInstruction(PirType::any(),
-                              {{PirType::any(), NativeType::context}},
+        : FixedLenInstruction(PirType::val(),
+                              {{PirType::val(), NativeType::context}},
                               {{res, push}}) {}
     PushContext* push() const { return PushContext::Cast(arg<1>().val()); }
     Value* result() const { return arg<0>().val(); }
-
-    PirType inferType(const GetType& getType) const override final {
-        return getType(result());
-    }
 };
 
 class FLIE(LdDots, 1, Effect::ReadsEnv) {
@@ -2564,7 +2568,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
     bool assumeTrue = true;
     Assume(Value* test, Value* checkpoint)
         : FixedLenInstruction(PirType::voyd(),
-                              {{NativeType::test, NativeType::checkpoint}},
+                              {{PirType::test(), NativeType::checkpoint}},
                               {{test, checkpoint}}) {}
 
     Checkpoint* checkpoint() const { return Checkpoint::Cast(arg(1).val()); }

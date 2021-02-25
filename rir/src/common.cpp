@@ -2,8 +2,8 @@
 #include "R/RList.h"
 #include "R/r.h"
 
-#include "interpreter/LazyArglist.h"
-#include "interpreter/LazyEnvironment.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 
 #include <cxxabi.h>
 #include <execinfo.h>

@@ -5,7 +5,6 @@
 #include "compiler/analysis/last_env.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
-#include "compiler/log/perf_counter.h"
 #include "compiler/native/lower_llvm.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/pir_impl.h"
@@ -13,7 +12,6 @@
 #include "compiler/util/bb_transform.h"
 #include "compiler/util/lowering/allocators.h"
 #include "compiler/util/visitor.h"
-#include "event_counters.h"
 #include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
@@ -279,10 +277,6 @@ static void toCSSA(Code* code) {
                         auto copy = pred->insert(pred->end(), new LdConst(val));
 
                         phi->arg(i).val() = *copy;
-
-                        if (phi->arg(i).type() == NativeType::test) {
-                            (*copy)->type = phi->arg(i).type();
-                        }
                     }
                 }
                 auto phiCopy = new PirCopy(phi);
