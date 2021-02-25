@@ -56,9 +56,8 @@ llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()() {
 
 class NativeAllocator : public SSAAllocator {
   public:
-    NativeAllocator(Code* code, const LivenessIntervals& livenessIntervals,
-                    LogStream& log)
-        : SSAAllocator(code, livenessIntervals, log) {}
+    NativeAllocator(Code* code, const LivenessIntervals& livenessIntervals)
+        : SSAAllocator(code, livenessIntervals) {}
 
     bool needsAVariable(Value* v) const {
         return v->producesRirResult() && !LdConst::Cast(v) &&
@@ -1958,7 +1957,7 @@ void LowerFunctionLLVM::compile() {
 
     std::unordered_map<Instruction*, Instruction*> phis;
     {
-        NativeAllocator allocator(code, liveness, log);
+        NativeAllocator allocator(code, liveness);
         allocator.compute();
         allocator.verify();
         auto numLocalsBase = numLocals;

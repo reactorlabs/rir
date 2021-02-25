@@ -45,8 +45,7 @@ class SSAAllocator {
 
     bool computed = false;
 
-    SSAAllocator(Code* code, const LivenessIntervals& livenessIntervals,
-                 LogStream& log)
+    SSAAllocator(Code* code, const LivenessIntervals& livenessIntervals)
         : dom(code), code(code), bbsSize(code->nextBBId),
           livenessIntervals(livenessIntervals) {
 #ifdef DEBUG_LIVENESS

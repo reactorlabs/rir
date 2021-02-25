@@ -1,6 +1,7 @@
 #ifndef RIR_COMPILER_PIR_JIT_LLVM_H
 #define RIR_COMPILER_PIR_JIT_LLVM_H
 
+#include "compiler/log/stream_logger.h"
 #include "compiler/native/builtins.h"
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/pir.h"
@@ -48,7 +49,7 @@ class PirJitLLVM {
     void compile(rir::Code* target, Code* code, const PromMap& m,
                  const NeedsRefcountAdjustment& refcount,
                  const std::unordered_set<Instruction*>& needsLdVarForUpdate,
-                 LogStream& log);
+                 ClosureStreamLogger& log);
 
     using GetModule = std::function<llvm::Module&()>;
     using GetFunction = std::function<llvm::Function*(Code*)>;

@@ -12,6 +12,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_os_ostream.h"
 
 namespace rir {
 namespace pir {
@@ -43,7 +44,7 @@ void PirJitLLVM::compile(
     rir::Code* target, Code* code, const PromMap& promMap,
     const NeedsRefcountAdjustment& refcount,
     const std::unordered_set<Instruction*>& needsLdVarForUpdate,
-    LogStream& log) {
+    ClosureStreamLogger& log) {
 
     if (!M.get()) {
         M = std::make_unique<llvm::Module>("", *TSC.getContext());
@@ -86,8 +87,7 @@ void PirJitLLVM::compile(
                 signature, llvm::Function::ExternalLinkage, name, *M);
             funs[c] = f;
             return f;
-        },
-        log);
+        });
     funCompiler.compile();
     if (funCompiler.pirTypeFeedback)
         target->pirTypeFeedback(funCompiler.pirTypeFeedback);
@@ -95,6 +95,11 @@ void PirJitLLVM::compile(
         target->arglistOrder(ArglistOrder::New(funCompiler.getArgReordering()));
     llvm::verifyFunction(*funCompiler.fun);
     assert(jitFixup.count(code) == 0);
+    log.LLVMBitcode([&](std::ostream& out, bool tty) {
+        auto f = funCompiler.fun;
+        llvm::raw_os_ostream ro(out);
+        f->print(ro, nullptr);
+    });
     // can we use llvm::StringRefs?
     jitFixup.emplace(code,
                      std::make_pair(target, funCompiler.fun->getName().str()));

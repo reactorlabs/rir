@@ -33,7 +33,6 @@ class LowerFunctionLLVM {
     llvm::IRBuilder<> builder;
     llvm::MDBuilder MDB;
     LivenessIntervals liveness;
-    LogStream& log;
     size_t numLocals;
     size_t numTemps;
     constexpr static size_t MAX_TEMPS = 4;
@@ -78,12 +77,11 @@ class LowerFunctionLLVM {
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         const PirJitLLVM::GetModule& getModule,
         const PirJitLLVM::GetFunction& getFunction,
-        const PirJitLLVM::GetBuiltin& getBuiltin, PirJitLLVM::Declare declare,
-        LogStream& log)
+        const PirJitLLVM::GetBuiltin& getBuiltin, PirJitLLVM::Declare declare)
         : code(code), promMap(promMap), refcount(refcount),
           needsLdVarForUpdate(needsLdVarForUpdate),
           builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
-          liveness(code, code->nextBBId), log(log), numLocals(0), numTemps(0),
+          liveness(code, code->nextBBId), numLocals(0), numTemps(0),
           branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),

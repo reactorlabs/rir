@@ -83,7 +83,7 @@ pir.tests <- function() {
 # environment was elided). Max assumptions compiled (+ minimal) are used, if
 # warmup=<FUN> will call <FUN> repeatedly to get better assumptions.
 pir.check <- function(f, ..., warmup=NULL) {
-    checks <- 
+    checks <-
         as.pairlist(lapply(lapply(as.list(substitute(...())), as.character), as.name))
     if (length(checks) == 0)
         stop("pir.check: needs at least 1 check")
@@ -116,6 +116,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            PrintOptimizationPhases = FALSE,
                            PrintPirAfterOpt = FALSE,
                            PrintCSSA = FALSE,
+                           PrintLLVM = FALSE,
                            PrintAllocator = FALSE,
                            PrintFinalPir = FALSE,
                            PrintFinalRir = FALSE) {
@@ -136,6 +137,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
           PrintOptimizationPhases,
           PrintPirAfterOpt,
           PrintCSSA,
+          PrintLLVM,
           PrintAllocator,
           PrintFinalPir,
           PrintFinalRir,
