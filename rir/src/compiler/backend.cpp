@@ -5,7 +5,7 @@
 #include "compiler/analysis/last_env.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/analysis/verifier.h"
-#include "compiler/native/lower_llvm.h"
+#include "compiler/native/pir_jit_llvm.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/pir/value_list.h"
@@ -293,7 +293,6 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?
 
-    Preserve preserve;
     FunctionWriter function;
 
     FunctionSignature signature(
@@ -312,20 +311,9 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     std::unordered_map<Code*,
                        std::unordered_map<Code*, std::pair<unsigned, MkArg*>>>
         promMap;
-    std::function<void(Code*)> scan = [&](Code* c) {
+    std::function<void(Code*)> lowerAndScanForPromises = [&](Code* c) {
         if (promMap.count(c))
             return;
-        // cppcheck-suppress variableScope
-        auto& pm = promMap[c];
-        auto addProm = [&](Instruction* i) {
-            if (auto mk = MkArg::Cast(i)) {
-                auto p = mk->prom();
-                if (!pm.count(p)) {
-                    scan(p);
-                    pm[p] = {pm.size(), mk};
-                }
-            }
-        };
         lower(c);
         toCSSA(c);
         log.CSSA(c);
@@ -336,12 +324,21 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         Verify::apply(cls, "Error after lowering");
 #endif
 #endif
-        Visitor::run(c->entry, addProm);
+        // cppcheck-suppress variableScope
+        auto& pm = promMap[c];
+        Visitor::run(c->entry, [&](Instruction* i) {
+            if (auto mk = MkArg::Cast(i)) {
+                auto p = mk->prom();
+                if (!pm.count(p)) {
+                    lowerAndScanForPromises(p);
+                    pm[p] = {pm.size(), mk};
+                }
+            }
+        });
     };
-    scan(cls);
+    lowerAndScanForPromises(cls);
 
     std::unordered_map<Code*, rir::Code*> done;
-    LowerLLVM lowerLlvm;
     std::function<rir::Code*(Code*)> compile = [&](Code* c) {
         if (done.count(c))
             return done.at(c);
@@ -350,9 +347,10 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         std::unordered_set<Instruction*> needsLdVarForUpdate;
         approximateNeedsLdVarForUpdate(c, needsLdVarForUpdate);
         auto res = done[c] = rir::Code::New(c->rirSrc()->src);
+        // Can we do better?
         preserve(res->container());
-        lowerLlvm.compile(res, cls, c, promMap.at(c), refcount,
-                          needsLdVarForUpdate, log.out());
+        jit.compile(res, c, promMap.at(c), refcount, needsLdVarForUpdate,
+                    log.out());
         auto& pm = promMap.at(c);
         // Order of prms in the extra pool must equal id in promMap
         std::vector<Code*> proms(pm.size());
@@ -375,7 +373,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     return function.function();
 }
 
-rir::Function* Backend::compile(ClosureVersion* cls) {
+rir::Function* Backend::getOrCompile(ClosureVersion* cls) {
     auto res = done.find(cls);
     if (res != done.end())
         return res->second;
@@ -386,12 +384,6 @@ rir::Function* Backend::compile(ClosureVersion* cls) {
     done[cls] = fun;
     log.flush();
 
-    if (fixup.count(cls)) {
-        auto fixups = fixup.find(cls);
-        for (auto idx : fixups->second)
-            Pool::patch(idx, fun->container());
-        fixup.erase(fixups);
-    }
     return fun;
 }
 

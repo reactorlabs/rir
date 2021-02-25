@@ -1,7 +1,9 @@
 #pragma once
 
+#include "R/Preserve.h"
 #include "compiler/log/debug.h"
 #include "compiler/log/stream_logger.h"
+#include "compiler/native/pir_jit_llvm.h"
 #include "compiler/pir/module.h"
 #include "compiler/pir/pir.h"
 #include "runtime/Function.h"
@@ -18,14 +20,12 @@ class Backend {
     Backend(const Backend&) = delete;
     Backend& operator=(const Backend&) = delete;
 
-    rir::Function* compile(ClosureVersion* cls);
-
-    void needsPatching(ClosureVersion* c, size_t i) { fixup[c].insert(i); }
+    rir::Function* getOrCompile(ClosureVersion* cls);
 
   private:
+    Preserve preserve;
+    PirJitLLVM jit;
     std::unordered_map<ClosureVersion*, Function*> done;
-    std::unordered_map<ClosureVersion*, std::unordered_set<size_t>> fixup;
-
     StreamLogger& logger;
 
     rir::Function* doCompile(ClosureVersion* cls, ClosureStreamLogger& log);

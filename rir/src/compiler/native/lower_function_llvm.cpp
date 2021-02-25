@@ -1,29 +1,24 @@
 #include "lower_function_llvm.h"
-#include "compiler/native/types_llvm.h"
-#include "representation_llvm.h"
-
-#include "llvm/IR/Intrinsics.h"
-
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
-
-#include "builtins.h"
+#include "compiler/analysis/reference_count.h"
+#include "compiler/native/builtins.h"
+#include "compiler/native/representation_llvm.h"
+#include "compiler/native/types_llvm.h"
+#include "compiler/parameter.h"
+#include "compiler/pir/pir_impl.h"
+#include "compiler/util/lowering/allocators.h"
+#include "compiler/util/visitor.h"
 #include "interpreter/builtins.h"
 #include "interpreter/instance.h"
-
 #include "runtime/DispatchTable.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
-#include "compiler/parameter.h"
-#include "compiler/pir/pir_impl.h"
-#include "compiler/util/lowering/allocators.h"
-#include "compiler/util/visitor.h"
-
-#include "compiler/analysis/reference_count.h"
+#include "llvm/IR/Intrinsics.h"
 
 #include <algorithm>
 #include <cassert>
@@ -39,8 +34,6 @@ namespace rir {
 namespace pir {
 
 using namespace llvm;
-
-LLVMContext& C = rir::pir::JitLLVM::C;
 
 extern "C" size_t R_NSize;
 extern "C" size_t R_NodesInUse;
@@ -63,9 +56,9 @@ llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()() {
 
 class NativeAllocator : public SSAAllocator {
   public:
-    NativeAllocator(Code* code, ClosureVersion* cls,
-                    const LivenessIntervals& livenessIntervals, LogStream& log)
-        : SSAAllocator(code, cls, livenessIntervals, log) {}
+    NativeAllocator(Code* code, const LivenessIntervals& livenessIntervals,
+                    LogStream& log)
+        : SSAAllocator(code, livenessIntervals, log) {}
 
     bool needsAVariable(Value* v) const {
         return v->producesRirResult() && !LdConst::Cast(v) &&
@@ -89,7 +82,7 @@ llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
                                             llvm::Type* ty) {
     if (!ty)
         ty = init->getType();
-    return new llvm::GlobalVariable(JitLLVM::module(), ty, true,
+    return new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init);
 }
 
@@ -99,11 +92,11 @@ void LowerFunctionLLVM::setVisible(int i) {
 
 llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
 
-    auto isProm = BasicBlock::Create(C, "", fun);
-    auto needsEval = BasicBlock::Create(C, "", fun);
-    auto isVal = BasicBlock::Create(C, "", fun);
-    auto isPromVal = BasicBlock::Create(C, "", fun);
-    auto done = BasicBlock::Create(C, "", fun);
+    auto isProm = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto needsEval = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto isVal = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto isPromVal = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     auto res = phiBuilder(t::SEXP);
 
@@ -121,7 +114,8 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     builder.CreateCondBr(tv, needsEval, isPromVal, branchMostlyFalse);
 
     builder.SetInsertPoint(needsEval);
-    auto evaled = call(NativeBuiltins::forcePromise, {arg});
+    auto evaled =
+        call(NativeBuiltins::get(NativeBuiltins::Id::forcePromise), {arg});
     checkIsSexp(evaled, "force result");
     res.addInput(evaled);
     builder.CreateBr(done);
@@ -145,15 +139,16 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
 
 void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
                                     llvm::Value* p) {
-    auto nok = BasicBlock::Create(C, "assertFail", fun);
-    auto ok = BasicBlock::Create(C, "assertOk", fun);
+    auto nok = BasicBlock::Create(PirJitLLVM::getContext(), "assertFail", fun);
+    auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "assertOk", fun);
 
     builder.CreateCondBr(v, ok, nok, branchAlwaysTrue);
 
     builder.SetInsertPoint(nok);
     if (p)
-        call(NativeBuiltins::printValue, {p});
-    call(NativeBuiltins::assertFail, {convertToPointer((void*)msg)});
+        call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
+    call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
+         {convertToPointer((void*)msg)});
     builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
 
     builder.SetInsertPoint(ok);
@@ -166,30 +161,38 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
     if (needed == t::Int) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP)
-            return llvm::ConstantInt::get(C, llvm::APInt(32, INTEGER(co)[0]));
+            return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                          llvm::APInt(32, INTEGER(co)[0]));
         if (TYPEOF(co) == REALSXP) {
             if (std::isnan(REAL(co)[0]))
-                return llvm::ConstantInt::get(C, llvm::APInt(32, NA_INTEGER));
-            return llvm::ConstantInt::get(C, llvm::APInt(32, (int)REAL(co)[0]));
+                return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                              llvm::APInt(32, NA_INTEGER));
+            return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                          llvm::APInt(32, (int)REAL(co)[0]));
         }
         if (TYPEOF(co) == LGLSXP)
-            return llvm::ConstantInt::get(C, llvm::APInt(32, LOGICAL(co)[0]));
+            return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                          llvm::APInt(32, LOGICAL(co)[0]));
     }
 
     if (needed == t::Double) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP) {
             if (INTEGER(co)[0] == NA_INTEGER)
-                return llvm::ConstantFP::get(C, llvm::APFloat(R_NaN));
-            return llvm::ConstantFP::get(C,
+                return llvm::ConstantFP::get(PirJitLLVM::getContext(),
+                                             llvm::APFloat(R_NaN));
+            return llvm::ConstantFP::get(PirJitLLVM::getContext(),
                                          llvm::APFloat((double)INTEGER(co)[0]));
         }
         if (TYPEOF(co) == REALSXP)
-            return llvm::ConstantFP::get(C, llvm::APFloat(REAL(co)[0]));
+            return llvm::ConstantFP::get(PirJitLLVM::getContext(),
+                                         llvm::APFloat(REAL(co)[0]));
         if (TYPEOF(co) == LGLSXP) {
             if (LOGICAL(co)[0] == NA_LOGICAL)
-                return llvm::ConstantFP::get(C, llvm::APFloat(R_NaN));
-            return llvm::ConstantInt::get(C, llvm::APInt(32, LOGICAL(co)[0]));
+                return llvm::ConstantFP::get(PirJitLLVM::getContext(),
+                                             llvm::APFloat(R_NaN));
+            return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                          llvm::APInt(32, LOGICAL(co)[0]));
         }
     }
 
@@ -273,7 +276,7 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
                                              llvm::Value* env) {
     if (supportsFastBuiltinCall(builtin)) {
         return withCallFrame(args, [&]() -> llvm::Value* {
-            return call(NativeBuiltins::callBuiltin,
+            return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
                         {
                             paramCode(),
                             c(srcIdx),
@@ -294,7 +297,8 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
         insn_assert(builder.CreateICmpNE(sexptype(a), c(PROMSXP)),
                     "passing promise to builtin");
 #endif
-        arglist = call(NativeBuiltins::consNr, {a, arglist});
+        arglist =
+            call(NativeBuiltins::get(NativeBuiltins::Id::consNr), {a, arglist});
     }
     if (args.size() > 0)
         protectTemp(arglist);
@@ -450,8 +454,8 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
                                                      llvm::Value* vector,
                                                      BasicBlock* fallback,
                                                      llvm::Value* max) {
-    BasicBlock* hit1 = BasicBlock::Create(C, "", fun);
-    BasicBlock* hit = BasicBlock::Create(C, "", fun);
+    BasicBlock* hit1 = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    BasicBlock* hit = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     auto representation = Representation::Of(index);
     llvm::Value* nativeIndex = load(index);
@@ -517,7 +521,8 @@ void LowerFunctionLLVM::compilePopContext(Instruction* i) {
     } else if (ret->getType() == t::Double) {
         boxedRet = boxReal(ret, false);
     }
-    call(NativeBuiltins::endClosureContext, {data.rcntxt, boxedRet});
+    call(NativeBuiltins::get(NativeBuiltins::Id::endClosureContext),
+         {data.rcntxt, boxedRet});
     inPushContext--;
     setVal(i, ret);
 }
@@ -544,7 +549,8 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
 
     withCallFrame(arglist,
                   [&]() -> llvm::Value* {
-                      return call(NativeBuiltins::initClosureContext,
+                      return call(NativeBuiltins::get(
+                                      NativeBuiltins::Id::initClosureContext),
                                   {c(callId), paramCode(), ast, data.rcntxt,
                                    sysparent, op, c(ct->narglist())});
                   },
@@ -577,24 +583,17 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     }
 
     // Do a setjmp
-    auto didLongjmp = BasicBlock::Create(C, "", fun);
-    auto cont = BasicBlock::Create(C, "", fun);
+    auto didLongjmp = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto cont = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     {
+        auto setjmp = NativeBuiltins::get(NativeBuiltins::Id::sigsetjmp);
 #ifdef __APPLE__
         auto setjmpBuf = builder.CreateGEP(data.rcntxt, {c(0), c(2), c(0)});
-        auto setjmpType = FunctionType::get(
-            t::i32, {PointerType::get(t::i32, 0), t::i32}, false);
-        auto setjmpFun =
-            JitLLVM::getFunctionDeclaration("sigsetjmp", setjmpType, builder);
 #else
         auto setjmpBuf = builder.CreateGEP(data.rcntxt, {c(0), c(2)});
-        auto setjmpType =
-            FunctionType::get(t::i32, {t::setjmp_buf_ptr, t::i32}, false);
-        auto setjmpFun =
-            JitLLVM::getFunctionDeclaration("__sigsetjmp", setjmpType, builder);
 #endif
-        auto callee = FunctionCallee(setjmpType, setjmpFun);
-        auto longjmp = builder.CreateCall(callee, {setjmpBuf, c(0)});
+        auto longjmp =
+            builder.CreateCall(getBuiltin(setjmp), {setjmpBuf, c(0)});
 
         builder.CreateCondBr(builder.CreateICmpEQ(longjmp, c(0)), cont,
                              didLongjmp);
@@ -608,8 +607,9 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         auto restart =
             builder.CreateICmpEQ(returned, constant(R_RestartToken, t::SEXP));
 
-        auto longjmpRestart = BasicBlock::Create(C, "", fun);
-        auto longjmpRet = BasicBlock::Create(C, "", fun);
+        auto longjmpRestart =
+            BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+        auto longjmpRet = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
         builder.CreateCondBr(restart, longjmpRestart, longjmpRet);
 
         // The longjump returned a restart token.
@@ -739,9 +739,9 @@ llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
 llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v,
                                                 PirType toType) {
     assert(v->getType() == t::SEXP);
-    auto done = BasicBlock::Create(C, "", fun);
-    auto isReal = BasicBlock::Create(C, "isReal", fun);
-    auto notReal = BasicBlock::Create(C, "notReal", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto isReal = BasicBlock::Create(PirJitLLVM::getContext(), "isReal", fun);
+    auto notReal = BasicBlock::Create(PirJitLLVM::getContext(), "notReal", fun);
 
     auto res = phiBuilder(t::Double);
 
@@ -753,7 +753,7 @@ llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v,
 
     auto intres = unboxIntLgl(v);
 
-    auto isNaBr = BasicBlock::Create(C, "isNa", fun);
+    auto isNaBr = BasicBlock::Create(PirJitLLVM::getContext(), "isNa", fun);
     nacheck(intres, toType, isNaBr);
 
     res.addInput(builder.CreateSIToFP(intres, t::Double));
@@ -913,14 +913,14 @@ llvm::Value* LowerFunctionLLVM::isVector(llvm::Value* v) {
 
 llvm::Value* LowerFunctionLLVM::isMatrix(llvm::Value* v) {
     auto res = phiBuilder(t::i1);
-    auto isVec = BasicBlock::Create(C, "", fun);
-    auto notVec = BasicBlock::Create(C, "", fun);
-    auto done = BasicBlock::Create(C, "", fun);
+    auto isVec = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto notVec = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     builder.CreateCondBr(isVector(v), isVec, notVec);
 
     builder.SetInsertPoint(isVec);
-    auto t =
-        call(NativeBuiltins::getAttrb, {v, constant(R_DimSymbol, t::SEXP)});
+    auto t = call(NativeBuiltins::get(NativeBuiltins::Id::getAttrb),
+                  {v, constant(R_DimSymbol, t::SEXP)});
     res.addInput(
         builder.CreateAnd(builder.CreateICmpEQ(sexptype(t), c(INTSXP)),
                           builder.CreateICmpEQ(vectorLength(t), c(2, 64))));
@@ -936,14 +936,14 @@ llvm::Value* LowerFunctionLLVM::isMatrix(llvm::Value* v) {
 
 llvm::Value* LowerFunctionLLVM::isArray(llvm::Value* v) {
     auto res = phiBuilder(t::i1);
-    auto isVec = BasicBlock::Create(C, "", fun);
-    auto notVec = BasicBlock::Create(C, "", fun);
-    auto done = BasicBlock::Create(C, "", fun);
+    auto isVec = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto notVec = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     builder.CreateCondBr(isVector(v), isVec, notVec);
 
     builder.SetInsertPoint(isVec);
-    auto t =
-        call(NativeBuiltins::getAttrb, {v, constant(R_DimSymbol, t::SEXP)});
+    auto t = call(NativeBuiltins::get(NativeBuiltins::Id::getAttrb),
+                  {v, constant(R_DimSymbol, t::SEXP)});
     res.addInput(
         builder.CreateAnd(builder.CreateICmpEQ(sexptype(t), c(INTSXP)),
                           builder.CreateICmpUGT(vectorLength(t), c(0, 64))));
@@ -973,12 +973,12 @@ void LowerFunctionLLVM::setCar(llvm::Value* x, llvm::Value* y,
         return;
     }
     writeBarrier(x, y, fast, [&]() {
-        auto skip = BasicBlock::Create(C, "", fun);
-        auto update = BasicBlock::Create(C, "", fun);
+        auto skip = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+        auto update = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
         builder.CreateCondBr(builder.CreateICmpNE(car(x), y), update, skip);
 
         builder.SetInsertPoint(update);
-        call(NativeBuiltins::setCar, {x, y});
+        call(NativeBuiltins::get(NativeBuiltins::Id::setCar), {x, y});
         builder.CreateBr(skip);
 
         builder.SetInsertPoint(skip);
@@ -996,12 +996,12 @@ void LowerFunctionLLVM::setCdr(llvm::Value* x, llvm::Value* y,
         return;
     }
     writeBarrier(x, y, fast, [&]() {
-        auto skip = BasicBlock::Create(C, "", fun);
-        auto update = BasicBlock::Create(C, "", fun);
+        auto skip = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+        auto update = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
         builder.CreateCondBr(builder.CreateICmpNE(cdr(x), y), update, skip);
 
         builder.SetInsertPoint(update);
-        call(NativeBuiltins::setCdr, {x, y});
+        call(NativeBuiltins::get(NativeBuiltins::Id::setCdr), {x, y});
         builder.CreateBr(skip);
 
         builder.SetInsertPoint(skip);
@@ -1018,7 +1018,9 @@ void LowerFunctionLLVM::setTag(llvm::Value* x, llvm::Value* y,
         fast();
         return;
     }
-    writeBarrier(x, y, fast, [&]() { call(NativeBuiltins::setTag, {x, y}); });
+    writeBarrier(x, y, fast, [&]() {
+        call(NativeBuiltins::get(NativeBuiltins::Id::setTag), {x, y});
+    });
 }
 
 llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
@@ -1076,8 +1078,9 @@ void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
     auto named = builder.CreateAnd(sxpinfo, c(namedMask));
     auto isNotNamed = builder.CreateICmpEQ(named, c(0, 64));
 
-    auto notNamed = BasicBlock::Create(C, "notNamed", fun);
-    auto ok = BasicBlock::Create(C, "", fun);
+    auto notNamed =
+        BasicBlock::Create(PirJitLLVM::getContext(), "notNamed", fun);
+    auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     builder.CreateCondBr(isNotNamed, notNamed, ok);
 
@@ -1102,7 +1105,11 @@ llvm::Value* LowerFunctionLLVM::shared(llvm::Value* v) {
 llvm::Value* LowerFunctionLLVM::cloneIfShared(llvm::Value* v) {
     auto s = shared(v);
     return createSelect2(
-        s, [&]() { return call(NativeBuiltins::shallowDuplicate, {v}); },
+        s,
+        [&]() {
+            return call(
+                NativeBuiltins::get(NativeBuiltins::Id::shallowDuplicate), {v});
+        },
         [&]() { return v; });
 }
 
@@ -1136,8 +1143,9 @@ void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     auto named = builder.CreateAnd(sxpinfo, c(namedMask));
     auto isNotNamed = builder.CreateICmpEQ(named, c(0, 64));
 
-    auto notNamed = BasicBlock::Create(C, "notNamed", fun);
-    auto ok = BasicBlock::Create(C, "", fun);
+    auto notNamed =
+        BasicBlock::Create(PirJitLLVM::getContext(), "notNamed", fun);
+    auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     builder.CreateCondBr(isNotNamed, notNamed, ok);
 
@@ -1162,8 +1170,8 @@ void LowerFunctionLLVM::ensureShared(llvm::Value* v) {
 
     auto isNamedShared = builder.CreateICmpUGE(named, c(2, 64));
 
-    auto incrementBr = BasicBlock::Create(C, "", fun);
-    auto done = BasicBlock::Create(C, "", fun);
+    auto incrementBr = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     builder.CreateCondBr(isNamedShared, done, incrementBr);
 
@@ -1191,8 +1199,8 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
 
     auto isNamedMax = builder.CreateICmpEQ(named, c(max, 64));
 
-    auto incrementBr = BasicBlock::Create(C, "", fun);
-    auto done = BasicBlock::Create(C, "", fun);
+    auto incrementBr = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     builder.CreateCondBr(isNamedMax, done, incrementBr);
 
@@ -1212,7 +1220,7 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
                                 BasicBlock* notNa) {
     assert(type.isA(PirType::num().scalar()));
     if (!notNa)
-        notNa = BasicBlock::Create(C, "", fun);
+        notNa = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     llvm::Value* isNotNa;
     if (!type.maybeNAOrNaN()) {
         // Don't actually check NA
@@ -1246,29 +1254,31 @@ llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld) {
 
 void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
-    auto ok = BasicBlock::Create(C, "", fun);
-    auto nok = BasicBlock::Create(C, "", fun);
+    auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto nok = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     auto t = builder.CreateICmpEQ(v, constant(R_MissingArg, t::SEXP));
     builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
     auto msg =
         builder.CreateGlobalString("argument is missing, with no default");
-    call(NativeBuiltins::error, {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+    call(NativeBuiltins::get(NativeBuiltins::Id::error),
+         {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
 }
 
 void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
-    auto ok = BasicBlock::Create(C, "", fun);
-    auto nok = BasicBlock::Create(C, "", fun);
+    auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto nok = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     auto t = builder.CreateICmpEQ(v, constant(R_UnboundValue, t::SEXP));
     builder.CreateCondBr(t, nok, ok, branchAlwaysFalse);
 
     builder.SetInsertPoint(nok);
     auto msg = builder.CreateGlobalString("object not found");
-    call(NativeBuiltins::error, {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+    call(NativeBuiltins::get(NativeBuiltins::Id::error),
+         {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
@@ -1284,11 +1294,12 @@ llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
                                         const std::vector<llvm::Value*>& args) {
 #ifdef ENABLE_SLOWASSERT
     // abuse BB label as comment
-    auto callBB = BasicBlock::Create(C, builtin.name, fun);
+    auto callBB =
+        BasicBlock::Create(PirJitLLVM::getContext(), builtin.name, fun);
     builder.CreateBr(callBB);
     builder.SetInsertPoint(callBB);
 #endif
-    return builder.CreateCall(JitLLVM::getBuiltin(builtin), args);
+    return builder.CreateCall(getBuiltin(builtin), args);
 }
 
 llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
@@ -1310,18 +1321,18 @@ llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
         // (*currentInstr)->printRecursive(dbg, 2);
         // auto l = new std::string;
         // l->append(dbg.str());
-        // return call(NativeBuiltins::newIntDebug,
+        // return call(NativeBuiltins::get(NativeBuiltins::Id::newIntDebug),
         //             {v, c((unsigned long)l->data())});
-        return call(NativeBuiltins::newInt, {v});
+        return call(NativeBuiltins::get(NativeBuiltins::Id::newInt), {v});
     }
     assert(v->getType() == t::Double);
-    return call(NativeBuiltins::newIntFromReal, {v});
+    return call(NativeBuiltins::get(NativeBuiltins::Id::newIntFromReal), {v});
 }
 llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool potect) {
     if (v->getType() == t::Double)
-        return call(NativeBuiltins::newReal, {v});
+        return call(NativeBuiltins::get(NativeBuiltins::Id::newReal), {v});
     assert(v->getType() == t::Int);
-    return call(NativeBuiltins::newRealFromInt, {v});
+    return call(NativeBuiltins::get(NativeBuiltins::Id::newRealFromInt), {v});
 }
 llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v, bool protect) {
     if (v->getType() == t::Int) {
@@ -1365,9 +1376,9 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
 #endif
         return arg;
     }
-    auto isProm = BasicBlock::Create(C, "isProm", fun);
-    auto isVal = BasicBlock::Create(C, "", fun);
-    auto ok = BasicBlock::Create(C, "", fun);
+    auto isProm = BasicBlock::Create(PirJitLLVM::getContext(), "isProm", fun);
+    auto isVal = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     auto res = phiBuilder(t::SEXP);
 
@@ -1416,10 +1427,11 @@ void LowerFunctionLLVM::compileRelop(
         llvm::Value* res;
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
-            res = call(NativeBuiltins::binopEnv,
+            res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                        {a, b, e, c(i->srcIdx), c((int)kind)});
         } else {
-            res = call(NativeBuiltins::binop, {a, b, c((int)kind)});
+            res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
+                       {a, b, c((int)kind)});
         }
         setVal(i, res);
         return;
@@ -1427,8 +1439,8 @@ void LowerFunctionLLVM::compileRelop(
 
     BasicBlock* isNaBr = nullptr;
     if (testNa)
-        isNaBr = BasicBlock::Create(C, "isNa", fun);
-    auto done = BasicBlock::Create(C, "", fun);
+        isNaBr = BasicBlock::Create(PirJitLLVM::getContext(), "isNa", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     auto res = phiBuilder(t::Int);
     auto a = load(lhs, lhsRep);
@@ -1483,10 +1495,11 @@ void LowerFunctionLLVM::compileBinop(
         llvm::Value* res = nullptr;
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
-            res = call(NativeBuiltins::binopEnv,
+            res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                        {a, b, e, c(i->srcIdx), c((int)kind)});
         } else {
-            res = call(NativeBuiltins::binop, {a, b, c((int)kind)});
+            res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
+                       {a, b, c((int)kind)});
         }
 
         setVal(i, res);
@@ -1494,7 +1507,7 @@ void LowerFunctionLLVM::compileBinop(
     }
 
     BasicBlock* isNaBr = nullptr;
-    auto done = BasicBlock::Create(C, "", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     auto r = (lhsRep == Representation::Real || rhsRep == Representation::Real)
                  ? t::Double
@@ -1508,7 +1521,8 @@ void LowerFunctionLLVM::compileBinop(
         if (type.maybeNAOrNaN()) {
             if (r == Representation::Integer) {
                 if (!isNaBr)
-                    isNaBr = BasicBlock::Create(C, "isNa", fun);
+                    isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                "isNa", fun);
                 nacheck(llvmValue, type, isNaBr);
             }
         }
@@ -1561,10 +1575,11 @@ void LowerFunctionLLVM::compileUnop(
         llvm::Value* res = nullptr;
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
-            res = call(NativeBuiltins::unopEnv,
+            res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
                        {a, e, c(i->srcIdx), c((int)kind)});
         } else {
-            res = call(NativeBuiltins::unop, {a, c((int)kind)});
+            res = call(NativeBuiltins::get(NativeBuiltins::Id::unop),
+                       {a, c((int)kind)});
         }
 
         setVal(i, res);
@@ -1572,7 +1587,7 @@ void LowerFunctionLLVM::compileUnop(
     }
 
     BasicBlock* isNaBr = nullptr;
-    auto done = BasicBlock::Create(C, "", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     auto r = (argRep == Representation::Real) ? t::Double : t::Int;
 
@@ -1583,7 +1598,8 @@ void LowerFunctionLLVM::compileUnop(
         if (type.maybeNAOrNaN()) {
             if (r == Representation::Integer) {
                 if (!isNaBr)
-                    isNaBr = BasicBlock::Create(C, "isNa", fun);
+                    isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                "isNa", fun);
                 nacheck(value, type, isNaBr);
             }
         }
@@ -1622,11 +1638,13 @@ void LowerFunctionLLVM::writeBarrier(llvm::Value* x, llvm::Value* y,
     auto markBitPos = c((unsigned long)(1ul << (TYPE_BITS + 19)));
     auto genBitPos = c((unsigned long)(1ul << (TYPE_BITS + 23)));
 
-    auto done = BasicBlock::Create(C, "", fun);
-    auto noBarrier = BasicBlock::Create(C, "", fun);
-    auto maybeNeedsBarrier = BasicBlock::Create(C, "", fun);
-    auto maybeNeedsBarrier2 = BasicBlock::Create(C, "", fun);
-    auto needsBarrier = BasicBlock::Create(C, "", fun);
+    auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto noBarrier = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto maybeNeedsBarrier =
+        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto maybeNeedsBarrier2 =
+        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+    auto needsBarrier = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     auto markBitX =
         builder.CreateICmpNE(builder.CreateAnd(sxpinfoX, markBitPos), c(0, 64));
@@ -1686,24 +1704,24 @@ bool LowerFunctionLLVM::compileDotcall(
     if (calli->isReordered())
         callId = pushArgReordering(calli->getArgOrderOrig());
 
-    setVal(i,
-           withCallFrame(
-               args,
-               [&]() -> llvm::Value* {
-                   return call(NativeBuiltins::dotsCall,
-                               {
-                                   c(callId),
-                                   paramCode(),
-                                   c(i->srcIdx),
-                                   callee(),
-                                   i->hasEnv() ? loadSxp(i->env())
-                                               : constant(R_BaseEnv, t::SEXP),
-                                   c(calli->nCallArgs()),
-                                   builder.CreateBitCast(namesStore, t::IntPtr),
-                                   c(asmpt.toI()),
-                               });
-               },
-               /* dotCall pops arguments : */ false));
+    setVal(i, withCallFrame(
+                  args,
+                  [&]() -> llvm::Value* {
+                      return call(
+                          NativeBuiltins::get(NativeBuiltins::Id::dotsCall),
+                          {
+                              c(callId),
+                              paramCode(),
+                              c(i->srcIdx),
+                              callee(),
+                              i->hasEnv() ? loadSxp(i->env())
+                                          : constant(R_BaseEnv, t::SEXP),
+                              c(calli->nCallArgs()),
+                              builder.CreateBitCast(namesStore, t::IntPtr),
+                              c(asmpt.toI()),
+                          });
+                  },
+                  /* dotCall pops arguments : */ false));
     return true;
 }
 
@@ -1773,7 +1791,7 @@ void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y,
             builder.CreateStore(y, pos);
         },
         [&]() {
-            call(NativeBuiltins::externalsxpSetEntry,
+            call(NativeBuiltins::get(NativeBuiltins::Id::externalsxpSetEntry),
                  {{x, c(i + LazyEnvironment::ArgOffset), y}});
         });
     if (setNotMissing) {
@@ -1822,7 +1840,7 @@ llvm::Value* LowerFunctionLLVM::createSelect2(
 
     auto intialInsertionPoint = builder.GetInsertBlock();
 
-    auto trueBranch = BasicBlock::Create(C, "", fun);
+    auto trueBranch = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     auto truePred = intialInsertionPoint;
     builder.SetInsertPoint(trueBranch);
     auto trueValue = trueValueAction();
@@ -1834,7 +1852,7 @@ llvm::Value* LowerFunctionLLVM::createSelect2(
         truePred = builder.GetInsertBlock();
     }
 
-    auto falseBranch = BasicBlock::Create(C, "", fun);
+    auto falseBranch = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     auto falsePred = intialInsertionPoint;
     builder.SetInsertPoint(falseBranch);
     auto falseValue = falseValueAction();
@@ -1851,7 +1869,7 @@ llvm::Value* LowerFunctionLLVM::createSelect2(
         return builder.CreateSelect(cond, trueValue, falseValue);
     }
 
-    auto next = BasicBlock::Create(C, "", fun);
+    auto next = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
     PhiBuilder res(builder, trueValue->getType());
 
@@ -1899,9 +1917,10 @@ void LowerFunctionLLVM::compile() {
         }
         std::stringstream ss;
         ss << "BB" << bb->id;
-        return blockMapping_[bb] = BasicBlock::Create(C, ss.str(), fun);
+        return blockMapping_[bb] =
+                   BasicBlock::Create(PirJitLLVM::getContext(), ss.str(), fun);
     };
-    entryBlock = BasicBlock::Create(C, "", fun);
+    entryBlock = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     builder.SetInsertPoint(entryBlock);
     nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop,
                                         PointerType::get(t::stackCellPtr, 0));
@@ -1939,7 +1958,7 @@ void LowerFunctionLLVM::compile() {
 
     std::unordered_map<Instruction*, Instruction*> phis;
     {
-        NativeAllocator allocator(code, cls, liveness, log);
+        NativeAllocator allocator(code, liveness, log);
         allocator.compute();
         allocator.verify();
         auto numLocalsBase = numLocals;
@@ -1998,9 +2017,10 @@ void LowerFunctionLLVM::compile() {
                     resRep = Representation::Of(pop->result());
                 auto resStore = topAlloca(resRep);
                 auto rcntxt = topAlloca(t::RCNTXT);
-                contexts[push] = {rcntxt, resStore,
-                                  pop ? BasicBlock::Create(C, "", fun)
-                                      : nullptr};
+                contexts[push] = {
+                    rcntxt, resStore,
+                    pop ? BasicBlock::Create(PirJitLLVM::getContext(), "", fun)
+                        : nullptr};
 
                 // Everything which is live at the Push context needs to be
                 // mutable, to be able to restore on restart
@@ -2078,7 +2098,9 @@ void LowerFunctionLLVM::compile() {
                 mk->eachElementRev([&](SEXP name, Value* v) {
                     auto val = loadSxp(v);
                     incrementNamed(val);
-                    arglist = call(NativeBuiltins::consNr, {val, arglist});
+                    arglist =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::consNr),
+                             {val, arglist});
                     setTag(arglist, constant(name, t::SEXP), false);
                 });
                 setSexptype(arglist, DOTSXP);
@@ -2094,7 +2116,7 @@ void LowerFunctionLLVM::compile() {
                                         convertToPointer(rec->reason.srcCode),
                                         c(rec->reason.originOffset),
                                     });
-                call(NativeBuiltins::recordDeopt,
+                call(NativeBuiltins::get(NativeBuiltins::Id::recordDeopt),
                      {loadSxp(rec->arg<0>().val()), globalConst(reason)});
                 break;
             }
@@ -2172,7 +2194,8 @@ void LowerFunctionLLVM::compile() {
                             return createSelect2(
                                 cls,
                                 [&]() {
-                                    return call(NativeBuiltins::clsEq,
+                                    return call(NativeBuiltins::get(
+                                                    NativeBuiltins::Id::clsEq),
                                                 {ai, bi});
                                 },
                                 [&]() { return builder.getFalse(); });
@@ -2242,7 +2265,8 @@ void LowerFunctionLLVM::compile() {
                                 yRep != Representation::Sexp) {
 
                                 BasicBlock* isNaBr = nullptr;
-                                auto done = BasicBlock::Create(C, "", fun);
+                                auto done = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "", fun);
 
                                 auto res = phiBuilder(t::Int);
 
@@ -2256,14 +2280,16 @@ void LowerFunctionLLVM::compile() {
                                             auto vv = load(v, rep);
                                             if (!isNaBr)
                                                 isNaBr = BasicBlock::Create(
-                                                    C, "isNa", fun);
+                                                    PirJitLLVM::getContext(),
+                                                    "isNa", fun);
                                             nacheck(vv, v->type, isNaBr);
                                         } else {
                                             assert(rep ==
                                                    Representation::Integer);
                                             if (!isNaBr)
                                                 isNaBr = BasicBlock::Create(
-                                                    C, "isNa", fun);
+                                                    PirJitLLVM::getContext(),
+                                                    "isNa", fun);
                                             nacheck(asInt, v->type, isNaBr);
                                         }
                                     }
@@ -2274,16 +2300,19 @@ void LowerFunctionLLVM::compile() {
                                 switch (found - bitwise.begin()) {
                                 case 0: {
                                     if (!isNaBr)
-                                        isNaBr =
-                                            BasicBlock::Create(C, "isNa", fun);
-                                    auto ok = BasicBlock::Create(C, "", fun);
+                                        isNaBr = BasicBlock::Create(
+                                            PirJitLLVM::getContext(), "isNa",
+                                            fun);
+                                    auto ok = BasicBlock::Create(
+                                        PirJitLLVM::getContext(), "", fun);
                                     auto ofl =
                                         builder.CreateICmpSLT(yInt, c(0));
                                     builder.CreateCondBr(ofl, isNaBr, ok,
                                                          branchMostlyFalse);
                                     builder.SetInsertPoint(ok);
 
-                                    ok = BasicBlock::Create(C, "", fun);
+                                    ok = BasicBlock::Create(
+                                        PirJitLLVM::getContext(), "", fun);
                                     ofl = builder.CreateICmpSGT(yInt, c(31));
                                     builder.CreateCondBr(ofl, isNaBr, ok,
                                                          branchMostlyFalse);
@@ -2294,16 +2323,19 @@ void LowerFunctionLLVM::compile() {
                                 }
                                 case 1: {
                                     if (!isNaBr)
-                                        isNaBr =
-                                            BasicBlock::Create(C, "isNa", fun);
-                                    auto ok = BasicBlock::Create(C, "", fun);
+                                        isNaBr = BasicBlock::Create(
+                                            PirJitLLVM::getContext(), "isNa",
+                                            fun);
+                                    auto ok = BasicBlock::Create(
+                                        PirJitLLVM::getContext(), "", fun);
                                     auto ofl =
                                         builder.CreateICmpSLT(yInt, c(0));
                                     builder.CreateCondBr(ofl, isNaBr, ok,
                                                          branchMostlyFalse);
                                     builder.SetInsertPoint(ok);
 
-                                    ok = BasicBlock::Create(C, "", fun);
+                                    ok = BasicBlock::Create(
+                                        PirJitLLVM::getContext(), "", fun);
                                     ofl = builder.CreateICmpSGT(yInt, c(31));
                                     builder.CreateCondBr(ofl, isNaBr, ok,
                                                          branchMostlyFalse);
@@ -2366,7 +2398,9 @@ void LowerFunctionLLVM::compile() {
                     switch (b->builtinId) {
                     case blt("length"):
                         if (irep == t::SEXP) {
-                            llvm::Value* r = call(NativeBuiltins::length, {a});
+                            llvm::Value* r = call(
+                                NativeBuiltins::get(NativeBuiltins::Id::length),
+                                {a});
                             if (orep == t::SEXP) {
                                 r = createSelect2(
                                     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
@@ -2402,9 +2436,12 @@ void LowerFunctionLLVM::compile() {
                                 setVal(i, constant(R_NilValue, t::SEXP));
                             } else {
                                 auto res = phiBuilder(t::SEXP);
-                                auto done = BasicBlock::Create(C, "", fun);
-                                auto hasAttr = BasicBlock::Create(C, "", fun);
-                                auto noAttr = BasicBlock::Create(C, "", fun);
+                                auto done = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "", fun);
+                                auto hasAttr = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "", fun);
+                                auto noAttr = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "", fun);
                                 auto mightHaveNames = builder.CreateICmpNE(
                                     attr(a), constant(R_NilValue, t::SEXP));
                                 if (itype.maybeObj())
@@ -2474,8 +2511,10 @@ void LowerFunctionLLVM::compile() {
                             auto itype = b->callArg(0).val()->type;
                             if (itype.isA(PirType::intReal())) {
                                 auto trg = b->builtinId == blt("sum")
-                                               ? NativeBuiltins::sumr
-                                               : NativeBuiltins::prodr;
+                                               ? NativeBuiltins::get(
+                                                     NativeBuiltins::Id::sumr)
+                                               : NativeBuiltins::get(
+                                                     NativeBuiltins::Id::prodr);
                                 llvm::Value* res = call(trg, {a});
                                 if (orep == Representation::Integer)
                                     res = convert(res, i->type);
@@ -2727,7 +2766,9 @@ void LowerFunctionLLVM::compile() {
                                         setVal(
                                             i,
                                             call(
-                                                NativeBuiltins::makeVector,
+                                                NativeBuiltins::get(
+                                                    NativeBuiltins::Id::
+                                                        makeVector),
                                                 {c(type),
                                                  Representation::Of(l) ==
                                                          Representation::Real
@@ -2866,7 +2907,8 @@ void LowerFunctionLLVM::compile() {
                             typ = LGLSXP;
                         }
                         if (typ != 100) {
-                            auto res = call(NativeBuiltins::makeVector,
+                            auto res = call(NativeBuiltins::get(
+                                                NativeBuiltins::Id::makeVector),
                                             {c(typ), c(b->nCallArgs(), 64)});
                             auto pos = 0;
                             b->eachCallArg([&](Value* v) {
@@ -2883,8 +2925,9 @@ void LowerFunctionLLVM::compile() {
                 }
 
                 if (b->builtinId == blt("list")) {
-                    auto res = call(NativeBuiltins::makeVector,
-                                    {c(VECSXP), c(b->nCallArgs(), 64)});
+                    auto res = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::makeVector),
+                        {c(VECSXP), c(b->nCallArgs(), 64)});
                     protectTemp(res);
                     auto pos = 0;
                     auto resT = PirType(RType::vec).notObject();
@@ -2935,10 +2978,11 @@ void LowerFunctionLLVM::compile() {
                     callId = pushArgReordering(b->getArgOrderOrig());
 
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                           return call(NativeBuiltins::call,
-                                       {c(callId), paramCode(), c(b->srcIdx),
-                                        loadSxp(b->cls()), loadSxp(b->env()),
-                                        c(b->nCallArgs()), c(asmpt.toI())});
+                           return call(
+                               NativeBuiltins::get(NativeBuiltins::Id::call),
+                               {c(callId), paramCode(), c(b->srcIdx),
+                                loadSxp(b->cls()), loadSxp(b->env()),
+                                c(b->nCallArgs()), c(asmpt.toI())});
                        }));
                 break;
             }
@@ -2963,20 +3007,21 @@ void LowerFunctionLLVM::compile() {
                 if (b->isReordered())
                     callId = pushArgReordering(b->getArgOrderOrig());
 
-                setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                           return call(
-                               NativeBuiltins::namedCall,
-                               {
-                                   c(callId),
-                                   paramCode(),
-                                   c(b->srcIdx),
-                                   loadSxp(b->cls()),
-                                   loadSxp(b->env()),
-                                   c(b->nCallArgs()),
-                                   builder.CreateBitCast(namesStore, t::IntPtr),
-                                   c(asmpt.toI()),
-                               });
-                       }));
+                setVal(
+                    i, withCallFrame(args, [&]() -> llvm::Value* {
+                        return call(
+                            NativeBuiltins::get(NativeBuiltins::Id::namedCall),
+                            {
+                                c(callId),
+                                paramCode(),
+                                c(b->srcIdx),
+                                loadSxp(b->cls()),
+                                loadSxp(b->env()),
+                                c(b->nCallArgs()),
+                                builder.CreateBitCast(namesStore, t::IntPtr),
+                                c(asmpt.toI()),
+                            });
+                    }));
                 break;
             }
 
@@ -2994,21 +3039,21 @@ void LowerFunctionLLVM::compile() {
                     callId = pushArgReordering(calli->getArgOrderOrig());
 
                 if (!target->owner()->hasOriginClosure()) {
-                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                               return call(
-                                   NativeBuiltins::call,
-                                   {c(callId), paramCode(), c(calli->srcIdx),
-                                    loadSxp(calli->runtimeClosure()),
-                                    loadSxp(calli->env()),
-                                    c(calli->nCallArgs()), c(asmpt.toI())});
-                           }));
+                    setVal(
+                        i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::get(NativeBuiltins::Id::call),
+                                {c(callId), paramCode(), c(calli->srcIdx),
+                                 loadSxp(calli->runtimeClosure()),
+                                 loadSxp(calli->env()), c(calli->nCallArgs()),
+                                 c(asmpt.toI())});
+                        }));
                     break;
                 }
 
                 if (target == bestTarget) {
                     auto callee = target->owner()->rirClosure();
                     auto dt = DispatchTable::check(BODY(callee));
-                    assert(cls);
                     rir::Function* nativeTarget = nullptr;
                     for (size_t i = 0; i < dt->size(); i++) {
                         auto entry = dt->get(i);
@@ -3019,7 +3064,7 @@ void LowerFunctionLLVM::compile() {
                     }
                     if (nativeTarget) {
                         // TODO: callId is not used here.. should it be?
-                        auto trg = JitLLVM::get(target);
+                        auto trg = getFunction(target);
                         if (trg &&
                             target->properties.includes(
                                 ClosureVersion::Property::NoReflection)) {
@@ -3041,17 +3086,19 @@ void LowerFunctionLLVM::compile() {
                         Pool::patch(idx, nativeTarget->container());
                         assert(asmpt.smaller(nativeTarget->context()));
                         auto res = withCallFrame(args, [&]() {
-                            return call(NativeBuiltins::nativeCallTrampoline,
-                                        {
-                                            c(callId),
-                                            paramCode(),
-                                            constant(callee, t::SEXP),
-                                            c(idx),
-                                            c(calli->srcIdx),
-                                            loadSxp(calli->env()),
-                                            c(args.size()),
-                                            c(asmpt.toI()),
-                                        });
+                            return call(
+                                NativeBuiltins::get(
+                                    NativeBuiltins::Id::nativeCallTrampoline),
+                                {
+                                    c(callId),
+                                    paramCode(),
+                                    constant(callee, t::SEXP),
+                                    c(idx),
+                                    c(calli->srcIdx),
+                                    loadSxp(calli->env()),
+                                    c(args.size()),
+                                    c(asmpt.toI()),
+                                });
                         });
                         setVal(i, res);
                         break;
@@ -3061,7 +3108,7 @@ void LowerFunctionLLVM::compile() {
                 assert(asmpt.includes(Assumption::StaticallyArgmatched));
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(
-                               NativeBuiltins::call,
+                               NativeBuiltins::get(NativeBuiltins::Id::call),
                                {
                                    c(callId),
                                    paramCode(),
@@ -3096,8 +3143,9 @@ void LowerFunctionLLVM::compile() {
                     setVal(i, c(1));
                     break;
                 }
-                llvm::Value* res = call(NativeBuiltins::forSeqSize,
-                                        {loadSxp(i->arg(0).val())});
+                llvm::Value* res =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::forSeqSize),
+                         {loadSxp(i->arg(0).val())});
                 setVal(i, convert(res, i->type));
                 break;
             }
@@ -3145,7 +3193,7 @@ void LowerFunctionLLVM::compile() {
                 i->eachArg([&](Value* v) { args.push_back(v); });
                 llvm::CallInst* res;
                 withCallFrame(args, [&]() {
-                    res = call(NativeBuiltins::deopt,
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
                                {paramCode(), paramClosure(),
                                 convertToPointer(m), paramArgs()});
                     return res;
@@ -3170,7 +3218,8 @@ void LowerFunctionLLVM::compile() {
 
                 if (mkenv->stub) {
                     auto env =
-                        call(NativeBuiltins::createStubEnvironment,
+                        call(NativeBuiltins::get(
+                                 NativeBuiltins::Id::createStubEnvironment),
                              {parent, c((int)mkenv->nLocals()),
                               builder.CreateBitCast(namesStore, t::IntPtr),
                               c(mkenv->context)});
@@ -3191,16 +3240,19 @@ void LowerFunctionLLVM::compile() {
                 mkenv->eachLocalVarRev([&](SEXP name, Value* v, bool miss) {
                     if (miss) {
                         arglist = call(
-                            NativeBuiltins::createMissingBindingCell,
+                            NativeBuiltins::get(
+                                NativeBuiltins::Id::createMissingBindingCell),
                             {loadSxp(v), constant(name, t::SEXP), arglist});
                     } else {
                         arglist = call(
-                            NativeBuiltins::createBindingCell,
+                            NativeBuiltins::get(
+                                NativeBuiltins::Id::createBindingCell),
                             {loadSxp(v), constant(name, t::SEXP), arglist});
                     }
                 });
 
-                setVal(i, call(NativeBuiltins::createEnvironment,
+                setVal(i, call(NativeBuiltins::get(
+                                   NativeBuiltins::Id::createEnvironment),
                                {parent, arglist, c(mkenv->context)}));
 
                 if (bindingsCache.count(i))
@@ -3213,7 +3265,8 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::MaterializeEnv: {
                 auto materialize = MaterializeEnv::Cast(i);
-                setVal(i, call(NativeBuiltins::materializeEnvironment,
+                setVal(i, call(NativeBuiltins::get(
+                                   NativeBuiltins::Id::materializeEnvironment),
                                {loadSxp(materialize->env())}));
                 break;
             }
@@ -3316,17 +3369,21 @@ void LowerFunctionLLVM::compile() {
                     llvm::Value* res = nullptr;
                     if (i->hasEnv()) {
                         res = call(
-                            NativeBuiltins::notEnv,
+                            NativeBuiltins::get(NativeBuiltins::Id::notEnv),
                             {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
                     } else {
-                        res = call(NativeBuiltins::notOp, {argumentNative});
+                        res =
+                            call(NativeBuiltins::get(NativeBuiltins::Id::notOp),
+                                 {argumentNative});
                     }
                     setVal(i, res);
                     break;
                 }
 
-                auto done = BasicBlock::Create(C, "", fun);
-                auto isNa = BasicBlock::Create(C, "", fun);
+                auto done =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                auto isNa =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                 auto argumentNative = load(argument, argumentRep);
 
@@ -3486,9 +3543,12 @@ void LowerFunctionLLVM::compile() {
                 compileBinop(
                     i,
                     [&](llvm::Value* a, llvm::Value* b) {
-                        auto isZero = BasicBlock::Create(C, "", fun);
-                        auto notZero = BasicBlock::Create(C, "", fun);
-                        auto cnt = BasicBlock::Create(C, "", fun);
+                        auto isZero = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto notZero = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto cnt = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                      "", fun);
                         builder.CreateCondBr(builder.CreateICmpEQ(b, c(0)),
                                              isZero, notZero,
                                              branchMostlyFalse);
@@ -3512,9 +3572,12 @@ void LowerFunctionLLVM::compile() {
                     [&](llvm::Value* a, llvm::Value* b) {
                         // from myfloor
                         auto q = builder.CreateFDiv(a, b);
-                        auto isZero = BasicBlock::Create(C, "", fun);
-                        auto notZero = BasicBlock::Create(C, "", fun);
-                        auto cnt = BasicBlock::Create(C, "", fun);
+                        auto isZero = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto notZero = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto cnt = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                      "", fun);
                         builder.CreateCondBr(builder.CreateFCmpUEQ(b, c(0.0)),
                                              isZero, notZero,
                                              branchMostlyFalse);
@@ -3544,9 +3607,12 @@ void LowerFunctionLLVM::compile() {
             case Tag::Mod: {
                 auto myfmod = [&](llvm::Value* a, llvm::Value* b) {
                     // from myfmod
-                    auto isZero = BasicBlock::Create(C, "", fun);
-                    auto notZero = BasicBlock::Create(C, "", fun);
-                    auto cnt = BasicBlock::Create(C, "", fun);
+                    auto isZero =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto notZero =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto cnt =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
                     auto res = phiBuilder(t::Double);
                     builder.CreateCondBr(builder.CreateFCmpUEQ(b, c(0.0)),
                                          isZero, notZero, branchMostlyFalse);
@@ -3567,15 +3633,17 @@ void LowerFunctionLLVM::compile() {
                     auto gt =
                         builder.CreateFCmpUGT(absq, c(1 / R_AccuracyInfo.eps));
 
-                    auto warn = BasicBlock::Create(C, "", fun);
-                    auto noWarn = BasicBlock::Create(C, "", fun);
+                    auto warn =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto noWarn =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
                     builder.CreateCondBr(builder.CreateAnd(finite, gt), warn,
                                          noWarn, branchMostlyFalse);
 
                     builder.SetInsertPoint(warn);
                     auto msg = builder.CreateGlobalString(
                         "probable complete loss of accuracy in modulus");
-                    call(NativeBuiltins::warn,
+                    call(NativeBuiltins::get(NativeBuiltins::Id::warn),
                          {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                     builder.CreateBr(noWarn);
 
@@ -3595,10 +3663,14 @@ void LowerFunctionLLVM::compile() {
                 compileBinop(
                     i,
                     [&](llvm::Value* a, llvm::Value* b) {
-                        auto fast = BasicBlock::Create(C, "", fun);
-                        auto fast1 = BasicBlock::Create(C, "", fun);
-                        auto slow = BasicBlock::Create(C, "", fun);
-                        auto cnt = BasicBlock::Create(C, "", fun);
+                        auto fast = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
+                        auto fast1 = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto slow = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
+                        auto cnt = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                      "", fun);
                         auto res = phiBuilder(t::Int);
                         builder.CreateCondBr(builder.CreateICmpSGE(a, c(0)),
                                              fast1, slow, branchMostlyTrue);
@@ -3631,16 +3703,18 @@ void LowerFunctionLLVM::compile() {
                 llvm::Value* res;
                 if (i->hasEnv()) {
                     auto e = loadSxp(i->env());
-                    res = call(NativeBuiltins::binopEnv,
-                               {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
-                                c((int)BinopKind::COLON)});
+                    res =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                             {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
+                              c((int)BinopKind::COLON)});
                 } else if (Representation::Of(a) == Representation::Integer &&
                            Representation::Of(b) == Representation::Integer) {
-                    res = call(NativeBuiltins::colon, {load(a), load(b)});
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::colon),
+                               {load(a), load(b)});
                 } else {
-                    res =
-                        call(NativeBuiltins::binop, {loadSxp(a), loadSxp(b),
-                                                     c((int)BinopKind::COLON)});
+                    res = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::binop),
+                        {loadSxp(a), loadSxp(b), c((int)BinopKind::COLON)});
                 }
                 setVal(i, res);
                 break;
@@ -3655,7 +3729,7 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::NonLocalReturn: {
-                call(NativeBuiltins::nonLocalReturn,
+                call(NativeBuiltins::get(NativeBuiltins::Id::nonLocalReturn),
                      {loadSxp(i->arg(0).val()), loadSxp(i->env())});
                 builder.CreateUnreachable();
                 break;
@@ -3665,10 +3739,14 @@ void LowerFunctionLLVM::compile() {
                 auto arg = loadSxp(i->arg(0).val());
                 auto env = MkEnv::Cast(i->env());
 
-                auto isStub = BasicBlock::Create(C, "", fun);
-                auto isNotMaterialized = BasicBlock::Create(C, "", fun);
-                auto isNotStub = BasicBlock::Create(C, "", fun);
-                auto done = BasicBlock::Create(C, "", fun);
+                auto isStub =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                auto isNotMaterialized =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                auto isNotStub =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                auto done =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                 auto r = Representation::Of(i);
                 auto res = phiBuilder(r);
@@ -3706,9 +3784,10 @@ void LowerFunctionLLVM::compile() {
                     constant(mkFunction->originalBody->container(), t::SEXP);
                 assert(DispatchTable::check(
                     mkFunction->originalBody->container()));
-                setVal(i, call(NativeBuiltins::createClosure,
-                               {body, formals, loadSxp(mkFunction->env()),
-                                srcRef}));
+                setVal(
+                    i,
+                    call(NativeBuiltins::get(NativeBuiltins::Id::createClosure),
+                         {body, formals, loadSxp(mkFunction->env()), srcRef}));
                 break;
             }
 
@@ -3718,7 +3797,8 @@ void LowerFunctionLLVM::compile() {
                 auto body = loadSxp(mk->arg(1).val());
                 auto srcRef = loadSxp(mk->arg(2).val());
                 auto env = loadSxp(mk->arg(3).val());
-                setVal(i, call(NativeBuiltins::createClosure,
+                setVal(i, call(NativeBuiltins::get(
+                                   NativeBuiltins::Id::createClosure),
                                {body, formals, env, srcRef}));
                 break;
             }
@@ -3883,12 +3963,16 @@ void LowerFunctionLLVM::compile() {
 
                 if (Representation::Of(arg) == Representation::Sexp) {
                     auto a = loadSxp(arg);
-                    res = call(NativeBuiltins::checkTrueFalse, {a});
+                    res = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::checkTrueFalse),
+                        {a});
                 } else {
                     auto r = Representation::Of(arg);
 
-                    auto done = BasicBlock::Create(C, "", fun);
-                    auto isNa = BasicBlock::Create(C, "asTestIsNa", fun);
+                    auto done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto isNa = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                   "asTestIsNa", fun);
 
                     if (r == Representation::Real) {
                         auto narg = load(arg, r);
@@ -3905,7 +3989,7 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(isNa);
                     auto msg = builder.CreateGlobalString(
                         "missing value where TRUE/FALSE needed");
-                    call(NativeBuiltins::error,
+                    call(NativeBuiltins::get(NativeBuiltins::Id::error),
                          {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                     builder.CreateUnreachable();
 
@@ -3925,14 +4009,19 @@ void LowerFunctionLLVM::compile() {
 
                 llvm::Value* res;
                 if (r1 == Representation::Sexp) {
-                    res = call(NativeBuiltins::asLogicalBlt, {loadSxp(arg)});
+                    res = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::asLogicalBlt),
+                        {loadSxp(arg)});
                 } else if (r1 == Representation::Real) {
                     auto phi = phiBuilder(t::Int);
                     auto nin = load(arg);
 
-                    auto done = BasicBlock::Create(C, "", fun);
-                    auto isNaBr = BasicBlock::Create(C, "isNa", fun);
-                    auto notNaBr = BasicBlock::Create(C, "", fun);
+                    auto done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                     "isNa", fun);
+                    auto notNaBr =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
                     nacheck(nin, arg->type, isNaBr, notNaBr);
 
                     builder.SetInsertPoint(isNaBr);
@@ -3991,7 +4080,7 @@ void LowerFunctionLLVM::compile() {
             case Tag::LdFun: {
                 auto ld = LdFun::Cast(i);
                 auto res =
-                    call(NativeBuiltins::ldfun,
+                    call(NativeBuiltins::get(NativeBuiltins::Id::ldfun),
                          {constant(ld->varName, t::SEXP), loadSxp(ld->env())});
                 setVal(i, res);
                 setVisible(1);
@@ -4007,19 +4096,26 @@ void LowerFunctionLLVM::compile() {
                 if (p->hasEnv()) {
                     auto e = loadSxp(p->env());
                     if (p->isEager()) {
-                        setVal(i, call(NativeBuiltins::createPromiseEager,
-                                       {exp, e, loadSxp(p->eagerArg())}));
-                    } else {
                         setVal(i,
-                               call(NativeBuiltins::createPromise, {exp, e}));
+                               call(NativeBuiltins::get(
+                                        NativeBuiltins::Id::createPromiseEager),
+                                    {exp, e, loadSxp(p->eagerArg())}));
+                    } else {
+                        setVal(i, call(NativeBuiltins::get(
+                                           NativeBuiltins::Id::createPromise),
+                                       {exp, e}));
                     }
                 } else {
                     if (p->isEager()) {
-                        setVal(i, call(NativeBuiltins::createPromiseNoEnvEager,
+                        setVal(i, call(NativeBuiltins::get(
+                                           NativeBuiltins::Id::
+                                               createPromiseNoEnvEager),
                                        {exp, loadSxp(p->eagerArg())}));
                     } else {
                         setVal(i,
-                               call(NativeBuiltins::createPromiseNoEnv, {exp}));
+                               call(NativeBuiltins::get(
+                                        NativeBuiltins::Id::createPromiseNoEnv),
+                                    {exp}));
                     }
                 }
                 break;
@@ -4036,7 +4132,7 @@ void LowerFunctionLLVM::compile() {
 
                 auto env = cdr(loadSxp(ld->env()));
 
-                auto res = call(NativeBuiltins::ldvar,
+                auto res = call(NativeBuiltins::get(NativeBuiltins::Id::ldvar),
                                 {constant(ld->varName, t::SEXP), env});
                 res->setName(CHAR(PRINTNAME(ld->varName)));
 
@@ -4068,7 +4164,8 @@ void LowerFunctionLLVM::compile() {
                             // if unsassigned in the stub, fall through
                             [&]() {
                                 return call(
-                                    NativeBuiltins::ldvar,
+                                    NativeBuiltins::get(
+                                        NativeBuiltins::Id::ldvar),
                                     {constant(varName, t::SEXP),
                                      envStubGet(e, -1, env->nLocals())});
                             },
@@ -4087,10 +4184,14 @@ void LowerFunctionLLVM::compile() {
                         builder.CreateGEP(bindingsCacheBase, c(offset));
                     llvm::Value* cache = builder.CreateLoad(cachePtr);
 
-                    auto hit1 = BasicBlock::Create(C, "", fun);
-                    auto hit2 = BasicBlock::Create(C, "", fun);
-                    auto miss = BasicBlock::Create(C, "", fun);
-                    auto done = BasicBlock::Create(C, "", fun);
+                    auto hit1 =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto hit2 =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto miss =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
@@ -4109,9 +4210,10 @@ void LowerFunctionLLVM::compile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(miss);
-                    auto res0 = call(NativeBuiltins::ldvarCacheMiss,
-                                     {constant(varName, t::SEXP),
-                                      loadSxp(i->env()), cachePtr});
+                    auto res0 = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::ldvarCacheMiss),
+                        {constant(varName, t::SEXP), loadSxp(i->env()),
+                         cachePtr});
                     if (needsLdVarForUpdate.count(i))
                         ensureShared(res0);
                     phi.addInput(res0);
@@ -4119,12 +4221,15 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(done);
                     res = phi();
                 } else if (i->env() == Env::global()) {
-                    res = call(NativeBuiltins::ldvarGlobal,
-                               {constant(varName, t::SEXP)});
+                    res = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::ldvarGlobal),
+                        {constant(varName, t::SEXP)});
                 } else {
-                    auto setter = needsLdVarForUpdate.count(i)
-                                      ? NativeBuiltins::ldvarForUpdate
-                                      : NativeBuiltins::ldvar;
+                    auto setter =
+                        needsLdVarForUpdate.count(i)
+                            ? NativeBuiltins::get(
+                                  NativeBuiltins::Id::ldvarForUpdate)
+                            : NativeBuiltins::get(NativeBuiltins::Id::ldvar);
                     res = call(setter,
                                {constant(varName, t::SEXP), loadSxp(i->env())});
                 }
@@ -4151,19 +4256,23 @@ void LowerFunctionLLVM::compile() {
                 auto res = phiBuilder(Representation::Of(i));
 
                 if (fastcase) {
-                    auto fallback = BasicBlock::Create(C, "", fun);
-                    done = BasicBlock::Create(C, "", fun);
+                    auto fallback =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(extract->vec());
 
                     if (Representation::Of(extract->vec()) == t::SEXP) {
-                        auto hit2 = BasicBlock::Create(C, "", fun);
+                        auto hit2 = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit2,
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
 
                         if (extract->vec()->type.maybeHasAttrs()) {
-                            auto hit3 = BasicBlock::Create(C, "", fun);
+                            auto hit3 = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
                                                  hit3, fallback,
                                                  branchMostlyTrue);
@@ -4187,8 +4296,9 @@ void LowerFunctionLLVM::compile() {
                 if (extract->hasEnv())
                     env = loadSxp(extract->env());
                 auto idx = loadSxp(extract->idx());
-                auto res0 = call(NativeBuiltins::extract11,
-                                 {vector, idx, env, c(extract->srcIdx)});
+                auto res0 =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::extract11),
+                         {vector, idx, env, c(extract->srcIdx)});
 
                 res.addInput(convert(res0, i->type));
                 if (fastcase) {
@@ -4216,19 +4326,23 @@ void LowerFunctionLLVM::compile() {
                 auto res = phiBuilder(Representation::Of(i));
 
                 if (fastcase) {
-                    auto fallback = BasicBlock::Create(C, "", fun);
-                    done = BasicBlock::Create(C, "", fun);
+                    auto fallback =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(extract->vec());
 
                     if (Representation::Of(extract->vec()) == t::SEXP) {
-                        auto hit2 = BasicBlock::Create(C, "", fun);
+                        auto hit2 = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit2,
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
 
                         if (extract->vec()->type.maybeHasAttrs()) {
-                            auto hit3 = BasicBlock::Create(C, "", fun);
+                            auto hit3 = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
                                                  hit3, fallback,
                                                  branchMostlyTrue);
@@ -4237,9 +4351,15 @@ void LowerFunctionLLVM::compile() {
                     }
 
                     auto ncol = builder.CreateZExt(
-                        call(NativeBuiltins::matrixNcols, {vector}), t::i64);
+                        call(NativeBuiltins::get(
+                                 NativeBuiltins::Id::matrixNcols),
+                             {vector}),
+                        t::i64);
                     auto nrow = builder.CreateZExt(
-                        call(NativeBuiltins::matrixNrows, {vector}), t::i64);
+                        call(NativeBuiltins::get(
+                                 NativeBuiltins::Id::matrixNrows),
+                             {vector}),
+                        t::i64);
                     llvm::Value* index1 = computeAndCheckIndex(
                         extract->idx1(), vector, fallback, nrow);
                     llvm::Value* index2 = computeAndCheckIndex(
@@ -4263,9 +4383,10 @@ void LowerFunctionLLVM::compile() {
                 auto vector = loadSxp(extract->vec());
                 auto idx1 = loadSxp(extract->idx1());
                 auto idx2 = loadSxp(extract->idx2());
-                auto res0 = call(NativeBuiltins::extract12,
-                                 {vector, idx1, idx2, loadSxp(extract->env()),
-                                  c(extract->srcIdx)});
+                auto res0 =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
+                         {vector, idx1, idx2, loadSxp(extract->env()),
+                          c(extract->srcIdx)});
 
                 res.addInput(convert(res0, i->type));
                 if (fastcase) {
@@ -4288,9 +4409,12 @@ void LowerFunctionLLVM::compile() {
                 auto res = phiBuilder(Representation::Of(i));
 
                 if (fastcase) {
-                    auto fallback = BasicBlock::Create(C, "", fun);
-                    auto hit2 = BasicBlock::Create(C, "", fun);
-                    done = BasicBlock::Create(C, "", fun);
+                    auto fallback =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto hit2 =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(extract->vec());
 
@@ -4318,10 +4442,12 @@ void LowerFunctionLLVM::compile() {
                 if (irep != t::SEXP) {
                     NativeBuiltin getter;
                     if (irep == t::Int) {
-                        getter = NativeBuiltins::extract21i;
+                        getter =
+                            NativeBuiltins::get(NativeBuiltins::Id::extract21i);
                     } else {
                         assert(irep == t::Double);
-                        getter = NativeBuiltins::extract21r;
+                        getter =
+                            NativeBuiltins::get(NativeBuiltins::Id::extract21r);
                     }
                     auto vector = loadSxp(extract->vec());
                     res0 = call(getter,
@@ -4330,9 +4456,10 @@ void LowerFunctionLLVM::compile() {
                 } else {
                     auto vector = loadSxp(extract->vec());
                     auto idx = loadSxp(extract->idx());
-                    res0 = call(NativeBuiltins::extract21,
-                                {vector, idx, loadSxp(extract->env()),
-                                 c(extract->srcIdx)});
+                    res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract21),
+                             {vector, idx, loadSxp(extract->env()),
+                              c(extract->srcIdx)});
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -4359,7 +4486,7 @@ void LowerFunctionLLVM::compile() {
                     env = loadSxp(extract->env());
 
                 auto res =
-                    call(NativeBuiltins::extract13,
+                    call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
                          {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
                 setVal(i, res);
 
@@ -4379,9 +4506,12 @@ void LowerFunctionLLVM::compile() {
                 auto res = phiBuilder(Representation::Of(i));
 
                 if (fastcase) {
-                    auto fallback = BasicBlock::Create(C, "", fun);
-                    auto hit2 = BasicBlock::Create(C, "", fun);
-                    done = BasicBlock::Create(C, "", fun);
+                    auto fallback =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto hit2 =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(extract->vec());
 
@@ -4392,9 +4522,15 @@ void LowerFunctionLLVM::compile() {
                     }
 
                     auto ncol = builder.CreateZExt(
-                        call(NativeBuiltins::matrixNcols, {vector}), t::i64);
+                        call(NativeBuiltins::get(
+                                 NativeBuiltins::Id::matrixNcols),
+                             {vector}),
+                        t::i64);
                     auto nrow = builder.CreateZExt(
-                        call(NativeBuiltins::matrixNrows, {vector}), t::i64);
+                        call(NativeBuiltins::get(
+                                 NativeBuiltins::Id::matrixNrows),
+                             {vector}),
+                        t::i64);
                     llvm::Value* index1 = computeAndCheckIndex(
                         extract->idx1(), vector, fallback, nrow);
                     llvm::Value* index2 = computeAndCheckIndex(
@@ -4422,10 +4558,12 @@ void LowerFunctionLLVM::compile() {
                     Representation::Of(extract->idx2()) == irep) {
                     NativeBuiltin getter;
                     if (irep == t::Int) {
-                        getter = NativeBuiltins::extract22ii;
+                        getter = NativeBuiltins::get(
+                            NativeBuiltins::Id::extract22ii);
                     } else {
                         assert(irep == t::Double);
-                        getter = NativeBuiltins::extract22rr;
+                        getter = NativeBuiltins::get(
+                            NativeBuiltins::Id::extract22rr);
                     }
 
                     auto vector = loadSxp(extract->vec());
@@ -4438,9 +4576,10 @@ void LowerFunctionLLVM::compile() {
                     auto vector = loadSxp(extract->vec());
                     auto idx1 = loadSxp(extract->idx1());
                     auto idx2 = loadSxp(extract->idx2());
-                    res0 = call(NativeBuiltins::extract22,
-                                {vector, idx1, idx2, loadSxp(extract->env()),
-                                 c(extract->srcIdx)});
+                    res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract22),
+                             {vector, idx1, idx2, loadSxp(extract->env()),
+                              c(extract->srcIdx)});
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -4464,7 +4603,7 @@ void LowerFunctionLLVM::compile() {
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
                 auto res =
-                    call(NativeBuiltins::subassign13,
+                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign13),
                          {vector, idx1, idx2, idx3, val,
                           loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                 setVal(i, res);
@@ -4481,7 +4620,7 @@ void LowerFunctionLLVM::compile() {
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
                 auto res =
-                    call(NativeBuiltins::subassign12,
+                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
                          {vector, idx1, idx2, val, loadSxp(subAssign->env()),
                           c(subAssign->srcIdx)});
                 setVal(i, res);
@@ -4514,17 +4653,25 @@ void LowerFunctionLLVM::compile() {
                     fastcase = false;
 
                 if (fastcase) {
-                    auto fallback = BasicBlock::Create(C, "", fun);
-                    done = BasicBlock::Create(C, "", fun);
+                    auto fallback =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(subAssign->lhs());
                     if (Representation::Of(subAssign->lhs()) == t::SEXP)
                         vector = cloneIfShared(vector);
 
                     auto ncol = builder.CreateZExt(
-                        call(NativeBuiltins::matrixNcols, {vector}), t::i64);
+                        call(NativeBuiltins::get(
+                                 NativeBuiltins::Id::matrixNcols),
+                             {vector}),
+                        t::i64);
                     auto nrow = builder.CreateZExt(
-                        call(NativeBuiltins::matrixNrows, {vector}), t::i64);
+                        call(NativeBuiltins::get(
+                                 NativeBuiltins::Id::matrixNrows),
+                             {vector}),
+                        t::i64);
                     llvm::Value* index1 = computeAndCheckIndex(
                         subAssign->idx1(), vector, fallback, nrow);
                     llvm::Value* index2 = computeAndCheckIndex(
@@ -4558,14 +4705,18 @@ void LowerFunctionLLVM::compile() {
                     subAssign->rhs()->type.isA(subAssign->lhs()->type)) {
                     NativeBuiltin setter;
                     if (irep == t::Int && vrep == t::Int)
-                        setter = NativeBuiltins::subassign22iii;
+                        setter = NativeBuiltins::get(
+                            NativeBuiltins::Id::subassign22iii);
                     else if (irep == t::Double && vrep == t::Int)
-                        setter = NativeBuiltins::subassign22rri;
+                        setter = NativeBuiltins::get(
+                            NativeBuiltins::Id::subassign22rri);
                     else if (irep == t::Int && vrep == t::Double)
-                        setter = NativeBuiltins::subassign22iir;
+                        setter = NativeBuiltins::get(
+                            NativeBuiltins::Id::subassign22iir);
                     else {
                         assert(irep == t::Double && vrep == t::Double);
-                        setter = NativeBuiltins::subassign22rrr;
+                        setter = NativeBuiltins::get(
+                            NativeBuiltins::Id::subassign22rrr);
                     }
 
                     assign = call(
@@ -4574,11 +4725,11 @@ void LowerFunctionLLVM::compile() {
                          load(subAssign->idx2()), load(subAssign->rhs()),
                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                 } else {
-                    assign =
-                        call(NativeBuiltins::subassign22,
-                             {loadSxp(subAssign->lhs()), idx1, idx2,
-                              loadSxp(subAssign->rhs()),
-                              loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                    assign = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::subassign22),
+                        {loadSxp(subAssign->lhs()), idx1, idx2,
+                         loadSxp(subAssign->rhs()), loadSxp(subAssign->env()),
+                         c(subAssign->srcIdx)});
                 }
 
                 res.addInput(assign);
@@ -4619,18 +4770,22 @@ void LowerFunctionLLVM::compile() {
                     fastcase = false;
 
                 if (fastcase) {
-                    auto fallback = BasicBlock::Create(C, "", fun);
-                    done = BasicBlock::Create(C, "", fun);
+                    auto fallback =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(subAssign->vector());
                     if (Representation::Of(subAssign->vector()) == t::SEXP) {
-                        auto hit1 = BasicBlock::Create(C, "", fun);
+                        auto hit1 = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit1,
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit1);
 
                         if (vecType.maybeHasAttrs()) {
-                            auto hit2 = BasicBlock::Create(C, "", fun);
+                            auto hit2 = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
                                                  hit2, fallback,
                                                  branchMostlyTrue);
@@ -4658,7 +4813,7 @@ void LowerFunctionLLVM::compile() {
                 }
 
                 llvm::Value* res0 =
-                    call(NativeBuiltins::subassign11,
+                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
                          {loadSxp(subAssign->vector()),
                           loadSxp(subAssign->idx()), loadSxp(subAssign->val()),
                           loadSxp(subAssign->env()), c(subAssign->srcIdx)});
@@ -4700,12 +4855,15 @@ void LowerFunctionLLVM::compile() {
                     fastcase = false;
 
                 if (fastcase) {
-                    auto fallback = BasicBlock::Create(C, "", fun);
-                    done = BasicBlock::Create(C, "", fun);
+                    auto fallback =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(subAssign->vector());
                     if (Representation::Of(subAssign->vector()) == t::SEXP) {
-                        auto hit1 = BasicBlock::Create(C, "", fun);
+                        auto hit1 = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit1,
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit1);
@@ -4736,14 +4894,18 @@ void LowerFunctionLLVM::compile() {
                     subAssign->val()->type.isA(subAssign->vector()->type)) {
                     NativeBuiltin setter;
                     if (irep == t::Int && vrep == t::Int)
-                        setter = NativeBuiltins::subassign21ii;
+                        setter = NativeBuiltins::get(
+                            NativeBuiltins::Id::subassign21ii);
                     else if (irep == t::Double && vrep == t::Int)
-                        setter = NativeBuiltins::subassign21ri;
+                        setter = NativeBuiltins::get(
+                            NativeBuiltins::Id::subassign21ri);
                     else if (irep == t::Int && vrep == t::Double)
-                        setter = NativeBuiltins::subassign21ir;
+                        setter = NativeBuiltins::get(
+                            NativeBuiltins::Id::subassign21ir);
                     else {
                         assert(irep == t::Double && vrep == t::Double);
-                        setter = NativeBuiltins::subassign21rr;
+                        setter = NativeBuiltins::get(
+                            NativeBuiltins::Id::subassign21rr);
                     }
 
                     res0 =
@@ -4753,7 +4915,7 @@ void LowerFunctionLLVM::compile() {
                               loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                 } else {
                     res0 = call(
-                        NativeBuiltins::subassign21,
+                        NativeBuiltins::get(NativeBuiltins::Id::subassign21),
                         {loadSxp(subAssign->vector()),
                          loadSxp(subAssign->idx()), loadSxp(subAssign->val()),
                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
@@ -4778,12 +4940,15 @@ void LowerFunctionLLVM::compile() {
                 if (environment && environment->stub) {
                     auto idx = environment->indexOf(st->varName);
                     auto e = loadSxp(environment);
-                    BasicBlock* done = BasicBlock::Create(C, "", fun);
+                    BasicBlock* done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
                     auto cur = envStubGet(e, idx, environment->nLocals());
 
                     if (Representation::Of(st->val()) != t::SEXP) {
-                        auto fastcase = BasicBlock::Create(C, "", fun);
-                        auto fallback = BasicBlock::Create(C, "", fun);
+                        auto fastcase = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto fallback = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
 
                         auto expected = Representation::Of(st->val()) == t::Int
                                             ? INTSXP
@@ -4805,8 +4970,10 @@ void LowerFunctionLLVM::compile() {
 
                     auto val = loadSxp(st->val());
                     if (Representation::Of(st->val()) == t::SEXP) {
-                        auto same = BasicBlock::Create(C, "", fun);
-                        auto different = BasicBlock::Create(C, "", fun);
+                        auto same = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
+                        auto different = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
                         builder.CreateCondBr(builder.CreateICmpEQ(val, cur),
                                              same, different);
 
@@ -4839,13 +5006,13 @@ void LowerFunctionLLVM::compile() {
                 bool realValueCase =
                     Representation::Of(pirVal) == Representation::Real &&
                     pirVal->type.isA(RType::real);
-                auto setter = NativeBuiltins::stvar;
+                auto setter = NativeBuiltins::get(NativeBuiltins::Id::stvar);
                 if (st->isStArg)
-                    setter = NativeBuiltins::starg;
+                    setter = NativeBuiltins::get(NativeBuiltins::Id::starg);
                 if (!st->isStArg && integerValueCase)
-                    setter = NativeBuiltins::stvari;
+                    setter = NativeBuiltins::get(NativeBuiltins::Id::stvari);
                 if (!st->isStArg && realValueCase)
-                    setter = NativeBuiltins::stvarr;
+                    setter = NativeBuiltins::get(NativeBuiltins::Id::stvarr);
                 bool unboxed =
                     setter.llvmSignature->getFunctionParamType(1) != t::SEXP;
 
@@ -4855,12 +5022,18 @@ void LowerFunctionLLVM::compile() {
                         builder.CreateGEP(bindingsCacheBase, c(offset));
                     llvm::Value* cache = builder.CreateLoad(cachePtr);
 
-                    auto hit1 = BasicBlock::Create(C, "", fun);
-                    auto hit2 = BasicBlock::Create(C, "", fun);
-                    auto hit3 = BasicBlock::Create(C, "", fun);
-                    auto identical = BasicBlock::Create(C, "", fun);
-                    auto miss = BasicBlock::Create(C, "", fun);
-                    auto done = BasicBlock::Create(C, "", fun);
+                    auto hit1 =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto hit2 =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto hit3 =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto identical =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto miss =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto done =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
@@ -4879,9 +5052,12 @@ void LowerFunctionLLVM::compile() {
 
                     llvm::Value* newVal = nullptr;
                     if (integerValueCase || realValueCase) {
-                        auto hitUnbox = BasicBlock::Create(C, "", fun);
-                        auto hitUnbox2 = BasicBlock::Create(C, "", fun);
-                        auto fallbackUnbox = BasicBlock::Create(C, "", fun);
+                        auto hitUnbox = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto hitUnbox2 = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto fallbackUnbox = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
                         auto storeType =
                             integerValueCase ? RType::integer : RType::real;
                         auto isScalarType = isSimpleScalar(
@@ -4951,16 +5127,17 @@ void LowerFunctionLLVM::compile() {
                 if (environment) {
                     auto parent = MkEnv::Cast(environment->lexicalEnv());
                     if (environment->stub || (parent && parent->stub)) {
-                        call(NativeBuiltins::stvarSuper,
-                             {constant(st->varName, t::SEXP),
-                              loadSxp(st->arg<0>().val()), loadSxp(st->env())});
+                        call(
+                            NativeBuiltins::get(NativeBuiltins::Id::stvarSuper),
+                            {constant(st->varName, t::SEXP),
+                             loadSxp(st->arg<0>().val()), loadSxp(st->env())});
                         break;
                     }
                 }
 
                 // In case we statically knew the parent PIR already converted
                 // super assigns to standard stores
-                call(NativeBuiltins::defvar,
+                call(NativeBuiltins::get(NativeBuiltins::Id::defvar),
                      {constant(st->varName, t::SEXP),
                       loadSxp(st->arg<0>().val()), loadSxp(st->env())});
                 break;
@@ -4969,9 +5146,10 @@ void LowerFunctionLLVM::compile() {
             case Tag::Missing: {
                 assert(Representation::Of(i) == Representation::Integer);
                 auto missing = Missing::Cast(i);
-                setVal(i, call(NativeBuiltins::isMissing,
-                               {constant(missing->varName, t::SEXP),
-                                loadSxp(i->env())}));
+                setVal(i,
+                       call(NativeBuiltins::get(NativeBuiltins::Id::isMissing),
+                            {constant(missing->varName, t::SEXP),
+                             loadSxp(i->env())}));
                 break;
             }
 
@@ -4986,7 +5164,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::ChkClosure: {
                 auto arg = loadSxp(i->arg(0).val());
-                call(NativeBuiltins::chkfun,
+                call(NativeBuiltins::get(NativeBuiltins::Id::chkfun),
                      {constant(Rf_install(ChkClosure::Cast(i)->name().c_str()),
                                t::SEXP),
                       arg});
@@ -4999,7 +5177,8 @@ void LowerFunctionLLVM::compile() {
                 auto b = i->arg(1).val();
                 if (Representation::Of(a) == t::SEXP ||
                     Representation::Of(b) == t::SEXP) {
-                    setVal(i, call(NativeBuiltins::colonInputEffects,
+                    setVal(i, call(NativeBuiltins::get(
+                                       NativeBuiltins::Id::colonInputEffects),
                                    {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
                     break;
                 }
@@ -5052,18 +5231,22 @@ void LowerFunctionLLVM::compile() {
                 auto a = i->arg(0).val();
                 if (Representation::Of(a) == t::SEXP ||
                     Representation::Of(i) == t::SEXP) {
-                    setVal(i, call(NativeBuiltins::colonCastLhs, {loadSxp(a)}));
+                    setVal(i, call(NativeBuiltins::get(
+                                       NativeBuiltins::Id::colonCastLhs),
+                                   {loadSxp(a)}));
                     break;
                 }
                 auto ld = load(a);
 
-                auto naBr = BasicBlock::Create(C, "", fun);
-                auto contBr = BasicBlock::Create(C, "", fun);
+                auto naBr =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                auto contBr =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
                 nacheck(ld, a->type, naBr, contBr);
 
                 builder.SetInsertPoint(naBr);
                 auto msg = builder.CreateGlobalString("NA/NaN argument");
-                call(NativeBuiltins::error,
+                call(NativeBuiltins::get(NativeBuiltins::Id::error),
                      {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                 builder.CreateUnreachable();
 
@@ -5078,20 +5261,23 @@ void LowerFunctionLLVM::compile() {
                 if (Representation::Of(a) == t::SEXP ||
                     Representation::Of(b) == t::SEXP ||
                     Representation::Of(i) == t::SEXP) {
-                    setVal(i, call(NativeBuiltins::colonCastRhs,
+                    setVal(i, call(NativeBuiltins::get(
+                                       NativeBuiltins::Id::colonCastRhs),
                                    {loadSxp(a), loadSxp(b)}));
                     break;
                 }
 
                 auto ldb = load(b);
 
-                auto naBr = BasicBlock::Create(C, "", fun);
-                auto contBr = BasicBlock::Create(C, "", fun);
+                auto naBr =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                auto contBr =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
                 nacheck(ldb, b->type, naBr, contBr);
 
                 builder.SetInsertPoint(naBr);
                 auto msg = builder.CreateGlobalString("NA/NaN argument");
-                call(NativeBuiltins::error,
+                call(NativeBuiltins::get(NativeBuiltins::Id::error),
                      {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
                 builder.CreateUnreachable();
 
@@ -5130,19 +5316,21 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Names:
-                setVal(i,
-                       call(NativeBuiltins::names, {loadSxp(i->arg(0).val())}));
+                setVal(i, call(NativeBuiltins::get(NativeBuiltins::Id::names),
+                               {loadSxp(i->arg(0).val())}));
                 break;
 
             case Tag::SetNames:
-                setVal(i, call(NativeBuiltins::setNames,
-                               {loadSxp(i->arg(0).val()),
-                                loadSxp(i->arg(1).val())}));
+                setVal(
+                    i,
+                    call(NativeBuiltins::get(NativeBuiltins::Id::setNames),
+                         {loadSxp(i->arg(0).val()), loadSxp(i->arg(1).val())}));
                 break;
 
             case Tag::XLength:
-                setVal(i, call(NativeBuiltins::xlength_,
-                               {loadSxp(i->arg(0).val())}));
+                setVal(i,
+                       call(NativeBuiltins::get(NativeBuiltins::Id::xlength_),
+                            {loadSxp(i->arg(0).val())}));
                 break;
 
             case Tag::Unreachable:
@@ -5195,7 +5383,7 @@ void LowerFunctionLLVM::compile() {
                             leaky.push_back(str.str());
                             msg = leaky.back().c_str();
                         }
-                        call(NativeBuiltins::checkType,
+                        call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
                              {load(i), c(i->type.serialize()),
                               convertToPointer(msg)});
                     }

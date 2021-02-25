@@ -5,7 +5,7 @@ namespace rir {
 namespace pir {
 
 using namespace llvm;
-int initializeTypes(LLVMContext& context) {
+void initializeTypes(LLVMContext& context) {
     std::vector<Type*> fields;
     t::i1 = IntegerType::get(context, 1);
     t::Int = IntegerType::get(context, 32);
@@ -144,217 +144,290 @@ int initializeTypes(LLVMContext& context) {
     DECLARE(double_sexp, t::Double, t::SEXP);
 #undef DECLARE
 
-    NativeBuiltins::forcePromise.llvmSignature = t::sexp_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::forcePromise).llvmSignature =
+        t::sexp_sexp;
 
-    NativeBuiltins::consNr.llvmSignature = t::sexp_sexpsexp;
-    NativeBuiltins::createBindingCell.llvmSignature = t::sexp_sexpsexpsexp;
-    NativeBuiltins::createMissingBindingCell.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::consNr).llvmSignature =
+        t::sexp_sexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::createBindingCell).llvmSignature =
         t::sexp_sexpsexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::createMissingBindingCell)
+        .llvmSignature = t::sexp_sexpsexpsexp;
 
-    NativeBuiltins::ldvar.llvmSignature = t::sexp_sexpsexp;
-    NativeBuiltins::ldvarGlobal.llvmSignature = t::sexp_sexp;
-    NativeBuiltins::ldvarForUpdate.llvmSignature = t::sexp_sexpsexp;
-    NativeBuiltins::ldvarCacheMiss.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP_ptr}, false);
-    NativeBuiltins::stvar.llvmSignature = t::void_sexpsexpsexp;
-    NativeBuiltins::stvarSuper.llvmSignature = t::void_sexpsexpsexp;
-    NativeBuiltins::stvari.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::ldvar).llvmSignature =
+        t::sexp_sexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::ldvarGlobal).llvmSignature =
+        t::sexp_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::ldvarForUpdate).llvmSignature =
+        t::sexp_sexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::ldvarCacheMiss).llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP_ptr},
+                                false);
+    NativeBuiltins::blt(NativeBuiltins::Id::stvar).llvmSignature =
+        t::void_sexpsexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::stvarSuper).llvmSignature =
+        t::void_sexpsexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::stvari).llvmSignature =
         llvm::FunctionType::get(t::Void, {t::SEXP, t::Int, t::SEXP}, false);
-    NativeBuiltins::stvarr.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::stvarr).llvmSignature =
         llvm::FunctionType::get(t::Void, {t::SEXP, t::Double, t::SEXP}, false);
-    NativeBuiltins::defvar.llvmSignature = t::void_sexpsexpsexp;
-    NativeBuiltins::starg.llvmSignature = t::void_sexpsexpsexp;
-    NativeBuiltins::ldfun.llvmSignature = t::sexp_sexpsexp;
-    NativeBuiltins::chkfun.llvmSignature = t::sexp_sexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::defvar).llvmSignature =
+        t::void_sexpsexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::starg).llvmSignature =
+        t::void_sexpsexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::ldfun).llvmSignature =
+        t::sexp_sexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::chkfun).llvmSignature =
+        t::sexp_sexpsexp;
 
-    NativeBuiltins::setCar.llvmSignature = t::void_sexpsexp;
-    NativeBuiltins::setCdr.llvmSignature = t::void_sexpsexp;
-    NativeBuiltins::setTag.llvmSignature = t::void_sexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::setCar).llvmSignature =
+        t::void_sexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::setCdr).llvmSignature =
+        t::void_sexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::setTag).llvmSignature =
+        t::void_sexpsexp;
 
-    NativeBuiltins::externalsxpSetEntry.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::externalsxpSetEntry).llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::SEXP, t::Int, t::SEXP}, false);
 
-    NativeBuiltins::error.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::error).llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::charPtr}, false);
-    NativeBuiltins::warn.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::warn).llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::charPtr}, false);
 
-    NativeBuiltins::createEnvironment.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::createEnvironment).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::createStubEnvironment.llvmSignature =
-        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::IntPtr, t::Int},
-                                false);
-    NativeBuiltins::materializeEnvironment.llvmSignature =
-        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::createStubEnvironment)
+        .llvmSignature = llvm::FunctionType::get(
+        t::SEXP, {t::SEXP, t::Int, t::IntPtr, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::materializeEnvironment)
+        .llvmSignature = llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
 
-    NativeBuiltins::createPromise.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::createPromise).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
-    NativeBuiltins::createPromiseNoEnvEager.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::createPromiseNoEnvEager)
+        .llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
-    NativeBuiltins::createPromiseNoEnv.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::createPromiseNoEnv).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
-    NativeBuiltins::createPromiseEager.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::createPromiseEager).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP}, false);
-    NativeBuiltins::createClosure.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::createClosure).llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP},
+                                false);
 
-    NativeBuiltins::newInt.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::newInt).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
-    NativeBuiltins::newIntDebug.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::newIntDebug).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int, t::i64}, false);
-    NativeBuiltins::newReal.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::newReal).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Double}, false);
-    NativeBuiltins::newIntFromReal.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::newIntFromReal).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Double}, false);
-    NativeBuiltins::newRealFromInt.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::newRealFromInt).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int}, false);
 
-    NativeBuiltins::colon.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::colon).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int, t::Int}, false);
 
-    NativeBuiltins::call.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::i64, t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64},
-        false);
-    NativeBuiltins::dotsCall.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::call).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP,
+            {t::i64, t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64},
+            false);
+    NativeBuiltins::blt(NativeBuiltins::Id::dotsCall).llvmSignature =
         llvm::FunctionType::get(t::SEXP,
                                 {t::i64, t::voidPtr, t::Int, t::SEXP, t::SEXP,
                                  t::i64, t::IntPtr, t::i64},
                                 false);
-    NativeBuiltins::namedCall.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::namedCall).llvmSignature =
         llvm::FunctionType::get(t::SEXP,
                                 {t::i64, t::voidPtr, t::Int, t::SEXP, t::SEXP,
                                  t::i64, t::IntPtr, t::i64},
                                 false);
-    NativeBuiltins::callBuiltin.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::callBuiltin).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64}, false);
 
-    NativeBuiltins::notEnv.llvmSignature = t::sexp_sexpsexpint;
-    NativeBuiltins::notOp.llvmSignature = t::sexp_sexp;
-    NativeBuiltins::binop.llvmSignature = t::sexp_sexpsexpint;
-    NativeBuiltins::binopEnv.llvmSignature = t::sexp_sexp3int2;
+    NativeBuiltins::blt(NativeBuiltins::Id::notEnv).llvmSignature =
+        t::sexp_sexpsexpint;
+    NativeBuiltins::blt(NativeBuiltins::Id::notOp).llvmSignature = t::sexp_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::binop).llvmSignature =
+        t::sexp_sexpsexpint;
+    NativeBuiltins::blt(NativeBuiltins::Id::binopEnv).llvmSignature =
+        t::sexp_sexp3int2;
 
-    NativeBuiltins::isMissing.llvmSignature = t::int_sexpsexp;
-    NativeBuiltins::checkTrueFalse.llvmSignature = t::int_sexp;
-    NativeBuiltins::asLogicalBlt.llvmSignature = t::int_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::isMissing).llvmSignature =
+        t::int_sexpsexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::checkTrueFalse).llvmSignature =
+        t::int_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::asLogicalBlt).llvmSignature =
+        t::int_sexp;
 
-    NativeBuiltins::length.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::length).llvmSignature =
         llvm::FunctionType::get(t::i64, {t::SEXP}, false);
-    NativeBuiltins::forSeqSize.llvmSignature = t::int_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::forSeqSize).llvmSignature =
+        t::int_sexp;
 
-    NativeBuiltins::makeVector.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::makeVector).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::Int, t::i64}, false);
 
-    NativeBuiltins::deopt.llvmSignature = llvm::FunctionType::get(
-        t::t_void, {t::voidPtr, t::SEXP, t::voidPtr, t::stackCellPtr}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::deopt).llvmSignature =
+        llvm::FunctionType::get(
+            t::t_void, {t::voidPtr, t::SEXP, t::voidPtr, t::stackCellPtr},
+            false);
 
-    NativeBuiltins::assertFail.llvmSignature = t::void_voidPtr;
+    NativeBuiltins::blt(NativeBuiltins::Id::assertFail).llvmSignature =
+        t::void_voidPtr;
 
-    NativeBuiltins::printValue.llvmSignature = t::void_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::printValue).llvmSignature =
+        t::void_sexp;
 
-    NativeBuiltins::matrixNcols.llvmSignature = t::int_sexp;
-    NativeBuiltins::matrixNrows.llvmSignature = t::int_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::matrixNcols).llvmSignature =
+        t::int_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::matrixNrows).llvmSignature =
+        t::int_sexp;
 
-    NativeBuiltins::extract11.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::extract21.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::extract21i.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Int, t::SEXP, t::Int}, false);
-    NativeBuiltins::extract21r.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Double, t::SEXP, t::Int}, false);
-    NativeBuiltins::extract12.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::extract22.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::extract22ii.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::Int}, false);
-    NativeBuiltins::extract22rr.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Double, t::Double, t::SEXP, t::Int}, false);
-    NativeBuiltins::extract13.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-
-    NativeBuiltins::subassign11.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign21.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign21ii.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign21rr.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Double, t::Double, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign21ir.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Int, t::Double, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign21ri.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Double, t::Int, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign12.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign22.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign22iii.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Int, t::Int, t::Int, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign22rrr.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Double, t::Double, t::Double, t::SEXP, t::Int},
-        false);
-    NativeBuiltins::subassign22iir.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Int, t::Int, t::Double, t::SEXP, t::Int}, false);
-    NativeBuiltins::subassign22rri.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::Double, t::Double, t::Int, t::SEXP, t::Int},
-        false);
-    NativeBuiltins::subassign13.llvmSignature = llvm::FunctionType::get(
-        t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
-        false);
-
-    NativeBuiltins::nativeCallTrampoline.llvmSignature =
-        llvm::FunctionType::get(t::SEXP,
-                                {t::i64, t::voidPtr, t::SEXP, t::Int, t::Int,
-                                 t::SEXP, t::i64, t::i64},
+    NativeBuiltins::blt(NativeBuiltins::Id::extract11).llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int},
                                 false);
+    NativeBuiltins::blt(NativeBuiltins::Id::extract21).llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int},
+                                false);
+    NativeBuiltins::blt(NativeBuiltins::Id::extract21i).llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::SEXP, t::Int},
+                                false);
+    NativeBuiltins::blt(NativeBuiltins::Id::extract21r).llvmSignature =
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Double, t::SEXP, t::Int},
+                                false);
+    NativeBuiltins::blt(NativeBuiltins::Id::extract12).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::extract22).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::extract22ii).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::extract22rr).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Double, t::Double, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::extract13).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
 
-    NativeBuiltins::unop.llvmSignature = t::sexp_sexpint;
-    NativeBuiltins::unopEnv.llvmSignature = t::sexp_sexp2int2;
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign11).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign21).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign21ii).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign21rr).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Double, t::Double, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign21ir).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Double, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign21ri).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Double, t::Int, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign12).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign22).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign22iii).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Int, t::Int, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign22rrr).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP,
+            {t::SEXP, t::Double, t::Double, t::Double, t::SEXP, t::Int}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign22iir).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Int, t::Double, t::SEXP, t::Int},
+            false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign22rri).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Double, t::Double, t::Int, t::SEXP, t::Int},
+            false);
+    NativeBuiltins::blt(NativeBuiltins::Id::subassign13).llvmSignature =
+        llvm::FunctionType::get(
+            t::SEXP,
+            {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
 
-    NativeBuiltins::initClosureContext.llvmSignature = llvm::FunctionType::get(
-        t::t_void,
-        {t::i64, t::voidPtr, t::SEXP, t::RCNTXT_ptr, t::SEXP, t::SEXP, t::i64},
+    NativeBuiltins::blt(NativeBuiltins::Id::nativeCallTrampoline)
+        .llvmSignature = llvm::FunctionType::get(
+        t::SEXP,
+        {t::i64, t::voidPtr, t::SEXP, t::Int, t::Int, t::SEXP, t::i64, t::i64},
         false);
-    NativeBuiltins::endClosureContext.llvmSignature =
+
+    NativeBuiltins::blt(NativeBuiltins::Id::unop).llvmSignature =
+        t::sexp_sexpint;
+    NativeBuiltins::blt(NativeBuiltins::Id::unopEnv).llvmSignature =
+        t::sexp_sexp2int2;
+
+    NativeBuiltins::blt(NativeBuiltins::Id::initClosureContext).llvmSignature =
+        llvm::FunctionType::get(t::t_void,
+                                {t::i64, t::voidPtr, t::SEXP, t::RCNTXT_ptr,
+                                 t::SEXP, t::SEXP, t::i64},
+                                false);
+    NativeBuiltins::blt(NativeBuiltins::Id::endClosureContext).llvmSignature =
         llvm::FunctionType::get(t::t_void, {t::RCNTXT_ptr, t::SEXP}, false);
 
-    NativeBuiltins::recordDeopt.llvmSignature = llvm::FunctionType::get(
-        t::t_void, {t::SEXP, PointerType::get(t::DeoptReason, 0)}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::recordDeopt).llvmSignature =
+        llvm::FunctionType::get(
+            t::t_void, {t::SEXP, PointerType::get(t::DeoptReason, 0)}, false);
 
-    NativeBuiltins::sumr.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::sumr).llvmSignature =
         llvm::FunctionType::get(t::Double, {t::SEXP}, false);
-    NativeBuiltins::prodr.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::prodr).llvmSignature =
         llvm::FunctionType::get(t::Double, {t::SEXP}, false);
 
-    NativeBuiltins::colonInputEffects.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::colonInputEffects).llvmSignature =
         llvm::FunctionType::get(t::Int, {t::SEXP, t::SEXP, t::Int}, false);
-    NativeBuiltins::colonCastLhs.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::colonCastLhs).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
-    NativeBuiltins::colonCastRhs.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::colonCastRhs).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
 
-    NativeBuiltins::names.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::names).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
-    NativeBuiltins::setNames.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::setNames).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
-    NativeBuiltins::xlength_.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::xlength_).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP}, false);
-    NativeBuiltins::getAttrb.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::getAttrb).llvmSignature =
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
 
-    NativeBuiltins::nonLocalReturn.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::nonLocalReturn).llvmSignature =
         llvm::FunctionType::get(t_void, {t::SEXP, t::SEXP}, false);
 
-    NativeBuiltins::clsEq.llvmSignature =
+    NativeBuiltins::blt(NativeBuiltins::Id::clsEq).llvmSignature =
         llvm::FunctionType::get(t::i1, {t::SEXP, t::SEXP}, false);
 
-    NativeBuiltins::checkType.llvmSignature = llvm::FunctionType::get(
-        t::t_void, {t::SEXP, t::i64, t::charPtr}, false);
+    NativeBuiltins::blt(NativeBuiltins::Id::checkType).llvmSignature =
+        llvm::FunctionType::get(t::t_void, {t::SEXP, t::i64, t::charPtr},
+                                false);
 
-    NativeBuiltins::shallowDuplicate.llvmSignature = t::sexp_sexp;
+    NativeBuiltins::blt(NativeBuiltins::Id::shallowDuplicate).llvmSignature =
+        t::sexp_sexp;
 
-    return 1;
+#ifdef __APPLE__
+    NativeBuiltins::blt(NativeBuiltins::Id::sigsetjmp).llvmSignature =
+        FunctionType::get(t::i32, {PointerType::get(t::i32, 0), t::i32}, false);
+#else
+    NativeBuiltins::blt(NativeBuiltins::Id::sigsetjmp).llvmSignature =
+        FunctionType::get(t::i32, {t::setjmp_buf_ptr, t::i32}, false);
+#endif
 }
 
 namespace t {

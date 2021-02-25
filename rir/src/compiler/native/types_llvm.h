@@ -1,13 +1,13 @@
 #ifndef TYPES_H_
 #define TYPES_H_
 
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/LLVMContext.h>
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/LLVMContext.h"
 
 namespace rir {
 namespace pir {
 
-int initializeTypes(llvm::LLVMContext& context);
+void initializeTypes(llvm::LLVMContext& context);
 
 namespace t {
 
