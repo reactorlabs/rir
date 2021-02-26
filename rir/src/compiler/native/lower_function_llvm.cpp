@@ -372,6 +372,10 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
         }
     } else if (val->asRValue()) {
         res = constant(val->asRValue(), needed);
+    } else if (val == OpaqueTrue::instance()) {
+        static int one = 1;
+        // Something that is always true, but llvm does not know about
+        res = builder.CreateLoad(convertToPointer(&one, t::IntPtr));
     } else if (auto ld = LdConst::Cast(val)) {
         res = constant(ld->c(), needed);
     } else {
@@ -508,22 +512,32 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
 void LowerFunctionLLVM::compilePopContext(Instruction* i) {
     auto popc = PopContext::Cast(i);
     auto data = contexts.at(popc->push());
-    auto arg = load(popc->result());
-    builder.CreateStore(arg, data.result);
+    auto res = popc->result();
+
+    builder.CreateStore(load(res, Representation::Of(i)), data.result);
     builder.CreateBr(data.popContextTarget);
 
     builder.SetInsertPoint(data.popContextTarget);
     llvm::Value* ret = builder.CreateLoad(data.result);
     llvm::Value* boxedRet = ret;
-    if (ret->getType() == t::Int) {
-        boxedRet = boxInt(ret, false);
-    } else if (ret->getType() == t::Double) {
-        boxedRet = boxReal(ret, false);
+    auto storeType = data.result->getType()->getPointerElementType();
+    if (storeType != t::SEXP) {
+        if (i->type.isA(PirType::test())) {
+            boxedRet = boxTst(ret, false);
+        } else if (i->type.isA(RType::logical)) {
+            boxedRet = boxLgl(ret, false);
+        } else if (i->type.isA(RType::integer)) {
+            boxedRet = boxInt(ret, false);
+        } else if (i->type.isA(RType::real)) {
+            boxedRet = boxReal(ret, false);
+        } else {
+            assert(false);
+        }
     }
     call(NativeBuiltins::get(NativeBuiltins::Id::endClosureContext),
          {data.rcntxt, boxedRet});
     inPushContext--;
-    setVal(i, ret);
+    setVal(i, Representation::Of(i) == t::SEXP ? boxedRet : ret);
 }
 
 void LowerFunctionLLVM::compilePushContext(Instruction* i) {
@@ -723,7 +737,12 @@ llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
     insn_assert(isScalar(v), "expected scalar lgl");
 #endif
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
-    return builder.CreateLoad(pos);
+    auto unbox = builder.CreateLoad(pos);
+    // Normalize the unboxed lgl to 0,1,NA.
+    return builder.CreateSelect(
+        builder.CreateICmpEQ(unbox, c(0)), c(0),
+        builder.CreateSelect(builder.CreateICmpEQ(unbox, c(NA_LOGICAL)),
+                             c(NA_LOGICAL), c(1)));
 }
 llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
@@ -2013,7 +2032,7 @@ void LowerFunctionLLVM::compile() {
                     pop = popI->second;
                 Representation resRep = Representation::Sexp;
                 if (pop)
-                    resRep = Representation::Of(pop->result());
+                    resRep = Representation::Of(pop);
                 auto resStore = topAlloca(resRep);
                 auto rcntxt = topAlloca(t::RCNTXT);
                 contexts[push] = {

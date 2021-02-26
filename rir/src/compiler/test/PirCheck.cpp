@@ -134,6 +134,15 @@ static bool testOneLdVar(ClosureVersion* f) {
     return numLdVar == 1;
 }
 
+static bool testNoLdFun(ClosureVersion* f) {
+    int numLdFun = 0;
+    Visitor::run(f->entry, [&](Instruction* i) {
+        if (LdFun::Cast(i))
+            numLdFun++;
+    });
+    return numLdFun == 0;
+}
+
 static bool testOneLdFun(ClosureVersion* f) {
     int numLdFun = 0;
     Visitor::run(f->entry, [&](Instruction* i) {

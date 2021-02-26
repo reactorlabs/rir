@@ -52,7 +52,7 @@ stopifnot(pir.check(function() {
       a <- c(1)
   }
   a
-}, OneLdFun))
+}, NoLdFun, warmup=function(f) f()))
 
 # Loop hoisting + simple range non-constant dead branch removal
 stopifnot(pir.check(function(b) {

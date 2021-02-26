@@ -273,9 +273,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
 
                         // Create a return value phi of the promise
-                        auto promRet =
-                            BBTransform::forInline(prom_copy, split, f->env());
-                        auto promRes = promRet.first;
+                        auto promRes =
+                            BBTransform::forInline(prom_copy, split, nullptr);
 
                         assert(!promRes->type.maybePromiseWrapped());
                         f = Force::Cast(*split->begin());
@@ -321,7 +320,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                         inlinedPromise[f] = promRes;
 
-                        if (promRet.second->isNonLocalReturn())
+                        if (promRes == Tombstone::unreachable())
                             dead.insert(split);
                         break;
                     }
