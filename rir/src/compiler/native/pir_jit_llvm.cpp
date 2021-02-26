@@ -7,6 +7,8 @@
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/Mangling.h"
+#include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Verifier.h"
@@ -111,16 +113,19 @@ void PirJitLLVM::initializeLLVM() {
     if (initialized)
         return;
 
+    using namespace llvm;
+    using namespace llvm::orc;
+
     // Initialize LLVM
-    llvm::InitializeNativeTarget();
-    llvm::InitializeNativeTargetAsmPrinter();
-    llvm::InitializeNativeTargetAsmParser();
+    InitializeNativeTarget();
+    InitializeNativeTargetAsmPrinter();
+    InitializeNativeTargetAsmParser();
     ExitOnErr.setBanner("PIR LLVM error: ");
 
     // Set some TargetMachine options
-    auto JTMB = ExitOnErr(llvm::orc::JITTargetMachineBuilder::detectHost());
-    // JTMB.setCodeModel(llvm::CodeModel::Small);
-    // JTMB.setCodeGenOptLevel(llvm::CodeGenOpt::Default);
+    auto JTMB = ExitOnErr(JITTargetMachineBuilder::detectHost());
+    // JTMB.setCodeModel(CodeModel::Small);
+    // JTMB.setCodeGenOptLevel(CodeGenOpt::Default);
     JTMB.getOptions().EnableMachineOutliner = true;
     JTMB.getOptions().EnableFastISel = true;
 
@@ -128,20 +133,33 @@ void PirJitLLVM::initializeLLVM() {
     // ObjectLinkingLayer
     assert(!JIT.get());
     JIT = ExitOnErr(
-        llvm::orc::LLJITBuilder()
+        LLJITBuilder()
             .setJITTargetMachineBuilder(std::move(JTMB))
-            // .setObjectLinkingLayerCreator([&](llvm::orc::ExecutionSession&
-            // ES,
-            //                                   const llvm::Triple& TT) {
-            //     return std::make_unique<llvm::ObjectLinkingLayer>(
-            //         ES,
-            //         std::make_unique<llvm::jitlink::InProcessMemoryManager>());
-            // })
+#ifdef PIR_LLVM_GDB
+            .setObjectLinkingLayerCreator(
+                [&](ExecutionSession& ES, const Triple& TT) {
+                    auto GetMemMgr = []() {
+                        return std::make_unique<SectionMemoryManager>();
+                    };
+                    auto ObjLinkingLayer =
+                        std::make_unique<RTDyldObjectLinkingLayer>(
+                            ES, std::move(GetMemMgr));
+
+                    // Register the event listener.
+                    ObjLinkingLayer->registerJITEventListener(
+                        *JITEventListener::createGDBRegistrationListener());
+
+                    // Make sure the debug info sections aren't stripped.
+                    ObjLinkingLayer->setProcessAllSections(true);
+
+                    return ObjLinkingLayer;
+                })
+#endif
             .create());
 
     // Create one global ThreadSafeContext
     assert(!TSC.getContext());
-    TSC = std::make_unique<llvm::LLVMContext>();
+    TSC = std::make_unique<LLVMContext>();
 
     // Set what passes to run
     JIT->getIRTransformLayer().setTransform(*PassScheduleLLVM::instance());
@@ -155,22 +173,28 @@ void PirJitLLVM::initializeLLVM() {
     JIT->getMainJITDylib().addToLinkOrder(builtins);
 
     // Build a map of builtin names to the builtins' addresses and populate the
-    // builtins dylib. Add record for "memset" explicitly otherwise it's not
-    // found.
-    llvm::orc::SymbolMap builtinSymbols(
-        static_cast<size_t>(NativeBuiltins::Id::NUM_BUILTINS) + 1);
-    builtinSymbols[JIT->mangleAndIntern("memset")] = llvm::JITEvaluatedSymbol(
-        llvm::pointerToJITTargetAddress(&memset),
-        llvm::JITSymbolFlags::Exported | llvm::JITSymbolFlags::Callable);
+    // builtins dylib
+    SymbolMap builtinSymbols(
+        static_cast<size_t>(NativeBuiltins::Id::NUM_BUILTINS));
     NativeBuiltins::eachBuiltin([&](const NativeBuiltin& blt) {
         auto res = builtinSymbols.try_emplace(
             JIT->mangleAndIntern(blt.name),
-            llvm::JITEvaluatedSymbol(llvm::pointerToJITTargetAddress(blt.fun),
-                                     llvm::JITSymbolFlags::Exported |
-                                         llvm::JITSymbolFlags::Callable));
+            JITEvaluatedSymbol(pointerToJITTargetAddress(blt.fun),
+                               JITSymbolFlags::Exported |
+                                   JITSymbolFlags::Callable));
         assert(res.second && "duplicate builtin?");
     });
-    ExitOnErr(builtins.define(llvm::orc::absoluteSymbols(builtinSymbols)));
+    ExitOnErr(builtins.define(absoluteSymbols(builtinSymbols)));
+
+    // Add a generator that will look for symbols in the host process.
+    // This is added to the builtins dylib so that the builtins have
+    // precedence
+    builtins.addGenerator(
+        ExitOnErr(DynamicLibrarySearchGenerator::GetForCurrentProcess(
+            JIT->getDataLayout().getGlobalPrefix(),
+            // [](const SymbolStringPtr&) { return true; })));
+            [MainName = JIT->mangleAndIntern("main")](
+                const SymbolStringPtr& Name) { return Name != MainName; })));
 
     // Initialize types specific to PIR
     initializeTypes(*TSC.getContext());
