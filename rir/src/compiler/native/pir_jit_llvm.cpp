@@ -124,8 +124,6 @@ void PirJitLLVM::initializeLLVM() {
 
     // Set some TargetMachine options
     auto JTMB = ExitOnErr(JITTargetMachineBuilder::detectHost());
-    // JTMB.setCodeModel(CodeModel::Small);
-    // JTMB.setCodeGenOptLevel(CodeGenOpt::Default);
     JTMB.getOptions().EnableMachineOutliner = true;
     JTMB.getOptions().EnableFastISel = true;
 
@@ -135,6 +133,7 @@ void PirJitLLVM::initializeLLVM() {
     JIT = ExitOnErr(
         LLJITBuilder()
             .setJITTargetMachineBuilder(std::move(JTMB))
+    // TODO: look into gdb support...
 #ifdef PIR_LLVM_GDB
             .setObjectLinkingLayerCreator(
                 [&](ExecutionSession& ES, const Triple& TT) {
@@ -164,13 +163,17 @@ void PirJitLLVM::initializeLLVM() {
     // Set what passes to run
     JIT->getIRTransformLayer().setTransform(*PassScheduleLLVM::instance());
 
+    // Initialize types specific to PIR and builtins
+    initializeTypes(*TSC.getContext());
+    NativeBuiltins::initializeBuiltins();
+
     // Initialize a JITDylib for builtins - these are implemented in C++ and
     // compiled when building Ř, we need to define symbols for them and
     // initialize these to the static addresses of each builtin; they are in
     // a separate dylib because they are shared by all the modules in the
     // main dylib
-    auto& builtins = ExitOnErr(JIT->createJITDylib("builtins"));
-    JIT->getMainJITDylib().addToLinkOrder(builtins);
+    auto& builtinsDL = ExitOnErr(JIT->createJITDylib("builtins"));
+    JIT->getMainJITDylib().addToLinkOrder(builtinsDL);
 
     // Build a map of builtin names to the builtins' addresses and populate the
     // builtins dylib
@@ -184,20 +187,17 @@ void PirJitLLVM::initializeLLVM() {
                                    JITSymbolFlags::Callable));
         assert(res.second && "duplicate builtin?");
     });
-    ExitOnErr(builtins.define(absoluteSymbols(builtinSymbols)));
+    ExitOnErr(builtinsDL.define(absoluteSymbols(builtinSymbols)));
 
     // Add a generator that will look for symbols in the host process.
     // This is added to the builtins dylib so that the builtins have
     // precedence
-    builtins.addGenerator(
+    builtinsDL.addGenerator(
         ExitOnErr(DynamicLibrarySearchGenerator::GetForCurrentProcess(
             JIT->getDataLayout().getGlobalPrefix(),
             // [](const SymbolStringPtr&) { return true; })));
             [MainName = JIT->mangleAndIntern("main")](
                 const SymbolStringPtr& Name) { return Name != MainName; })));
-
-    // Initialize types specific to PIR
-    initializeTypes(*TSC.getContext());
 
     initialized = true;
 }

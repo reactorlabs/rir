@@ -1,5 +1,6 @@
 #include "builtins.h"
 
+#include "compiler/native/types_llvm.h"
 #include "compiler/parameter.h"
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
@@ -2002,372 +2003,349 @@ void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
 }
 
 NativeBuiltin NativeBuiltins::store[];
-bool NativeBuiltins::initialized = NativeBuiltins::initializeBuiltins();
 
-bool NativeBuiltins::initializeBuiltins() {
-    blt(Id::forcePromise) = {"forcePromise", (void*)&forcePromiseImpl};
-    blt(Id::consNr) = {"consNr", (void*)&CONS_NR};
-    blt(Id::createBindingCell) = {"createBindingCellImpl",
-                                  (void*)&createBindingCellImpl};
-    blt(Id::createMissingBindingCell) = {"createMissingBindingCell",
-                                         (void*)&createMissingBindingCellImpl};
-    blt(Id::createEnvironment) = {"createEnvironment",
-                                  (void*)&createEnvironmentImpl};
-    blt(Id::createStubEnvironment) = {
-        "createStubEnvironment",
-        (void*)&createStubEnvironmentImpl,
-    };
-    blt(Id::materializeEnvironment) = {
-        "materializeEnvironment",
-        (void*)&materializeEnvironmentImpl,
-    };
-    blt(Id::ldvarForUpdate) = {
-        "ldvarForUpdate",
-        (void*)&ldvarForUpdateImpl,
-    };
-    blt(Id::ldvar) = {
-        "ldvar",
-        (void*)&ldvarImpl,
-    };
-    blt(Id::ldvarGlobal) = {
-        "ldvarGlobal",
-        (void*)&ldvarGlobalImpl,
-    };
-    blt(Id::ldvarCacheMiss) = {
-        "ldvarCacheMiss",
-        (void*)&ldvarCachedImpl,
-    };
-    blt(Id::stvarSuper) = {
-        "stvarSuper",
-        (void*)&stvarSuperImpl,
-    };
-    blt(Id::stvar) = {
-        "stvar",
-        (void*)&stvarImpl,
-    };
-    blt(Id::stvari) = {
-        "stvari",
-        (void*)&stvarImplI,
-    };
-    blt(Id::stvarr) = {
-        "stvarr",
-        (void*)&stvarImplR,
-    };
-    blt(Id::starg) = {
-        "starg",
-        (void*)&stargImpl,
-    };
-    blt(Id::setCar) = {
-        "setCar", (void*)&setCarImpl, nullptr, {llvm::Attribute::ArgMemOnly}};
-    blt(Id::setCdr) = {
-        "setCdr", (void*)&setCdrImpl, nullptr, {llvm::Attribute::ArgMemOnly}};
-    blt(Id::setTag) = {
-        "setTag", (void*)&setTagImpl, nullptr, {llvm::Attribute::ArgMemOnly}};
-    blt(Id::externalsxpSetEntry) = {"externalsxpSetEntry",
-                                    (void*)&externalsxpSetEntryImpl,
-                                    nullptr,
-                                    {llvm::Attribute::ArgMemOnly}};
-    blt(Id::defvar) = {
-        "defvar",
-        (void*)&defvarImpl,
-    };
-    blt(Id::ldfun) = {
-        "ldfun",
-        (void*)&ldfunImpl,
-    };
-    blt(Id::chkfun) = {
-        "chkfun",
-        (void*)&chkfunImpl,
-    };
-    blt(Id::warn) = {
-        "warn",
-        (void*)&warnImpl,
-    };
-    blt(Id::error) = {
-        "error", (void*)&errorImpl, nullptr, {llvm::Attribute::NoReturn}};
-    blt(Id::callBuiltin) = {
-        "callBuiltin",
-        (void*)&callBuiltinImpl,
-    };
-    blt(Id::call) = {
-        "call",
-        (void*)&callImpl,
-    };
-    blt(Id::namedCall) = {
-        "namedCall",
-        (void*)&namedCallImpl,
-    };
-    blt(Id::dotsCall) = {
-        "dotsCall",
-        (void*)&dotsCallImpl,
-    };
-    blt(Id::createPromise) = {
-        "createPromise",
-        (void*)&createPromiseImpl,
-    };
-    blt(Id::createPromiseNoEnvEager) = {
-        "createPromiseNoEnvEager",
-        (void*)&createPromiseNoEnvEagerImpl,
-    };
-    blt(Id::createPromiseNoEnv) = {
-        "createPromiseNoEnv",
-        (void*)&createPromiseNoEnvImpl,
-    };
-    blt(Id::createPromiseEager) = {
-        "createPromiseEager",
-        (void*)&createPromiseEagerImpl,
-    };
-    blt(Id::createClosure) = {
-        "createClosure",
-        (void*)&createClosureImpl,
-    };
-    blt(Id::newIntFromReal) = {
-        "newIntFromReal",
-        (void*)&newIntFromRealImpl,
-    };
-    blt(Id::newRealFromInt) = {
-        "newRealFromInt",
-        (void*)&newRealFromIntImpl,
-    };
-    blt(Id::newInt) = {
-        "newInt",
-        (void*)&newIntImpl,
-    };
-    blt(Id::newIntDebug) = {
-        "newIntDebug",
-        (void*)&newIntDebugImpl,
-    };
-    blt(Id::newReal) = {
-        "newReal",
-        (void*)&newRealImpl,
-    };
-    blt(Id::unopEnv) = {
-        "unopEnv",
-        (void*)&unopEnvImpl,
-    };
-    blt(Id::unop) = {
-        "unop",
-        (void*)&unopImpl,
-    };
-    blt(Id::notEnv) = {
-        "notEnv",
-        (void*)&notEnvImpl,
-    };
-    blt(Id::notOp) = {"not", (void*)&notImpl};
-    blt(Id::binopEnv) = {
-        "binopEnv",
-        (void*)&binopEnvImpl,
-    };
-    blt(Id::binop) = {
-        "binop",
-        (void*)&binopImpl,
-    };
-    blt(Id::colon) = {
-        "colon",
-        (void*)&colonImpl,
-    };
-    blt(Id::isMissing) = {
-        "isMissing",
-        (void*)&isMissingImpl,
-    };
-    blt(Id::checkTrueFalse) = {
-        "checkTrueFalse",
-        (void*)&checkTrueFalseImpl,
-    };
-    blt(Id::asLogicalBlt) = {"aslogical", (void*)&asLogicalImpl};
-    blt(Id::length) = {
+void NativeBuiltins::initializeBuiltins() {
+    get_(Id::forcePromise) = {"forcePromise", (void*)&forcePromiseImpl,
+                              t::sexp_sexp};
+    get_(Id::consNr) = {"consNr", (void*)&CONS_NR, t::sexp_sexpsexp};
+    get_(Id::createBindingCell) = {"createBindingCellImpl",
+                                   (void*)&createBindingCellImpl,
+                                   t::sexp_sexpsexpsexp};
+    get_(Id::createMissingBindingCell) = {"createMissingBindingCell",
+                                          (void*)&createMissingBindingCellImpl,
+                                          t::sexp_sexpsexpsexp};
+    get_(Id::createEnvironment) = {
+        "createEnvironment", (void*)&createEnvironmentImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::Int}, false)};
+    get_(Id::createStubEnvironment) = {
+        "createStubEnvironment", (void*)&createStubEnvironmentImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::IntPtr, t::Int},
+                                false)};
+    get_(Id::materializeEnvironment) = {
+        "materializeEnvironment", (void*)&materializeEnvironmentImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false)};
+    get_(Id::ldvarForUpdate) = {"ldvarForUpdate", (void*)&ldvarForUpdateImpl,
+                                t::sexp_sexpsexp};
+    get_(Id::ldvar) = {"ldvar", (void*)&ldvarImpl, t::sexp_sexpsexp};
+    get_(Id::ldvarGlobal) = {"ldvarGlobal", (void*)&ldvarGlobalImpl,
+                             t::sexp_sexp};
+    get_(Id::ldvarCacheMiss) = {
+        "ldvarCacheMiss", (void*)&ldvarCachedImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP_ptr},
+                                false)};
+    get_(Id::stvarSuper) = {"stvarSuper", (void*)&stvarSuperImpl,
+                            t::void_sexpsexpsexp};
+    get_(Id::stvar) = {"stvar", (void*)&stvarImpl, t::void_sexpsexpsexp};
+    get_(Id::stvari) = {
+        "stvari", (void*)&stvarImplI,
+        llvm::FunctionType::get(t::Void, {t::SEXP, t::Int, t::SEXP}, false)};
+    get_(Id::stvarr) = {
+        "stvarr", (void*)&stvarImplR,
+        llvm::FunctionType::get(t::Void, {t::SEXP, t::Double, t::SEXP}, false)};
+    get_(Id::starg) = {"starg", (void*)&stargImpl, t::void_sexpsexpsexp};
+    get_(Id::setCar) = {"setCar",
+                        (void*)&setCarImpl,
+                        t::void_sexpsexp,
+                        {llvm::Attribute::ArgMemOnly}};
+    get_(Id::setCdr) = {"setCdr",
+                        (void*)&setCdrImpl,
+                        t::void_sexpsexp,
+                        {llvm::Attribute::ArgMemOnly}};
+    get_(Id::setTag) = {"setTag",
+                        (void*)&setTagImpl,
+                        t::void_sexpsexp,
+                        {llvm::Attribute::ArgMemOnly}};
+    get_(Id::externalsxpSetEntry) = {
+        "externalsxpSetEntry",
+        (void*)&externalsxpSetEntryImpl,
+        llvm::FunctionType::get(t::t_void, {t::SEXP, t::Int, t::SEXP}, false),
+        {llvm::Attribute::ArgMemOnly}};
+    get_(Id::defvar) = {"defvar", (void*)&defvarImpl, t::void_sexpsexpsexp};
+    get_(Id::ldfun) = {"ldfun", (void*)&ldfunImpl, t::sexp_sexpsexp};
+    get_(Id::chkfun) = {"chkfun", (void*)&chkfunImpl, t::sexp_sexpsexp};
+    get_(Id::warn) = {"warn", (void*)&warnImpl,
+                      llvm::FunctionType::get(t::t_void, {t::charPtr}, false)};
+    get_(Id::error) = {"error",
+                       (void*)&errorImpl,
+                       llvm::FunctionType::get(t::t_void, {t::charPtr}, false),
+                       {llvm::Attribute::NoReturn}};
+    get_(Id::callBuiltin) = {
+        "callBuiltin", (void*)&callBuiltinImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64}, false)};
+    get_(Id::call) = {
+        "call", (void*)&callImpl,
+        llvm::FunctionType::get(
+            t::SEXP,
+            {t::i64, t::voidPtr, t::Int, t::SEXP, t::SEXP, t::i64, t::i64},
+            false)};
+    get_(Id::namedCall) = {
+        "namedCall", (void*)&namedCallImpl,
+        llvm::FunctionType::get(t::SEXP,
+                                {t::i64, t::voidPtr, t::Int, t::SEXP, t::SEXP,
+                                 t::i64, t::IntPtr, t::i64},
+                                false)};
+    get_(Id::dotsCall) = {
+        "dotsCall", (void*)&dotsCallImpl,
+        llvm::FunctionType::get(t::SEXP,
+                                {t::i64, t::voidPtr, t::Int, t::SEXP, t::SEXP,
+                                 t::i64, t::IntPtr, t::i64},
+                                false)};
+    get_(Id::createPromise) = {
+        "createPromise", (void*)&createPromiseImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
+    get_(Id::createPromiseNoEnvEager) = {
+        "createPromiseNoEnvEager", (void*)&createPromiseNoEnvEagerImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
+    get_(Id::createPromiseNoEnv) = {
+        "createPromiseNoEnv", (void*)&createPromiseNoEnvImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false)};
+    get_(Id::createPromiseEager) = {
+        "createPromiseEager", (void*)&createPromiseEagerImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP}, false)};
+    get_(Id::createClosure) = {
+        "createClosure", (void*)&createClosureImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP},
+                                false)};
+    get_(Id::newIntFromReal) = {
+        "newIntFromReal", (void*)&newIntFromRealImpl,
+        llvm::FunctionType::get(t::SEXP, {t::Double}, false)};
+    get_(Id::newRealFromInt) = {
+        "newRealFromInt", (void*)&newRealFromIntImpl,
+        llvm::FunctionType::get(t::SEXP, {t::Int}, false)};
+    get_(Id::newInt) = {"newInt", (void*)&newIntImpl,
+                        llvm::FunctionType::get(t::SEXP, {t::Int}, false)};
+    get_(Id::newIntDebug) = {
+        "newIntDebug", (void*)&newIntDebugImpl,
+        llvm::FunctionType::get(t::SEXP, {t::Int, t::i64}, false)};
+    get_(Id::newReal) = {"newReal", (void*)&newRealImpl,
+                         llvm::FunctionType::get(t::SEXP, {t::Double}, false)};
+    get_(Id::unopEnv) = {"unopEnv", (void*)&unopEnvImpl, t::sexp_sexp2int2};
+    get_(Id::unop) = {"unop", (void*)&unopImpl, t::sexp_sexpint};
+    get_(Id::notEnv) = {"notEnv", (void*)&notEnvImpl, t::sexp_sexpsexpint};
+    get_(Id::notOp) = {"not", (void*)&notImpl, t::sexp_sexp};
+    get_(Id::binopEnv) = {"binopEnv", (void*)&binopEnvImpl, t::sexp_sexp3int2};
+    get_(Id::binop) = {"binop", (void*)&binopImpl, t::sexp_sexpsexpint};
+    get_(Id::colon) = {
+        "colon", (void*)&colonImpl,
+        llvm::FunctionType::get(t::SEXP, {t::Int, t::Int}, false)};
+    get_(Id::isMissing) = {"isMissing", (void*)&isMissingImpl, t::int_sexpsexp};
+    get_(Id::checkTrueFalse) = {"checkTrueFalse", (void*)&checkTrueFalseImpl,
+                                t::int_sexp};
+    get_(Id::asLogicalBlt) = {"aslogical", (void*)&asLogicalImpl, t::int_sexp};
+    get_(Id::length) = {
         "length",
         (void*)&lengthImpl,
-        nullptr,
+        llvm::FunctionType::get(t::i64, {t::SEXP}, false),
         {llvm::Attribute::ReadOnly, llvm::Attribute::ArgMemOnly}};
-    blt(Id::deopt) = {
-        "deopt", (void*)&deoptImpl, nullptr, {llvm::Attribute::NoReturn}};
-    blt(Id::recordDeopt) = {
-        "recordDeopt",
-        (void*)&recordDeoptReason,
-    };
-    blt(Id::assertFail) = {"assertFail",
-                           (void*)&assertFailImpl,
-                           nullptr,
-                           {llvm::Attribute::NoReturn}};
-    blt(Id::printValue) = {
-        "printValue",
-        (void*)printValueImpl,
-    };
-    blt(Id::extract11) = {
-        "extract1_1D",
-        (void*)&extract11Impl,
-    };
-    blt(Id::extract21) = {
-        "extract2_1D",
-        (void*)&extract21Impl,
-    };
-    blt(Id::extract21i) = {
-        "extract2_1Di",
-        (void*)&extract21iImpl,
-    };
-    blt(Id::extract21r) = {
-        "extract2_1Dr",
-        (void*)&extract21rImpl,
-    };
-    blt(Id::extract12) = {
-        "extract1_2D",
-        (void*)&extract12Impl,
-    };
-    blt(Id::extract13) = {
-        "extract1_3D",
-        (void*)&extract13Impl,
-    };
-    blt(Id::extract22) = {
-        "extract2_2D",
-        (void*)&extract22Impl,
-    };
-    blt(Id::extract22ii) = {
-        "extract2_2Dii",
-        (void*)&extract22iiImpl,
-    };
-    blt(Id::extract22rr) = {
-        "extract2_2Drr",
-        (void*)&extract22rrImpl,
-    };
-    blt(Id::nativeCallTrampoline) = {
-        "nativeCallTrampoline",
-        (void*)&nativeCallTrampolineImpl,
-    };
-    blt(Id::subassign11) = {
-        "subassign1_1D",
-        (void*)subassign11Impl,
-    };
-    blt(Id::subassign21) = {
-        "subassign2_1D",
-        (void*)subassign21Impl,
-    };
-    blt(Id::subassign21ii) = {
-        "subassign2_1D_ii",
-        (void*)subassign21iiImpl,
-    };
-    blt(Id::subassign21rr) = {
-        "subassign2_1D_rr",
-        (void*)subassign21rrImpl,
-    };
-    blt(Id::subassign21ri) = {
-        "subassign2_1D_ri",
-        (void*)subassign21riImpl,
-    };
-    blt(Id::subassign21ir) = {
-        "subassign2_1D_ir",
-        (void*)subassign21irImpl,
-    };
-    blt(Id::subassign12) = {
-        "subassign1_22",
-        (void*)subassign12Impl,
-    };
-    blt(Id::subassign13) = {
-        "subassign1_3D",
-        (void*)subassign13Impl,
-    };
-    blt(Id::subassign22) = {
-        "subassign2_2D",
-        (void*)subassign22Impl,
-    };
-    blt(Id::subassign22iii) = {
-        "subassign2_2Diii",
-        (void*)subassign22iiiImpl,
-    };
-    blt(Id::subassign22rrr) = {
-        "subassign2_2Drrr",
-        (void*)subassign22rrrImpl,
-    };
-    blt(Id::subassign22rri) = {
-        "subassign2_2Drr1",
-        (void*)subassign22rriImpl,
-    };
-    blt(Id::subassign22iir) = {
-        "subassign2_2Diir",
-        (void*)subassign22iirImpl,
-    };
-    blt(Id::forSeqSize) = {"forSeqSize", (void*)&forSeqSizeImpl};
-    blt(Id::initClosureContext) = {
-        "initClosureContext",
-        (void*)&initClosureContextImpl,
-    };
-    blt(Id::endClosureContext) = {
-        "endClosureContext",
-        (void*)&endClosureContextImpl,
-    };
-    blt(Id::matrixNcols) = {"ncols",
-                            (void*)ncolsImpl,
-                            nullptr,
-                            {llvm::Attribute::ReadOnly,
-                             llvm::Attribute::Speculatable,
-                             llvm::Attribute::ArgMemOnly}};
-    blt(Id::matrixNrows) = {"nrows",
-                            (void*)nrowsImpl,
-                            nullptr,
-                            {llvm::Attribute::ReadOnly,
-                             llvm::Attribute::Speculatable,
-                             llvm::Attribute::ArgMemOnly}};
-    blt(Id::makeVector) = {
-        "makeVector",
-        (void*)makeVectorImpl,
-    };
-    blt(Id::prodr) = {
+    get_(Id::deopt) = {"deopt",
+                       (void*)&deoptImpl,
+                       llvm::FunctionType::get(
+                           t::t_void,
+                           {t::voidPtr, t::SEXP, t::voidPtr, t::stackCellPtr},
+                           false),
+                       {llvm::Attribute::NoReturn}};
+    get_(Id::recordDeopt) = {
+        "recordDeopt", (void*)&recordDeoptReason,
+        llvm::FunctionType::get(
+            t::t_void, {t::SEXP, llvm::PointerType::get(t::DeoptReason, 0)},
+            false)};
+    get_(Id::assertFail) = {"assertFail",
+                            (void*)&assertFailImpl,
+                            t::void_voidPtr,
+                            {llvm::Attribute::NoReturn}};
+    get_(Id::printValue) = {"printValue", (void*)printValueImpl, t::void_sexp};
+    get_(Id::extract11) = {
+        "extract1_1D", (void*)&extract11Impl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int},
+                                false)};
+    get_(Id::extract21) = {
+        "extract2_1D", (void*)&extract21Impl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int},
+                                false)};
+    get_(Id::extract21i) = {
+        "extract2_1Di", (void*)&extract21iImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::SEXP, t::Int},
+                                false)};
+    get_(Id::extract21r) = {
+        "extract2_1Dr", (void*)&extract21rImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Double, t::SEXP, t::Int},
+                                false)};
+    get_(Id::extract12) = {
+        "extract1_2D", (void*)&extract12Impl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false)};
+    get_(Id::extract13) = {"extract1_3D", (void*)&extract13Impl,
+                           llvm::FunctionType::get(t::SEXP,
+                                                   {t::SEXP, t::SEXP, t::SEXP,
+                                                    t::SEXP, t::SEXP, t::Int},
+                                                   false)};
+    get_(Id::extract22) = {
+        "extract2_2D", (void*)&extract22Impl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false)};
+    get_(Id::extract22ii) = {
+        "extract2_2Dii", (void*)&extract22iiImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::Int}, false)};
+    get_(Id::extract22rr) = {
+        "extract2_2Drr", (void*)&extract22rrImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Double, t::Double, t::SEXP, t::Int}, false)};
+    get_(Id::nativeCallTrampoline) = {
+        "nativeCallTrampoline", (void*)&nativeCallTrampolineImpl,
+        llvm::FunctionType::get(t::SEXP,
+                                {t::i64, t::voidPtr, t::SEXP, t::Int, t::Int,
+                                 t::SEXP, t::i64, t::i64},
+                                false)};
+    get_(Id::subassign11) = {
+        "subassign1_1D", (void*)subassign11Impl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false)};
+    get_(Id::subassign21) = {
+        "subassign2_1D", (void*)subassign21Impl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false)};
+    get_(Id::subassign21ii) = {
+        "subassign2_1D_ii", (void*)subassign21iiImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Int, t::SEXP, t::Int}, false)};
+    get_(Id::subassign21rr) = {
+        "subassign2_1D_rr", (void*)subassign21rrImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Double, t::Double, t::SEXP, t::Int}, false)};
+    get_(Id::subassign21ri) = {
+        "subassign2_1D_ri", (void*)subassign21riImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Double, t::Int, t::SEXP, t::Int}, false)};
+    get_(Id::subassign21ir) = {
+        "subassign2_1D_ir", (void*)subassign21irImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Double, t::SEXP, t::Int}, false)};
+    get_(Id::subassign12) = {"subassign1_22", (void*)subassign12Impl,
+                             llvm::FunctionType::get(t::SEXP,
+                                                     {t::SEXP, t::SEXP, t::SEXP,
+                                                      t::SEXP, t::SEXP, t::Int},
+                                                     false)};
+    get_(Id::subassign13) = {
+        "subassign1_3D", (void*)subassign13Impl,
+        llvm::FunctionType::get(
+            t::SEXP,
+            {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false)};
+    get_(Id::subassign22) = {"subassign2_2D", (void*)subassign22Impl,
+                             llvm::FunctionType::get(t::SEXP,
+                                                     {t::SEXP, t::SEXP, t::SEXP,
+                                                      t::SEXP, t::SEXP, t::Int},
+                                                     false)};
+    get_(Id::subassign22iii) = {
+        "subassign2_2Diii", (void*)subassign22iiiImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Int, t::Int, t::SEXP, t::Int},
+            false)};
+    get_(Id::subassign22rrr) = {
+        "subassign2_2Drrr", (void*)subassign22rrrImpl,
+        llvm::FunctionType::get(
+            t::SEXP,
+            {t::SEXP, t::Double, t::Double, t::Double, t::SEXP, t::Int},
+            false)};
+    get_(Id::subassign22rri) = {
+        "subassign2_2Drr1", (void*)subassign22rriImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Double, t::Double, t::Int, t::SEXP, t::Int},
+            false)};
+    get_(Id::subassign22iir) = {
+        "subassign2_2Diir", (void*)subassign22iirImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::Int, t::Int, t::Double, t::SEXP, t::Int},
+            false)};
+    get_(Id::forSeqSize) = {"forSeqSize", (void*)&forSeqSizeImpl, t::int_sexp};
+    get_(Id::initClosureContext) = {
+        "initClosureContext", (void*)&initClosureContextImpl,
+        llvm::FunctionType::get(t::t_void,
+                                {t::i64, t::voidPtr, t::SEXP, t::RCNTXT_ptr,
+                                 t::SEXP, t::SEXP, t::i64},
+                                false)};
+    get_(Id::endClosureContext) = {
+        "endClosureContext", (void*)&endClosureContextImpl,
+        llvm::FunctionType::get(t::t_void, {t::RCNTXT_ptr, t::SEXP}, false)};
+    get_(Id::matrixNcols) = {"ncols",
+                             (void*)ncolsImpl,
+                             t::int_sexp,
+                             {llvm::Attribute::ReadOnly,
+                              llvm::Attribute::Speculatable,
+                              llvm::Attribute::ArgMemOnly}};
+    get_(Id::matrixNrows) = {"nrows",
+                             (void*)nrowsImpl,
+                             t::int_sexp,
+                             {llvm::Attribute::ReadOnly,
+                              llvm::Attribute::Speculatable,
+                              llvm::Attribute::ArgMemOnly}};
+    get_(Id::makeVector) = {
+        "makeVector", (void*)makeVectorImpl,
+        llvm::FunctionType::get(t::SEXP, {t::Int, t::i64}, false)};
+    get_(Id::prodr) = {
         "prodr",
         (void*)prodrImpl,
-        nullptr,
+        llvm::FunctionType::get(t::Double, {t::SEXP}, false),
         {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
-    blt(Id::sumr) = {
+    get_(Id::sumr) = {
         "sumr",
         (void*)sumrImpl,
-        nullptr,
+        llvm::FunctionType::get(t::Double, {t::SEXP}, false),
         {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
-    blt(Id::colonInputEffects) = {
-        "colonInputEffects",
-        (void*)rir::colonInputEffects,
-    };
-    blt(Id::colonCastLhs) = {
-        "colonCastLhs",
-        (void*)rir::colonCastLhs,
-    };
-    blt(Id::colonCastRhs) = {"colonCastRhs",
-                             (void*)rir::colonCastRhs,
-                             nullptr,
-                             {llvm::Attribute::ReadOnly}};
-    blt(Id::names) = {
-        "names",
-        (void*)&namesImpl,
-    };
-    blt(Id::setNames) = {
-        "setNames",
-        (void*)&setNamesImpl,
-    };
-    blt(Id::xlength_) = {
+    get_(Id::colonInputEffects) = {
+        "colonInputEffects", (void*)rir::colonInputEffects,
+        llvm::FunctionType::get(t::Int, {t::SEXP, t::SEXP, t::Int}, false)};
+    get_(Id::colonCastLhs) = {
+        "colonCastLhs", (void*)rir::colonCastLhs,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false)};
+    get_(Id::colonCastRhs) = {
+        "colonCastRhs",
+        (void*)rir::colonCastRhs,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false),
+        {llvm::Attribute::ReadOnly}};
+    get_(Id::names) = {"names", (void*)&namesImpl,
+                       llvm::FunctionType::get(t::SEXP, {t::SEXP}, false)};
+    get_(Id::setNames) = {
+        "setNames", (void*)&setNamesImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
+    get_(Id::xlength_) = {
         "xlength_",
         (void*)&xlength_Impl,
-        nullptr,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false),
         {llvm::Attribute::ArgMemOnly, llvm::Attribute::ReadOnly}};
-    blt(Id::getAttrb) = {"getAttrib",
-                         (void*)&getAttribImpl,
-                         nullptr,
-                         {llvm::Attribute::ArgMemOnly}};
-    blt(Id::nonLocalReturn) = {"nonLocalReturn", (void*)&nonLocalReturnImpl,
-                               nullptr};
-    blt(Id::clsEq) = {
+    get_(Id::getAttrb) = {
+        "getAttrib",
+        (void*)&getAttribImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false),
+        {llvm::Attribute::ArgMemOnly}};
+    get_(Id::nonLocalReturn) = {
+        "nonLocalReturn", (void*)&nonLocalReturnImpl,
+        llvm::FunctionType::get(t::t_void, {t::SEXP, t::SEXP}, false)};
+    get_(Id::clsEq) = {
         "cksEq",
         (void*)&clsEqImpl,
-        nullptr,
+        llvm::FunctionType::get(t::i1, {t::SEXP, t::SEXP}, false),
         {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};
-    blt(Id::checkType) = {"checkType", (void*)&checkTypeImpl, nullptr, {}};
-    blt(Id::shallowDuplicate) = {"shallowDuplicate",
-                                 (void*)&Rf_shallow_duplicate,
-                                 nullptr,
-                                 {llvm::Attribute::NoAlias}};
+    get_(Id::checkType) = {
+        "checkType", (void*)&checkTypeImpl,
+        llvm::FunctionType::get(t::t_void, {t::SEXP, t::i64, t::charPtr},
+                                false)};
+    get_(Id::shallowDuplicate) = {"shallowDuplicate",
+                                  (void*)&Rf_shallow_duplicate,
+                                  t::sexp_sexp,
+                                  {llvm::Attribute::NoAlias}};
 #ifdef __APPLE__
-    blt(Id::sigsetjmp) = {"sigsetjmp", (void*)&sigsetjmp};
+    get_(Id::sigsetjmp) = {
+        "sigsetjmp", (void*)&sigsetjmp,
+        llvm::FunctionType::get(
+            t::i32, {llvm::PointerType::get(t::i32, 0), t::i32}, false)};
 #else
-    blt(Id::sigsetjmp) = {"__sigsetjmp", (void*)&__sigsetjmp};
+    get_(Id::sigsetjmp) = {
+        "__sigsetjmp", (void*)&__sigsetjmp,
+        llvm::FunctionType::get(t::i32, {t::setjmp_buf_ptr, t::i32}, false)};
 #endif
-    return true;
 }
 
 } // namespace pir

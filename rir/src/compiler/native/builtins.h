@@ -55,134 +55,102 @@ enum class UnopKind : int {
 struct NativeBuiltins {
 
     enum class Id : uint8_t {
-
         forcePromise,
-
         consNr,
         createBindingCell,
         createMissingBindingCell,
-
-        ldvar,
-        ldvarGlobal,
-        ldvarForUpdate,
-        ldvarCacheMiss,
-        stvar,
-        stvarSuper,
-        stvari,
-        stvarr,
-        defvar,
-        starg,
-        ldfun,
-        chkfun,
-
-        setCar,
-        setCdr,
-        setTag,
-
-        externalsxpSetEntry,
-
-        error,
-        warn,
-
         createEnvironment,
         createStubEnvironment,
         materializeEnvironment,
-        createPromise,
-        createPromiseNoEnv,
-        createPromiseEager,
-        createPromiseNoEnvEager,
-        createClosure,
-
-        newInt,
-        newIntDebug,
-        newReal,
-        newIntFromReal,
-        newRealFromInt,
-
-        makeVector,
-
+        ldvarForUpdate,
+        ldvar,
+        ldvarGlobal,
+        ldvarCacheMiss,
+        stvarSuper,
+        stvar,
+        stvari,
+        stvarr,
+        starg,
+        setCar,
+        setCdr,
+        setTag,
+        externalsxpSetEntry,
+        defvar,
+        ldfun,
+        chkfun,
+        warn,
+        error,
+        callBuiltin,
         call,
         namedCall,
         dotsCall,
-        callBuiltin,
-
-        notOp,
-        notEnv,
-        binop,
-        binopEnv,
-        unop,
+        createPromise,
+        createPromiseNoEnvEager,
+        createPromiseNoEnv,
+        createPromiseEager,
+        createClosure,
+        newIntFromReal,
+        newRealFromInt,
+        newInt,
+        newIntDebug,
+        newReal,
         unopEnv,
-
+        unop,
+        notEnv,
+        notOp,
+        binopEnv,
+        binop,
+        colon,
         isMissing,
         checkTrueFalse,
         asLogicalBlt,
-
         length,
-        forSeqSize,
-
         deopt,
-
+        recordDeopt,
         assertFail,
-
         printValue,
-
         extract11,
         extract21,
         extract21i,
         extract21r,
         extract12,
+        extract13,
         extract22,
         extract22ii,
         extract22rr,
-        extract13,
-
+        nativeCallTrampoline,
         subassign11,
         subassign21,
         subassign21ii,
         subassign21rr,
-        subassign21ir,
         subassign21ri,
+        subassign21ir,
         subassign12,
+        subassign13,
+        subassign22,
         subassign22iii,
         subassign22rrr,
         subassign22rri,
         subassign22iir,
-        subassign22,
-        subassign13,
-
-        nativeCallTrampoline,
-
+        forSeqSize,
         initClosureContext,
         endClosureContext,
-
-        recordDeopt,
-
-        matrixNrows,
         matrixNcols,
-
-        sumr,
+        matrixNrows,
+        makeVector,
         prodr,
-
+        sumr,
         colonInputEffects,
         colonCastLhs,
         colonCastRhs,
-
-        colon,
-
         names,
         setNames,
         xlength_,
-
         getAttrb,
-
         nonLocalReturn,
-
         clsEq,
-
         checkType,
-
         shallowDuplicate,
-
         sigsetjmp,
 
         // book keeping
@@ -194,17 +162,11 @@ struct NativeBuiltins {
     static constexpr unsigned long bindingsCacheFails = 2;
 
     static const NativeBuiltin& get(Id id) {
-#ifdef ENABLE_SLOWASSERT
-        assert(initialized);
-#endif
         return store[static_cast<size_t>(id)];
     }
 
     using BuiltinAction = std::function<void(const NativeBuiltin&)>;
     static void eachBuiltin(BuiltinAction it) {
-#ifdef ENABLE_SLOWASSERT
-        assert(initialized);
-#endif
         for (size_t i = static_cast<size_t>(Id::FIRST),
                     e = static_cast<size_t>(Id::LAST);
              i <= e; i++) {
@@ -212,12 +174,13 @@ struct NativeBuiltins {
         }
     }
 
+    static void initializeBuiltins();
+
   private:
-    static NativeBuiltin& blt(Id id) { return store[static_cast<size_t>(id)]; }
+    // For setting up - returns mutable reference
+    static NativeBuiltin& get_(Id id) { return store[static_cast<size_t>(id)]; }
+
     static NativeBuiltin store[static_cast<size_t>(Id::NUM_BUILTINS)];
-    static bool initialized;
-    static bool initializeBuiltins();
-    friend void initializeTypes(llvm::LLVMContext& context);
 };
 
 } // namespace pir
