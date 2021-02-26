@@ -20,51 +20,6 @@
 namespace rir {
 namespace pir {
 
-llvm::Expected<llvm::orc::ThreadSafeModule> PassScheduleLLVM::
-operator()(llvm::orc::ThreadSafeModule TSM,
-           llvm::orc::MaterializationResponsibility& R) {
-    TSM.withModuleDo([this](llvm::Module& M) {
-        auto PM = std::make_unique<llvm::legacy::FunctionPassManager>(&M);
-
-        // Can we do this without the dependence on the Module?
-        {
-            llvm::PassManagerBuilder builder;
-
-            builder.OptLevel = 0;
-            builder.SizeLevel = 0;
-            builder.Inliner = llvm::createFunctionInliningPass();
-
-            // Start with some custom passes tailored to our backend
-            builder.addExtension(llvm::PassManagerBuilder::EP_EarlyAsPossible,
-                                 pirPassSchedule);
-
-            // TODO: this is dubious
-            PM->add(new llvm::TargetLibraryInfoWrapperPass(
-                llvm::Triple(M.getTargetTriple())));
-            PM->add(llvm::createTargetTransformInfoWrapperPass(
-                llvm::TargetIRAnalysis()));
-
-            builder.populateFunctionPassManager(*PM);
-        }
-
-        PM->doInitialization();
-        PreMPM->run(M);
-        for (auto& F : M) {
-            PM->run(F);
-#ifdef ENABLE_SLOWASSERT
-            verifyFunction(F);
-#endif
-        }
-        PM->doFinalization();
-        MPM->run(M);
-    });
-    return std::move(TSM);
-}
-
-std::unique_ptr<llvm::legacy::PassManager> PassScheduleLLVM::PreMPM;
-std::unique_ptr<llvm::legacy::PassManager> PassScheduleLLVM::MPM;
-// std::unique_ptr<llvm::legacy::PassManager> PassScheduleLLVM::PM;
-
 // Pass to run after hotCold splitting:
 // We use cold functions for bailout branches, thus we set the optnone attribute
 // on cold functions and uses the coldcc calling convention to call them.
@@ -115,10 +70,32 @@ static llvm::RegisterPass<NooptCold> X("noopt-cold",
                                        false /* Only looks at CFG */,
                                        false /* Analysis Pass */);
 
-void PassScheduleLLVM::pirPassSchedule(const llvm::PassManagerBuilder&,
-                                       llvm::legacy::PassManagerBase& PM_) {
+llvm::Expected<llvm::orc::ThreadSafeModule> PassScheduleLLVM::
+operator()(llvm::orc::ThreadSafeModule TSM,
+           llvm::orc::MaterializationResponsibility& R) {
+    TSM.withModuleDo([this](llvm::Module& M) {
+        PM->run(M);
+#ifdef ENABLE_SLOWASSERT
+        for (auto& F : M) {
+            verifyFunction(F);
+        }
+#endif
+    });
+    return std::move(TSM);
+}
+
+PassScheduleLLVM::PassScheduleLLVM() {
     using namespace llvm;
-    legacy::PassManagerBase* PM = &PM_;
+
+    if (PM.get())
+        return;
+
+    PM.reset(new llvm::legacy::PassManager);
+
+    PM->add(createHotColdSplittingPass());
+    PM->add(new NooptCold());
+
+    PM->add(createFunctionInliningPass());
 
     // See
     // https://github.com/JuliaLang/julia/blob/235784a49b6ed8ab5677f42887e08c84fdc12c5c/src/aotcompile.cpp#L607
@@ -215,29 +192,7 @@ void PassScheduleLLVM::pirPassSchedule(const llvm::PassManagerBuilder&,
     PM->add(createDivRemPairsPass());
 }
 
-void PassScheduleLLVM::initializePMs() {
-    using namespace llvm;
-
-    assert(!PreMPM.get());
-    PreMPM = std::make_unique<legacy::PassManager>();
-    assert(!MPM.get());
-    MPM = std::make_unique<legacy::PassManager>();
-
-    PreMPM->add(createHotColdSplittingPass());
-    PreMPM->add(new NooptCold());
-
-    llvm::PassManagerBuilder builder;
-    builder.OptLevel = 0;
-    builder.SizeLevel = 0;
-    builder.Inliner = llvm::createFunctionInliningPass();
-
-    // Start with some custom passes tailored to our backend
-    builder.addExtension(PassManagerBuilder::EP_EarlyAsPossible,
-                         pirPassSchedule);
-
-    builder.populateModulePassManager(*MPM);
-    builder.populateLTOPassManager(*MPM);
-}
+std::unique_ptr<llvm::legacy::PassManager> PassScheduleLLVM::PM = nullptr;
 
 unsigned Parameter::PIR_LLVM_OPT_LEVEL =
     getenv("PIR_LLVM_OPT_LEVEL") ? atoi(getenv("PIR_LLVM_OPT_LEVEL")) : 2;

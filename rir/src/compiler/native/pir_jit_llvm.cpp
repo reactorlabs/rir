@@ -161,7 +161,7 @@ void PirJitLLVM::initializeLLVM() {
     TSC = std::make_unique<LLVMContext>();
 
     // Set what passes to run
-    JIT->getIRTransformLayer().setTransform(*PassScheduleLLVM::instance());
+    JIT->getIRTransformLayer().setTransform(PassScheduleLLVM());
 
     // Initialize types specific to PIR and builtins
     initializeTypes(*TSC.getContext());

@@ -18,19 +18,10 @@ class PassScheduleLLVM {
     operator()(llvm::orc::ThreadSafeModule TSM,
                llvm::orc::MaterializationResponsibility& R);
 
-    static PassScheduleLLVM* instance() {
-        static PassScheduleLLVM singleton;
-        return &singleton;
-    }
+    PassScheduleLLVM();
 
   private:
-    PassScheduleLLVM() { initializePMs(); }
-    void initializePMs();
-    static void pirPassSchedule(const llvm::PassManagerBuilder&,
-                                llvm::legacy::PassManagerBase& PM_);
-    static std::unique_ptr<llvm::legacy::PassManager> PreMPM;
-    static std::unique_ptr<llvm::legacy::PassManager> MPM;
-    // static std::unique_ptr<llvm::legacy::PassManager> PM;
+    static std::unique_ptr<llvm::legacy::PassManager> PM;
 };
 
 } // namespace pir
