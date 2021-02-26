@@ -745,7 +745,7 @@ CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
       builtinSexp(builtin), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
-        this->pushArg(args[i], PirType::val() | RType::expandedDots);
+        this->pushArg(args[i], PirType::val());
 }
 
 size_t CallSafeBuiltin::gvnBase() const {
@@ -770,22 +770,25 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
                                      const std::vector<Value*>& args,
                                      unsigned srcIdx) {
     bool noObj = true;
+    bool unsafe = false;
     for (auto a : args) {
         if (auto mk = MkArg::Cast(a)) {
             if (mk->isEager())
                 if (!mk->eagerArg()->type.maybeObj())
                     continue;
             noObj = false;
-            break;
+            continue;
         }
         if (a->type.maybeObj()) {
             noObj = false;
-            break;
+        }
+        if (a->type.isA(RType::expandedDots)) {
+            unsafe = true;
         }
     }
 
-    if (SafeBuiltinsList::always(builtin) ||
-        (noObj && SafeBuiltinsList::nonObject(builtin)))
+    if (!unsafe && (SafeBuiltinsList::always(builtin) ||
+                    (noObj && SafeBuiltinsList::nonObject(builtin))))
         return new CallSafeBuiltin(builtin, args, srcIdx);
     else
         return new CallBuiltin(callerEnv, builtin, args, srcIdx);

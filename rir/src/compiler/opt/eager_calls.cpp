@@ -119,45 +119,54 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             }
 
             if (auto call = Call::Cast(*ip)) {
-                if (auto ldfun = LdFun::Cast(call->cls())) {
-                    if (ldfun->hint) {
-                        if (TYPEOF(ldfun->hint) == BUILTINSXP) {
-                            // We can only speculate if we have a checkpoint at
-                            // the ldfun position, since we want to deopt before
-                            // forcing arguments.
-                            if (auto cp = checkpoint.at(ldfun)) {
-                                ip = replaceCallWithCallBuiltin(bb, ip, call,
-                                                                ldfun->hint);
-                                needsGuard[ldfun] = {ldfun->hint, cp};
+                bool dots = false;
+                call->eachCallArg([&](Value* v) {
+                    if (v->type.maybe(RType::expandedDots))
+                        dots = true;
+                });
+                if (!dots) {
+                    if (auto ldfun = LdFun::Cast(call->cls())) {
+                        if (ldfun->hint) {
+                            if (TYPEOF(ldfun->hint) == BUILTINSXP) {
+                                // We can only speculate if we have a checkpoint
+                                // at the ldfun position, since we want to deopt
+                                // before forcing arguments.
+                                if (auto cp = checkpoint.at(ldfun)) {
+                                    ip = replaceCallWithCallBuiltin(
+                                        bb, ip, call, ldfun->hint);
+                                    needsGuard[ldfun] = {ldfun->hint, cp};
+                                }
                             }
-                        }
-                    } else {
-                        // Only speculate if we don't have a static guess
-                        if (!ldfun->guessedBinding()) {
-                            auto env = Env::Cast(cls->owner()->closureEnv());
-                            if (env != Env::notClosed() && env->rho) {
-                                auto name = ldfun->varName;
-                                auto builtin = Rf_findVar(name, env->rho);
-                                if (TYPEOF(builtin) == PROMSXP)
-                                    builtin = PRVALUE(builtin);
-                                if (TYPEOF(builtin) == BUILTINSXP) {
-                                    auto rho = env->rho;
-                                    bool inBase = false;
-                                    if (rho == R_BaseEnv ||
-                                        rho == R_BaseNamespace) {
-                                        inBase =
-                                            SYMVALUE(name) == builtin &&
-                                            SafeBuiltinsList::
-                                                assumeStableInBaseEnv(name);
-                                    }
+                        } else {
+                            // Only speculate if we don't have a static guess
+                            if (!ldfun->guessedBinding()) {
+                                auto env =
+                                    Env::Cast(cls->owner()->closureEnv());
+                                if (env != Env::notClosed() && env->rho) {
+                                    auto name = ldfun->varName;
+                                    auto builtin = Rf_findVar(name, env->rho);
+                                    if (TYPEOF(builtin) == PROMSXP)
+                                        builtin = PRVALUE(builtin);
+                                    if (TYPEOF(builtin) == BUILTINSXP) {
+                                        auto rho = env->rho;
+                                        bool inBase = false;
+                                        if (rho == R_BaseEnv ||
+                                            rho == R_BaseNamespace) {
+                                            inBase =
+                                                SYMVALUE(name) == builtin &&
+                                                SafeBuiltinsList::
+                                                    assumeStableInBaseEnv(name);
+                                        }
 
-                                    auto cp = checkpoint.at(ldfun);
+                                        auto cp = checkpoint.at(ldfun);
 
-                                    if (inBase || cp) {
-                                        ip = replaceCallWithCallBuiltin(
-                                            bb, ip, call, builtin);
-                                        if (!inBase)
-                                            needsGuard[ldfun] = {builtin, cp};
+                                        if (inBase || cp) {
+                                            ip = replaceCallWithCallBuiltin(
+                                                bb, ip, call, builtin);
+                                            if (!inBase)
+                                                needsGuard[ldfun] = {builtin,
+                                                                     cp};
+                                        }
                                     }
                                 }
                             }

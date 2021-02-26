@@ -19,7 +19,7 @@ static bool taintsEnvironment(Instruction* i) {
         if (SafeBuiltinsList::nonObject(call->builtinId)) {
             auto taints = false;
             call->eachCallArg([&](Value* arg) {
-                if (arg->type.maybeObj())
+                if (arg->type.maybeObj() || arg->type.isA(RType::expandedDots))
                     taints = true;
             });
             return taints;

@@ -403,11 +403,13 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                         lookup(
                             arg->followCasts(),
                             [&](const AbstractPirValue& analysisRes) {
-                                if (analysisRes.type.maybeObj())
+                                if (analysisRes.type.maybeObj() ||
+                                    analysisRes.type.maybe(RType::expandedDots))
                                     safe = false;
                             },
                             [&]() {
-                                if (arg->type.maybeObj())
+                                if (arg->type.maybeObj() ||
+                                    arg->type.maybe(RType::expandedDots))
                                     safe = false;
                             });
                     });
