@@ -276,7 +276,7 @@ class DeadStoreAnalysis {
                         state.completelyObserved.insert(e);
                         effect.update();
                     }
-                    if (state.removeStoreIgnoralOf(env))
+                    if (state.removeStoreIgnoralOf(e))
                         effect.update();
                 }
             };
@@ -284,7 +284,7 @@ class DeadStoreAnalysis {
             auto observeLeakedEnv = [&](Value* env, Instruction* instruction) {
                 for (auto& e : withPotentialParents(env)) {
                     if (!MkEnv::Cast(e))
-                        return observeFullEnv(env);
+                        return observeFullEnv(e);
                     if (!state.completelyObserved.count(e)) {
                         if (!state.observedByDeopt.count(e)) {
                             std::unordered_set<Instruction*> set;
@@ -298,7 +298,7 @@ class DeadStoreAnalysis {
                                 effect.update();
                         }
                     }
-                    if (state.removeStoreIgnoralOf(env))
+                    if (state.removeStoreIgnoralOf(e))
                         effect.update();
                 }
             };
@@ -325,26 +325,27 @@ class DeadStoreAnalysis {
                     state.ignoreStore.insert(var);
                     effect.update();
                 }
-            } else if (i->exits() || i->effects.contains(Effect::ExecuteCode)) {
-                auto leakedEnvs = leaked.leakedWhile(i);
-                for (auto& l : leakedEnvs.leaked)
-                    observeFullEnv(l);
-                if (i->bb()->isDeopt()) {
+            } else {
+                if (i->exits() || i->readsEnv() ||
+                    i->effects.contains(Effect::ExecuteCode)) {
+                    auto leakedEnvs = leaked.leakedWhile(i);
+                    for (auto& l : leakedEnvs.leaked) {
+                        if (i->bb()->isDeopt())
+                            observeLeakedEnv(l, i);
+                        else
+                            observeFullEnv(l);
+                    }
+                    observeStaticEnvs();
+                }
+                if (Deopt::Cast(i)) {
+                    auto leakedEnvs = leaked.leakedWhile(i);
                     for (auto& l : leakedEnvs.leakedByDeopt)
                         observeLeakedEnv(l, i);
                 }
-            } else if (i->readsEnv()) {
-                auto leakedEnvs = leaked.leakedWhile(i);
-                Value* environment = resolveEnv(i->env());
-                if (i->bb()->isDeopt())
-                    observeLeakedEnv(environment, i);
-                else {
-                    observeFullEnv(environment);
-                }
-            }
 
-            if (i->exits() || i->readsEnv()) {
-                observeStaticEnvs();
+                if (i->hasEnv())
+                    for (auto& e : withPotentialParents(i->env()))
+                        state.removeStoreIgnoralOf(e);
             }
 
             return effect;
