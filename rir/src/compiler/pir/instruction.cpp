@@ -996,6 +996,7 @@ Context CallInstruction::inferAvailableAssumptions() const {
             given.add(Assumption::NotTooManyArguments);
             auto missing = callee->nargs() - nCallArgs();
             given.numMissing(missing);
+            given.add(Assumption::NoExplicitlyMissingArgs);
         }
     } else {
         if (auto clsArg = tryGetClsArg()) {
@@ -1017,12 +1018,10 @@ Context CallInstruction::inferAvailableAssumptions() const {
                 given.add(Assumption::NotTooManyArguments);
                 auto missing = localFun->nargs() - nCallArgs();
                 given.numMissing(missing);
+                given.add(Assumption::NoExplicitlyMissingArgs);
             }
         }
     }
-
-    // Make some optimistic assumptions, they might be reset below...
-    given.add(Assumption::NoExplicitlyMissingArgs);
 
     size_t i = 0;
     eachNamedCallArg([&](SEXP name, Value* arg) {

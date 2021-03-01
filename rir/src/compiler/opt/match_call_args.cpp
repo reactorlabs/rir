@@ -64,6 +64,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         matchedArgs, argOrderOrig);
                 }
 
+                auto asmpt = calli->inferAvailableAssumptions();
                 if (staticallyArgmatched && !target) {
                     rir::DispatchTable* dt = nullptr;
                     SEXP srcRef = nullptr;
@@ -77,12 +78,18 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         assert(!mk->tryGetCls());
                     }
                     if (dt) {
-                        auto asmpt = calli->inferAvailableAssumptions();
                         // We can add these because arguments will be statically
                         // matched
                         asmpt.add(Assumption::StaticallyArgmatched);
                         asmpt.add(Assumption::CorrectOrderOfArguments);
                         asmpt.add(Assumption::NotTooManyArguments);
+                        asmpt.add(Assumption::NoExplicitlyMissingArgs);
+                        for (auto a : matchedArgs)
+                            if (a == MissingArg::instance())
+                                asmpt.remove(
+                                    Assumption::NoExplicitlyMissingArgs);
+                        asmpt.numMissing(Rf_length(formals) -
+                                         matchedArgs.size());
                         cmp.compileFunction(
                             dt, "", formals, srcRef, asmpt,
                             [&](ClosureVersion* fun) { target = fun; }, []() {},
@@ -94,15 +101,13 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     anyChange = true;
                     if (auto c = call) {
                         auto nc = new StaticCall(
-                            c->env(), target->owner(),
-                            c->inferAvailableAssumptions(), matchedArgs,
+                            c->env(), target->owner(), asmpt, matchedArgs,
                             std::move(argOrderOrig), c->frameStateOrTs(),
                             c->srcIdx, c->cls()->followCastsAndForce());
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else if (auto c = namedCall) {
                         auto nc = new StaticCall(
-                            c->env(), target->owner(),
-                            c->inferAvailableAssumptions(), matchedArgs,
+                            c->env(), target->owner(), asmpt, matchedArgs,
                             std::move(argOrderOrig), c->frameStateOrTs(),
                             c->srcIdx, c->cls()->followCastsAndForce());
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
