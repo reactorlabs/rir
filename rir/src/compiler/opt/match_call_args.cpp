@@ -65,7 +65,19 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
 
                 auto asmpt = calli->inferAvailableAssumptions();
+
                 if (staticallyArgmatched && !target) {
+                    // We can add these because arguments will be statically
+                    // matched
+                    asmpt.add(Assumption::StaticallyArgmatched);
+                    asmpt.add(Assumption::CorrectOrderOfArguments);
+                    asmpt.add(Assumption::NotTooManyArguments);
+                    asmpt.add(Assumption::NoExplicitlyMissingArgs);
+                    for (auto a : matchedArgs)
+                        if (a == MissingArg::instance())
+                            asmpt.remove(Assumption::NoExplicitlyMissingArgs);
+                    asmpt.numMissing(Rf_length(formals) - matchedArgs.size());
+
                     rir::DispatchTable* dt = nullptr;
                     SEXP srcRef = nullptr;
                     if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
@@ -78,18 +90,6 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         assert(!mk->tryGetCls());
                     }
                     if (dt) {
-                        // We can add these because arguments will be statically
-                        // matched
-                        asmpt.add(Assumption::StaticallyArgmatched);
-                        asmpt.add(Assumption::CorrectOrderOfArguments);
-                        asmpt.add(Assumption::NotTooManyArguments);
-                        asmpt.add(Assumption::NoExplicitlyMissingArgs);
-                        for (auto a : matchedArgs)
-                            if (a == MissingArg::instance())
-                                asmpt.remove(
-                                    Assumption::NoExplicitlyMissingArgs);
-                        asmpt.numMissing(Rf_length(formals) -
-                                         matchedArgs.size());
                         cmp.compileFunction(
                             dt, "", formals, srcRef, asmpt,
                             [&](ClosureVersion* fun) { target = fun; }, []() {},

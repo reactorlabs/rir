@@ -988,10 +988,9 @@ Context CallInstruction::inferAvailableAssumptions() const {
 
     Context given;
     // If we know the callee, we can verify arg order and statically matching
-    if (!hasNamedArgs() || callee)
-        given.add(Assumption::CorrectOrderOfArguments);
     if (callee) {
         given.add(Assumption::StaticallyArgmatched);
+        given.add(Assumption::CorrectOrderOfArguments);
         if (callee->nargs() >= nCallArgs()) {
             given.add(Assumption::NotTooManyArguments);
             auto missing = callee->nargs() - nCallArgs();
@@ -1014,6 +1013,7 @@ Context CallInstruction::inferAvailableAssumptions() const {
         }
         if (localFun) {
             given.add(Assumption::StaticallyArgmatched);
+            given.add(Assumption::CorrectOrderOfArguments);
             if (localFun->nargs() >= nCallArgs()) {
                 given.add(Assumption::NotTooManyArguments);
                 auto missing = localFun->nargs() - nCallArgs();
@@ -1025,7 +1025,7 @@ Context CallInstruction::inferAvailableAssumptions() const {
 
     size_t i = 0;
     eachNamedCallArg([&](SEXP name, Value* arg) {
-        if (arg->type.maybe(RType::expandedDots)) {
+        if (arg->type.maybe(RType::expandedDots) || name != R_NilValue) {
             // who knows to how many args this expands...
             given.remove(Assumption::CorrectOrderOfArguments);
             given.remove(Assumption::StaticallyArgmatched);

@@ -214,6 +214,16 @@ class TheVerifier {
             ok = false;
         }
 
+        if (auto call = NamedCall::Cast(i)) {
+            if (call->inferAvailableAssumptions().includes(
+                    rir::Assumption::StaticallyArgmatched)) {
+                std::cerr << "Error: instruction '";
+                i->print(std::cerr);
+                std::cerr << "' named call cannot be statically argmatched\n";
+                ok = false;
+            }
+        }
+
         if (auto call = StaticCall::Cast(i)) {
             if (call->hint && call->tryDispatch() &&
                 call->hint->owner() != call->tryDispatch()->owner()) {

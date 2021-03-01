@@ -2209,7 +2209,16 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     ClosureVersion* tryOptimisticDispatch() const;
 
     Context inferAvailableAssumptions() const override final {
-        return CallInstruction::inferAvailableAssumptions() | givenContext;
+        static Context minimal = ([]() {
+            Context m;
+            m.add(Assumption::CorrectOrderOfArguments);
+            m.add(Assumption::StaticallyArgmatched);
+            m.add(Assumption::NotTooManyArguments);
+            return m;
+        })();
+        auto res = CallInstruction::inferAvailableAssumptions() | givenContext;
+        assert((res & minimal) == minimal);
+        return res;
     }
 };
 
