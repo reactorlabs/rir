@@ -58,7 +58,7 @@ struct CallContext {
     const Code* caller;
     const size_t suppliedArgs;
     size_t passedArgs;
-    /*const */ R_bcstack_t* stackArgs;
+    R_bcstack_t* stackArgs;
     const Immediate* names;
     SEXP callerEnv;
     const SEXP ast;

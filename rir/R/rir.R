@@ -7,7 +7,7 @@ rir.markFunction <- function(what, which,
                              DisableAllSpecialization=NA,
                              DisableArgumentTypeSpecialization=NA,
                              DisableNumArgumentsSepcialization=NA,
-                             Annotated=NA) {
+                             DepromisedArgs=NA) {
     doIt = function(n) {
         .Call("rirMarkFunction", what, n,
               Reopt,
@@ -15,7 +15,7 @@ rir.markFunction <- function(what, which,
               DisableAllSpecialization,
               DisableArgumentTypeSpecialization,
               DisableNumArgumentsSepcialization,
-              Annotated);
+              DepromisedArgs);
     }
     if (missing(which)) {
         for (i in rir.functionVersions(what))
@@ -85,7 +85,7 @@ pir.tests <- function() {
 # environment was elided). Max assumptions compiled (+ minimal) are used, if
 # warmup=<FUN> will call <FUN> repeatedly to get better assumptions.
 pir.check <- function(f, ..., warmup=NULL) {
-    checks <- 
+    checks <-
         as.pairlist(lapply(lapply(as.list(substitute(...())), as.character), as.name))
     if (length(checks) == 0)
         stop("pir.check: needs at least 1 check")
