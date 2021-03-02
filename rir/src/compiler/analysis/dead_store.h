@@ -191,15 +191,21 @@ class DeadStoreAnalysis {
         }
 
         bool removeStoreIgnoralOf(Value* env) {
+            if (env == Env::notClosed() && ignoreStore.size()) {
+                ignoreStore.clear();
+                return true;
+            }
+
+            bool found = false;
             for (auto it = ignoreStore.begin(); it != ignoreStore.end();) {
                 if (it->second != env) {
                     it++;
                 } else {
                     it = ignoreStore.erase(it);
-                    return true;
+                    found = true;
                 }
             }
-            return false;
+            return found;
         }
 
         void print(std::ostream& out, bool tty) const {
