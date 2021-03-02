@@ -85,6 +85,19 @@ class False : public SingletonValue<False> {
     False() : SingletonValue(PirType::test(), Tag::False) {}
 };
 
+class OpaqueTrue : public SingletonValue<OpaqueTrue> {
+  public:
+    void printRef(std::ostream& out) const override final {
+        out << "opaqueTrue";
+    }
+
+    SEXP asRValue() const override final { return nullptr; }
+
+  private:
+    friend class SingletonValue;
+    OpaqueTrue() : SingletonValue(PirType::test(), Tag::OpaqueTrue) {}
+};
+
 class NaLogical : public SingletonValue<NaLogical> {
   public:
     void printRef(std::ostream& out) const override final { out << "na-lgl"; }
@@ -105,6 +118,8 @@ class Tombstone : public Value {
             out << "cls";
         else if (this == framestate())
             out << "fs";
+        else if (this == unreachable())
+            out << "unreachable";
         else
             assert(false);
     }
@@ -115,6 +130,10 @@ class Tombstone : public Value {
     static Tombstone* framestate() {
         static Tombstone fs(NativeType::frameState);
         return &fs;
+    }
+    static Tombstone* unreachable() {
+        static Tombstone dead(RType::nil);
+        return &dead;
     }
     SEXP asRValue() const override final {
         assert(false && "This value is dead");

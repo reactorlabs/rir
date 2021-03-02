@@ -156,10 +156,13 @@ class ClosureStreamLogger : public GenericStreamLogger {
   public:
     PassStreamLogger forPass(size_t number);
 
+    using LLVMBitcodePrint = std::function<void(std::ostream&, bool)>;
+
     void pirOptimizationsFinished(ClosureVersion*);
     void compilationEarlyPir(ClosureVersion*);
     void CSSA(Code*);
     void finalPIR(ClosureVersion*);
+    void LLVMBitcode(const LLVMBitcodePrint&);
     void unsupportedBC(const std::string&, const rir::BC&);
 
     void preparePrint() override {

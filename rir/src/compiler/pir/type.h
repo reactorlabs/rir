@@ -234,7 +234,7 @@ struct PirType {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
                        RType::missing | RType::unbound | RType::ast |
-                       RType::dots | RType::expandedDots | RType::other)
+                       RType::dots | RType::other)
             .orObject()
             .orAttribs();
     }

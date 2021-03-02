@@ -1,9 +1,9 @@
 {
     "configurations": [
         {
-            "name": "LinuxPRL5",
+            "name": "Ř on PRL5",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/rir/src/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",
@@ -11,17 +11,17 @@
             "cppStandard": "c++17",
             "intelliSenseMode": "clang-x64"
         },
-        { 
+        {
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/rir/**",
                 "${workspaceFolder}/external/custom-r/src/**",
-                "${workspaceFolder}/external/llvm-8.0.0/**"
+                "${workspaceFolder}/external/llvm-11/include/**"
             ],
-            "defines": [],
-            "compilerPath": "/usr/bin/gcc",
+            "defines": ["ENABLE_SLOWASSERT"],
+            "compilerPath": "/usr/bin/g++-8",
             "cStandard": "c11",
-            "cppStandard": "c++17",
+            "cppStandard": "c++14",
             "intelliSenseMode": "gcc-x64"
         }
     ],

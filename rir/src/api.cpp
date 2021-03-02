@@ -297,7 +297,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                            logger.flush();
                            cmp.optimizeModule();
 
-                           auto fun = backend.compile(c);
+                           auto fun = backend.getOrCompile(c);
 
                            // Install
                            if (dryRun)

@@ -34,6 +34,16 @@ struct UnnecessaryContextsState : public AbstractUnique<PushContext> {
         needed = false;
         affected.clear();
     }
+    void print(std::ostream& out, bool tty) const {
+        out << "Context : ";
+        AbstractUnique<PushContext>::print(out, tty);
+        out << "Needed: " << needed << "\nAffected: ";
+        for (auto a : affected) {
+            a->printRef(out);
+            out << " ";
+        }
+        out << "\n";
+    }
 };
 
 class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
@@ -50,6 +60,14 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
         }
 
         if (!state.needed) {
+            // We use an opaque branch in the inliner to make pop-context
+            // reachable for non-local returns. In this case we need to
+            // preserve the context as the return target.
+            if (Branch::Cast(i) &&
+                Branch::Cast(i)->arg(0).val() == OpaqueTrue::instance()) {
+                state.needed = true;
+                return AbstractResult::Updated;
+            }
             for (auto e : state.affected) {
                 if (i->mayObserveContext(e)) {
                     // Contexts are needed for non-local returns and reflection.

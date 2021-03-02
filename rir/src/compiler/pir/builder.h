@@ -54,6 +54,7 @@ class Builder {
     BB* getCurrentBB() const { return bb; }
     // Use with even more care, no checks
     void reenterBB(BB* bb) { this->bb = bb; }
+    void clearCurrentBB() { this->bb = nullptr; }
 
   private:
     void markDone(BB*);

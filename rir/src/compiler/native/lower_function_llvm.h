@@ -1,17 +1,14 @@
 #ifndef PIR_COMPILER_LOWER_FUNCTION_LLVM_H
 #define PIR_COMPILER_LOWER_FUNCTION_LLVM_H
 
-#include "jit_llvm.h"
-#include "lower_llvm.h"
-#include "types_llvm.h"
-
-#include "compiler/pir/pir.h"
-
 #include "R/Protect.h"
-#include "runtime/Code.h"
-
 #include "compiler/analysis/liveness.h"
 #include "compiler/analysis/reference_count.h"
+#include "compiler/native/builtins.h"
+#include "compiler/native/pir_jit_llvm.h"
+#include "compiler/native/types_llvm.h"
+#include "compiler/pir/pir.h"
+#include "runtime/Code.h"
 
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/MDBuilder.h"
@@ -23,10 +20,10 @@
 namespace rir {
 namespace pir {
 
+typedef std::unordered_map<Code*, std::pair<unsigned, MkArg*>> PromMap;
 struct Representation;
 class LowerFunctionLLVM {
 
-    ClosureVersion* cls;
     Code* code;
     BB::Instrs::iterator currentInstr;
     BB* currentBB = nullptr;
@@ -36,7 +33,6 @@ class LowerFunctionLLVM {
     llvm::IRBuilder<> builder;
     llvm::MDBuilder MDB;
     LivenessIntervals liveness;
-    LogStream& log;
     size_t numLocals;
     size_t numTemps;
     constexpr static size_t MAX_TEMPS = 4;
@@ -64,6 +60,10 @@ class LowerFunctionLLVM {
     llvm::MDNode* branchMostlyTrue;
     llvm::MDNode* branchMostlyFalse;
 
+    const PirJitLLVM::GetModule& getModule;
+    const PirJitLLVM::GetFunction& getFunction;
+    const PirJitLLVM::GetBuiltin& getBuiltin;
+
     Protect p_;
 
   public:
@@ -72,22 +72,23 @@ class LowerFunctionLLVM {
     MkEnv* myPromenv = nullptr;
 
     LowerFunctionLLVM(
-        const std::string& name, ClosureVersion* cls, Code* code,
-        const PromMap& promMap, const NeedsRefcountAdjustment& refcount,
+        const std::string& name, Code* code, const PromMap& promMap,
+        const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
-        LogStream& log)
-        : cls(cls), code(code), promMap(promMap), refcount(refcount),
-          needsLdVarForUpdate(needsLdVarForUpdate), builder(JitLLVM::C),
-          MDB(JitLLVM::C), liveness(code, code->nextBBId), log(log),
-          numLocals(0), numTemps(0),
+        const PirJitLLVM::GetModule& getModule,
+        const PirJitLLVM::GetFunction& getFunction,
+        const PirJitLLVM::GetBuiltin& getBuiltin, PirJitLLVM::Declare declare)
+        : code(code), promMap(promMap), refcount(refcount),
+          needsLdVarForUpdate(needsLdVarForUpdate),
+          builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
+          liveness(code, code->nextBBId), numLocals(0), numTemps(0),
           branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
-          branchMostlyFalse(MDB.createBranchWeights(1, 1000)) {
-        fun = JitLLVM::declare(cls, name, t::nativeFunction);
-        // prevent Wunused
-        this->cls->size();
-        this->promMap.size();
+          branchMostlyFalse(MDB.createBranchWeights(1, 1000)),
+          getModule(getModule), getFunction(getFunction),
+          getBuiltin(getBuiltin) {
+        fun = declare(code, name, t::nativeFunction);
         auto p = promMap.find(code);
         if (p != promMap.end()) {
             auto mk = MkEnv::Cast(p->second.second->env());
@@ -99,14 +100,14 @@ class LowerFunctionLLVM {
                                             llvm::Type* ty = t::voidPtr) {
         return llvm::ConstantExpr::getCast(
             llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(JitLLVM::C,
+            llvm::ConstantInt::get(PirJitLLVM::getContext(),
                                    llvm::APInt(64, (std::uint64_t)what)),
             ty);
     }
     static llvm::Constant* convertToPointer(SEXP what) {
         return llvm::ConstantExpr::getCast(
             llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(JitLLVM::C,
+            llvm::ConstantInt::get(PirJitLLVM::getContext(),
                                    llvm::APInt(64, (std::uint64_t)what)),
             t::SEXP);
     }
@@ -260,27 +261,33 @@ class LowerFunctionLLVM {
     llvm::Value* paramClosure() { return args[3]; }
 
     static llvm::Constant* c(void* i) {
-        return llvm::ConstantInt::get(JitLLVM::C, llvm::APInt(64, (intptr_t)i));
+        return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                      llvm::APInt(64, (intptr_t)i));
     }
 
     static llvm::Constant* c(unsigned long i, int bs = 64) {
-        return llvm::ConstantInt::get(JitLLVM::C, llvm::APInt(bs, i));
+        return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                      llvm::APInt(bs, i));
     }
 
     static llvm::Constant* c(long i, int bs = 64) {
-        return llvm::ConstantInt::get(JitLLVM::C, llvm::APInt(bs, i));
+        return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                      llvm::APInt(bs, i));
     }
 
     static llvm::Constant* c(unsigned int i, int bs = 32) {
-        return llvm::ConstantInt::get(JitLLVM::C, llvm::APInt(bs, i));
+        return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                      llvm::APInt(bs, i));
     }
 
     static llvm::Constant* c(int i, int bs = 32) {
-        return llvm::ConstantInt::get(JitLLVM::C, llvm::APInt(bs, i));
+        return llvm::ConstantInt::get(PirJitLLVM::getContext(),
+                                      llvm::APInt(bs, i));
     }
 
     static llvm::Constant* c(double d) {
-        return llvm::ConstantFP::get(JitLLVM::C, llvm::APFloat(d));
+        return llvm::ConstantFP::get(PirJitLLVM::getContext(),
+                                     llvm::APFloat(d));
     }
 
     static llvm::Constant* c(const std::vector<unsigned int>& array) {
@@ -291,8 +298,7 @@ class LowerFunctionLLVM {
         return llvm::ConstantArray::get(ty, init);
     }
 
-    static llvm::Value* globalConst(llvm::Constant* init,
-                                    llvm::Type* ty = nullptr);
+    llvm::Value* globalConst(llvm::Constant* init, llvm::Type* ty = nullptr);
     llvm::AllocaInst* topAlloca(llvm::Type* t, size_t len = 1);
 
     llvm::Value* argument(int i);

@@ -22,6 +22,7 @@ namespace rir {
     V(OneEq)                                                                   \
     V(OneNot)                                                                  \
     V(OneAdd)                                                                  \
+    V(NoLdFun)                                                                 \
     V(OneLdFun)                                                                \
     V(OneLdVar)                                                                \
     V(TwoAdd)                                                                  \

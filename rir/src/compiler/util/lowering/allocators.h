@@ -45,8 +45,7 @@ class SSAAllocator {
 
     bool computed = false;
 
-    SSAAllocator(Code* code, ClosureVersion* cls,
-                 const LivenessIntervals& livenessIntervals, LogStream& log)
+    SSAAllocator(Code* code, const LivenessIntervals& livenessIntervals)
         : dom(code), code(code), bbsSize(code->nextBBId),
           livenessIntervals(livenessIntervals) {
 #ifdef DEBUG_LIVENESS
@@ -273,27 +272,27 @@ class SSAAllocator {
                             assert(false);
                         } else {
                             SlotNumber slot = allocation.at(ia);
-                                // Make sure the argument slot is initialized
-                                if (reg.count(slot) == 0) {
-                                    std::cerr << "REG alloc fail: ";
-                                    i->printRef(std::cerr);
-                                    std::cerr << " is reading its argument ";
-                                    ia->printRef(std::cerr);
-                                    std::cerr << "from an unititialized slot\n";
-                                    assert(false);
-                                }
-                                if (reg.at(slot) != ia) {
-                                    code->printCode(std::cerr, true, false);
-                                    std::cerr << "REG alloc fail: ";
-                                    i->printRef(std::cerr);
-                                    std::cerr << " needs ";
-                                    ia->printRef(std::cerr);
-                                    std::cerr << " but slot " << slot
-                                              << " was overridden by ";
-                                    reg.at(slot)->printRef(std::cerr);
-                                    std::cerr << "\n";
-                                    assert(false);
-                                }
+                            // Make sure the argument slot is initialized
+                            if (reg.count(slot) == 0) {
+                                std::cerr << "REG alloc fail: ";
+                                i->printRef(std::cerr);
+                                std::cerr << " is reading its argument ";
+                                ia->printRef(std::cerr);
+                                std::cerr << "from an unititialized slot\n";
+                                assert(false);
+                            }
+                            if (reg.at(slot) != ia) {
+                                code->printCode(std::cerr, true, false);
+                                std::cerr << "REG alloc fail: ";
+                                i->printRef(std::cerr);
+                                std::cerr << " needs ";
+                                ia->printRef(std::cerr);
+                                std::cerr << " but slot " << slot
+                                          << " was overridden by ";
+                                reg.at(slot)->printRef(std::cerr);
+                                std::cerr << "\n";
+                                assert(false);
+                            }
                         }
                         argNum++;
                     });
@@ -327,9 +326,7 @@ class SSAAllocator {
         }
     }
 
-    size_t operator[](Value* v) const {
-        return allocation.at(v) - 1;
-    }
+    size_t operator[](Value* v) const { return allocation.at(v) - 1; }
 
     size_t slots() const {
         unsigned max = 0;

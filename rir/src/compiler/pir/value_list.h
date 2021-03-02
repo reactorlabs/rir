@@ -4,6 +4,7 @@
 #define COMPILER_VALUES(V)                                                     \
     V(True)                                                                    \
     V(False)                                                                   \
+    V(OpaqueTrue)                                                              \
     V(NaLogical)                                                               \
     V(Tombstone)                                                               \
     V(MissingArg)                                                              \

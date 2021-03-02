@@ -8,7 +8,7 @@ namespace pir {
 
 class LdFunctionEnv;
 
-class Promise : public Code {
+class Promise : public CodeImpl<CodeTag::Promise, Promise> {
   public:
     const unsigned id;
     ClosureVersion* owner;

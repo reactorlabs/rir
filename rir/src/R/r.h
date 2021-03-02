@@ -18,6 +18,17 @@
 #undef eval
 #undef cons
 
+#undef isString
+inline bool isString(SEXP s) { return TYPEOF(s) == STRSXP; }
+
+#undef isNull
+inline bool isNull(SEXP s) { return TYPEOF(s) == NILSXP; }
+
+#undef isObject
+inline bool isObject(SEXP s) { return OBJECT(s) != 0; }
+
+#undef PI
+
 #undef PREXPR
 inline SEXP PREXPR(SEXP pr) {
     // bypassing PREXPR from Gnur, which causes code objects to be converted to
