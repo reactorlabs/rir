@@ -281,6 +281,8 @@ bool Constantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
     }
 
+    DominanceGraph::BBSet dead;
+    DominanceGraph::BBSet unreachableEnd;
     for (auto i = 0; i < 2; ++i) {
         bool iterAnyChange = false;
         Visitor::run(code->entry, [&](BB* bb) {
@@ -346,8 +348,11 @@ bool Constantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
                         ip += 2;
                         while (ip != bb->end())
                             ip = bb->remove(ip);
-                        next = bb->end();
-                        bb->deleteSuccessors();
+                        for (auto b : bb->successors())
+                            if (b->predecessors().size() == 1)
+                                dead.insert(b);
+                        unreachableEnd.insert(bb);
+                        continue;
                     } else if (isStaticallyTrue(a) || isStaticallyFalse(a)) {
                         auto replace = isStaticallyTrue(a)
                                            ? (Value*)True::instance()
@@ -528,14 +533,32 @@ bool Constantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 }
                 if (auto assume = Assume::Cast(i)) {
-                    if (assume->arg<0>().val() == True::instance() &&
-                        assume->assumeTrue) {
-                        iterAnyChange = true;
-                        next = bb->remove(ip);
-                    } else if (assume->arg<0>().val() == False::instance() &&
-                               !assume->assumeTrue) {
-                        iterAnyChange = true;
-                        next = bb->remove(ip);
+                    bool isdead = false;
+                    if (assume->arg<0>().val() == True::instance()) {
+                        if (assume->assumeTrue) {
+                            iterAnyChange = true;
+                            next = bb->remove(ip);
+                        } else {
+                            isdead = true;
+                        }
+                    } else if (assume->arg<0>().val() == False::instance()) {
+                        if (!assume->assumeTrue) {
+                            iterAnyChange = true;
+                            next = bb->remove(ip);
+                        } else {
+                            isdead = true;
+                        }
+                    }
+                    if (isdead) {
+                        bb->insert(ip + 1, new Unreachable());
+                        ip += 2;
+                        while (ip != bb->end())
+                            ip = bb->remove(ip);
+                        for (auto b : bb->successors())
+                            if (b->predecessors().size() == 1)
+                                dead.insert(b);
+                        unreachableEnd.insert(bb);
+                        continue;
                     }
                 }
                 if (auto cl = Colon::Cast(i)) {
@@ -974,7 +997,6 @@ bool Constantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
         anyChange = true;
     }
     // Find all dead basic blocks
-    DominanceGraph::BBSet dead;
     for (const auto& e : branchRemoval) {
         const auto& branch = e.first;
         const auto& condition = e.second;
@@ -985,6 +1007,10 @@ bool Constantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
         if (auto phi = Phi::Cast(i))
             phi->removeInputs(toDelete);
     });
+
+    for (const auto& bb : unreachableEnd)
+        bb->deleteSuccessors();
+
     for (const auto& e : branchRemoval) {
         const auto& branch = e.first;
         const auto& condition = e.second;
