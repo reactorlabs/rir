@@ -282,6 +282,15 @@ void ClosureStreamLogger::finalPIR(ClosureVersion* code) {
     }
 }
 
+void ClosureStreamLogger::LLVMBitcode(const LLVMBitcodePrint& print) {
+    if (options.includes(DebugFlag::PrintLLVM)) {
+        preparePrint();
+        section("LLVM Bitcode");
+        print(out().out, out().tty());
+        out() << "\n";
+    }
+}
+
 void ClosureStreamLogger::unsupportedBC(const std::string& warning,
                                         const rir::BC& bc) {
     if (options.includes(DebugFlag::ShowWarnings)) {

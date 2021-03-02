@@ -18,6 +18,7 @@ namespace pir {
     V(PrintOptimizationPhases)                                                 \
     V(PrintPirAfterOpt)                                                        \
     V(PrintCSSA)                                                               \
+    V(PrintLLVM)                                                               \
     V(PrintAllocator)                                                          \
     V(PrintFinalPir)                                                           \
     V(PrintFinalRir)

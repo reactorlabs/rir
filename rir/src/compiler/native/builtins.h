@@ -3,8 +3,10 @@
 
 #include "R/r_incl.h"
 #include "R_ext/Boolean.h"
+
+#include "llvm/IR/Attributes.h"
+
 #include <cstddef>
-#include <llvm/IR/Attributes.h>
 #include <vector>
 
 extern "C" {
@@ -52,138 +54,136 @@ enum class UnopKind : int {
 
 struct NativeBuiltins {
 
-    static NativeBuiltin forcePromise;
+    enum class Id : uint8_t {
+        forcePromise,
+        consNr,
+        createBindingCell,
+        createMissingBindingCell,
+        createEnvironment,
+        createStubEnvironment,
+        materializeEnvironment,
+        ldvarForUpdate,
+        ldvar,
+        ldvarGlobal,
+        ldvarCacheMiss,
+        stvarSuper,
+        stvar,
+        stvari,
+        stvarr,
+        starg,
+        setCar,
+        setCdr,
+        setTag,
+        externalsxpSetEntry,
+        defvar,
+        ldfun,
+        chkfun,
+        warn,
+        error,
+        callBuiltin,
+        call,
+        namedCall,
+        dotsCall,
+        createPromise,
+        createPromiseNoEnvEager,
+        createPromiseNoEnv,
+        createPromiseEager,
+        createClosure,
+        newIntFromReal,
+        newRealFromInt,
+        newInt,
+        newIntDebug,
+        newReal,
+        unopEnv,
+        unop,
+        notEnv,
+        notOp,
+        binopEnv,
+        binop,
+        colon,
+        isMissing,
+        checkTrueFalse,
+        asLogicalBlt,
+        length,
+        deopt,
+        recordDeopt,
+        assertFail,
+        printValue,
+        extract11,
+        extract21,
+        extract21i,
+        extract21r,
+        extract12,
+        extract13,
+        extract22,
+        extract22ii,
+        extract22rr,
+        nativeCallTrampoline,
+        subassign11,
+        subassign21,
+        subassign21ii,
+        subassign21rr,
+        subassign21ri,
+        subassign21ir,
+        subassign12,
+        subassign13,
+        subassign22,
+        subassign22iii,
+        subassign22rrr,
+        subassign22rri,
+        subassign22iir,
+        forSeqSize,
+        initClosureContext,
+        endClosureContext,
+        matrixNcols,
+        matrixNrows,
+        makeVector,
+        prodr,
+        sumr,
+        colonInputEffects,
+        colonCastLhs,
+        colonCastRhs,
+        names,
+        setNames,
+        xlength_,
+        getAttrb,
+        nonLocalReturn,
+        clsEq,
+        checkType,
+        shallowDuplicate,
+        sigsetjmp,
 
-    static NativeBuiltin consNr;
-    static NativeBuiltin createBindingCell;
-    static NativeBuiltin createMissingBindingCell;
-
-    static NativeBuiltin ldvar;
-    static NativeBuiltin ldvarGlobal;
-    static NativeBuiltin ldvarForUpdate;
-    static NativeBuiltin ldvarCacheMiss;
-    static NativeBuiltin stvar;
-    static NativeBuiltin stvarSuper;
-    static NativeBuiltin stvari;
-    static NativeBuiltin stvarr;
-    static NativeBuiltin defvar;
-    static NativeBuiltin starg;
-    static NativeBuiltin ldfun;
-    static NativeBuiltin chkfun;
-
-    static NativeBuiltin setCar;
-    static NativeBuiltin setCdr;
-    static NativeBuiltin setTag;
-
-    static NativeBuiltin externalsxpSetEntry;
-
-    static NativeBuiltin error;
-    static NativeBuiltin warn;
-
-    static NativeBuiltin createEnvironment;
-    static NativeBuiltin createStubEnvironment;
-    static NativeBuiltin materializeEnvironment;
-    static NativeBuiltin createPromise;
-    static NativeBuiltin createPromiseNoEnv;
-    static NativeBuiltin createPromiseEager;
-    static NativeBuiltin createPromiseNoEnvEager;
-    static NativeBuiltin createClosure;
-
-    static NativeBuiltin newInt;
-    static NativeBuiltin newIntDebug;
-    static NativeBuiltin newReal;
-    static NativeBuiltin newIntFromReal;
-    static NativeBuiltin newRealFromInt;
-
-    static NativeBuiltin makeVector;
-
-    static NativeBuiltin call;
-    static NativeBuiltin namedCall;
-    static NativeBuiltin dotsCall;
-    static NativeBuiltin callBuiltin;
-
-    static NativeBuiltin notOp;
-    static NativeBuiltin notEnv;
-    static NativeBuiltin binop;
-    static NativeBuiltin binopEnv;
-    static NativeBuiltin unop;
-    static NativeBuiltin unopEnv;
-
-    static NativeBuiltin is;
-    static NativeBuiltin isMissing;
-    static NativeBuiltin checkTrueFalse;
-    static NativeBuiltin asLogicalBlt;
-
-    static NativeBuiltin length;
-    static NativeBuiltin forSeqSize;
-
-    static NativeBuiltin deopt;
-
-    static NativeBuiltin assertFail;
-
-    static NativeBuiltin printValue;
-
-    static NativeBuiltin extract11;
-    static NativeBuiltin extract21;
-    static NativeBuiltin extract21i;
-    static NativeBuiltin extract21r;
-    static NativeBuiltin extract12;
-    static NativeBuiltin extract22;
-    static NativeBuiltin extract22ii;
-    static NativeBuiltin extract22rr;
-    static NativeBuiltin extract13;
-
-    static NativeBuiltin subassign11;
-    static NativeBuiltin subassign21;
-    static NativeBuiltin subassign21ii;
-    static NativeBuiltin subassign21rr;
-    static NativeBuiltin subassign21ir;
-    static NativeBuiltin subassign21ri;
-    static NativeBuiltin subassign12;
-    static NativeBuiltin subassign22iii;
-    static NativeBuiltin subassign22rrr;
-    static NativeBuiltin subassign22rri;
-    static NativeBuiltin subassign22iir;
-    static NativeBuiltin subassign22;
-    static NativeBuiltin subassign13;
-
-    static NativeBuiltin nativeCallTrampoline;
-
-    static NativeBuiltin initClosureContext;
-    static NativeBuiltin endClosureContext;
-
-    static NativeBuiltin recordDeopt;
-
-    static NativeBuiltin matrixNrows;
-    static NativeBuiltin matrixNcols;
-
-    static NativeBuiltin sumr;
-    static NativeBuiltin prodr;
-
-    static NativeBuiltin colonInputEffects;
-    static NativeBuiltin colonCastLhs;
-    static NativeBuiltin colonCastRhs;
-
-    static NativeBuiltin colon;
-
-    static NativeBuiltin names;
-    static NativeBuiltin setNames;
-    static NativeBuiltin xlength_;
-
-    static NativeBuiltin getAttrb;
-
-    static NativeBuiltin nonLocalReturn;
-
-    static NativeBuiltin clsEq;
-
-    static NativeBuiltin checkType;
-
-    static NativeBuiltin shallowDuplicate;
+        // book keeping
+        NUM_BUILTINS,
+        FIRST = forcePromise,
+        LAST = sigsetjmp
+    };
 
     static constexpr unsigned long bindingsCacheFails = 2;
+
+    static const NativeBuiltin& get(Id id) {
+        return store[static_cast<size_t>(id)];
+    }
+
+    using BuiltinAction = std::function<void(const NativeBuiltin&)>;
+    static void eachBuiltin(BuiltinAction it) {
+        for (size_t i = static_cast<size_t>(Id::FIRST),
+                    e = static_cast<size_t>(Id::LAST);
+             i <= e; i++) {
+            it(store[i]);
+        }
+    }
+
+    static void initializeBuiltins();
+
+  private:
+    // For setting up - returns mutable reference
+    static NativeBuiltin& get_(Id id) { return store[static_cast<size_t>(id)]; }
+
+    static NativeBuiltin store[static_cast<size_t>(Id::NUM_BUILTINS)];
 };
 
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif
