@@ -352,7 +352,8 @@ void BBTransform::removeDeadInstrs(Code* fun, uint8_t maxBurstSize) {
                 if (auto ldf = LdFun::Cast(i)) {
                     if (auto guess = ldf->guessedBinding()) {
                         auto gi = Instruction::Cast(guess);
-                        if (!gi->hasObservableEffects() && dead.isDead(gi))
+                        if (!gi ||
+                            (!gi->hasObservableEffects() && dead.isDead(gi)))
                             ldf->clearGuessedBinding();
                     }
                 }
