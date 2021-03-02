@@ -748,6 +748,47 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 break;
             }
 
+            // Special case for the super nasty match.arg(x) pattern where the
+            // arguments being matched are read reflectively from the default
+            // promises in the formals...
+            static SEXP argmatchFun =
+                Rf_findFun(Rf_install("match.arg"), R_BaseNamespace);
+            if (ti.monomorphic == argmatchFun && matchedArgs.size() == 1) {
+                if (auto mk = MkArg::Cast(matchedArgs[0])) {
+                    auto varName = mk->prom()->rirSrc()->trivialExpr;
+                    if (TYPEOF(varName) == SYMSXP) {
+                        auto& formals = cls->owner()->formals();
+                        auto f = std::find(formals.names().begin(),
+                                           formals.names().end(), varName);
+                        if (f != formals.names().end()) {
+                            auto pos = f - formals.names().begin();
+                            if (formals.hasDefaultArgs() &&
+                                formals.defaultArgs()[pos] != R_NilValue) {
+                                if (auto options = rir::Code::check(
+                                        formals.defaultArgs()[pos])) {
+                                    auto ast = src_pool_at(globalContext(),
+                                                           options->src);
+                                    if (CAR(ast) == symbol::c) {
+                                        bool allStrings = true;
+                                        for (auto c : RList(CDR(ast))) {
+                                            if (TYPEOF(c) != STRSXP)
+                                                allStrings = false;
+                                        }
+                                        if (allStrings) {
+                                            auto optionList =
+                                                Rf_eval(ast, R_GlobalEnv);
+                                            auto opt =
+                                                insert(new LdConst(optionList));
+                                            matchedArgs.push_back(opt);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             missingArgs = needed - matchedArgs.size();
 
             // (2)

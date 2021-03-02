@@ -143,13 +143,19 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (auto ldfun = LdFun::Cast(call->cls())) {
                         if (ldfun->hint) {
-                            if (TYPEOF(ldfun->hint) == BUILTINSXP) {
+                            auto kind = TYPEOF(ldfun->hint);
+                            // This transformation also speculates on
+                            // monomorphic calls to closures. This pass does not
+                            // do anything to them, however the match arg pass
+                            // can turn them into static calls later.
+                            if (kind == BUILTINSXP || kind == CLOSXP) {
                                 // We can only speculate if we have a checkpoint
                                 // at the ldfun position, since we want to deopt
                                 // before forcing arguments.
                                 if (auto cp = checkpoint.at(ldfun)) {
-                                    ip = replaceCallWithCallBuiltin(
-                                        bb, ip, call, ldfun->hint, true);
+                                    if (kind == BUILTINSXP)
+                                        ip = replaceCallWithCallBuiltin(
+                                            bb, ip, call, ldfun->hint, true);
                                     needsGuard[ldfun] = {ldfun->hint, cp};
                                 }
                             }
