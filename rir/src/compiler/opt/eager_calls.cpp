@@ -125,7 +125,12 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         dots = true;
                 });
                 if (!dots) {
-                    if (auto ldfun = LdFun::Cast(call->cls())) {
+                    if (auto ldcn = LdConst::Cast(call->cls())) {
+                        if (TYPEOF(ldcn->c()) == BUILTINSXP) {
+                            ip = replaceCallWithCallBuiltin(bb, ip, call,
+                                                            ldcn->c());
+                        }
+                    } else if (auto ldfun = LdFun::Cast(call->cls())) {
                         if (ldfun->hint) {
                             if (TYPEOF(ldfun->hint) == BUILTINSXP) {
                                 // We can only speculate if we have a checkpoint
