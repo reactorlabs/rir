@@ -8,6 +8,8 @@
 #include <unordered_set>
 #include <iostream>
 
+#include <array>
+
 namespace rir {
 namespace pir {
 

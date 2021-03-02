@@ -111,7 +111,7 @@ if [ ! -d $LLVM_DIR ]; then
     if [ $USING_OSX -eq 1 ]; then
         F="clang+llvm-11.0.0-x86_64-apple-darwin"
         if [ ! -f "$F" ]; then
-            curl -L https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/$F.tar.xz
+            curl -L https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/$F.tar.xz > $F.tar.xz 
         fi
         tar xf $F.tar.xz
         ln -s $F llvm-11
