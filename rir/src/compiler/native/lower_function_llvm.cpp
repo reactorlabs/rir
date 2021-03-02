@@ -38,6 +38,8 @@ using namespace llvm;
 extern "C" size_t R_NSize;
 extern "C" size_t R_NodesInUse;
 
+static_assert(sizeof(unsigned long) == sizeof(uint64_t), "sizeof(unsigned long) and sizeof(uint64_t) should match"); 
+
 void LowerFunctionLLVM::PhiBuilder::addInput(llvm::Value* v) {
     addInput(v, builder.GetInsertBlock());
 }
@@ -5402,7 +5404,7 @@ void LowerFunctionLLVM::compile() {
                             msg = leaky.back().c_str();
                         }
                         call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
-                             {load(i), c(i->type.serialize()),
+                             {load(i), c((unsigned long) i->type.serialize()),
                               convertToPointer(msg)});
                     }
                 }
