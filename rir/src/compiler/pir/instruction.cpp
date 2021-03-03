@@ -917,37 +917,6 @@ void MkFunCls::printArgs(std::ostream& out, bool tty) const {
     Instruction::printArgs(out, tty);
 }
 
-void StaticCall::printArgs(std::ostream& out, bool tty) const {
-    if (auto trg = tryDispatch()) {
-        out << trg->name();
-    } else {
-        out << cls()->name();
-    }
-    if (auto hint = tryOptimisticDispatch()) {
-        if (hint != tryDispatch())
-            out << "<hint: " << hint->nameSuffix() << ">";
-    }
-    printCallArgs(out, this);
-    if (frameState()) {
-        frameState()->printRef(out);
-        out << ", ";
-    }
-
-    if (runtimeClosure() != Tombstone::closure()) {
-        out << "from ";
-        runtimeClosure()->printRef(out);
-        out << " ";
-    }
-
-    if (!argOrderOrig.empty()) {
-        out << "{ ";
-        for (auto a : argOrderOrig)
-            out << ArglistOrder::decodeArg(a)
-                << (ArglistOrder::isArgNamed(a) ? "n " : " ");
-        out << "} ";
-    }
-}
-
 void Force::printArgs(std::ostream& out, bool tty) const {
     input()->printRef(out);
     out << ", ";
@@ -955,30 +924,6 @@ void Force::printArgs(std::ostream& out, bool tty) const {
         frameState()->printRef(out);
         out << ", ";
     }
-}
-
-PirType StaticCall::inferType(const GetType& getType) const {
-    auto t = PirType::bottom();
-    if (auto v = tryDispatch()) {
-        Visitor::run(v->entry, [&](BB* bb) {
-            if (bb->isExit()) {
-                if (auto r = Return::Cast(bb->last())) {
-                    t = t | r->arg(0).val()->type;
-                } else {
-                    t = t | PirType::any();
-                }
-            }
-        });
-        return type & t;
-    }
-    return type;
-}
-
-Effects StaticCall::inferEffects(const GetType& getType) const {
-    if (auto v = tryDispatch())
-        if (v->properties.includes(ClosureVersion::Property::NoReflection))
-            return effects & ~Effects(Effect::Reflection);
-    return effects;
 }
 
 ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
@@ -1010,45 +955,6 @@ ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
             assert(res->effectiveNArgs() >= nCallArgs());
     }
     return res;
-}
-
-ClosureVersion* StaticCall::tryDispatch() const {
-    return CallInstruction::tryDispatch(cls());
-}
-
-ClosureVersion* StaticCall::tryOptimisticDispatch() const {
-    auto dispatch = CallInstruction::tryDispatch(cls());
-    if (!hint)
-        return dispatch;
-
-    if (!dispatch)
-        return nullptr;
-
-    return (hint->context() < dispatch->context()) ? dispatch : hint;
-}
-
-StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
-                       const std::vector<Value*>& args,
-                       ArglistOrder::CallArglistOrder&& argOrderOrig,
-                       FrameState* fs, unsigned srcIdx, Value* runtimeClosure)
-    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls), argOrderOrig(argOrderOrig), givenContext(givenContext) {
-    assert(cls->nargs() >= args.size());
-    assert(fs);
-    pushArg(fs, NativeType::frameState);
-    pushArg(runtimeClosure, RType::closure);
-    for (unsigned i = 0; i < args.size(); ++i) {
-        assert(!ExpandDots::Cast(args[i]) &&
-               "Static Call cannot accept dynamic number of arguments");
-        if (cls->formals().names()[i] == R_DotsSymbol) {
-            pushArg(args[i],
-                    PirType() | RType::prom | RType::missing | RType::dots);
-        } else {
-            pushArg(args[i],
-                    PirType() | RType::prom | RType::missing | PirType::val());
-        }
-    }
-    assert(tryDispatch());
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -1124,11 +1030,32 @@ Context CallInstruction::inferAvailableAssumptions() const {
     return given;
 }
 
+Call::Call(Value* callerEnv, Value* fun, const std::vector<Value*>& args,
+           Value* fs, unsigned srcIdx)
+    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
+    assert(fs);
+    pushArg(fs, NativeType::frameState);
+    pushArg(fun, RType::closure);
+
+    // Calling builtins with names or ... is not supported by callBuiltin,
+    // that's why those calls go through the normal call BC.
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    if (auto con = LdConst::Cast(fun))
+        if (TYPEOF(con->c()) == BUILTINSXP)
+            argtype = argtype | PirType::val();
+
+    for (unsigned i = 0; i < args.size(); ++i)
+        pushArg(args[i], argtype);
+}
+
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
-                     const std::vector<SEXP>& names_, unsigned srcIdx)
+                     const std::vector<SEXP>& names_, Value* fs,
+                     unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
+    assert(fs);
+    pushArg(fs, NativeType::frameState);
     pushArg(fun, RType::closure);
 
     // Calling builtins with names or ... is not supported by callBuiltin,
@@ -1148,9 +1075,12 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
-                     const std::vector<BC::PoolIdx>& names_, unsigned srcIdx)
+                     const std::vector<BC::PoolIdx>& names_, Value* fs,
+                     unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
     assert(names_.size() == args.size());
+    assert(fs);
+    pushArg(fs, NativeType::frameState);
     pushArg(fun, RType::closure);
 
     // Calling builtins with names or ... is not supported by callBuiltin,
@@ -1168,6 +1098,69 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     }
 }
 
+StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
+                       const std::vector<Value*>& args,
+                       ArglistOrder::CallArglistOrder&& argOrderOrig, Value* fs,
+                       unsigned srcIdx, Value* runtimeClosure)
+    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
+      cls_(cls), argOrderOrig(argOrderOrig), givenContext(givenContext) {
+    assert(cls->nargs() >= args.size());
+    assert(fs);
+    pushArg(fs, NativeType::frameState);
+    pushArg(runtimeClosure, RType::closure);
+    for (unsigned i = 0; i < args.size(); ++i) {
+        assert(!ExpandDots::Cast(args[i]) &&
+               "Static Call cannot accept dynamic number of arguments");
+        if (cls->formals().names()[i] == R_DotsSymbol) {
+            pushArg(args[i],
+                    PirType() | RType::prom | RType::missing | RType::dots);
+        } else {
+            pushArg(args[i],
+                    PirType() | RType::prom | RType::missing | PirType::val());
+        }
+    }
+    assert(tryDispatch());
+}
+
+PirType StaticCall::inferType(const GetType& getType) const {
+    auto t = PirType::bottom();
+    if (auto v = tryDispatch()) {
+        Visitor::run(v->entry, [&](BB* bb) {
+            if (bb->isExit()) {
+                if (auto r = Return::Cast(bb->last())) {
+                    t = t | r->arg(0).val()->type;
+                } else {
+                    t = t | PirType::any();
+                }
+            }
+        });
+        return type & t;
+    }
+    return type;
+}
+
+Effects StaticCall::inferEffects(const GetType& getType) const {
+    if (auto v = tryDispatch())
+        if (v->properties.includes(ClosureVersion::Property::NoReflection))
+            return effects & ~Effects(Effect::Reflection);
+    return effects;
+}
+
+ClosureVersion* StaticCall::tryDispatch() const {
+    return CallInstruction::tryDispatch(cls());
+}
+
+ClosureVersion* StaticCall::tryOptimisticDispatch() const {
+    auto dispatch = CallInstruction::tryDispatch(cls());
+    if (!hint)
+        return dispatch;
+
+    if (!dispatch)
+        return nullptr;
+
+    return (hint->context() < dispatch->context()) ? dispatch : hint;
+}
+
 void Call::printArgs(std::ostream& out, bool tty) const {
     cls()->printRef(out);
     printCallArgs(out, this);
@@ -1183,6 +1176,37 @@ void NamedCall::printArgs(std::ostream& out, bool tty) const {
     if (frameState()) {
         frameState()->printRef(out);
         out << ", ";
+    }
+}
+
+void StaticCall::printArgs(std::ostream& out, bool tty) const {
+    if (auto trg = tryDispatch()) {
+        out << trg->name();
+    } else {
+        out << cls()->name();
+    }
+    if (auto hint = tryOptimisticDispatch()) {
+        if (hint != tryDispatch())
+            out << "<hint: " << hint->nameSuffix() << ">";
+    }
+    printCallArgs(out, this);
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
+    }
+
+    if (runtimeClosure() != Tombstone::closure()) {
+        out << "from ";
+        runtimeClosure()->printRef(out);
+        out << " ";
+    }
+
+    if (!argOrderOrig.empty()) {
+        out << "{ ";
+        for (auto a : argOrderOrig)
+            out << ArglistOrder::decodeArg(a)
+                << (ArglistOrder::isArgNamed(a) ? "n " : " ");
+        out << "} ";
     }
 }
 

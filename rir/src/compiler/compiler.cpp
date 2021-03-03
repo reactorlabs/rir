@@ -74,7 +74,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
                               std::list<PirTypeFeedback*> outerFeedback) {
 
     if (!ctx.includes(minimalContext)) {
-        for (const auto& a : minimalContext) {
+        for (const auto a : minimalContext) {
             if (!ctx.includes(a)) {
                 std::stringstream as;
                 as << "Missing minimal assumption " << a;

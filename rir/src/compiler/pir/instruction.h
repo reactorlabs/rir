@@ -2044,26 +2044,10 @@ class CallInstruction {
 // evaluated at runtime and arguments are passed as promises.
 class VLIE(Call, Effects::Any()), public CallInstruction {
   public:
-    Value* cls() const { return arg(1).val(); }
-
     Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
-         Value* fs, unsigned srcIdx)
-        : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
-        assert(fs);
-        pushArg(fs, NativeType::frameState);
-        pushArg(fun, RType::closure);
+         Value* fs, unsigned srcIdx);
 
-        // Calling builtins with names or ... is not supported by callBuiltin,
-        // that's why those calls go through the normal call BC.
-        auto argtype =
-            PirType(RType::prom) | RType::missing | RType::expandedDots;
-        if (auto con = LdConst::Cast(fun))
-            if (TYPEOF(con->c()) == BUILTINSXP)
-                argtype = argtype | PirType::val();
-
-        for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], argtype);
-    }
+    Value* cls() const { return arg(1).val(); }
 
     Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
@@ -2071,7 +2055,8 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         return nullptr;
     }
 
-    size_t nCallArgs() const override { return nargs() - 3; };
+    size_t nCallArgs() const override { return nargs() - 3; }
+
     void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(R_NilValue, arg(i + 2).val());
@@ -2090,7 +2075,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
     }
 
     Value* frameStateOrTs() const override final { return arg(0).val(); }
-    void updateFrameState(Value * fs) override final { arg(0).val() = fs; };
+    void updateFrameState(Value * fs) override final { arg(0).val() = fs; }
 
     Value* callerEnv() { return env(); }
 
@@ -2099,9 +2084,16 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
 
 class VLIE(NamedCall, Effects::Any()), public CallInstruction {
   public:
-    std::vector<SEXP> names;
+    NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
+              const std::vector<SEXP>& names_, Value* fs, unsigned srcIdx);
+    NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
+              const std::vector<BC::PoolIdx>& names_, Value* fs,
+              unsigned srcIdx);
 
-    Value* cls() const { return arg(0).val(); }
+    std::vector<SEXP> names;
+    bool hasNamedArgs() const override { return true; }
+
+    Value* cls() const { return arg(1).val(); }
 
     Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
@@ -2109,36 +2101,30 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
         return nullptr;
     }
 
-    bool hasNamedArgs() const override { return true; }
+    size_t nCallArgs() const override { return nargs() - 3; }
 
-    Value* frameStateOrTs() const override final {
-        return Tombstone::framestate();
-    }
-
-    NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
-              const std::vector<SEXP>& names_, unsigned srcIdx);
-    NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
-              const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
-
-    size_t nCallArgs() const override { return nargs() - 2; };
     void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(names[i], arg(i + 1).val());
+            it(names[i], arg(i + 2).val());
     }
     void eachNamedCallArg(const MutableNamedArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(names[i], arg(i + 1));
+            it(names[i], arg(i + 2));
     }
     const InstrArg& callArg(size_t pos) const override final {
         assert(pos < nCallArgs());
-        return arg(pos + 1);
+        return arg(pos + 2);
     }
     InstrArg& callArg(size_t pos) override final {
         assert(pos < nCallArgs());
-        return arg(pos + 1);
+        return arg(pos + 2);
     }
 
+    Value* frameStateOrTs() const override final { return arg(0).val(); }
+    void updateFrameState(Value * fs) override final { arg(0).val() = fs; }
+
     Value* callerEnv() { return env(); }
+
     void printArgs(std::ostream & out, bool tty) const override;
 };
 
@@ -2149,6 +2135,11 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     ArglistOrder::CallArglistOrder argOrderOrig;
 
   public:
+    StaticCall(Value * callerEnv, Closure * cls, Context givenContext,
+               const std::vector<Value*>& args,
+               ArglistOrder::CallArglistOrder&& argOrderOrig, Value* fs,
+               unsigned srcIdx, Value* runtimeClosure = Tombstone::closure());
+
     Context givenContext;
 
     ClosureVersion* hint = nullptr;
@@ -2158,12 +2149,8 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
 
     Closure* tryGetCls() const override final { return cls(); }
 
-    StaticCall(Value * callerEnv, Closure * cls, Context givenContext,
-               const std::vector<Value*>& args,
-               ArglistOrder::CallArglistOrder&& argOrderOrig, FrameState* fs,
-               unsigned srcIdx, Value* runtimeClosure = Tombstone::closure());
+    size_t nCallArgs() const override { return nargs() - 3; }
 
-    size_t nCallArgs() const override { return nargs() - 3; };
     void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(R_NilValue, arg(i + 2).val());
@@ -2196,6 +2183,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Value* runtimeClosure() const { return arg(1).val(); }
 
     void printArgs(std::ostream & out, bool tty) const override;
+
     Value* callerEnv() { return env(); }
 
     ClosureVersion* tryDispatch() const;

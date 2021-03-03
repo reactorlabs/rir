@@ -16,7 +16,8 @@ namespace pir {
  * ClosureVersion
  *
  */
-class ClosureVersion : public Code {
+class ClosureVersion
+    : public CodeImpl<CodeTag::ClosureVersion, ClosureVersion> {
   public:
     enum class Property {
         IsEager,

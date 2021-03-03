@@ -25,7 +25,7 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
     auto i = 1;
     while (changed && i <= maxBurstSize) {
         changed = false;
-        for (const auto instructionUses : dataDependencies) {
+        for (const auto& instructionUses : dataDependencies) {
             auto candidate = instructionUses.first;
             auto addToDead = true;
             if (unused_.count(candidate) ||
