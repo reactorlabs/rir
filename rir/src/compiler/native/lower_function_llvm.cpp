@@ -3332,21 +3332,22 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::DIV);
                 break;
-            case Tag::Pow:
+            case Tag::Pow: {
+                auto p = getModule().getOrInsertFunction(
+                    "pow", FunctionType::get(t::Double, {t::Double, t::Double},
+                                             false));
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 // TODO: Check NA?
-                                 return builder.CreateIntrinsic(
-                                     Intrinsic::powi,
-                                     {a->getType(), b->getType()}, {a, b});
+                                 return builder.CreateCall(
+                                     p, {builder.CreateSIToFP(a, t::Double),
+                                         builder.CreateSIToFP(b, t::Double)});
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateIntrinsic(
-                                     Intrinsic::pow,
-                                     {a->getType(), b->getType()}, {a, b});
+                                 return builder.CreateCall(p, {a, b});
                              },
                              BinopKind::POW);
                 break;
+            }
 
             case Tag::Neq:
                 compileRelop(i,
