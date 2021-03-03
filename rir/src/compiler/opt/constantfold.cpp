@@ -292,6 +292,26 @@ bool Constantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
             while (ip != bb->end()) {
                 auto i = *ip;
                 auto next = ip + 1;
+
+                auto killUnreachable = [&]() {
+                    if (ip == bb->end() || Unreachable::Cast(*(ip + 1)))
+                        return;
+                    ip = bb->insert(ip + 1, new Unreachable()) + 1;
+                    while (ip != bb->end())
+                        ip = bb->remove(ip);
+                    for (auto b : bb->successors()) {
+                        bool isdead = true;
+                        if (b->predecessors().size() != 1)
+                            for (auto p : b->predecessors())
+                                if (!dead.count(p))
+                                    isdead = false;
+                        if (isdead)
+                            dead.insert(b);
+                    }
+                    unreachableEnd.insert(bb);
+                    next = bb->end();
+                };
+
                 auto foldLglCmp = [&](SEXP carg, Value* varg, bool isEq) {
                     if (!isConst(varg) && // If this is true, was already folded
                         IS_SIMPLE_SCALAR(carg, LGLSXP) &&
@@ -344,15 +364,7 @@ bool Constantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (CheckTrueFalse::Cast(i)) {
                     auto a = i->arg(0).val();
                     if (isStaticallyNA(a)) {
-                        bb->insert(ip + 1, new Unreachable());
-                        ip += 2;
-                        while (ip != bb->end())
-                            ip = bb->remove(ip);
-                        for (auto b : bb->successors())
-                            if (b->predecessors().size() == 1)
-                                dead.insert(b);
-                        unreachableEnd.insert(bb);
-                        continue;
+                        killUnreachable();
                     } else if (isStaticallyTrue(a) || isStaticallyFalse(a)) {
                         auto replace = isStaticallyTrue(a)
                                            ? (Value*)True::instance()
@@ -550,15 +562,7 @@ bool Constantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
                     }
                     if (isdead) {
-                        bb->insert(ip + 1, new Unreachable());
-                        ip += 2;
-                        while (ip != bb->end())
-                            ip = bb->remove(ip);
-                        for (auto b : bb->successors())
-                            if (b->predecessors().size() == 1)
-                                dead.insert(b);
-                        unreachableEnd.insert(bb);
-                        continue;
+                        killUnreachable();
                     }
                 }
                 if (auto cl = Colon::Cast(i)) {
