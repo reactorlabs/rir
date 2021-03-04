@@ -112,6 +112,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("complex"),
         blt("array"),
         blt("new.env"),
+        blt("match"),
 
         blt("dim"),
         blt("names"),
@@ -302,7 +303,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("cat"),
         blt("paste"),
         blt("nchar"),
-        blt("match"),
+        blt("pmatch"),
 
         blt("seq.int"),
         blt("rep.int"),
