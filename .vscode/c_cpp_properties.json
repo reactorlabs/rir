@@ -3,20 +3,10 @@
         {
             "name": "Ř on PRL5",
             "includePath": [
-                "${workspaceFolder}/rir/src/**"
-            ],
-            "defines": [],
-            "compilerPath": "/usr/bin/clang",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "clang-x64"
-        },
-        {
-            "name": "Linux",
-            "includePath": [
-                "${workspaceFolder}/rir/**",
+                "${workspaceFolder}/rir/src/**",
                 "${workspaceFolder}/external/custom-r/src/**",
-                "${workspaceFolder}/external/llvm-11/include/**"
+                "${workspaceFolder}/external/llvm-11/include/**",
+                "${workspaceFolder}/external/llvm-11.0.1.src/include/**"
             ],
             "defines": ["ENABLE_SLOWASSERT"],
             "compilerPath": "/usr/bin/g++-8",
