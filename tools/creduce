@@ -1,0 +1,53 @@
+#!/bin/sh
+
+VM=$1
+FILE=$2
+EXPECTED=$3
+
+if [ -z "$VM" ] || [ -z "$FILE" ] || [ -z "$EXPECTED" ]; then
+  echo "usage: $0 bin/R file.r \"expected string in output\""
+  echo
+  echo "This script quickly allows you to reduce a failing test."
+  echo "As arguments pass an R binary, a failing test file and"
+  echo "an error string that occurs in the failing output."
+  echo "Ensure that the error string does not contain \" chars"
+  echo "and has all bash special chars escaped."
+  echo
+  echo "The result is a reduced R script in /tmp (see output)"
+  echo "that exhibits the same error"
+  exit 1
+fi
+
+shift
+shift
+shift
+
+VM=`readlink -f $VM`
+tmpfile=$(mktemp /tmp/creduce-test.XXXXXX)
+
+F=`basename $FILE`
+reduce=$(mktemp /tmp/$F.XXXXXX)
+cp $FILE $reduce
+
+echo "Trying to reduce $reduce running with $VM"
+
+reduce=`basename $reduce`
+
+cat - > $tmpfile <<EOF
+#!/bin/bash
+tmpfile=\$(mktemp /tmp/creduce-test-out.XXXXXX)
+$VM -f $reduce &> \$tmpfile
+echo "yes"
+$VM -f $reduce
+cat \$tmpfile
+grep "$EXPECTED" \$tmpfile
+RES=\$?
+rm \$tmpfile
+exit \$RES
+EOF
+chmod +x $tmpfile
+
+cd /tmp
+creduce --timeout 300 --not-c $tmpfile $reduce "$@"
+
+echo $tmpfile
