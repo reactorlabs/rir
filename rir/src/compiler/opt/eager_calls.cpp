@@ -65,7 +65,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                           bool dependsOnAssume) {
         std::vector<Value*> args;
         call->eachCallArg([&](Value* a) {
-            if (auto mk = MkArg::Cast(a->followCasts())) {
+            if (auto mk = MkArg::Cast(a)) {
                 if (mk->isEager()) {
                     args.push_back(mk->eagerArg());
                 } else {
