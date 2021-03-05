@@ -121,7 +121,6 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
         args[i]->type.fromContext(context, i, closure->nargs());
 
         if (depromisedArgs) {
-
             args[i]->type = args[i]->type.notPromiseWrapped();
         }
     }
