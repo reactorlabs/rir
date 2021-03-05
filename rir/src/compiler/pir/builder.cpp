@@ -112,6 +112,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
 
     auto depromisedArgs = version->owner()->rirFunction()->flags.contains(
         rir::Function::Flag::DepromisedArgs);
+
     for (long i = nargs - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
 
@@ -120,7 +121,8 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
         args[i]->type.fromContext(context, i, closure->nargs());
 
         if (depromisedArgs) {
-            args[i]->type = args[i]->type.forced();
+
+            args[i]->type = args[i]->type.notPromiseWrapped();
         }
     }
     for (size_t i = nargs; i < closure->nargs(); ++i) {
