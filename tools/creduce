@@ -37,9 +37,6 @@ cat - > $tmpfile <<EOF
 #!/bin/bash
 tmpfile=\$(mktemp /tmp/creduce-test-out.XXXXXX)
 $VM -f $reduce &> \$tmpfile
-echo "yes"
-$VM -f $reduce
-cat \$tmpfile
 grep "$EXPECTED" \$tmpfile
 RES=\$?
 rm \$tmpfile
@@ -50,4 +47,4 @@ chmod +x $tmpfile
 cd /tmp
 creduce --timeout 300 --not-c $tmpfile $reduce "$@"
 
-echo $tmpfile
+rm $tmpfile
