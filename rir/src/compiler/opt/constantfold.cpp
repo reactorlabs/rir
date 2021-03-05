@@ -43,6 +43,7 @@ static SEXP isConst(Value* instr) {
                                                : (Value*)False::instance());   \
                         next = bb->remove(ip);                                 \
                     } else {                                                   \
+                        cmp.preserve(res);                                     \
                         auto resi = new LdConst(res);                          \
                         anyChange = true;                                      \
                         instr->replaceUsesWith(resi);                          \
@@ -150,7 +151,7 @@ static bool isStaticallyNA(Value* i) {
     return false;
 }
 
-bool Constantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
+bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                          LogStream&) const {
     bool anyChange = false;
 

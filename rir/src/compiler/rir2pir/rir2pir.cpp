@@ -651,13 +651,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                            ? (Value*)Tombstone::framestate()
                            : (Value*)insert.registerFrameState(
                                   srcCode, nextPos, stack, inPromise());
+            Instruction* res;
             if (namedArguments) {
-                push(insert(new NamedCall(env, callee, args, callArgumentNames,
-                                          fs, bc.immediate.callFixedArgs.ast)));
+                res = insert(new NamedCall(env, callee, args, callArgumentNames,
+                                           fs, bc.immediate.callFixedArgs.ast));
             } else {
-                push(insert(new Call(env, callee, args, fs,
-                                     bc.immediate.callFixedArgs.ast)));
+                res = insert(new Call(env, callee, args, fs,
+                                      bc.immediate.callFixedArgs.ast));
             }
+            if (monomorphicSpecial)
+                res->effects.set(Effect::DependsOnAssume);
+            push(res);
         };
 
         // Insert a guard if we want to speculate
@@ -697,8 +701,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
 
             popn(toPop);
-            push(insert(
-                BuiltinCallFactory::New(env, ti.monomorphic, args, ast)));
+            auto bt =
+                insert(BuiltinCallFactory::New(env, ti.monomorphic, args, ast));
+            bt->effects.set(Effect::DependsOnAssume);
+            push(bt);
         } else if (monomorphicClosure || monomorphicInnerFunction) {
             // (1) Argument Matching
             //
@@ -775,10 +781,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 assert(!inlining());
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
                                                     inPromise());
-                push(insert(new StaticCall(
+                auto cl = insert(new StaticCall(
                     insert.env, f->owner(), given, matchedArgs,
                     std::move(argOrderOrig), fs, ast,
-                    monomorphicInnerFunction ? callee : Tombstone::closure())));
+                    monomorphicInnerFunction ? callee : Tombstone::closure()));
+                cl->effects.set(Effect::DependsOnAssume);
+                push(cl);
+
                 auto innerc = MkFunCls::Cast(callee->followCastsAndForce());
                 if (!innerc)
                     return;
