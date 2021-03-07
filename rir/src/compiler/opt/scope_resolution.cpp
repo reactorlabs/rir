@@ -301,7 +301,6 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     force->type.fromContext(cls->context(),
                                                             ld->id,
                                                             cls->nargs(), true);
-                                    ld->type = ld->type & force->type.orLazy();
                                 }
                         }
                     }
