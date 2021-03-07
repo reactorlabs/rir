@@ -2411,10 +2411,22 @@ void LowerFunctionLLVM::compile() {
 
                     switch (b->builtinId) {
                     case blt("length"):
-                        if (irep == t::SEXP) {
-                            llvm::Value* r = call(
-                                NativeBuiltins::get(NativeBuiltins::Id::length),
-                                {a});
+                        if (irep == t::SEXP &&
+                            !b->callArg(0).val()->type.isA(
+                                PirType::anySimpleScalar())) {
+                            auto callLengthBuiltin = [&]() {
+                                return call(NativeBuiltins::get(
+                                                NativeBuiltins::Id::length),
+                                            {a});
+                            };
+                            llvm::Value* r;
+                            if (vectorTypeSupport(b->callArg(0).val())) {
+                                r = createSelect2(
+                                    isAltrep(a), callLengthBuiltin,
+                                    [&]() { return vectorLength(a); });
+                            } else {
+                                r = callLengthBuiltin();
+                            }
                             if (orep == t::SEXP) {
                                 r = createSelect2(
                                     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
