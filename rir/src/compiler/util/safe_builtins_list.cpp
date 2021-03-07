@@ -461,6 +461,7 @@ bool SafeBuiltinsList::nonObjectIdempotent(SEXP builtin) {
     V(lockBinding)                                                             \
     V(lockEnvironment)                                                         \
     V(unlockBinding)                                                           \
+    V(bindingIsLocked)                                                         \
     V(as.environment)                                                          \
     V(on.exit)                                                                 \
     V(environment)                                                             \
@@ -472,6 +473,7 @@ bool SafeBuiltinsList::nonObjectIdempotent(SEXP builtin) {
     V(parent.frame)                                                            \
     V(UseMethod)                                                               \
     V(eval)                                                                    \
+    V(topenv)                                                                  \
     V(pos.to.env)                                                              \
     V(standardGeneric)
 
