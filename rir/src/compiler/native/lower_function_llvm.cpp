@@ -1084,6 +1084,14 @@ llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
     pos = builder.CreateGEP(pos, {c(0), c(4), c(0)});
     return builder.CreateLoad(pos);
 }
+llvm::Value* LowerFunctionLLVM::isNamed(llvm::Value* v) {
+    auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
+    auto sxpinfo = builder.CreateLoad(sxpinfoP);
+
+    static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1) << 32;
+    auto named = builder.CreateAnd(sxpinfo, c(namedMask));
+    return builder.CreateICmpNE(named, c(0, 64));
+}
 void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
@@ -2959,7 +2967,20 @@ void LowerFunctionLLVM::compile() {
                     auto resT = PirType(RType::vec).notObject();
 
                     b->eachCallArg([&](Value* v) {
-                        assignVector(res, c(pos), loadSxp(v), resT);
+                        auto vn = loadSxp(v);
+                        if (v->minReferenceCount() < 2) {
+                            auto isnamed = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+                            auto cont = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+                            ensureNamed(vn);
+                            builder.CreateCondBr(isNamed(vn), isnamed, cont);
+                            builder.SetInsertPoint(isnamed);
+                            ensureShared(vn);
+                            builder.CreateBr(cont);
+                            builder.SetInsertPoint(cont);
+                        }
+                        assignVector(res, c(pos), vn, resT);
                         pos++;
                     });
                     setVal(i, res);
