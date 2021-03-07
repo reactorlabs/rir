@@ -769,7 +769,7 @@ int asLogicalImpl(SEXP a) {
     return Rf_asLogical(a);
 }
 
-size_t lengthImpl(SEXP e) { return Rf_length(e); }
+size_t lengthImpl(SEXP e) { return Rf_xlength(e); }
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     if (!pir::Parameter::DEOPT_CHAOS) {
@@ -2133,11 +2133,10 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::checkTrueFalse) = {"checkTrueFalse", (void*)&checkTrueFalseImpl,
                                 t::int_sexp};
     get_(Id::asLogicalBlt) = {"aslogical", (void*)&asLogicalImpl, t::int_sexp};
-    get_(Id::length) = {
-        "length",
-        (void*)&lengthImpl,
-        llvm::FunctionType::get(t::i64, {t::SEXP}, false),
-        {llvm::Attribute::ReadOnly, llvm::Attribute::ArgMemOnly}};
+    get_(Id::length) = {"length",
+                        (void*)&lengthImpl,
+                        llvm::FunctionType::get(t::i64, {t::SEXP}, false),
+                        {}};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,
                        llvm::FunctionType::get(
