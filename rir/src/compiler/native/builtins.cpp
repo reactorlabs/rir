@@ -2309,16 +2309,15 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::setNames) = {
         "setNames", (void*)&setNamesImpl,
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
-    get_(Id::xlength_) = {
-        "xlength_",
-        (void*)&xlength_Impl,
-        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false),
-        {llvm::Attribute::ArgMemOnly, llvm::Attribute::ReadOnly}};
+    get_(Id::xlength_) = {"xlength_",
+                          (void*)&xlength_Impl,
+                          llvm::FunctionType::get(t::SEXP, {t::SEXP}, false),
+                          {}};
     get_(Id::getAttrb) = {
         "getAttrib",
         (void*)&getAttribImpl,
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false),
-        {llvm::Attribute::ArgMemOnly}};
+        {}};
     get_(Id::nonLocalReturn) = {
         "nonLocalReturn", (void*)&nonLocalReturnImpl,
         llvm::FunctionType::get(t::t_void, {t::SEXP, t::SEXP}, false)};
