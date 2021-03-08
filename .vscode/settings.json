@@ -110,6 +110,8 @@
     "*.gen": "cpp",
     "csetjmp": "cpp",
     "cfenv": "cpp",
-    "csignal": "cpp"
+    "csignal": "cpp",
+    "__functional_base_03": "cpp",
+    "__memory": "cpp"
   }
 }
