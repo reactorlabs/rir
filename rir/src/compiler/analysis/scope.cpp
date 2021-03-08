@@ -465,11 +465,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
     if (!handled) {
         if (i->hasEnv()) {
             bool envIsNeeded = i->hasEnv();
-
-            if (auto mk = MkEnv::Cast(i->env())) {
-                if (mk->stub)
-                    envIsNeeded = false;
-            }
+            bool stubenv = MkEnv::Cast(i->env()) && MkEnv::Cast(i->env())->stub;
 
             // Already exclude the case where an operation needs an env only for
             // object arguments, but we know that none of the args are objects.
@@ -490,7 +486,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 });
             }
 
-            if (envIsNeeded && i->leaksEnv()) {
+            if (envIsNeeded && !stubenv && i->leaksEnv()) {
                 state.envs.leak(i->env());
                 effect.update();
             }
@@ -499,7 +495,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             // need to consider it tainted.
             if (envIsNeeded && i->changesEnv()) {
                 state.envs.taintLeaked();
-                state.envs.at(i->env()).taint();
+                if (!stubenv)
+                    state.envs.at(i->env()).taint();
                 effect.taint();
             }
         }
