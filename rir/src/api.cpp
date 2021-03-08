@@ -163,7 +163,6 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
     }
 
     bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true : false;
-    DISABLE_ANNOTATIONS = true;
     if (!DISABLE_ANNOTATIONS) {
         if (depromisedArgs != NA_LOGICAL) {
             if (depromisedArgs)
