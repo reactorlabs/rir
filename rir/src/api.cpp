@@ -162,17 +162,18 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
             fun->flags.reset(Function::DisableNumArgumentsSpezialization);
     }
 
-    // bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true :
-    // false; if (!DISABLE_ANNOTATIONS) {
-    if (depromisedArgs != NA_LOGICAL) {
-        if (depromisedArgs)
-            fun->flags.set(Function::DepromisedArgs);
-        else
-            fun->flags.reset(Function::DepromisedArgs);
+    bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true : false;
+    DISABLE_ANNOTATIONS = true;
+    if (!DISABLE_ANNOTATIONS) {
+        if (depromisedArgs != NA_LOGICAL) {
+            if (depromisedArgs)
+                fun->flags.set(Function::DepromisedArgs);
+            else
+                fun->flags.reset(Function::DepromisedArgs);
         }
-        //}
+    }
 
-        return R_NilValue;
+    return R_NilValue;
 }
 
 REXPORT SEXP rirFunctionVersions(SEXP what) {
