@@ -249,25 +249,25 @@ struct PirType {
     }
 
     static constexpr PirType simpleScalarInt() {
-        return PirType(RType::integer).scalar();
+        return PirType(RType::integer).simpleScalar();
     }
 
     static constexpr PirType simpleScalarReal() {
-        return PirType(RType::real).scalar();
+        return PirType(RType::real).simpleScalar();
     }
 
     static constexpr PirType simpleScalarLogical() {
-        return PirType(RType::logical).scalar();
+        return PirType(RType::logical).simpleScalar();
     }
     static constexpr PirType test() {
         return simpleScalarLogical().notNAOrNaN();
     }
 
     static constexpr PirType simpleScalarString() {
-        return PirType(RType::str).scalar();
+        return PirType(RType::str).simpleScalar();
     }
 
-    static constexpr PirType simpleScalar() {
+    static constexpr PirType anySimpleScalar() {
         return (PirType(RType::integer) | RType::real | RType::logical)
             .scalar();
     }
@@ -310,6 +310,9 @@ struct PirType {
         if (!isRType())
             return false;
         return flags_.includes(TypeFlags::maybeNAOrNaN);
+    }
+    RIR_INLINE constexpr bool isSimpleScalar() const {
+        return isScalar() && !maybeHasAttrs();
     }
     RIR_INLINE constexpr bool isScalar() const {
         if (!isRType())
@@ -397,6 +400,10 @@ struct PirType {
     RIR_INLINE constexpr PirType scalar() const {
         assert(isRType());
         return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNotScalar));
+    }
+
+    RIR_INLINE constexpr PirType simpleScalar() const {
+        return scalar().noAttribs();
     }
 
     RIR_INLINE constexpr PirType notT(RType t) const {

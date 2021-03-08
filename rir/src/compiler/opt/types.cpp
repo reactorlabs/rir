@@ -52,15 +52,15 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                         "bitwiseAnd", "bitwiseNot",    "bitwiseOr"};
                     if (bitwise.count(name)) {
                         inferred = PirType(RType::integer);
-                        if (getType(c->callArg(0).val()).isScalar() &&
-                            getType(c->callArg(1).val()).isScalar())
-                            inferred.setScalar();
+                        if (getType(c->callArg(0).val()).isSimpleScalar() &&
+                            getType(c->callArg(1).val()).isSimpleScalar())
+                            inferred = inferred.simpleScalar();
                         break;
                     }
 
                     if ("length" == name) {
-                        inferred =
-                            (PirType() | RType::integer | RType::real).scalar();
+                        inferred = (PirType() | RType::integer | RType::real)
+                                       .simpleScalar();
                         break;
                     }
 
@@ -80,7 +80,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                                    .notT(RType::logical);
 
                                 if (doSummary)
-                                    inferred.setScalar();
+                                    inferred = inferred.simpleScalar();
                                 if ("prod" == name)
                                     inferred = inferred.orT(RType::real)
                                                    .notT(RType::integer);
@@ -112,8 +112,8 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if ("as.integer" == name) {
                         if (!getType(c->callArg(0).val()).maybeObj()) {
                             inferred = PirType(RType::integer);
-                            if (getType(c->callArg(0).val()).isScalar())
-                                inferred.setScalar();
+                            if (getType(c->callArg(0).val()).isSimpleScalar())
+                                inferred = inferred.simpleScalar();
                         } else {
                             inferred = i->inferType(getType);
                         }
@@ -121,7 +121,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
 
                     if ("typeof" == name) {
-                        inferred = PirType(RType::str).scalar();
+                        inferred = PirType(RType::str).simpleScalar();
                         break;
                     }
 
@@ -130,8 +130,8 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (vecTests.count(name)) {
                         if (!getType(c->callArg(0).val()).maybeObj()) {
                             inferred = PirType(RType::logical);
-                            if (getType(c->callArg(0).val()).isScalar())
-                                inferred.setScalar();
+                            if (getType(c->callArg(0).val()).isSimpleScalar())
+                                inferred = inferred.simpleScalar();
                         } else {
                             inferred = i->inferType(getType);
                         }
@@ -150,8 +150,9 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                         "all",         "any"};
                     if (tests.count(name)) {
                         if (!getType(c->callArg(0).val()).maybeObj())
-                            inferred =
-                                PirType(RType::logical).scalar().notNAOrNaN();
+                            inferred = PirType(RType::logical)
+                                           .simpleScalar()
+                                           .notNAOrNaN();
                         else
                             inferred = i->inferType(getType);
                         break;
@@ -223,18 +224,18 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                             inferred = inferred & PirType::val();
 
                         if (auto e = Extract1_1D::Cast(i)) {
-                            if (!inferred.isScalar() &&
+                            if (!inferred.isSimpleScalar() &&
                                 getType(e->vec()).isA(PirType::num()) &&
                                 // named arguments produce named result
                                 !getType(e->vec()).maybeHasAttrs() &&
-                                getType(e->idx()).isScalar()) {
+                                getType(e->idx()).isSimpleScalar()) {
                                 auto range = rangeAnalysis.before(e).range;
                                 if (range.count(e->idx())) {
                                     if (range.at(e->idx()).first > 0) {
                                         // Negative numbers as indices make the
                                         // extract return a vector. Only
                                         // positive are safe.
-                                        inferred.setScalar();
+                                        inferred = inferred.simpleScalar();
                                     }
                                 }
                             }

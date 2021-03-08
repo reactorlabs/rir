@@ -589,7 +589,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (builtinId == blt("length") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
-                        if (t.isA(PirType::simpleScalar())) {
+                        if (t.isA(PirType::anySimpleScalar())) {
                             iterAnyChange = true;
                             i->replaceUsesAndSwapWith(new LdConst(1), ip);
                         }

@@ -8,11 +8,11 @@ Representation Representation::Of(PirType t) {
     // Combined types like integer|real cannot be unbox, since we do not know
     // how to re-box again.
     if (!t.maybeMissing() && !t.maybePromiseWrapped()) {
-        if (t.isA(PirType(RType::logical).scalar().notObject()))
+        if (t.isA(PirType(RType::logical).simpleScalar().notObject()))
             return Representation::Integer;
-        if (t.isA(PirType(RType::integer).scalar().notObject()))
+        if (t.isA(PirType(RType::integer).simpleScalar().notObject()))
             return Representation::Integer;
-        if (t.isA(PirType(RType::real).scalar().notObject()))
+        if (t.isA(PirType(RType::real).simpleScalar().notObject()))
             return Representation::Real;
     }
     return Representation::Sexp;

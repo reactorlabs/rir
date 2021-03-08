@@ -96,7 +96,7 @@ static void lower(Code* code) {
                 (*it)->clearFrameState();
 
             auto t = (*it)->type;
-            if (t.isA(PirType::simpleScalar())) {
+            if (t.isA(PirType::anySimpleScalar())) {
                 // In the case we have an instruction that might statically
                 // return int or double, but there is no instruction that could
                 // observe the difference we might as well set the type to
@@ -104,7 +104,7 @@ static void lower(Code* code) {
                 if (t.maybe(PirType::simpleScalarInt()) &&
                     t.maybe(PirType::simpleScalarReal()) &&
                     representAsReal.isDead(*it)) {
-                    (*it)->type = t & PirType::simpleScalarReal();
+                    (*it)->type = t.simpleScalar();
                 }
             }
 
