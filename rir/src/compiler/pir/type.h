@@ -269,7 +269,7 @@ struct PirType {
 
     static constexpr PirType anySimpleScalar() {
         return (PirType(RType::integer) | RType::real | RType::logical)
-            .scalar();
+            .simpleScalar();
     }
 
     static constexpr PirType simpleVector() { return PirType(RType::vec); }
@@ -312,7 +312,7 @@ struct PirType {
         return flags_.includes(TypeFlags::maybeNAOrNaN);
     }
     RIR_INLINE constexpr bool isSimpleScalar() const {
-        return isScalar() && !maybeHasAttrs();
+        return isScalar() && !maybeHasAttrs() && !maybeObj();
     }
     RIR_INLINE constexpr bool isScalar() const {
         if (!isRType())
@@ -403,7 +403,7 @@ struct PirType {
     }
 
     RIR_INLINE constexpr PirType simpleScalar() const {
-        return scalar().noAttribs();
+        return scalar().noAttribs().notObject();
     }
 
     RIR_INLINE constexpr PirType notT(RType t) const {

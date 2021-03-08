@@ -232,11 +232,13 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
             type.setNotMissing();
             type.setScalar(RType::real);
             type.setNoAttribs();
+            assert(type.isA(PirType::simpleScalarReal().orPromiseWrapped()));
         }
         if (assumptions.isSimpleInt(i)) {
             type.setNotMissing();
             type.setScalar(RType::integer);
             type.setNoAttribs();
+            assert(type.isA(PirType::simpleScalarInt().orPromiseWrapped()));
         }
     }
 }

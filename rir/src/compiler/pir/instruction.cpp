@@ -513,10 +513,10 @@ LdConst::LdConst(SEXP c, PirType t)
 LdConst::LdConst(SEXP c)
     : FixedLenInstruction(PirType(c)), idx(Pool::insert(c)) {}
 LdConst::LdConst(int num)
-    : FixedLenInstruction(PirType(RType::integer).scalar().notNAOrNaN()),
+    : FixedLenInstruction(PirType(RType::integer).simpleScalar().notNAOrNaN()),
       idx(Pool::getInt(num)) {}
 LdConst::LdConst(double num)
-    : FixedLenInstruction(PirType(RType::integer).scalar().notNAOrNaN()),
+    : FixedLenInstruction(PirType(RType::integer).simpleScalar().notNAOrNaN()),
       idx(Pool::getNum(num)) {}
 
 SEXP LdConst::c() const { return Pool::get(idx); }
@@ -542,10 +542,10 @@ PirType Extract1_1D::inferType(const GetType& getType) const {
         if (auto c = LdConst::Cast(idx())) {
             if (IS_SIMPLE_SCALAR(c->c(), INTSXP)) {
                 if (INTEGER(c->c())[0] >= 1)
-                    res.setScalar();
+                    res = res.simpleScalar();
             } else if (IS_SIMPLE_SCALAR(c->c(), REALSXP)) {
                 if (REAL(c->c())[0] >= 1)
-                    res.setScalar();
+                    res = res.simpleScalar();
             }
         }
     }

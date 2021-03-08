@@ -81,7 +81,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                    // Vector where Extract is unboxed if we speculate
                    (i->type.isA(PirType::num()) &&
                     !i->type.simpleScalar().unboxable() &&
-                    i->typeFeedback.type.unboxable() &&
+                    i->typeFeedback.type.simpleScalar().unboxable() &&
                     maybeUsedUnboxed.isAlive(i))) {
             speculateOn = i;
             feedback = i->typeFeedback;

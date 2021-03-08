@@ -386,24 +386,22 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
     }
 
     if (res->getType() == t::SEXP && needed != t::SEXP) {
-        if (type.isA(PirType(RType::integer).scalar().notObject())) {
+        if (type.isA(PirType::simpleScalarInt())) {
             res = unboxInt(res);
             assert(res->getType() == t::Int);
-        } else if (type.isA(PirType(RType::logical).scalar().notObject())) {
+        } else if (type.isA(PirType::simpleScalarLogical())) {
             res = unboxLgl(res);
             assert(res->getType() == t::Int);
         } else if (type.isA((PirType() | RType::integer | RType::logical)
-                                .scalar()
-                                .notObject())) {
+                                .simpleScalar())) {
             res = unboxIntLgl(res);
             assert(res->getType() == t::Int);
-        } else if (type.isA(PirType(RType::real).scalar().notObject())) {
+        } else if (type.isA(PirType::simpleScalarReal())) {
             res = unboxReal(res);
             assert(res->getType() == t::Double);
         } else if (type.isA(
                        (PirType(RType::real) | RType::integer | RType::logical)
-                           .scalar()
-                           .notObject())) {
+                           .simpleScalar())) {
             res = unboxRealIntLgl(res, type);
             assert(res->getType() == t::Double);
         } else {
@@ -651,7 +649,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
             returned = unboxIntLgl(returned);
         } else if (data.result->getType()->getPointerElementType() ==
                    t::Double) {
-            returned = unboxRealIntLgl(returned, PirType(RType::real).scalar());
+            returned = unboxRealIntLgl(returned, PirType::simpleScalarReal());
         }
         builder.CreateStore(returned, data.result);
         if (data.popContextTarget)
@@ -2268,8 +2266,7 @@ void LowerFunctionLLVM::compile() {
                             const static PirType num =
                                 (PirType() | RType::integer | RType::logical |
                                  RType::real)
-                                    .notObject()
-                                    .scalar();
+                                    .simpleScalar();
 
                             if (xRep == Representation::Sexp &&
                                 x->type.isA(num))
