@@ -1269,7 +1269,7 @@ llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld) {
                                   // overflow
                                   auto conv = builder.CreateFPToSI(ld, t::i64);
                                   conv = builder.CreateSIToFP(conv, t::Double);
-                                  return builder.CreateFCmpOEQ(ld, conv);
+                                  return builder.CreateFCmpUEQ(ld, conv);
                               },
                               [&]() { return builder.getFalse(); });
     return conv;
@@ -2511,7 +2511,7 @@ void LowerFunctionLLVM::compile() {
                             assert(orep == irep);
 
                             setVal(i, builder.CreateSelect(
-                                          builder.CreateFCmpOGE(a, c(0.0)), a,
+                                          builder.CreateFCmpUGE(a, c(0.0)), a,
                                           builder.CreateFNeg(a)));
 
                         } else {
@@ -3463,7 +3463,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpEQ(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpUEQ(a, b);
+                                 return builder.CreateFCmpOEQ(a, b);
                              },
                              BinopKind::EQ);
                 break;
@@ -3474,7 +3474,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpSLE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpULE(a, b);
+                                 return builder.CreateFCmpOLE(a, b);
                              },
                              BinopKind::LTE);
                 break;
@@ -3484,7 +3484,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpSLT(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpULT(a, b);
+                                 return builder.CreateFCmpOLT(a, b);
                              },
                              BinopKind::LT);
                 break;
@@ -3494,7 +3494,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpSGE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpUGE(a, b);
+                                 return builder.CreateFCmpOGE(a, b);
                              },
                              BinopKind::GTE);
                 break;
@@ -3504,7 +3504,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpSGT(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpUGT(a, b);
+                                 return builder.CreateFCmpOGT(a, b);
                              },
                              BinopKind::GT);
                 break;
@@ -5120,7 +5120,7 @@ void LowerFunctionLLVM::compile() {
                         auto same =
                             integerValueCase
                                 ? builder.CreateICmpEQ(newValNative, oldVal)
-                                : builder.CreateFCmpOEQ(newValNative, oldVal);
+                                : builder.CreateFCmpUEQ(newValNative, oldVal);
                         builder.CreateCondBr(same, identical, hitUnbox2);
 
                         builder.SetInsertPoint(hitUnbox2);
