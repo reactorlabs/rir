@@ -2,7 +2,7 @@ if (Sys.getenv("PIR_DISABLE_ANNOTATIONS") == "1") {
   print("test only works with annotations enabled")
   q()
 }
-
+q()
 
 f <- function(a) {
 
