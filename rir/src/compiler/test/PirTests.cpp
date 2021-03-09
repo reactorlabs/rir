@@ -861,6 +861,8 @@ bool testTypeRules() {
     assert(!r2.subsetType(PirType(RType::integer).scalar()).isScalar());
     assert(r2.extractType(RType::integer).isScalar());
     assert(!r2.subsetType(PirType::any()).maybeObj());
+    assert(!PirType::val().simpleScalar().maybeHasAttrs());
+    assert(PirType::val().scalar().maybeHasAttrs());
     auto t = PirType(RType::logical).notObject().notMissing().scalar();
     assert(t.mergeWithConversion(t).isA(t));
 

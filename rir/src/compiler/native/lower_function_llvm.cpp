@@ -386,24 +386,22 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
     }
 
     if (res->getType() == t::SEXP && needed != t::SEXP) {
-        if (type.isA(PirType(RType::integer).scalar().notObject())) {
+        if (type.isA(PirType::simpleScalarInt())) {
             res = unboxInt(res);
             assert(res->getType() == t::Int);
-        } else if (type.isA(PirType(RType::logical).scalar().notObject())) {
+        } else if (type.isA(PirType::simpleScalarLogical())) {
             res = unboxLgl(res);
             assert(res->getType() == t::Int);
         } else if (type.isA((PirType() | RType::integer | RType::logical)
-                                .scalar()
-                                .notObject())) {
+                                .simpleScalar())) {
             res = unboxIntLgl(res);
             assert(res->getType() == t::Int);
-        } else if (type.isA(PirType(RType::real).scalar().notObject())) {
+        } else if (type.isA(PirType::simpleScalarReal())) {
             res = unboxReal(res);
             assert(res->getType() == t::Double);
         } else if (type.isA(
                        (PirType(RType::real) | RType::integer | RType::logical)
-                           .scalar()
-                           .notObject())) {
+                           .simpleScalar())) {
             res = unboxRealIntLgl(res, type);
             assert(res->getType() == t::Double);
         } else {
@@ -651,7 +649,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
             returned = unboxIntLgl(returned);
         } else if (data.result->getType()->getPointerElementType() ==
                    t::Double) {
-            returned = unboxRealIntLgl(returned, PirType(RType::real).scalar());
+            returned = unboxRealIntLgl(returned, PirType::simpleScalarReal());
         }
         builder.CreateStore(returned, data.result);
         if (data.popContextTarget)
@@ -726,8 +724,7 @@ llvm::Value* LowerFunctionLLVM::unboxIntLgl(llvm::Value* v) {
 llvm::Value* LowerFunctionLLVM::unboxInt(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
-    checkSexptype(v, {INTSXP});
-    insn_assert(isScalar(v), "expected scalar int");
+    insn_assert(isSimpleScalar(v, INTSXP), "expected scalar int");
 #endif
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
@@ -735,8 +732,7 @@ llvm::Value* LowerFunctionLLVM::unboxInt(llvm::Value* v) {
 llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
-    checkSexptype(v, {LGLSXP});
-    insn_assert(isScalar(v), "expected scalar lgl");
+    insn_assert(isSimpleScalar(v, LGLSXP), "expected scalar lgl");
 #endif
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     auto unbox = builder.CreateLoad(pos);
@@ -749,8 +745,7 @@ llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
 llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
-    checkSexptype(v, {REALSXP});
-    insn_assert(isScalar(v), "expected scalar real");
+    insn_assert(isSimpleScalar(v, REALSXP), "expected scalar real");
 #endif
     auto pos = builder.CreateBitCast(dataPtr(v), t::DoublePtr);
     auto res = builder.CreateLoad(pos);
@@ -2271,8 +2266,7 @@ void LowerFunctionLLVM::compile() {
                             const static PirType num =
                                 (PirType() | RType::integer | RType::logical |
                                  RType::real)
-                                    .notObject()
-                                    .scalar();
+                                    .simpleScalar();
 
                             if (xRep == Representation::Sexp &&
                                 x->type.isA(num))
@@ -2768,7 +2762,7 @@ void LowerFunctionLLVM::compile() {
                     switch (b->builtinId) {
                     case blt("vector"): {
                         auto l = b->arg(1).val();
-                        if (l->type.isA(PirType::simpleScalar())) {
+                        if (l->type.isA(PirType::anySimpleScalar())) {
                             if (auto con = LdConst::Cast(b->arg(0).val())) {
                                 if (TYPEOF(con->c()) == STRSXP &&
                                     XLENGTH(con->c()) == 1) {
@@ -2914,7 +2908,7 @@ void LowerFunctionLLVM::compile() {
                 if (b->builtinId == blt("c") && !b->type.maybeHasAttrs()) {
                     bool allScalar = true;
                     b->eachArg([&](Value* v) {
-                        if (!v->type.isA(PirType::simpleScalar()))
+                        if (!v->type.isA(PirType::anySimpleScalar()))
                             allScalar = false;
                     });
                     if (allScalar) {

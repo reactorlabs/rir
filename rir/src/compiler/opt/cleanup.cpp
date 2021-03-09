@@ -92,7 +92,7 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 } else if (auto lgl = AsLogical::Cast(i)) {
                     if (lgl->arg(0).val()->type.isA(
-                            PirType::simpleScalar().notNAOrNaN())) {
+                            PirType::anySimpleScalar().notNAOrNaN())) {
                         removed = true;
                         lgl->replaceUsesWith(lgl->arg(0).val());
                         next = bb->remove(ip);
