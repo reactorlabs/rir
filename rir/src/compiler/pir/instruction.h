@@ -392,6 +392,8 @@ class Instruction : public Value {
             auto res = PirType(RType::logical).notMissing();
             if (t.isScalar())
                 res.setScalar();
+            if (t.isSimpleScalar())
+                res = res.simpleScalar();
             if (!t.maybeNAOrNaN())
                 res.setNotNAOrNaN();
             return type & res;
@@ -965,16 +967,18 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
 class FLI(ForSeqSize, 1, Effect::Error) {
   public:
     explicit ForSeqSize(Value* val)
-        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
-                              {{PirType::val()}}, {{val}}) {}
+        : FixedLenInstruction(
+              PirType(RType::integer).simpleScalar().notObject(),
+              {{PirType::val()}}, {{val}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLI(XLength, 1, Effects::None()) {
   public:
     explicit XLength(Value* val)
-        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
-                              {{PirType::val()}}, {{val}}) {}
+        : FixedLenInstruction(
+              PirType(RType::integer).simpleScalar().notObject(),
+              {{PirType::val()}}, {{val}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -1637,9 +1641,9 @@ class FLIE(Extract1_3D, 5, Effects::Any()) {
 class FLI(Inc, 1, Effects::None()) {
   public:
     explicit Inc(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).scalar().noAttribs(),
-                              {{PirType(RType::integer).scalar().noAttribs()}},
-                              {{v}}) {}
+        : FixedLenInstruction(
+              PirType(RType::integer).simpleScalar().noAttribs(),
+              {{PirType(RType::integer).simpleScalar().noAttribs()}}, {{v}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -1747,8 +1751,8 @@ class FLIE(Colon, 3, Effects::Any()) {
                                          {{PirType::val(), PirType::val()}},
                                          {{lhs, rhs}}, env, srcIdx) {}
     VisibilityFlag visibilityFlag() const override {
-        if (lhs()->type.isA(PirType::simpleScalar()) &&
-            rhs()->type.isA(PirType::simpleScalar())) {
+        if (lhs()->type.isA(PirType::anySimpleScalar()) &&
+            rhs()->type.isA(PirType::anySimpleScalar())) {
             return VisibilityFlag::On;
         } else {
             return VisibilityFlag::Unknown;

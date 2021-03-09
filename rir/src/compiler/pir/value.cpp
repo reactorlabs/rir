@@ -37,7 +37,7 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
             assumptions.setEager(i);
         if (!value->type.maybeObj()) {
             assumptions.setNotObj(i);
-            if (!value->type.maybeHasAttrs() && value->type.isScalar()) {
+            if (value->type.isSimpleScalar()) {
                 if (value->type.isRType(RType::real))
                     assumptions.setSimpleReal(i);
                 if (value->type.isRType(RType::integer))

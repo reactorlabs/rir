@@ -60,9 +60,9 @@ class LowerFunctionLLVM {
     llvm::MDNode* branchMostlyTrue;
     llvm::MDNode* branchMostlyFalse;
 
-    const PirJitLLVM::GetModule& getModule;
-    const PirJitLLVM::GetFunction& getFunction;
-    const PirJitLLVM::GetBuiltin& getBuiltin;
+    PirJitLLVM::GetModule getModule;
+    PirJitLLVM::GetFunction getFunction;
+    PirJitLLVM::GetBuiltin getBuiltin;
 
     Protect p_;
 
