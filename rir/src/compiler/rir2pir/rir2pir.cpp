@@ -1221,14 +1221,15 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
             bool swapTrueFalse = false;
             Instruction* deoptCondition = nullptr;
+            Value* branchCondition;
             bool assumeBB0 = false;
 
             // Conditional jump
             switch (bc.bc) {
             case Opcode::brtrue_:
             case Opcode::brfalse_: {
-                auto v = cur.stack.pop();
-                if (auto c = Instruction::Cast(v)) {
+                auto v = branchCondition = cur.stack.pop();
+                if (auto c = Instruction::Cast(branchCondition)) {
                     if (c->typeFeedback.value == True::instance()) {
                         assumeBB0 = bc.bc == Opcode::brtrue_;
                         deoptCondition = c;
@@ -1239,8 +1240,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                     }
                 }
 
-                if (!v->type.isA(PirType::test())) {
-                    v = insert(new Identical(v,
+                if (!branchCondition->type.isA(PirType::test())) {
+                    v = insert(new Identical(branchCondition,
                                              bc.bc == Opcode::brtrue_
                                                  ? (Value*)True::instance()
                                                  : (Value*)False::instance(),
@@ -1285,11 +1286,26 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
                 insert.enterBB(deopt == fall ? branch : fall);
                 finger = (deopt == fall) ? trg : nextPos;
+
+                // If we deopt on a typecheck, then we should record that
+                // information by casting the value.
+                if (assumeBB0)
+                    if (auto tt = IsType::Cast(branchCondition)) {
+                        for (auto& e : cur.stack) {
+                            if (tt->arg<0>().val() == e) {
+                                auto cast = insert(
+                                    new CastType(e, CastType::Downcast,
+                                                 PirType::any(), tt->typeTest));
+                                cast->effects.set(Effect::DependsOnAssume);
+                                e = cast;
+                            }
+                        }
+                    }
+
                 continue;
             }
 
             pushWorklist(branch, trg);
-
             insert.enterBB(fall);
             continue;
         }

@@ -335,7 +335,9 @@ struct PirType {
     RIR_INLINE constexpr bool maybeObj() const {
         if (!isRType())
             return false;
-        return flags_.includes(TypeFlags::maybeObject);
+        auto res = flags_.includes(TypeFlags::maybeObject);
+        assert(!res || maybeHasAttrs());
+        return res;
     }
     RIR_INLINE constexpr bool maybeHasAttrs() const {
         if (!isRType())
