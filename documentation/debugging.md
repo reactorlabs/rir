@@ -166,16 +166,16 @@ There is *WIP* support for debugging LLVM jitted PIR code. It is enabled by `#de
 
 Run your program, ideally with `rr`:
 ```
-***@***:~/rir/build/debug$ bin/R -e "f <- function(x) { Sys.sleep(0.01); x + 123L }; f(4L); f(4L); f(4L); f(4L)" -d rr
+***@***:~/rir/build/debug$ PIR_GDB_FOLDER=pirgdb bin/R -e "f <- function(x) { Sys.sleep(0.01); x + 123L }; f(4L); f(4L); f(4L); f(4L)" -d rr
 rr: Saving execution to trace directory `/home/***/.local/share/rr/R-402'.
 
 R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night"
 [...]
 ```
 
-This will produce PIR listing files for each PIR module compiled, named like `f.01`:
+This will produce PIR listing files for each PIR module compiled, named like `f.001` in the folder specified by `PIR_GDB_FOLDER` (defaults to `pirgdb`, this folder will be wiped if it already exists):
 ```
-***@***:~/rir/build/debug$ cat f.01
+***@***:~/rir/build/debug$ cat pirgdb/f.001
 rsh_f[0x56500a98aa80].1
 BB0
   int$~"          %0.0  = LdArg                    0
@@ -212,19 +212,19 @@ Now, you can run the debugger and set a breakpoint in those files:
 ```
 ***@***:~/rir/build/debug$ rr replay
 GNU gdb (Ubuntu 8.1.1-0ubuntu1) 8.1.1
-...
+[...]
 0x00007f0bdeeef090 in _start () from /lib64/ld-linux-x86-64.so.2
-(rr) b f.01:3
-No source file named f.01.
+(rr) b f.001:3
+No source file named f.001.
 Make breakpoint pending on future shared library load? (y or [n]) y
-Breakpoint 1 (f.01:3) pending.
+Breakpoint 1 (f.001:3) pending.
 (rr) c
 Continuing.
 
 R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night"
 [...]
 
-Breakpoint 1, rsh_f[0x56500a98aa80].1 () at f.01:3
+Breakpoint 1, rsh_f[0x56500a98aa80].1 () at f.001:3
 3         int$~"          %0.0  = LdArg                    0
 (rr) n
 4         val?^           %0.1  = LdVar              eR    Sys.sleep, GlobalEnv
@@ -235,7 +235,7 @@ Breakpoint 1, rsh_f[0x56500a98aa80].1 () at f.01:3
 (rr) n
 12        env"            e4.3  = (MkEnv)            l     x=%0.0, parent=GlobalEnv, context 1
 (rr) bt
-#0  rsh_f[0x56500a98aa80].1 () at f.01:12
+#0  rsh_f[0x56500a98aa80].1 () at f.001:12
 #1  0x00007f0bd9a5a223 in rir::evalRirCode (c=0x56500aa2fcd8, ctx=0x5650097ce110,
     env=0x5650097d59a8, callCtxt=0x7fff4d1290d0, initialPC=0x0, cache=0x0)
     at ../../rir/src/interpreter/interp.cpp:1918

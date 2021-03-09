@@ -102,19 +102,21 @@ class PirJitLLVM {
   public:
     static std::string makeDbgFileName(const std::string& base) {
         std::stringstream ss;
-        ss << base << "." << std::setfill('0') << std::setw(2) << nModules;
+        ss << base << "." << std::setfill('0') << std::setw(3) << nModules;
         return ss.str();
     }
     struct DebugInfo {
         DebugInfo(const DebugInfo&) = delete;
-        explicit DebugInfo(const std::string& name)
-            : CU(nullptr), File(nullptr), FileName(makeDbgFileName(name)),
-              VoidPtrType(nullptr), SEXPRECType(nullptr), SEXPType(nullptr),
-              NativeCodeType(nullptr), log(FileName), line(1) {}
+        DebugInfo(const std::string& folder, const std::string& name)
+            : CU(nullptr), File(nullptr), Folder(folder),
+              FileName(makeDbgFileName(name)), VoidPtrType(nullptr),
+              SEXPRECType(nullptr), SEXPType(nullptr), NativeCodeType(nullptr),
+              line(1) {}
 
         llvm::DICompileUnit* CU;
         llvm::DIFile* File;
 
+        std::string Folder;
         std::string FileName;
 
         std::vector<llvm::DIScope*> LexicalBlocks;
@@ -130,7 +132,7 @@ class PirJitLLVM {
         llvm::DISubroutineType* getNativeCodeType(llvm::DIBuilder*);
         llvm::DIType* getInstrType(llvm::DIBuilder*, PirType);
 
-        FileLogStream log;
+        std::unique_ptr<FileLogStream> log;
         size_t line;
         std::unordered_map<Code*, size_t> codeLoc;
         std::unordered_map<BB*, size_t> BBLoc;

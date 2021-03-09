@@ -3,6 +3,9 @@
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/pass_schedule_llvm.h"
 #include "compiler/native/types_llvm.h"
+#ifdef PIR_GDB_SUPPORT
+#include "utils/filesystem.h"
+#endif
 
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
@@ -28,32 +31,37 @@ llvm::ExitOnError ExitOnErr;
 std::unique_ptr<llvm::orc::LLJIT> JIT;
 llvm::orc::ThreadSafeContext TSC;
 
+#ifdef PIR_GDB_SUPPORT
+std::string dbgFolder =
+    getenv("PIR_GDB_FOLDER") ? getenv("PIR_GDB_FOLDER") : "pirgdb";
+#endif
+
 } // namespace
 
 #ifdef PIR_GDB_SUPPORT
 void PirJitLLVM::DebugInfo::addCode(Code* c) {
     assert(!codeLoc.count(c));
     codeLoc[c] = line++;
-    log << makeName(c) << "\n";
+    *log << makeName(c) << "\n";
     Visitor::run(c->entry, [&](BB* bb) {
         assert(!BBLoc.count(bb));
         BBLoc[bb] = line++;
-        bb->printPrologue(log.out, false);
+        bb->printPrologue(log->out, false);
 
         for (auto i : *bb) {
             assert(!instLoc.count(i));
             instLoc[i] = line++;
-            log << "  ";
-            i->print(log.out, false);
-            log << "\n";
+            *log << "  ";
+            i->print(log->out, false);
+            *log << "\n";
         }
 
-        if (bb->printEpilogue(log.out, false))
+        if (bb->printEpilogue(log->out, false))
             line++;
     });
     line++;
-    log << "\n";
-    log.flush();
+    *log << "\n";
+    log->flush();
 }
 
 llvm::DIType* PirJitLLVM::DebugInfo::getVoidPtrType(llvm::DIBuilder* builder) {
@@ -119,7 +127,7 @@ void PirJitLLVM::DebugInfo::emitLocation(llvm::IRBuilder<>& builder,
 
 #ifdef PIR_GDB_SUPPORT
 PirJitLLVM::PirJitLLVM(const std::string& name)
-    : DI(name)
+    : DI(dbgFolder, name)
 #else
 PirJitLLVM::PirJitLLVM()
 #endif
@@ -163,6 +171,10 @@ void PirJitLLVM::compile(
         M = std::make_unique<llvm::Module>("", *TSC.getContext());
 
 #ifdef PIR_GDB_SUPPORT
+        // Create a file stream log for this module
+        DI.log = std::make_unique<FileLogStream>("./" + DI.Folder + "/" +
+                                                 DI.FileName);
+
         // Add the current debug info version into the module.
         M->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
                          llvm::DEBUG_METADATA_VERSION);
@@ -175,7 +187,7 @@ void PirJitLLVM::compile(
         DIB = std::make_unique<llvm::DIBuilder>(*M);
 
         // Create the compile unit for the module.
-        DI.File = DIB->createFile(DI.FileName, ".");
+        DI.File = DIB->createFile(DI.FileName, DI.Folder);
         DI.CU = DIB->createCompileUnit(llvm::dwarf::DW_LANG_C, DI.File,
                                        "PIR Compiler", false, "", 0);
 #endif // PIR_GDB_SUPPORT
@@ -266,6 +278,10 @@ void PirJitLLVM::compile(
         auto f = funCompiler.fun;
         llvm::raw_os_ostream ro(out);
         f->print(ro, nullptr);
+        // For debugging, print the whole module to see the debuginfo too
+        // also comment out insn_assert in lower_function_llvm.cpp to get
+        // smaller listings...
+        // ro << *M;
     });
 }
 
@@ -359,6 +375,10 @@ void PirJitLLVM::initializeLLVM() {
             // [](const SymbolStringPtr&) { return true; })));
             [MainName = JIT->mangleAndIntern("main")](
                 const SymbolStringPtr& Name) { return Name != MainName; })));
+
+#ifdef PIR_GDB_SUPPORT
+    clearOrCreateDirectory(dbgFolder.c_str());
+#endif
 
     initialized = true;
 }
