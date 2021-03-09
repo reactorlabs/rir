@@ -22,7 +22,7 @@ void BB::remove(Instruction* i) {
     assert(false);
 }
 
-void BB::print(std::ostream& out, bool tty) {
+void BB::printPrologue(std::ostream& out, bool tty) {
     out << "BB" << id;
     if (!predecessors().empty()) {
         out << "   <- [";
@@ -34,14 +34,24 @@ void BB::print(std::ostream& out, bool tty) {
         out << "]";
     }
     out << "\n";
+}
+
+bool BB::printEpilogue(std::ostream& out, bool tty) {
+    if (isJmp()) {
+        out << "  goto BB" << next0->id << "\n";
+        return true;
+    }
+    return false;
+}
+
+void BB::print(std::ostream& out, bool tty) {
+    printPrologue(out, tty);
     for (auto i : instrs) {
         out << "  ";
         i->print(out, tty);
         out << "\n";
     }
-    if (isJmp()) {
-        out << "  goto BB" << next0->id << "\n";
-    }
+    printEpilogue(out, tty);
 }
 
 void BB::printGraph(std::ostream& out, bool omitDeoptBranches) {

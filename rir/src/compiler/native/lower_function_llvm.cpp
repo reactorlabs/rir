@@ -2070,11 +2070,19 @@ void LowerFunctionLLVM::compile() {
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
 
+#ifdef PIR_GDB_SUPPORT
+    // For variable info, broken...
+    // size_t ArgIdx = 0;
+#endif
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         currentBB = bb;
 
         builder.SetInsertPoint(getBlock(bb));
         inPushContext = blockInPushContext.at(bb);
+
+#ifdef PIR_GDB_SUPPORT
+        DI->emitLocation(builder, DI->getBBLoc(bb));
+#endif
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             currentInstr = it;
@@ -2098,6 +2106,11 @@ void LowerFunctionLLVM::compile() {
                     }
                 });
             }
+
+#ifdef PIR_GDB_SUPPORT
+            auto line = DI->getInstLoc(i);
+            DI->emitLocation(builder, line);
+#endif
 
             switch (i->tag) {
             case Tag::ExpandDots: {
@@ -3285,18 +3298,39 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::Add:
+            case Tag::Add: {
+
+#ifdef PIR_GDB_SUPPORT
+                // TODO: this is broken...
+                // auto decl = [&](llvm::Value* v) {
+                //     DILocalVariable* D = DIB->createParameterVariable(
+                //         DI->getScope(), "i", ++ArgIdx, DI->File, line,
+                //         DI->getInstrType(DIB, i->type), true);
+
+                //     DIB->insertDeclare(
+                //         v, D, DIB->createExpression(),
+                //         DILocation::get(DI->getScope()->getContext(), line,
+                //         0,
+                //                         DI->getScope()),
+                //         builder.GetInsertBlock());
+                // };
+#endif
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
                                  // TODO: Check NA
-                                 return builder.CreateAdd(a, b, "", false,
-                                                          true);
+                                 auto res =
+                                     builder.CreateAdd(a, b, "", false, true);
+#ifdef PIR_GDB_SUPPORT
+                    //  decl(res);
+#endif
+                                 return res;
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
                                  return builder.CreateFAdd(a, b);
                              },
                              BinopKind::ADD);
                 break;
+            }
             case Tag::Sub:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {

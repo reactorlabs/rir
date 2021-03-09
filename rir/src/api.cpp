@@ -2,16 +2,13 @@
  * in low level.
  */
 
-#include <cassert>
-#include <cstdio>
-
 #include "api.h"
-
 #include "R/Funtab.h"
 #include "R/Serialize.h"
 #include "compiler/backend.h"
 #include "compiler/compiler.h"
 #include "compiler/log/debug.h"
+#include "compiler/native/pir_debug_info.h"
 #include "compiler/parameter.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
@@ -19,6 +16,8 @@
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 
+#include <cassert>
+#include <cstdio>
 #include <list>
 #include <memory>
 #include <string>
@@ -291,7 +290,11 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
+#ifdef PIR_GDB_SUPPORT
+    pir::Backend backend(logger, name);
+#else
     pir::Backend backend(logger);
+#endif
     cmp.compileClosure(what, name, assumptions,
                        [&](pir::ClosureVersion* c) {
                            logger.flush();

@@ -5,8 +5,8 @@
 #include "pir.h"
 
 #include "utils/Set.h"
-#include <unordered_set>
 #include <iostream>
+#include <unordered_set>
 
 #include <array>
 
@@ -76,6 +76,9 @@ class BB {
 
     bool before(Instruction*, Instruction*) const;
 
+    void printPrologue(std::ostream&, bool tty);
+    // Returns true if it printed anything (for debugging src location purposes)
+    bool printEpilogue(std::ostream&, bool tty);
     void print(std::ostream&, bool tty);
     void printGraph(std::ostream&, bool omitDeoptBranches);
     void printBBGraph(std::ostream&, bool omitDeoptBranches);
