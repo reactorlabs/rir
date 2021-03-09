@@ -7,4 +7,4 @@ RUN cd /opt/rir && tools/sync.sh && tools/build-gnur.sh custom-r && rm -rf exter
     mkdir -p /opt/rir/build/fullverifier && cd /opt/rir/build/fullverifier && cmake -DCMAKE_BUILD_TYPE=fullverifier -GNinja ../.. && ninja &&\
     mkdir -p /opt/rir/build/debugopt     && cd /opt/rir/build/debugopt     && cmake -DCMAKE_BUILD_TYPE=debugopt     -GNinja ../.. && ninja &&\
     mkdir -p /opt/rir/build/sanitize     && cd /opt/rir/build/sanitize     && cmake -DCMAKE_BUILD_TYPE=sanitize     -GNinja ../.. && ninja &&\
-    rm -rf /opt/rir/external/libjit /opt/rir/external/llvm-11 /opt/rir/external/*.tar.xz /opt/rir/build/*/CMakeFiles /opt/rir/external/custom-r/src/main
+    rm -rf /opt/rir/external/libjit /opt/rir/external/llvm-11 /opt/rir/external/clang+llvm-* /opt/rir/external/*.tar.xz /opt/rir/build/*/CMakeFiles /opt/rir/external/custom-r/src/main
