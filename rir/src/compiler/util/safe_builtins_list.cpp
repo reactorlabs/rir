@@ -112,6 +112,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("complex"),
         blt("array"),
         blt("new.env"),
+        blt("match"),
 
         blt("dim"),
         blt("names"),
@@ -302,7 +303,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("cat"),
         blt("paste"),
         blt("nchar"),
-        blt("match"),
+        blt("pmatch"),
 
         blt("seq.int"),
         blt("rep.int"),
@@ -460,6 +461,7 @@ bool SafeBuiltinsList::nonObjectIdempotent(SEXP builtin) {
     V(lockBinding)                                                             \
     V(lockEnvironment)                                                         \
     V(unlockBinding)                                                           \
+    V(bindingIsLocked)                                                         \
     V(as.environment)                                                          \
     V(on.exit)                                                                 \
     V(environment)                                                             \
@@ -471,6 +473,7 @@ bool SafeBuiltinsList::nonObjectIdempotent(SEXP builtin) {
     V(parent.frame)                                                            \
     V(UseMethod)                                                               \
     V(eval)                                                                    \
+    V(topenv)                                                                  \
     V(pos.to.env)                                                              \
     V(standardGeneric)
 

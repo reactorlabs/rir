@@ -23,10 +23,10 @@ struct CallContext {
     CallContext(const CallContext&) = delete;
     CallContext& operator=(CallContext&) = delete;
 
-    CallContext(ArglistOrder::CallId callId, Code* c, SEXP callee, size_t nargs,
-                SEXP ast, R_bcstack_t* stackArgs, Immediate* names,
-                SEXP callerEnv, const Context& givenContext,
-                InterpreterInstance* ctx)
+    CallContext(ArglistOrder::CallId callId, const Code* c, SEXP callee,
+                size_t nargs, SEXP ast, const R_bcstack_t* stackArgs,
+                const Immediate* names, SEXP callerEnv,
+                const Context& givenContext, InterpreterInstance* ctx)
         : callId(callId), caller(c), suppliedArgs(nargs), passedArgs(nargs),
           stackArgs(stackArgs), names(names), callerEnv(callerEnv), ast(ast),
           callee(callee), givenContext(givenContext) {
@@ -70,7 +70,8 @@ struct CallContext {
     bool hasNames() const { return names; }
 
     SEXP stackArg(unsigned i) const {
-        assert(stackArgs && i < passedArgs);
+        assert(stackArgs);
+        assert(i < passedArgs);
         return ostack_at_cell(stackArgs + i);
     }
 

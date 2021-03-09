@@ -15,8 +15,10 @@
 #include <iterator>
 #include <list>
 #include <unordered_set>
-namespace {
-using namespace rir::pir;
+
+namespace rir {
+namespace pir {
+
 static SEXP isConst(Value* instr) {
     instr = instr->followCastsAndForce();
 
@@ -149,10 +151,6 @@ static bool isStaticallyNA(Value* i) {
     return false;
 }
 
-} // namespace
-namespace rir {
-namespace pir {
-
 bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                          LogStream&) const {
     bool anyChange = false;
@@ -284,6 +282,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         }
     }
 
+    DominanceGraph::BBSet dead;
+    DominanceGraph::BBSet unreachableEnd;
     for (auto i = 0; i < 2; ++i) {
         bool iterAnyChange = false;
         Visitor::run(code->entry, [&](BB* bb) {
@@ -293,6 +293,26 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             while (ip != bb->end()) {
                 auto i = *ip;
                 auto next = ip + 1;
+
+                auto killUnreachable = [&]() {
+                    if (ip == bb->end() || Unreachable::Cast(*(ip + 1)))
+                        return;
+                    ip = bb->insert(ip + 1, new Unreachable()) + 1;
+                    while (ip != bb->end())
+                        ip = bb->remove(ip);
+                    for (auto b : bb->successors()) {
+                        bool isdead = true;
+                        if (b->predecessors().size() != 1)
+                            for (auto p : b->predecessors())
+                                if (!dead.count(p))
+                                    isdead = false;
+                        if (isdead)
+                            dead.insert(b);
+                    }
+                    unreachableEnd.insert(bb);
+                    next = bb->end();
+                };
+
                 auto foldLglCmp = [&](SEXP carg, Value* varg, bool isEq) {
                     if (!isConst(varg) && // If this is true, was already folded
                         IS_SIMPLE_SCALAR(carg, LGLSXP) &&
@@ -345,12 +365,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (CheckTrueFalse::Cast(i)) {
                     auto a = i->arg(0).val();
                     if (isStaticallyNA(a)) {
-                        bb->insert(ip + 1, new Unreachable());
-                        ip += 2;
-                        while (ip != bb->end())
-                            ip = bb->remove(ip);
-                        next = bb->end();
-                        bb->deleteSuccessors();
+                        killUnreachable();
                     } else if (isStaticallyTrue(a) || isStaticallyFalse(a)) {
                         auto replace = isStaticallyTrue(a)
                                            ? (Value*)True::instance()
@@ -531,14 +546,24 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
                 }
                 if (auto assume = Assume::Cast(i)) {
-                    if (assume->arg<0>().val() == True::instance() &&
-                        assume->assumeTrue) {
-                        iterAnyChange = true;
-                        next = bb->remove(ip);
-                    } else if (assume->arg<0>().val() == False::instance() &&
-                               !assume->assumeTrue) {
-                        iterAnyChange = true;
-                        next = bb->remove(ip);
+                    bool isdead = false;
+                    if (assume->arg<0>().val() == True::instance()) {
+                        if (assume->assumeTrue) {
+                            iterAnyChange = true;
+                            next = bb->remove(ip);
+                        } else {
+                            isdead = true;
+                        }
+                    } else if (assume->arg<0>().val() == False::instance()) {
+                        if (!assume->assumeTrue) {
+                            iterAnyChange = true;
+                            next = bb->remove(ip);
+                        } else {
+                            isdead = true;
+                        }
+                    }
+                    if (isdead) {
+                        killUnreachable();
                     }
                 }
                 if (auto cl = Colon::Cast(i)) {
@@ -977,7 +1002,6 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         anyChange = true;
     }
     // Find all dead basic blocks
-    DominanceGraph::BBSet dead;
     for (const auto& e : branchRemoval) {
         const auto& branch = e.first;
         const auto& condition = e.second;
@@ -988,6 +1012,10 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         if (auto phi = Phi::Cast(i))
             phi->removeInputs(toDelete);
     });
+
+    for (const auto& bb : unreachableEnd)
+        bb->deleteSuccessors();
+
     for (const auto& e : branchRemoval) {
         const auto& branch = e.first;
         const auto& condition = e.second;

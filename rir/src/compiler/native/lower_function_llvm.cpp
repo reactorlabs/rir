@@ -1084,6 +1084,14 @@ llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
     pos = builder.CreateGEP(pos, {c(0), c(4), c(0)});
     return builder.CreateLoad(pos);
 }
+llvm::Value* LowerFunctionLLVM::isNamed(llvm::Value* v) {
+    auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
+    auto sxpinfo = builder.CreateLoad(sxpinfoP);
+
+    static auto namedMask = ((unsigned long)pow(2, NAMED_BITS) - 1) << 32;
+    auto named = builder.CreateAnd(sxpinfo, c(namedMask));
+    return builder.CreateICmpNE(named, c(0, 64));
+}
 void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
@@ -1261,7 +1269,7 @@ llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld) {
                                   // overflow
                                   auto conv = builder.CreateFPToSI(ld, t::i64);
                                   conv = builder.CreateSIToFP(conv, t::Double);
-                                  return builder.CreateFCmpOEQ(ld, conv);
+                                  return builder.CreateFCmpUEQ(ld, conv);
                               },
                               [&]() { return builder.getFalse(); });
     return conv;
@@ -2411,10 +2419,22 @@ void LowerFunctionLLVM::compile() {
 
                     switch (b->builtinId) {
                     case blt("length"):
-                        if (irep == t::SEXP) {
-                            llvm::Value* r = call(
-                                NativeBuiltins::get(NativeBuiltins::Id::length),
-                                {a});
+                        if (irep == t::SEXP &&
+                            !b->callArg(0).val()->type.isA(
+                                PirType::anySimpleScalar())) {
+                            auto callLengthBuiltin = [&]() {
+                                return call(NativeBuiltins::get(
+                                                NativeBuiltins::Id::length),
+                                            {a});
+                            };
+                            llvm::Value* r;
+                            if (vectorTypeSupport(b->callArg(0).val())) {
+                                r = createSelect2(
+                                    isAltrep(a), callLengthBuiltin,
+                                    [&]() { return vectorLength(a); });
+                            } else {
+                                r = callLengthBuiltin();
+                            }
                             if (orep == t::SEXP) {
                                 r = createSelect2(
                                     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
@@ -2491,7 +2511,7 @@ void LowerFunctionLLVM::compile() {
                             assert(orep == irep);
 
                             setVal(i, builder.CreateSelect(
-                                          builder.CreateFCmpOGE(a, c(0.0)), a,
+                                          builder.CreateFCmpUGE(a, c(0.0)), a,
                                           builder.CreateFNeg(a)));
 
                         } else {
@@ -2947,7 +2967,20 @@ void LowerFunctionLLVM::compile() {
                     auto resT = PirType(RType::vec).notObject();
 
                     b->eachCallArg([&](Value* v) {
-                        assignVector(res, c(pos), loadSxp(v), resT);
+                        auto vn = loadSxp(v);
+                        if (v->minReferenceCount() < 2) {
+                            auto isnamed = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+                            auto cont = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+                            ensureNamed(vn);
+                            builder.CreateCondBr(isNamed(vn), isnamed, cont);
+                            builder.SetInsertPoint(isnamed);
+                            ensureShared(vn);
+                            builder.CreateBr(cont);
+                            builder.SetInsertPoint(cont);
+                        }
+                        assignVector(res, c(pos), vn, resT);
                         pos++;
                     });
                     setVal(i, res);
@@ -3332,21 +3365,22 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::DIV);
                 break;
-            case Tag::Pow:
+            case Tag::Pow: {
+                auto p = getModule().getOrInsertFunction(
+                    "pow", FunctionType::get(t::Double, {t::Double, t::Double},
+                                             false));
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 // TODO: Check NA?
-                                 return builder.CreateIntrinsic(
-                                     Intrinsic::powi,
-                                     {a->getType(), b->getType()}, {a, b});
+                                 return builder.CreateCall(
+                                     p, {builder.CreateSIToFP(a, t::Double),
+                                         builder.CreateSIToFP(b, t::Double)});
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateIntrinsic(
-                                     Intrinsic::pow,
-                                     {a->getType(), b->getType()}, {a, b});
+                                 return builder.CreateCall(p, {a, b});
                              },
                              BinopKind::POW);
                 break;
+            }
 
             case Tag::Neq:
                 compileRelop(i,
@@ -3429,7 +3463,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpEQ(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpUEQ(a, b);
+                                 return builder.CreateFCmpOEQ(a, b);
                              },
                              BinopKind::EQ);
                 break;
@@ -3440,7 +3474,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpSLE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpULE(a, b);
+                                 return builder.CreateFCmpOLE(a, b);
                              },
                              BinopKind::LTE);
                 break;
@@ -3450,7 +3484,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpSLT(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpULT(a, b);
+                                 return builder.CreateFCmpOLT(a, b);
                              },
                              BinopKind::LT);
                 break;
@@ -3460,7 +3494,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpSGE(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpUGE(a, b);
+                                 return builder.CreateFCmpOGE(a, b);
                              },
                              BinopKind::GTE);
                 break;
@@ -3470,7 +3504,7 @@ void LowerFunctionLLVM::compile() {
                                  return builder.CreateICmpSGT(a, b);
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpUGT(a, b);
+                                 return builder.CreateFCmpOGT(a, b);
                              },
                              BinopKind::GT);
                 break;
@@ -3791,9 +3825,8 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::MkFunCls: {
                 auto mkFunction = MkFunCls::Cast(i);
-                auto closure = mkFunction->cls;
-                auto srcRef = constant(closure->srcRef(), t::SEXP);
-                auto formals = constant(closure->formals().original(), t::SEXP);
+                auto srcRef = constant(mkFunction->srcRef, t::SEXP);
+                auto formals = constant(mkFunction->formals, t::SEXP);
                 auto body =
                     constant(mkFunction->originalBody->container(), t::SEXP);
                 assert(DispatchTable::check(
@@ -5087,7 +5120,7 @@ void LowerFunctionLLVM::compile() {
                         auto same =
                             integerValueCase
                                 ? builder.CreateICmpEQ(newValNative, oldVal)
-                                : builder.CreateFCmpOEQ(newValNative, oldVal);
+                                : builder.CreateFCmpUEQ(newValNative, oldVal);
                         builder.CreateCondBr(same, identical, hitUnbox2);
 
                         builder.SetInsertPoint(hitUnbox2);

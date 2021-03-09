@@ -378,8 +378,10 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 [&](Value* v) { anyDots = anyDots || ExpandDots::Cast(v); });
             if (auto mk = MkFunCls::Cast(target))
                 if (!anyDots)
-                    if (auto trg = call->tryDispatch(mk->cls))
-                        interProceduralAnalysis(trg, mk->lexicalEnv());
+                    if (mk->tryGetCls()) {
+                        if (auto trg = call->tryDispatch(mk->tryGetCls()))
+                            interProceduralAnalysis(trg, mk->lexicalEnv());
+                    }
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();
             bool anyDots = false;
@@ -401,11 +403,13 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                         lookup(
                             arg->followCasts(),
                             [&](const AbstractPirValue& analysisRes) {
-                                if (analysisRes.type.maybeObj())
+                                if (analysisRes.type.maybeObj() ||
+                                    analysisRes.type.maybe(RType::expandedDots))
                                     safe = false;
                             },
                             [&]() {
-                                if (arg->type.maybeObj())
+                                if (arg->type.maybeObj() ||
+                                    arg->type.maybe(RType::expandedDots))
                                     safe = false;
                             });
                     });

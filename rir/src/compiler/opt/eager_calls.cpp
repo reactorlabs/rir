@@ -61,10 +61,11 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
     bool anyChange = false;
     auto replaceCallWithCallBuiltin = [&](BB* bb, BB::Instrs::iterator ip,
-                                          Call* call, SEXP builtin) {
+                                          Call* call, SEXP builtin,
+                                          bool dependsOnAssume) {
         std::vector<Value*> args;
         call->eachCallArg([&](Value* a) {
-            if (auto mk = MkArg::Cast(a->followCasts())) {
+            if (auto mk = MkArg::Cast(a)) {
                 if (mk->isEager()) {
                     args.push_back(mk->eagerArg());
                 } else {
@@ -72,14 +73,19 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                               PirType::valOrLazy());
                     auto forced =
                         new Force(asArg, call->env(), Tombstone::framestate());
+                    if (dependsOnAssume)
+                        forced->effects.set(Effect::DependsOnAssume);
                     ip = bb->insert(ip, forced);
                     ip = bb->insert(ip, asArg);
                     args.push_back(forced);
                     ip += 2;
                 }
             } else if (a->type.maybePromiseWrapped()) {
-                ip = bb->insert(
-                    ip, new Force(a, call->env(), Tombstone::framestate()));
+                auto forced =
+                    new Force(a, call->env(), Tombstone::framestate());
+                ip = bb->insert(ip, forced);
+                if (dependsOnAssume)
+                    forced->effects.set(Effect::DependsOnAssume);
                 args.push_back(*ip);
                 ++ip;
             } else {
@@ -89,6 +95,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         anyChange = true;
         auto bt =
             BuiltinCallFactory::New(call->env(), builtin, args, call->srcIdx);
+        if (dependsOnAssume)
+            bt->effects.set(Effect::DependsOnAssume);
         call->replaceUsesWith(bt);
         bb->replace(ip, bt);
         return ip;
@@ -119,45 +127,61 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             }
 
             if (auto call = Call::Cast(*ip)) {
-                if (auto ldfun = LdFun::Cast(call->cls())) {
-                    if (ldfun->hint) {
-                        if (TYPEOF(ldfun->hint) == BUILTINSXP) {
-                            // We can only speculate if we have a checkpoint at
-                            // the ldfun position, since we want to deopt before
-                            // forcing arguments.
-                            if (auto cp = checkpoint.at(ldfun)) {
-                                ip = replaceCallWithCallBuiltin(bb, ip, call,
-                                                                ldfun->hint);
-                                needsGuard[ldfun] = {ldfun->hint, cp};
-                            }
+                bool dots = false;
+                call->eachCallArg([&](Value* v) {
+                    if (v->type.maybe(RType::expandedDots))
+                        dots = true;
+                });
+                if (!dots) {
+                    if (auto ldcn = LdConst::Cast(call->cls())) {
+                        if (TYPEOF(ldcn->c()) == BUILTINSXP) {
+                            ip = replaceCallWithCallBuiltin(
+                                bb, ip, call, ldcn->c(),
+                                call->effects.includes(
+                                    Effect::DependsOnAssume));
                         }
-                    } else {
-                        // Only speculate if we don't have a static guess
-                        if (!ldfun->guessedBinding()) {
-                            auto env = Env::Cast(cls->owner()->closureEnv());
-                            if (env != Env::notClosed() && env->rho) {
-                                auto name = ldfun->varName;
-                                auto builtin = Rf_findVar(name, env->rho);
-                                if (TYPEOF(builtin) == PROMSXP)
-                                    builtin = PRVALUE(builtin);
-                                if (TYPEOF(builtin) == BUILTINSXP) {
-                                    auto rho = env->rho;
-                                    bool inBase = false;
-                                    if (rho == R_BaseEnv ||
-                                        rho == R_BaseNamespace) {
-                                        inBase =
-                                            SYMVALUE(name) == builtin &&
-                                            SafeBuiltinsList::
-                                                assumeStableInBaseEnv(name);
-                                    }
+                    } else if (auto ldfun = LdFun::Cast(call->cls())) {
+                        if (ldfun->hint) {
+                            if (TYPEOF(ldfun->hint) == BUILTINSXP) {
+                                // We can only speculate if we have a checkpoint
+                                // at the ldfun position, since we want to deopt
+                                // before forcing arguments.
+                                if (auto cp = checkpoint.at(ldfun)) {
+                                    ip = replaceCallWithCallBuiltin(
+                                        bb, ip, call, ldfun->hint, true);
+                                    needsGuard[ldfun] = {ldfun->hint, cp};
+                                }
+                            }
+                        } else {
+                            // Only speculate if we don't have a static guess
+                            if (!ldfun->guessedBinding()) {
+                                auto env =
+                                    Env::Cast(cls->owner()->closureEnv());
+                                if (env != Env::notClosed() && env->rho) {
+                                    auto name = ldfun->varName;
+                                    auto builtin = Rf_findVar(name, env->rho);
+                                    if (TYPEOF(builtin) == PROMSXP)
+                                        builtin = PRVALUE(builtin);
+                                    if (TYPEOF(builtin) == BUILTINSXP) {
+                                        auto rho = env->rho;
+                                        bool inBase = false;
+                                        if (rho == R_BaseEnv ||
+                                            rho == R_BaseNamespace) {
+                                            inBase =
+                                                SYMVALUE(name) == builtin &&
+                                                SafeBuiltinsList::
+                                                    assumeStableInBaseEnv(name);
+                                        }
 
-                                    auto cp = checkpoint.at(ldfun);
+                                        auto cp = checkpoint.at(ldfun);
 
-                                    if (inBase || cp) {
-                                        ip = replaceCallWithCallBuiltin(
-                                            bb, ip, call, builtin);
-                                        if (!inBase)
-                                            needsGuard[ldfun] = {builtin, cp};
+                                        if (inBase || cp) {
+                                            ip = replaceCallWithCallBuiltin(
+                                                bb, ip, call, builtin, !inBase);
+                                            if (!inBase)
+                                                needsGuard[ldfun] = {builtin,
+                                                                     cp};
+                                        }
                                     }
                                 }
                             }

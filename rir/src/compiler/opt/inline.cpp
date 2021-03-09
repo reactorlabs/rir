@@ -53,7 +53,9 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                         MkFunCls::Cast(call->cls()->followCastsAndForce());
                     if (!mkcls)
                         continue;
-                    inlineeCls = mkcls->cls;
+                    inlineeCls = mkcls->tryGetCls();
+                    if (!inlineeCls)
+                        continue;
                     if (dontInline(inlineeCls))
                         continue;
                     inlinee = call->tryDispatch(inlineeCls);

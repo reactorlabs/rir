@@ -37,8 +37,7 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                 auto next = *(it + 1);
 
-                if (Branch::Cast(next) || Return::Cast(next) ||
-                    Deopt::Cast(next) || Checkpoint::Cast(next))
+                if (next->exits() || next->branches())
                     break;
 
                 auto consumeStVar = [&](StVar* st) {

@@ -9,6 +9,8 @@
 #include "interp_incl.h"
 #include "ir/Deoptimization.h"
 
+#include "R/BuiltinIds.h"
+
 #include <R/r.h>
 
 #undef length
@@ -129,6 +131,13 @@ inline void forceAll(SEXP list, InterpreterInstance* ctx) {
             SETCAR(list, evaluatePromise(CAR(list), ctx));
         list = CDR(list);
     }
+}
+
+inline bool needsExpandedDots(SEXP callee) {
+    return TYPEOF(callee) != SPECIALSXP ||
+           // forceAndCall is fully handled in tryFastSpecialCall
+           // and expects expanded dots
+           callee->u.primsxp.offset == blt("forceAndCall");
 }
 
 } // namespace rir

@@ -301,7 +301,6 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     force->type.fromContext(cls->context(),
                                                             ld->id,
                                                             cls->nargs(), true);
-                                    ld->type = ld->type & force->type.orLazy();
                                 }
                         }
                     }
@@ -668,13 +667,17 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                 // TODO move this to a pass where it fits...
                 if (auto b = CallBuiltin::Cast(i)) {
                     bool noObjects = true;
+                    bool unsafe = false;
                     i->eachArg([&](Value* v) {
-                        if (v != i->env())
+                        if (v != i->env()) {
                             if (v->cFollowCastsAndForce()->type.maybeObj())
                                 noObjects = false;
+                            if (v->type.isA(RType::expandedDots))
+                                unsafe = true;
+                        }
                     });
 
-                    if (noObjects &&
+                    if (!unsafe && noObjects &&
                         SafeBuiltinsList::nonObject(b->builtinId)) {
                         std::vector<Value*> args;
                         i->eachArg([&](Value* v) {
@@ -686,8 +689,8 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     args.push_back(v);
                             }
                         });
-                        auto safe = new CallSafeBuiltin(b->builtinSexp, args,
-                                                        b->srcIdx);
+                        auto safe = BuiltinCallFactory::New(
+                            b->env(), b->builtinSexp, args, b->srcIdx);
                         assert(!b->type.maybePromiseWrapped() ||
                                safe->type.maybePromiseWrapped());
                         b->replaceUsesWith(safe);

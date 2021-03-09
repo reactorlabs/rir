@@ -24,9 +24,17 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
     auto envOnlyForObj = [&](Instruction* i) {
         if (i->envOnlyForObj())
             return true;
-        if (auto blt = CallBuiltin::Cast(i))
+        if (auto blt = CallBuiltin::Cast(i)) {
+            bool dots = false;
+            blt->eachCallArg([&](Value* v) {
+                if (v->type.maybe(RType::expandedDots))
+                    dots = true;
+            });
+            if (dots)
+                return false;
             if (SafeBuiltinsList::nonObject(blt->builtinSexp))
                 return true;
+        }
         return false;
     };
 
