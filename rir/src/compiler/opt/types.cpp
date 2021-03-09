@@ -60,7 +60,8 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                     if ("length" == name) {
                         inferred = (PirType() | RType::integer | RType::real)
-                                       .simpleScalar();
+                                       .simpleScalar()
+                                       .orNAOrNaN();
                         break;
                     }
 

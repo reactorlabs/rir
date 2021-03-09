@@ -24,6 +24,7 @@
 #include <iomanip>
 #include <list>
 #include <sstream>
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
@@ -95,33 +96,22 @@ static void lower(Code* code) {
             if ((*it)->frameState() && !Deopt::Cast(*it))
                 (*it)->clearFrameState();
 
-            auto t = (*it)->type;
-            if (t.isA(PirType::anySimpleScalar())) {
-                // In the case we have an instruction that might statically
-                // return int or double, but there is no instruction that could
-                // observe the difference we might as well set the type to
-                // double to avoid boxing.
-                if (t.maybe(PirType::simpleScalarInt()) &&
-                    t.maybe(PirType::simpleScalarReal()) &&
-                    representAsReal.isDead(*it)) {
-                    (*it)->type = t.simpleScalar();
-                }
-            }
-
             if (auto b = CallSafeBuiltin::Cast(*it)) {
-                if (b->builtinId == blt("length") && next != bb->end()) {
-                    if (auto t = IsType::Cast(*(it + 1))) {
-                        if (t->typeTest.isA(
-                                PirType::simpleScalarInt().notNAOrNaN()) &&
-                            t->arg(0).val() == b) {
-                            // Type test follows, let's cheat and load this as
-                            // an integer already. this avoids boxing in the
-                            // native backend. NOTE: don't move this to an
-                            // earlier pass, since otherwise the check will be
-                            // optimized away!
-                            b->type = PirType::simpleScalarInt().notNAOrNaN();
-                            break;
-                        }
+                auto t = (*it)->type;
+                if (b->builtinId == blt("length") &&
+                    !t.isA(PirType::simpleScalarInt()) &&
+                    !t.isA(PirType::simpleScalarReal())) {
+                    // In the case we have an instruction that might statically
+                    // return int or double, but there is no instruction that
+                    // could observe the difference we might as well set the
+                    // type to double to avoid boxing.
+                    bool indistinguishable =
+                        t.isA(PirType::simpleScalarInt() |
+                              PirType::simpleScalarReal()) &&
+                        representAsReal.isDead(*it);
+                    if (indistinguishable) {
+                        b->type = b->type & PirType::simpleScalarReal();
+                        break;
                     }
                 }
             } else if (auto ldfun = LdFun::Cast(*it)) {
