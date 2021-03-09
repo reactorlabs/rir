@@ -23,6 +23,10 @@ class Backend {
     rir::Function* getOrCompile(ClosureVersion* cls);
 
   private:
+    struct LastDestructor {
+        ~LastDestructor();
+    };
+    LastDestructor firstMember_;
     Preserve preserve;
     PirJitLLVM jit;
     std::unordered_map<ClosureVersion*, Function*> done;
