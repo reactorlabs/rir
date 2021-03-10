@@ -10,11 +10,6 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
     auto arg = this;
     assert(!arg->type.maybePromiseWrapped());
 
-    if (arg == MissingArg::instance()) {
-        assumptions.remove(Assumption::NoExplicitlyMissingArgs);
-        return;
-    }
-
     if (auto mk = MkArg::Cast(arg)) {
         if (mk->isEager() || mk->noReflection)
             assumptions.setNonRefl(i);
@@ -27,24 +22,36 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
         }
     } else {
         assumptions.setNonRefl(i);
+        assumptions.setEager(i);
+    }
+
+    if (arg == MissingArg::instance()) {
+        assumptions.remove(Assumption::NoExplicitlyMissingArgs);
+        return;
     }
 
     assert(arg != UnboundValue::instance());
 
-    auto value = arg->cFollowCastsAndForce();
-    if (value != MissingArg::instance()) {
-        if (!value->type.maybeLazy())
+    auto check = [&](const Value* arg) {
+        if (!arg->type.maybeLazy())
             assumptions.setEager(i);
-        if (!value->type.maybeObj()) {
+        if (!arg->type.maybeObj()) {
             assumptions.setNotObj(i);
-            if (value->type.isSimpleScalar()) {
-                if (value->type.isRType(RType::real))
+            if (arg->type.isSimpleScalar()) {
+                if (arg->type.isRType(RType::real))
                     assumptions.setSimpleReal(i);
-                if (value->type.isRType(RType::integer))
+                if (arg->type.isRType(RType::integer))
                     assumptions.setSimpleInt(i);
             }
         }
-    }
+    };
+    check(arg);
+    arg = arg->cFollowCasts();
+    if (!MkArg::Cast(arg))
+        check(arg);
+    arg = arg->cFollowCastsAndForce();
+    if (!MkArg::Cast(arg))
+        check(arg);
 }
 }
 }

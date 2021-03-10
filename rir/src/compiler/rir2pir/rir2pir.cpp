@@ -805,8 +805,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     Rf_getAttrib(ti.monomorphic, symbol::srcref), given, apply,
                     emitGenericCall, outerFeedback);
             } else {
-                compiler.compileClosure(ti.monomorphic, name, given, apply,
-                                        emitGenericCall, outerFeedback);
+                compiler.compileClosure(ti.monomorphic, name, given, false,
+                                        apply, emitGenericCall, outerFeedback);
             }
         } else {
             emitGenericCall();

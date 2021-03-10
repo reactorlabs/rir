@@ -789,6 +789,9 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
         // An explicitly missing arg, such as f(,1)
         if (arg == R_MissingArg) {
             given.remove(Assumption::NoExplicitlyMissingArgs);
+            given.setNonRefl(i);
+            given.setEager(i);
+            return;
         }
 
         bool reflectionPossible = false;

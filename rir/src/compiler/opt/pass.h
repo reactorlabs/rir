@@ -15,6 +15,7 @@ class Pass {
     explicit Pass(const std::string& name) : name(name) {}
 
     virtual bool runOnPromises() const { return false; }
+    virtual bool isSlow() const { return false; }
 
     bool apply(Compiler& cmp, ClosureVersion* function, LogStream& log) const;
     virtual bool apply(Compiler& cmp, ClosureVersion*, Code*,

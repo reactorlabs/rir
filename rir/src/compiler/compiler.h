@@ -30,7 +30,7 @@ class Compiler {
     typedef std::function<void(ClosureVersion*)> MaybeCls;
 
     void compileClosure(SEXP, const std::string& name, const Context& ctx,
-                        MaybeCls success, Maybe fail,
+                        bool root, MaybeCls success, Maybe fail,
                         std::list<PirTypeFeedback*> outerFeedback);
     void compileFunction(rir::DispatchTable*, const std::string& name,
                          SEXP formals, SEXP srcRef, const Context& ctx,
@@ -47,8 +47,8 @@ class Compiler {
     StreamLogger& logger;
 
     void compileClosure(Closure* closure, rir::Function* optFunction,
-                        const Context& ctx, MaybeCls success, Maybe fail,
-                        std::list<PirTypeFeedback*> outerFeedback);
+                        const Context& ctx, bool root, MaybeCls success,
+                        Maybe fail, std::list<PirTypeFeedback*> outerFeedback);
 
     Preserve preserve_;
 };
