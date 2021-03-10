@@ -1519,7 +1519,7 @@ class FLIE(Subassign1_3D, 6, Effects::Any()) {
 class FLIE(Extract1_1D, 3, Effects::Any()) {
   public:
     Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+        : FixedLenInstructionWithEnvSlot(PirType::val(),
                                          {{PirType::val(), PirType::any()}},
                                          {{vec, idx}}, env, srcIdx) {}
     Value* vec() const { return arg(0).val(); }
@@ -1539,7 +1539,7 @@ class FLIE(Extract1_1D, 3, Effects::Any()) {
 class FLIE(Extract2_1D, 3, Effects::Any()) {
   public:
     Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+        : FixedLenInstructionWithEnvSlot(PirType::val(),
                                          {{PirType::val(), PirType::any()}},
                                          {{vec, idx}}, env, srcIdx) {}
     Value* vec() const { return arg(0).val(); }
@@ -1564,7 +1564,7 @@ class FLIE(Extract1_2D, 4, Effects::Any()) {
     Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::valOrLazy(),
+              PirType::val(),
               {{PirType::val(), PirType::any(), PirType::any()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
     Value* vec() const { return arg(0).val(); }
@@ -1592,7 +1592,7 @@ class FLIE(Extract2_2D, 4, Effects::Any()) {
     Extract2_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::valOrLazy(),
+              PirType::val(),
               {{PirType::val(), PirType::any(), PirType::any()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
     Value* vec() const { return arg(0).val(); }
@@ -1619,7 +1619,7 @@ class FLIE(Extract1_3D, 5, Effects::Any()) {
   public:
     Extract1_3D(Value* vec, Value* idx1, Value* idx2, Value* idx3, Value* env,
                 unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+        : FixedLenInstructionWithEnvSlot(PirType::val(),
                                          {{PirType::val(), PirType::any(),
                                            PirType::any(), PirType::any()}},
                                          {{vec, idx1, idx2, idx3}}, env,
