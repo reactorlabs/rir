@@ -14,7 +14,7 @@ def Settings( **kwargs ):
        '-DENABLE_SLOWASSERT',
        '-I'+DirectoryOfThisScript()+'/rir/src',
        '-isystem'+DirectoryOfThisScript()+'/external/custom-r/include',
-       '-isystem'+DirectoryOfThisScript()+'/external/llvm-11.0.0/include',
+       '-isystem'+DirectoryOfThisScript()+'/external/llvm-11/include',
        '-Wall',
        '-Wuninitialized',
        '-Wundef',
