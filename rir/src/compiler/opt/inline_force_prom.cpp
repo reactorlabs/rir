@@ -27,8 +27,8 @@ namespace pir {
 bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 LogStream& log) const {
 
-    log.out << "---------------------- BEGIN FORCE DEPROMISE---------  "
-            << cls->name() << "\n";
+    // log.out << "---------------------- BEGIN FORCE DEPROMISE---------  "
+    //         << cls->name() << "\n";
 
     bool anyChange = false;
 
@@ -64,10 +64,10 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 ip = bb->insert(ip, forced) + 1;
                                 next = ip + 1;
 
-                                log.out << "In " << cls->name()
-                                        << " depromised callee: "
-                                        << clsCallee->name()
-                                        << " arg:" << forced << "\n";
+                                // log.out << "In " << cls->name()
+                                //         << " depromised callee: "
+                                //         << clsCallee->name()
+                                //         << " arg:" << forced << "\n";
                             }
 
 
@@ -79,8 +79,8 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
     });
 
-    log.out << "---------------------- END FORCE DEPROMISE---------  "
-            << cls->name() << "\n";
+    // log.out << "---------------------- END FORCE DEPROMISE---------  "
+    //         << cls->name() << "\n";
 
     return anyChange;
 }
