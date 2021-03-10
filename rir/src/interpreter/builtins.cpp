@@ -263,7 +263,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             res = XLENGTH(args[0]);
             break;
         default:
-            res = Rf_length(args[0]);
+            res = Rf_xlength(args[0]);
             break;
         }
         if (res >= INT_MAX)

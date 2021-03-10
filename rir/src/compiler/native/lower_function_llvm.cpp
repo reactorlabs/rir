@@ -2192,8 +2192,11 @@ void LowerFunctionLLVM::compile() {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
 
-                auto ai = load(a);
-                auto bi = load(b);
+                auto rep = Representation::Of(a) < Representation::Of(b)
+                               ? Representation::Of(b)
+                               : Representation::Of(a);
+                auto ai = load(a, rep);
+                auto bi = load(b, rep);
                 if (Representation::Of(a) == t::SEXP &&
                     a->type.maybePromiseWrapped())
                     ai = depromise(ai, a->type);
