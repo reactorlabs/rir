@@ -62,11 +62,11 @@ ClosureVersion* Closure::findCompatibleVersion(const Context& ctx) const {
 }
 
 ClosureVersion* Closure::declareVersion(const Context& optimizationContext,
-                                        rir::Function* optFunction) {
+                                        bool root, rir::Function* optFunction) {
     assert(!versions.count(optimizationContext));
     versions[optimizationContext] = nullptr;
     auto entry = versions.find(optimizationContext);
-    auto v = new ClosureVersion(this, optFunction, entry->first);
+    auto v = new ClosureVersion(this, optFunction, root, entry->first);
     entry->second = v;
     return v;
 }

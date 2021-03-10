@@ -87,7 +87,6 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (auto mk = MkFunCls::Cast(calli->tryGetClsArg())) {
                         dt = mk->originalBody;
                         srcRef = mk->srcRef;
-                        assert(!mk->tryGetCls());
                     }
                     if (dt) {
                         cmp.compileFunction(
