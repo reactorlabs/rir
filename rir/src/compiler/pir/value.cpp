@@ -32,17 +32,26 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
 
     assert(arg != UnboundValue::instance());
 
-    if (!arg->type.maybeLazy())
-        assumptions.setEager(i);
-    if (!arg->type.maybeObj()) {
-        assumptions.setNotObj(i);
-        if (arg->type.isSimpleScalar()) {
-            if (arg->type.isRType(RType::real))
-                assumptions.setSimpleReal(i);
-            if (arg->type.isRType(RType::integer))
-                assumptions.setSimpleInt(i);
+    auto check = [&](const Value* arg) {
+        if (!arg->type.maybeLazy())
+            assumptions.setEager(i);
+        if (!arg->type.maybeObj()) {
+            assumptions.setNotObj(i);
+            if (arg->type.isSimpleScalar()) {
+                if (arg->type.isRType(RType::real))
+                    assumptions.setSimpleReal(i);
+                if (arg->type.isRType(RType::integer))
+                    assumptions.setSimpleInt(i);
+            }
         }
-    }
+    };
+    check(arg);
+    arg = arg->cFollowCasts();
+    if (!MkArg::Cast(arg))
+        check(arg);
+    arg = arg->cFollowCastsAndForce();
+    if (!MkArg::Cast(arg))
+        check(arg);
 }
 }
 }
