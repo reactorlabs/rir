@@ -24,7 +24,7 @@ struct CallContext {
     CallContext& operator=(CallContext&) = delete;
 
     CallContext(ArglistOrder::CallId callId, const Code* c, SEXP callee,
-                size_t nargs, SEXP ast, const R_bcstack_t* stackArgs,
+                size_t nargs, SEXP ast, R_bcstack_t* stackArgs,
                 const Immediate* names, SEXP callerEnv,
                 const Context& givenContext, InterpreterInstance* ctx)
         : callId(callId), caller(c), suppliedArgs(nargs), passedArgs(nargs),
