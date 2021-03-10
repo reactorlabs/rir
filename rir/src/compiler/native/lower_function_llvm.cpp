@@ -5377,11 +5377,25 @@ void LowerFunctionLLVM::compile() {
                          {loadSxp(i->arg(0).val()), loadSxp(i->arg(1).val())}));
                 break;
 
-            case Tag::Length:
+            case Tag::Length: {
                 assert(Representation::Of(i) == t::Int);
-                setVal(i, call(NativeBuiltins::get(NativeBuiltins::Id::length),
-                               {loadSxp(i->arg(0).val())}));
+
+                auto a = loadSxp(i->arg(0).val());
+                auto callLengthBuiltin = [&]() {
+                    return call(NativeBuiltins::get(NativeBuiltins::Id::length),
+                                {a});
+                };
+                llvm::Value* r;
+                if (vectorTypeSupport(i->arg(0).val())) {
+                    r = createSelect2(isAltrep(a), callLengthBuiltin, [&]() {
+                        return builder.CreateTrunc(vectorLength(a), t::Int);
+                    });
+                } else {
+                    r = callLengthBuiltin();
+                }
+                setVal(i, r);
                 break;
+            }
 
             case Tag::Unreachable:
                 builder.CreateUnreachable();
