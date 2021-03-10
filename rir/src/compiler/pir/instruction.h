@@ -1398,12 +1398,12 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
     Value* val() const { return arg(0).val(); }
-    Value* vector() const { return arg(1).val(); }
+    Value* vec() const { return arg(1).val(); }
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const GetType& getType) const override final {
         return ifNonObjectArgs(getType,
-                               type & (getType(vector())
+                               type & (getType(vec())
                                            .mergeWithConversion(getType(val()))
                                            .orNotScalar()),
                                type);
@@ -1422,13 +1422,13 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
     Value* val() const { return arg(0).val(); }
-    Value* vector() const { return arg(1).val(); }
+    Value* vec() const { return arg(1).val(); }
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const GetType& getType) const override final {
         return ifNonObjectArgs(
             getType,
-            type & (getType(vector()).mergeWithConversion(getType(val())))
+            type & (getType(vec()).mergeWithConversion(getType(val())))
                        .orNotScalar(),
             type);
     }
@@ -1446,15 +1446,15 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
                                          srcIdx) {}
-    Value* rhs() const { return arg(0).val(); }
-    Value* lhs() const { return arg(1).val(); }
+    Value* val() const { return arg(0).val(); }
+    Value* vec() const { return arg(1).val(); }
     Value* idx1() const { return arg(2).val(); }
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
         return ifNonObjectArgs(getType,
-                               type & (getType(lhs())
-                                           .mergeWithConversion(getType(rhs()))
+                               type & (getType(vec())
+                                           .mergeWithConversion(getType(val()))
                                            .orNotScalar()),
                                type);
     }
@@ -1472,15 +1472,15 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
                                          srcIdx) {}
-    Value* rhs() const { return arg(0).val(); }
-    Value* lhs() const { return arg(1).val(); }
+    Value* val() const { return arg(0).val(); }
+    Value* vec() const { return arg(1).val(); }
     Value* idx1() const { return arg(2).val(); }
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
         return ifNonObjectArgs(getType,
-                               type & (getType(lhs())
-                                           .mergeWithConversion(getType(rhs()))
+                               type & (getType(vec())
+                                           .mergeWithConversion(getType(val()))
                                            .orNotScalar()),
                                type);
     }
@@ -1498,16 +1498,16 @@ class FLIE(Subassign1_3D, 6, Effects::Any()) {
               {{PirType::val(), PirType::val(), PirType::val(), PirType::val(),
                 PirType::val()}},
               {{val, mtx, idx1, idx2, idx3}}, env, srcIdx) {}
-    Value* rhs() const { return arg(0).val(); }
-    Value* lhs() const { return arg(1).val(); }
+    Value* val() const { return arg(0).val(); }
+    Value* vec() const { return arg(1).val(); }
     Value* idx1() const { return arg(2).val(); }
     Value* idx2() const { return arg(3).val(); }
     Value* idx3() const { return arg(4).val(); }
 
     PirType inferType(const GetType& getType) const override final {
         return ifNonObjectArgs(getType,
-                               type & (getType(lhs())
-                                           .mergeWithConversion(getType(rhs()))
+                               type & (getType(vec())
+                                           .mergeWithConversion(getType(val()))
                                            .orNotScalar()),
                                type);
     }

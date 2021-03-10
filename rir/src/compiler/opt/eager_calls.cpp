@@ -123,6 +123,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         }                                                                      \
         break;
                 VECTOR_RW_INSTRUCTIONS(V);
+#undef V
             default: {}
             }
 
@@ -209,6 +210,27 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     continue;
                 }
             }
+
+            // Remove promises from non-obj vector operations
+            switch ((*ip)->tag) {
+#define V(T)                                                                   \
+    case Tag::T: {                                                             \
+        auto i = T::Cast(*ip);                                                 \
+        if (!i->effects.contains(Effect::Reflection)) {                        \
+            (*ip)->eachArg([&](InstrArg& a) {                                  \
+                if (!a.val()->type.maybePromiseWrapped()) {                    \
+                    if (auto mk = MkArg::Cast(a.val())) {                      \
+                        if (mk->isEager())                                     \
+                            a.val() = mk->eagerArg();                          \
+                    }                                                          \
+                }                                                              \
+            });                                                                \
+        }                                                                      \
+    } break;
+                VECTOR_RW_INSTRUCTIONS(V)
+#undef V
+            default: {}
+            };
 
             // Look for static calls, where we statically know that all (or
             // some) arguments are eager. In this case we will compile an
