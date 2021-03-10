@@ -243,9 +243,13 @@ static void findUnreachable(Module* m) {
                         } else if (auto call = CallInstruction::CastCall(i)) {
                             if (auto cls = call->tryGetCls())
                                 found(call->tryDispatch(cls));
-                        } else if (auto mk = MkFunCls::Cast(i)) {
-                            if (mk->tryGetCls())
-                                mk->tryGetCls()->eachVersion(found);
+                        } else {
+                            i->eachArg([&](Value* v) {
+                                if (auto mk = MkFunCls::Cast(i)) {
+                                    if (mk->tryGetCls())
+                                        mk->tryGetCls()->eachVersion(found);
+                                }
+                            });
                         }
                     };
                     Visitor::run(v->entry, check);
