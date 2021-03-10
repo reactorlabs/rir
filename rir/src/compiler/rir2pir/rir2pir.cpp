@@ -1293,11 +1293,25 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                     if (auto tt = IsType::Cast(branchCondition)) {
                         for (auto& e : cur.stack) {
                             if (tt->arg<0>().val() == e) {
-                                auto cast = insert(
-                                    new CastType(e, CastType::Downcast,
-                                                 PirType::any(), tt->typeTest));
-                                cast->effects.set(Effect::DependsOnAssume);
-                                e = cast;
+                                if (!e->type.isA(tt->typeTest)) {
+                                    bool block = false;
+                                    if (auto j = Instruction::Cast(e)) {
+                                        // In case the typefeedback is more
+                                        // precise than the
+                                        if (!j->typeFeedback.type.isVoid() &&
+                                            !tt->typeTest.isA(
+                                                j->typeFeedback.type))
+                                            block = true;
+                                    }
+                                    if (!block) {
+                                        auto cast = insert(new CastType(
+                                            e, CastType::Downcast,
+                                            PirType::any(), tt->typeTest));
+                                        cast->effects.set(
+                                            Effect::DependsOnAssume);
+                                        e = cast;
+                                    }
+                                }
                             }
                         }
                     }
