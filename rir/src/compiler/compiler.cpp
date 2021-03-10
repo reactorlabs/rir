@@ -210,7 +210,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
 bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
 
 static void findUnreachable(Module* m) {
-    SmallMap<Closure*, SmallSet<Context>> reachable;
+    std::unordered_map<Closure*, std::unordered_set<Context>> reachable;
     bool changed = true;
 
     auto found = [&](ClosureVersion* v) {
@@ -243,6 +243,9 @@ static void findUnreachable(Module* m) {
                         } else if (auto call = CallInstruction::CastCall(i)) {
                             if (auto cls = call->tryGetCls())
                                 found(call->tryDispatch(cls));
+                        } else if (auto mk = MkFunCls::Cast(i)) {
+                            if (mk->tryGetCls())
+                                mk->tryGetCls()->eachVersion(found);
                         }
                     };
                     Visitor::run(v->entry, check);
