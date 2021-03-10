@@ -17,7 +17,8 @@ class Pass {
     virtual bool runOnPromises() const { return false; }
 
     bool apply(Compiler& cmp, ClosureVersion* function, LogStream& log) const;
-    virtual bool apply(Compiler&, ClosureVersion*, Code*, LogStream&) const = 0;
+    virtual bool apply(Compiler& cmp, ClosureVersion*, Code*,
+                       LogStream&) const = 0;
 
     std::string getName() const { return this->name; }
     bool changedAnything() const { return changedAnything_; }

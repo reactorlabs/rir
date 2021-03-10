@@ -18,6 +18,7 @@
 #include "runtime/DispatchTable.h"
 #include "simple_instruction_list.h"
 #include "utils/FunctionWriter.h"
+#include "utils/measuring.h"
 
 #include <algorithm>
 #include <chrono>
@@ -277,11 +278,18 @@ static void toCSSA(Code* code) {
     });
 }
 
+// Don't forget to pass PIR_MEASURING=1 too
+bool MEASURE_COMPILER_BACKEND_PERF =
+    getenv("PIR_MEASURE_COMPILER_BACKEND") ? true : false;
+
 rir::Function* Backend::doCompile(ClosureVersion* cls,
                                   ClosureStreamLogger& log) {
     // TODO: keep track of source ast indices in the source pool
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?
+
+    if (MEASURE_COMPILER_BACKEND_PERF)
+        Measuring::startTimer();
 
     FunctionWriter function;
 
@@ -328,6 +336,11 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     };
     lowerAndScanForPromises(cls);
 
+    if (MEASURE_COMPILER_BACKEND_PERF) {
+        Measuring::countTimer("lowering");
+        Measuring::startTimer();
+    }
+
     std::unordered_map<Code*, rir::Code*> done;
     std::function<rir::Code*(Code*)> compile = [&](Code* c) {
         if (done.count(c))
@@ -355,11 +368,22 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     };
     auto body = compile(cls);
 
+    if (MEASURE_COMPILER_BACKEND_PERF) {
+        Measuring::countTimer("pir2llvm");
+        Measuring::startTimer();
+    }
+
     log.finalPIR(cls);
     function.finalize(body, signature, cls->context());
 
     function.function()->inheritFlags(cls->owner()->rirFunction());
     return function.function();
+}
+
+Backend::LastDestructor::~LastDestructor() {
+    if (MEASURE_COMPILER_BACKEND_PERF) {
+        Measuring::countTimer("llvm");
+    }
 }
 
 rir::Function* Backend::getOrCompile(ClosureVersion* cls) {

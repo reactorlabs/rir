@@ -12,6 +12,9 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
     bool anyChange = false;
 
     auto isTarget = [](Instruction* j) {
+        if (LdFun::Cast(j) || DotsList::Cast(j) || MkArg::Cast(j) ||
+            FrameState::Cast(j) || CastType::Cast(j))
+            return true;
         int builtinId = -1;
         if (auto call = CallBuiltin::Cast(j))
             builtinId = call->builtinId;
@@ -24,8 +27,7 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
                 return SafeBuiltinsList::nonObjectIdempotent(builtinId);
             return SafeBuiltinsList::idempotent(builtinId);
         }
-        return LdFun::Cast(j) || DotsList::Cast(j) || MkArg::Cast(j) ||
-               FrameState::Cast(j) || CastType::Cast(j);
+        return false;
     };
 
     const UsesTree dataDependencies(code);

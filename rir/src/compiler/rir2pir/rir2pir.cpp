@@ -6,6 +6,7 @@
 #include "compiler/analysis/cfg.h"
 #include "compiler/analysis/query.h"
 #include "compiler/analysis/verifier.h"
+#include "compiler/opt/pass_definitions.h"
 #include "compiler/pir/builder.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/arg_match.h"
@@ -428,6 +429,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::ldfun_: {
+        // Speculative inlining is too important, so let's ensure we have a cp
+        // here.
+        addCheckpoint(srcCode, pos, stack, insert);
         auto ld = insert(new LdFun(bc.immediateConst(), env));
         // Add early checkpoint for efficient speculative inlining. The goal is
         // to be able do move the ldfun into the deoptbranch later.
@@ -635,6 +639,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (arity != -1 && arity != nargs)
                 monomorphicBuiltin = false;
         }
+        const std::unordered_set<int> supportedSpecials = {blt("forceAndCall")};
+        bool monomorphicSpecial =
+            ti.monomorphic && TYPEOF(ti.monomorphic) == SPECIALSXP &&
+            supportedSpecials.count(ti.monomorphic->u.primsxp.offset);
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto emitGenericCall = [&]() {
@@ -643,18 +651,22 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                            ? (Value*)Tombstone::framestate()
                            : (Value*)insert.registerFrameState(
                                   srcCode, nextPos, stack, inPromise());
+            Instruction* res;
             if (namedArguments) {
-                push(insert(new NamedCall(env, callee, args, callArgumentNames,
-                                          fs, bc.immediate.callFixedArgs.ast)));
+                res = insert(new NamedCall(env, callee, args, callArgumentNames,
+                                           fs, bc.immediate.callFixedArgs.ast));
             } else {
-                push(insert(new Call(env, callee, args, fs,
-                                     bc.immediate.callFixedArgs.ast)));
+                res = insert(new Call(env, callee, args, fs,
+                                      bc.immediate.callFixedArgs.ast));
             }
+            if (monomorphicSpecial)
+                res->effects.set(Effect::DependsOnAssume);
+            push(res);
         };
 
         // Insert a guard if we want to speculate
         if (monomorphicBuiltin || monomorphicClosure ||
-            monomorphicInnerFunction) {
+            monomorphicInnerFunction || monomorphicSpecial) {
             auto cp = std::get<Checkpoint*>(callTargetFeedback.at(callee));
             if (!cp)
                 cp = addCheckpoint(srcCode, pos, stack, insert);
@@ -689,8 +701,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
 
             popn(toPop);
-            push(insert(
-                BuiltinCallFactory::New(env, ti.monomorphic, args, ast)));
+            auto bt =
+                insert(BuiltinCallFactory::New(env, ti.monomorphic, args, ast));
+            bt->effects.set(Effect::DependsOnAssume);
+            push(bt);
         } else if (monomorphicClosure || monomorphicInnerFunction) {
             // (1) Argument Matching
             //
@@ -767,17 +781,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 assert(!inlining());
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
                                                     inPromise());
-                push(insert(new StaticCall(
+                auto cl = insert(new StaticCall(
                     insert.env, f->owner(), given, matchedArgs,
                     std::move(argOrderOrig), fs, ast,
-                    monomorphicInnerFunction ? callee : Tombstone::closure())));
+                    monomorphicInnerFunction ? callee : Tombstone::closure()));
+                cl->effects.set(Effect::DependsOnAssume);
+                push(cl);
+
                 auto innerc = MkFunCls::Cast(callee->followCastsAndForce());
                 if (!innerc)
                     return;
                 auto delayed = delayedCompilation.find(innerc);
                 if (delayed == delayedCompilation.end())
                     return;
-                delayed->first->cls = f->owner();
+                delayed->first->setCls(f->owner());
                 delayedCompilation.erase(delayed);
             };
 
@@ -1371,7 +1388,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             }
             inner << (pos - srcCode->code());
 
-            auto mk = insert(new MkFunCls(nullptr, dt, insert.env));
+            auto mk =
+                insert(new MkFunCls(nullptr, formals, srcRef, dt, insert.env));
             cur.stack.push(mk);
 
             delayedCompilation[mk] = {dt,      inner.str(),
@@ -1443,6 +1461,48 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     }
     assert(cur.stack.empty());
 
+    Value* res;
+    if (results.size() == 0) {
+        res = Tombstone::unreachable();
+        insert.clearCurrentBB();
+    } else if (results.size() == 1) {
+        res = results.back().second;
+        insert.reenterBB(results.back().first);
+    } else {
+        BB* merge = insert.createBB();
+        insert.enterBB(merge);
+        Phi* phi = insert(new Phi());
+        for (auto r : results) {
+            r.first->setNext(merge);
+            phi->addInput(r.first, r.second);
+        }
+        phi->updateTypeAndEffects();
+        res = phi;
+    }
+
+    // The return is only added for the early opt passes to update the result
+    // value. Now we need to remove it again, because we don't know if it is
+    // needed (e.g. when we compile an inline promise it is not).
+    if (insert.getCurrentBB())
+        insert(new Return(res));
+
+    static EarlyConstantfold ecf;
+    static ScopeResolution sr;
+    if (!inPromise()) {
+        // EarlyConstantfold is used to expand specials such as forceAndCall
+        // which can be expressed in PIR.
+        ecf.apply(compiler, cls, insert.code, log.out());
+        // This early pass of scope resolution helps to find local call targets
+        // and thus leads to better assumptions in the delayed compilation
+        // below.
+        sr.apply(compiler, cls, insert.code, log.out());
+    }
+
+    if (auto last = insert.getCurrentBB()) {
+        res = Return::Cast(last->last())->arg(0).val();
+        last->eraseLast();
+    }
+
     Visitor::run(insert.code->entry, [&](Instruction* i) {
         Value* callee = nullptr;
         Context asmpt;
@@ -1468,42 +1528,17 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         }
     });
 
-    bool failedToCompileInnerFun = false;
     for (auto& delayed : delayedCompilation) {
         auto d = delayed.second;
         compiler.compileFunction(
-            d.dt, d.name, d.formals, d.srcRef, d.context,
+            d.dt, d.name, d.formals, d.srcRef,
+            d.context | Compiler::minimalContext,
             [&](ClosureVersion* innerF) {
-                delayed.first->cls = innerF->owner();
+                delayed.first->setCls(innerF->owner());
             },
-            [&]() {
-                failedToCompileInnerFun = true;
-                log.warn("Aborting. Failed to compile inner function" + name);
-            },
+            [&]() { log.warn("Failed to compile inner function" + name); },
             outerFeedback);
     }
-    if (failedToCompileInnerFun)
-        return nullptr;
-
-    Value* res;
-    if (results.size() == 0) {
-        insert.clearCurrentBB();
-        return Tombstone::unreachable();
-    } else if (results.size() == 1) {
-        res = results.back().second;
-        insert.reenterBB(results.back().first);
-    } else {
-        BB* merge = insert.createBB();
-        insert.enterBB(merge);
-        Phi* phi = insert(new Phi());
-        for (auto r : results) {
-            r.first->setNext(merge);
-            phi->addInput(r.first, r.second);
-        }
-        phi->updateTypeAndEffects();
-        res = phi;
-    }
-
     results.clear();
 
     return res;

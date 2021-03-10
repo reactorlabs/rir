@@ -350,6 +350,7 @@ class LowerFunctionLLVM {
     void ensureNamed(llvm::Value* v);
     void ensureNamedIfNeeded(Instruction* i, llvm::Value* val = nullptr);
     llvm::Value* shared(llvm::Value* v);
+    llvm::Value* isNamed(llvm::Value* v);
     void assertNamed(llvm::Value* v);
     void ensureShared(llvm::Value* v);
     void incrementNamed(llvm::Value* v, int max = NAMEDMAX);

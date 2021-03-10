@@ -9,6 +9,7 @@
 #include "R/Symbols.h"
 #include "api.h"
 #include "compiler/analysis/cfg.h"
+#include "runtime/DispatchTable.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
 
@@ -744,7 +745,7 @@ CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
       builtinSexp(builtin), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
-        this->pushArg(args[i], PirType::val() | RType::expandedDots);
+        this->pushArg(args[i], PirType::val());
 }
 
 size_t CallSafeBuiltin::gvnBase() const {
@@ -769,22 +770,25 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
                                      const std::vector<Value*>& args,
                                      unsigned srcIdx) {
     bool noObj = true;
+    bool unsafe = false;
     for (auto a : args) {
         if (auto mk = MkArg::Cast(a)) {
             if (mk->isEager())
                 if (!mk->eagerArg()->type.maybeObj())
                     continue;
             noObj = false;
-            break;
+            continue;
         }
         if (a->type.maybeObj()) {
             noObj = false;
-            break;
+        }
+        if (a->type.isA(RType::expandedDots)) {
+            unsafe = true;
         }
     }
 
-    if (SafeBuiltinsList::always(builtin) ||
-        (noObj && SafeBuiltinsList::nonObject(builtin)))
+    if (!unsafe && (SafeBuiltinsList::always(builtin) ||
+                    (noObj && SafeBuiltinsList::nonObject(builtin))))
         return new CallSafeBuiltin(builtin, args, srcIdx);
     else
         return new CallBuiltin(callerEnv, builtin, args, srcIdx);
@@ -908,12 +912,14 @@ void ScheduledDeopt::printArgs(std::ostream& out, bool tty) const {
     }
 }
 
-MkFunCls::MkFunCls(Closure* cls, DispatchTable* originalBody, Value* lexicalEnv)
+MkFunCls::MkFunCls(Closure* cls, SEXP formals, SEXP srcRef,
+                   DispatchTable* originalBody, Value* lexicalEnv)
     : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), cls(cls),
-      originalBody(originalBody) {}
+      originalBody(originalBody), formals(formals), srcRef(srcRef) {}
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) const {
-    out << *cls;
+    if (cls)
+        out << *cls;
     Instruction::printArgs(out, tty);
 }
 
@@ -945,7 +951,7 @@ ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
             std::cout << "* " << v->context() << "\n";
         });
         std::cout << "Available assumptions at callsite: \n ";
-        std::cout << inferAvailableAssumptions << "\n";
+        std::cout << inferAvailableAssumptions() << "\n";
     }
 #endif
     if (res) {
@@ -977,26 +983,49 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
 
 Context CallInstruction::inferAvailableAssumptions() const {
     auto callee = tryGetCls();
+    rir::Function* localFun = nullptr;
+    SEXP formals = nullptr;
 
     Context given;
     // If we know the callee, we can verify arg order and statically matching
-    if (!hasNamedArgs() || callee)
-        given.add(Assumption::CorrectOrderOfArguments);
     if (callee) {
         given.add(Assumption::StaticallyArgmatched);
+        given.add(Assumption::CorrectOrderOfArguments);
         if (callee->nargs() >= nCallArgs()) {
             given.add(Assumption::NotTooManyArguments);
             auto missing = callee->nargs() - nCallArgs();
             given.numMissing(missing);
+            given.add(Assumption::NoExplicitlyMissingArgs);
+        }
+    } else {
+        if (auto clsArg = tryGetClsArg()) {
+            if (auto mk = MkFunCls::Cast(clsArg)) {
+                localFun = mk->originalBody->baseline();
+                formals = mk->formals;
+            } else if (auto ld = LdConst::Cast(clsArg)) {
+                if (TYPEOF(ld->c()) == CLOSXP) {
+                    if (auto dt = DispatchTable::check(BODY(ld->c()))) {
+                        localFun = dt->baseline();
+                        formals = FORMALS(ld->c());
+                    }
+                }
+            }
+        }
+        if (localFun) {
+            given.add(Assumption::StaticallyArgmatched);
+            given.add(Assumption::CorrectOrderOfArguments);
+            if (localFun->nargs() >= nCallArgs()) {
+                given.add(Assumption::NotTooManyArguments);
+                auto missing = localFun->nargs() - nCallArgs();
+                given.numMissing(missing);
+                given.add(Assumption::NoExplicitlyMissingArgs);
+            }
         }
     }
 
-    // Make some optimistic assumptions, they might be reset below...
-    given.add(Assumption::NoExplicitlyMissingArgs);
-
     size_t i = 0;
     eachNamedCallArg([&](SEXP name, Value* arg) {
-        if (arg->type.maybe(RType::expandedDots)) {
+        if (arg->type.maybe(RType::expandedDots) || name != R_NilValue) {
             // who knows to how many args this expands...
             given.remove(Assumption::CorrectOrderOfArguments);
             given.remove(Assumption::StaticallyArgmatched);
@@ -1023,7 +1052,25 @@ Context CallInstruction::inferAvailableAssumptions() const {
                     given.remove(Assumption::CorrectOrderOfArguments);
                 }
             }
+        } else if (localFun && formals) {
+            if (localFun->signature().numArguments > i) {
+                if (TAG(formals) == R_DotsSymbol) {
+                    // If the callee expects `...` then we can only statically
+                    // statisfy that with an explicit (unexpanded) dots list!
+                    if (!arg->type.isA(RType::dots)) {
+                        given.remove(Assumption::CorrectOrderOfArguments);
+                        given.remove(Assumption::StaticallyArgmatched);
+                    }
+                } else if (TAG(formals) != R_NilValue && TAG(formals) != name) {
+                    // we could be more clever here, but for now we just assume
+                    // if any of the formal names does not match the passed name
+                    // then it's not in the correct order.
+                    given.remove(Assumption::CorrectOrderOfArguments);
+                }
+                formals = CDR(formals);
+            }
         }
+
         ++i;
     });
 
@@ -1039,7 +1086,8 @@ Call::Call(Value* callerEnv, Value* fun, const std::vector<Value*>& args,
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
-    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
+                   PirType::val();
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
@@ -1060,7 +1108,8 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
-    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
+                   PirType::val();
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
@@ -1085,7 +1134,8 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
-    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots;
+    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
+                   PirType::val();
     if (auto con = LdConst::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();

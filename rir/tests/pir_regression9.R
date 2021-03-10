@@ -60,3 +60,19 @@ stopifnot(f0() == 10)
 stopifnot(f0() == 10)
 stopifnot(f0() == 10)
 stopifnot(f0() == 10)
+
+
+
+
+f <- function() g(1,2)
+g <- function(a,b) h(a,b,1)
+h <- function(...) {
+  x <- function(...) c(...)
+  forceAndCall(3, x, ...)
+}
+stopifnot(identical(f(), c(1,2,1)))
+stopifnot(identical(f(), c(1,2,1)))
+stopifnot(identical(f(), c(1,2,1)))
+stopifnot(identical(f(), c(1,2,1)))
+stopifnot(identical(f(), c(1,2,1)))
+stopifnot(identical(f(), c(1,2,1)))

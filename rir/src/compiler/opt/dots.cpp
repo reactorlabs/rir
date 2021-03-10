@@ -145,9 +145,6 @@ bool DotDotDots::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             assert(false);
                         }
                     }
-
-                    for (; pos < calli->nCallArgs(); ++pos)
-                        i->popArg();
                 }
             }
 

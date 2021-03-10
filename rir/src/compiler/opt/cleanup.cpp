@@ -80,8 +80,8 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                         std::vector<Value*> args;
                         b->eachCallArg([&](Value* v) { args.push_back(v); });
                         i->replaceUsesAndSwapWith(
-                            new CallSafeBuiltin(b->builtinSexp, args,
-                                                b->srcIdx),
+                            BuiltinCallFactory::New(i->env(), b->builtinSexp,
+                                                    args, b->srcIdx),
                             ip);
                     }
                 } else if (auto tst = CheckTrueFalse::Cast(i)) {
