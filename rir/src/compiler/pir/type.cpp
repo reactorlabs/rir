@@ -220,7 +220,7 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         type = type.notMissing();
 
     if (assumptions.isEager(i))
-        type = type.notLazy().notMissing();
+        type = type.notLazy();
 
     if (assumptions.isEager(i) || afterForce) {
         type = type.notLazy();

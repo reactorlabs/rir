@@ -22,6 +22,7 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
         }
     } else {
         assumptions.setNonRefl(i);
+        assumptions.setEager(i);
     }
 
     if (arg == MissingArg::instance()) {

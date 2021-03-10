@@ -237,6 +237,7 @@ static void findUnreachable(Module* m) {
                 if (reachableVersions.count(v->context())) {
                     auto check = [&](Instruction* i) {
                         if (auto call = StaticCall::Cast(i)) {
+                            assert(call->tryDispatch());
                             found(call->tryDispatch());
                             found(call->tryOptimisticDispatch());
                         } else if (auto call = CallInstruction::CastCall(i)) {
