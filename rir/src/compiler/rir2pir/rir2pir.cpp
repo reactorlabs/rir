@@ -846,8 +846,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new ForSeqSize(top())));
         break;
 
-    case Opcode::xlength_:
-        push(insert(new XLength(pop())));
+    case Opcode::length_:
+        push(insert(new Length(pop())));
         break;
 
     case Opcode::extract1_1_: {

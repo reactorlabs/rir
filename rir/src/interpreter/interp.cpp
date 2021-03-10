@@ -3676,10 +3676,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(xlength_) {
-            SEXP len = Rf_allocVector(INTSXP, 1);
-            INTEGER(len)[0] = Rf_xlength(ostack_pop(ctx));
-            ostack_push(ctx, len);
+        INSTRUCTION(length_) {
+            auto res = Rf_ScalarInteger(Rf_length(ostack_pop(ctx)));
+            ostack_push(ctx, res);
             NEXT();
         }
 

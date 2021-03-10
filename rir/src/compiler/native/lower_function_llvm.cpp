@@ -2427,7 +2427,7 @@ void LowerFunctionLLVM::compile() {
                                 PirType::anySimpleScalar())) {
                             auto callLengthBuiltin = [&]() {
                                 return call(NativeBuiltins::get(
-                                                NativeBuiltins::Id::length),
+                                                NativeBuiltins::Id::xlength),
                                             {a});
                             };
                             llvm::Value* r;
@@ -5377,10 +5377,10 @@ void LowerFunctionLLVM::compile() {
                          {loadSxp(i->arg(0).val()), loadSxp(i->arg(1).val())}));
                 break;
 
-            case Tag::XLength:
-                setVal(i,
-                       call(NativeBuiltins::get(NativeBuiltins::Id::xlength_),
-                            {loadSxp(i->arg(0).val())}));
+            case Tag::Length:
+                assert(Representation::Of(i) == t::Int);
+                setVal(i, call(NativeBuiltins::get(NativeBuiltins::Id::length),
+                               {loadSxp(i->arg(0).val())}));
                 break;
 
             case Tag::Unreachable:
