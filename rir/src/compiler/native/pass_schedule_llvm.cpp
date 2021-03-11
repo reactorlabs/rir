@@ -35,6 +35,8 @@ struct NooptCold : public llvm::ModulePass {
                     if (!fun.hasFnAttribute(llvm::Attribute::OptimizeNone)) {
                         fun.addAttribute(llvm::AttributeList::FunctionIndex,
                                          llvm::Attribute::OptimizeNone);
+                        fun.addAttribute(llvm::AttributeList::FunctionIndex,
+                                         llvm::Attribute::NoInline);
                         fun.setCallingConv(llvm::CallingConv::Cold);
                         changed = true;
                     }
@@ -95,8 +97,6 @@ PassScheduleLLVM::PassScheduleLLVM() {
     PM->add(createHotColdSplittingPass());
     PM->add(new NooptCold());
 
-    PM->add(createFunctionInliningPass());
-
     // See
     // https://github.com/JuliaLang/julia/blob/235784a49b6ed8ab5677f42887e08c84fdc12c5c/src/aotcompile.cpp#L607
     // for inspiration
@@ -121,7 +121,6 @@ PassScheduleLLVM::PassScheduleLLVM() {
     }
     PM->add(createLowerExpectIntrinsicPass());
 
-    PM->add(createDeadInstEliminationPass());
     PM->add(createDeadCodeEliminationPass());
     PM->add(createInstructionCombiningPass());
     PM->add(createCFGSimplificationPass());
@@ -129,15 +128,17 @@ PassScheduleLLVM::PassScheduleLLVM() {
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL < 2)
         return;
 
+    PM->add(createFunctionInliningPass());
+
     PM->add(createSROAPass());
     PM->add(createInstSimplifyLegacyPass());
     PM->add(createAggressiveDCEPass());
-    PM->add(createBitTrackingDCEPass());
     PM->add(createJumpThreadingPass());
 
     PM->add(createReassociatePass());
-    PM->add(createEarlyCSEPass());
     PM->add(createMergedLoadStoreMotionPass());
+    PM->add(createBitTrackingDCEPass());
+    PM->add(createDeadInstEliminationPass());
 
     // Load forwarding above can expose allocations that aren't actually used
     // remove those before optimizing loops.
