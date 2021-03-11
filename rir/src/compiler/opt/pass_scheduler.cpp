@@ -62,7 +62,7 @@ PassScheduler::PassScheduler() {
         add<LoopInvariant>();
     };
 
-    nextPhase("Initial", 70);
+    nextPhase("Initial", 60);
     addDefaultOpt();
     nextPhase("Initial post");
     addDefaultPostPhaseOpt();
