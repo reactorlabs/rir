@@ -4641,8 +4641,8 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Subassign1_3D: {
                 auto subAssign = Subassign1_3D::Cast(i);
-                auto vector = loadSxp(subAssign->lhs());
-                auto val = loadSxp(subAssign->rhs());
+                auto vector = loadSxp(subAssign->vec());
+                auto val = loadSxp(subAssign->val());
                 auto idx1 = loadSxp(subAssign->idx1());
                 auto idx2 = loadSxp(subAssign->idx2());
                 auto idx3 = loadSxp(subAssign->idx3());
@@ -4659,8 +4659,8 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Subassign1_2D: {
                 auto subAssign = Subassign1_2D::Cast(i);
-                auto vector = loadSxp(subAssign->lhs());
-                auto val = loadSxp(subAssign->rhs());
+                auto vector = loadSxp(subAssign->vec());
+                auto val = loadSxp(subAssign->val());
                 auto idx1 = loadSxp(subAssign->idx1());
                 auto idx2 = loadSxp(subAssign->idx2());
 
@@ -4679,8 +4679,8 @@ void LowerFunctionLLVM::compile() {
 
                 auto idx1Type = subAssign->idx1()->type;
                 auto idx2Type = subAssign->idx2()->type;
-                auto valType = subAssign->rhs()->type;
-                auto vecType = subAssign->lhs()->type;
+                auto valType = subAssign->val()->type;
+                auto vecType = subAssign->vec()->type;
 
                 BasicBlock* done = nullptr;
                 auto res = phiBuilder(Representation::Of(i));
@@ -4695,7 +4695,7 @@ void LowerFunctionLLVM::compile() {
                       valType.isA(RType::integer)) ||
                      (vecType.isA(RType::real) && valType.isA(RType::real)));
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
-                if (Representation::Of(subAssign->lhs()) != t::SEXP &&
+                if (Representation::Of(subAssign->vec()) != t::SEXP &&
                     Representation::Of(i) == t::SEXP)
                     fastcase = false;
 
@@ -4705,8 +4705,8 @@ void LowerFunctionLLVM::compile() {
                     done =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
-                    llvm::Value* vector = load(subAssign->lhs());
-                    if (Representation::Of(subAssign->lhs()) == t::SEXP)
+                    llvm::Value* vector = load(subAssign->vec());
+                    if (Representation::Of(subAssign->vec()) == t::SEXP)
                         vector = cloneIfShared(vector);
 
                     auto ncol = builder.CreateZExt(
@@ -4724,7 +4724,7 @@ void LowerFunctionLLVM::compile() {
                     llvm::Value* index2 = computeAndCheckIndex(
                         subAssign->idx2(), vector, fallback, ncol);
 
-                    auto val = load(subAssign->rhs());
+                    auto val = load(subAssign->val());
                     if (Representation::Of(i) == Representation::Sexp) {
                         llvm::Value* index =
                             builder.CreateMul(nrow, index2, "", true, true);
@@ -4746,10 +4746,10 @@ void LowerFunctionLLVM::compile() {
 
                 llvm::Value* assign = nullptr;
                 auto irep = Representation::Of(subAssign->idx1());
-                auto vrep = Representation::Of(subAssign->rhs());
+                auto vrep = Representation::Of(subAssign->val());
                 if (Representation::Of(subAssign->idx2()) == irep &&
                     irep != t::SEXP && vrep != t::SEXP &&
-                    subAssign->rhs()->type.isA(subAssign->lhs()->type)) {
+                    subAssign->val()->type.isA(subAssign->vec()->type)) {
                     NativeBuiltin setter;
                     if (irep == t::Int && vrep == t::Int)
                         setter = NativeBuiltins::get(
@@ -4768,14 +4768,14 @@ void LowerFunctionLLVM::compile() {
 
                     assign = call(
                         setter,
-                        {loadSxp(subAssign->lhs()), load(subAssign->idx1()),
-                         load(subAssign->idx2()), load(subAssign->rhs()),
+                        {loadSxp(subAssign->vec()), load(subAssign->idx1()),
+                         load(subAssign->idx2()), load(subAssign->val()),
                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                 } else {
                     assign = call(
                         NativeBuiltins::get(NativeBuiltins::Id::subassign22),
-                        {loadSxp(subAssign->lhs()), idx1, idx2,
-                         loadSxp(subAssign->rhs()), loadSxp(subAssign->env()),
+                        {loadSxp(subAssign->vec()), idx1, idx2,
+                         loadSxp(subAssign->val()), loadSxp(subAssign->env()),
                          c(subAssign->srcIdx)});
                 }
 
@@ -4794,7 +4794,7 @@ void LowerFunctionLLVM::compile() {
 
                 // TODO: Extend a fastPath for generic vectors.
                 // TODO: Support type conversions
-                auto vecType = subAssign->vector()->type;
+                auto vecType = subAssign->vec()->type;
                 auto valType = subAssign->val()->type;
                 auto idxType = subAssign->idx()->type;
 
@@ -4812,7 +4812,7 @@ void LowerFunctionLLVM::compile() {
                       valType.isA(RType::integer)) ||
                      (vecType.isA(RType::real) && valType.isA(RType::real)));
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
-                if (Representation::Of(subAssign->vector()) != t::SEXP &&
+                if (Representation::Of(subAssign->vec()) != t::SEXP &&
                     Representation::Of(i) == t::SEXP)
                     fastcase = false;
 
@@ -4822,8 +4822,8 @@ void LowerFunctionLLVM::compile() {
                     done =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
-                    llvm::Value* vector = load(subAssign->vector());
-                    if (Representation::Of(subAssign->vector()) == t::SEXP) {
+                    llvm::Value* vector = load(subAssign->vec());
+                    if (Representation::Of(subAssign->vec()) == t::SEXP) {
                         auto hit1 = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit1,
@@ -4848,7 +4848,7 @@ void LowerFunctionLLVM::compile() {
                     auto val = load(subAssign->val());
                     if (Representation::Of(i) == Representation::Sexp) {
                         assignVector(vector, index, val,
-                                     subAssign->vector()->type);
+                                     subAssign->vec()->type);
                         res.addInput(convert(vector, i->type));
                     } else {
                         res.addInput(convert(val, i->type));
@@ -4861,9 +4861,9 @@ void LowerFunctionLLVM::compile() {
 
                 llvm::Value* res0 =
                     call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
-                         {loadSxp(subAssign->vector()),
-                          loadSxp(subAssign->idx()), loadSxp(subAssign->val()),
-                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                         {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                          loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                          c(subAssign->srcIdx)});
 
                 res.addInput(convert(res0, i->type));
                 if (fastcase) {
@@ -4880,7 +4880,7 @@ void LowerFunctionLLVM::compile() {
 
                 // TODO: Extend a fastPath for generic vectors.
                 // TODO: Support type conversions
-                auto vecType = subAssign->vector()->type;
+                auto vecType = subAssign->vec()->type;
                 auto valType = subAssign->val()->type;
                 auto idxType = subAssign->idx()->type;
 
@@ -4897,7 +4897,7 @@ void LowerFunctionLLVM::compile() {
                       valType.isA(RType::integer)) ||
                      (vecType.isA(RType::real) && valType.isA(RType::real)));
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
-                if (Representation::Of(subAssign->vector()) != t::SEXP &&
+                if (Representation::Of(subAssign->vec()) != t::SEXP &&
                     Representation::Of(i) == t::SEXP)
                     fastcase = false;
 
@@ -4907,8 +4907,8 @@ void LowerFunctionLLVM::compile() {
                     done =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
-                    llvm::Value* vector = load(subAssign->vector());
-                    if (Representation::Of(subAssign->vector()) == t::SEXP) {
+                    llvm::Value* vector = load(subAssign->vec());
+                    if (Representation::Of(subAssign->vec()) == t::SEXP) {
                         auto hit1 = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit1,
@@ -4923,7 +4923,7 @@ void LowerFunctionLLVM::compile() {
                     auto val = load(subAssign->val());
                     if (Representation::Of(i) == Representation::Sexp) {
                         assignVector(vector, index, val,
-                                     subAssign->vector()->type);
+                                     subAssign->vec()->type);
                         res.addInput(convert(vector, i->type));
                     } else {
                         res.addInput(convert(val, i->type));
@@ -4938,7 +4938,7 @@ void LowerFunctionLLVM::compile() {
                 auto irep = Representation::Of(subAssign->idx());
                 auto vrep = Representation::Of(subAssign->val());
                 if (irep != t::SEXP && vrep != t::SEXP &&
-                    subAssign->val()->type.isA(subAssign->vector()->type)) {
+                    subAssign->val()->type.isA(subAssign->vec()->type)) {
                     NativeBuiltin setter;
                     if (irep == t::Int && vrep == t::Int)
                         setter = NativeBuiltins::get(
@@ -4957,15 +4957,15 @@ void LowerFunctionLLVM::compile() {
 
                     res0 =
                         call(setter,
-                             {loadSxp(subAssign->vector()),
-                              load(subAssign->idx()), load(subAssign->val()),
-                              loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                             {loadSxp(subAssign->vec()), load(subAssign->idx()),
+                              load(subAssign->val()), loadSxp(subAssign->env()),
+                              c(subAssign->srcIdx)});
                 } else {
                     res0 = call(
                         NativeBuiltins::get(NativeBuiltins::Id::subassign21),
-                        {loadSxp(subAssign->vector()),
-                         loadSxp(subAssign->idx()), loadSxp(subAssign->val()),
-                         loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                        {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                         loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                         c(subAssign->srcIdx)});
                 }
 
                 res.addInput(convert(res0, i->type));

@@ -40,6 +40,8 @@ class ClosureVersion
 
     size_t inlinees = 0;
 
+    const bool root;
+
     rir::Function* optFunction;
 
   private:
@@ -49,7 +51,7 @@ class ClosureVersion
 
     std::string name_;
     std::string nameSuffix_;
-    ClosureVersion(Closure* closure, rir::Function* optFunction,
+    ClosureVersion(Closure* closure, rir::Function* optFunction, bool root,
                    const Context& optimizationContext,
                    const Properties& properties = Properties());
 

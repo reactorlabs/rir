@@ -9,7 +9,7 @@ namespace pir {
 class LogStream;
 class Closure;
 
-#define PASS(name, __runOnPromises__)                                          \
+#define PASS(name, __runOnPromises__, __slow__)                                \
     name:                                                                      \
   public                                                                       \
     Pass {                                                                     \
@@ -20,6 +20,7 @@ class Closure;
         bool runOnPromises() const final override {                            \
             return __runOnPromises__;                                          \
         }                                                                      \
+        bool isSlow() const final override { return __slow__; }                \
     };
 
 /*
@@ -29,7 +30,7 @@ class Closure;
  * environment, to pir SSA variables.
  *
  */
-class PASS(ScopeResolution, false);
+class PASS(ScopeResolution, false, true);
 
 /*
  * ElideEnv removes envrionments which are not needed. It looks at all uses of
@@ -39,7 +40,7 @@ class PASS(ScopeResolution, false);
  *
  */
 
-class PASS(ElideEnv, true);
+class PASS(ElideEnv, true, false);
 
 /*
  * This pass searches for dominating force instructions.
@@ -49,13 +50,13 @@ class PASS(ElideEnv, true);
  * dominating force, and replaces all subsequent forces with its result.
  *
  */
-class PASS(ForceDominance, false);
+class PASS(ForceDominance, false, true);
 
 /*
  * DelayInstr tries to schedule instructions right before they are needed.
  *
  */
-class PASS(DelayInstr, false);
+class PASS(DelayInstr, false, false);
 
 /*
  * The DelayEnv pass tries to delay the scheduling of `MkEnv` instructions as
@@ -63,7 +64,7 @@ class PASS(DelayInstr, false);
  * the goal is to move it out of the others.
  *
  */
-class PASS(DelayEnv, false);
+class PASS(DelayEnv, false, false);
 
 /*
  * Inlines a closure. Intentionally stupid. It does not resolve inner
@@ -71,7 +72,7 @@ class PASS(DelayEnv, false);
  * with multiple environments. Later scope resolution and force dominance
  * passes will do the smart parts.
  */
-class PASS(Inline, false);
+class PASS(Inline, false, false);
 
 /*
  * Goes through every operation that for the general case needs an environment
@@ -83,26 +84,26 @@ class PASS(Inline, false);
  * instruction for which we could not prove it does not access the parent
  * environment reflectively and speculate it will not.
  */
-class PASS(ElideEnvSpec, false);
+class PASS(ElideEnvSpec, false, false);
 
 /*
  * Constantfolding and dead branch removal.
  */
-class PASS(Constantfold, true);
+class PASS(Constantfold, true, false);
 
 // Constantfolding to be used in rir2pi
-class PASS(EarlyConstantfold, true);
+class PASS(EarlyConstantfold, true, false);
 
 /*
  * Generic instruction and controlflow cleanup pass.
  */
-class PASS(Cleanup, true);
+class PASS(Cleanup, true, true);
 
 /*
  * Checkpoints keep values alive. Thus it makes sense to remove them if they
  * are unused after a while.
  */
-class PASS(CleanupCheckpoints, true);
+class PASS(CleanupCheckpoints, true, false);
 
 /*
  * Unused framestate instructions usually get removed automatically. Except
@@ -111,42 +112,42 @@ class PASS(CleanupCheckpoints, true);
  * that they can be removed later, if they are not actually used by any
  * checkpoint/deopt.
  */
-class PASS(CleanupFramestate, true);
+class PASS(CleanupFramestate, true, false);
 
 /*
  * Trying to group assumptions, by pushing them up. This well lead to fewer
  * checkpoints being used overall.
  */
-class PASS(OptimizeAssumptions, false);
+class PASS(OptimizeAssumptions, false, false);
 
-class PASS(EagerCalls, false);
+class PASS(EagerCalls, false, false);
 
-class PASS(OptimizeVisibility, true);
+class PASS(OptimizeVisibility, true, false);
 
-class PASS(OptimizeContexts, false);
+class PASS(OptimizeContexts, false, false);
 
-class PASS(DeadStoreRemoval, false);
+class PASS(DeadStoreRemoval, false, true);
 
-class PASS(DotDotDots, false);
+class PASS(DotDotDots, false, false);
 
-class PASS(MatchCallArgs, false);
+class PASS(MatchCallArgs, false, false);
 
 /*
  * At this point, loop code invariant mainly tries to hoist ldFun operations
  * outside the loop in case it can prove that the loop body will not change
  * the binding
  */
-class PASS(LoopInvariant, false);
+class PASS(LoopInvariant, false, false);
 
-class PASS(GVN, true);
+class PASS(GVN, true, true);
 
-class PASS(LoadElision, false);
+class PASS(LoadElision, false, false);
 
-class PASS(TypeInference, true);
+class PASS(TypeInference, true, false);
 
-class PASS(TypeSpeculation, false);
+class PASS(TypeSpeculation, false, false);
 
-class PASS(PromiseSplitter, false);
+class PASS(PromiseSplitter, false, false);
 
 class PASS(InlineForcePromises, false);
 
@@ -154,12 +155,12 @@ class PASS(InlineForcePromises, false);
  * Range analysis to detect and optimize code which will not create overflows /
  * underflows
  */
-class PASS(Overflow, true);
+class PASS(Overflow, true, false);
 
 /*
  * Loop Invariant Code motion
  */
-class PASS(HoistInstruction, false);
+class PASS(HoistInstruction, false, false);
 
 class PhaseMarker : public Pass {
   public:

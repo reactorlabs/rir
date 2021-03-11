@@ -139,6 +139,10 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         } else if (onlyDependsOnAssume) {
                             if (Assume::Cast(j))
                                 return false;
+                            if (Branch::Cast(j))
+                                for (auto b : bb->successors())
+                                    if (b->isDeopt())
+                                        return false;
                         } else if (i->isTypecheck()) {
                             if (Force::Cast(j) &&
                                 i->arg(0).val()->type.maybePromiseWrapped() &&

@@ -304,7 +304,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
     pir::Backend backend(logger);
-    cmp.compileClosure(what, name, assumptions,
+    cmp.compileClosure(what, name, assumptions, true,
                        [&](pir::ClosureVersion* c) {
                            logger.flush();
                            cmp.optimizeModule();

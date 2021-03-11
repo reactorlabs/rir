@@ -89,7 +89,7 @@ ClosureVersion::~ClosureVersion() {
 
 ClosureVersion* ClosureVersion::clone(const Context& newAssumptions) {
     auto ctx = optimizationContext_ | newAssumptions;
-    auto c = owner_->declareVersion(ctx, optFunction);
+    auto c = owner_->declareVersion(ctx, false, optFunction);
     c->properties = properties;
     c->entry = BBTransform::clone(entry, c, c);
     return c;
@@ -118,9 +118,9 @@ size_t ClosureVersion::effectiveNArgs() const {
 }
 
 ClosureVersion::ClosureVersion(Closure* closure, rir::Function* optFunction,
-                               const Context& optimizationContext,
+                               bool root, const Context& optimizationContext,
                                const Properties& properties)
-    : optFunction(optFunction), owner_(closure),
+    : root(root), optFunction(optFunction), owner_(closure),
       optimizationContext_(optimizationContext), properties(properties) {
     auto id = std::stringstream();
     id << closure->name() << "[" << this << "]";

@@ -2,6 +2,7 @@
 #include "R/RList.h"
 #include "pir/pir_impl.h"
 #include "rir2pir/rir2pir.h"
+#include "utils/Map.h"
 #include "utils/measuring.h"
 
 #include "compiler/analysis/query.h"
@@ -9,11 +10,13 @@
 #include "compiler/opt/pass_definitions.h"
 #include "compiler/opt/pass_scheduler.h"
 #include "compiler/parameter.h"
+#include "compiler/util/visitor.h"
 
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 
 #include <chrono>
+#include <unordered_map>
 
 namespace rir {
 namespace pir {
@@ -24,8 +27,8 @@ constexpr Context::Flags Compiler::minimalContext;
 constexpr Context Compiler::defaultContext;
 
 void Compiler::compileClosure(SEXP closure, const std::string& name,
-                              const Context& assumptions_, MaybeCls success,
-                              Maybe fail,
+                              const Context& assumptions_, bool root,
+                              MaybeCls success, Maybe fail,
                               std::list<PirTypeFeedback*> outerFeedback) {
     assert(isValidClosureSEXP(closure));
 
@@ -49,8 +52,8 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
     auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun,
                                                      tbl->userDefinedContext());
     Context context(assumptions);
-    compileClosure(pirClosure, tbl->dispatch(assumptions), context, success,
-                   fail, outerFeedback);
+    compileClosure(pirClosure, tbl->dispatch(assumptions), context, root,
+                   success, fail, outerFeedback);
 }
 
 void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
@@ -65,12 +68,13 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
     Context context(assumptions);
     auto closure = module->getOrDeclareRirFunction(
         name, srcFunction, formals, srcRef, src->userDefinedContext());
-    compileClosure(closure, src->dispatch(assumptions), context, success, fail,
-                   outerFeedback);
+    compileClosure(closure, src->dispatch(assumptions), context, false, success,
+                   fail, outerFeedback);
 }
 
 void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
-                              const Context& ctx, MaybeCls success, Maybe fail,
+                              const Context& ctx, bool root, MaybeCls success,
+                              Maybe fail,
                               std::list<PirTypeFeedback*> outerFeedback) {
 
     if (!ctx.includes(minimalContext)) {
@@ -104,7 +108,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     if (auto existing = closure->findCompatibleVersion(ctx))
         return success(existing);
 
-    auto version = closure->declareVersion(ctx, optFunction);
+    auto version = closure->declareVersion(ctx, root, optFunction);
     Builder builder(version, closure->closureEnv());
     auto& log = logger.begin(version);
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback);
@@ -205,11 +209,82 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
 // Don't forget to pass PIR_MEASURING=1 too
 bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
 
+static void findUnreachable(Module* m) {
+    std::unordered_map<Closure*, std::unordered_set<Context>> reachable;
+    bool changed = true;
+
+    auto found = [&](ClosureVersion* v) {
+        if (!v)
+            return;
+        auto& reachableVersions = reachable[v->owner()];
+        if (!reachableVersions.count(v->context())) {
+            reachableVersions.insert(v->context());
+            changed = true;
+        }
+    };
+
+    while (changed) {
+        changed = false;
+        m->eachPirClosure([&](Closure* c) {
+            auto& reachableVersions = reachable[c];
+            c->eachVersion([&](ClosureVersion* v) {
+                if (v->root) {
+                    if (!reachableVersions.count(v->context())) {
+                        reachableVersions.insert(v->context());
+                        changed = true;
+                    }
+                }
+                if (reachableVersions.count(v->context())) {
+                    auto check = [&](Instruction* i) {
+                        if (auto call = StaticCall::Cast(i)) {
+                            assert(call->tryDispatch());
+                            found(call->tryDispatch());
+                            found(call->tryOptimisticDispatch());
+                        } else if (auto call = CallInstruction::CastCall(i)) {
+                            if (auto cls = call->tryGetCls())
+                                found(call->tryDispatch(cls));
+                        } else {
+                            i->eachArg([&](Value* v) {
+                                if (auto mk = MkFunCls::Cast(i)) {
+                                    if (mk->tryGetCls())
+                                        mk->tryGetCls()->eachVersion(found);
+                                }
+                            });
+                        }
+                    };
+                    Visitor::run(v->entry, check);
+                    v->eachPromise(
+                        [&](Promise* p) { Visitor::run(p->entry, check); });
+                }
+            });
+        });
+    }
+
+    std::vector<std::pair<Closure*, Context>> toErase;
+    m->eachPirClosure([&](Closure* c) {
+        const auto& reachableVersions = reachable[c];
+        c->eachVersion([&](ClosureVersion* v) {
+            if (!reachableVersions.count(v->context()))
+                toErase.push_back({v->owner(), v->context()});
+        });
+    });
+
+    for (auto e : toErase)
+        e.first->erase(e.second);
+};
+
 void Compiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
     PassScheduler::instance().run([&](const Pass* translation) {
         bool changed = false;
+        if (translation->isSlow()) {
+            if (MEASURE_COMPILER_PERF)
+                Measuring::startTimer();
+            findUnreachable(module);
+            if (MEASURE_COMPILER_PERF)
+                Measuring::countTimer("module cleanup");
+        }
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
                 auto log = logger.get(v).forPass(passnr);
