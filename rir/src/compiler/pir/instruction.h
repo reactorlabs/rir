@@ -973,9 +973,9 @@ class FLI(ForSeqSize, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(XLength, 1, Effects::None()) {
+class FLI(Length, 1, Effects::None()) {
   public:
-    explicit XLength(Value* val)
+    explicit Length(Value* val)
         : FixedLenInstruction(
               PirType(RType::integer).simpleScalar().notObject(),
               {{PirType::val()}}, {{val}}) {}

@@ -769,7 +769,7 @@ int asLogicalImpl(SEXP a) {
     return Rf_asLogical(a);
 }
 
-size_t lengthImpl(SEXP e) { return Rf_xlength(e); }
+int lengthImpl(SEXP e) { return Rf_length(e); }
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     if (!pir::Parameter::DEOPT_CHAOS) {
@@ -1965,11 +1965,7 @@ SEXP setNamesImpl(SEXP val, SEXP names) {
     return val;
 }
 
-SEXP xlength_Impl(SEXP val) {
-    SEXP len = Rf_allocVector(INTSXP, 1);
-    INTEGER(len)[0] = Rf_xlength(val);
-    return len;
-}
+size_t xlengthImpl(SEXP val) { return Rf_xlength(val); }
 
 SEXP getAttribImpl(SEXP val, SEXP sym) { return Rf_getAttrib(val, sym); }
 
@@ -2135,7 +2131,7 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::asLogicalBlt) = {"aslogical", (void*)&asLogicalImpl, t::int_sexp};
     get_(Id::length) = {"length",
                         (void*)&lengthImpl,
-                        llvm::FunctionType::get(t::i64, {t::SEXP}, false),
+                        llvm::FunctionType::get(t::Int, {t::SEXP}, false),
                         {}};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,
@@ -2309,10 +2305,10 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::setNames) = {
         "setNames", (void*)&setNamesImpl,
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
-    get_(Id::xlength_) = {"xlength_",
-                          (void*)&xlength_Impl,
-                          llvm::FunctionType::get(t::SEXP, {t::SEXP}, false),
-                          {}};
+    get_(Id::xlength) = {"xlength",
+                         (void*)&xlengthImpl,
+                         llvm::FunctionType::get(t::i64, {t::SEXP}, false),
+                         {}};
     get_(Id::getAttrb) = {
         "getAttrib",
         (void*)&getAttribImpl,

@@ -145,7 +145,7 @@ struct NativeBuiltins {
         colonCastRhs,
         names,
         setNames,
-        xlength_,
+        xlength,
         getAttrb,
         nonLocalReturn,
         clsEq,

@@ -2205,8 +2205,11 @@ void LowerFunctionLLVM::compile() {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
 
-                auto ai = load(a);
-                auto bi = load(b);
+                auto rep = Representation::Of(a) < Representation::Of(b)
+                               ? Representation::Of(b)
+                               : Representation::Of(a);
+                auto ai = load(a, rep);
+                auto bi = load(b, rep);
                 if (Representation::Of(a) == t::SEXP &&
                     a->type.maybePromiseWrapped())
                     ai = depromise(ai, a->type);
@@ -2437,7 +2440,7 @@ void LowerFunctionLLVM::compile() {
                                 PirType::anySimpleScalar())) {
                             auto callLengthBuiltin = [&]() {
                                 return call(NativeBuiltins::get(
-                                                NativeBuiltins::Id::length),
+                                                NativeBuiltins::Id::xlength),
                                             {a});
                             };
                             llvm::Value* r;
@@ -5408,11 +5411,25 @@ void LowerFunctionLLVM::compile() {
                          {loadSxp(i->arg(0).val()), loadSxp(i->arg(1).val())}));
                 break;
 
-            case Tag::XLength:
-                setVal(i,
-                       call(NativeBuiltins::get(NativeBuiltins::Id::xlength_),
-                            {loadSxp(i->arg(0).val())}));
+            case Tag::Length: {
+                assert(Representation::Of(i) == t::Int);
+
+                auto a = loadSxp(i->arg(0).val());
+                auto callLengthBuiltin = [&]() {
+                    return call(NativeBuiltins::get(NativeBuiltins::Id::length),
+                                {a});
+                };
+                llvm::Value* r;
+                if (vectorTypeSupport(i->arg(0).val())) {
+                    r = createSelect2(isAltrep(a), callLengthBuiltin, [&]() {
+                        return builder.CreateTrunc(vectorLength(a), t::Int);
+                    });
+                } else {
+                    r = callLengthBuiltin();
+                }
+                setVal(i, r);
                 break;
+            }
 
             case Tag::Unreachable:
                 builder.CreateUnreachable();

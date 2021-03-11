@@ -383,9 +383,9 @@ DEF_INSTR(names_, 0, 1, 1, 1)
 DEF_INSTR(set_names_, 0, 2, 1, 1)
 
 /**
- * xlength_ :: get length of a vector
+ * length_ :: get length of a small vector
  */
-DEF_INSTR(xlength_, 0, 1, 1, 1)
+DEF_INSTR(length_, 0, 1, 1, 1)
 
 /**
  * for_seq_size_ :: get size of the for loop sequence

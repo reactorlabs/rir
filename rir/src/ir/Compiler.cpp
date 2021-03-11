@@ -1220,7 +1220,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs << BC::br(vecErrorBr);
 
         // ... || LENGTH(x) != 1
-        cs << vecArityBr << BC::dup() << BC::xlength_() << BC::push(1)
+        cs << vecArityBr << BC::dup() << BC::length_() << BC::push(1)
            << BC::eq();
         cs.addSrc(R_NilValue); // to make code verifier happy
         cs << BC::recordTest() << BC::brtrue(vecEContBr);
@@ -1350,17 +1350,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 compileExpr(ctx, args[0]); // [X]
 
                 // get length and names of the vector X
-                cs << BC::dup()
-                   << BC::names()
-                   << BC::swap()
-                   << BC::xlength_() // [names(X), length(X)]
-                   << BC::dup()
-                   << BC::push(Rf_mkString("list"))
-                   << BC::swap()
-                   << BC::callBuiltin(2, symbol::tmp, getBuiltinFun("vector")) // [names(X), length(X), ans]
-                   << BC::pick(2)
-                   << BC::setNames()
-                   << BC::swap()
+                cs << BC::dup() << BC::names() << BC::swap()
+                   << BC::length_() // [names(X), length(X)]
+                   << BC::dup() << BC::push(Rf_mkString("list")) << BC::swap()
+                   << BC::callBuiltin(
+                          2, symbol::tmp,
+                          getBuiltinFun("vector")) // [names(X), length(X), ans]
+                   << BC::pick(2) << BC::setNames() << BC::swap()
                    << BC::push((int)0); // [ans, length(X), i]
 
                 // loop invariant stack layout: [ans, length(X), i]

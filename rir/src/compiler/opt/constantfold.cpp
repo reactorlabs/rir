@@ -588,6 +588,14 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     next = ip + 1;
                 }
 
+                if (Length::Cast(i)) {
+                    auto t = i->arg(0).val()->type;
+                    if (t.isA(PirType::anySimpleScalar())) {
+                        iterAnyChange = true;
+                        i->replaceUsesAndSwapWith(new LdConst(1), ip);
+                    }
+                }
+
                 if (CallSafeBuiltin::Cast(i) || CallBuiltin::Cast(i)) {
                     int builtinId = CallBuiltin::Cast(i)
                                         ? CallBuiltin::Cast(i)->builtinId

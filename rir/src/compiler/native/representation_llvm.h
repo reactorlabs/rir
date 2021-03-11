@@ -55,6 +55,7 @@ struct Representation {
         }
         return false;
     }
+    bool operator<(const Representation& other) const { return t < other.t; }
     bool operator==(const Representation& other) const { return t == other.t; }
     bool operator!=(const Representation& other) const {
         return !(*this == other);
