@@ -18,11 +18,12 @@
 #undef eval
 #undef cons
 
-#undef isString
-inline bool isString(SEXP s) { return TYPEOF(s) == STRSXP; }
-
 #undef isNull
 inline bool isNull(SEXP s) { return TYPEOF(s) == NILSXP; }
+#undef isComplex
+inline bool isComplex(SEXP s) { return TYPEOF(s) == CPLXSXP; }
+#undef isString
+inline bool isString(SEXP s) { return TYPEOF(s) == STRSXP; }
 
 #undef isObject
 inline bool isObject(SEXP s) { return OBJECT(s) != 0; }

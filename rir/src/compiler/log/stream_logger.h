@@ -73,7 +73,14 @@ class FileLogStream : public LogStream {
 
   public:
     explicit FileLogStream(const std::string& fileName)
-        : LogStream(fstream), fstream(fileName) {}
+        : LogStream(fstream), fstream(fileName) {
+#ifdef ENABLE_SLOWASSERT
+        if (!fstream.good()) {
+            std::cerr << "Warning: FileLogStream(" << fileName
+                      << ") error: " << strerror(errno) << "\n";
+        }
+#endif
+    }
     ~FileLogStream() override;
 
     bool tty() override { return false; }

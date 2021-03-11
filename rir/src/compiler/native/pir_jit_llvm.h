@@ -3,12 +3,22 @@
 
 #include "compiler/log/stream_logger.h"
 #include "compiler/native/builtins.h"
+#include "compiler/native/pir_debug_info.h"
+#include "compiler/pir/bb.h"
 #include "compiler/pir/closure_version.h"
+#include "compiler/pir/instruction.h"
 #include "compiler/pir/pir.h"
 #include "compiler/pir/promise.h"
+#include "compiler/util/visitor.h"
 
+#ifdef PIR_GDB_SUPPORT
+#include "llvm/IR/DIBuilder.h"
+#endif
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 
+#include <iomanip>
 #include <memory>
 #include <sstream>
 #include <unordered_map>
@@ -31,20 +41,14 @@ using PromMap = std::unordered_map<Code*, std::pair<unsigned, MkArg*>>;
 // addresses for PIR builtins.
 class PirJitLLVM {
   public:
-    PirJitLLVM() {
-        if (!initialized)
-            initializeLLVM();
-    }
-
-    // We have to wait to query LLVM for native code addresses until all Code's
-    // (including promises) are added to the Module. Hence, in the destructor,
-    // we need to fixup all the native pointers.
-    ~PirJitLLVM() {
-        if (M) {
-            finalizeAndFixup();
-            nModules++;
-        }
-    }
+#ifdef PIR_GDB_SUPPORT
+    explicit PirJitLLVM(const std::string& name);
+#else
+    PirJitLLVM();
+#endif
+    PirJitLLVM(const PirJitLLVM&) = delete;
+    PirJitLLVM(PirJitLLVM&&) = delete;
+    ~PirJitLLVM();
 
     void compile(rir::Code* target, Code* code, const PromMap& m,
                  const NeedsRefcountAdjustment& refcount,
@@ -92,6 +96,56 @@ class PirJitLLVM {
     static size_t nModules;
     static void initializeLLVM();
     static bool initialized;
+
+#ifdef PIR_GDB_SUPPORT
+    // Support for debugging pir in gdb
+  public:
+    static std::string makeDbgFileName(const std::string& base) {
+        std::stringstream ss;
+        ss << base << "." << std::setfill('0') << std::setw(3) << nModules;
+        return ss.str();
+    }
+    struct DebugInfo {
+        DebugInfo(const DebugInfo&) = delete;
+        DebugInfo(const std::string& folder, const std::string& name)
+            : CU(nullptr), File(nullptr), Folder(folder),
+              FileName(makeDbgFileName(name)), VoidPtrType(nullptr),
+              SEXPRECType(nullptr), SEXPType(nullptr), NativeCodeType(nullptr),
+              line(1) {}
+
+        llvm::DICompileUnit* CU;
+        llvm::DIFile* File;
+
+        std::string Folder;
+        std::string FileName;
+
+        std::vector<llvm::DIScope*> LexicalBlocks;
+        llvm::DIScope* getScope();
+
+        llvm::DIType* VoidPtrType;
+        llvm::DIType* getVoidPtrType(llvm::DIBuilder*);
+        llvm::DIType* SEXPRECType;
+        llvm::DIType* getSEXPRECType(llvm::DIBuilder*);
+        llvm::DIType* SEXPType;
+        llvm::DIType* getSEXPType(llvm::DIBuilder*);
+        llvm::DISubroutineType* NativeCodeType;
+        llvm::DISubroutineType* getNativeCodeType(llvm::DIBuilder*);
+        llvm::DIType* getInstrType(llvm::DIBuilder*, PirType);
+
+        std::unique_ptr<FileLogStream> log;
+        size_t line;
+        std::unordered_map<Code*, size_t> codeLoc;
+        std::unordered_map<BB*, size_t> BBLoc;
+        std::unordered_map<Instruction*, size_t> instLoc;
+        void addCode(Code* c);
+        size_t getCodeLoc(Code* c) const { return codeLoc.at(c); }
+        size_t getBBLoc(BB* bb) const { return BBLoc.at(bb); }
+        size_t getInstLoc(Instruction* i) const { return instLoc.at(i); }
+        void emitLocation(llvm::IRBuilder<>&, size_t);
+    };
+    DebugInfo DI;
+    std::unique_ptr<llvm::DIBuilder> DIB;
+#endif
 };
 
 } // namespace pir

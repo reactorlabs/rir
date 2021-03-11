@@ -159,3 +159,125 @@ debugging:
   containing its ast maps and code objects
 * `.printInvocation`: prints invocation during evaluation
 * `.int3`: breakpoint during evaluation
+
+## PIR & GDB (experimental!)
+
+There is *WIP* support for debugging LLVM jitted PIR code. It is enabled by `#define PIR_GDB_SUPPORT` in `compiler/native/pir_debug_info.h`, currently set for debug builds.
+
+Run your program, ideally with `rr`:
+```
+***@***:~/rir/build/debug$ PIR_GDB_FOLDER=pirgdb bin/R -e "f <- function(x) { Sys.sleep(0.01); x + 123L }; f(4L); f(4L); f(4L); f(4L)" -d rr
+rr: Saving execution to trace directory `/home/***/.local/share/rr/R-402'.
+
+R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night"
+[...]
+```
+
+This will produce PIR listing files for each PIR module compiled, named like `f.001` in the folder specified by `PIR_GDB_FOLDER` (defaults to `pirgdb`, this folder will be wiped if it already exists):
+```
+***@***:~/rir/build/debug$ cat pirgdb/f.001
+rsh_f[0x56500a98aa80].1
+BB0
+  int$~"          %0.0  = LdArg                    0
+  val?^           %0.1  = LdVar              eR    Sys.sleep, GlobalEnv
+  cls"            %0.2  = LdConst                  function (time)
+  lgl$#"          %0.3  = Identical                %0.1, %0.2
+  void                    Branch                   %0.3 -> BB4 (if true) | BB5 (if false)
+BB4   <- [0]
+  real$#"         %4.0  = LdConst                  0.01
+  prom"           %4.1  = MkArg                    %4.0, Prom(0) (!refl),
+  code"           %4.2  = LdConst                  Sys.sleep(0.01)
+  env"            e4.3  = (MkEnv)            l     x=%0.0, parent=GlobalEnv, context 1
+  ct              %4.4  = PushContext        lCL   %4.1, %4.2, %0.2, e4.3
+  env"            e4.5  = MKEnv              l     time=%4.0, parent=BaseNamespace, context 1
+  val?            %4.6  = CallBuiltin        !v    Sys.sleep(%4.0) e4.5
+  val?            %4.7  = PopContext         C     %4.6, %4.4
+  int$"<>         %4.8  = Force!<lazy>       d     %0.0,
+  int$#"          %4.9  = LdConst                  123
+  int$"<>         %4.10 = Add                vd    %4.8, %4.9, elided
+  void                    Return                   %4.10
+BB5   <- [0]
+  void                    RecordDeoptReason  m     %0.1
+  env"            e5.1  = MKEnv              l     x=%0.0, parent=GlobalEnv, context 1
+  void                    ScheduledDeopt           0x5650095589a0+0: [], env=e5.1
+
+rsh_f[0x56500a98aa80]_Prom(0).1
+BB0
+  real$#"         %0.0  = LdConst                  0.01
+  void                    Visible            v
+  void                    Return                   %0.0
+```
+
+Now, you can run the debugger and set a breakpoint in those files:
+```
+***@***:~/rir/build/debug$ rr replay
+GNU gdb (Ubuntu 8.1.1-0ubuntu1) 8.1.1
+[...]
+0x00007f0bdeeef090 in _start () from /lib64/ld-linux-x86-64.so.2
+(rr) b f.001:3
+No source file named f.001.
+Make breakpoint pending on future shared library load? (y or [n]) y
+Breakpoint 1 (f.001:3) pending.
+(rr) c
+Continuing.
+
+R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night"
+[...]
+
+Breakpoint 1, rsh_f[0x56500a98aa80].1 () at f.001:3
+3         int$~"          %0.0  = LdArg                    0
+(rr) n
+4         val?^           %0.1  = LdVar              eR    Sys.sleep, GlobalEnv
+(rr) n
+6         lgl$#"          %0.3  = Identical                %0.1, %0.2
+(rr) n
+10        prom"           %4.1  = MkArg                    %4.0, Prom(0) (!refl),
+(rr) n
+12        env"            e4.3  = (MkEnv)            l     x=%0.0, parent=GlobalEnv, context 1
+(rr) bt
+#0  rsh_f[0x56500a98aa80].1 () at f.001:12
+#1  0x00007f0bd9a5a223 in rir::evalRirCode (c=0x56500aa2fcd8, ctx=0x5650097ce110,
+    env=0x5650097d59a8, callCtxt=0x7fff4d1290d0, initialPC=0x0, cache=0x0)
+    at ../../rir/src/interpreter/interp.cpp:1918
+#2  0x00007f0bd9a6b0ee in rir::evalRirCode (c=0x56500aa2fcd8, ctx=0x5650097ce110,
+    env=0x5650097d59a8, callCtxt=0x7fff4d1290d0)
+    at ../../rir/src/interpreter/interp.cpp:3783
+#3  0x00007f0bd9a5676e in rir::rirCallTrampoline_ (cntxt=..., call=...,
+    code=0x56500aa2fcd8, env=0x5650097d59a8, ctx=0x5650097ce110)
+    at ../../rir/src/interpreter/interp.cpp:501
+#4  0x00007f0bd9a568f9 in rir::rirCallTrampoline (call=..., fun=0x56500aa2ff98,
+    env=0x5650097d59a8, arglist=0x56500b32ffc0, ctx=0x5650097ce110)
+    at ../../rir/src/interpreter/interp.cpp:529
+#5  0x00007f0bd9a6ce41 in rir::rirCallTrampoline (call=..., fun=0x56500aa2ff98,
+    arglist=0x56500b32ffc0, ctx=0x5650097ce110)
+    at ../../rir/src/interpreter/interp.cpp:545
+#6  0x00007f0bd9a6d34a in rir::rirCall (call=..., ctx=0x5650097ce110)
+    at ../../rir/src/interpreter/interp.cpp:1054
+#7  0x00007f0bd9a6b56e in rir::rirApplyClosure (ast=0x56500b330068,
+    op=0x56500b328cb8, arglist=0x56500b32ffc0, rho=0x56500945e800,
+    suppliedvars=0x56500942c190) at ../../rir/src/interpreter/interp.cpp:3827
+#8  0x00005650070d9352 in Rf_applyClosure (call=call@entry=0x56500b330068,
+    op=op@entry=0x56500b328cb8, arglist=0x56500b32ffc0,
+    rho=rho@entry=0x56500945e800, suppliedvars=<optimized out>) at eval.c:1704
+#9  0x00005650070d6c15 in Rf_eval (e=e@entry=0x56500b330068,
+    rho=rho@entry=0x56500945e800) at eval.c:775
+#10 0x0000565007105dbd in Rf_ReplIteration (rho=0x56500945e800, savestack=0,
+    browselevel=0, state=0x7fff4d129400) at main.c:260
+#11 0x0000565007106181 in R_ReplConsole (rho=0x56500945e800, savestack=0,
+    browselevel=0) at main.c:310
+#12 0x0000565007106232 in run_Rmainloop () at main.c:1086
+#13 0x0000565007106282 in Rf_mainloop () at main.c:1093
+#14 0x000056500700cc98 in main (ac=ac@entry=3, av=av@entry=0x7fff4d12a548)
+    at Rmain.c:29
+#15 0x00007f0bdd1ebbf7 in __libc_start_main (main=0x56500700cc80 <main>, argc=3,
+    argv=0x7fff4d12a548, init=<optimized out>, fini=<optimized out>,
+    rtld_fini=<optimized out>, stack_end=0x7fff4d12a538)
+    at ../csu/libc-start.c:310
+#16 0x000056500700ccca in _start ()
+(rr)
+```
+
+Current limitations:
+* `continue` after setting a breakpoint breaks something in `rr` and kills the session
+* no variable information (can't do `p %0.1`)
+* sort of stepping into functions but not tested much

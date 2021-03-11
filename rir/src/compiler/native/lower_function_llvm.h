@@ -10,6 +10,9 @@
 #include "compiler/pir/pir.h"
 #include "runtime/Code.h"
 
+#ifdef PIR_GDB_SUPPORT
+#include "llvm/IR/DIBuilder.h"
+#endif
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/MDBuilder.h"
 
@@ -64,6 +67,11 @@ class LowerFunctionLLVM {
     PirJitLLVM::GetFunction getFunction;
     PirJitLLVM::GetBuiltin getBuiltin;
 
+#ifdef PIR_GDB_SUPPORT
+    PirJitLLVM::DebugInfo* DI;
+    llvm::DIBuilder* DIB;
+#endif
+
     Protect p_;
 
   public:
@@ -75,9 +83,14 @@ class LowerFunctionLLVM {
         const std::string& name, Code* code, const PromMap& promMap,
         const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
-        const PirJitLLVM::GetModule& getModule,
+        PirJitLLVM::Declare declare, const PirJitLLVM::GetModule& getModule,
         const PirJitLLVM::GetFunction& getFunction,
-        const PirJitLLVM::GetBuiltin& getBuiltin, PirJitLLVM::Declare declare)
+        const PirJitLLVM::GetBuiltin& getBuiltin
+#ifdef PIR_GDB_SUPPORT
+        ,
+        PirJitLLVM::DebugInfo* DI, llvm::DIBuilder* DIB
+#endif
+        )
         : code(code), promMap(promMap), refcount(refcount),
           needsLdVarForUpdate(needsLdVarForUpdate),
           builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
@@ -86,9 +99,15 @@ class LowerFunctionLLVM {
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)),
-          getModule(getModule), getFunction(getFunction),
-          getBuiltin(getBuiltin) {
+          getModule(getModule), getFunction(getFunction), getBuiltin(getBuiltin)
+#ifdef PIR_GDB_SUPPORT
+          ,
+          DI(DI), DIB(DIB)
+#endif
+    {
+
         fun = declare(code, name, t::nativeFunction);
+
         auto p = promMap.find(code);
         if (p != promMap.end()) {
             auto mk = MkEnv::Cast(p->second.second->env());
