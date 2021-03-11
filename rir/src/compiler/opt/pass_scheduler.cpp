@@ -21,10 +21,13 @@ void PassScheduler::add(std::unique_ptr<const Pass>&& t) {
 }
 
 PassScheduler::PassScheduler() {
+    // Keep the number in sync with the passes below!
+    static size_t nDefaultOpts = 26;
     auto addDefaultOpt = [&]() {
         add<DotDotDots>();
         add<MatchCallArgs>();
         add<EagerCalls>();
+        add<TypeInference>();
 
         add<Inline>();
         add<OptimizeContexts>();
@@ -41,6 +44,7 @@ PassScheduler::PassScheduler() {
 
         add<OptimizeVisibility>();
         add<OptimizeAssumptions>();
+        add<Constantfold>();
         add<Cleanup>();
 
         add<ElideEnv>();
@@ -51,16 +55,16 @@ PassScheduler::PassScheduler() {
         add<OptimizeVisibility>();
         add<OptimizeAssumptions>();
         add<Cleanup>();
-
-        add<TypeInference>();
-        add<Overflow>();
     };
     auto addDefaultPostPhaseOpt = [&]() {
         add<HoistInstruction>();
         add<LoopInvariant>();
+        add<Overflow>();
+        // Since some builtin implementations in the native backend depend on it
+        add<TypeInference>();
     };
 
-    nextPhase("Initial", 60);
+    nextPhase("Initial", 2 * nDefaultOpts);
     addDefaultOpt();
     nextPhase("Initial post");
     addDefaultPostPhaseOpt();
@@ -69,7 +73,7 @@ PassScheduler::PassScheduler() {
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
-    nextPhase("Speculation", 100);
+    nextPhase("Speculation", 3 * nDefaultOpts);
     add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();
@@ -88,7 +92,7 @@ PassScheduler::PassScheduler() {
     add<CleanupCheckpoints>();
     addDefaultPostPhaseOpt();
 
-    nextPhase("Intermediate 2", 60);
+    nextPhase("Intermediate 2", 2 * nDefaultOpts);
     addDefaultOpt();
     nextPhase("Intermediate 2 post");
     addDefaultPostPhaseOpt();
@@ -103,7 +107,7 @@ PassScheduler::PassScheduler() {
     add<CleanupFramestate>();
     add<CleanupCheckpoints>();
 
-    nextPhase("Final", 120);
+    nextPhase("Final", 3 * nDefaultOpts);
     // ==== Phase 4) Final round of default opts
     addDefaultOpt();
     add<ElideEnvSpec>();
