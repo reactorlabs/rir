@@ -1754,7 +1754,7 @@ class FLI(Identical, 2, Effects::None()) {
 class FLIE(Colon, 3, Effects::Any()) {
   public:
     Colon(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+        : FixedLenInstructionWithEnvSlot(PirType::val(),
                                          {{PirType::val(), PirType::val()}},
                                          {{lhs, rhs}}, env, srcIdx) {}
     VisibilityFlag visibilityFlag() const override {
@@ -1793,7 +1793,7 @@ class Binop
         Super;
 
     Binop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : Super(PirType::valOrLazy(), {{PirType::val(), PirType::val()}},
+        : Super(PirType::val(), {{PirType::val(), PirType::val()}},
                 {{lhs, rhs}}, env, srcIdx) {}
 
     using Super::arg;
@@ -1932,8 +1932,7 @@ class Unop
                                            HasEnvSlot::Yes>
         Super;
     Unop(Value* val, Value* env, unsigned srcIdx)
-        : Super(PirType::valOrLazy(), {{PirType::val()}}, {{val}}, env,
-                srcIdx) {}
+        : Super(PirType::val(), {{PirType::val()}}, {{val}}, env, srcIdx) {}
 
     using Super::arg;
     using Super::effects;
