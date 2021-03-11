@@ -99,7 +99,7 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
             // exception are deopt exits, where we rewrite contexts on the fly.
             // If this assert triggers, we inserted a return instruction into
             // an inlined function.
-            assert((!state.get() || Deopt::Cast(i)) &&
+            assert((!state.get() || Deopt::Cast(i) || Unreachable::Cast(i)) &&
                    "Exit with missing pop context");
         }
         return AbstractResult::None;
