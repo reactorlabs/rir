@@ -91,7 +91,7 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
                              SEXP disableSpecialization_,
                              SEXP disableArgumentTypeSpecialization_,
                              SEXP disableNumArgumentSpecialization_,
-                             SEXP depromisedArgs_) {
+                             SEXP depromiseArgs_) {
     if (!isValidClosureSEXP(what))
         Rf_error("Not rir compiled code");
     if (TYPEOF(which) != INTSXP || LENGTH(which) != 1)
@@ -120,7 +120,7 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
         getBool(disableNumArgumentSpecialization_);
     auto disableArgumentTypeSpecialization =
         getBool(disableArgumentTypeSpecialization_);
-    auto depromisedArgs = getBool(depromisedArgs_);
+    auto depromiseArgs = getBool(depromiseArgs_);
 
     Function* fun = dt->get(i);
     if (reopt != NA_LOGICAL) {
@@ -164,11 +164,11 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
 
     bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true : false;
     if (!DISABLE_ANNOTATIONS) {
-        if (depromisedArgs != NA_LOGICAL) {
-            if (depromisedArgs)
-                fun->flags.set(Function::DepromisedArgs);
+        if (depromiseArgs != NA_LOGICAL) {
+            if (depromiseArgs)
+                fun->flags.set(Function::DepromiseArgs);
             else
-                fun->flags.reset(Function::DepromisedArgs);
+                fun->flags.reset(Function::DepromiseArgs);
         }
     }
 

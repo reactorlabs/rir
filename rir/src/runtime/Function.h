@@ -82,7 +82,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     V(MarkOpt)                                                                 \
     V(ForceInline)                                                             \
     V(DisableInline)                                                           \
-    V(DepromisedArgs)                                                          \
+    V(DepromiseArgs)                                                           \
     V(NotOptimizable)                                                          \
     V(NotInlineable)                                                           \
     V(Dead)                                                                    \
@@ -107,7 +107,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
                                    DisableAllSpecialization,
                                    DisableArgumentTypeSpecialization,
                                    DisableNumArgumentsSpezialization,
-                                   DepromisedArgs};
+                                   DepromiseArgs};
         auto f = other->flags;
         for (auto flag : inherited)
             if (f.contains(flag))

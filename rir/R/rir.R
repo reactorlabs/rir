@@ -7,7 +7,7 @@ rir.markFunction <- function(what, which,
                              DisableAllSpecialization=NA,
                              DisableArgumentTypeSpecialization=NA,
                              DisableNumArgumentsSepcialization=NA,
-                             DepromisedArgs=NA) {
+                             DepromiseArgs=NA) {
     doIt = function(n) {
         .Call("rirMarkFunction", what, n,
               Reopt,
@@ -15,7 +15,7 @@ rir.markFunction <- function(what, which,
               DisableAllSpecialization,
               DisableArgumentTypeSpecialization,
               DisableNumArgumentsSepcialization,
-              DepromisedArgs);
+              DepromiseArgs);
     }
     if (missing(which)) {
         for (i in rir.functionVersions(what))
@@ -198,4 +198,12 @@ rir.printBuiltinIds <- function() {
 # compiles given closure, or expression and returns the compiled version.
 rir.setUserContext <- function(f, udc) {
     .Call("rirSetUserContext", f, udc)
+}
+
+rir.annotateDepromised <- function(closure) {
+  copy <- closure
+  body(copy) <- body(closure)    # triggers a copy due to value semantics
+  rir.compile(copy)
+  rir.markFunction(copy, DepromiseArgs=TRUE)
+  copy
 }

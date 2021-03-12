@@ -27,9 +27,6 @@ namespace pir {
 bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 LogStream& log) const {
 
-    // log.out << "---------------------- BEGIN FORCE DEPROMISE---------  "
-    //         << cls->name() << "\n";
-
     bool anyChange = false;
 
     Visitor::run(code->entry, [&](BB* bb) {
@@ -45,7 +42,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                     auto functionVersion = clsCallee->rirFunction();
                     if (functionVersion->flags.contains(
-                            rir::Function::Flag::DepromisedArgs)) {
+                            rir::Function::Flag::DepromiseArgs)) {
 
                         call->eachCallArg([&](InstrArg& v) {
                             if (auto mkarg = MkArg::Cast(v.val())) {
@@ -64,10 +61,6 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 ip = bb->insert(ip, forced) + 1;
                                 next = ip + 1;
 
-                                // log.out << "In " << cls->name()
-                                //         << " depromised callee: "
-                                //         << clsCallee->name()
-                                //         << " arg:" << forced << "\n";
                             }
 
 
@@ -79,8 +72,6 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
     });
 
-    // log.out << "---------------------- END FORCE DEPROMISE---------  "
-    //         << cls->name() << "\n";
 
     return anyChange;
 }

@@ -16,8 +16,7 @@ f <- function(a) {
     a + 1L
 
 }
-rir.compile(f)
-rir.markFunction(f, DepromisedArgs=TRUE)
+f <- rir.annotateDepromised(f)
 
 
 performStep <- function(n) {

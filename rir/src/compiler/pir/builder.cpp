@@ -110,8 +110,8 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     std::vector<Value*> args(closure->nargs());
     size_t nargs = version->effectiveNArgs();
 
-    auto depromisedArgs = version->owner()->rirFunction()->flags.contains(
-        rir::Function::Flag::DepromisedArgs);
+    auto depromiseArgs = version->owner()->rirFunction()->flags.contains(
+        rir::Function::Flag::DepromiseArgs);
 
     for (long i = nargs - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
@@ -120,7 +120,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
             args[i]->type = PirType::dotsArg();
         args[i]->type.fromContext(context, i, closure->nargs());
 
-        if (depromisedArgs) {
+        if (depromiseArgs) {
             args[i]->type = args[i]->type.notPromiseWrapped();
         }
     }
