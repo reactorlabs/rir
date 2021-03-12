@@ -171,6 +171,8 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (auto mkarg = MkArg::Cast(i)) {
                             ok = Visitor::check(
                                 mkarg->prom()->entry, [&](Instruction* i) {
+                                    if (!i->hasEnv())
+                                        return true;
                                     return std::find(allowedInProm.begin(),
                                                      allowedInProm.end(),
                                                      i->tag) !=
