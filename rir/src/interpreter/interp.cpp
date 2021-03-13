@@ -1038,6 +1038,12 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     }
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
+
+    if (fun->flags.contains(Function::DepromiseArgs)) {
+        // Force arguments and depromise
+        call.depromiseArgs();
+    }
+
     LazyArglistOnStack lazyPromargs(
         call.callId,
         call.caller ? call.caller->arglistOrderContainer() : nullptr,

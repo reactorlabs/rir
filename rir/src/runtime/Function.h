@@ -82,6 +82,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     V(MarkOpt)                                                                 \
     V(ForceInline)                                                             \
     V(DisableInline)                                                           \
+    V(DepromiseArgs)                                                           \
     V(NotOptimizable)                                                          \
     V(NotInlineable)                                                           \
     V(Dead)                                                                    \
@@ -101,10 +102,12 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     EnumSet<Flag> flags;
 
     void inheritFlags(const Function* other) {
-        static Flag inherited[] = {ForceInline, DisableInline,
+        static Flag inherited[] = {ForceInline,
+                                   DisableInline,
                                    DisableAllSpecialization,
                                    DisableArgumentTypeSpecialization,
-                                   DisableNumArgumentsSpezialization};
+                                   DisableNumArgumentsSpezialization,
+                                   DepromiseArgs};
         auto f = other->flags;
         for (auto flag : inherited)
             if (f.contains(flag))

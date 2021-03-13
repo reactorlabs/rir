@@ -24,7 +24,7 @@ struct CallContext {
     CallContext& operator=(CallContext&) = delete;
 
     CallContext(ArglistOrder::CallId callId, const Code* c, SEXP callee,
-                size_t nargs, SEXP ast, const R_bcstack_t* stackArgs,
+                size_t nargs, SEXP ast, R_bcstack_t* stackArgs,
                 const Immediate* names, SEXP callerEnv,
                 const Context& givenContext, InterpreterInstance* ctx)
         : callId(callId), caller(c), suppliedArgs(nargs), passedArgs(nargs),
@@ -58,7 +58,7 @@ struct CallContext {
     const Code* caller;
     const size_t suppliedArgs;
     size_t passedArgs;
-    const R_bcstack_t* stackArgs;
+    R_bcstack_t* stackArgs;
     const Immediate* names;
     SEXP callerEnv;
     const SEXP ast;
@@ -75,6 +75,11 @@ struct CallContext {
         return ostack_at_cell(stackArgs + i);
     }
 
+    void setStackArg(SEXP what, unsigned i) const {
+        assert(stackArgs && i < passedArgs);
+        ostack_at_cell(stackArgs + i) = what;
+    }
+
     SEXP name(unsigned i, InterpreterInstance* ctx) const {
         assert(hasNames() && i < suppliedArgs);
         return cp_pool_at(ctx, names[i]);
@@ -85,6 +90,32 @@ struct CallContext {
             SEXP arg = stackArg(i);
             if (TYPEOF(arg) == PROMSXP) {
                 safeForcePromise(arg);
+            }
+        }
+    }
+
+    void depromiseArgs() const {
+
+        // Both stackAergs and listargs should point to the same promises
+        // So forcing twice shouldn't execute the promise twice
+
+        // depromise on stack
+        for (unsigned i = 0; i < passedArgs; i++) {
+            SEXP arg = stackArg(i);
+            if (TYPEOF(arg) == PROMSXP) {
+                auto v = forcePromise(arg);
+                setStackArg(v, i);
+            }
+        }
+
+        // depromise on listArgs (linked list of CONS)
+        if (arglist) {
+            for (SEXP c = arglist; c != R_NilValue; c = CDR(c)) {
+                SEXP each = CAR(c);
+                if (TYPEOF(each) == PROMSXP) {
+                    auto v = forcePromise(each);
+                    CAR(c) = v;
+                }
             }
         }
     }

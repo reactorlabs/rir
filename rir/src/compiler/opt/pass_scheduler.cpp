@@ -26,7 +26,9 @@ PassScheduler::PassScheduler() {
         add<MatchCallArgs>();
         add<EagerCalls>();
 
+        add<InlineForcePromises>();
         add<Inline>();
+
         add<OptimizeContexts>();
 
         add<ForceDominance>();

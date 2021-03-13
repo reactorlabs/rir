@@ -49,11 +49,11 @@ bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 
 REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     if (!what || TYPEOF(what) != CLOSXP)
-        Rf_error("Not a rir compiled code");
+        Rf_error("Not a rir compiled code (Not CLOSXP)");
     DispatchTable* t = DispatchTable::check(BODY(what));
 
     if (!t)
-        Rf_error("Not a rir compiled code");
+        Rf_error("Not a rir compiled code (CLOSXP but not DispatchTable)");
 
     std::cout << "== closure " << what << " (dispatch table " << t << ", env "
               << CLOENV(what) << ") ==\n";
@@ -89,7 +89,8 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
                              SEXP forceInline_, SEXP disableInline_,
                              SEXP disableSpecialization_,
                              SEXP disableArgumentTypeSpecialization_,
-                             SEXP disableNumArgumentSpecialization_) {
+                             SEXP disableNumArgumentSpecialization_,
+                             SEXP depromiseArgs_) {
     if (!isValidClosureSEXP(what))
         Rf_error("Not rir compiled code");
     if (TYPEOF(which) != INTSXP || LENGTH(which) != 1)
@@ -118,6 +119,7 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
         getBool(disableNumArgumentSpecialization_);
     auto disableArgumentTypeSpecialization =
         getBool(disableArgumentTypeSpecialization_);
+    auto depromiseArgs = getBool(depromiseArgs_);
 
     Function* fun = dt->get(i);
     if (reopt != NA_LOGICAL) {
@@ -157,6 +159,16 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
             fun->flags.set(Function::DisableNumArgumentsSpezialization);
         else
             fun->flags.reset(Function::DisableNumArgumentsSpezialization);
+    }
+
+    bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true : false;
+    if (!DISABLE_ANNOTATIONS) {
+        if (depromiseArgs != NA_LOGICAL) {
+            if (depromiseArgs)
+                fun->flags.set(Function::DepromiseArgs);
+            else
+                fun->flags.reset(Function::DepromiseArgs);
+        }
     }
 
     return R_NilValue;

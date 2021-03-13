@@ -5,8 +5,8 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "preLaunchTask": "compile debugopt",
-            "name": "(gdb) R debugopt",
+            "preLaunchTask": "compile debug",
+            "name": "(gdb) R debug",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/external/custom-r/bin/exec/R",
@@ -20,7 +20,7 @@
                 {"name": "R_INCLUDE_DIR",   "value": "${workspaceFolder}/external/custom-r/include"},
                 {"name": "R_HOME",          "value": "${workspaceFolder}/external/custom-r"},
                 {"name": "R_ARCH",          "value": ""},
-                {"name": "EXTRA_LOAD_SO",   "value": "${workspaceRoot}/build/debugopt/librir.so"},
+                {"name": "EXTRA_LOAD_SO",   "value": "${workspaceRoot}/build/debug/librir.so"},
                 {"name": "EXTRA_LOAD_R",    "value": "${workspaceRoot}/rir/R/rir.R"},
             ],
             "externalConsole": false,

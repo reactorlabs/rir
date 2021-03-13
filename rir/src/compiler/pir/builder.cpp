@@ -109,11 +109,20 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     auto& context = version->context();
     std::vector<Value*> args(closure->nargs());
     size_t nargs = version->effectiveNArgs();
+
+    auto depromiseArgs = version->owner()->rirFunction()->flags.contains(
+        rir::Function::Flag::DepromiseArgs);
+
     for (long i = nargs - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
+
         if (closure->formals().names()[i] == R_DotsSymbol)
             args[i]->type = PirType::dotsArg();
         args[i]->type.fromContext(context, i, closure->nargs());
+
+        if (depromiseArgs) {
+            args[i]->type = args[i]->type.notPromiseWrapped();
+        }
     }
     for (size_t i = nargs; i < closure->nargs(); ++i) {
         args[i] = MissingArg::instance();
