@@ -1394,7 +1394,7 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::valOrLazy(),
+              PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
     Value* val() const { return arg(0).val(); }
@@ -1418,7 +1418,7 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::valOrLazy(),
+              PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
     Value* val() const { return arg(0).val(); }
@@ -1441,7 +1441,7 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
   public:
     Subassign1_2D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* env,
                   unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+        : FixedLenInstructionWithEnvSlot(PirType::val(),
                                          {{PirType::val(), PirType::val(),
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
@@ -1467,7 +1467,7 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
   public:
     Subassign2_2D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* env,
                   unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+        : FixedLenInstructionWithEnvSlot(PirType::val(),
                                          {{PirType::val(), PirType::val(),
                                            PirType::val(), PirType::val()}},
                                          {{val, mtx, idx1, idx2}}, env,
@@ -1494,7 +1494,7 @@ class FLIE(Subassign1_3D, 6, Effects::Any()) {
     Subassign1_3D(Value* val, Value* mtx, Value* idx1, Value* idx2, Value* idx3,
                   Value* env, unsigned srcIdx)
         : FixedLenInstructionWithEnvSlot(
-              PirType::valOrLazy(),
+              PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val(), PirType::val(),
                 PirType::val()}},
               {{val, mtx, idx1, idx2, idx3}}, env, srcIdx) {}
