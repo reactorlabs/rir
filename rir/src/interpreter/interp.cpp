@@ -17,6 +17,7 @@
 #include <deque>
 #include <libintl.h>
 #include <set>
+
 #include <unordered_set>
 
 #define NOT_IMPLEMENTED assert(false)
@@ -1030,6 +1031,44 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                         ctx);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
+
+    bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true : false;
+    if (!DISABLE_ANNOTATIONS) {
+        if (table->size() == 1) {
+
+            SEXP lhs = CAR(call.ast);
+            SEXP name = R_NilValue;
+            std::string nameStr = "";
+            if (TYPEOF(lhs) == SYMSXP) {
+                name = lhs;
+                nameStr = CHAR(PRINTNAME(name));
+            }
+
+            std::set<std::string> blackList;
+            blackList.insert(std::string("source"));
+            blackList.insert(std::string("integer"));
+            blackList.insert(std::string("file"));
+            blackList.insert(std::string("getOption"));
+            blackList.insert(std::string("readLines"));
+            blackList.insert(std::string("scan"));
+            blackList.insert(std::string("eval"));
+            blackList.insert(std::string("sys.function"));
+            blackList.insert(std::string("sys.parent"));
+            blackList.insert(std::string("formals"));
+            blackList.insert(std::string("match.arg"));
+
+            // flexclust (...)
+            blackList.insert(std::string("newKccaObject"));
+            blackList.insert(std::string("newKccasimpleObject"));
+            blackList.insert(std::string("new"));
+            blackList.insert(std::string("initialize"));
+
+            if (blackList.count(nameStr) == 0) {
+                // std::cerr <<"annotated: " << nameStr <<"\n";
+                table->baseline()->flags.set(Function::DepromiseArgs);
+            }
+        }
+    }
 
     if (!isDeoptimizing() && RecompileHeuristic(table, fun)) {
         Context given = call.givenContext;

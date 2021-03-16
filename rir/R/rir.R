@@ -212,3 +212,14 @@ rir.annotateDepromised <- function(closure) {
     rir.markFunction(copy, DepromiseArgs=TRUE)
     copy
 }
+
+# rir.annotateDepromised <- function(closure) {
+
+#     if (Sys.getenv("PIR_DISABLE_ANNOTATIONS") == "1") {
+#         return(closure)
+#     }
+
+#     rir.compile(closure)
+#     rir.markFunction(closure, DepromiseArgs=TRUE)
+#     closure
+# }
