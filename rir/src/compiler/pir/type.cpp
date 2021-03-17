@@ -172,7 +172,8 @@ void PirType::merge(const ObservedValues& other) {
         flags_.set(TypeFlags::maybeAttrib);
     if (!other.scalar)
         flags_.set(TypeFlags::maybeNotScalar);
-    flags_.set(TypeFlags::maybeNAOrNaN);
+    if (other.numTypes)
+        flags_.set(TypeFlags::maybeNAOrNaN);
     for (size_t i = 0; i < other.numTypes; ++i)
         merge(other.seen[i]);
 

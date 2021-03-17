@@ -91,7 +91,7 @@ struct ObservedValues {
 
     ObservedValues()
         : numTypes(0), stateBeforeLastForce(StateBeforeLastForce::unknown),
-          unused(0) {}
+          scalar(1), object(0), attribs(0), unused(0) {}
 
     void reset() { *this = ObservedValues(); }
 
