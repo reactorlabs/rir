@@ -215,6 +215,11 @@ struct PirType {
         return res;
     }
 
+    constexpr PirType orSexpTypes(const PirType& other) const {
+        assert(isRType() && other.isRType());
+        return PirType(t_.r | other.t_.r, flags_);
+    }
+
     void merge(const ObservedValues& other);
     void merge(SEXPTYPE t);
 
@@ -235,6 +240,7 @@ struct PirType {
                        RType::closure | RType::prom | RType::code | RType::env |
                        RType::missing | RType::unbound | RType::ast |
                        RType::dots | RType::other)
+            .orNAOrNaN()
             .orObject()
             .orAttribs();
     }

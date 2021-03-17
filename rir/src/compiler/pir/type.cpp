@@ -90,6 +90,10 @@ void PirType::merge(SEXPTYPE sexptype) {
     }
 }
 
+// For non-scalars, it takes too long to determine whether they
+// contain NaN for the benefit, so we simple assume they do
+static const R_xlen_t MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK = 1;
+
 static bool maybeContainsNAOrNaN(SEXP vector) {
     if (TYPEOF(vector) == CHARSXP) {
         return vector == NA_STRING;
@@ -162,27 +166,18 @@ PirType::PirType(uint64_t i) : PirType() {
 void PirType::merge(const ObservedValues& other) {
     assert(other.numTypes);
 
-    if (other.numTypes == ObservedValues::MaxTypes) {
-        *this = *this | any();
+    if (other.object)
         flags_.set(TypeFlags::maybeObject);
+    if (other.attribs)
         flags_.set(TypeFlags::maybeAttrib);
+    if (!other.scalar)
         flags_.set(TypeFlags::maybeNotScalar);
-        flags_.set(TypeFlags::maybeNAOrNaN);
-        return;
-    }
+    flags_.set(TypeFlags::maybeNAOrNaN);
+    for (size_t i = 0; i < other.numTypes; ++i)
+        merge(other.seen[i]);
 
-    for (size_t i = 0; i < other.numTypes; ++i) {
-        const auto& record = other.seen[i];
-        if (record.object)
-            flags_.set(TypeFlags::maybeObject);
-        if (record.attribs)
-            flags_.set(TypeFlags::maybeAttrib);
-        if (!record.scalar)
-            flags_.set(TypeFlags::maybeNotScalar);
-        flags_.set(TypeFlags::maybeNAOrNaN);
-
-        merge(record.sexptype);
-    }
+    if (other.numTypes == ObservedValues::MaxTypes)
+        *this = orSexpTypes(any());
 }
 
 bool PirType::isInstance(SEXP val) const {
