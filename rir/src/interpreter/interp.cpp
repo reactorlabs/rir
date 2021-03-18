@@ -882,11 +882,11 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
         }
     };
 
+    bool tryArgmatch = !given.includes(Assumption::StaticallyArgmatched);
     given.add(Assumption::CorrectOrderOfArguments);
-
     auto sig =
         DispatchTable::unpack(BODY(call.callee))->baseline()->signature();
-    if (given.includes(Assumption::NotTooManyArguments) &&
+    if (tryArgmatch && given.includes(Assumption::NotTooManyArguments) &&
         given.numMissing() == 0 && !sig.hasDotsFormals)
         given.add(Assumption::StaticallyArgmatched);
 
@@ -896,8 +896,9 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
         if (call.hasNames()) {
             auto name = call.name(i, ctx);
             if (name != R_NilValue && name != TAG(formals)) {
+                if (tryArgmatch)
+                    given.remove(Assumption::StaticallyArgmatched);
                 given.remove(Assumption::CorrectOrderOfArguments);
-                given.remove(Assumption::StaticallyArgmatched);
             }
             formals = CDR(formals);
         }
