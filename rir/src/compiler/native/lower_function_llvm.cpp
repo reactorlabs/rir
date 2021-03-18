@@ -3939,7 +3939,9 @@ void LowerFunctionLLVM::compile() {
                     }
                     if (arg->type.maybeHasAttrs() &&
                         !t->typeTest.maybeHasAttrs()) {
-                        res = builder.CreateAnd(res, fastVeceltOkNative(a));
+                        res = builder.CreateAnd(
+                            res, builder.CreateICmpEQ(
+                                     attr(a), constant(R_NilValue, t::SEXP)));
                     }
                     if (arg->type.maybeObj() && !t->typeTest.maybeObj()) {
                         res =

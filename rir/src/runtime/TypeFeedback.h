@@ -124,7 +124,7 @@ struct ObservedValues {
     RIR_INLINE void record(SEXP e) {
         scalar = scalar && IS_SIMPLE_SCALAR(e, TYPEOF(e));
         object = object || isObject(e);
-        attribs = attribs || !fastVeceltOk(e);
+        attribs = attribs || ATTRIB(e) != R_NilValue;
 
         uint8_t type = TYPEOF(e);
         if (numTypes < MaxTypes) {
