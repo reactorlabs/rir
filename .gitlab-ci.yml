@@ -80,7 +80,8 @@ test_release_1:
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - ../../external/custom-r/tests/*/*check.log
+    - "../../external/custom-r/tests/*.log"
+    - "../../external/custom-r/tests/*/*check.log"
     when: on_failure
     expire_in: 1 week
 
@@ -89,8 +90,8 @@ test_release_2:
   variables:
     GIT_STRATEGY: none
     PIR_INLINER_INLINE_UNLIKELY: 1
-    PIR_MAX_INPUT_SIZE: 10000
-    PIR_INLINER_MAX_SIZE: 10000
+    PIR_MAX_INPUT_SIZE: 5000
+    PIR_INLINER_MAX_SIZE: 5000
   stage: Run tests
   needs:
     - sanity
@@ -102,7 +103,8 @@ test_release_2:
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - ../../external/custom-r/tests/*/*check.log
+    - "../../external/custom-r/tests/*.log"
+    - "../../external/custom-r/tests/*/*check.log"
     when: on_failure
     expire_in: 1 week
 
@@ -125,11 +127,24 @@ tests_debug:
     - R_ENABLE_JIT=3 ./bin/tests
     - PIR_ENABLE=off ./bin/tests
     - PIR_ENABLE=force ./bin/tests
+
+tests_debug2:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+  stage: Run tests
+  needs:
+    - sanity
+  except:
+    - schedules
+  script:
+    - cd /opt/rir/build/debugopt
     - ./bin/gnur-make-tests check-devel
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - ../../external/custom-r/tests/*/*check.log
+    - "../../external/custom-r/tests/*.log"
+    - "../../external/custom-r/tests/*/*check.log"
     when: on_failure
     expire_in: 1 week
 
@@ -148,13 +163,29 @@ tests_fullverify:
   script:
     - cd /opt/rir/build/fullverifier
     - bin/tests
+
+tests_fullverify2:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_MAX_INPUT_SIZE: 10000
+    PIR_INLINER_MAX_SIZE: 10000
+  stage: Run tests
+  needs:
+    - sanity
+  except:
+    - schedules
+  script:
+    - cd /opt/rir/build/fullverifier
     - bin/gnur-make-tests check-devel
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - ../../external/custom-r/tests/*/*check.log
+    - "../../external/custom-r/tests/*.log"
+    - "../../external/custom-r/tests/*/*check.log"
     when: on_failure
     expire_in: 1 week
+
 
 # Test particular features, like deoptimization and serialization
 test_features_1:
@@ -200,9 +231,6 @@ test_sanitize1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_MAX_INPUT_SIZE: 10000
-    PIR_INLINER_MAX_SIZE: 10000
-    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
     - sanity
@@ -211,7 +239,6 @@ test_sanitize1:
   script:
     - cd /opt/rir/build/sanitize
     - ENABLE_VALGRIND=1 ./bin/tests
-    - R_GCTORTURE=1000 bin/tests
 
 # Run ubsan and gc torture
 test_sanitize2:
@@ -226,6 +253,22 @@ test_sanitize2:
   script:
     - cd /opt/rir/build/sanitize
     - R_GCTORTURE=20000 ./bin/gnur-make-tests check
+
+test_sanitize3:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_MAX_INPUT_SIZE: 10000
+    PIR_INLINER_MAX_SIZE: 10000
+    PIR_LLVM_OPT_LEVEL: 0
+  stage: Run tests
+  needs:
+    - sanity
+  except:
+    - schedules
+  script:
+    - cd /opt/rir/build/sanitize
+    - R_GCTORTURE=1000 bin/tests
 
 # Test with inlining big functions
 test_big_inline:
