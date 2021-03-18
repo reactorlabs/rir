@@ -410,9 +410,9 @@ void Instruction::replaceUsesIn(
 }
 
 void Instruction::replaceUsesWith(
-    Value* replace,
-    const std::function<void(Instruction*, size_t)>& postAction) {
-    replaceUsesIn(replace, bb(), postAction);
+    Value* replace, const std::function<void(Instruction*, size_t)>& postAction,
+    const std::function<bool(Instruction*)>& replaceOnly) {
+    replaceUsesIn(replace, bb(), postAction, replaceOnly);
 }
 
 void Instruction::replaceUsesAndSwapWith(

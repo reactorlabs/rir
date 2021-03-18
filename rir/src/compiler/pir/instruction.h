@@ -278,7 +278,9 @@ class Instruction : public Value {
     void replaceUsesWith(
         Value* val,
         const std::function<void(Instruction*, size_t)>& postAction =
-            [](Instruction*, size_t) {});
+            [](Instruction*, size_t) {},
+        const std::function<bool(Instruction*)>& replaceOnly =
+            [](Instruction*) { return true; });
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
