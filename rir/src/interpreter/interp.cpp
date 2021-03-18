@@ -1037,10 +1037,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         if (table->size() == 1) {
 
             SEXP lhs = CAR(call.ast);
-            SEXP name = R_NilValue;
             std::string nameStr = "";
             if (TYPEOF(lhs) == SYMSXP) {
-                name = lhs;
+                auto name = lhs;
                 nameStr = CHAR(PRINTNAME(name));
             }
 
