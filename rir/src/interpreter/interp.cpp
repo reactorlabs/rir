@@ -1032,8 +1032,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true : false;
-    if (!DISABLE_ANNOTATIONS) {
+    bool ENABLE_ANNOTATIONS = getenv("PIR_ENABLE_ANNOTATIONS") ? true : false;
+    if (ENABLE_ANNOTATIONS) {
         if (table->size() == 1) {
 
             SEXP lhs = CAR(call.ast);
@@ -1056,6 +1056,13 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             blackList.insert(std::string("sys.parent"));
             blackList.insert(std::string("formals"));
             blackList.insert(std::string("match.arg"));
+
+            blackList.insert(std::string("::"));
+
+            blackList.insert(std::string("tryCatch"));
+            blackList.insert(std::string("tryCatchOne"));
+            blackList.insert(std::string("tryCatchList"));
+            blackList.insert(std::string("doTryCatch"));
 
             // flexclust (...)
             blackList.insert(std::string("newKccaObject"));

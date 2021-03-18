@@ -200,18 +200,18 @@ rir.setUserContext <- function(f, udc) {
     .Call("rirSetUserContext", f, udc)
 }
 
-rir.annotateDepromised <- function(closure) {
+# rir.annotateDepromised <- function(closure) {
 
-    if (Sys.getenv("PIR_DISABLE_ANNOTATIONS") == "1") {
-        return(closure)
-    }
+#     if (Sys.getenv("PIR_ENABLE_ANNOTATIONS") != "1") {
+#         return(closure)
+#     }
 
-    copy <- closure
-    body(copy) <- body(closure)    # triggers a copy due to value semantics
-    rir.compile(copy)
-    rir.markFunction(copy, DepromiseArgs=TRUE)
-    copy
-}
+#     copy <- closure
+#     body(copy) <- body(closure)    # triggers a copy due to value semantics
+#     rir.compile(copy)
+#     rir.markFunction(copy, DepromiseArgs=TRUE)
+#     copy
+# }
 
 # rir.annotateDepromised <- function(closure) {
 

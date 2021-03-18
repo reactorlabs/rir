@@ -161,10 +161,12 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
             fun->flags.reset(Function::DisableNumArgumentsSpezialization);
     }
 
-    bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true : false;
-    if (!DISABLE_ANNOTATIONS) {
+    bool ENABLE_ANNOTATIONS = getenv("PIR_ENABLE_ANNOTATIONS") ? true : false;
+    if (ENABLE_ANNOTATIONS) {
+
         if (depromiseArgs != NA_LOGICAL) {
             if (depromiseArgs)
+
                 fun->flags.set(Function::DepromiseArgs);
             else
                 fun->flags.reset(Function::DepromiseArgs);
