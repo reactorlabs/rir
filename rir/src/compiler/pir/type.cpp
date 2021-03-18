@@ -170,7 +170,7 @@ void PirType::merge(const ObservedValues& other) {
         flags_.set(TypeFlags::maybeObject);
     if (other.attribs)
         flags_.set(TypeFlags::maybeAttrib);
-    if (!other.scalar)
+    if (other.notScalar)
         flags_.set(TypeFlags::maybeNotScalar);
 
     flags_.set(TypeFlags::maybeNAOrNaN);

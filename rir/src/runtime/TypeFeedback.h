@@ -82,16 +82,17 @@ struct ObservedValues {
     static constexpr unsigned MaxTypes = 3;
     uint8_t numTypes : 2;
     uint8_t stateBeforeLastForce : 2;
-    uint8_t scalar : 1;
+    uint8_t notScalar : 1;
     uint8_t object : 1;
     uint8_t attribs : 1;
     uint8_t unused : 1;
 
     std::array<uint8_t, MaxTypes> seen;
 
-    ObservedValues()
-        : numTypes(0), stateBeforeLastForce(StateBeforeLastForce::unknown),
-          scalar(1), object(0), attribs(0), unused(0) {}
+    ObservedValues() {
+        // implicitly happens when writing bytecode stream...
+        memset(this, 0, sizeof(ObservedValues));
+    }
 
     void reset() { *this = ObservedValues(); }
 
@@ -103,7 +104,7 @@ struct ObservedValues {
                     out << ", ";
             }
             out << " (" << (object ? "o" : "") << (attribs ? "a" : "")
-                << (scalar ? "s" : "") << ")";
+                << (!notScalar ? "s" : "") << ")";
             if (stateBeforeLastForce !=
                 ObservedValues::StateBeforeLastForce::unknown) {
                 out << " | "
@@ -122,7 +123,7 @@ struct ObservedValues {
     };
 
     RIR_INLINE void record(SEXP e) {
-        scalar = scalar && IS_SIMPLE_SCALAR(e, TYPEOF(e));
+        notScalar = notScalar || !IS_SIMPLE_SCALAR(e, TYPEOF(e));
         object = object || isObject(e);
         attribs = attribs || ATTRIB(e) != R_NilValue;
 
