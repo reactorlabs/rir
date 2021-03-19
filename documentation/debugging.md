@@ -112,8 +112,9 @@ completely disables the PIR optimizer. As follows are the different Options avai
 * `^` : May be lazy (and wrapped in a promise)
 * `~` : May be wrapped in a promise (but evaluated)
 * `?` : May be missing
-* `'` : Not an object but may have attributes
-* `"` : Not an object and has no attributes
+* `⁺` : Not an object but may have attributes
+* `ⁿ` : Can only have dimension attributes (not an object)
+* `⁻` : No attributes at all
 
 #### Effects
 
