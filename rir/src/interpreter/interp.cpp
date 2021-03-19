@@ -1012,6 +1012,17 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
     return res;
 }
 
+std::set<std::string> blackList = {
+    "source", "integer", "file", "getOption", "readLines", "scan", "eval",
+    "sys.function", "sys.parent", "formals", "match.arg", "::",
+
+    "tryCatch", "tryCatchOne", "tryCatchList", "doTryCatch",
+
+    // flexclust (...)
+    "newKccaObject", "newKccasimpleObject", "new", "initialize"
+
+};
+
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
@@ -1042,33 +1053,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                 auto name = lhs;
                 nameStr = CHAR(PRINTNAME(name));
             }
-
-            std::set<std::string> blackList;
-            blackList.insert(std::string("source"));
-            blackList.insert(std::string("integer"));
-            blackList.insert(std::string("file"));
-            blackList.insert(std::string("getOption"));
-            blackList.insert(std::string("readLines"));
-            blackList.insert(std::string("scan"));
-            blackList.insert(std::string("eval"));
-            blackList.insert(std::string("sys.function"));
-            blackList.insert(std::string("sys.parent"));
-            blackList.insert(std::string("formals"));
-            blackList.insert(std::string("match.arg"));
-
-            blackList.insert(std::string("::"));
-
-            blackList.insert(std::string("tryCatch"));
-            blackList.insert(std::string("tryCatchOne"));
-            blackList.insert(std::string("tryCatchList"));
-            blackList.insert(std::string("doTryCatch"));
-
-            // flexclust (...)
-            blackList.insert(std::string("newKccaObject"));
-            blackList.insert(std::string("newKccasimpleObject"));
-            blackList.insert(std::string("new"));
-            blackList.insert(std::string("initialize"));
-
+            // std::cerr <<"executed: " << nameStr <<"\n";
             if (blackList.count(nameStr) == 0) {
                 // std::cerr <<"annotated: " << nameStr <<"\n";
                 table->baseline()->flags.set(Function::DepromiseArgs);
