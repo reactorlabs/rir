@@ -1,6 +1,5 @@
 stages:
   - Build container
-  - Sanity Checks
   - Build benchmark container
   - Run tests
   - Deploy
@@ -10,18 +9,6 @@ variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   REBENCH_RUN_BL: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
-
-sanity:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-    PIR_LLVM_OPT_LEVEL: 1
-  stage: Sanity Checks
-  needs:
-    - rir_container
-  script:
-    - /opt/rir/tools/cppcheck
-    - /opt/rir/build/release/bin/tests
 
 rir_container:
   stage: Build container
@@ -60,6 +47,20 @@ benchmark_container:
     - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
 
+cpp_check:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+  needs:
+    - rir_container
+  except:
+    - schedules
+  stage: Run tests
+  needs:
+    - rir_container
+  script:
+    - /opt/rir/tools/cppcheck
+
 # Run check-all in release mode  (additionally check pir types)
 test_release_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -70,7 +71,7 @@ test_release_1:
     PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
@@ -94,7 +95,7 @@ test_release_2:
     PIR_INLINER_MAX_SIZE: 5000
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
@@ -115,7 +116,7 @@ tests_debug:
     GIT_STRATEGY: none
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
@@ -134,7 +135,7 @@ tests_debug2:
     GIT_STRATEGY: none
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
@@ -157,35 +158,12 @@ tests_fullverify:
     PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
     - cd /opt/rir/build/fullverifier
     - bin/tests
-
-tests_fullverify2:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-    PIR_MAX_INPUT_SIZE: 10000
-    PIR_INLINER_MAX_SIZE: 10000
-  stage: Run tests
-  needs:
-    - sanity
-  except:
-    - schedules
-  script:
-    - cd /opt/rir/build/fullverifier
-    - bin/gnur-make-tests check-devel
-    - ../../tools/check-gnur-make-tests-error
-  artifacts:
-    paths:
-    - "../../external/custom-r/tests/*.log"
-    - "../../external/custom-r/tests/*/*check.log"
-    when: on_failure
-    expire_in: 1 week
-
 
 # Test particular features, like deoptimization and serialization
 test_features_1:
@@ -195,7 +173,7 @@ test_features_1:
     PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
@@ -219,7 +197,7 @@ test_features_2:
     PIR_LLVM_OPT_LEVEL: 1
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
@@ -231,44 +209,30 @@ test_sanitize1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
     - cd /opt/rir/build/sanitize
-    - ENABLE_VALGRIND=1 ./bin/tests
+    - R_GCTORTURE=40000 ./bin/gnur-make-tests check
 
-# Run ubsan and gc torture
 test_sanitize2:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-  stage: Run tests
-  needs:
-    - sanity
-  except:
-    - schedules
-  script:
-    - cd /opt/rir/build/sanitize
-    - R_GCTORTURE=20000 ./bin/gnur-make-tests check
-
-test_sanitize3:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
-    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
     - cd /opt/rir/build/sanitize
-    - R_GCTORTURE=1000 bin/tests
+    - R_GCTORTURE=500 bin/tests
 
 # Test with inlining big functions
 test_big_inline:
@@ -280,7 +244,7 @@ test_big_inline:
     PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
-    - sanity
+    - rir_container
   except:
     - schedules
   script:
