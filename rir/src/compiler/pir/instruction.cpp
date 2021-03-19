@@ -741,7 +741,7 @@ void PirCopy::print(std::ostream& out, bool tty) const {
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                                  unsigned srcIdx)
-    : VarLenInstruction(PirType::val().notMissing(), srcIdx),
+    : VarLenInstruction(PirType::val().notObject().notMissing(), srcIdx),
       builtinSexp(builtin), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)

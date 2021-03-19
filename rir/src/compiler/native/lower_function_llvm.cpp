@@ -4342,7 +4342,7 @@ void LowerFunctionLLVM::compile() {
                 auto vector = loadSxp(extract->vec());
 
                 bool fastcase = !extract->vec()->type.maybe(RType::vec) &&
-                                !extract->vec()->type.maybeHasAttrs() &&
+                                !extract->vec()->type.maybeObj() &&
                                 vectorTypeSupport(extract->vec()) &&
                                 extract->idx()->type.isA(
                                     PirType::intReal().notObject().scalar());
