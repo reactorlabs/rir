@@ -485,6 +485,12 @@ struct PirType {
                                  TypeFlags::maybeObject);
     }
 
+    RIR_INLINE constexpr PirType fastVecelt() const {
+        assert(isRType());
+        return PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::maybeObject |
+                                        TypeFlags::maybeNotFastVecelt));
+    }
+
     PirType constexpr notPromiseWrapped() const {
         return PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::lazy |
                                         TypeFlags::promiseWrapped));
@@ -774,13 +780,15 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
         out << "^";
     else if (t.maybePromiseWrapped())
         out << "~";
-    if (t.maybeHasAttrs()) {
-        if (!t.maybeNotFastVecelt())
+    if (!t.maybeHasAttrs()) {
+        out << "⁻";
+    } else {
+        if (!t.maybeNotFastVecelt()) {
+            assert(!t.maybeObj());
             out << "ⁿ";
-        else if (!t.maybeObj())
-            out << "−";
-        else
-            out << "ₐ";
+        }
+        if (t.maybeObj())
+            out << "⁰";
     }
 
     return out;

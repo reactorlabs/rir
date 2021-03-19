@@ -674,10 +674,10 @@ llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v, bool enableAsserts) {
 
 bool LowerFunctionLLVM::vectorTypeSupport(Value* vector) {
     auto type = vector->type;
-    return type.isA(PirType(RType::vec).notObject()) ||
-           type.isA(PirType(RType::integer).notObject()) ||
-           type.isA(PirType(RType::logical).notObject()) ||
-           type.isA(PirType(RType::real).notObject());
+    return type.isA(PirType(RType::vec).orAttribsOrObj().fastVecelt()) ||
+           type.isA(PirType(RType::integer).orAttribsOrObj().fastVecelt()) ||
+           type.isA(PirType(RType::logical).orAttribsOrObj().fastVecelt()) ||
+           type.isA(PirType(RType::real).orAttribsOrObj().fastVecelt());
 }
 
 llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
@@ -685,12 +685,12 @@ llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
                                                   PirType type) {
     assert(vector->getType() == t::SEXP);
     PointerType* nativeType;
-    if (type.isA(PirType(RType::integer).notObject()) ||
-        type.isA(PirType(RType::logical).notObject())) {
+    if (type.isA(PirType(RType::integer).orAttribsOrObj().fastVecelt()) ||
+        type.isA(PirType(RType::logical).orAttribsOrObj().fastVecelt())) {
         nativeType = t::IntPtr;
-    } else if (type.isA(PirType(RType::real).notObject())) {
+    } else if (type.isA(PirType(RType::real).orAttribsOrObj().fastVecelt())) {
         nativeType = t::DoublePtr;
-    } else if (type.isA(PirType(RType::vec).notObject())) {
+    } else if (type.isA(PirType(RType::vec).orAttribsOrObj().fastVecelt())) {
         nativeType = t::SEXP_ptr;
     } else {
         nativeType = t::SEXP_ptr;
@@ -4360,7 +4360,7 @@ void LowerFunctionLLVM::compile() {
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
 
-                        if (extract->vec()->type.maybeHasAttrs()) {
+                        if (extract->vec()->type.maybeNotFastVecelt()) {
                             auto hit3 = BasicBlock::Create(
                                 PirJitLLVM::getContext(), "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
@@ -4430,7 +4430,7 @@ void LowerFunctionLLVM::compile() {
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
 
-                        if (extract->vec()->type.maybeHasAttrs()) {
+                        if (extract->vec()->type.maybeNotFastVecelt()) {
                             auto hit3 = BasicBlock::Create(
                                 PirJitLLVM::getContext(), "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
@@ -4873,7 +4873,7 @@ void LowerFunctionLLVM::compile() {
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit1);
 
-                        if (vecType.maybeHasAttrs()) {
+                        if (vecType.maybeNotFastVecelt()) {
                             auto hit2 = BasicBlock::Create(
                                 PirJitLLVM::getContext(), "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
