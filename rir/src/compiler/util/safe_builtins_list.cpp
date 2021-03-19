@@ -97,6 +97,18 @@ bool SafeBuiltinsList::always(SEXP builtin) {
     return always(getBuiltinNr(builtin));
 }
 
+bool SafeBuiltinsList::returnsObj(int builtin) {
+    static int safeBuiltins[] = {
+        blt("stdout"),
+        blt("stderr"),
+    };
+
+    for (auto i : safeBuiltins)
+        if (i == builtin)
+            return true;
+    return false;
+}
+
 bool SafeBuiltinsList::nonObject(int builtin) {
     if (always(builtin))
         return true;
