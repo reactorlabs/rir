@@ -74,7 +74,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 m = m.mergeWithConversion(
                                     getType(c->callArg(i).val()));
                             if (!m.maybeObj()) {
-                                inferred = m & PirType::num();
+                                inferred = m & PirType::num().orAttribsOrObj();
 
                                 if (inferred.maybe(RType::logical))
                                     inferred = inferred.orT(RType::integer)
@@ -102,7 +102,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 m = m.mergeWithConversion(
                                     getType(c->callArg(i).val()));
                             if (!m.maybeObj()) {
-                                inferred = m & PirType::num();
+                                inferred = m & PirType::num().orAttribsOrObj();
                                 inferred = inferred.orT(RType::real)
                                                .notT(RType::integer);
                                 break;
@@ -207,7 +207,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
 
                     if ("strsplit" == name) {
-                        inferred = RType::vec;
+                        inferred = PirType(RType::vec).orAttribsOrObj();
                         break;
                     }
 

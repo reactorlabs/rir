@@ -70,7 +70,7 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 } else if (auto chkcls = ChkClosure::Cast(i)) {
                     Value* arg = chkcls->arg<0>().val();
-                    if (arg->type.isA(RType::closure)) {
+                    if (arg->type.isA(PirType::closure())) {
                         removed = true;
                         chkcls->replaceUsesWith(arg);
                         next = bb->remove(ip);

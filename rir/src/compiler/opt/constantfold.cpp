@@ -703,11 +703,11 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (builtinId == blt("is.function") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
-                        if (t.isA(RType::closure)) {
+                        if (t.isA(PirType::closure())) {
                             iterAnyChange = true;
                             i->replaceUsesWith(True::instance());
                             next = bb->remove(ip);
-                        } else if (!t.maybe(RType::closure)) {
+                        } else if (!t.maybe(PirType::closure())) {
                             iterAnyChange = true;
                             i->replaceUsesWith(False::instance());
                             next = bb->remove(ip);
@@ -835,7 +835,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             if (auto cast = CastType::Cast(i->arg(0).val())) {
                                 if (cast != in &&
                                     cast->kind == CastType::Downcast &&
-                                    cast->type.isA(RType::closure)) {
+                                    cast->type.isA(PirType::closure())) {
                                     if (auto cast2 = CastType::Cast(
                                             cast->arg(0).val())) {
                                         if (cast2 != in &&

@@ -34,6 +34,22 @@ struct AAssumption {
             c.misc = cond;
         }
     }
+    explicit AAssumption(Branch* b, bool yesNo) : yesNo(yesNo) {
+        auto cond = b->arg(0).val();
+        if (auto t = IsType::Cast(cond)) {
+            kind = Typecheck;
+            c.typecheck = {t->arg(0).val(), t->typeTest};
+        } else if (auto t = Identical::Cast(cond)) {
+            kind = Equality;
+            c.equality = {t->arg(0).val(), t->arg(1).val()};
+        } else if (auto t = IsEnvStub::Cast(cond)) {
+            kind = IsEnvStub;
+            c.env = t->env();
+        } else {
+            kind = Other;
+            c.misc = cond;
+        }
+    }
     AAssumption& operator=(const AAssumption& o) {
         yesNo = o.yesNo;
         kind = o.kind;
@@ -218,8 +234,30 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                 }
             }
 
+            auto assumptionsIncludes = [&](AAssumption a) {
+                auto as = assumptions.at(instr);
+                for (const auto& e : as) {
+                    if (e == a)
+                        return true;
+                    if (e.kind == AAssumption::Typecheck &&
+                        a.kind == AAssumption::Typecheck)
+                        if (a.c.typecheck.first == e.c.typecheck.first &&
+                            e.c.typecheck.second.isA(a.c.typecheck.second))
+                            return true;
+                }
+                return false;
+            };
+
+            if (auto br = Branch::Cast(instr)) {
+                if (assumptionsIncludes(AAssumption(br, true))) {
+                    br->arg(0).val() = True::instance();
+                } else if (assumptionsIncludes(AAssumption(br, false))) {
+                    br->arg(0).val() = False::instance();
+                }
+            }
+
             if (auto assume = Assume::Cast(instr)) {
-                if (assumptions.at(instr).includes(AAssumption(assume))) {
+                if (assumptionsIncludes(AAssumption(assume))) {
                     anyChange = true;
                     next = bb->remove(ip);
                 } else {

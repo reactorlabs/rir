@@ -370,7 +370,7 @@ class Instruction : public Value {
                     t = t.mergeWithConversion(getType(v));
             });
             // Everything but numbers throws an error
-            t = t & PirType::num().notMissing();
+            t = t & PirType::num().notMissing().orAttribsOrObj();
             // e.g. TRUE + TRUE == 2
             if (m.maybe(RType::logical)) {
                 t = t.orT(RType::integer);
@@ -391,7 +391,7 @@ class Instruction : public Value {
     PirType inferredTypeForLogicalInstruction(const GetType& getType) const {
         auto t = mergedInputType(getType);
         if (!t.maybeObj()) {
-            auto res = PirType(RType::logical);
+            auto res = PirType(RType::logical).orAttribsOrObj();
             if (t.isScalar())
                 res = res.scalar();
             if (!t.maybeHasAttrs())
@@ -692,7 +692,7 @@ class FixedLenInstructionWithEnvSlot
                 const std::array<PirType, ARGS - 1>& t, Value* env) {
             static_assert(EnvSlot == ARGS - 1, "");
             (*this)[EnvSlot].val() = env;
-            (*this)[EnvSlot].type() = RType::env;
+            (*this)[EnvSlot].type() = PirType::env();
             for (size_t i = 0; i < EnvSlot; ++i) {
                 (*this)[i].val() = a[i];
                 (*this)[i].type() = t[i];
@@ -743,23 +743,23 @@ class VarLenInstructionWithEnvSlot
     VarLenInstructionWithEnvSlot(PirType resultType, Value* env,
                                  unsigned srcIdx = 0)
         : Super(resultType, srcIdx) {
-        Super::pushArg(env, RType::env);
+        Super::pushArg(env, PirType::env());
     }
 
     void pushArg(Value* a, PirType t) override {
         assert(a);
         assert(args_.size() > 0);
-        assert(args_.back().type() == RType::env);
+        assert(args_.back().type() == PirType::env());
         // extend vector and move the environment to the end
         args_.push_back(args_.back());
         args_[args_.size() - 2] = InstrArg(a, t);
     }
     void popArg() override final {
         assert(args_.size() > 1);
-        assert(args_.back().type() == RType::env);
+        assert(args_.back().type() == PirType::env());
         args_[args_.size() - 2] = args_[args_.size() - 1];
         args_.pop_back();
-        assert(args_.back().type() == RType::env);
+        assert(args_.back().type() == PirType::env());
     }
 
     Value* env() const final override { return args_.back().val(); }
@@ -926,11 +926,11 @@ class FLIE(LdFun, 2, Effects::Any()) {
     SEXP hint = nullptr;
 
     LdFun(const char* name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(PirType::closure(), {{PirType::any()}},
                                          {{Tombstone::closure()}}, env),
           varName(Rf_install(name)) {}
     LdFun(SEXP name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(PirType::closure(), {{PirType::any()}},
                                          {{Tombstone::closure()}}, env),
           varName(name) {
         assert(TYPEOF(name) == SYMSXP);
@@ -1024,7 +1024,7 @@ class FLI(ChkMissing, 1, Effect::Error) {
 class FLI(ChkClosure, 1, Effect::Error) {
   public:
     explicit ChkClosure(Value* in)
-        : FixedLenInstruction(RType::closure, {{PirType::val()}}, {{in}}) {}
+        : FixedLenInstruction(PirType::closure(), {{PirType::val()}}, {{in}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -1178,7 +1178,8 @@ class FLIE(MkCls, 4, Effects::None()) {
   public:
     MkCls(Value* fml, Value* code, Value* src, Value* lexicalEnv)
         : FixedLenInstructionWithEnvSlot(
-              RType::closure, {{PirType::list(), RType::code, PirType::any()}},
+              PirType::closure(),
+              {{PirType::list(), RType::code, PirType::any()}},
               {{fml, code, src}}, lexicalEnv) {}
 
     Value* code() const { return arg(1).val(); }
@@ -1692,7 +1693,7 @@ class FLI(IsType, 1, Effects::None()) {
 
 class FLI(LdFunctionEnv, 0, Effects::None()) {
   public:
-    LdFunctionEnv() : FixedLenInstruction(RType::env) {}
+    LdFunctionEnv() : FixedLenInstruction(PirType::env()) {}
     bool stub = false;
 };
 
@@ -2341,15 +2342,16 @@ class VLIE(MkEnv, Effect::LeakArg) {
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args,
           const std::vector<bool>& missing)
-        : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names),
-          missing(missing) {
+        : VarLenInstructionWithEnvSlot(PirType::env(), lexicalEnv),
+          varName(names), missing(missing) {
         for (unsigned i = 0; i < varName.size(); ++i) {
             MkEnv::pushArg(args[i], PirType::any());
         }
     }
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args)
-        : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names) {
+        : VarLenInstructionWithEnvSlot(PirType::env(), lexicalEnv),
+          varName(names) {
         for (unsigned i = 0; i < varName.size(); ++i) {
             MkEnv::pushArg(args[i], PirType::any());
         }
@@ -2399,7 +2401,7 @@ class VLIE(MkEnv, Effect::LeakArg) {
 class FLIE(MaterializeEnv, 1, Effects::None()) {
   public:
     explicit MaterializeEnv(MkEnv* e)
-        : FixedLenInstructionWithEnvSlot(RType::env, e) {}
+        : FixedLenInstructionWithEnvSlot(PirType::env(), e) {}
 };
 
 class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {

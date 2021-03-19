@@ -254,6 +254,10 @@ struct PirType {
         return PirType(RType::closure).orAttribsOrObj();
     }
 
+    static constexpr PirType env() {
+        return PirType(RType::env).orAttribsOrObj();
+    }
+
     static constexpr PirType dotsArg() {
         return (PirType() | RType::missing | RType::dots).notPromiseWrapped();
     }
@@ -786,9 +790,9 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
         if (!t.maybeNotFastVecelt()) {
             assert(!t.maybeObj());
             out << "ⁿ";
+        } else if (!t.maybeObj()) {
+            out << "⁺";
         }
-        if (t.maybeObj())
-            out << "⁰";
     }
 
     return out;

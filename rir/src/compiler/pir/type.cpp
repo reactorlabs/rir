@@ -157,13 +157,11 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
         assert(!Rf_isObject(e));
         flags_.reset(TypeFlags::maybeAttrib);
     }
+    if (Rf_xlength(e) == 1)
+        flags_.reset(TypeFlags::maybeNotScalar);
 
-    if (PirType::vecs().isSuper(*this)) {
-        if (Rf_length(e) == 1)
-            flags_.reset(TypeFlags::maybeNotScalar);
-        if (!maybeContainsNAOrNaN(e))
-            flags_.reset(TypeFlags::maybeNAOrNaN);
-    }
+    if (!maybeContainsNAOrNaN(e))
+        flags_.reset(TypeFlags::maybeNAOrNaN);
 }
 
 PirType::PirType(uint64_t i) : PirType() {
