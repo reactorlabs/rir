@@ -250,7 +250,9 @@ struct PirType {
         return num() | RType::str | RType::raw | RType::vec |
                RType::expressions;
     }
-    static constexpr PirType closure() { return RType::closure; }
+    static constexpr PirType closure() {
+        return PirType(RType::closure).orAttribsOrObj();
+    }
 
     static constexpr PirType dotsArg() {
         return (PirType() | RType::missing | RType::dots).notPromiseWrapped();

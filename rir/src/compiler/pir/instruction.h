@@ -399,7 +399,7 @@ class Instruction : public Value {
             if (t.isSimpleScalar())
                 res = res.simpleScalar();
             if (!t.maybeNAOrNaN())
-                t = res.notNAOrNaN();
+                res = res.notNAOrNaN();
             return type & res;
         }
         return type;
