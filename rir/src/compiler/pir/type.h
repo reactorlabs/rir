@@ -489,6 +489,11 @@ struct PirType {
                                  TypeFlags::maybeObject);
     }
 
+    RIR_INLINE constexpr PirType orFastVecelt() const {
+        assert(isRType());
+        return orAttribsOrObj().orAttribsOrObj().fastVecelt();
+    }
+
     RIR_INLINE constexpr PirType fastVecelt() const {
         assert(isRType());
         return PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::maybeObject |

@@ -131,6 +131,12 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (vecTests.count(name)) {
                         if (!getType(c->callArg(0).val()).maybeObj()) {
                             inferred = PirType(RType::logical);
+                            if (getType(c->callArg(0).val()).maybeHasAttrs())
+                                inferred =
+                                    inferred.orAttribsOrObj().notObject();
+                            if (!getType(c->callArg(0).val())
+                                     .maybeNotFastVecelt())
+                                inferred = inferred.fastVecelt();
                             if (getType(c->callArg(0).val()).isSimpleScalar())
                                 inferred = inferred.simpleScalar();
                         } else {

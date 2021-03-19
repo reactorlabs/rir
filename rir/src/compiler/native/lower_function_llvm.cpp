@@ -674,10 +674,10 @@ llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v, bool enableAsserts) {
 
 bool LowerFunctionLLVM::vectorTypeSupport(Value* vector) {
     auto type = vector->type;
-    return type.isA(PirType(RType::vec).orAttribsOrObj().fastVecelt()) ||
-           type.isA(PirType(RType::integer).orAttribsOrObj().fastVecelt()) ||
-           type.isA(PirType(RType::logical).orAttribsOrObj().fastVecelt()) ||
-           type.isA(PirType(RType::real).orAttribsOrObj().fastVecelt());
+    return type.isA(PirType(RType::vec).orFastVecelt()) ||
+           type.isA(PirType(RType::integer).orFastVecelt()) ||
+           type.isA(PirType(RType::logical).orFastVecelt()) ||
+           type.isA(PirType(RType::real).orFastVecelt());
 }
 
 llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
@@ -4738,9 +4738,11 @@ void LowerFunctionLLVM::compile() {
                     idx1Type.isA(PirType::intReal().notObject().scalar()) &&
                     idx2Type.isA(PirType::intReal().notObject().scalar()) &&
                     valType.isScalar() && !vecType.maybeObj() &&
-                    ((vecType.isA(RType::integer) &&
+                    ((vecType.isA(PirType(RType::integer).orFastVecelt()) &&
                       valType.isA(RType::integer)) ||
-                     (vecType.isA(RType::real) && valType.isA(RType::real)));
+                     (vecType.isA(PirType(RType::real).orFastVecelt()) &&
+                      valType.isA(RType::real)));
+
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
                 if (Representation::Of(subAssign->vec()) != t::SEXP &&
                     Representation::Of(i) == t::SEXP)
@@ -4854,10 +4856,11 @@ void LowerFunctionLLVM::compile() {
                 bool fastcase =
                     idxType.isA(PirType::intReal().notObject().scalar()) &&
                     valType.isScalar() && !vecType.maybeObj() &&
-                    (vecType.isA(RType::vec) ||
-                     (vecType.isA(RType::integer) &&
+                    (vecType.isA(PirType(RType::vec).orFastVecelt()) ||
+                     (vecType.isA(PirType(RType::integer).orFastVecelt()) &&
                       valType.isA(RType::integer)) ||
-                     (vecType.isA(RType::real) && valType.isA(RType::real)));
+                     (vecType.isA(PirType(RType::real).orFastVecelt()) &&
+                      valType.isA(RType::real)));
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
                 if (Representation::Of(subAssign->vec()) != t::SEXP &&
                     Representation::Of(i) == t::SEXP)
@@ -4940,9 +4943,10 @@ void LowerFunctionLLVM::compile() {
                 bool fastcase =
                     idxType.isA(PirType::intRealLgl().notObject().scalar()) &&
                     valType.isScalar() && !vecType.maybeObj() &&
-                    ((vecType.isA(RType::integer) &&
+                    ((vecType.isA(PirType(RType::integer).orFastVecelt()) &&
                       valType.isA(RType::integer)) ||
-                     (vecType.isA(RType::real) && valType.isA(RType::real)));
+                     (vecType.isA(PirType(RType::real).orFastVecelt()) &&
+                      valType.isA(RType::real)));
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
                 if (Representation::Of(subAssign->vec()) != t::SEXP &&
                     Representation::Of(i) == t::SEXP)
