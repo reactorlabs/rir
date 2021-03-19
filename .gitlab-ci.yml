@@ -263,10 +263,8 @@ test_benchmarks:
   needs:
     - benchmark_container
   script:
-    - PIR_ENABLE=0 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:RIR-LLVM -R -r --iterations 2"
     - PIR_DEOPT_CHAOS=200 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
     - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
-  retry: 2
 
 deploy:
   stage: Deploy
