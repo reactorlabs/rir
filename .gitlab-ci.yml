@@ -216,8 +216,8 @@ test_sanitize1:
   except:
     - schedules
   script:
-    - cd /opt/rir/build/sanitize
-    - R_GCTORTURE=40000 ./bin/gnur-make-tests check
+    - cd /opt/rir/build/release
+    - R_GCTORTURE=5000 ./bin/gnur-make-tests check
 
 test_sanitize2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -232,7 +232,7 @@ test_sanitize2:
     - schedules
   script:
     - cd /opt/rir/build/sanitize
-    - R_GCTORTURE=500 bin/tests
+    - R_GCTORTURE=300 bin/tests
 
 # Test with inlining big functions
 test_big_inline:
