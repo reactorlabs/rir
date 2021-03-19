@@ -83,9 +83,9 @@ struct ObservedValues {
     uint8_t numTypes : 2;
     uint8_t stateBeforeLastForce : 2;
     uint8_t notScalar : 1;
-    uint8_t object : 1;
     uint8_t attribs : 1;
-    uint8_t unused : 1;
+    uint8_t object : 1;
+    uint8_t notFastVecelt : 1;
 
     std::array<uint8_t, MaxTypes> seen;
 
@@ -104,7 +104,7 @@ struct ObservedValues {
                     out << ", ";
             }
             out << " (" << (object ? "o" : "") << (attribs ? "a" : "")
-                << (!notScalar ? "s" : "") << ")";
+                << (notFastVecelt ? "v" : "") << (!notScalar ? "s" : "") << ")";
             if (stateBeforeLastForce !=
                 ObservedValues::StateBeforeLastForce::unknown) {
                 out << " | "
@@ -123,9 +123,10 @@ struct ObservedValues {
     };
 
     RIR_INLINE void record(SEXP e) {
-        notScalar = notScalar || !IS_SIMPLE_SCALAR(e, TYPEOF(e));
+        notScalar = notScalar || XLENGTH(e) != 1;
         object = object || isObject(e);
         attribs = attribs || ATTRIB(e) != R_NilValue;
+        notFastVecelt = notFastVecelt || !fastVeceltOk(e);
 
         uint8_t type = TYPEOF(e);
         if (numTypes < MaxTypes) {

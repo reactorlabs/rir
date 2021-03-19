@@ -747,7 +747,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (builtinId == blt("is.integer") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
-                        if (t.isA(PirType(RType::integer).noAttribs())) {
+                        if (t.isA(PirType(RType::integer))) {
                             iterAnyChange = true;
                             i->replaceUsesWith(True::instance());
                             next = bb->remove(ip);
@@ -814,7 +814,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         static PirType typeThatDoesntError =
                             (PirType::num() | RType::chr | RType::str |
                              RType::vec)
-                                .orAttribs();
+                                .orAttribsOrObj();
                         if (typeThatDoesntError.isA(t) && !t.maybeNAOrNaN()) {
                             iterAnyChange = true;
                             i->replaceUsesWith(False::instance());

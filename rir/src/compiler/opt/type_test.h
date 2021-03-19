@@ -34,9 +34,9 @@ class TypeTest {
         assert(feedback.origin);
         // First try to refine the type
         if (!expected.maybeObj() && // TODO: Is this right?
-            (expected.noAttribs().isA(RType::integer) ||
-             expected.noAttribs().isA(RType::real) ||
-             expected.noAttribs().isA(RType::logical))) {
+            (expected.noAttribsOrObject().isA(RType::integer) ||
+             expected.noAttribsOrObject().isA(RType::real) ||
+             expected.noAttribsOrObject().isA(RType::logical))) {
             return action({expected, new IsType(expected, i), true,
                            feedback.srcCode, feedback.origin});
         }
@@ -48,7 +48,7 @@ class TypeTest {
         if (i->type.isA(suggested))
             return;
 
-        auto checkFor = i->type.notLazy().noAttribs();
+        auto checkFor = i->type.notLazy().noAttribsOrObject();
         if (expected.isA(checkFor)) {
             assert(!expected.maybeObj());
             assert(!expected.maybeHasAttrs());

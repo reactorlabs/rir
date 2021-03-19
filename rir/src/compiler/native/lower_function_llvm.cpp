@@ -2479,9 +2479,8 @@ void LowerFunctionLLVM::compile() {
                         if (Representation::Of(b->callArg(0).val()) !=
                             t::SEXP) {
                             setVal(i, constant(R_NilValue, t::SEXP));
-                        } else if (itype.isA(PirType::vecs()
-                                                 .orObject()
-                                                 .orAttribs())) {
+                        } else if (itype.isA(
+                                       PirType::vecs().orAttribsOrObj())) {
                             if (!itype.maybeHasAttrs() && !itype.maybeObj()) {
                                 setVal(i, constant(R_NilValue, t::SEXP));
                             } else {
@@ -3915,20 +3914,20 @@ void LowerFunctionLLVM::compile() {
                     }
 
                     llvm::Value* res = nullptr;
-                    if (t->typeTest.noAttribs().isA(
+                    if (t->typeTest.noAttribsOrObject().isA(
                             PirType(RType::logical).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
-                    } else if (t->typeTest.noAttribs().isA(
+                    } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::integer)
                                        .orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
-                    } else if (t->typeTest.noAttribs().isA(
+                    } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::real).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
                     } else {
                         assert(arg->type.notMissing()
                                    .notPromiseWrapped()
-                                   .noAttribs()
+                                   .noAttribsOrObject()
                                    .isA(t->typeTest));
                         res = builder.CreateICmpNE(
                             a, constant(R_UnboundValue, t::SEXP));
@@ -3942,10 +3941,15 @@ void LowerFunctionLLVM::compile() {
                         res = builder.CreateAnd(
                             res, builder.CreateICmpEQ(
                                      attr(a), constant(R_NilValue, t::SEXP)));
-                    }
-                    if (arg->type.maybeObj() && !t->typeTest.maybeObj()) {
-                        res =
-                            builder.CreateAnd(res, builder.CreateNot(isObj(a)));
+                    } else {
+                        if (arg->type.maybeNotFastVecelt() &&
+                            !t->typeTest.maybeNotFastVecelt()) {
+                            res = builder.CreateAnd(res, fastVeceltOkNative(a));
+                        }
+                        if (arg->type.maybeObj() && !t->typeTest.maybeObj()) {
+                            res = builder.CreateAnd(
+                                res, builder.CreateNot(isObj(a)));
+                        }
                     }
                     setVal(i, builder.CreateZExt(res, t::Int));
                 } else {

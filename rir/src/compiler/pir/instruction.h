@@ -382,7 +382,7 @@ class Instruction : public Value {
             // integer (doesn't happen with only logicals), and the result is an
             // integer (doesn't happen with real coercion)
             if (m.maybe(RType::integer) && t.maybe(RType::integer))
-                t.setMaybeNAOrNaN();
+                t = t.orNAOrNaN();
             return type & t;
         }
         return type;
@@ -391,13 +391,15 @@ class Instruction : public Value {
     PirType inferredTypeForLogicalInstruction(const GetType& getType) const {
         auto t = mergedInputType(getType);
         if (!t.maybeObj()) {
-            auto res = PirType(RType::logical).notMissing();
+            auto res = PirType(RType::logical);
             if (t.isScalar())
-                res.setScalar();
+                res = res.scalar();
+            if (!t.maybeHasAttrs())
+                res = res.noAttribsOrObject();
             if (t.isSimpleScalar())
                 res = res.simpleScalar();
             if (!t.maybeNAOrNaN())
-                res.setNotNAOrNaN();
+                t = res.notNAOrNaN();
             return type & res;
         }
         return type;
@@ -1307,7 +1309,7 @@ class FLI(AsLogical, 1, Effect::Error) {
     Effects inferEffects(const GetType& getType) const override final {
         if (getType(val()).isA((PirType() | RType::logical | RType::integer |
                                 RType::real | RType::str | RType::cplx)
-                                   .noAttribs())) {
+                                   .noAttribsOrObject())) {
             return Effects::None();
         }
         return effects;
@@ -1650,9 +1652,9 @@ class FLIE(Extract1_3D, 5, Effects::Any()) {
 class FLI(Inc, 1, Effects::None()) {
   public:
     explicit Inc(Value* v)
-        : FixedLenInstruction(
-              PirType(RType::integer).simpleScalar().noAttribs(),
-              {{PirType(RType::integer).simpleScalar().noAttribs()}}, {{v}}) {}
+        : FixedLenInstruction(PirType(RType::integer).simpleScalar(),
+                              {{PirType(RType::integer).simpleScalar()}},
+                              {{v}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 

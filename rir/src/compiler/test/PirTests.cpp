@@ -849,12 +849,14 @@ bool testTypeRules() {
     assert(r.subsetType(PirType::any()).isA(RType::vec));
     assert(!r.subsetType(PirType::any()).maybeObj());
     assert(!r.orObject().subsetType(PirType::bottom()).isA(RType::vec));
-    assert(!r.orObject().subsetType(PirType::bottom()).isA(PirType::val()));
+    assert(!r.orObject()
+                .subsetType(PirType::bottom())
+                .isA(PirType::val().noAttribsOrObject()));
     assert(r.extractType(PirType::any()).isA(PirType::val()));
     assert(!r.extractType(PirType::bottom()).isScalar());
     assert(!r.extractType(PirType::bottom()).maybeMissing());
     assert(!r.extractType(PirType::bottom()).isA(RType::vec));
-    assert(r.orObject().extractType(PirType::bottom()).maybeMissing());
+    assert(r.orObject().extractType(PirType::simpleScalarInt()).maybeMissing());
     assert(r2.subsetType(RType::real).isA(RType::logical));
     assert(!r2.subsetType(RType::integer).isScalar());
     assert(!r2.scalar().subsetType(RType::integer).isScalar());
@@ -869,11 +871,11 @@ bool testTypeRules() {
     auto a = (PirType() | RType::real | RType::integer)
                  .notPromiseWrapped()
                  .notObject()
-                 .noAttribs();
+                 .noAttribsOrObject();
     auto b = (PirType() | RType::integer)
                  .notPromiseWrapped()
                  .notObject()
-                 .noAttribs();
+                 .noAttribsOrObject();
     assert(a.mergeWithConversion(b) == a);
     assert(b.mergeWithConversion(a) == a);
     t = PirType::bottom();
@@ -884,7 +886,7 @@ bool testTypeRules() {
     assert(t == a);
     t = PirType::any() & t;
     assert(t == a);
-    auto real = PirType(RType::real).orAttribs().notObject();
+    auto real = PirType(RType::real).orAttribsOrObj().notObject();
     auto realScalar = PirType::simpleScalarReal();
     assert(real.maybeHasAttrs());
     assert(!realScalar.maybeHasAttrs());

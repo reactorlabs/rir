@@ -92,9 +92,12 @@ enum class TypeFlags : uint8_t {
 
     lazy,
     promiseWrapped,
+
     maybeNotScalar,
     maybeObject,
+    maybeNotFastVecelt,
     maybeAttrib,
+
     maybeNAOrNaN,
     rtype,
 
@@ -139,9 +142,9 @@ struct PirType {
 
     static constexpr FlagSet topRTypeFlags() {
         return FlagSet() | TypeFlags::lazy | TypeFlags::promiseWrapped |
-               TypeFlags::maybeObject | TypeFlags::maybeAttrib |
-               TypeFlags::maybeNotScalar | TypeFlags::maybeNAOrNaN |
-               TypeFlags::rtype;
+               TypeFlags::maybeObject | TypeFlags::maybeNotFastVecelt |
+               TypeFlags::maybeAttrib | TypeFlags::maybeNotScalar |
+               TypeFlags::maybeNAOrNaN | TypeFlags::rtype;
     }
     static constexpr FlagSet optimisticRTypeFlags() {
         return FlagSet() | TypeFlags::rtype;
@@ -241,8 +244,7 @@ struct PirType {
                        RType::missing | RType::unbound | RType::ast |
                        RType::dots | RType::other)
             .orNAOrNaN()
-            .orObject()
-            .orAttribs();
+            .orAttribsOrObj();
     }
     static constexpr PirType vecs() {
         return num() | RType::str | RType::raw | RType::vec |
@@ -318,8 +320,9 @@ struct PirType {
         return flags_.includes(TypeFlags::maybeNAOrNaN);
     }
     RIR_INLINE constexpr bool isSimpleScalar() const {
-        return isScalar() && !maybeHasAttrs() && !maybeObj();
+        return isScalar() && !maybeHasAttrs();
     }
+
     RIR_INLINE constexpr bool isScalar() const {
         if (!isRType())
             return true;
@@ -342,13 +345,26 @@ struct PirType {
         if (!isRType())
             return false;
         auto res = flags_.includes(TypeFlags::maybeObject);
-        assert(!res || maybeHasAttrs());
+        assert(!res || (flags_.includes(TypeFlags::maybeAttrib) &&
+                        flags_.includes(TypeFlags::maybeNotFastVecelt)));
         return res;
     }
+
+    RIR_INLINE constexpr bool maybeNotFastVecelt() const {
+        if (!isRType())
+            return false;
+        auto res = flags_.includes(TypeFlags::maybeNotFastVecelt);
+        assert(!res || flags_.includes(TypeFlags::maybeAttrib));
+        return res;
+    }
+
     RIR_INLINE constexpr bool maybeHasAttrs() const {
         if (!isRType())
             return false;
-        return flags_.includes(TypeFlags::maybeAttrib);
+        auto res = flags_.includes(TypeFlags::maybeAttrib);
+        assert(res || (!flags_.includes(TypeFlags::maybeNotFastVecelt) &&
+                       !flags_.includes(TypeFlags::maybeObject)));
+        return res;
     }
 
     RIR_INLINE constexpr PirType operator|(const PirType& o) const {
@@ -389,10 +405,12 @@ struct PirType {
         return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeObject));
     }
 
-    PirType constexpr noAttribs() const {
+    PirType constexpr noAttribsOrObject() const {
         assert(isRType());
-        return PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::maybeAttrib |
-                                        TypeFlags::maybeObject));
+        return PirType(t_.r,
+                       flags_ & ~(FlagSet() | TypeFlags::maybeNotFastVecelt |
+                                  TypeFlags::maybeAttrib))
+            .notObject();
     }
 
     PirType constexpr notMissing() const {
@@ -411,7 +429,7 @@ struct PirType {
     }
 
     RIR_INLINE constexpr PirType simpleScalar() const {
-        return scalar().noAttribs().notObject();
+        return scalar().noAttribsOrObject();
     }
 
     RIR_INLINE constexpr PirType notT(RType t) const {
@@ -448,12 +466,21 @@ struct PirType {
     RIR_INLINE constexpr PirType orObject() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::maybeObject |
+                                 TypeFlags::maybeAttrib |
+                                 TypeFlags::maybeNotFastVecelt);
+    }
+
+    RIR_INLINE constexpr PirType orNotFastVecelt() const {
+        assert(isRType());
+        return PirType(t_.r, flags_ | TypeFlags::maybeNotFastVecelt |
                                  TypeFlags::maybeAttrib);
     }
 
-    RIR_INLINE constexpr PirType orAttribs() const {
+    RIR_INLINE constexpr PirType orAttribsOrObj() const {
         assert(isRType());
-        return PirType(t_.r, flags_ | TypeFlags::maybeAttrib);
+        return PirType(t_.r, flags_ | TypeFlags::maybeAttrib |
+                                 TypeFlags::maybeNotFastVecelt |
+                                 TypeFlags::maybeObject);
     }
 
     PirType constexpr notPromiseWrapped() const {
@@ -484,47 +511,49 @@ struct PirType {
     // Type of <this>[<idx>] or <this>[<idx>, <idx>]
     PirType subsetType(PirType idx) const {
         assert(isRType());
-        if (isA(PirType(RType::nil).orAttribs())) {
+        if (isA(PirType(RType::nil).orAttribsOrObj())) {
             // NULL
             return RType::nil;
         }
-        if (isA((num() | RType::str | RType::list | RType::code).orAttribs())) {
+        if (isA((num() | RType::str | RType::list | RType::code)
+                    .orAttribsOrObj())) {
             // If the index is out of bounds, NA is returned (even if both args
             // are non-NA) so we must add orNAOrNaN()
             if (idx.isA(PirType(RType::str).scalar()))
-                return scalar().orAttribs().orNAOrNaN();
+                return scalar().orAttribsOrObj().orNAOrNaN();
             // e.g. c(1,2,3)[-1] returns c(2,3)
             return orNotScalar().orNAOrNaN();
         } else if (isA(RType::vec)) {
             return PirType(RType::vec);
-        } else if (isA(PirType(RType::vec).orAttribs())) {
-            return PirType(RType::vec).orAttribs();
-        } else if (!maybeHasAttrs() && !PirType(RType::prom).isA(*this)) {
+        } else if (isA(PirType(RType::vec).orAttribsOrObj())) {
+            return PirType(RType::vec).orAttribsOrObj();
+        } else if (!maybeNotFastVecelt() && !PirType(RType::prom).isA(*this)) {
             // Something else
             return val().notMissing();
         } else {
             // Possible object
-            return valOrLazy();
+            return val();
         }
     }
 
     // Type of <this>[[<idx>]] or <this>[[<idx>, <idx>]]
     PirType extractType(PirType idx) const {
         assert(isRType());
-        if (isA(PirType(RType::nil).orAttribs())) {
+        if (isA(PirType(RType::nil).orAttribsOrObj())) {
             // NULL
             return RType::nil;
         }
-        if (isA((num() | RType::str | RType::list | RType::code).orAttribs())) {
-            return scalar();
-        } else if (isA(PirType(RType::vec).orAttribs())) {
+        if (isA((num() | RType::str | RType::list | RType::code)
+                    .orAttribsOrObj())) {
+            return simpleScalar();
+        } else if (isA(PirType(RType::vec))) {
             return val().notMissing();
-        } else if (!maybeObj() && !PirType(RType::prom).isA(*this)) {
+        } else if (!maybeNotFastVecelt() && !PirType(RType::prom).isA(*this)) {
             // Something else
             return val().notMissing();
         } else {
             // Possible object
-            return valOrLazy();
+            return val();
         }
     }
 
@@ -548,19 +577,6 @@ struct PirType {
         } else {
             return forced().notObject().orNotScalar().orNAOrNaN() | RType::vec;
         }
-    }
-
-    RIR_INLINE void setNotScalar() { *this = orNotScalar(); }
-    RIR_INLINE void setNotMissing() { *this = notMissing(); }
-    RIR_INLINE void setNotObject() { *this = notObject(); }
-    RIR_INLINE void setNoAttribs() { *this = noAttribs(); }
-    RIR_INLINE void setNotNAOrNaN() { *this = notNAOrNaN(); }
-    RIR_INLINE void setMaybeNAOrNaN() { *this = orNAOrNaN(); }
-    RIR_INLINE void setScalar() { *this = scalar(); }
-
-    RIR_INLINE void setScalar(RType rtype) {
-        setScalar();
-        t_.r = RTypeSet(rtype);
     }
 
     constexpr bool isVoid() const {
@@ -596,6 +612,7 @@ struct PirType {
         if ((!maybeLazy() && o.maybeLazy()) ||
             (!maybePromiseWrapped() && o.maybePromiseWrapped()) ||
             (!maybeObj() && o.maybeObj()) ||
+            (!maybeNotFastVecelt() && o.maybeNotFastVecelt()) ||
             (!maybeHasAttrs() && o.maybeHasAttrs()) ||
             (!maybeNAOrNaN() && o.maybeNAOrNaN()) ||
             (isScalar() && !o.isScalar())) {
@@ -755,10 +772,14 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
         out << "^";
     else if (t.maybePromiseWrapped())
         out << "~";
-    if (!t.maybeHasAttrs())
-        out << "\"";
-    else if (!t.maybeObj())
-        out << "'";
+    if (t.maybeHasAttrs()) {
+        if (!t.maybeNotFastVecelt())
+            out << "ⁿ";
+        else if (!t.maybeObj())
+            out << "−";
+        else
+            out << "ₐ";
+    }
 
     return out;
 }

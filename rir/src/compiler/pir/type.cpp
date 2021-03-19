@@ -136,7 +136,11 @@ static bool maybeContainsNAOrNaN(SEXP vector) {
     }
 }
 
-PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
+PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
+    // these are set by merge below
+    flags_.reset(TypeFlags::promiseWrapped);
+    flags_.reset(TypeFlags::lazy);
+
     if (e == R_MissingArg)
         t_.r.set(RType::missing);
     else if (e == R_UnboundValue)
@@ -147,7 +151,12 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     if (!Rf_isObject(e))
         flags_.reset(TypeFlags::maybeObject);
     if (fastVeceltOk(e))
+        flags_.reset(TypeFlags::maybeNotFastVecelt);
+    if (ATTRIB(e) == R_NilValue) {
+        assert(fastVeceltOk(e));
+        assert(!Rf_isObject(e));
         flags_.reset(TypeFlags::maybeAttrib);
+    }
 
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
@@ -166,12 +175,15 @@ PirType::PirType(uint64_t i) : PirType() {
 void PirType::merge(const ObservedValues& other) {
     assert(other.numTypes);
 
-    if (other.object)
-        flags_.set(TypeFlags::maybeObject);
     if (other.attribs)
         flags_.set(TypeFlags::maybeAttrib);
     if (other.notScalar)
         flags_.set(TypeFlags::maybeNotScalar);
+    if (other.object)
+        flags_.set(TypeFlags::maybeObject);
+    if (other.notFastVecelt)
+        flags_.set(TypeFlags::maybeNotFastVecelt);
+    assert(other.attribs || (!other.notFastVecelt && !other.object));
 
     flags_.set(TypeFlags::maybeNAOrNaN);
     for (size_t i = 0; i < other.numTypes; ++i)
@@ -218,24 +230,17 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
     if (assumptions.isEager(i))
         type = type.notLazy();
 
+    if (afterForce)
+        type = type.notPromiseWrapped();
+
     if (assumptions.isEager(i) || afterForce) {
         type = type.notLazy();
-        if (assumptions.isNotObj(i)) {
-            type.setNotMissing();
-            type.setNotObject();
-        }
-        if (assumptions.isSimpleReal(i)) {
-            type.setNotMissing();
-            type.setScalar(RType::real);
-            type.setNoAttribs();
-            assert(type.isA(PirType::simpleScalarReal().orPromiseWrapped()));
-        }
-        if (assumptions.isSimpleInt(i)) {
-            type.setNotMissing();
-            type.setScalar(RType::integer);
-            type.setNoAttribs();
-            assert(type.isA(PirType::simpleScalarInt().orPromiseWrapped()));
-        }
+        if (assumptions.isNotObj(i))
+            type = type.notMissing().notObject();
+        if (assumptions.isSimpleReal(i))
+            type = type & PirType::simpleScalarReal().orPromiseWrapped();
+        if (assumptions.isSimpleInt(i))
+            type = type & PirType::simpleScalarInt().orPromiseWrapped();
     }
 }
 }
