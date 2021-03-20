@@ -1407,11 +1407,13 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(vec())
-                                           .mergeWithConversion(getType(val()))
-                                           .orNotScalar()),
-                               type);
+        bool maybeStringIdx = getType(idx()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1431,11 +1433,13 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(
-            getType,
-            type & (getType(vec()).mergeWithConversion(getType(val())))
-                       .orNotScalar(),
-            type);
+        bool maybeStringIdx = getType(idx()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1457,11 +1461,14 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(vec())
-                                           .mergeWithConversion(getType(val()))
-                                           .orNotScalar()),
-                               type);
+        bool maybeStringIdx = getType(idx1()).maybe(PirType() | RType::str) ||
+                              getType(idx2()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1483,11 +1490,14 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(vec())
-                                           .mergeWithConversion(getType(val()))
-                                           .orNotScalar()),
-                               type);
+        bool maybeStringIdx = getType(idx1()).maybe(PirType() | RType::str) ||
+                              getType(idx2()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1510,11 +1520,15 @@ class FLIE(Subassign1_3D, 6, Effects::Any()) {
     Value* idx3() const { return arg(4).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(vec())
-                                           .mergeWithConversion(getType(val()))
-                                           .orNotScalar()),
-                               type);
+        bool maybeStringIdx = getType(idx1()).maybe(PirType() | RType::str) ||
+                              getType(idx2()).maybe(PirType() | RType::str) ||
+                              getType(idx3()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);

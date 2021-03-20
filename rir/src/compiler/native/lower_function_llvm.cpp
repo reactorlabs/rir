@@ -4342,8 +4342,8 @@ void LowerFunctionLLVM::compile() {
                 auto vector = loadSxp(extract->vec());
 
                 bool fastcase = !extract->vec()->type.maybe(RType::vec) &&
-                                !extract->vec()->type.maybeObj() &&
                                 vectorTypeSupport(extract->vec()) &&
+                                extract->type.unboxable() &&
                                 extract->idx()->type.isA(
                                     PirType::intReal().notObject().scalar());
                 BasicBlock* done;
@@ -4409,7 +4409,7 @@ void LowerFunctionLLVM::compile() {
                 auto extract = Extract1_2D::Cast(i);
 
                 bool fastcase = !extract->vec()->type.maybe(RType::vec) &&
-                                !extract->vec()->type.maybeObj() &&
+                                extract->type.unboxable() &&
                                 vectorTypeSupport(extract->vec()) &&
                                 extract->idx1()->type.isA(
                                     PirType::intReal().notObject().scalar()) &&
