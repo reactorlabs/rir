@@ -49,6 +49,11 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 });
 
+                // All inputs to the phi are the same. Therefore the phi is
+                // equal to any of them.
+                if (inputs.size() == 1)
+                    return *inputs.begin();
+
                 auto h = phi->gvnBase();
                 for (auto n : inputs)
                     h = hash_combine(h, n);
