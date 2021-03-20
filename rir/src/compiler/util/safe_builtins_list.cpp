@@ -77,6 +77,7 @@ bool SafeBuiltinsList::always(int builtin) {
 
         blt("which"),
 
+        blt("cat"),
         blt("stdout"),
         blt("stderr"),
         blt("("),
@@ -312,7 +313,6 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("cumsum"),
         blt("colSums"),
 
-        blt("cat"),
         blt("paste"),
         blt("nchar"),
         blt("pmatch"),

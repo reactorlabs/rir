@@ -116,6 +116,7 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
                     instruction->replaceUsesIn(newInstr, targetBB);
                     replacements[instruction].insert({targetBB, newInstr});
                 }
+                next = bb->remove(ip);
             }
             ip = next;
         }

@@ -31,6 +31,7 @@ PassScheduler::PassScheduler() {
 
         add<OptimizeContexts>();
 
+        add<DelayInstr>();
         add<ForceDominance>();
         add<ScopeResolution>();
         add<LoadElision>();
@@ -47,7 +48,6 @@ PassScheduler::PassScheduler() {
 
         add<ElideEnv>();
         add<DelayEnv>();
-        add<DelayInstr>();
         add<Cleanup>();
 
         add<OptimizeVisibility>();
