@@ -61,7 +61,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (mk->isEager() && mk->prom()->trivial()) {
                 i->replaceUsesWith(mk->eagerArg(),
                                    [&](Instruction* j, size_t a) {
-                                       if (j->arg(a).type().isA(RType::prom))
+                                       if (j->arg(a).type().isA(PirType() |
+                                                                RType::prom))
                                            j->arg(a).type() =
                                                mk->eagerArg()->type;
                                    },
@@ -401,7 +402,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (inlinedPromise.count(otherForce)) {
                             f->replaceUsesWith(inlinedPromise.at(otherForce));
                         } else {
-                            dom->second->type = dom->second->type & f->type;
                             f->replaceUsesWith(dom->second);
                         }
                         next = bb->remove(ip);

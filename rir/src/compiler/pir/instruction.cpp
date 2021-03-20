@@ -63,7 +63,7 @@ std::string Instruction::getRef() const {
 }
 
 void Instruction::printRef(std::ostream& out) const {
-    if (type == RType::env)
+    if (type == PirType::env())
         out << "e" << id();
     else
         out << "%" << id();
