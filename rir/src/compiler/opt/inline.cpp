@@ -15,11 +15,16 @@
 #include <algorithm>
 #include <unordered_map>
 
+#include "../analysis/unnecessary_contexts.h"
+
 namespace rir {
 namespace pir {
 
 bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                    LogStream& log) const {
+    // std::cerr << "Before Inline " << cls->owner()->name() << "\n";
+    // cls->printGraphCode(std::cerr, false);
+
     bool anyChange = false;
     size_t fuel = Parameter::INLINER_INITIAL_FUEL;
 
@@ -462,6 +467,9 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                     break;
             }
         });
+
+    // std::cerr << "After Inline " << cls->owner()->name() << "\n";
+    // UnnecessaryContexts unnecessary2(cls, code, log);
 
     return anyChange;
     }

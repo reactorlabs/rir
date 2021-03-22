@@ -1016,7 +1016,7 @@ std::set<std::string> blackList = {
     "source", "integer", "file", "getOption", "readLines", "scan", "eval",
     "sys.function", "sys.parent", "formals", "match.arg", "::",
 
-    "tryCatch", "tryCatchOne", "tryCatchList", "doTryCatch",
+    //"tryCatch", "tryCatchOne", "tryCatchList", "doTryCatch",
 
     // flexclust (...)
     "newKccaObject", "newKccasimpleObject", "new", "initialize"
@@ -1055,7 +1055,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             }
             // std::cerr <<"executed: " << nameStr <<"\n";
             if (blackList.count(nameStr) == 0) {
-                // std::cerr <<"annotated: " << nameStr <<"\n";
+                std::cerr << "annotated: " << nameStr << "\n";
                 table->baseline()->flags.set(Function::DepromiseArgs);
             }
         }
