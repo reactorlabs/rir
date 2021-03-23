@@ -62,7 +62,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 i->replaceUsesWith(
                     mk->eagerArg(),
                     [&](Instruction* j, size_t a) {
-                        if (!j->arg(a).type().maybeLazy())
+                        if (j->arg(a).type().isA(RType::prom))
                             j->arg(a).type() = mk->eagerArg()->type;
                     },
                     [&](Instruction* j) { return j->tag != Tag::CastType; });
