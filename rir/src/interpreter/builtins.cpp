@@ -157,8 +157,6 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
                     evaluatePromise(p);
                 else if (p == R_MissingArg)
                     errorcall(innerCall.ast, ("argument %d is empty"), i);
-                else
-                    Rf_error("something weird happened");
             }
         } else if (TYPEOF(fun) != SPECIALSXP) {
             Rf_error("attempt to apply non-function");

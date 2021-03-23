@@ -124,7 +124,7 @@ class Tombstone : public Value {
             assert(false);
     }
     static Tombstone* closure() {
-        static Tombstone cls(RType::closure);
+        static Tombstone cls(PirType::closure());
         return &cls;
     }
     static Tombstone* framestate() {

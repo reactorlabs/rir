@@ -79,7 +79,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         // opts if we show that the vector has no attribs
                         if (auto e = Extract1_1D::Cast(i))
                             if (arg == e->vec())
-                                suggested = required.noAttribs();
+                                suggested = required.noAttribsOrObject();
 
                         TypeTest::Create(
                             arg, seen, suggested, required,

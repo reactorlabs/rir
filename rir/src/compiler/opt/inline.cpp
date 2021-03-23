@@ -101,7 +101,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                             }
                             auto e = new CallSafeBuiltin(
                                 b, {call->runtimeClosure()}, 0);
-                            e->type = RType::env;
+                            e->type = PirType::env();
                             e->effects.reset();
                             it = bb->insert(it, e);
                             it++;

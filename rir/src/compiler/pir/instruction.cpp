@@ -63,7 +63,7 @@ std::string Instruction::getRef() const {
 }
 
 void Instruction::printRef(std::ostream& out) const {
-    if (type == RType::env)
+    if (type == PirType::env())
         out << "e" << id();
     else
         out << "%" << id();
@@ -741,7 +741,10 @@ void PirCopy::print(std::ostream& out, bool tty) const {
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                                  unsigned srcIdx)
-    : VarLenInstruction(PirType::val().notObject().notMissing(), srcIdx),
+    : VarLenInstruction(SafeBuiltinsList::returnsObj(getBuiltinNr(builtin))
+                            ? PirType::val().notMissing()
+                            : PirType::val().notMissing().notObject(),
+                        srcIdx),
       builtinSexp(builtin), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
@@ -914,7 +917,7 @@ void ScheduledDeopt::printArgs(std::ostream& out, bool tty) const {
 
 MkFunCls::MkFunCls(Closure* cls, SEXP formals, SEXP srcRef,
                    DispatchTable* originalBody, Value* lexicalEnv)
-    : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), cls(cls),
+    : FixedLenInstructionWithEnvSlot(PirType::closure(), lexicalEnv), cls(cls),
       originalBody(originalBody), formals(formals), srcRef(srcRef) {}
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) const {
@@ -1082,7 +1085,7 @@ Call::Call(Value* callerEnv, Value* fun, const std::vector<Value*>& args,
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(fun, RType::closure);
+    pushArg(fun, PirType::closure());
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
@@ -1104,7 +1107,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(fun, RType::closure);
+    pushArg(fun, PirType::closure());
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
@@ -1130,7 +1133,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(fun, RType::closure);
+    pushArg(fun, PirType::closure());
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
@@ -1157,7 +1160,7 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(runtimeClosure, RType::closure);
+    pushArg(runtimeClosure, PirType::closure());
     for (unsigned i = 0; i < args.size(); ++i) {
         assert(!ExpandDots::Cast(args[i]) &&
                "Static Call cannot accept dynamic number of arguments");

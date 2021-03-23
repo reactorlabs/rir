@@ -77,6 +77,7 @@ bool SafeBuiltinsList::always(int builtin) {
 
         blt("which"),
 
+        blt("cat"),
         blt("stdout"),
         blt("stderr"),
         blt("("),
@@ -95,6 +96,18 @@ bool SafeBuiltinsList::always(int builtin) {
 }
 bool SafeBuiltinsList::always(SEXP builtin) {
     return always(getBuiltinNr(builtin));
+}
+
+bool SafeBuiltinsList::returnsObj(int builtin) {
+    static int safeBuiltins[] = {
+        blt("stdout"),
+        blt("stderr"),
+    };
+
+    for (auto i : safeBuiltins)
+        if (i == builtin)
+            return true;
+    return false;
 }
 
 bool SafeBuiltinsList::nonObject(int builtin) {
@@ -300,7 +313,6 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("cumsum"),
         blt("colSums"),
 
-        blt("cat"),
         blt("paste"),
         blt("nchar"),
         blt("pmatch"),

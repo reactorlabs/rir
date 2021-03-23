@@ -13,6 +13,7 @@ class SafeBuiltinsList {
     static bool nonObject(SEXP builtin);
     static bool nonObjectIdempotent(SEXP builtin);
     static bool always(int builtin);
+    static bool returnsObj(int builtin);
     static bool idempotent(int builtin);
     static bool nonObject(int builtin);
     static bool nonObjectIdempotent(int builtin);

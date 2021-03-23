@@ -674,10 +674,10 @@ llvm::Value* LowerFunctionLLVM::dataPtr(llvm::Value* v, bool enableAsserts) {
 
 bool LowerFunctionLLVM::vectorTypeSupport(Value* vector) {
     auto type = vector->type;
-    return type.isA(PirType(RType::vec).notObject()) ||
-           type.isA(PirType(RType::integer).notObject()) ||
-           type.isA(PirType(RType::logical).notObject()) ||
-           type.isA(PirType(RType::real).notObject());
+    return type.isA(PirType(RType::vec).orFastVecelt()) ||
+           type.isA(PirType(RType::integer).orFastVecelt()) ||
+           type.isA(PirType(RType::logical).orFastVecelt()) ||
+           type.isA(PirType(RType::real).orFastVecelt());
 }
 
 llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
@@ -685,12 +685,12 @@ llvm::Value* LowerFunctionLLVM::vectorPositionPtr(llvm::Value* vector,
                                                   PirType type) {
     assert(vector->getType() == t::SEXP);
     PointerType* nativeType;
-    if (type.isA(PirType(RType::integer).notObject()) ||
-        type.isA(PirType(RType::logical).notObject())) {
+    if (type.isA(PirType(RType::integer).orAttribsOrObj().fastVecelt()) ||
+        type.isA(PirType(RType::logical).orAttribsOrObj().fastVecelt())) {
         nativeType = t::IntPtr;
-    } else if (type.isA(PirType(RType::real).notObject())) {
+    } else if (type.isA(PirType(RType::real).orAttribsOrObj().fastVecelt())) {
         nativeType = t::DoublePtr;
-    } else if (type.isA(PirType(RType::vec).notObject())) {
+    } else if (type.isA(PirType(RType::vec).orAttribsOrObj().fastVecelt())) {
         nativeType = t::SEXP_ptr;
     } else {
         nativeType = t::SEXP_ptr;
@@ -2222,8 +2222,8 @@ void LowerFunctionLLVM::compile() {
                        ai->getType() != t::Double);
 
                 auto res = builder.CreateICmpEQ(ai, bi);
-                if (a->type.maybe(RType::closure) ||
-                    b->type.maybe(RType::closure)) {
+                if (a->type.maybe(PirType::closure()) ||
+                    b->type.maybe(PirType::closure())) {
                     res = createSelect2(
                         res, [&]() { return builder.getTrue(); },
                         [&]() {
@@ -2479,10 +2479,10 @@ void LowerFunctionLLVM::compile() {
                         if (Representation::Of(b->callArg(0).val()) !=
                             t::SEXP) {
                             setVal(i, constant(R_NilValue, t::SEXP));
-                        } else if (itype.isA(PirType::vecs()
-                                                 .orObject()
-                                                 .orAttribs())) {
-                            if (!itype.maybeHasAttrs() && !itype.maybeObj()) {
+                        } else if (itype.isA(
+                                       PirType::vecs().orAttribsOrObj())) {
+                            if (!itype.maybeNotFastVecelt() ||
+                                !itype.maybeHasAttrs()) {
                                 setVal(i, constant(R_NilValue, t::SEXP));
                             } else {
                                 auto res = phiBuilder(t::SEXP);
@@ -2757,7 +2757,7 @@ void LowerFunctionLLVM::compile() {
                     case blt("bodyCode"): {
                         assert(irep == Representation::Sexp && orep == irep);
                         llvm::Value* res = nullptr;
-                        if (i->arg(0).val()->type.isA(RType::closure)) {
+                        if (i->arg(0).val()->type.isA(PirType::closure())) {
                             res = cdr(a);
                         } else {
                             res = createSelect2(
@@ -2771,7 +2771,7 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("environment"):
-                        if (!i->arg(0).val()->type.isA(RType::closure)) {
+                        if (!i->arg(0).val()->type.isA(PirType::closure())) {
                             done = false;
                             break;
                         }
@@ -2889,7 +2889,8 @@ void LowerFunctionLLVM::compile() {
                             llvm::Value* res;
                             auto isvec = isVector(aval);
                             auto v = b->arg(0).val();
-                            if (!v->type.maybeHasAttrs()) {
+                            if (!v->type.maybeNotFastVecelt() ||
+                                !v->type.maybeHasAttrs()) {
                                 res = builder.CreateSelect(
                                     isvec, constant(R_TrueValue, orep),
                                     constant(R_FalseValue, orep));
@@ -2941,7 +2942,9 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                 }
-                if (b->builtinId == blt("c") && !b->type.maybeHasAttrs()) {
+                if (b->builtinId == blt("c") &&
+                    (!b->type.maybeNotFastVecelt() ||
+                     !b->type.maybeHasAttrs())) {
                     bool allScalar = true;
                     b->eachArg([&](Value* v) {
                         if (!v->type.isA(PirType::anySimpleScalar()))
@@ -3915,20 +3918,20 @@ void LowerFunctionLLVM::compile() {
                     }
 
                     llvm::Value* res = nullptr;
-                    if (t->typeTest.noAttribs().isA(
+                    if (t->typeTest.noAttribsOrObject().isA(
                             PirType(RType::logical).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
-                    } else if (t->typeTest.noAttribs().isA(
+                    } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::integer)
                                        .orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
-                    } else if (t->typeTest.noAttribs().isA(
+                    } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::real).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
                     } else {
                         assert(arg->type.notMissing()
                                    .notPromiseWrapped()
-                                   .noAttribs()
+                                   .noAttribsOrObject()
                                    .isA(t->typeTest));
                         res = builder.CreateICmpNE(
                             a, constant(R_UnboundValue, t::SEXP));
@@ -3939,11 +3942,18 @@ void LowerFunctionLLVM::compile() {
                     }
                     if (arg->type.maybeHasAttrs() &&
                         !t->typeTest.maybeHasAttrs()) {
-                        res = builder.CreateAnd(res, fastVeceltOkNative(a));
-                    }
-                    if (arg->type.maybeObj() && !t->typeTest.maybeObj()) {
-                        res =
-                            builder.CreateAnd(res, builder.CreateNot(isObj(a)));
+                        res = builder.CreateAnd(
+                            res, builder.CreateICmpEQ(
+                                     attr(a), constant(R_NilValue, t::SEXP)));
+                    } else {
+                        if (arg->type.maybeNotFastVecelt() &&
+                            !t->typeTest.maybeNotFastVecelt()) {
+                            res = builder.CreateAnd(res, fastVeceltOkNative(a));
+                        }
+                        if (arg->type.maybeObj() && !t->typeTest.maybeObj()) {
+                            res = builder.CreateAnd(
+                                res, builder.CreateNot(isObj(a)));
+                        }
                     }
                     setVal(i, builder.CreateZExt(res, t::Int));
                 } else {
@@ -4332,8 +4342,8 @@ void LowerFunctionLLVM::compile() {
                 auto vector = loadSxp(extract->vec());
 
                 bool fastcase = !extract->vec()->type.maybe(RType::vec) &&
-                                !extract->vec()->type.maybeObj() &&
                                 vectorTypeSupport(extract->vec()) &&
+                                extract->type.unboxable() &&
                                 extract->idx()->type.isA(
                                     PirType::intReal().notObject().scalar());
                 BasicBlock* done;
@@ -4354,7 +4364,7 @@ void LowerFunctionLLVM::compile() {
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
 
-                        if (extract->vec()->type.maybeHasAttrs()) {
+                        if (extract->vec()->type.maybeNotFastVecelt()) {
                             auto hit3 = BasicBlock::Create(
                                 PirJitLLVM::getContext(), "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
@@ -4399,7 +4409,7 @@ void LowerFunctionLLVM::compile() {
                 auto extract = Extract1_2D::Cast(i);
 
                 bool fastcase = !extract->vec()->type.maybe(RType::vec) &&
-                                !extract->vec()->type.maybeObj() &&
+                                extract->type.unboxable() &&
                                 vectorTypeSupport(extract->vec()) &&
                                 extract->idx1()->type.isA(
                                     PirType::intReal().notObject().scalar()) &&
@@ -4424,7 +4434,7 @@ void LowerFunctionLLVM::compile() {
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
 
-                        if (extract->vec()->type.maybeHasAttrs()) {
+                        if (extract->vec()->type.maybeNotFastVecelt()) {
                             auto hit3 = BasicBlock::Create(
                                 PirJitLLVM::getContext(), "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
@@ -4728,9 +4738,11 @@ void LowerFunctionLLVM::compile() {
                     idx1Type.isA(PirType::intReal().notObject().scalar()) &&
                     idx2Type.isA(PirType::intReal().notObject().scalar()) &&
                     valType.isScalar() && !vecType.maybeObj() &&
-                    ((vecType.isA(RType::integer) &&
+                    ((vecType.isA(PirType(RType::integer).orFastVecelt()) &&
                       valType.isA(RType::integer)) ||
-                     (vecType.isA(RType::real) && valType.isA(RType::real)));
+                     (vecType.isA(PirType(RType::real).orFastVecelt()) &&
+                      valType.isA(RType::real)));
+
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
                 if (Representation::Of(subAssign->vec()) != t::SEXP &&
                     Representation::Of(i) == t::SEXP)
@@ -4844,10 +4856,11 @@ void LowerFunctionLLVM::compile() {
                 bool fastcase =
                     idxType.isA(PirType::intReal().notObject().scalar()) &&
                     valType.isScalar() && !vecType.maybeObj() &&
-                    (vecType.isA(RType::vec) ||
-                     (vecType.isA(RType::integer) &&
+                    (vecType.isA(PirType(RType::vec).orFastVecelt()) ||
+                     (vecType.isA(PirType(RType::integer).orFastVecelt()) &&
                       valType.isA(RType::integer)) ||
-                     (vecType.isA(RType::real) && valType.isA(RType::real)));
+                     (vecType.isA(PirType(RType::real).orFastVecelt()) &&
+                      valType.isA(RType::real)));
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
                 if (Representation::Of(subAssign->vec()) != t::SEXP &&
                     Representation::Of(i) == t::SEXP)
@@ -4867,7 +4880,7 @@ void LowerFunctionLLVM::compile() {
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit1);
 
-                        if (vecType.maybeHasAttrs()) {
+                        if (vecType.maybeNotFastVecelt()) {
                             auto hit2 = BasicBlock::Create(
                                 PirJitLLVM::getContext(), "", fun);
                             builder.CreateCondBr(fastVeceltOkNative(vector),
@@ -4930,9 +4943,10 @@ void LowerFunctionLLVM::compile() {
                 bool fastcase =
                     idxType.isA(PirType::intRealLgl().notObject().scalar()) &&
                     valType.isScalar() && !vecType.maybeObj() &&
-                    ((vecType.isA(RType::integer) &&
+                    ((vecType.isA(PirType(RType::integer).orFastVecelt()) &&
                       valType.isA(RType::integer)) ||
-                     (vecType.isA(RType::real) && valType.isA(RType::real)));
+                     (vecType.isA(PirType(RType::real).orFastVecelt()) &&
+                      valType.isA(RType::real)));
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
                 if (Representation::Of(subAssign->vec()) != t::SEXP &&
                     Representation::Of(i) == t::SEXP)

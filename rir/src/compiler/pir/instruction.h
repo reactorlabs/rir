@@ -370,7 +370,7 @@ class Instruction : public Value {
                     t = t.mergeWithConversion(getType(v));
             });
             // Everything but numbers throws an error
-            t = t & PirType::num().notMissing();
+            t = t & PirType::num().notMissing().orAttribsOrObj();
             // e.g. TRUE + TRUE == 2
             if (m.maybe(RType::logical)) {
                 t = t.orT(RType::integer);
@@ -382,7 +382,7 @@ class Instruction : public Value {
             // integer (doesn't happen with only logicals), and the result is an
             // integer (doesn't happen with real coercion)
             if (m.maybe(RType::integer) && t.maybe(RType::integer))
-                t.setMaybeNAOrNaN();
+                t = t.orNAOrNaN();
             return type & t;
         }
         return type;
@@ -391,13 +391,15 @@ class Instruction : public Value {
     PirType inferredTypeForLogicalInstruction(const GetType& getType) const {
         auto t = mergedInputType(getType);
         if (!t.maybeObj()) {
-            auto res = PirType(RType::logical).notMissing();
+            auto res = PirType(RType::logical).orAttribsOrObj();
             if (t.isScalar())
-                res.setScalar();
+                res = res.scalar();
+            if (!t.maybeHasAttrs())
+                res = res.noAttribsOrObject();
             if (t.isSimpleScalar())
                 res = res.simpleScalar();
             if (!t.maybeNAOrNaN())
-                res.setNotNAOrNaN();
+                res = res.notNAOrNaN();
             return type & res;
         }
         return type;
@@ -690,7 +692,7 @@ class FixedLenInstructionWithEnvSlot
                 const std::array<PirType, ARGS - 1>& t, Value* env) {
             static_assert(EnvSlot == ARGS - 1, "");
             (*this)[EnvSlot].val() = env;
-            (*this)[EnvSlot].type() = RType::env;
+            (*this)[EnvSlot].type() = PirType::env();
             for (size_t i = 0; i < EnvSlot; ++i) {
                 (*this)[i].val() = a[i];
                 (*this)[i].type() = t[i];
@@ -741,23 +743,23 @@ class VarLenInstructionWithEnvSlot
     VarLenInstructionWithEnvSlot(PirType resultType, Value* env,
                                  unsigned srcIdx = 0)
         : Super(resultType, srcIdx) {
-        Super::pushArg(env, RType::env);
+        Super::pushArg(env, PirType::env());
     }
 
     void pushArg(Value* a, PirType t) override {
         assert(a);
         assert(args_.size() > 0);
-        assert(args_.back().type() == RType::env);
+        assert(args_.back().type() == PirType::env());
         // extend vector and move the environment to the end
         args_.push_back(args_.back());
         args_[args_.size() - 2] = InstrArg(a, t);
     }
     void popArg() override final {
         assert(args_.size() > 1);
-        assert(args_.back().type() == RType::env);
+        assert(args_.back().type() == PirType::env());
         args_[args_.size() - 2] = args_[args_.size() - 1];
         args_.pop_back();
-        assert(args_.back().type() == RType::env);
+        assert(args_.back().type() == PirType::env());
     }
 
     Value* env() const final override { return args_.back().val(); }
@@ -924,11 +926,11 @@ class FLIE(LdFun, 2, Effects::Any()) {
     SEXP hint = nullptr;
 
     LdFun(const char* name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(PirType::closure(), {{PirType::any()}},
                                          {{Tombstone::closure()}}, env),
           varName(Rf_install(name)) {}
     LdFun(SEXP name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(PirType::closure(), {{PirType::any()}},
                                          {{Tombstone::closure()}}, env),
           varName(name) {
         assert(TYPEOF(name) == SYMSXP);
@@ -1022,7 +1024,7 @@ class FLI(ChkMissing, 1, Effect::Error) {
 class FLI(ChkClosure, 1, Effect::Error) {
   public:
     explicit ChkClosure(Value* in)
-        : FixedLenInstruction(RType::closure, {{PirType::val()}}, {{in}}) {}
+        : FixedLenInstruction(PirType::closure(), {{PirType::val()}}, {{in}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -1176,7 +1178,8 @@ class FLIE(MkCls, 4, Effects::None()) {
   public:
     MkCls(Value* fml, Value* code, Value* src, Value* lexicalEnv)
         : FixedLenInstructionWithEnvSlot(
-              RType::closure, {{PirType::list(), RType::code, PirType::any()}},
+              PirType::closure(),
+              {{PirType::list(), RType::code, PirType::any()}},
               {{fml, code, src}}, lexicalEnv) {}
 
     Value* code() const { return arg(1).val(); }
@@ -1307,7 +1310,7 @@ class FLI(AsLogical, 1, Effect::Error) {
     Effects inferEffects(const GetType& getType) const override final {
         if (getType(val()).isA((PirType() | RType::logical | RType::integer |
                                 RType::real | RType::str | RType::cplx)
-                                   .noAttribs())) {
+                                   .noAttribsOrObject())) {
             return Effects::None();
         }
         return effects;
@@ -1404,11 +1407,13 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(vec())
-                                           .mergeWithConversion(getType(val()))
-                                           .orNotScalar()),
-                               type);
+        bool maybeStringIdx = getType(idx()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1428,11 +1433,13 @@ class FLIE(Subassign2_1D, 4, Effects::Any()) {
     Value* idx() const { return arg(2).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(
-            getType,
-            type & (getType(vec()).mergeWithConversion(getType(val())))
-                       .orNotScalar(),
-            type);
+        bool maybeStringIdx = getType(idx()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1454,11 +1461,14 @@ class FLIE(Subassign1_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(vec())
-                                           .mergeWithConversion(getType(val()))
-                                           .orNotScalar()),
-                               type);
+        bool maybeStringIdx = getType(idx1()).maybe(PirType() | RType::str) ||
+                              getType(idx2()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1480,11 +1490,14 @@ class FLIE(Subassign2_2D, 5, Effects::Any()) {
     Value* idx2() const { return arg(3).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(vec())
-                                           .mergeWithConversion(getType(val()))
-                                           .orNotScalar()),
-                               type);
+        bool maybeStringIdx = getType(idx1()).maybe(PirType() | RType::str) ||
+                              getType(idx2()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1507,11 +1520,15 @@ class FLIE(Subassign1_3D, 6, Effects::Any()) {
     Value* idx3() const { return arg(4).val(); }
 
     PirType inferType(const GetType& getType) const override final {
-        return ifNonObjectArgs(getType,
-                               type & (getType(vec())
-                                           .mergeWithConversion(getType(val()))
-                                           .orNotScalar()),
-                               type);
+        bool maybeStringIdx = getType(idx1()).maybe(PirType() | RType::str) ||
+                              getType(idx2()).maybe(PirType() | RType::str) ||
+                              getType(idx3()).maybe(PirType() | RType::str);
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        if (maybeStringIdx)
+            restricted = restricted.orNameAttrs();
+        return ifNonObjectArgs(getType, restricted, type);
     }
     Effects inferEffects(const GetType& getType) const override final {
         return ifNonObjectArgs(getType, effects & errorWarnVisible, effects);
@@ -1650,9 +1667,9 @@ class FLIE(Extract1_3D, 5, Effects::Any()) {
 class FLI(Inc, 1, Effects::None()) {
   public:
     explicit Inc(Value* v)
-        : FixedLenInstruction(
-              PirType(RType::integer).simpleScalar().noAttribs(),
-              {{PirType(RType::integer).simpleScalar().noAttribs()}}, {{v}}) {}
+        : FixedLenInstruction(PirType(RType::integer).simpleScalar(),
+                              {{PirType(RType::integer).simpleScalar()}},
+                              {{v}}) {}
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -1690,7 +1707,7 @@ class FLI(IsType, 1, Effects::None()) {
 
 class FLI(LdFunctionEnv, 0, Effects::None()) {
   public:
-    LdFunctionEnv() : FixedLenInstruction(RType::env) {}
+    LdFunctionEnv() : FixedLenInstruction(PirType::env()) {}
     bool stub = false;
 };
 
@@ -2339,15 +2356,16 @@ class VLIE(MkEnv, Effect::LeakArg) {
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args,
           const std::vector<bool>& missing)
-        : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names),
-          missing(missing) {
+        : VarLenInstructionWithEnvSlot(PirType::env(), lexicalEnv),
+          varName(names), missing(missing) {
         for (unsigned i = 0; i < varName.size(); ++i) {
             MkEnv::pushArg(args[i], PirType::any());
         }
     }
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args)
-        : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names) {
+        : VarLenInstructionWithEnvSlot(PirType::env(), lexicalEnv),
+          varName(names) {
         for (unsigned i = 0; i < varName.size(); ++i) {
             MkEnv::pushArg(args[i], PirType::any());
         }
@@ -2397,7 +2415,7 @@ class VLIE(MkEnv, Effect::LeakArg) {
 class FLIE(MaterializeEnv, 1, Effects::None()) {
   public:
     explicit MaterializeEnv(MkEnv* e)
-        : FixedLenInstructionWithEnvSlot(RType::env, e) {}
+        : FixedLenInstructionWithEnvSlot(PirType::env(), e) {}
 };
 
 class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {

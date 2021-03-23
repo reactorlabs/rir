@@ -90,6 +90,10 @@ void PirType::merge(SEXPTYPE sexptype) {
     }
 }
 
+// For non-scalars, it takes too long to determine whether they
+// contain NaN for the benefit, so we simple assume they do
+static const R_xlen_t MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK = 1;
+
 static bool maybeContainsNAOrNaN(SEXP vector) {
     if (TYPEOF(vector) == CHARSXP) {
         return vector == NA_STRING;
@@ -132,7 +136,11 @@ static bool maybeContainsNAOrNaN(SEXP vector) {
     }
 }
 
-PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
+PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
+    // these are set by merge below
+    flags_.reset(TypeFlags::promiseWrapped);
+    flags_.reset(TypeFlags::lazy);
+
     if (e == R_MissingArg)
         t_.r.set(RType::missing);
     else if (e == R_UnboundValue)
@@ -143,14 +151,16 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     if (!Rf_isObject(e))
         flags_.reset(TypeFlags::maybeObject);
     if (fastVeceltOk(e))
+        flags_.reset(TypeFlags::maybeNotFastVecelt);
+    if (ATTRIB(e) == R_NilValue && !Rf_isObject(e)) {
+        assert(fastVeceltOk(e));
         flags_.reset(TypeFlags::maybeAttrib);
-
-    if (PirType::vecs().isSuper(*this)) {
-        if (Rf_length(e) == 1)
-            flags_.reset(TypeFlags::maybeNotScalar);
-        if (!maybeContainsNAOrNaN(e))
-            flags_.reset(TypeFlags::maybeNAOrNaN);
     }
+    if (Rf_xlength(e) == 1)
+        flags_.reset(TypeFlags::maybeNotScalar);
+
+    if (!maybeContainsNAOrNaN(e))
+        flags_.reset(TypeFlags::maybeNAOrNaN);
 }
 
 PirType::PirType(uint64_t i) : PirType() {
@@ -162,27 +172,22 @@ PirType::PirType(uint64_t i) : PirType() {
 void PirType::merge(const ObservedValues& other) {
     assert(other.numTypes);
 
-    if (other.numTypes == ObservedValues::MaxTypes) {
-        *this = *this | any();
-        flags_.set(TypeFlags::maybeObject);
+    if (other.attribs)
         flags_.set(TypeFlags::maybeAttrib);
+    if (other.notScalar)
         flags_.set(TypeFlags::maybeNotScalar);
-        flags_.set(TypeFlags::maybeNAOrNaN);
-        return;
-    }
+    if (other.object)
+        flags_.set(TypeFlags::maybeObject);
+    if (other.notFastVecelt)
+        flags_.set(TypeFlags::maybeNotFastVecelt);
+    assert(other.attribs || (!other.notFastVecelt && !other.object));
 
-    for (size_t i = 0; i < other.numTypes; ++i) {
-        const auto& record = other.seen[i];
-        if (record.object)
-            flags_.set(TypeFlags::maybeObject);
-        if (record.attribs)
-            flags_.set(TypeFlags::maybeAttrib);
-        if (!record.scalar)
-            flags_.set(TypeFlags::maybeNotScalar);
-        flags_.set(TypeFlags::maybeNAOrNaN);
+    flags_.set(TypeFlags::maybeNAOrNaN);
+    for (size_t i = 0; i < other.numTypes; ++i)
+        merge(other.seen[i]);
 
-        merge(record.sexptype);
-    }
+    if (other.numTypes == ObservedValues::MaxTypes)
+        *this = orSexpTypes(any());
 }
 
 bool PirType::isInstance(SEXP val) const {
@@ -222,24 +227,17 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
     if (assumptions.isEager(i))
         type = type.notLazy();
 
+    if (afterForce)
+        type = type.notPromiseWrapped();
+
     if (assumptions.isEager(i) || afterForce) {
         type = type.notLazy();
-        if (assumptions.isNotObj(i)) {
-            type.setNotMissing();
-            type.setNotObject();
-        }
-        if (assumptions.isSimpleReal(i)) {
-            type.setNotMissing();
-            type.setScalar(RType::real);
-            type.setNoAttribs();
-            assert(type.isA(PirType::simpleScalarReal().orPromiseWrapped()));
-        }
-        if (assumptions.isSimpleInt(i)) {
-            type.setNotMissing();
-            type.setScalar(RType::integer);
-            type.setNoAttribs();
-            assert(type.isA(PirType::simpleScalarInt().orPromiseWrapped()));
-        }
+        if (assumptions.isNotObj(i))
+            type = type.notMissing().notObject();
+        if (assumptions.isSimpleReal(i))
+            type = type & PirType::simpleScalarReal().orPromiseWrapped();
+        if (assumptions.isSimpleInt(i))
+            type = type & PirType::simpleScalarInt().orPromiseWrapped();
     }
 }
 }

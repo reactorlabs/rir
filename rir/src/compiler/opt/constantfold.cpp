@@ -703,11 +703,11 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (builtinId == blt("is.function") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
-                        if (t.isA(RType::closure)) {
+                        if (t.isA(PirType::closure())) {
                             iterAnyChange = true;
                             i->replaceUsesWith(True::instance());
                             next = bb->remove(ip);
-                        } else if (!t.maybe(RType::closure)) {
+                        } else if (!t.maybe(PirType::closure())) {
                             iterAnyChange = true;
                             i->replaceUsesWith(False::instance());
                             next = bb->remove(ip);
@@ -747,7 +747,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (builtinId == blt("is.integer") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
-                        if (t.isA(PirType(RType::integer).noAttribs())) {
+                        if (t.isA(PirType(RType::integer))) {
                             iterAnyChange = true;
                             i->replaceUsesWith(True::instance());
                             next = bb->remove(ip);
@@ -814,7 +814,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         static PirType typeThatDoesntError =
                             (PirType::num() | RType::chr | RType::str |
                              RType::vec)
-                                .orAttribs();
+                                .orAttribsOrObj();
                         if (typeThatDoesntError.isA(t) && !t.maybeNAOrNaN()) {
                             iterAnyChange = true;
                             i->replaceUsesWith(False::instance());
@@ -835,7 +835,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             if (auto cast = CastType::Cast(i->arg(0).val())) {
                                 if (cast != in &&
                                     cast->kind == CastType::Downcast &&
-                                    cast->type.isA(RType::closure)) {
+                                    cast->type.isA(PirType::closure())) {
                                     if (auto cast2 = CastType::Cast(
                                             cast->arg(0).val())) {
                                         if (cast2 != in &&

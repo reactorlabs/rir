@@ -74,7 +74,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 m = m.mergeWithConversion(
                                     getType(c->callArg(i).val()));
                             if (!m.maybeObj()) {
-                                inferred = m & PirType::num();
+                                inferred = m & PirType::num().orAttribsOrObj();
 
                                 if (inferred.maybe(RType::logical))
                                     inferred = inferred.orT(RType::integer)
@@ -102,7 +102,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 m = m.mergeWithConversion(
                                     getType(c->callArg(i).val()));
                             if (!m.maybeObj()) {
-                                inferred = m & PirType::num();
+                                inferred = m & PirType::num().orAttribsOrObj();
                                 inferred = inferred.orT(RType::real)
                                                .notT(RType::integer);
                                 break;
@@ -131,6 +131,12 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (vecTests.count(name)) {
                         if (!getType(c->callArg(0).val()).maybeObj()) {
                             inferred = PirType(RType::logical);
+                            if (getType(c->callArg(0).val()).maybeHasAttrs())
+                                inferred =
+                                    inferred.orAttribsOrObj().notObject();
+                            if (!getType(c->callArg(0).val())
+                                     .maybeNotFastVecelt())
+                                inferred = inferred.fastVecelt();
                             if (getType(c->callArg(0).val()).isSimpleScalar())
                                 inferred = inferred.simpleScalar();
                         } else {
@@ -207,7 +213,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
 
                     if ("strsplit" == name) {
-                        inferred = RType::vec;
+                        inferred = PirType(RType::vec).orAttribsOrObj();
                         break;
                     }
 

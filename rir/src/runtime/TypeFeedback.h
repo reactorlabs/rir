@@ -11,10 +11,6 @@ namespace rir {
 
 struct Code;
 
-// For non-scalars, it takes too long to determine whether they
-// contain NaN for the benefit, so we simple assume they do
-static const R_xlen_t MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK = 1;
-
 #pragma pack(push)
 #pragma pack(1)
 
@@ -37,44 +33,14 @@ struct ObservedCallees {
 
     std::array<unsigned, MaxTargets> targets;
 };
+static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
+              "Size needs to fit inside a record_ bc immediate args");
 
 inline bool fastVeceltOk(SEXP vec) {
     return !isObject(vec) &&
            (ATTRIB(vec) == R_NilValue || (TAG(ATTRIB(vec)) == R_DimSymbol &&
                                           CDR(ATTRIB(vec)) == R_NilValue));
 }
-
-struct ObservedType {
-    uint8_t sexptype : 5;
-    uint8_t scalar : 1;
-    uint8_t object : 1;
-    uint8_t attribs : 1;
-
-    ObservedType() {}
-    explicit ObservedType(SEXP s)
-        : sexptype((uint8_t)TYPEOF(s)), scalar(IS_SIMPLE_SCALAR(s, TYPEOF(s))),
-          object(isObject(s)), attribs(object || !fastVeceltOk(s)) {
-        assert(!object || attribs);
-    }
-
-    bool operator==(const ObservedType& other) {
-        return memcmp(this, &other, sizeof(ObservedType)) == 0;
-    }
-
-    ObservedType operator|(const ObservedType& other) {
-        assert(sexptype == other.sexptype);
-        ObservedType t;
-        t.sexptype = sexptype;
-        t.scalar = scalar && other.scalar;
-        t.object = object || other.object;
-        t.attribs = attribs || other.attribs;
-        return t;
-    }
-
-    bool isObj() const { return object; }
-};
-static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
-              "Size needs to fit inside a record_ bc immediate args");
 
 struct ObservedTest {
     enum { None, OnlyTrue, OnlyFalse, Both };
@@ -116,25 +82,29 @@ struct ObservedValues {
     static constexpr unsigned MaxTypes = 3;
     uint8_t numTypes : 2;
     uint8_t stateBeforeLastForce : 2;
-    uint8_t unused : 4;
+    uint8_t notScalar : 1;
+    uint8_t attribs : 1;
+    uint8_t object : 1;
+    uint8_t notFastVecelt : 1;
 
-    std::array<ObservedType, MaxTypes> seen;
+    std::array<uint8_t, MaxTypes> seen;
 
-    ObservedValues()
-        : numTypes(0), stateBeforeLastForce(StateBeforeLastForce::unknown),
-          unused(0) {}
+    ObservedValues() {
+        // implicitly happens when writing bytecode stream...
+        memset(this, 0, sizeof(ObservedValues));
+    }
 
     void reset() { *this = ObservedValues(); }
 
     void print(std::ostream& out) const {
         if (numTypes) {
             for (size_t i = 0; i < numTypes; ++i) {
-                auto t = seen[i];
-                out << Rf_type2char(t.sexptype) << "(" << (t.object ? "o" : "")
-                    << (t.attribs ? "a" : "") << (t.scalar ? "s" : "") << ")";
+                out << Rf_type2char(seen[i]);
                 if (i != (unsigned)numTypes - 1)
                     out << ", ";
             }
+            out << " (" << (object ? "o" : "") << (attribs ? "a" : "")
+                << (notFastVecelt ? "v" : "") << (!notScalar ? "s" : "") << ")";
             if (stateBeforeLastForce !=
                 ObservedValues::StateBeforeLastForce::unknown) {
                 out << " | "
@@ -153,16 +123,17 @@ struct ObservedValues {
     };
 
     RIR_INLINE void record(SEXP e) {
-        ObservedType type(e);
+        notScalar = notScalar || XLENGTH(e) != 1;
+        object = object || isObject(e);
+        attribs = attribs || ATTRIB(e) != R_NilValue;
+        notFastVecelt = notFastVecelt || !fastVeceltOk(e);
+
+        uint8_t type = TYPEOF(e);
         if (numTypes < MaxTypes) {
             int i = 0;
             for (; i < numTypes; ++i) {
                 if (seen[i] == type)
                     break;
-                if (seen[i].sexptype == type.sexptype) {
-                    seen[i] = seen[i] | type;
-                    return;
-                }
             }
             if (i == numTypes)
                 seen[numTypes++] = type;

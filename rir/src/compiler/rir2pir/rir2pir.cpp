@@ -274,7 +274,7 @@ static Value* insertLdFunGuard(const TargetInfo& trg, Value* callee,
         // It is therefore safe (ie. conservative with respect to the
         // guard) to avoid forcing the result by casting it to a value.
         auto casted = new CastType(calleeForGuard, CastType::Downcast,
-                                   PirType::any(), RType::closure);
+                                   PirType::any(), PirType::closure());
         pos = bb->insert(pos, casted);
         pos++;
 
