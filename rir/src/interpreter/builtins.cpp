@@ -188,7 +188,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = call.stackArg(i);
         if (TYPEOF(arg) == PROMSXP)
-            arg = PRVALUE(arg);
+            arg = evaluatePromise(arg);
         if (arg == R_UnboundValue || arg == R_MissingArg)
             return nullptr;
         if (ATTRIB(arg) != R_NilValue)
