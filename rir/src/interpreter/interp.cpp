@@ -1016,7 +1016,7 @@ std::set<std::string> blackList = {
     "source", "integer", "file", "getOption", "readLines", "scan", "eval",
     "sys.function", "sys.parent", "formals", "match.arg", "::",
 
-    //"tryCatch", "tryCatchOne", "tryCatchList", "doTryCatch",
+    "tryCatch", "tryCatchOne", "tryCatchList", "doTryCatch",
 
     // flexclust (...)
     "newKccaObject", "newKccasimpleObject", "new", "initialize"
