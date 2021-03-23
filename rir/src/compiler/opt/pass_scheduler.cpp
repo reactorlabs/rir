@@ -60,6 +60,7 @@ PassScheduler::PassScheduler() {
     auto addDefaultPostPhaseOpt = [&]() {
         add<HoistInstruction>();
         add<LoopInvariant>();
+        add<DelayInstr>();
     };
 
     nextPhase("Initial", 60);
