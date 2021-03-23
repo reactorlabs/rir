@@ -59,17 +59,13 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
         if (auto mk = MkArg::Cast(i)) {
             if (mk->isEager() && mk->prom()->trivial()) {
-                i->replaceUsesWith(mk->eagerArg(),
-                                   [&](Instruction* j, size_t a) {
-                                       if (j->arg(a).type().isA(PirType() |
-                                                                RType::prom))
-                                           j->arg(a).type() =
-                                               mk->eagerArg()->type;
-                                   },
-                                   [&](Instruction* j) {
-                                       return !CallInstruction::CastCall(j) &&
-                                              j->tag != Tag::CastType;
-                                   });
+                i->replaceUsesWith(
+                    mk->eagerArg(),
+                    [&](Instruction* j, size_t a) {
+                        if (!j->arg(a).type().maybeLazy())
+                            j->arg(a).type() = mk->eagerArg()->type;
+                    },
+                    [&](Instruction* j) { return j->tag != Tag::CastType; });
                 anyChange = true;
             }
         }
