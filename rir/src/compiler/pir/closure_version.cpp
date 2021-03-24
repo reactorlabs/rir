@@ -106,10 +106,10 @@ void ClosureVersion::erasePromise(unsigned id) {
     promises_[id] = nullptr;
 }
 
-size_t ClosureVersion::size() const {
+size_t ClosureVersion::numNonDeoptInstrs() const {
     size_t s = 0;
-    eachPromise([&s](Promise* p) { s += p->size(); });
-    return s + Code::size();
+    VisitorNoDeoptBranch::run(entry, [&](BB* bb) { s += bb->size(); });
+    return s;
 }
 
 size_t ClosureVersion::nargs() const { return owner_->nargs(); }

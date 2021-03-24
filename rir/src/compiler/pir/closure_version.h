@@ -92,7 +92,7 @@ class ClosureVersion
                 it(p);
     }
 
-    size_t size() const override final;
+    size_t numNonDeoptInstrs() const;
 
     rir::Code* rirSrc() const override final;
 
