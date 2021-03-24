@@ -51,14 +51,14 @@ completely disables the PIR optimizer. As follows are the different Options avai
         GraphViz   print pir in GraphViz, displaying all instructions within BBs
         GraphVizBB print pir in GraphViz, displaying only BB names and connections
 
-    PIR_MEASURING=
-        1          enable event and time measuring
-
     PIR_MEASURING_LOGFILE=
         filename   write the output to filename instead of std::cerr
 
     PIR_MEASURE_COMPILER=
-        1          print overal time spend in different passes on shutdown
+        1          print overall time spend in different passes on shutdown
+
+    PIR_MEASURE_COMPILER_BACKEND=
+        1          print overall time spend in different phases in the backend
 
     RIR_CHECK_PIR_TYPES=
         0        Disable

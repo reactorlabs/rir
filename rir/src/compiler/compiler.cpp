@@ -206,7 +206,6 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     return fail();
 }
 
-// Don't forget to pass PIR_MEASURING=1 too
 bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
 
 static void findUnreachable(Module* m) {
@@ -280,10 +279,10 @@ void Compiler::optimizeModule() {
         bool changed = false;
         if (translation->isSlow()) {
             if (MEASURE_COMPILER_PERF)
-                Measuring::startTimer();
+                Measuring::startTimer("compiler.cpp: module cleanup");
             findUnreachable(module);
             if (MEASURE_COMPILER_PERF)
-                Measuring::countTimer("module cleanup");
+                Measuring::countTimer("compiler.cpp: module cleanup");
         }
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
@@ -291,12 +290,14 @@ void Compiler::optimizeModule() {
                 log.pirOptimizationsHeader(translation);
 
                 if (MEASURE_COMPILER_PERF)
-                    Measuring::startTimer();
+                    Measuring::startTimer("compiler.cpp: " +
+                                          translation->getName());
 
                 if (translation->apply(*this, v, log.out()))
                     changed = true;
                 if (MEASURE_COMPILER_PERF)
-                    Measuring::countTimer(translation->getName());
+                    Measuring::countTimer("compiler.cpp: " +
+                                          translation->getName());
 
                 log.pirOptimizations(translation);
                 log.flush();
@@ -315,7 +316,7 @@ void Compiler::optimizeModule() {
         return changed;
     });
     if (MEASURE_COMPILER_PERF)
-        Measuring::startTimer();
+        Measuring::startTimer("compiler.cpp: verification");
 
     module->eachPirClosure([&](Closure* c) {
         c->eachVersion([&](ClosureVersion* v) {
@@ -331,7 +332,7 @@ void Compiler::optimizeModule() {
     });
 
     if (MEASURE_COMPILER_PERF)
-        Measuring::countTimer("Verification");
+        Measuring::countTimer("compiler.cpp: verification");
 
     logger.flush();
 }
