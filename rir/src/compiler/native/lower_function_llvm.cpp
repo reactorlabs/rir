@@ -49,17 +49,18 @@ static_assert(sizeof(unsigned long) == sizeof(uint64_t),
 void LowerFunctionLLVM::PhiBuilder::addInput(llvm::Value* v) {
     addInput(v, builder.GetInsertBlock());
 }
-llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()() {
+llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()(size_t numInputs) {
     assert(!created);
     created = true;
-    assert(inputs.size() > 0);
-    if (inputs.size() == 1)
-        return inputs[0].first;
-    assert(builder.GetInsertBlock()->hasNPredecessors(inputs.size()));
-    auto phi = builder.CreatePHI(type, inputs.size());
-    for (auto& in : inputs)
-        phi->addIncoming(in.first, in.second);
-    return phi;
+    if (numInputs == 0) {
+        numInputs = inputs.size();
+        if (numInputs == 1)
+            return inputs[0].first;
+        assert(builder.GetInsertBlock()->hasNPredecessors(numInputs));
+    }
+    assert(numInputs > 0);
+    phi_ = builder.CreatePHI(type, inputs.size());
+    return phi_;
 }
 
 class NativeAllocator : public SSAAllocator {
@@ -2518,6 +2519,17 @@ void LowerFunctionLLVM::compile() {
                     };
 
                     switch (b->builtinId) {
+                    case blt("dim"): {
+                        if (irep == t::SEXP) {
+                            setVal(i,
+                                   call(NativeBuiltins::get(
+                                            NativeBuiltins::Id::getAttrb),
+                                        {a, constant(R_DimSymbol, t::SEXP)}));
+                        } else {
+                            setVal(i, constant(R_NilValue, orep));
+                        }
+                        break;
+                    }
                     case blt("length"):
                         if (irep == t::SEXP &&
                             !b->callArg(0).val()->type.isA(
@@ -2629,6 +2641,43 @@ void LowerFunctionLLVM::compile() {
                                    irep == Representation::Real) {
                             setVal(i, builder.CreateIntrinsic(
                                           Intrinsic::sqrt, {t::Double}, {a}));
+                        } else if (i->arg(0).val()->type.isA(
+                                       PirType(RType::real))) {
+                            auto l = vectorLength(a);
+                            auto res = call(NativeBuiltins::get(
+                                                NativeBuiltins::Id::makeVector),
+                                            {c(REALSXP), l});
+
+                            auto idx = phiBuilder(t::i64);
+                            idx.addInput(c(0, 64));
+
+                            auto loopH = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "sqrt-loop-hd", fun);
+                            auto loopB = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+                            auto loopE = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+
+                            builder.CreateBr(loopH);
+                            builder.SetInsertPoint(loopH);
+
+                            auto idxPhi = idx(2);
+                            builder.CreateCondBr(
+                                builder.CreateICmpEQ(idxPhi, l), loopE, loopB);
+                            builder.SetInsertPoint(loopB);
+
+                            assignVector(
+                                res, idxPhi,
+                                builder.CreateIntrinsic(
+                                    Intrinsic::sqrt, {t::Double},
+                                    {accessVector(a, idxPhi,
+                                                  i->arg(0).val()->type)}),
+                                i->type);
+                            idx.addInput(builder.CreateAdd(idxPhi, c(1, 64)));
+                            builder.CreateBr(loopH);
+
+                            builder.SetInsertPoint(loopE);
+                            setVal(i, res);
                         } else {
                             done = false;
                         }
@@ -2728,6 +2777,26 @@ void LowerFunctionLLVM::compile() {
 
                         } else {
                             done = false;
+                        }
+                        break;
+                    case blt("as.character"):
+                        if (irep == Representation::Sexp) {
+                            setVal(i, createSelect2(
+                                          builder.CreateICmpEQ(sexptype(a),
+                                                               c(STRSXP)),
+                                          [&]() { return a; },
+                                          [&]() { return callTheBuiltin(); }));
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    case blt("as.vector"):
+                        if (irep == Representation::Sexp) {
+                            setVal(i, createSelect2(
+                                          isVector(a), [&]() { return a; },
+                                          [&]() { return callTheBuiltin(); }));
+                        } else {
+                            setVal(i, convert(a, i->type));
                         }
                         break;
                     case blt("is.logical"):
