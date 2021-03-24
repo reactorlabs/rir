@@ -1055,7 +1055,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
             }
             // std::cerr <<"executed: " << nameStr <<"\n";
             if (blackList.count(nameStr) == 0) {
-                std::cerr << "annotated: " << nameStr << "\n";
+                // std::cerr << "annotated: " << nameStr << "\n";
                 table->baseline()->flags.set(Function::DepromiseArgs);
             }
         }

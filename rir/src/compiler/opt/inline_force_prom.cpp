@@ -26,6 +26,17 @@ will be later on removed by dead code elimination.
 namespace rir {
 namespace pir {
 
+BB::Instrs::iterator iteratorAt(BB* bb, Instruction* ins) {
+    auto ip = bb->begin();
+    while (ip != bb->end()) {
+        if (*ip == ins)
+            return ip;
+        ip++;
+    }
+    assert(false && "instruction not found in bb");
+    // return nullptr;
+};
+
 bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 LogStream& log) const {
     // std::cerr << "Before InlineForceProm "  << cls->owner()->name() << "\n";
@@ -39,7 +50,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
             auto next = ip + 1;
 
             if (auto call = CallInstruction::CastCall(*ip)) {
-
+                auto callAsInstr = *ip;
                 auto clsCallee = call->tryGetCls();
 
                 if (clsCallee) {
@@ -48,36 +59,58 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (functionVersion->flags.contains(
                             rir::Function::Flag::DepromiseArgs)) {
 
+                        bool anyChangeLocal;
+                        std::function<void(InstrArg&)> updateMkArg =
+                            [&](InstrArg& v) {
+                                if (auto mkarg = MkArg::Cast(v.val())) {
+
+                                    anyChange = true;
+                                    anyChangeLocal = true;
+
+                                    auto cast = new CastType(
+                                        mkarg, CastType::Kind::Upcast,
+                                        RType::prom, PirType::valOrLazy());
+
+                                    auto forced =
+                                        new Force(cast, mkarg->env(),
+                                                  Tombstone::framestate());
+                                    v.val() = forced;
+                                    // v.type() = PirType::val();
+                                    ip = bb->insert(ip, cast) + 1;
+                                    ip = bb->insert(ip, forced) + 1;
+                                }
+                            };
+
                         call->eachCallArg([&](InstrArg& v) {
-                            if (auto mkarg = MkArg::Cast(v.val())) {
+                            updateMkArg(v);
+                            if (auto dots = DotsList::Cast(v.val())) {
 
-                                anyChange = true;
+                                anyChangeLocal = false;
+                                dots->eachArg([&](InstrArg& vDot) {
+                                    updateMkArg(vDot);
+                                    vDot.type() = PirType::val();
+                                });
 
-                                auto cast = new CastType(
-                                    mkarg, CastType::Kind::Upcast, RType::prom,
-                                    PirType::valOrLazy());
+                                // bb->remove(dots);
+                                // ip = iteratorAt(bb, callAsInstr);
+                                // ip = bb->insert(ip, dots) + 1;
 
-                                auto forced =
-                                    new Force(cast, mkarg->env(),
-                                              Tombstone::framestate());
-                                v.val() = forced;
-                                ip = bb->insert(ip, cast) + 1;
-                                ip = bb->insert(ip, forced) + 1;
-                                next = ip + 1;
-
+                                if (anyChangeLocal) {
+                                    auto clone = dots->clone();
+                                    ip = bb->insert(ip, clone) + 1;
+                                    dots->replaceUsesWith(clone);
+                                    bb->remove(dots);
+                                    ip = iteratorAt(bb, callAsInstr);
+                                }
                             }
-
-
                         });
+                        next = ip + 1;
                     }
                 }
             }
             ip = next;
         }
     });
-
-    // std::cerr << "After InlineForceProm \n";
-    // UnnecessaryContexts unnecessary2(cls, code, log);
 
     return anyChange;
 }
