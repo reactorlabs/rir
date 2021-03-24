@@ -28,6 +28,7 @@ struct MeasuringImpl {
     std::chrono::time_point<std::chrono::high_resolution_clock> end;
     size_t threshold = 0;
     const unsigned width = 40;
+    bool shouldOutput = false;
 
     MeasuringImpl() : start(std::chrono::high_resolution_clock::now()) {}
 
@@ -49,6 +50,9 @@ struct MeasuringImpl {
     }
 
     void dump(std::ostream& out) {
+        if (!shouldOutput)
+            return;
+
         std::chrono::duration<double> duration = end - start;
         out << "\n---== Measuring breakdown ===---\n\n";
         out << "  Total lifetime: " << format(duration.count()) << "\n\n";
@@ -147,6 +151,7 @@ struct MeasuringImpl {
 std::unique_ptr<MeasuringImpl> m = std::make_unique<MeasuringImpl>();
 
 void Measuring::startTimer(const std::string& name) {
+    m->shouldOutput = true;
     auto& t = m->timers[name];
     if (t.timerActive) {
         t.alreadyRunning++;
@@ -158,6 +163,7 @@ void Measuring::startTimer(const std::string& name) {
 
 void Measuring::countTimer(const std::string& name) {
     auto end = std::chrono::high_resolution_clock::now();
+    m->shouldOutput = true;
     auto& t = m->timers[name];
     if (!t.timerActive) {
         t.notStarted++;
@@ -169,13 +175,18 @@ void Measuring::countTimer(const std::string& name) {
 }
 
 void Measuring::addTime(const std::string& name, double time) {
+    m->shouldOutput = true;
     auto& t = m->timers[name];
     t.timer += time;
 }
 
-void Measuring::setEventThreshold(size_t n) { m->threshold = n; }
+void Measuring::setEventThreshold(size_t n) {
+    m->shouldOutput = true;
+    m->threshold = n;
+}
 
 void Measuring::countEvent(const std::string& name, size_t n) {
+    m->shouldOutput = true;
     auto& c = m->events[name];
     c += n;
 }
