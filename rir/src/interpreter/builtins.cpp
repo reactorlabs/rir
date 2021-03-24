@@ -186,7 +186,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = call.stackArg(i);
         if (TYPEOF(arg) == PROMSXP)
-            arg = PRVALUE(arg);
+            arg = evaluatePromise(arg);
         if (arg == R_UnboundValue || arg == R_MissingArg)
             return nullptr;
         if (ATTRIB(arg) != R_NilValue)
@@ -477,6 +477,34 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         }
 
 #undef CMP
+    }
+
+    case blt("all"): {
+        for (size_t i = 0; i < nargs; ++i) {
+            auto a = args[0];
+            if (IS_SIMPLE_SCALAR(a, LGLSXP)) {
+                if (LOGICAL(a)[0] == 0)
+                    return R_FalseValue;
+                else if (LOGICAL(a)[0] == 1)
+                    continue;
+            }
+            return nullptr;
+        }
+        return R_TrueValue;
+    }
+
+    case blt("any"): {
+        for (size_t i = 0; i < nargs; ++i) {
+            auto a = args[0];
+            if (IS_SIMPLE_SCALAR(a, LGLSXP)) {
+                if (LOGICAL(a)[0] == 1)
+                    return R_TrueValue;
+                else if (LOGICAL(a)[0] == 0)
+                    continue;
+            }
+            return nullptr;
+        }
+        return R_FalseValue;
     }
 
     case blt("as.character"): {
@@ -830,6 +858,8 @@ bool supportsFastBuiltinCall(SEXP b) {
     case blt("stdin"):
     case blt("stdout"):
     case blt("stderr"):
+    case blt("all"):
+    case blt("any"):
     case blt("is.logical"):
     case blt("is.symbol"):
     case blt("is.expression"):
