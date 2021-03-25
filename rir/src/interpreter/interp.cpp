@@ -1012,17 +1012,6 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
     return res;
 }
 
-std::set<std::string> blackList = {
-    "source", "integer", "file", "getOption", "readLines", "scan", "eval",
-    "sys.function", "sys.parent", "formals", "match.arg", "::",
-
-    "tryCatch", "tryCatchOne", "tryCatchList", "doTryCatch",
-
-    // flexclust (...)
-    "newKccaObject", "newKccasimpleObject", "new", "initialize"
-
-};
-
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
@@ -1042,24 +1031,6 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
                         ctx);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
-
-    bool ENABLE_ANNOTATIONS = getenv("PIR_ENABLE_ANNOTATIONS") ? true : false;
-    if (ENABLE_ANNOTATIONS) {
-        if (table->size() == 1) {
-
-            SEXP lhs = CAR(call.ast);
-            std::string nameStr = "";
-            if (TYPEOF(lhs) == SYMSXP) {
-                auto name = lhs;
-                nameStr = CHAR(PRINTNAME(name));
-            }
-            // std::cerr <<"executed: " << nameStr <<"\n";
-            if (blackList.count(nameStr) == 0) {
-                // std::cerr << "annotated: " << nameStr << "\n";
-                table->baseline()->flags.set(Function::DepromiseArgs);
-            }
-        }
-    }
 
     if (!isDeoptimizing() && RecompileHeuristic(table, fun)) {
         Context given = call.givenContext;
