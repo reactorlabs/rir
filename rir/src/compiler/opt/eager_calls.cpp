@@ -143,7 +143,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (auto ldfun = LdFun::Cast(call->cls())) {
                         if (ldfun->hint) {
-                            if (TYPEOF(ldfun->hint) == BUILTINSXP) {
+                            auto kind = TYPEOF(ldfun->hint);
+                            if (kind == BUILTINSXP) {
                                 // We can only speculate if we have a checkpoint
                                 // at the ldfun position, since we want to deopt
                                 // before forcing arguments.
