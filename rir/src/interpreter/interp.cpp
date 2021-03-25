@@ -966,15 +966,15 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
                     a = CONS_NR(R_MissingArg, R_NilValue);
                     SET_TAG(a, TAG(f));
                     SET_MISSING(a, 1);
-                    if (auto dflt = fun->defaultArg(pos)) {
-                        SETCAR(a, createPromise(dflt, env));
-                        SET_MISSING(a, 2);
-                    }
                     if (prevA) {
                         SETCDR(prevA, a);
                     } else {
                         assert(frame == R_NilValue);
                         SET_FRAME(env, a);
+                    }
+                    if (auto dflt = fun->defaultArg(pos)) {
+                        SETCAR(a, createPromise(dflt, env));
+                        SET_MISSING(a, 2);
                     }
                 } else if (CAR(a) == R_MissingArg) {
                     if (auto dflt = fun->defaultArg(pos))
