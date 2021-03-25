@@ -207,7 +207,9 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                     continue;
                 } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
                     if (!inlineeCls->rirFunction()->flags.contains(
-                            rir::Function::ForceInline))
+                            rir::Function::ForceInline) &&
+                        inlinee->numNonDeoptInstrs() >
+                            Parameter::INLINER_MAX_INLINEE_SIZE * 4)
                         inlineeCls->rirFunction()->flags.set(
                             rir::Function::NotInlineable);
                     continue;
@@ -470,11 +472,11 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
     size_t Parameter::INLINER_MAX_INLINEE_SIZE =
         getenv("PIR_INLINER_MAX_INLINEE_SIZE")
             ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
-            : 80;
+            : 100;
     size_t Parameter::INLINER_INITIAL_FUEL =
         getenv("PIR_INLINER_INITIAL_FUEL")
             ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
-            : 15;
+            : 10;
     size_t Parameter::INLINER_INLINE_UNLIKELY =
         getenv("PIR_INLINER_INLINE_UNLIKELY")
             ? atoi(getenv("PIR_INLINER_INLINE_UNLIKELY"))
