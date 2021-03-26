@@ -14,6 +14,7 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [
+                {"name": "PIR_ENABLE_ANNOTATIONS", "value": "1"},
                 {"name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/external/custom-r/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu:/usr/lib/jvm/java-11-openjdk-amd64/lib/server"},
                 {"name": "R_SHARE_DIR",     "value": "${workspaceFolder}/external/custom-r/share"},
                 {"name": "R_DOC_DIR",       "value": "${workspaceFolder}/external/custom-r/doc"},
