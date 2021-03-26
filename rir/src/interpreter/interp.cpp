@@ -3856,36 +3856,32 @@ SEXP rirEval(SEXP what, SEXP env) {
         return evalRirCodeExtCaller(code, globalContext(), env);
     }
 
+    auto depromiseIfNeeded = [&](Function* fun) {
+        if (fun->flags.contains(Function::DepromiseArgs)) {
+            // Force arguments and depromise
+            auto f = FRAME(env);
+            while (f != R_NilValue) {
+                if (TYPEOF(CAR(f)) == PROMSXP)
+                    SETCAR(f, evaluatePromise(CAR(f)));
+                f = CDR(f);
+            }
+        }
+    };
+
     if (auto table = DispatchTable::check(what)) {
         // TODO: add an adapter frame to be able to call something else than
         // the baseline version!
         Function* fun = table->baseline();
         fun->registerInvocation();
+        depromiseIfNeeded(fun);
 
-        if (fun->flags.contains(Function::DepromiseArgs)) {
-            // Force arguments and depromise
-            auto f = FRAME(env);
-            while (f != R_NilValue) {
-                if (TYPEOF(TAG(f)) == PROMSXP)
-                    SET_TAG(f, evaluatePromise(TAG(f)));
-                f = CDR(f);
-            }
-        }
         return evalRirCodeExtCaller(fun->body(), globalContext(), env);
     }
 
     if (auto fun = Function::check(what)) {
         fun->registerInvocation();
+        depromiseIfNeeded(fun);
 
-        if (fun->flags.contains(Function::DepromiseArgs)) {
-            // Force arguments and depromise
-            auto f = FRAME(env);
-            while (f != R_NilValue) {
-                if (TYPEOF(TAG(f)) == PROMSXP)
-                    SET_TAG(f, evaluatePromise(TAG(f)));
-                f = CDR(f);
-            }
-        }
         return evalRirCodeExtCaller(fun->body(), globalContext(), env);
     }
 
