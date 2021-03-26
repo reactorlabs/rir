@@ -239,8 +239,8 @@ test_big_inline:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_MAX_INPUT_SIZE: 10000
-    PIR_INLINER_MAX_SIZE: 10000
+    PIR_MAX_INPUT_SIZE: 5000
+    PIR_INLINER_MAX_SIZE: 5000
     PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:

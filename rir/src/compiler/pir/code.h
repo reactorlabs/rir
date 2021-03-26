@@ -37,7 +37,7 @@ class Code {
     void printBBGraphCode(std::ostream&, bool omitDeoptBranches) const;
     virtual ~Code();
 
-    virtual size_t size() const;
+    size_t numInstrs() const;
 
     virtual rir::Code* rirSrc() const = 0;
 };

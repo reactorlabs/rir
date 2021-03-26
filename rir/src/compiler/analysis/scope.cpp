@@ -349,7 +349,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             if (depth == MAX_DEPTH)
                 return;
 
-            if (version->size() > MAX_SIZE)
+            if (version->numNonDeoptInstrs() > MAX_SIZE)
                 return;
 
             std::vector<Value*> args;

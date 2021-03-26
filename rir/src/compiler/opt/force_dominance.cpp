@@ -74,7 +74,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     std::unordered_map<Force*, ForcedBy::PromiseInlineable> toInline;
     SmallMap<Force*, Instruction*> dominatedBy;
 
-    bool isHuge = code->size() > Parameter::PROMISE_INLINER_MAX_SIZE;
+    bool isHuge =
+        cls->numNonDeoptInstrs() > Parameter::PROMISE_INLINER_MAX_SIZE;
     {
         ForceDominanceAnalysis analysis(cls, code, log);
 
@@ -131,7 +132,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         f->strict = true;
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
                             if (!mk->isEager()) {
-                                if (!isHuge || mk->prom()->size() < 10) {
+                                if (!isHuge || mk->prom()->numInstrs() < 10) {
                                     // We need to know if the promise escaped
                                     // before the force. After the force the
                                     // analysis deletes escape information.
@@ -441,6 +442,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 size_t Parameter::PROMISE_INLINER_MAX_SIZE =
     getenv("PIR_PROMISE_INLINER_MAX_SIZE")
         ? atoi(getenv("PIR_PROMISE_INLINER_MAX_SIZE"))
-        : 3000;
+        : 1800;
 } // namespace pir
 } // namespace rir

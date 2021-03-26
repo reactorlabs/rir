@@ -23,7 +23,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
     bool anyChange = false;
     size_t fuel = Parameter::INLINER_INITIAL_FUEL;
 
-    if (cls->size() > Parameter::INLINER_MAX_SIZE)
+    if (cls->numNonDeoptInstrs() > Parameter::INLINER_MAX_SIZE)
         return false;
 
     auto dontInline = [](Closure* cls) {
@@ -159,7 +159,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                     });
                 };
 
-                size_t weight = inlinee->size();
+                size_t weight = inlinee->numNonDeoptInstrs();
                 // The taken information of the call instruction tells us how
                 // many times a call was executed relative to function
                 // invocation. 0 means never, 1 means on every call, above 1
@@ -171,14 +171,14 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                         // stays unchanged. Below it's increased and above it
                         // is decreased, but not more than 4x
                         double adjust = 1.25 * c->taken;
-                        if (adjust > 3)
-                            adjust = 3;
-                        if (adjust < 0.25)
-                            adjust = 0.25;
+                        if (adjust > 4)
+                            adjust = 4;
+                        if (adjust < 0.2)
+                            adjust = 0.2;
                         weight = (double)weight / adjust;
                         // Inline only small methods if we are getting close to
                         // the limit.
-                        auto limit = (double)inlinee->size() /
+                        auto limit = (double)inlinee->numNonDeoptInstrs() /
                                      (double)Parameter::INLINER_MAX_SIZE;
                         limit = (limit * 4) + 1;
                         weight *= limit;
@@ -207,7 +207,9 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                     continue;
                 } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
                     if (!inlineeCls->rirFunction()->flags.contains(
-                            rir::Function::ForceInline))
+                            rir::Function::ForceInline) &&
+                        inlinee->numNonDeoptInstrs() >
+                            Parameter::INLINER_MAX_INLINEE_SIZE * 4)
                         inlineeCls->rirFunction()->flags.set(
                             rir::Function::NotInlineable);
                     continue;
@@ -464,21 +466,21 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
 
 // TODO: maybe implement something more resonable to pass in those constants.
 // For now it seems a simple env variable is just fine.
-size_t Parameter::INLINER_MAX_SIZE = getenv("PIR_INLINER_MAX_SIZE")
-                                         ? atoi(getenv("PIR_INLINER_MAX_SIZE"))
-                                         : 4000;
-size_t Parameter::INLINER_MAX_INLINEE_SIZE =
-    getenv("PIR_INLINER_MAX_INLINEE_SIZE")
-        ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
-        : 200;
-size_t Parameter::INLINER_INITIAL_FUEL =
-    getenv("PIR_INLINER_INITIAL_FUEL")
-        ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
-        : 15;
-size_t Parameter::INLINER_INLINE_UNLIKELY =
-    getenv("PIR_INLINER_INLINE_UNLIKELY")
-        ? atoi(getenv("PIR_INLINER_INLINE_UNLIKELY"))
-        : 0;
+    size_t Parameter::INLINER_MAX_SIZE =
+        getenv("PIR_INLINER_MAX_SIZE") ? atoi(getenv("PIR_INLINER_MAX_SIZE"))
+                                       : 2500;
+    size_t Parameter::INLINER_MAX_INLINEE_SIZE =
+        getenv("PIR_INLINER_MAX_INLINEE_SIZE")
+            ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
+            : 90;
+    size_t Parameter::INLINER_INITIAL_FUEL =
+        getenv("PIR_INLINER_INITIAL_FUEL")
+            ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
+            : 15;
+    size_t Parameter::INLINER_INLINE_UNLIKELY =
+        getenv("PIR_INLINER_INLINE_UNLIKELY")
+            ? atoi(getenv("PIR_INLINER_INLINE_UNLIKELY"))
+            : 0;
 
 } // namespace pir
 } // namespace rir
