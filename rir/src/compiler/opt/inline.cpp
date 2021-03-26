@@ -472,11 +472,11 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
     size_t Parameter::INLINER_MAX_INLINEE_SIZE =
         getenv("PIR_INLINER_MAX_INLINEE_SIZE")
             ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
-            : 100;
+            : 90;
     size_t Parameter::INLINER_INITIAL_FUEL =
         getenv("PIR_INLINER_INITIAL_FUEL")
             ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
-            : 10;
+            : 15;
     size_t Parameter::INLINER_INLINE_UNLIKELY =
         getenv("PIR_INLINER_INLINE_UNLIKELY")
             ? atoi(getenv("PIR_INLINER_INLINE_UNLIKELY"))
