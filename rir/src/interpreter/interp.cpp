@@ -3862,11 +3862,30 @@ SEXP rirEval(SEXP what, SEXP env) {
         Function* fun = table->baseline();
         fun->registerInvocation();
 
+        if (fun->flags.contains(Function::DepromiseArgs)) {
+            // Force arguments and depromise
+            auto f = FRAME(env);
+            while (f != R_NilValue) {
+                if (TYPEOF(TAG(f)) == PROMSXP)
+                    SET_TAG(f, evaluatePromise(TAG(f)));
+                f = CDR(f);
+            }
+        }
         return evalRirCodeExtCaller(fun->body(), globalContext(), env);
     }
 
     if (auto fun = Function::check(what)) {
         fun->registerInvocation();
+
+        if (fun->flags.contains(Function::DepromiseArgs)) {
+            // Force arguments and depromise
+            auto f = FRAME(env);
+            while (f != R_NilValue) {
+                if (TYPEOF(TAG(f)) == PROMSXP)
+                    SET_TAG(f, evaluatePromise(TAG(f)));
+                f = CDR(f);
+            }
+        }
         return evalRirCodeExtCaller(fun->body(), globalContext(), env);
     }
 

@@ -128,13 +128,11 @@ class Compiler {
 
         // };
 
-        bool ENABLE_ANNOTATIONS =
-            getenv("PIR_ENABLE_ANNOTATIONS") ? true : false;
+        static bool ENABLE_ANNOTATIONS = 1;
+        //            (getenv("PIR_ENABLE_ANNOTATIONS") &&
+        //            *getenv("PIR_ENABLE_ANNOTATIONS")  == '1') ? true : false;
 
         if (ENABLE_ANNOTATIONS) {
-
-            static auto tryCatch =
-                Rf_findFun(Rf_install("tryCatch"), R_BaseNamespace);
 
             static auto blocked = std::unordered_set<SEXP>({
 
@@ -151,48 +149,19 @@ class Compiler {
                 Rf_findFun(Rf_install("match.arg"), R_BaseNamespace),
                 Rf_findFun(Rf_install("::"), R_BaseNamespace),
 
-                tryCatch,
-                // Rf_findFun(Rf_install("tryCatchOne"), R_BaseNamespace),
-                // Rf_findFun(Rf_install("tryCatchList"), R_BaseNamespace),
-                // Rf_findFun(Rf_install("doTryCatch"), R_BaseNamespace),
+                Rf_findFun(Rf_install("tryCatch"), R_BaseNamespace),
 
                 Rf_findFun(Rf_install("new"), R_BaseNamespace),
                 Rf_findFun(Rf_install("initialize"), R_BaseNamespace),
+            });
 
-                // flexclust (...)
-                // Rf_findFun(Rf_install("newKccaObject"), R_BaseNamespace),
-                // Rf_findFun(Rf_install("newKccasimpleObject"),
-                // R_BaseNamespace),
+            if (blocked.count(inClosure) ||
+                // block tryCatch
+                (FORMALS(inClosure) != R_NilValue &&
+                 TAG(FORMALS(inClosure)) == Rf_install("expr")))
+                return;
 
-            }
-
-            );
-            // flexclust has to be blacklisted too *****
-
-            SEXP envir = CLOENV(inClosure);
-            auto currentCl = envir;
-            auto isInnerOfTryCatch = false;
-            while (currentCl != R_NilValue) {
-                if (currentCl == CLOENV(tryCatch)) {
-                    isInnerOfTryCatch = true;
-                    break;
-                }
-                currentCl = ENCLOS(currentCl);
-            }
-
-            // auto f1 = Rf_findFun(Rf_install("newKccaObject"), envir);
-            // if (f1 != R_NilValue)
-            //     blocked.insert(f1);
-
-            // auto f2 = Rf_findFun(Rf_install("newKccasimpleObject"), envir);
-            // if (f2 != R_NilValue)
-            //     blocked.insert(f2);
-
-            // std::cerr << "executed ann \n";
-            if (!blocked.count(inClosure) && !isInnerOfTryCatch) {
-                // std::cerr << "annotated: \n";
-                vtable->baseline()->flags.set(Function::DepromiseArgs);
-            }
+            vtable->baseline()->flags.set(Function::DepromiseArgs);
         }
     }
 };
