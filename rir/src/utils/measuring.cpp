@@ -176,8 +176,7 @@ void Measuring::countTimer(const std::string& name) {
 
 void Measuring::addTime(const std::string& name, double time) {
     m->shouldOutput = true;
-    auto& t = m->timers[name];
-    t.timer += time;
+    m->timers[name].timer += time;
 }
 
 void Measuring::setEventThreshold(size_t n) {
@@ -187,8 +186,7 @@ void Measuring::setEventThreshold(size_t n) {
 
 void Measuring::countEvent(const std::string& name, size_t n) {
     m->shouldOutput = true;
-    auto& c = m->events[name];
-    c += n;
+    m->events[name] += n;
 }
 
 } // namespace rir
