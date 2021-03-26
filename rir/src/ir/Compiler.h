@@ -128,9 +128,11 @@ class Compiler {
 
         // };
 
-        static bool ENABLE_ANNOTATIONS = 1;
-        //            (getenv("PIR_ENABLE_ANNOTATIONS") &&
-        //            *getenv("PIR_ENABLE_ANNOTATIONS")  == '1') ? true : false;
+        static bool ENABLE_ANNOTATIONS =
+            (getenv("PIR_ENABLE_ANNOTATIONS") &&
+             *getenv("PIR_ENABLE_ANNOTATIONS") == '1')
+                ? true
+                : false;
 
         if (ENABLE_ANNOTATIONS) {
 
