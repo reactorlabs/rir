@@ -882,15 +882,24 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
         }
     };
 
+    bool tryArgmatch = !given.includes(Assumption::StaticallyArgmatched);
     given.add(Assumption::CorrectOrderOfArguments);
+    auto sig =
+        DispatchTable::unpack(BODY(call.callee))->baseline()->signature();
+    if (tryArgmatch && given.includes(Assumption::NotTooManyArguments) &&
+        given.numMissing() == 0 && !sig.hasDotsFormals)
+        given.add(Assumption::StaticallyArgmatched);
 
     SEXP formals = FORMALS(call.callee);
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         testArg(i);
         if (call.hasNames()) {
             auto name = call.name(i, ctx);
-            if (name != R_NilValue && name != TAG(formals))
+            if (name != R_NilValue && name != TAG(formals)) {
+                if (tryArgmatch)
+                    given.remove(Assumption::StaticallyArgmatched);
                 given.remove(Assumption::CorrectOrderOfArguments);
+            }
             formals = CDR(formals);
         }
     }
@@ -908,6 +917,8 @@ static RIR_INLINE void supplyMissingArgs(CallContext& call,
     assert(expected == call.suppliedArgs ||
            !context.includes(Assumption::NoExplicitlyMissingArgs));
     if (expected > call.suppliedArgs) {
+        // TODO: maybe we could also deal with ... here by pasing an empty dots
+        // list?
         for (size_t i = 0; i < expected - call.suppliedArgs; ++i)
             ostack_push(ctx, R_MissingArg);
         call.passedArgs = expected;

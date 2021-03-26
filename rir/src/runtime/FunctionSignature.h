@@ -27,6 +27,7 @@ struct FunctionSignature {
         unsigned numArgs = InInteger(inp);
         FunctionSignature sig(envc, opt);
         sig.numArguments = numArgs;
+        sig.dotsPosition = InInteger(inp);
         return sig;
     }
 
@@ -34,13 +35,16 @@ struct FunctionSignature {
         OutInteger(out, (int)envCreation);
         OutInteger(out, (int)optimization);
         OutInteger(out, numArguments);
+        OutInteger(out, dotsPosition);
     }
 
     void pushFormal(SEXP arg, SEXP name) {
         if (arg != R_MissingArg)
             hasDefaultArgs = true;
-        if (name != R_NilValue)
+        if (name == R_DotsSymbol) {
             hasDotsFormals = true;
+            dotsPosition = numArguments;
+        }
         numArguments++;
     }
 
@@ -63,6 +67,7 @@ struct FunctionSignature {
     unsigned numArguments = 0;
     bool hasDotsFormals = false;
     bool hasDefaultArgs = false;
+    size_t dotsPosition = -1;
 };
 
 } // namespace rir
