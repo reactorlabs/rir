@@ -129,10 +129,8 @@ class Compiler {
         // };
 
         static bool ENABLE_ANNOTATIONS =
-            (getenv("PIR_ENABLE_ANNOTATIONS") &&
-             *getenv("PIR_ENABLE_ANNOTATIONS") == '1')
-                ? true
-                : false;
+            getenv("PIR_ENABLE_ANNOTATIONS") &&
+            *getenv("PIR_ENABLE_ANNOTATIONS") == '1';
 
         if (ENABLE_ANNOTATIONS) {
 
@@ -157,10 +155,25 @@ class Compiler {
                 Rf_findFun(Rf_install("initialize"), R_BaseNamespace),
             });
 
-            if (blocked.count(inClosure) ||
-                // block tryCatch
-                (FORMALS(inClosure) != R_NilValue &&
-                 TAG(FORMALS(inClosure)) == Rf_install("expr")))
+            auto blockTryCatch = [&]() {
+                return FORMALS(inClosure) != R_NilValue &&
+                       TAG(FORMALS(inClosure)) == Rf_install("expr");
+            };
+            auto blocknewKccaObject = [&]() {
+                auto f = FORMALS(inClosure);
+                if (f == R_NilValue)
+                    return false;
+                if (TAG(f) != Rf_install("x"))
+                    return false;
+                f = CDR(f);
+                if (f == R_NilValue)
+                    return false;
+                if (TAG(f) != Rf_install("family"))
+                    return false;
+                return true;
+            };
+            if (blocked.count(inClosure) || blockTryCatch() ||
+                blocknewKccaObject())
                 return;
 
             vtable->baseline()->flags.set(Function::DepromiseArgs);
