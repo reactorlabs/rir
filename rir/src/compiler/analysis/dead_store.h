@@ -309,9 +309,11 @@ class DeadStoreAnalysis {
                 }
             };
 
-            if (auto ld = LdVar::Cast(i)) {
+            if (LdVar::Cast(i) || Missing::Cast(i)) {
+                auto name = LdVar::Cast(i) ? LdVar::Cast(i)->varName
+                                           : Missing::Cast(i)->varName;
                 for (auto& e : withPotentialParents(resolveEnv(i->env()))) {
-                    Variable var({ld->varName, e});
+                    Variable var({name, e});
                     if (!Env::isStaticEnv(e) &&
                         !state.partiallyObserved.count(var)) {
                         state.partiallyObserved.insert(var);
