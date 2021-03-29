@@ -160,6 +160,7 @@ class Compiler {
                     return false;
                 return true;
             };
+
             if (blocked.count(inClosure) || blockTryCatch() ||
                 blocknewKccaObject())
                 return;
