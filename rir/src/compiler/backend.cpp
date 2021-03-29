@@ -278,7 +278,6 @@ static void toCSSA(Code* code) {
     });
 }
 
-// Don't forget to pass PIR_MEASURING=1 too
 bool MEASURE_COMPILER_BACKEND_PERF =
     getenv("PIR_MEASURE_COMPILER_BACKEND") ? true : false;
 
@@ -289,7 +288,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     // + how to deal with inlined stuff?
 
     if (MEASURE_COMPILER_BACKEND_PERF)
-        Measuring::startTimer();
+        Measuring::startTimer("backend.cpp: lowering");
 
     FunctionWriter function;
 
@@ -337,8 +336,8 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     lowerAndScanForPromises(cls);
 
     if (MEASURE_COMPILER_BACKEND_PERF) {
-        Measuring::countTimer("lowering");
-        Measuring::startTimer();
+        Measuring::countTimer("backend.cpp: lowering");
+        Measuring::startTimer("backend.cpp: pir2llvm");
     }
 
     std::unordered_map<Code*, rir::Code*> done;
@@ -369,8 +368,8 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     auto body = compile(cls);
 
     if (MEASURE_COMPILER_BACKEND_PERF) {
-        Measuring::countTimer("pir2llvm");
-        Measuring::startTimer();
+        Measuring::countTimer("backend.cpp: pir2llvm");
+        Measuring::startTimer("backend.cpp: llvm");
     }
 
     log.finalPIR(cls);
@@ -382,7 +381,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
 Backend::LastDestructor::~LastDestructor() {
     if (MEASURE_COMPILER_BACKEND_PERF) {
-        Measuring::countTimer("llvm");
+        Measuring::countTimer("backend.cpp: llvm");
     }
 }
 

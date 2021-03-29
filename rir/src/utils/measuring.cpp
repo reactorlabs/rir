@@ -4,9 +4,9 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string>
 #include <unordered_map>
-#include <sstream>
 
 #include "measuring.h"
 
@@ -15,23 +15,25 @@ namespace rir {
 namespace {
 
 struct MeasuringImpl {
-    size_t EVENT_THRESHOLD = 0;
-    std::unordered_map<std::string, double> timers;
-    std::pair<size_t, size_t> timerMismatches;
+    struct Timer {
+        double timer = 0;
+        bool timerActive = false;
+        std::chrono::time_point<std::chrono::high_resolution_clock> start;
+        size_t alreadyRunning = 0;
+        size_t notStarted = 0;
+    };
+    std::unordered_map<std::string, Timer> timers;
     std::unordered_map<std::string, size_t> events;
     std::chrono::time_point<std::chrono::high_resolution_clock> start;
+    std::chrono::time_point<std::chrono::high_resolution_clock> end;
+    size_t threshold = 0;
     const unsigned width = 40;
+    bool shouldOutput = false;
 
     MeasuringImpl() : start(std::chrono::high_resolution_clock::now()) {}
 
-    void addTime(const std::string& name, double time) { timers[name] += time; }
-
-    void timerAlreadyRunning() { timerMismatches.first++; }
-    void timerNotStarted() { timerMismatches.second++; }
-
-    void countEvent(const std::string& name, size_t n) { events[name] += n; }
-
     ~MeasuringImpl() {
+        end = std::chrono::high_resolution_clock::now();
         auto logfile = getenv("PIR_MEASURING_LOGFILE");
         if (logfile) {
             std::ofstream fs(logfile);
@@ -48,60 +50,67 @@ struct MeasuringImpl {
     }
 
     void dump(std::ostream& out) {
-        std::chrono::time_point<std::chrono::high_resolution_clock> end =
-            std::chrono::high_resolution_clock::now();
+        if (!shouldOutput)
+            return;
 
         std::chrono::duration<double> duration = end - start;
-        out << "=== Measurments breakdown (total lifetime: "
-            << format(duration.count()) << ") ===\n";
+        out << "\n---== Measuring breakdown ===---\n\n";
+        out << "  Total lifetime: " << format(duration.count()) << "\n\n";
 
         {
-            std::map<double, std::string> orderedTimers;
-            double totalTimer = 0;
+            std::map<double, std::tuple<std::string, size_t, size_t, double>>
+                orderedTimers;
             for (auto& t : timers) {
-                while (orderedTimers.count(t.second))
-                    t.second += 1e-20;
-                orderedTimers.emplace(t.second, t.first);
-                totalTimer += t.second;
+                auto& key = t.second.timer;
+                while (orderedTimers.count(key))
+                    key += 1e-20;
+                double notStopped = 0;
+                if (t.second.timerActive) {
+                    duration = end - t.second.start;
+                    notStopped = duration.count();
+                }
+                orderedTimers.emplace(
+                    key, std::make_tuple(t.first, t.second.alreadyRunning,
+                                         t.second.notStarted, notStopped));
             }
             if (!orderedTimers.empty()) {
-                out << "= Timers   (total: " << format(totalTimer) << " ~ "
-                    << (totalTimer / duration.count()) * 100 << "%)\n"
-                    << "           (rest:  "
-                    << format(duration.count() - totalTimer) << " ~ "
-                    << ((1. - (totalTimer / duration.count())) * 100) << "%)\n";
-                for (auto& t : orderedTimers)
-                    out << "" << std::setw(width) << t.second << "\t"
-                        << format(t.first) << "\n";
+                out << "  Timers:\n";
+                for (auto& t : orderedTimers) {
+                    auto& name = std::get<0>(t.second);
+                    out << "    " << std::setw(width) << name << "\t"
+                        << format(t.first);
+                    if (auto& alreadyRunning = std::get<1>(t.second)) {
+                        out << "  (started " << alreadyRunning
+                            << "x while running)!";
+                    }
+                    if (auto& notStarted = std::get<2>(t.second)) {
+                        out << "  (counted " << notStarted
+                            << "x while not running)!";
+                    }
+                    if (auto& notStopped = std::get<3>(t.second)) {
+                        out << "  (not stopped, measured extra "
+                            << format(notStopped) << ")!";
+                    }
+                    out << "\n";
+                }
+                out << "\n";
             }
-        }
-
-        if (timerMismatches.first || timerMismatches.second) {
-            out << "= Timer mismatches\n";
-            if (timerMismatches.first)
-                out << "" << std::setw(width)
-                    << "Timer started when already running"
-                    << "\t" << timerMismatches.first << "\n";
-            if (timerMismatches.second)
-                out << "" << std::setw(width)
-                    << "Timer counted when not started"
-                    << "\t" << timerMismatches.second << "\n";
         }
 
         {
             std::map<size_t, std::set<std::string>> orderedEvents;
             for (auto& e : events)
-                if (e.second > EVENT_THRESHOLD)
+                if (e.second >= threshold)
                     orderedEvents[e.second].insert(e.first);
             if (!orderedEvents.empty()) {
-                out << "= Events";
-                if (EVENT_THRESHOLD)
-                    out << "   (threshold: " << EVENT_THRESHOLD << ")";
-                out << "\n";
+                out << "  Events";
+                if (threshold)
+                    out << " (threshold " << threshold << ")";
+                out << ":\n";
                 for (auto& e : orderedEvents) {
                     for (auto& n : e.second) {
-                        out << "" << std::setw(width) << n << "\t"
-                            << readable(e.first) << " (" << e.first << ")\n";
+                        out << "    " << std::setw(width) << n << "\t"
+                            << e.first << " (~ " << readable(e.first) << ")\n";
                     }
                 }
             }
@@ -139,52 +148,45 @@ struct MeasuringImpl {
 
 } // namespace
 
-std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
-std::chrono::time_point<std::chrono::high_resolution_clock> endTime;
-bool timerActive = false;
-std::unique_ptr<MeasuringImpl> m = std::unique_ptr<MeasuringImpl>(
-    getenv("PIR_MEASURING") ? new MeasuringImpl : nullptr);
+std::unique_ptr<MeasuringImpl> m = std::make_unique<MeasuringImpl>();
 
-void Measuring::startTimer() {
-    if (!m)
-        return;
-    if (!timerActive) {
-        timerActive = true;
-        startTime = std::chrono::high_resolution_clock::now();
+void Measuring::startTimer(const std::string& name) {
+    m->shouldOutput = true;
+    auto& t = m->timers[name];
+    if (t.timerActive) {
+        t.alreadyRunning++;
     } else {
-        m->timerAlreadyRunning();
+        t.timerActive = true;
+        t.start = std::chrono::high_resolution_clock::now();
     }
 }
 
 void Measuring::countTimer(const std::string& name) {
-    if (!m)
-        return;
-    if (timerActive) {
-        endTime = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> duration = endTime - startTime;
-        Measuring::addTime(name, duration.count());
-        timerActive = false;
+    auto end = std::chrono::high_resolution_clock::now();
+    m->shouldOutput = true;
+    auto& t = m->timers[name];
+    if (!t.timerActive) {
+        t.notStarted++;
     } else {
-        m->timerNotStarted();
+        t.timerActive = false;
+        std::chrono::duration<double> duration = end - t.start;
+        Measuring::addTime(name, duration.count());
     }
 }
 
 void Measuring::addTime(const std::string& name, double time) {
-    if (!m)
-        return;
-    m->addTime(name, time);
+    m->shouldOutput = true;
+    m->timers[name].timer += time;
 }
 
 void Measuring::setEventThreshold(size_t n) {
-    if (!m)
-        return;
-    m->EVENT_THRESHOLD = n;
+    m->shouldOutput = true;
+    m->threshold = n;
 }
 
 void Measuring::countEvent(const std::string& name, size_t n) {
-    if (!m)
-        return;
-    m->countEvent(name, n);
+    m->shouldOutput = true;
+    m->events[name] += n;
 }
 
 } // namespace rir

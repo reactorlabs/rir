@@ -1090,11 +1090,8 @@ class SlowcaseCounter {
   public:
     static void count(const std::string& kind, CallContext& call,
                       InterpreterInstance* ctx) {
-        static bool init = false;
-        if (!init) {
-            Measuring::setEventThreshold(100);
-            init = true;
-        }
+        // setting every time not needed but simple
+        Measuring::setEventThreshold(100);
         std::stringstream message;
         message << "Fast case " << kind << " failed for "
                 << getBuiltinName(getBuiltinNr(call.callee)) << " ("

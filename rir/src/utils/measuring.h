@@ -7,7 +7,7 @@ namespace rir {
 
 class Measuring {
   public:
-    static void startTimer();
+    static void startTimer(const std::string& name);
     static void countTimer(const std::string& name);
     static void addTime(const std::string& name, double time);
     static void setEventThreshold(size_t n);
