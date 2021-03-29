@@ -116,18 +116,6 @@ class Compiler {
         // Set the closure fields.
         SET_BODY(inClosure, vtable->container());
 
-        // std::set<std::string> blackList = {
-        //     "source", "integer", "file", "getOption", "readLines", "scan",
-        //     "eval", "sys.function", "sys.parent", "formals", "match.arg",
-        //     "::",
-
-        //     "tryCatch", "tryCatchOne", "tryCatchList", "doTryCatch",
-
-        //     // flexclust (...)
-        //     "newKccaObject", "newKccasimpleObject", "new", "initialize"
-
-        // };
-
         static bool ENABLE_ANNOTATIONS =
             getenv("PIR_ENABLE_ANNOTATIONS") &&
             *getenv("PIR_ENABLE_ANNOTATIONS") == '1';
