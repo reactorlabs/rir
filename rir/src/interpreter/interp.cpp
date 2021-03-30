@@ -1937,40 +1937,40 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     assert((!initialPC || !c->nativeCode) && "Cannot jump into native code");
     if (c->nativeCode) {
 
-        if (callCtxt) {
-            std::cerr << "----------------------- \n";
-            std::cerr << "Given context:" << callCtxt->givenContext << "\n";
+        // if (callCtxt) {
+        //     std::cerr << "----------------------- \n";
+        //     std::cerr << "Given context:" << callCtxt->givenContext << "\n";
 
-            DispatchTable::check(BODY(callCtxt->callee));
-            auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
+        //     DispatchTable::check(BODY(callCtxt->callee));
+        //     auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
 
-            for (unsigned i = 0; i < dt->size(); i++) {
-                if (dt->get(i)->body() == c) {
-                    std::cerr << "Function context:" << i << ". "
-                              << dt->get(i)->context() << "\n";
-                } else
-                    std::cerr << "Other context:" << i << ". "
-                              << dt->get(i)->context() << "\n";
-            }
+        //     for (unsigned i = 0; i < dt->size(); i++) {
+        //         if (dt->get(i)->body() == c) {
+        //             std::cerr << "Function context:" << i << ". "
+        //                       << dt->get(i)->context() << "\n";
+        //         } else
+        //             std::cerr << "Other context:" << i << ". "
+        //                       << dt->get(i)->context() << "\n";
+        //     }
 
-            Rf_PrintValue(callCtxt->ast);
-            if (callCtxt->stackArgs) {
-                for (unsigned i = 0; i < callCtxt->passedArgs; i++) {
-                    SEXP arg = callCtxt->stackArg(i);
-                    Rf_PrintValue(arg);
-                }
-            }
-        }
+        //     Rf_PrintValue(callCtxt->ast);
+        //     if (callCtxt->stackArgs) {
+        //         for (unsigned i = 0; i < callCtxt->passedArgs; i++) {
+        //             SEXP arg = callCtxt->stackArg(i);
+        //             Rf_PrintValue(arg);
+        //         }
+        //     }
+        // }
 
         auto ret =
             c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
                           env, callCtxt ? callCtxt->callee : nullptr);
 
-        if (callCtxt) {
-            std::cerr << "Result: ";
-            Rf_PrintValue(ret);
-            std::cerr << "\n";
-        }
+        // if (callCtxt) {
+        //     std::cerr << "Result: ";
+        //     Rf_PrintValue(ret);
+        //     std::cerr << "\n";
+        // }
         return ret;
     }
 
