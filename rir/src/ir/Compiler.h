@@ -121,6 +121,8 @@ class Compiler {
             *getenv("PIR_ENABLE_ANNOTATIONS") == '1';
 
         if (ENABLE_ANNOTATIONS) {
+            if (vtable->baseline()->signature().formalNargs() == 0)
+                return;
 
             static auto blocked = std::unordered_set<SEXP>({
 

@@ -1027,8 +1027,14 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
+    if (table->baseline()->flags.contains(Function::DepromiseArgs)) {
+        // Force arguments and depromise
+        call.depromiseArgs();
+    }
+
     inferCurrentContext(call, table->baseline()->signature().formalNargs(),
                         ctx);
+
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
@@ -1051,10 +1057,6 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
 
-    if (fun->flags.contains(Function::DepromiseArgs)) {
-        // Force arguments and depromise
-        call.depromiseArgs();
-    }
 
     LazyArglistOnStack lazyPromargs(
         call.callId,
@@ -1934,8 +1936,42 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     checkUserInterrupt();
     assert((!initialPC || !c->nativeCode) && "Cannot jump into native code");
     if (c->nativeCode) {
-        return c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
-                             env, callCtxt ? callCtxt->callee : nullptr);
+
+        if (callCtxt) {
+            std::cerr << "----------------------- \n";
+            std::cerr << "Given context:" << callCtxt->givenContext << "\n";
+
+            DispatchTable::check(BODY(callCtxt->callee));
+            auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
+
+            for (unsigned i = 0; i < dt->size(); i++) {
+                if (dt->get(i)->body() == c) {
+                    std::cerr << "Function context:" << i << ". "
+                              << dt->get(i)->context() << "\n";
+                } else
+                    std::cerr << "Other context:" << i << ". "
+                              << dt->get(i)->context() << "\n";
+            }
+
+            Rf_PrintValue(callCtxt->ast);
+            if (callCtxt->stackArgs) {
+                for (unsigned i = 0; i < callCtxt->passedArgs; i++) {
+                    SEXP arg = callCtxt->stackArg(i);
+                    Rf_PrintValue(arg);
+                }
+            }
+        }
+
+        auto ret =
+            c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
+                          env, callCtxt ? callCtxt->callee : nullptr);
+
+        if (callCtxt) {
+            std::cerr << "Result: ";
+            Rf_PrintValue(ret);
+            std::cerr << "\n";
+        }
+        return ret;
     }
 
 #ifdef THREADED_CODE
