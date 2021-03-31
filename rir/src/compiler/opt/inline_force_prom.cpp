@@ -90,15 +90,15 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                                 if (anyChangeLocal) {
 
-                                    bb->remove(dots);
-                                    ip = iteratorAt(bb, callAsInstr);
-                                    ip = bb->insert(ip, dots) + 1;
-
-                                    // auto clone = dots->clone();
-                                    // ip = bb->insert(ip, clone) + 1;
-                                    // dots->replaceUsesWith(clone);
                                     // bb->remove(dots);
                                     // ip = iteratorAt(bb, callAsInstr);
+                                    // ip = bb->insert(ip, dots) + 1;
+
+                                    auto clone = dots->clone();
+                                    ip = bb->insert(ip, clone) + 1;
+                                    dots->replaceUsesWith(clone);
+                                    bb->remove(dots);
+                                    ip = iteratorAt(bb, callAsInstr);
                                 }
                             }
                         });
