@@ -46,7 +46,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
             auto next = ip + 1;
 
             if (auto call = CallInstruction::CastCall(*ip)) {
-                auto callAsInstr = *ip;
+                // auto callAsInstr = *ip;
                 auto clsCallee = call->tryGetCls();
 
                 if (clsCallee) {
