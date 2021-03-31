@@ -307,7 +307,6 @@ benchmark_llvm:
     - test_benchmarks
   variables:
     GIT_STRATEGY: none
-    PIR_ENABLE_ANNOTATIONS: 1
   tags:
     - benchmarks
   script:
