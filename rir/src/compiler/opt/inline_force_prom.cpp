@@ -11,8 +11,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "../analysis/unnecessary_contexts.h"
-
 /*
 For each call, if we can statically know the function at a call and the function
 is annotated as depromise, we add a Force instruction for each argument right
@@ -39,8 +37,6 @@ BB::Instrs::iterator iteratorAt(BB* bb, Instruction* ins) {
 
 bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 LogStream& log) const {
-    // std::cerr << "Before InlineForceProm "  << cls->owner()->name() << "\n";
-    // cls->printGraphCode(std::cerr, false);
 
     bool anyChange = false;
 
