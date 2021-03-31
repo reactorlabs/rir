@@ -46,7 +46,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
             auto next = ip + 1;
 
             if (auto call = CallInstruction::CastCall(*ip)) {
-                // auto callAsInstr = *ip;
+                auto callAsInstr = *ip;
                 auto clsCallee = call->tryGetCls();
 
                 if (clsCallee) {
@@ -55,13 +55,13 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (functionVersion->flags.contains(
                             rir::Function::Flag::DepromiseArgs)) {
 
-                        // bool anyChangeLocal;
+                        bool anyChangeLocal;
                         std::function<void(InstrArg&)> updateMkArg =
                             [&](InstrArg& v) {
                                 if (auto mkarg = MkArg::Cast(v.val())) {
 
                                     anyChange = true;
-                                    // anyChangeLocal = true;
+                                    anyChangeLocal = true;
 
                                     auto cast = new CastType(
                                         mkarg, CastType::Kind::Upcast,
@@ -80,22 +80,22 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                         call->eachCallArg([&](InstrArg& v) {
                             updateMkArg(v);
 
-                            // if (auto dots = DotsList::Cast(v.val())) {
+                            if (auto dots = DotsList::Cast(v.val())) {
 
-                            //     anyChangeLocal = false;
-                            //     dots->eachArg([&](InstrArg& vDot) {
-                            //         updateMkArg(vDot);
-                            //         vDot.type() = PirType::val();
-                            //     });
+                                anyChangeLocal = false;
+                                dots->eachArg([&](InstrArg& vDot) {
+                                    updateMkArg(vDot);
+                                    vDot.type() = PirType::val();
+                                });
 
-                            //     if (anyChangeLocal) {
-                            //         auto clone = dots->clone();
-                            //         ip = bb->insert(ip, clone) + 1;
-                            //         dots->replaceUsesWith(clone);
-                            //         bb->remove(dots);
-                            //         ip = iteratorAt(bb, callAsInstr);
-                            //     }
-                            // }
+                                if (anyChangeLocal) {
+                                    auto clone = dots->clone();
+                                    ip = bb->insert(ip, clone) + 1;
+                                    dots->replaceUsesWith(clone);
+                                    bb->remove(dots);
+                                    ip = iteratorAt(bb, callAsInstr);
+                                }
+                            }
                         });
                         next = ip + 1;
                     }
