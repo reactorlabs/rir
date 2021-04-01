@@ -89,9 +89,13 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 });
 
                                 if (anyChangeLocal) {
+                                    ip = iteratorAt(bb, dots);
+                                    ip = bb->remove(ip);
 
-                                    bb->remove(dots);
-                                    ip = iteratorAt(bb, callAsInstr);
+                                    while (*ip != callAsInstr) {
+                                        ip++;
+                                    }
+                                    // ip = iteratorAt(bb, callAsInstr);
                                     ip = bb->insert(ip, dots) + 1;
 
                                     // auto clone = dots->clone();
