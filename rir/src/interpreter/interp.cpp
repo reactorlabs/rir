@@ -265,51 +265,49 @@ static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
-SEXP materialize(SEXP rirDataWrapper) {
-    if (auto promargs = LazyArglist::check(rirDataWrapper)) {
-        return promargs->createArglist(globalContext());
-    }
-    if (auto lazyEnv = LazyEnvironment::check(rirDataWrapper)) {
-        auto createEnvironment = [](InterpreterInstance* ctx, SEXP wrapper_) {
-            auto wrapper = LazyEnvironment::unpack(wrapper_);
-            assert(!wrapper->materialized());
-
-            SEXP arglist = R_NilValue;
-            auto names = wrapper->names;
-            for (size_t i = 0; i < wrapper->nargs; ++i) {
-                SEXP val = wrapper->getArg(i);
-                if (val == R_UnboundValue)
-                    continue;
-                SEXP name = cp_pool_at(ctx, names[i]);
-                bool isMissing = wrapper->missing[i];
-                if (TYPEOF(name) == LISTSXP) {
-                    name = CAR(name);
-                }
-                arglist = CONS_NR(val, arglist);
-                SET_TAG(arglist, name);
-                SET_MISSING(arglist, isMissing ? 2 : 0);
-            }
-
-            SEXP environment =
-                Rf_NewEnvironment(R_NilValue, arglist, wrapper->getParent());
-            wrapper->materialized(environment);
-            return environment;
-        };
-        auto newEnv = createEnvironment(globalContext(), rirDataWrapper);
-        Rf_setAttrib(newEnv, symbol::delayedEnv, rirDataWrapper);
-        lazyEnv->clear();
-        RCNTXT* cur = (RCNTXT*)R_GlobalContext;
+SEXP materialize(SEXP wrapper) {
+    SEXP res = nullptr;
+    RCNTXT* cur = (RCNTXT*)R_GlobalContext;
+    if (auto lazyArgs = LazyArglist::check(wrapper)) {
+        res = lazyArgs->createArglist(globalContext());
+        // Fixup the contexts chain
         while (cur) {
-            if (cur->cloenv == rirDataWrapper)
-                cur->cloenv = newEnv;
-            if (cur->sysparent == rirDataWrapper)
-                cur->sysparent = newEnv;
+            if (cur->promargs == wrapper)
+                cur->promargs = res;
             cur = cur->nextcontext;
         }
-        return newEnv;
+    } else if (auto lazyEnv = LazyEnvironment::check(wrapper)) {
+        assert(!lazyEnv->materialized());
+
+        SEXP arglist = R_NilValue;
+        auto names = lazyEnv->names;
+        for (size_t i = 0; i < lazyEnv->nargs; ++i) {
+            SEXP val = lazyEnv->getArg(i);
+            if (val == R_UnboundValue)
+                continue;
+            SEXP name = cp_pool_at(globalContext(), names[i]);
+            if (TYPEOF(name) == LISTSXP)
+                name = CAR(name);
+            // cons protects its args if needed
+            arglist = CONS_NR(val, arglist);
+            SET_TAG(arglist, name);
+            SET_MISSING(arglist, lazyEnv->missing[i] ? 2 : 0);
+        }
+        res = Rf_NewEnvironment(R_NilValue, arglist, lazyEnv->getParent());
+        lazyEnv->materialized(res);
+        Rf_setAttrib(res, symbol::delayedEnv, wrapper);
+        lazyEnv->clear();
+        // Fixup the contexts chain
+        while (cur) {
+            if (cur->cloenv == wrapper)
+                cur->cloenv = res;
+            if (cur->sysparent == wrapper)
+                cur->sysparent = res;
+            cur = cur->nextcontext;
+        }
     }
-    assert(false);
-    return nullptr;
+    assert(res);
+    return res;
 }
 
 static SEXP materializeCallerEnv(CallContext& callCtx,
