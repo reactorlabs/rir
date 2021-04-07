@@ -152,14 +152,18 @@ struct AvailableAssumptions
                 state.available.insert(am);
                 res.update();
             }
-        } else if (i->effects.contains(Effect::ExecuteCode)) {
-            for (auto it = state.available.begin(); it != state.available.end();
-                 ++it) {
-                if ((*it).kind == AAssumption::Kind::IsEnvStub) {
-                    it = state.available.erase(it);
-                    if (it == state.available.end())
-                        break;
+        } else if (i->effects.contains(Effect::ExecuteCode) ||
+                   /* Inlined code can jump to its PopContext and thus skip some
+                      IsEnvStub assumptions. We clear these here so that they
+                      don't get merged across a PopContext. */
+                   PopContext::Cast(i)) {
+            auto it = state.available.begin();
+            while (it != state.available.end()) {
+                auto next = it + 1;
+                if (it->kind == AAssumption::Kind::IsEnvStub) {
+                    next = state.available.erase(it);
                 }
+                it = next;
             }
         }
         return res;
