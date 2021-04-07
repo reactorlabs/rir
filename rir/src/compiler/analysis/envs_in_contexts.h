@@ -48,7 +48,7 @@ class EnvsInContexts : public StaticAnalysis<EnvsInContextsState> {
             return AbstractResult::Updated;
         }
 
-        if (Deopt::Cast(i)) {
+        if (Deopt::Cast(i) || Unreachable::Cast(i)) {
             state.envs.clear();
             return AbstractResult::Updated;
         }
