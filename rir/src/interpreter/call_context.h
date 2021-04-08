@@ -17,6 +17,8 @@
 #include "runtime/LazyEnvironment.h"
 #include "safe_force.h"
 
+extern int FORCED_PROMISES_INTERPRETER;
+
 namespace rir {
 
 struct CallContext {
@@ -99,10 +101,14 @@ struct CallContext {
         // Both stackAergs and listargs should point to the same promises
         // So forcing twice shouldn't execute the promise twice
 
+        int forcedPromises1 = 0;
+        int forcedPromises2 = 0;
+
         // depromise on stack
         for (unsigned i = 0; i < passedArgs; i++) {
             SEXP arg = stackArg(i);
             if (TYPEOF(arg) == PROMSXP) {
+                forcedPromises1++;
                 auto v = forcePromise(arg);
                 setStackArg(v, i);
             }
@@ -113,11 +119,16 @@ struct CallContext {
             for (SEXP c = arglist; c != R_NilValue; c = CDR(c)) {
                 SEXP each = CAR(c);
                 if (TYPEOF(each) == PROMSXP) {
+                    forcedPromises2++;
                     auto v = forcePromise(each);
                     CAR(c) = v;
                 }
             }
         }
+
+        FORCED_PROMISES_INTERPRETER += forcedPromises1 > forcedPromises2
+                                           ? forcedPromises1
+                                           : forcedPromises2;
     }
 };
 

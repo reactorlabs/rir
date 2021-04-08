@@ -21,6 +21,8 @@ will be later on removed by dead code elimination.
 
 */
 
+int INLINED_PROMISES = 0;
+
 namespace rir {
 namespace pir {
 
@@ -47,6 +49,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
 
             if (auto call = CallInstruction::CastCall(*ip)) {
                 auto callAsInstr = *ip;
+
                 auto clsCallee = call->tryGetCls();
 
                 if (clsCallee) {
@@ -59,6 +62,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                         std::function<void(InstrArg&)> updateMkArg =
                             [&](InstrArg& v) {
                                 if (auto mkarg = MkArg::Cast(v.val())) {
+                                    INLINED_PROMISES++;
 
                                     anyChange = true;
                                     anyChangeLocal = true;

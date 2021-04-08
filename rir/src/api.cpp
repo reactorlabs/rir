@@ -25,6 +25,10 @@
 using namespace rir;
 
 extern "C" Rboolean R_Visible;
+extern "C" int CREATED_PROMISES;
+
+extern int INLINED_PROMISES;
+extern int FORCED_PROMISES_INTERPRETER;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
@@ -547,6 +551,29 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     INTEGER(res)[0] = n1;
     INTEGER(res)[1] = n2;
     return res;
+}
+
+REXPORT SEXP rirResetCreatedPromises() {
+    CREATED_PROMISES = 0;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirCreatedPromises() { return Rf_ScalarInteger(CREATED_PROMISES); }
+
+REXPORT SEXP rirResetInlinedPromises() {
+    INLINED_PROMISES = 0;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirInlinedPromises() { return Rf_ScalarInteger(INLINED_PROMISES); }
+
+REXPORT SEXP rirResetForcedPromisesInterpreter() {
+    FORCED_PROMISES_INTERPRETER = 0;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirForcedPromisesInterpreter() {
+    return Rf_ScalarInteger(FORCED_PROMISES_INTERPRETER);
 }
 
 bool startup() {

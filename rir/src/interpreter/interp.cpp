@@ -29,6 +29,8 @@ extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
 }
 
+int FORCED_PROMISES_INTERPRETER = 0;
+
 namespace rir {
 
 // #define PRINT_INTERP
@@ -1936,6 +1938,33 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     checkUserInterrupt();
     assert((!initialPC || !c->nativeCode) && "Cannot jump into native code");
     if (c->nativeCode) {
+
+        //  if (callCtxt) {
+        //     std::cerr << "----------------------- \n" ;
+        //     std::cerr << "Given context:" << callCtxt->givenContext <<"\n";
+
+        //     DispatchTable::check(BODY(callCtxt->callee));
+        //     auto dt = DispatchTable::unpack(BODY(callCtxt->callee));
+
+        //     for (unsigned i = 0; i < dt->size(); i++) {
+        //         if (dt->get(i)->body() == c) {
+        //             std::cerr << "Function context:" << i << ". "<<
+        //             dt->get(i)->context() << "\n";
+        //         }
+        //         else
+        //             std::cerr << "Other context:" << i << ". " <<
+        //             dt->get(i)->context() << "\n";
+
+        //     }
+
+        //     Rf_PrintValue(callCtxt->ast);
+        //     if (callCtxt->stackArgs) {
+        //         for (unsigned i = 0; i < callCtxt->passedArgs; i++) {
+        //             SEXP arg = callCtxt->stackArg(i);
+        //              Rf_PrintValue(arg);
+        //         }
+        //     }
+        //  }
 
         auto ret =
             c->nativeCode(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr,
@@ -3867,8 +3896,10 @@ SEXP rirEval(SEXP what, SEXP env) {
             // Force arguments and depromise
             auto f = FRAME(env);
             while (f != R_NilValue) {
-                if (TYPEOF(CAR(f)) == PROMSXP)
+                if (TYPEOF(CAR(f)) == PROMSXP) {
+                    FORCED_PROMISES_INTERPRETER++;
                     SETCAR(f, evaluatePromise(CAR(f)));
+                }
                 f = CDR(f);
             }
         }
