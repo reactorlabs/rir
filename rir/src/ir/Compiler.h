@@ -137,7 +137,10 @@ class Compiler {
                 Rf_findFun(Rf_install("sys.parent"), R_BaseNamespace),
                 Rf_findFun(Rf_install("formals"), R_BaseNamespace),
                 Rf_findFun(Rf_install("match.arg"), R_BaseNamespace),
+                Rf_findFun(Rf_install("match.fun"), R_BaseNamespace),
+
                 Rf_findFun(Rf_install("::"), R_BaseNamespace),
+                //Rf_findFun(Rf_install("outer"), R_BaseNamespace),
 
                 Rf_findFun(Rf_install("tryCatch"), R_BaseNamespace),
 
