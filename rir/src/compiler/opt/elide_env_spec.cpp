@@ -1,7 +1,7 @@
 #include "R/r.h"
 #include "compiler/analysis/available_checkpoints.h"
 #include "compiler/analysis/cfg.h"
-#include "compiler/analysis/envs_in_contexts.h"
+#include "compiler/analysis/context_stack.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/bb_transform.h"
 #include "compiler/util/safe_builtins_list.h"
@@ -20,7 +20,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     constexpr bool debug = false;
     AvailableCheckpoints checkpoint(cls, code, log);
-    EnvsInContexts envsInContexts(cls, code, log);
+    ContextStack cs(cls, code, log);
     DominanceGraph dom(code);
 
     auto envOnlyForObj = [&](Instruction* i) {
@@ -204,11 +204,13 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
     std::unordered_map<MkEnv*, SmallSet<Instruction*>> needsMaterialization;
     std::unordered_map<MkEnv*, SmallSet<SEXP>> additionalEntries;
     Visitor::run(code->entry, [&](Instruction* i) {
-        // We need to check that stubs in contexts are not materialized
+        // We need to be careful with inlined contexts. Stubs, including the
+        // ones that leak into a context, need to be checked after each
+        // instruction that can cause them to be materialized, as well as after
+        // PopContext (for non-local jumps from inlined code).
         if (!i->bb()->isDeopt() &&
             (i->effects.contains(Effect::ExecuteCode) || PopContext::Cast(i))) {
-            auto inContexts = envsInContexts.before(i);
-            for (auto mk : inContexts.envs) {
+            cs.before(i).eachLeakedEnvRev([&](MkEnv* mk) {
                 if (!mk->stub && !bannedEnvs.count(mk)) {
                     if (auto cp = checkpoint.next(i, mk, dom)) {
                         checks[i][cp].insert(mk);
@@ -223,7 +225,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         bannedEnvs.insert(mk);
                     }
                 }
-            }
+            });
         }
         if (i->hasEnv()) {
             if (auto st = StVar::Cast(i)) {
