@@ -647,117 +647,244 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             }
         }
 
-        // 3) Special case [ and [[
 
+        // 3) Special case f(a) <- b
+
+        // Only allow one level of nesting:
+        //     f(x) <- 1         ok
+        //     f(g(x)) <- 1      not supported
+        // TODO: compile nested complex assignments
         if (lhsParts.size() != 2) {
             return false;
         }
 
-        RList g(lhsParts[0]);
-        int dims = g.length() - 2;
-        if (dims < 1 || dims > 3) {
-            return false;
-        }
+        RList g(lhs);
+        // If assignment is
+        //       f(x, 2, 3) <- y
+        // g = `f`, `x`, 2, 3
 
-        SEXP fun2 = *g.begin();
-        RListIter idx = g.begin() + 2;
-        if ((fun2 != symbol::Bracket && fun2 != symbol::DoubleBracket) ||
-            !isRegularArg(idx) || (dims > 1 && !isRegularArg(idx + 1)) ||
-            (dims > 2 && !isRegularArg(idx + 2))) {
-            return false;
-        }
-        if (dims == 3 && fun2 == symbol::DoubleBracket)
-            return false;
+        // If we are here, it means that a complex assignment was requested
+        // i.e. g != `x`
+        assert(g.length() >= 2);
 
-        emitGuardForNamePrimitive(cs, fun);
+        SEXP fun2 = g[0]; // symbol `f`
+        SEXP dest = g[1]; // symbol `x`
 
-        if (maybeChanges(target, rhs)) {
-            if (ctx.code.top()->isCached(target))
-                cs << BC::ldvarForUpdateCached(
-                    target, ctx.code.top()->cacheSlotFor(target));
-            else
-                cs << BC::ldvarForUpdate(target);
-            cs << BC::setShared() << BC::pop();
-        }
+        // 3.a) Special case [ and [[
+        if (fun2 == symbol::Bracket || fun2 == symbol::DoubleBracket) {
+            int dims = g.length() - 2;
+            if (dims < 1 || dims > 3) {
+                return false;
+            }
 
-        // First rhs (assign is right-associative)
-        compileExpr(ctx, rhs);
-        if (!voidContext) {
-            // Keep a copy of rhs since it's the result of this expression
-            cs << BC::dup();
-            if (!isConstant(rhs))
+            SEXP fun2 = *g.begin();
+            RListIter idx = g.begin() + 2;
+            if (!isRegularArg(idx) || (dims > 1 && !isRegularArg(idx + 1)) ||
+                (dims > 2 && !isRegularArg(idx + 2))) {
+                return false;
+            }
+            if (dims == 3 && fun2 == symbol::DoubleBracket)
+                return false;
+
+            emitGuardForNamePrimitive(cs, fun);
+
+            if (maybeChanges(target, rhs)) {
+                if (ctx.code.top()->isCached(target))
+                    cs << BC::ldvarForUpdateCached(
+                        target, ctx.code.top()->cacheSlotFor(target));
+                else
+                    cs << BC::ldvarForUpdate(target);
+                cs << BC::setShared() << BC::pop();
+            }
+
+            // First rhs (assign is right-associative)
+            compileExpr(ctx, rhs);
+            if (!voidContext) {
+                // Keep a copy of rhs since it's the result of this expression
+                cs << BC::dup();
+                if (!isConstant(rhs))
+                    cs << BC::setShared();
+            }
+
+            // Again, subassign bytecodes override objects with named count of 1. If
+            // the target is from the outer scope that would be wrong. For example
+            //
+            //     a <- 1
+            //     f <- function()
+            //         a[[1]] <- 2
+            //
+            // the f function should not override a.
+            // The ldvarForUpdate BC increments the named count if the target is
+            // not local to the current environment.
+
+            if (superAssign) {
+                cs << BC::ldvarSuper(target);
+            } else {
+                if (ctx.code.top()->isCached(target))
+                    cs << BC::ldvarForUpdateCached(
+                        target, ctx.code.top()->cacheSlotFor(target));
+                else
+                    cs << BC::ldvarForUpdate(target);
+            }
+
+            if (Compiler::profile)
+                cs << BC::recordType();
+
+            if (maybeChanges(target, *idx) ||
+                (dims > 1 && maybeChanges(target, *(idx + 1))) ||
+                (dims > 2 && maybeChanges(target, *(idx + 2))))
                 cs << BC::setShared();
-        }
 
-        // Again, subassign bytecodes override objects with named count of 1. If
-        // the target is from the outer scope that would be wrong. For example
-        //
-        //     a <- 1
-        //     f <- function()
-        //         a[[1]] <- 2
-        //
-        // the f function should not override a.
-        // The ldvarForUpdate BC increments the named count if the target is
-        // not local to the current environment.
+            // And index
+            compileExpr(ctx, *idx);
+            if (dims > 1)
+                compileExpr(ctx, *(idx + 1));
+            if (dims > 2)
+                compileExpr(ctx, *(idx + 2));
 
-        if (superAssign) {
-            cs << BC::ldvarSuper(target);
-        } else {
-            if (ctx.code.top()->isCached(target))
-                cs << BC::ldvarForUpdateCached(
-                    target, ctx.code.top()->cacheSlotFor(target));
-            else
-                cs << BC::ldvarForUpdate(target);
-        }
-
-        if (Compiler::profile)
-            cs << BC::recordType();
-
-        if (maybeChanges(target, *idx) ||
-            (dims > 1 && maybeChanges(target, *(idx + 1))) ||
-            (dims > 2 && maybeChanges(target, *(idx + 2))))
-            cs << BC::setShared();
-
-        // And index
-        compileExpr(ctx, *idx);
-        if (dims > 1)
-            compileExpr(ctx, *(idx + 1));
-        if (dims > 2)
-            compileExpr(ctx, *(idx + 2));
-
-        if (dims == 3) {
-            assert(fun2 == symbol::Bracket);
-            cs << BC::subassign1_3();
-        } else if (dims == 2) {
-            if (fun2 == symbol::DoubleBracket) {
-                cs << BC::subassign2_2();
+            if (dims == 3) {
+                assert(fun2 == symbol::Bracket);
+                cs << BC::subassign1_3();
+            } else if (dims == 2) {
+                if (fun2 == symbol::DoubleBracket) {
+                    cs << BC::subassign2_2();
+                } else {
+                    cs << BC::subassign1_2();
+                }
             } else {
-                cs << BC::subassign1_2();
+                if (fun2 == symbol::DoubleBracket) {
+                    cs << BC::subassign2_1();
+                } else {
+                    cs << BC::subassign1_1();
+                }
             }
-        } else {
-            if (fun2 == symbol::DoubleBracket) {
-                cs << BC::subassign2_1();
+            cs.addSrc(ast);
+
+            // store the result as "target"
+            if (superAssign) {
+                cs << BC::stvarSuper(target);
             } else {
-                cs << BC::subassign1_1();
+                if (ctx.code.top()->isCached(target))
+                    cs << BC::stvarCached(target,
+                                        ctx.code.top()->cacheSlotFor(target));
+                else
+                    cs << BC::stvar(target);
             }
-        }
-        cs.addSrc(ast);
 
-        // store the result as "target"
-        if (superAssign) {
-            cs << BC::stvarSuper(target);
-        } else {
-            if (ctx.code.top()->isCached(target))
-                cs << BC::stvarCached(target,
-                                      ctx.code.top()->cacheSlotFor(target));
-            else
-                cs << BC::stvar(target);
+            if (!voidContext)
+                cs << BC::invisible();
+        }
+        else // 3.b) Deal with all the other functions.
+        {
+
+            /*
+                    f(x,y) <- z
+                Rewrite
+                    <-(f(x,y), value=z)
+                Into
+                    <-( x, value=f<-(x,y,value=z) )
+
+            */
+
+
+            // fun2 cannot be a langage expression, else R raises
+            //      invalid function in complex assignment
+            assert( TYPEOF(fun2) == SYMSXP);
+
+            // DEBUG
+            Rf_PrintValue(ast);
+
+            // We need to get the SEXP for `f<-` from the SEXP for `f`
+            std::string const fun2name = CHAR(PRINTNAME(fun2));
+            std::string const fun2_replacement_name = fun2name + "<-";
+            SEXP farrow_sym = Rf_install(fun2_replacement_name.c_str());
+
+
+
+            // Question:
+            // - need to pass AST to compileLoadArgs
+            //   so maybe rewrite the AST first?
+            // - what happens to SEXP that are no longer referenced? are they GCed?
+            // (though no leftover SEXP here)
+
+
+
+            // Get the LISTSXP of args for f
+            SEXP f_args = CDR(CAR(args_));
+
+            // Get the last cell in the LISTSXP of args for f
+            SEXP last_f_arg_cell = f_args;
+            while( CDR(last_f_arg_cell) != R_NilValue ) {
+                last_f_arg_cell = CDR(last_f_arg_cell);
+            }
+
+
+            // We need to append "value = z" to the list of args for f
+            // Let's create the corresponding cell
+            SEXP assignment_value = CAR(CDR(args_));
+            SEXP new_z_cell = Rf_cons(assignment_value, R_NilValue);
+            SET_TAG(new_z_cell, Rf_install("value"));
+
+            // Append this new cell to the LISTSXP
+            CDR(last_f_arg_cell) = new_z_cell;
+
+            // Make the ast for the call (LANGSXP) : f<-, x, y, value=z
+            SEXP farrow_ast = Rf_lcons(farrow_sym, f_args);
+
+            // Make x the assignment destination
+            CAR(args_) = dest;
+            // Make farrow_ast the assignment value
+            // The second cell in args is already tagged "value"
+            CAR(CDR(args_)) = farrow_ast;
+
+
+            // Simply rewriting the AST is not enough: we also want to make
+            // sure that x is evaluated. This is why we will manually compile
+            // this call instead of simply using compileSpecialCall on the
+            // rewritten assignment:
+            //       compileSpecialCall(ctx, ast, fun, args_, voidContext);
+
+
+            cs << BC::ldfun(farrow_sym);
+
+            // prepare x, y, z as promises
+            // x is eagerly evaluated
+            auto const info_args_farrow = compileLoadArgs(ctx, farrow_ast, farrow_sym, f_args, voidContext, 0, 1);
+
+
+            // Question: what is this? For profiling?
+            // (found in compileCall)
+            if (Compiler::profile)
+                cs << BC::recordCall();
+
+
+            // call f<- with the arguments
+            cs << BC::call(info_args_farrow.numArgs, info_args_farrow.names, farrow_ast, info_args_farrow.assumptions);
+
+            // Bind the result to x
+            if(!voidContext)
+                cs << BC::dup() << BC::invisible();
+            if (superAssign) {
+                cs << BC::stvarSuper(dest);
+            } else {
+                if (ctx.code.top()->isCached(dest))
+                    cs << BC::stvarCached(dest,
+                                          ctx.code.top()->cacheSlotFor(dest));
+                else
+                    cs << BC::stvar(dest);
+            }
+
+
+            if (!voidContext && Compiler::profile)
+                cs << BC::recordType();
+
+
+            return true;
         }
 
-        if (!voidContext)
-            cs << BC::invisible();
         return true;
     }
+
 
     if (fun == symbol::Block) {
         emitGuardForNamePrimitive(cs, fun);
