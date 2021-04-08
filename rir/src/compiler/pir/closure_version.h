@@ -16,8 +16,7 @@ namespace pir {
  * ClosureVersion
  *
  */
-class ClosureVersion
-    : public CodeImpl<CodeTag::ClosureVersion, ClosureVersion> {
+class ClosureVersion : public Code {
   public:
     enum class Property {
         IsEager,
@@ -42,9 +41,8 @@ class ClosureVersion
 
     const bool root;
 
-    rir::Function* optFunction;
-
   private:
+    rir::Function* optFunction;
     Closure* owner_;
     std::vector<Promise*> promises_;
     const Context& optimizationContext_;
@@ -70,6 +68,7 @@ class ClosureVersion
     const std::string& name() const { return name_; }
     const std::string& nameSuffix() const { return nameSuffix_; }
 
+    void printName(std::ostream& out) const override final;
     void print(std::ostream& out, bool tty) const;
     void print(DebugStyle style, std::ostream& out, bool tty,
                bool omitDeoptBranches) const;
@@ -78,12 +77,20 @@ class ClosureVersion
     void printGraph(std::ostream& out, bool omitDeoptBranches) const;
     void printBBGraph(std::ostream& out, bool omitDeoptBranches) const;
 
-    Promise* createProm(rir::Code* rirSrc);
+    Promise* createProm(SEXP expr);
 
     Promise* promise(unsigned id) const { return promises_.at(id); }
     const std::vector<Promise*>& promises() { return promises_; }
 
     void erasePromise(unsigned id);
+
+    SEXP expression() const override final;
+
+    PirTypeFeedback* pirTypeFeedback() {
+        if (optFunction)
+            optFunction->body()->pirTypeFeedback();
+        return nullptr;
+    }
 
     typedef std::function<void(Promise*)> PromiseIterator;
     void eachPromise(PromiseIterator it) const {
@@ -93,8 +100,6 @@ class ClosureVersion
     }
 
     size_t numNonDeoptInstrs() const;
-
-    rir::Code* rirSrc() const override final;
 
     friend std::ostream& operator<<(std::ostream& out,
                                     const ClosureVersion& e) {

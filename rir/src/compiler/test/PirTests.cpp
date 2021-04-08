@@ -374,7 +374,8 @@ class MockBB : public BB {
             // ~Code wants to delete something
             entry = new MockBB;
         }
-        rir::Code* rirSrc() const override final { return nullptr; }
+        SEXP expression() const override final { return nullptr; }
+        void printName(std::ostream&) const override final {}
     };
 
   public:

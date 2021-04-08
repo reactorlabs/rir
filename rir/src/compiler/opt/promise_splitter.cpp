@@ -96,7 +96,8 @@ bool PromiseSplitter::apply(Compiler&, ClosureVersion* cls, Code* code,
                 });
                 assert(seen);
             }
-            auto nmk = new MkArg(mk->prom(), mk->eagerArg(), mk->env());
+            auto nmk = new MkArg(mk->prom(), mk->eagerArg(), mk->env(),
+                                 mk->originalIdx);
             auto nct = new CastType(nmk, ct->kind, ct->arg(0).type(), ct->type);
             pos = bb->insert(pos, nct);
             bb->insert(pos, nmk);

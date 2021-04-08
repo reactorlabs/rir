@@ -27,11 +27,15 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
         return false;
 
     auto dontInline = [](Closure* cls) {
-        if (cls->rirFunction()->flags.contains(rir::Function::DisableInline))
-            return true;
-        if (cls->rirFunction()->flags.contains(rir::Function::ForceInline))
-            return false;
-        return cls->rirFunction()->flags.contains(rir::Function::NotInlineable);
+        bool res = false;
+        cls->rirFunction([&](rir::Function* f) {
+            if (f->flags.contains(rir::Function::DisableInline))
+                res = true;
+            if (f->flags.contains(rir::Function::ForceInline))
+                res = false;
+            res = f->flags.contains(rir::Function::NotInlineable);
+        });
+        return res;
     };
 
     Visitor::run(
@@ -208,27 +212,26 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (inlinee->owner() == cls->owner()) {
                     continue;
                 } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
-                    if (!inlineeCls->rirFunction()->flags.contains(
-                            rir::Function::ForceInline) &&
-                        inlinee->numNonDeoptInstrs() >
-                            Parameter::INLINER_MAX_INLINEE_SIZE * 4)
-                        inlineeCls->rirFunction()->flags.set(
-                            rir::Function::NotInlineable);
+                    inlineeCls->rirFunction([&](rir::Function* f) {
+                        if (!f->flags.contains(rir::Function::ForceInline) &&
+                            inlinee->numNonDeoptInstrs() >
+                                Parameter::INLINER_MAX_INLINEE_SIZE * 4)
+                            f->flags.set(rir::Function::NotInlineable);
+                    });
                     continue;
                 } else {
                     updateAllowInline(inlinee);
                     inlinee->eachPromise(
                         [&](Promise* p) { updateAllowInline(p); });
                     if (allowInline == SafeToInline::No) {
-                        inlineeCls->rirFunction()->flags.set(
-                            rir::Function::NotInlineable);
+                        inlineeCls->rirFunction([&](rir::Function* f) {
+                            f->flags.set(rir::Function::NotInlineable);
+                        });
                         continue;
                     }
                 }
 
-                if (!inlineeCls->rirFunction()->flags.contains(
-                        rir::Function::ForceInline))
-                    fuel--;
+                fuel--;
 
                 cls->inlinees++;
 
@@ -354,8 +357,9 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (failedToInline) {
                     delete copy;
                     bb->overrideNext(split);
-                    inlineeCls->rirFunction()->flags.set(
-                        rir::Function::NotInlineable);
+                    inlineeCls->rirFunction([&](rir::Function* f) {
+                        f->flags.set(rir::Function::NotInlineable);
+                    });
                 } else {
                     anyChange = true;
                     bb->overrideNext(copy);
@@ -380,8 +384,8 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     mk->updatePromise(
                                         cls->promises().at(newPromId[id]));
                                 } else {
-                                    Promise* clone =
-                                        cls->createProm(mk->prom()->rirSrc());
+                                    Promise* clone = cls->createProm(
+                                        mk->prom()->expression());
                                     BB* promCopy = BBTransform::clone(
                                         mk->prom()->entry, clone, cls);
                                     clone->entry = promCopy;

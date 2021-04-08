@@ -74,8 +74,8 @@ void ClosureVersion::printBBGraph(std::ostream& out,
     out << "}\n";
 }
 
-Promise* ClosureVersion::createProm(rir::Code* rirSrc) {
-    Promise* p = new Promise(this, promises_.size(), rirSrc);
+Promise* ClosureVersion::createProm(SEXP expression) {
+    Promise* p = new Promise(this, promises_.size(), expression);
     promises_.push_back(p);
     return p;
 }
@@ -117,6 +117,8 @@ size_t ClosureVersion::effectiveNArgs() const {
     return owner_->nargs() - optimizationContext_.numMissing();
 }
 
+SEXP ClosureVersion::expression() const { return owner()->expression(); }
+
 ClosureVersion::ClosureVersion(Closure* closure, rir::Function* optFunction,
                                bool root, const Context& optimizationContext,
                                const Properties& properties)
@@ -129,6 +131,8 @@ ClosureVersion::ClosureVersion(Closure* closure, rir::Function* optFunction,
     id << this;
     nameSuffix_ = id.str();
 }
+
+void ClosureVersion::printName(std::ostream& out) const { out << name(); }
 
 std::ostream& operator<<(std::ostream& out, const ClosureVersion::Property& p) {
     switch (p) {
@@ -161,10 +165,6 @@ std::ostream& operator<<(std::ostream& out,
         }
     }
     return out;
-}
-
-rir::Code* ClosureVersion::rirSrc() const {
-    return owner()->rirFunction()->body();
 }
 
 } // namespace pir

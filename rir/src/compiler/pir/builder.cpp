@@ -110,8 +110,11 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     std::vector<Value*> args(closure->nargs());
     size_t nargs = version->effectiveNArgs();
 
-    auto depromiseArgs = version->owner()->rirFunction()->flags.contains(
-        rir::Function::Flag::DepromiseArgs);
+    auto depromiseArgs = false;
+    version->owner()->rirFunction([&](rir::Function* f) {
+        if (f->flags.contains(rir::Function::Flag::DepromiseArgs))
+            depromiseArgs = true;
+    });
 
     for (long i = nargs - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
@@ -129,10 +132,13 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     }
 
     auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
-    auto rirCode = version->owner()->rirFunction()->body();
-    if (rirCode->flags.contains(rir::Code::NeedsFullEnv))
-        mkenv->neverStub = true;
-    mkenv->typeFeedback.srcCode = rirCode;
+
+    version->owner()->rirFunction([&](rir::Function* f) {
+        auto rirCode = f->body();
+        if (rirCode->flags.contains(rir::Code::NeedsFullEnv))
+            mkenv->neverStub = true;
+        mkenv->typeFeedback.srcCode = rirCode;
+    });
     add(mkenv);
     this->env = mkenv;
 }

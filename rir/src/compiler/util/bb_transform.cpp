@@ -56,7 +56,7 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
                 if (promMap.count(p)) {
                     mk->updatePromise(promMap.at(p));
                 } else {
-                    auto c = targetClosure->createProm(p->rirSrc());
+                    auto c = targetClosure->createProm(p->expression());
                     c->entry = clone(p->entry, c, targetClosure);
                     mk->updatePromise(c);
                 }

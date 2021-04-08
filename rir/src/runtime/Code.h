@@ -70,7 +70,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
                      size_t bindingCache);
     static Code* New(Immediate ast, size_t codeSize, size_t sources,
                      size_t locals, size_t bindingCache);
-    static Code* New(Immediate ast);
+    static Code* New(SEXP ast);
 
     NativeCode nativeCode;
 

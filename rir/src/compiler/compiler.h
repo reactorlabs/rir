@@ -46,9 +46,10 @@ class Compiler {
     Module* module;
     StreamLogger& logger;
 
-    void compileClosure(Closure* closure, rir::Function* optFunction,
-                        const Context& ctx, bool root, MaybeCls success,
-                        Maybe fail, std::list<PirTypeFeedback*> outerFeedback);
+    void compileClosure(Closure* closure, rir::Function* srcCode,
+                        rir::Function* optFunction, const Context& ctx,
+                        bool root, MaybeCls success, Maybe fail,
+                        std::list<PirTypeFeedback*> outerFeedback);
 
     Preserve preserve_;
 };

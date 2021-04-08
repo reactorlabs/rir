@@ -52,8 +52,8 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
     auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun,
                                                      tbl->userDefinedContext());
     Context context(assumptions);
-    compileClosure(pirClosure, tbl->dispatch(assumptions), context, root,
-                   success, fail, outerFeedback);
+    compileClosure(pirClosure, tbl->baseline(), tbl->dispatch(assumptions),
+                   context, root, success, fail, outerFeedback);
 }
 
 void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
@@ -68,13 +68,13 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
     Context context(assumptions);
     auto closure = module->getOrDeclareRirFunction(
         name, srcFunction, formals, srcRef, src->userDefinedContext());
-    compileClosure(closure, src->dispatch(assumptions), context, false, success,
-                   fail, outerFeedback);
+    compileClosure(closure, srcFunction, src->dispatch(assumptions), context,
+                   false, success, fail, outerFeedback);
 }
 
-void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
-                              const Context& ctx, bool root, MaybeCls success,
-                              Maybe fail,
+void Compiler::compileClosure(Closure* closure, rir::Function* srcCode,
+                              rir::Function* optFunction, const Context& ctx,
+                              bool root, MaybeCls success, Maybe fail,
                               std::list<PirTypeFeedback*> outerFeedback) {
 
     if (!ctx.includes(minimalContext)) {
@@ -99,8 +99,10 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return fail();
     }
 
-    if (closure->rirFunction()->body()->codeSize > Parameter::MAX_INPUT_SIZE) {
-        closure->rirFunction()->flags.set(Function::NotOptimizable);
+    auto sz = closure->bodySize();
+    if (sz > Parameter::MAX_INPUT_SIZE) {
+        closure->rirFunction(
+            [&](rir::Function* f) { f->flags.set(Function::NotOptimizable); });
         logger.warn("skipping huge function");
         return fail();
     }
@@ -125,7 +127,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         auto arg = closure->formals().defaultArgs()[idx];
         assert(rir::Code::check(arg) && "Default arg not compiled");
         auto code = rir::Code::unpack(arg);
-        auto res = rir2pir.tryCreateArg(code, builder, false);
+        auto res = rir2pir.tryCreateArg(code, builder, false, -1);
         if (!res) {
             failedToCompileDefaultArgs = true;
             return;
@@ -186,7 +188,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return fail();
     }
 
-    if (rir2pir.tryCompile(builder)) {
+    if (rir2pir.tryCompile(srcCode->body(), builder)) {
         log.compilationEarlyPir(version);
 #ifdef FULLVERIFIER
         Verify::apply(version, "Error after initial translation", true);

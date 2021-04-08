@@ -40,32 +40,30 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                 if (clsCallee) {
 
-                    auto functionVersion = clsCallee->rirFunction();
-                    if (functionVersion->flags.contains(
-                            rir::Function::Flag::DepromiseArgs)) {
+                    clsCallee->rirFunction([&](rir::Function* functionVersion) {
+                        if (functionVersion->flags.contains(
+                                rir::Function::Flag::DepromiseArgs)) {
 
-                        call->eachCallArg([&](InstrArg& v) {
-                            if (auto mkarg = MkArg::Cast(v.val())) {
+                            call->eachCallArg([&](InstrArg& v) {
+                                if (auto mkarg = MkArg::Cast(v.val())) {
 
-                                anyChange = true;
+                                    anyChange = true;
 
-                                auto cast = new CastType(
-                                    mkarg, CastType::Kind::Upcast, RType::prom,
-                                    PirType::valOrLazy());
+                                    auto cast = new CastType(
+                                        mkarg, CastType::Kind::Upcast,
+                                        RType::prom, PirType::valOrLazy());
 
-                                auto forced =
-                                    new Force(cast, mkarg->env(),
-                                              Tombstone::framestate());
-                                v.val() = forced;
-                                ip = bb->insert(ip, cast) + 1;
-                                ip = bb->insert(ip, forced) + 1;
-                                next = ip + 1;
-
-                            }
-
-
-                        });
-                    }
+                                    auto forced =
+                                        new Force(cast, mkarg->env(),
+                                                  Tombstone::framestate());
+                                    v.val() = forced;
+                                    ip = bb->insert(ip, cast) + 1;
+                                    ip = bb->insert(ip, forced) + 1;
+                                    next = ip + 1;
+                                }
+                            });
+                        }
+                    });
                 }
             }
             ip = next;

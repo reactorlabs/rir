@@ -1137,8 +1137,9 @@ class FLIE(MkArg, 2, Effects::None()) {
 
   public:
     bool noReflection = false;
+    const size_t originalIdx;
 
-    MkArg(Promise* prom, Value* v, Value* env);
+    MkArg(Promise* prom, Value* v, Value* env, size_t originalIdx);
 
     Value* eagerArg() const { return arg(0).val(); }
     void eagerArg(Value* eager) {

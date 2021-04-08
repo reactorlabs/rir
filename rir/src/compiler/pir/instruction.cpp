@@ -571,10 +571,10 @@ void Branch::printGraphBranches(std::ostream& out, size_t bbId) const {
         << " [color=red];  // -> BB" << falseBB->id << "\n";
 }
 
-MkArg::MkArg(Promise* prom, Value* v, Value* env)
+MkArg::MkArg(Promise* prom, Value* v, Value* env, size_t originalIdx)
     : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                      env),
-      prom_(prom) {
+      prom_(prom), originalIdx(originalIdx) {
     assert(eagerArg() == v);
     assert(!MkArg::Cast(eagerArg()->followCasts()));
     if (isEager()) {
@@ -584,7 +584,7 @@ MkArg::MkArg(Promise* prom, Value* v, Value* env)
 
 void MkArg::printArgs(std::ostream& out, bool tty) const {
     eagerArg()->printRef(out);
-    out << ", " << *prom();
+    out << ", " << prom()->id;
     if (noReflection)
         out << " (!refl)";
     out << ", ";
