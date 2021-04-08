@@ -4,6 +4,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/analysis/context_stack.h"
 #include "pass_definitions.h"
 
 #include <unordered_set>
@@ -12,9 +13,10 @@ namespace rir {
 namespace pir {
 
 bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                             LogStream&) const {
+                             LogStream& log) const {
     bool anyChange = false;
     DominanceGraph dom(code);
+    ContextStack cs(cls, code, log);
 
     VisitorNoDeoptBranch::run(code->entry, [&](BB* bb) {
         if (bb->isEmpty())
@@ -116,6 +118,35 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             if (!target) {
                 ip = next;
                 continue;
+            }
+
+            // Check that we are not hoisting into inlined code. If we move an
+            // instruction from after a PopContext in between a PushContext and
+            // a PopContext, we basically move it into the inlined callee.
+            // However, the callee can jump to the PopContext and thus skip the
+            // hoisted instruction.
+            // TODO: This still allows hoisting over the push-pop pair or out of
+            // the callee into the caller, but it depends on where the instruction
+            // arguments are, ie, sometimes it could be possible to hoist but we
+            // don't. In the example we don't move the Inc to the end of BB1
+            // BB1
+            //   %1 = LdConst 0
+            //   %2 = PushContext
+            //   # we don't hoist to here but could be more precise
+            //   # and find the push maybe?
+            //   Branch -> BB2 (if true) | BB3 (if false)
+            // BB2
+            //   %3 = PopContext %2
+            //   %4 = Inc %1
+            {
+                auto b = target;
+                while (b->isEmpty())
+                    b = *b->predecessors().begin();
+
+                if (cs.after(b->last()).context() > cs.before(i).context()) {
+                    ip = next;
+                    continue;
+                }
             }
 
             auto allowReorder = [&](BB* x) {
