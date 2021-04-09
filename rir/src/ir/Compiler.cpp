@@ -1438,6 +1438,7 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
         "eval",
         "match.arg",
         "as.name",
+        "newKccaObject",
     });
     static std::unordered_set<SEXP> block;
     static int initialized = ([&]() {
@@ -1450,15 +1451,16 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
     assert(initialized);
 
     if (inlineAllProms) {
-        if (block.count(fun)) {
+        auto v = Rf_findVar(fun, R_BaseEnv);
+        if ((v && TYPEOF(v) == SPECIALSXP) ||
+            // PIR bug in while(lenght(line <- read ....
+            (fun == Rf_install("length") && TYPEOF(CAR(args)) != SYMSXP) ||
+            block.count(fun)) {
             inlineAllProms = false;
-        } else {
-            auto v = Rf_findVar(fun, R_BaseEnv);
-            if (v && TYPEOF(v) == SPECIALSXP) {
-                inlineAllProms = false;
-            } else {
-                // Rf_PrintValue(fun);
-            }
+        }
+
+        if (inlineAllProms) {
+            // Rf_PrintValue(fun);
         }
     }
 
