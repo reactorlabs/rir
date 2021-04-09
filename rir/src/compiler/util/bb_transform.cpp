@@ -319,13 +319,13 @@ void BBTransform::mergeRedundantBBs(Code* closure) {
 }
 
 void BBTransform::renumber(Code* fun) {
-    DominanceGraph dom(fun);
-    fun->nextBBId = 0;
-    DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
+    size_t nextBBId = 0;
+    DepthFirstVisitor<VisitorHelpers::PointerMarker>::run(
         fun->entry, [&](BB* bb) {
-            bb->unsafeSetId(fun->nextBBId++);
+            bb->unsafeSetId(nextBBId++);
             bb->gc();
         });
+    fun->nextBBId = nextBBId;
 }
 
 void BBTransform::removeDeadInstrs(Code* fun, uint8_t maxBurstSize) {
