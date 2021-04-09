@@ -1454,10 +1454,11 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
             inlineAllProms = false;
         } else {
             auto v = Rf_findVar(fun, R_BaseEnv);
-            if (v && TYPEOF(v) == SPECIALSXP)
+            if (v && TYPEOF(v) == SPECIALSXP) {
                 inlineAllProms = false;
-            else
-                Rf_PrintValue(fun);
+            } else {
+                // Rf_PrintValue(fun);
+            }
         }
     }
 
