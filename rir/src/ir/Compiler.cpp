@@ -18,6 +18,8 @@
 
 #include "simple_instruction_list.h"
 
+#include <algorithm>
+#include <initializer_list>
 #include <stack>
 
 namespace rir {
@@ -1419,9 +1421,46 @@ SIMPLE_INSTRUCTIONS(V, _)
     return false;
 }
 
+static bool globallyInlineAllProms =
+    getenv("INLINE_ALL_PROMS")
+        ? (std::string("1") == getenv("INLINE_ALL_PROMS"))
+        : false;
+
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                                       SEXP args, bool voidContext, int skipArgs,
                                       int eager) {
+
+    bool inlineAllProms = globallyInlineAllProms;
+    static std::initializer_list<std::string> blockNames({
+        "deparse",
+        "tryCatch",
+        "::",
+        "eval",
+        "match.arg",
+        "as.name",
+    });
+    static std::unordered_set<SEXP> block;
+    static int initialized = ([&]() {
+        std::transform(
+            blockNames.begin(), blockNames.end(),
+            std::inserter(block, block.end()),
+            [](const std::string& str) { return Rf_install(str.c_str()); });
+        return 1;
+    })();
+    assert(initialized);
+
+    if (inlineAllProms) {
+        if (block.count(fun)) {
+            inlineAllProms = false;
+        } else {
+            auto v = Rf_findVar(fun, R_BaseEnv);
+            if (v && TYPEOF(v) == SPECIALSXP)
+                inlineAllProms = false;
+            else
+                Rf_PrintValue(fun);
+        }
+    }
+
     CodeStream& cs = ctx.cs();
 
     // Process arguments:
@@ -1452,7 +1491,7 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
         if (arg.tag() != R_NilValue)
             res.hasNames = true;
 
-        if (i < eager) {
+        if (i < eager || inlineAllProms) {
             compileExpr(ctx, *arg, false);
             continue;
         }
