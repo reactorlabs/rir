@@ -21,7 +21,11 @@ will be later on removed by dead code elimination.
 
 */
 
-int INLINED_PROMISES = 0;
+int ADDED_FORCES = 0;
+
+extern int FORCED_AND_INLINED;
+std::unordered_set<rir::pir::Force*> addedForcesSet;
+extern std::unordered_set<rir::pir::Force*> seen;
 
 namespace rir {
 namespace pir {
@@ -40,6 +44,10 @@ BB::Instrs::iterator iteratorAt(BB* bb, Instruction* ins) {
 bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 LogStream& log) const {
 
+    // std::cerr << "**********  BEGIN INLINE_FORCE_PROM ************** \n";
+    // std::cerr << "ADDED_FORCES: " << ADDED_FORCES << "\n";
+    // std::cerr << "FORCED_AND_INLINED: " << FORCED_AND_INLINED << "\n";
+
     bool anyChange = false;
 
     Visitor::run(code->entry, [&](BB* bb) {
@@ -48,6 +56,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
             auto next = ip + 1;
 
             if (auto call = CallInstruction::CastCall(*ip)) {
+
                 auto callAsInstr = *ip;
 
                 auto clsCallee = call->tryGetCls();
@@ -55,6 +64,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (clsCallee) {
 
                     auto functionVersion = clsCallee->rirFunction();
+
                     if (functionVersion->flags.contains(
                             rir::Function::Flag::DepromiseArgs)) {
 
@@ -62,7 +72,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                         std::function<void(InstrArg&)> updateMkArg =
                             [&](InstrArg& v) {
                                 if (auto mkarg = MkArg::Cast(v.val())) {
-                                    INLINED_PROMISES++;
+                                    ADDED_FORCES++;
 
                                     anyChange = true;
                                     anyChangeLocal = true;
@@ -71,13 +81,28 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         mkarg, CastType::Kind::Upcast,
                                         RType::prom, PirType::valOrLazy());
 
-                                    auto forced =
+                                    auto force =
                                         new Force(cast, mkarg->env(),
                                                   Tombstone::framestate());
-                                    v.val() = forced;
+
+                                    if (addedForcesSet.count(force)) {
+                                        assert(false && "ee");
+                                        seen.erase(force);
+                                    }
+                                    // assert(!addedForcesSet.count(force));
+                                    addedForcesSet.insert(force);
+
+                                    // force->FROM_DEPROMISE= true;
+
+                                    v.val() = force;
                                     // v.type() = PirType::val();
                                     ip = bb->insert(ip, cast) + 1;
-                                    ip = bb->insert(ip, forced) + 1;
+                                    ip = bb->insert(ip, force) + 1;
+
+                                    // std::cerr << "Adding Force: ";
+                                    // force->printRef(std::cerr);
+                                    // std::cerr << "\n";
+                                    // std::cerr.flush();
                                 }
                             };
 
@@ -114,6 +139,10 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
     });
 
+    // std::cerr << "ADDED_FORCES: " << ADDED_FORCES << "\n";
+    // std::cerr << "FORCED_AND_INLINED: " << FORCED_AND_INLINED << "\n";
+    // std::cerr << "*********    END INLINE_FORCE_PROM
+    // ******************************** \n";
     return anyChange;
 }
 

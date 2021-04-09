@@ -10,6 +10,11 @@
 #include <unordered_map>
 #include <unordered_set>
 
+int FORCED_AND_INLINED = 0;
+extern int ADDED_FORCES;
+extern std::unordered_set<rir::pir::Force*> addedForcesSet;
+std::unordered_set<rir::pir::Force*> seen;
+
 namespace rir {
 namespace pir {
 
@@ -41,6 +46,11 @@ namespace pir {
 
 bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                            LogStream& log) const {
+
+    // std::cerr << "**********  BEGIN FORCE_DOMINANCE ************** \n";
+    // std::cerr << "ADDED_FORCES: " << ADDED_FORCES << "\n";
+    // std::cerr << "FORCED_AND_INLINED: " << FORCED_AND_INLINED << "\n";
+
     bool anyChange = false;
 
     // Do this first so dead code elimination will remove the dependencies
@@ -179,6 +189,36 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         f->replaceUsesWith(eager);
                         next = bb->remove(ip);
                     } else if (toInline.count(f)) {
+
+                        if (addedForcesSet.count(f)) {
+                            FORCED_AND_INLINED++;
+                            // assert(!seen.count(f));
+
+                            if (!seen.count(f)) {
+                                seen.insert(f);
+                            } else {
+                                cls->print(std::cerr, true);
+                                std::cerr << "Force: ";
+                                f->printRef(std::cerr);
+                                std::cerr << "\n\n";
+
+                                assert(false && "seen!");
+
+                                // int a=3;
+                            }
+
+                            // assert(!f->SEEN);
+                            // f->SEEN = true;
+                            // if (!addedForcesSet.count(f)) {
+                            //     std::cerr << "Size: " <<
+                            //     addedForcesSet.size() << "\n";
+                            //     f->printRef(std::cerr);
+                            //     std::cerr.flush();
+                            //     assert(false && "force not in set");
+
+                            // }
+                        }
+
                         anyChange = true;
                         Promise* prom = mkarg->prom();
                         BB* split =
@@ -436,6 +476,12 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     // 4. remove BB's that became dead due to non local return
     BBTransform::removeDeadBlocks(code, dead);
+
+    // std::cerr << "ADDED_FORCES: " << ADDED_FORCES << "\n";
+    // std::cerr << "FORCED_AND_INLINED: " << FORCED_AND_INLINED << "\n";
+    // std::cerr << "*********    END FORCE_DOMINANCE
+    // ******************************** \n \n \n";
+
     return anyChange;
 }
 

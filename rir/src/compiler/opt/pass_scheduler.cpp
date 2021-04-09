@@ -27,12 +27,17 @@ PassScheduler::PassScheduler() {
         add<EagerCalls>();
 
         add<InlineForcePromises>();
+        add<ForceDominance>();
+
         add<Inline>();
 
         add<OptimizeContexts>();
 
         add<DelayInstr>();
+
+        // add<InlineForcePromises>();
         add<ForceDominance>();
+
         add<ScopeResolution>();
         add<LoadElision>();
         add<GVN>();

@@ -25,10 +25,13 @@
 using namespace rir;
 
 extern "C" Rboolean R_Visible;
-extern "C" int CREATED_PROMISES;
 
-extern int INLINED_PROMISES;
+extern "C" int CREATED_PROMISES;
+extern int FORCED_AND_INLINED;
+extern int ADDED_FORCES;
 extern int FORCED_PROMISES_INTERPRETER;
+extern std::unordered_set<rir::pir::Force*> addedForcesSet;
+extern std::unordered_set<rir::pir::Force*> seen;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
@@ -560,12 +563,27 @@ REXPORT SEXP rirResetCreatedPromises() {
 
 REXPORT SEXP rirCreatedPromises() { return Rf_ScalarInteger(CREATED_PROMISES); }
 
-REXPORT SEXP rirResetInlinedPromises() {
-    INLINED_PROMISES = 0;
+REXPORT SEXP rirResetForcedAndInlined() {
+    FORCED_AND_INLINED = 0;
+    addedForcesSet.clear();
+    seen.clear();
+    std::cerr << "reset forced_and_inlined!!";
     return R_NilValue;
 }
 
-REXPORT SEXP rirInlinedPromises() { return Rf_ScalarInteger(INLINED_PROMISES); }
+REXPORT SEXP rirForcedAndInlined() {
+    return Rf_ScalarInteger(FORCED_AND_INLINED);
+}
+
+REXPORT SEXP rirResetAddedForces() {
+    ADDED_FORCES = 0;
+    addedForcesSet.clear();
+    seen.clear();
+    std::cerr << "reset add_forces!!";
+    return R_NilValue;
+}
+
+REXPORT SEXP rirAddedForces() { return Rf_ScalarInteger(ADDED_FORCES); }
 
 REXPORT SEXP rirResetForcedPromisesInterpreter() {
     FORCED_PROMISES_INTERPRETER = 0;

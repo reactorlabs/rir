@@ -18,6 +18,9 @@
 #include <chrono>
 #include <unordered_map>
 
+extern std::unordered_set<rir::pir::Force*> addedForcesSet;
+extern std::unordered_set<rir::pir::Force*> seen;
+
 namespace rir {
 namespace pir {
 
@@ -30,6 +33,10 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
                               const Context& assumptions_, bool root,
                               MaybeCls success, Maybe fail,
                               std::list<PirTypeFeedback*> outerFeedback) {
+
+    addedForcesSet.clear();
+    seen.clear();
+
     assert(isValidClosureSEXP(closure));
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
