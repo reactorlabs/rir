@@ -368,9 +368,26 @@ class RBCCode {
     }
 };
 
+struct Stack {
+  private:
+    std::stack<Value*> stack;
+
+  public:
+    void push(Value* v) { stack.push(v); }
+    Value* pop() {
+        auto v = stack.top();
+        stack.pop();
+        return v;
+    }
+    ~Stack() { assert(stack.empty()); }
+};
+
 struct CompilerInfo {
-    CompilerInfo(SEXP src) : src(src) {}
+    CompilerInfo(SEXP src, Stack& stack, Builder& insert)
+        : src(src), stack(stack), insert(insert) {}
     SEXP src;
+    Stack& stack;
+    Builder& insert;
     std::unordered_set<size_t> mergepoints;
     std::unordered_map<size_t, size_t> jumps;
 };
@@ -407,57 +424,102 @@ static void findMerges(const RBCCode& bytecode, CompilerInfo& info) {
             info.mergepoints.insert(m.first);
 }
 
+struct BCCompiler {
+    CompilerInfo& cmp;
+    BCCompiler(CompilerInfo& cmp) : cmp(cmp) {}
+
+    void push(Value* v) { cmp.stack.push(v); }
+
+    Value* pop() { return cmp.stack.pop(); }
+
+    Instruction* insertPush(Instruction* i) {
+        push(insert(i));
+        return i;
+    }
+
+    Instruction* insert(Instruction* i) {
+        cmp.insert(i);
+        return i;
+    }
+
+    SEXP cnst(int i) { return VECTOR_ELT(BCODE_CONSTS(BODY(cmp.src)), i); }
+
+    Value* env() { return cmp.insert.env; }
+
+    template <RBC::Id BC>
+    void compile(RBC);
+};
+
+// Start instructions translation
+
+template <>
+void BCCompiler::compile<RBC::GETVAR_OP>(RBC bc) {
+    auto v = insert(new LdVar(cnst(bc.imm(0)), env()));
+    insertPush(new Force(v, env(), Tombstone::framestate()));
+}
+
+template <>
+void BCCompiler::compile<RBC::RETURN_OP>(RBC bc) {
+    insert(new Return(pop()));
+}
+
+template <>
+void BCCompiler::compile<RBC::LDCONST_OP>(RBC bc) {
+    push(insert(new LdConst(cnst(bc.imm(0)))));
+}
+
+template <>
+void BCCompiler::compile<RBC::ADD_OP>(RBC bc) {
+    auto a = pop();
+    auto b = pop();
+    insertPush(new Add(a, b, env(), bc.imm(0)));
+}
+
+// End instructions translation
+
 pir::ClosureVersion* Gnur2Pir::compile(SEXP src, const std::string& name) {
     SEXP body = BODY(src);
     RBCCode bytecode(body);
-    SEXP consts = BCODE_CONSTS(body);
-    auto cnst = [&](int i) { return VECTOR_ELT(consts, i); };
 
     std::cout << bytecode;
 
-    CompilerInfo info(src);
+    auto c = m.getOrDeclareGnurClosure(name, src, Context());
+    auto v = c->declareVersion(Compiler::defaultContext, true, nullptr);
+
+    Stack stack;
+    Builder insert(v, c->closureEnv());
+
+    CompilerInfo info(src, stack, insert);
 
     findMerges(bytecode, info);
 
-    std::cout << "Merges at: ";
+    std::cout << "CFG merges at: ";
     for (auto& m : info.mergepoints) {
         std::cout << m << " ";
     }
     std::cout << "\n";
 
-    auto c = m.getOrDeclareGnurClosure(name, src, Context());
-    auto v = c->declareVersion(Compiler::defaultContext, true, nullptr);
+    BCCompiler bccompiler(info);
 
-    Builder insert(v, c->closureEnv());
+#define SUPPORTED_INSTRUCTIONS(V)                                              \
+    V(RBC::GETVAR_OP)                                                          \
+    V(RBC::RETURN_OP)                                                          \
+    V(RBC::LDCONST_OP)                                                         \
+    V(RBC::ADD_OP)
 
-    struct Stack {
-      private:
-        std::stack<Value*> stack;
-
-      public:
-        void push(Value* v) { stack.push(v); }
-        Value* pop() {
-            auto v = stack.top();
-            stack.pop();
-            return v;
-        }
-        ~Stack() { assert(stack.empty()); }
-    };
-    Stack stack;
     for (auto pc = bytecode.begin(); pc != bytecode.end(); ++pc) {
         auto bc = *pc;
         switch (bc.id) {
-        case RBC::GETVAR_OP: {
-            auto v = insert(new LdVar(cnst(bc.imm(0)), insert.env));
-            stack.push(
-                insert(new Force(v, insert.env, Tombstone::framestate())));
-            break;
-        }
-        case RBC::RETURN_OP:
-            insert(new Return(stack.pop()));
-            break;
+#define V(BC)                                                                  \
+    case BC:                                                                   \
+        bccompiler.compile<BC>(bc);                                            \
+        break;
+            SUPPORTED_INSTRUCTIONS(V)
+#undef V
+
         default:
             std::cerr << "Could not compile " << *pc << "\n";
+            assert(false);
             return nullptr;
         }
     }

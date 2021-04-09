@@ -31,9 +31,10 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
         cls->rirFunction([&](rir::Function* f) {
             if (f->flags.contains(rir::Function::DisableInline))
                 res = true;
-            if (f->flags.contains(rir::Function::ForceInline))
+            else if (f->flags.contains(rir::Function::ForceInline))
                 res = false;
-            res = f->flags.contains(rir::Function::NotInlineable);
+            else
+                res = f->flags.contains(rir::Function::NotInlineable);
         });
         return res;
     };
