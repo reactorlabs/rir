@@ -1,10 +1,11 @@
-#include "../analysis/available_checkpoints.h"
-#include "../pir/pir_impl.h"
-#include "../util/visitor.h"
 #include "R/r.h"
+#include "compiler/analysis/available_checkpoints.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/analysis/context_stack.h"
+#include "compiler/pir/pir_impl.h"
 #include "compiler/util/bb_transform.h"
 #include "compiler/util/safe_builtins_list.h"
+#include "compiler/util/visitor.h"
 #include "interpreter/builtins.h"
 #include "pass_definitions.h"
 #include "type_test.h"
@@ -19,6 +20,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     constexpr bool debug = false;
     AvailableCheckpoints checkpoint(cls, code, log);
+    ContextStack cs(cls, code, log);
     DominanceGraph dom(code);
 
     auto envOnlyForObj = [&](Instruction* i) {
@@ -145,10 +147,12 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
         Tag::StaticCall, Tag::LdDots};
     static constexpr auto allowedInProm = {Tag::LdVar, Tag::StVar,
                                            Tag::StVarSuper, Tag::LdDots};
-    // Those do not materialize the stub in any case
-    static constexpr auto dontMaterialize = {
-        Tag::PushContext, Tag::LdVar,     Tag::StVar, Tag::StVarSuper,
-        Tag::FrameState,  Tag::IsEnvStub, Tag::LdDots};
+    // Those do not materialize the stub in any case. PushContext doesn't
+    // materialize itself but it makes the environment accessible, so it's
+    // not on this list.
+    static constexpr auto dontMaterialize = {Tag::LdVar,      Tag::StVar,
+                                             Tag::StVarSuper, Tag::FrameState,
+                                             Tag::IsEnvStub,  Tag::LdDots};
     VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
@@ -194,10 +198,35 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
         });
     });
 
-    std::unordered_map<Instruction*, std::pair<Checkpoint*, MkEnv*>> checks;
+    std::unordered_map<Instruction*,
+                       std::unordered_map<Checkpoint*, SmallSet<MkEnv*>>>
+        checks;
     std::unordered_map<MkEnv*, SmallSet<Instruction*>> needsMaterialization;
     std::unordered_map<MkEnv*, SmallSet<SEXP>> additionalEntries;
     Visitor::run(code->entry, [&](Instruction* i) {
+        // We need to be careful with inlined contexts. Stubs, including the
+        // ones that leak into a context, need to be checked after each
+        // instruction that can cause them to be materialized, as well as after
+        // PopContext (for non-local jumps from inlined code).
+        if (!i->bb()->isDeopt() &&
+            (i->effects.contains(Effect::ExecuteCode) || PopContext::Cast(i))) {
+            cs.before(i).eachLeakedEnvRev([&](MkEnv* mk) {
+                if (!mk->stub && !bannedEnvs.count(mk)) {
+                    if (auto cp = checkpoint.next(i, mk, dom)) {
+                        checks[i][cp].insert(mk);
+                    } else {
+                        if (debug) {
+                            std::cout << "Environment (in context): ";
+                            mk->print(std::cout);
+                            std::cout << " blocked by missing checkpoint at ";
+                            i->print(std::cout);
+                            std::cout << "\n";
+                        }
+                        bannedEnvs.insert(mk);
+                    }
+                }
+            });
+        }
         if (i->hasEnv()) {
             if (auto st = StVar::Cast(i)) {
                 if (!bannedEnvs.count(i->env())) {
@@ -212,24 +241,25 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                 StVarSuper::Cast(i) || PushContext::Cast(i))
                 return;
             if (auto mk = MkEnv::Cast(i->env())) {
-                if (mk->stub || bannedEnvs.count(mk))
-                    return;
-                if (i->bb()->isDeopt()) {
-                    needsMaterialization[mk].insert(i);
-                } else {
-                    // We can only stub an environment if all uses have a
-                    // checkpoint available after every use.
-                    if (auto cp = checkpoint.next(i, mk, dom))
-                        checks[i] = std::pair<Checkpoint*, MkEnv*>(cp, mk);
-                    else {
-                        if (debug) {
-                            std::cout << "Environment:";
-                            mk->print(std::cout);
-                            std::cout << " blocked by missing checkpoint at ";
-                            i->print(std::cout);
-                            std::cout << "\n";
+                if (!mk->stub && !bannedEnvs.count(mk)) {
+                    if (i->bb()->isDeopt()) {
+                        needsMaterialization[mk].insert(i);
+                    } else {
+                        // We can only stub an environment if we have a
+                        // checkpoint available after every use.
+                        if (auto cp = checkpoint.next(i, mk, dom)) {
+                            checks[i][cp].insert(mk);
+                        } else {
+                            if (debug) {
+                                std::cout << "Environment: ";
+                                mk->print(std::cout);
+                                std::cout
+                                    << " blocked by missing checkpoint at ";
+                                i->print(std::cout);
+                                std::cout << "\n";
+                            }
+                            bannedEnvs.insert(mk);
                         }
-                        bannedEnvs.insert(mk);
                     }
                 }
             }
@@ -243,13 +273,19 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
             Instruction* i = *ip;
             auto next = ip + 1;
 
-            if (checks.count(i) && !bannedEnvs.count(i->env())) {
-                auto env = checks[i].second;
-                auto cp = checks[i].first;
-                auto condition = new IsEnvStub(env);
-                BBTransform::insertAssume(condition, cp, true,
-                                          env->typeFeedback.srcCode, nullptr);
-                assert(cp->bb()->trueBranch() != bb);
+            if (checks.count(i)) {
+                for (auto check : checks[i]) {
+                    auto cp = check.first;
+                    for (auto env : check.second) {
+                        if (!bannedEnvs.count(env)) {
+                            auto condition = new IsEnvStub(env);
+                            BBTransform::insertAssume(condition, cp, true,
+                                                      env->typeFeedback.srcCode,
+                                                      nullptr);
+                            assert(cp->bb()->trueBranch() != bb);
+                        }
+                    }
+                }
             }
 
             if (auto env = MkEnv::Cast(i)) {
