@@ -89,7 +89,7 @@ SEXP materializeEnvironmentImpl(SEXP environment) {
     assert(lazyEnv);
     if (!lazyEnv->materialized())
         return materialize(environment);
-    return environment;
+    return lazyEnv->materialized();
 }
 
 SEXP ldvarForUpdateImpl(SEXP sym, SEXP env) {
