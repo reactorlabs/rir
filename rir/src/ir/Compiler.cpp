@@ -1496,6 +1496,7 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
 
         if (i < eager || inlineAllProms) {
             compileExpr(ctx, *arg, false);
+            res.assumptions.setEager(i);
             continue;
         }
 
