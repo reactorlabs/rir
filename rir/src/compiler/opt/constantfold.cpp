@@ -1015,7 +1015,21 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         const auto& condition = e.second;
         dead.insert(condition ? branch->falseBranch() : branch->trueBranch());
     }
-    auto toDelete = DominanceGraph::dominatedSet(code, dead);
+    // If we have two blocks A,B newly ending with Unreachable and originally
+    // joining into C, then C is now dead. To find the block C dead, we have to
+    // add A and B to the dominating set of dead blocks.
+    DominanceGraph::BBSet toDelete;
+    if (unreachableEnd.empty()) {
+        toDelete = DominanceGraph::dominatedSet(code, dead);
+    } else {
+        auto deadAndUnreachable = dead;
+        deadAndUnreachable.insert(unreachableEnd.begin(), unreachableEnd.end());
+        toDelete = DominanceGraph::dominatedSet(code, deadAndUnreachable);
+        for (auto u : unreachableEnd) {
+            if (!dead.count(u))
+                toDelete.erase(u);
+        }
+    }
     Visitor::run(code->entry, [&](Instruction* i) {
         if (auto phi = Phi::Cast(i))
             phi->removeInputs(toDelete);
