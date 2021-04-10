@@ -817,6 +817,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         given.remove(Assumption::NoExplicitlyMissingArgs);
                         i++;
                     } else {
+                        if (auto j = Instruction::Cast(arg))
+                            j->updateTypeAndEffects();
                         arg->callArgTypeToContext(given, i++);
                     }
                 }
