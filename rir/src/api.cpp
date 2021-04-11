@@ -26,6 +26,8 @@ using namespace rir;
 
 extern "C" Rboolean R_Visible;
 
+extern "C" int CREATED_PROMISES;
+
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
 static size_t oldMaxInput = 0;
@@ -550,6 +552,13 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     INTEGER(res)[1] = n2;
     return res;
 }
+
+REXPORT SEXP rirResetCreatedPromises() {
+    CREATED_PROMISES = 0;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirCreatedPromises() { return Rf_ScalarInteger(CREATED_PROMISES); }
 
 bool startup() {
     initializeRuntime();
