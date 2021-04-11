@@ -27,6 +27,9 @@ using namespace rir;
 extern "C" Rboolean R_Visible;
 
 extern "C" int CREATED_PROMISES;
+extern "C" int CREATED_PROMISES_AST;
+
+extern int INLINED_PROMISES;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
@@ -559,6 +562,22 @@ REXPORT SEXP rirResetCreatedPromises() {
 }
 
 REXPORT SEXP rirCreatedPromises() { return Rf_ScalarInteger(CREATED_PROMISES); }
+
+REXPORT SEXP rirResetCreatedPromisesAST() {
+    CREATED_PROMISES_AST = 0;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirCreatedPromisesAST() {
+    return Rf_ScalarInteger(CREATED_PROMISES_AST);
+}
+
+REXPORT SEXP rirResetInlinedPromises() {
+    INLINED_PROMISES = 0;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirInlinedPromises() { return Rf_ScalarInteger(INLINED_PROMISES); }
 
 bool startup() {
     initializeRuntime();

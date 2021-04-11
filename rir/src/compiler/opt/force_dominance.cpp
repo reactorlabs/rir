@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+int INLINED_PROMISES = 0;
+
 namespace rir {
 namespace pir {
 
@@ -179,6 +181,9 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         f->replaceUsesWith(eager);
                         next = bb->remove(ip);
                     } else if (toInline.count(f)) {
+
+                        INLINED_PROMISES++;
+
                         anyChange = true;
                         Promise* prom = mkarg->prom();
                         BB* split =
