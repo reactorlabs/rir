@@ -60,7 +60,7 @@ benchmark_container:
       #     - rir_container
       #   script:
       #     - /opt/rir/tools/cppcheck
-      # 
+      #
       # # Run check-all in release mode  (additionally check pir types)
       # test_release_1:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -85,7 +85,7 @@ benchmark_container:
       #     - "../../external/custom-r/tests/*/*check.log"
       #     when: on_failure
       #     expire_in: 1 week
-      # 
+      #
       # test_release_2:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
       #   variables:
@@ -108,7 +108,7 @@ benchmark_container:
       #     - "../../external/custom-r/tests/*/*check.log"
       #     when: on_failure
       #     expire_in: 1 week
-      # 
+      #
       # # Run some tests in the debug mode
       # tests_debug:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -128,7 +128,7 @@ benchmark_container:
       #     - R_ENABLE_JIT=3 ./bin/tests
       #     - PIR_ENABLE=off ./bin/tests
       #     - PIR_ENABLE=force ./bin/tests
-      # 
+      #
       # tests_debug2:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
       #   variables:
@@ -148,7 +148,7 @@ benchmark_container:
       #     - "../../external/custom-r/tests/*/*check.log"
       #     when: on_failure
       #     expire_in: 1 week
-      # 
+      #
       # # Run some tests in the full verify (release) mode
       # tests_fullverify:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -164,7 +164,7 @@ benchmark_container:
       #   script:
       #     - cd /opt/rir/build/fullverifier
       #     - bin/tests
-      # 
+      #
       # # Test particular features, like deoptimization and serialization
       # test_features_1:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -189,7 +189,7 @@ benchmark_container:
       #     - PIR_GLOBAL_SPECIALIZATION_LEVEL=3 ./bin/tests
       #     - PIR_GLOBAL_SPECIALIZATION_LEVEL=4 ./bin/tests
       #     - PIR_GLOBAL_SPECIALIZATION_LEVEL=5 ./bin/tests
-      # 
+      #
       # test_features_2:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
       #   variables:
@@ -203,7 +203,7 @@ benchmark_container:
       #   script:
       #     - cd /opt/rir/build/release
       #     - ./bin/gnur-make-tests check
-      # 
+      #
       # # Run ubsan and gc torture
       # test_sanitize1:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -218,7 +218,7 @@ benchmark_container:
       #   script:
       #     - cd /opt/rir/build/release
       #     - R_GCTORTURE=5000 ./bin/gnur-make-tests check
-      # 
+      #
       # test_sanitize2:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
       #   variables:
@@ -233,7 +233,7 @@ benchmark_container:
       #   script:
       #     - cd /opt/rir/build/sanitize
       #     - R_GCTORTURE=300 bin/tests
-      # 
+      #
       # # Test with inlining big functions
       # test_big_inline:
       #   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -309,7 +309,7 @@ benchmark_llvm:
   tags:
     - benchmarks
   script:
-    - INLINE_ALL_PROMS=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - INLINE_ALL_PROMS=0 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data
