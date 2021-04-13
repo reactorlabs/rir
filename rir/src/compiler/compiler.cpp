@@ -128,7 +128,8 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
 
         Value* res;
         bool inlineDefaultArgs = rir::Compiler::globallyInlineAllProms;
-        if (closure->formals().names()[idx] == Rf_install("envir")) {
+        if (closure->formals().names()[idx] == Rf_install("envir") ||
+            closure->name() == "as") {
             inlineDefaultArgs = false;
         }
         if (inlineDefaultArgs) {
