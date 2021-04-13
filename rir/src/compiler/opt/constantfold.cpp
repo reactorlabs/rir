@@ -22,7 +22,7 @@ namespace pir {
 static SEXP isConst(Value* instr) {
     instr = instr->followCastsAndForce();
 
-    if (instr->asRValue())
+    if (instr->asRValue() && instr != MissingArg::instance())
         return instr->asRValue();
 
     if (auto cst = LdConst::Cast(instr)) {
