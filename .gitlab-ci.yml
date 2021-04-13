@@ -307,7 +307,8 @@ benchmark_llvm:
   variables:
     GIT_STRATEGY: none
   tags:
-    - benchmarks
+    - dockerInDocker
+  #   - benchmarks
   script:
     - "sed -i 's/invocations: 1/invocations: 4/' /opt/rbenchmarking/rebench.conf"
     - "sed -i 's/iterations: 15/iterations: 25/' /opt/rbenchmarking/rebench.conf"
