@@ -311,7 +311,7 @@ benchmark_llvm:
   script:
     - "sed -i 's/invocations: 1/invocations: 4/' /opt/rbenchmarking/rebench.conf"
     - "sed -i 's/iterations: 15/iterations: 25/' /opt/rbenchmarking/rebench.conf"
-    - PIR_ENABLE=off INLINE_ALL_PROMS=0 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - PIR_ENABLE=off INLINE_ALL_PROMS=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data
