@@ -1421,16 +1421,11 @@ SIMPLE_INSTRUCTIONS(V, _)
     return false;
 }
 
-static bool globallyInlineAllProms =
-    getenv("INLINE_ALL_PROMS")
-        ? (std::string("1") == getenv("INLINE_ALL_PROMS"))
-        : false;
-
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                                       SEXP args, bool voidContext, int skipArgs,
                                       int eager) {
 
-    bool inlineAllProms = globallyInlineAllProms;
+    bool inlineAllProms = rir::Compiler::globallyInlineAllProms;
     static std::initializer_list<std::string> blockNames({
         "deparse",
         "tryCatch",
@@ -1495,6 +1490,23 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
             res.hasNames = true;
 
         if (i < eager || inlineAllProms) {
+            // "safe force" the argument to get static assumptions
+            SEXP known = safeEval(*arg);
+            // TODO: If we add more assumptions should probably abstract with
+            // testArg in interp.cpp. For now they're both much different though
+            if (known != R_UnboundValue) {
+                res.assumptions.setEager(i);
+                if (!isObject(known)) {
+                    res.assumptions.setNotObj(i);
+                    if (IS_SIMPLE_SCALAR(known, REALSXP))
+                        res.assumptions.setSimpleReal(i);
+                    if (IS_SIMPLE_SCALAR(known, INTSXP))
+                        res.assumptions.setSimpleInt(i);
+                }
+                cs << BC::push(known);
+                continue;
+            }
+
             compileExpr(ctx, *arg, false);
             res.assumptions.setEager(i);
             continue;
@@ -1696,5 +1708,10 @@ bool Compiler::profile =
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 bool Compiler::loopPeelingEnabled = true;
+
+bool Compiler::globallyInlineAllProms =
+    getenv("INLINE_ALL_PROMS")
+        ? (std::string("1") == getenv("INLINE_ALL_PROMS"))
+        : false;
 
 } // namespace rir

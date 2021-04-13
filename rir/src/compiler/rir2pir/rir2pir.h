@@ -28,10 +28,10 @@ class Rir2Pir {
         Value*, std::tuple<Checkpoint*, ObservedCallees, Opcode*>>
         CallTargetFeedback;
 
-  private:
     Value* tryInlinePromise(rir::Code* srcCode, Builder& insert)
         __attribute__((warn_unused_result));
 
+  private:
     // Tries to compile the srcCode. Return value indicates failure. Builder
     // has to be discarded, if compilation fails!
     bool tryCompile(rir::Code* srcCode, Builder& insert)

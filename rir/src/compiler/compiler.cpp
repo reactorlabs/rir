@@ -125,12 +125,22 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         auto arg = closure->formals().defaultArgs()[idx];
         assert(rir::Code::check(arg) && "Default arg not compiled");
         auto code = rir::Code::unpack(arg);
-        auto res = rir2pir.tryCreateArg(code, builder, false);
+
+        Value* res;
+        bool inlineDefaultArgs = rir::Compiler::globallyInlineAllProms;
+        if (closure->formals().names()[idx] == Rf_install("envir")) {
+            inlineDefaultArgs = false;
+        }
+        if (inlineDefaultArgs) {
+            res = rir2pir.tryInlinePromise(code, builder);
+        } else {
+            res = rir2pir.tryCreateArg(code, builder, false);
+        }
         if (!res) {
             failedToCompileDefaultArgs = true;
             return;
         }
-        if (MkArg::Cast(res)) {
+        if (!inlineDefaultArgs && MkArg::Cast(res)) {
             // Need to cast promise-as-a-value to lazy-value, to make
             // it evaluate on access
             res = builder(new CastType(res, CastType::Upcast, RType::prom,

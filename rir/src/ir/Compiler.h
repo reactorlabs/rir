@@ -39,6 +39,8 @@ class Compiler {
     }
 
   public:
+    static bool globallyInlineAllProms;
+
     static bool profile;
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
