@@ -190,7 +190,7 @@ struct LoadArgsResult {
     bool hasDots = false;
     std::vector<SEXP> names;
     Context assumptions;
-    int numArgs;
+    int numArgs = 0;
 };
 
 Code* compilePromise(CompilerContext& ctx, SEXP exp);
@@ -200,6 +200,16 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp);
 // in a void context, since the loop as an expression is always nil.
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
+
+// EAGER_PROMISE_AND_RAW_VALUE is for the special case when we want to get both
+// an eager promise and the value wrapped inside that promise on the stack.
+// This is used in particular for the complex assignment: the expression
+//    f(x) <- z
+// returns z, and z must be passed as en eager promise to `f<-`.
+enum class ArgType { PROMISE, EAGER_PROMISE, RAW_VALUE, EAGER_PROMISE_AND_RAW_VALUE };
+
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res);
+
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                                       SEXP args, bool voidContext,
                                       int skipArgs = 0, int eager = 0);
@@ -789,10 +799,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // fun2 cannot be a langage expression, else R raises
             //      invalid function in complex assignment
+            // TODO: raise error properly!
             assert( TYPEOF(fun2) == SYMSXP);
-
-            // DEBUG
-            Rf_PrintValue(ast);
 
             // We need to get the SEXP for `f<-` from the SEXP for `f`
             std::string const fun2name = CHAR(PRINTNAME(fun2));
@@ -808,6 +816,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // (though no leftover SEXP here)
 
 
+            //TODO:
+            // - z needs to be eager
+            // - and value pushed back on the stack after the assignmt (if not voidCtxt)
+            // (use BC put to save value somewhere)
+
+            // can extend compileLoadArgs
 
             // Get the LISTSXP of args for f
             SEXP f_args = CDR(CAR(args_));
@@ -821,6 +835,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // We need to append "value = z" to the list of args for f
             // Let's create the corresponding cell
+
             SEXP assignment_value = CAR(CDR(args_));
             SEXP new_z_cell = Rf_cons(assignment_value, R_NilValue);
             SET_TAG(new_z_cell, Rf_install("value"));
@@ -837,7 +852,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // The second cell in args is already tagged "value"
             CAR(CDR(args_)) = farrow_ast;
 
-
             // Simply rewriting the AST is not enough: we also want to make
             // sure that x is evaluated. This is why we will manually compile
             // this call instead of simply using compileSpecialCall on the
@@ -845,25 +859,51 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             //       compileSpecialCall(ctx, ast, fun, args_, voidContext);
 
 
+            // Prepare call to f<-(x, y1, <...>, yn, z)
             cs << BC::ldfun(farrow_sym);
 
-            // prepare x, y, z as promises
-            // x is eagerly evaluated
-            auto const info_args_farrow = compileLoadArgs(ctx, farrow_ast, farrow_sym, f_args, voidContext, 0, 1);
-
-
-            // Question: what is this? For profiling?
-            // (found in compileCall)
             if (Compiler::profile)
                 cs << BC::recordCall();
 
+            // prepare x, yk, z as promises
+
+
+            //LoadArgsResult load_arg_res = compileLoadArgs(ctx, farrow_ast, farrow_sym, f_args, false, 0, 1);
+            // x and z are eager
+            // we will take care of them in a more manual way
+
+            LoadArgsResult load_arg_res;
+
+            // load x as an eager promise
+            compileLoadOneArg(ctx, f_args, ArgType::EAGER_PROMISE, load_arg_res);
+
+            //load y1, <...>, yn
+            SEXP cur_arg_cell = CDR(f_args);
+            for(; cur_arg_cell != new_z_cell; cur_arg_cell = CDR(cur_arg_cell) )
+            {
+                compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE, load_arg_res);
+            }
+
+            // load z as an eager promise AND keep its value
+            compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE_AND_RAW_VALUE, load_arg_res);
+            // after this call, the value stack looks like this:
+            //
+            // N+2,    N+1   N              2           1             0
+            //   ?,  `f<-`,  x, y1, <...>, yn, z(promise), z(raw_value)
+            //
+            // where N is the number of arguments passed to `f<-` (load_arg_res.numArgs)
+
+            cs << BC::put(load_arg_res.numArgs + 1);
+
+            // after this insn, the value stack is
+            // N+2,           N+1      N                  1           0
+            //   ?,  z(raw_value), `f<-`,  x, y1, <...>, yn, z(promise)
 
             // call f<- with the arguments
-            cs << BC::call(info_args_farrow.numArgs, info_args_farrow.names, farrow_ast, info_args_farrow.assumptions);
+            cs << BC::call(load_arg_res.numArgs, load_arg_res.names, farrow_ast, load_arg_res.assumptions);
+
 
             // Bind the result to x
-            if(!voidContext)
-                cs << BC::dup() << BC::invisible();
             if (superAssign) {
                 cs << BC::stvarSuper(dest);
             } else {
@@ -874,8 +914,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     cs << BC::stvar(dest);
             }
 
-
-            if (!voidContext && Compiler::profile)
+            // TOS is the value of the RHS
+            if(voidContext)
+                cs << BC::pop();
+            else if (Compiler::profile)
                 cs << BC::recordType();
 
 
@@ -1546,52 +1588,69 @@ SIMPLE_INSTRUCTIONS(V, _)
     return false;
 }
 
-static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
-                                      SEXP args, bool voidContext, int skipArgs,
-                                      int eager) {
+
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res)
+{
     CodeStream& cs = ctx.cs();
+    int i = res.numArgs;
+    res.numArgs += 1;
 
-    // Process arguments:
-    // Arguments can be optionally named
+    if (CAR(arg) == R_DotsSymbol) {
+        cs << BC::push(R_DotsSymbol);
+        res.names.push_back(R_DotsSymbol);
+        res.hasDots = true;
+        return;
+    }
+    if (CAR(arg) == R_MissingArg) {
+        cs << BC::push(R_MissingArg);
+        res.names.push_back(R_NilValue);
+        return;
+    }
 
-    LoadArgsResult res;
-    RList argsList(args);
-    RListIter arg = argsList.begin();
+    // remember if the argument had a name associated
+    res.names.push_back(TAG(arg));
+    if (TAG(arg) != R_NilValue)
+    {
+        res.hasNames = true;
+    }
 
-    int i = skipArgs;
-    arg = arg + skipArgs;
 
-    for (; arg != RList::end(); ++i, ++arg) {
-        if (*arg == R_DotsSymbol) {
-            cs << BC::push(R_DotsSymbol);
-            res.names.push_back(R_DotsSymbol);
-            res.hasDots = true;
-            continue;
-        }
-        if (*arg == R_MissingArg) {
-            cs << BC::push(R_MissingArg);
-            res.names.push_back(R_NilValue);
-            continue;
-        }
+    if (arg_type == ArgType::RAW_VALUE) {
+        compileExpr(ctx, CAR(arg), false);
+        return;
+    }
 
-        // remember if the argument had a name associated
-        res.names.push_back(arg.tag());
-        if (arg.tag() != R_NilValue)
-            res.hasNames = true;
+    if (arg_type == ArgType::EAGER_PROMISE) {
+        compileExpr(ctx, CAR(arg), false);
+        // leave the value on the stack for mkEagerPromise
+    }
 
-        if (i < eager) {
-            compileExpr(ctx, *arg, false);
-            res.assumptions.setEager(i);
-            continue;
-        }
+    if (arg_type == ArgType::EAGER_PROMISE_AND_RAW_VALUE) {
+        compileExpr(ctx, CAR(arg), false);
+        cs << BC::dup();
+        // leave the value on the stack for mkEagerPromise
+        // AND add one that will be kept as a raw value
+    }
 
-        // Arguments are wrapped as Promises:
-        //     create a new Code object for the promise
-        Code* prom = compilePromise(ctx, *arg);
-        size_t idx = cs.addPromise(prom);
 
+    // Arguments are wrapped as Promises:
+    //     create a new Code object for the promise
+    Code* prom = compilePromise(ctx, CAR(arg));
+    size_t idx = cs.addPromise(prom);
+
+    if (arg_type == ArgType::EAGER_PROMISE ) {
+        cs << BC::mkEagerPromise(idx);
+    }
+    else if (arg_type == ArgType::EAGER_PROMISE_AND_RAW_VALUE)
+    {
+        cs << BC::mkEagerPromise(idx);
+        // put the raw value as tos, the promise just behind
+        cs << BC::swap();
+    }
+    else
+    {
         // "safe force" the argument to get static assumptions
-        SEXP known = safeEval(*arg);
+        SEXP known = safeEval(CAR(arg));
         // TODO: If we add more assumptions should probably abstract with
         // testArg in interp.cpp. For now they're both much different though
         if (known != R_UnboundValue) {
@@ -1609,8 +1668,30 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
             cs << BC::mkPromise(idx);
         }
     }
+}
 
-    res.numArgs = i;
+
+
+static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
+                                      SEXP args, bool voidContext, int skipArgs,
+                                      int eager) {
+    // Process arguments:
+    // Arguments can be optionally named
+
+    LoadArgsResult res;
+
+    SEXP cur_cell = args;
+    int i = 0;
+    while(cur_cell != R_NilValue)
+    {
+        if (i >= skipArgs) {
+            ArgType t = (i < eager) ? ArgType::RAW_VALUE : ArgType::PROMISE;
+            compileLoadOneArg(ctx, cur_cell, t, res);
+        }
+        cur_cell = CDR(cur_cell);
+        i++;
+    }
+
     return res;
 }
 
