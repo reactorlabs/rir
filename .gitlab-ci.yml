@@ -263,7 +263,7 @@ test_benchmarks:
   needs:
     - benchmark_container
   script:
-    - MEASUREMENT_FILE=$CI_PROJECT_DIR/dataGC_test.csv INLINE_ALL_PROMS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
+    - MEASUREMENT_FILE=$CI_PROJECT_DIR/dummy.csv INLINE_ALL_PROMS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
 
 deploy:
   stage: Deploy
@@ -309,8 +309,8 @@ benchmark_llvm:
   tags:
     - benchmarks
   script:
-    - "sed -i 's/invocations: 1/invocations: 4/' /opt/rbenchmarking/rebench.conf"
-    - "sed -i 's/iterations: 15/iterations: 25/' /opt/rbenchmarking/rebench.conf"
+    #- "sed -i 's/invocations: 1/invocations: 4/' /opt/rbenchmarking/rebench.conf"
+    #- "sed -i 's/iterations: 15/iterations: 25/' /opt/rbenchmarking/rebench.conf"
     - MEASUREMENT_FILE=$CI_PROJECT_DIR/dataGC.csv INLINE_ALL_PROMS=0 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
