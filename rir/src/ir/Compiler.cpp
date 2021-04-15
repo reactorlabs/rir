@@ -208,7 +208,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidC
 // returns z, and z must be passed as en eager promise to `f<-`.
 enum class ArgType { PROMISE, EAGER_PROMISE, RAW_VALUE, EAGER_PROMISE_AND_RAW_VALUE };
 
-static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res);
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res, SEXP fake_arg_ast = nullptr);
 
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                                       SEXP args, bool voidContext,
@@ -793,35 +793,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     <-(f(x,y), value=z)
                 Into
                     <-( x, value=f<-(x,y,value=z) )
-
             */
-
-
-            // fun2 cannot be a langage expression, else R raises
-            //      invalid function in complex assignment
-            // TODO: raise error properly!
-            assert( TYPEOF(fun2) == SYMSXP);
 
             // We need to get the SEXP for `f<-` from the SEXP for `f`
             std::string const fun2name = CHAR(PRINTNAME(fun2));
             std::string const fun2_replacement_name = fun2name + "<-";
             SEXP farrow_sym = Rf_install(fun2_replacement_name.c_str());
-
-
-
-            // Question:
-            // - need to pass AST to compileLoadArgs
-            //   so maybe rewrite the AST first?
-            // - what happens to SEXP that are no longer referenced? are they GCed?
-            // (though no leftover SEXP here)
-
-
-            //TODO:
-            // - z needs to be eager
-            // - and value pushed back on the stack after the assignmt (if not voidCtxt)
-            // (use BC put to save value somewhere)
-
-            // can extend compileLoadArgs
 
             // Get the LISTSXP of args for f
             SEXP f_args = CDR(CAR(args_));
@@ -843,7 +820,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // Append this new cell to the LISTSXP
             CDR(last_f_arg_cell) = new_z_cell;
 
-            // Make the ast for the call (LANGSXP) : f<-, x, y, value=z
+            // Make the ast for the call : f<-, x, y, value=z
             SEXP farrow_ast = Rf_lcons(farrow_sym, f_args);
 
             // Make x the assignment destination
@@ -853,28 +830,27 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             CAR(CDR(args_)) = farrow_ast;
 
             // Simply rewriting the AST is not enough: we also want to make
-            // sure that x is evaluated. This is why we will manually compile
-            // this call instead of simply using compileSpecialCall on the
-            // rewritten assignment:
+            // sure that x and z are evaluated, and return the value of z.
+            // This is why we will manually compile this call instead of simply
+            // using compileSpecialCall on the rewritten assignment:
             //       compileSpecialCall(ctx, ast, fun, args_, voidContext);
 
 
-            // Prepare call to f<-(x, y1, <...>, yn, z)
+            // Prepare the call to f<-(x, y1, <...>, yn, z)
             cs << BC::ldfun(farrow_sym);
 
             if (Compiler::profile)
                 cs << BC::recordCall();
 
             // prepare x, yk, z as promises
-
-
-            //LoadArgsResult load_arg_res = compileLoadArgs(ctx, farrow_ast, farrow_sym, f_args, false, 0, 1);
-            // x and z are eager
-            // we will take care of them in a more manual way
-
             LoadArgsResult load_arg_res;
 
-            // load x as an eager promise
+            // load x as an evaluated promise
+            // the value of the promise will be the value of x,
+            // but the expr will be replace by `*tmp*` to allow
+            // reflective access
+            // SEXP tmp_sym = Rf_install("*tmp*");
+            // compileLoadOneArg(ctx, f_args, ArgType::EAGER_PROMISE, load_arg_res, tmp_sym);
             compileLoadOneArg(ctx, f_args, ArgType::EAGER_PROMISE, load_arg_res);
 
             //load y1, <...>, yn
@@ -884,20 +860,35 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE, load_arg_res);
             }
 
-            // load z as an eager promise AND keep its value
-            compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE_AND_RAW_VALUE, load_arg_res);
-            // after this call, the value stack looks like this:
-            //
-            // N+2,    N+1   N              2           1             0
-            //   ?,  `f<-`,  x, y1, <...>, yn, z(promise), z(raw_value)
-            //
-            // where N is the number of arguments passed to `f<-` (load_arg_res.numArgs)
+            if (!voidContext) {
+                // load z as an evaluated promise AND keep its value
+                compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE_AND_RAW_VALUE, load_arg_res);
 
-            cs << BC::put(load_arg_res.numArgs + 1);
+                // after this call, the value stack looks like this:
+                //
+                // N+2,    N+1   N              2           1             0
+                //   ?,  `f<-`,  x, y1, <...>, yn, z(promise), z(raw_value)
+                //
+                // where N is the number of arguments passed to `f<-` (load_arg_res.numArgs)
 
-            // after this insn, the value stack is
-            // N+2,           N+1      N                  1           0
-            //   ?,  z(raw_value), `f<-`,  x, y1, <...>, yn, z(promise)
+                cs << BC::put(load_arg_res.numArgs + 1);
+
+                // after this insn, the value stack is
+                // N+2,           N+1      N                  1           0
+                //   ?,  z(raw_value), `f<-`,  x, y1, <...>, yn, z(promise)
+
+            } else {
+                // load z only as an evaluated promise
+                compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE, load_arg_res);
+            }
+
+            // rewrite the AST from
+            //     <-(x, f<-(x,y,value=z))
+            // to
+            //     <-(x, f<-(*tmp*,y,value=z))
+            // the arguments have already been prepared, so the value of
+            // x will effectively be passed to the call.
+            // CAR(f_args) = tmp_sym;
 
             // call f<- with the arguments
             cs << BC::call(load_arg_res.numArgs, load_arg_res.names, farrow_ast, load_arg_res.assumptions);
@@ -914,11 +905,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     cs << BC::stvar(dest);
             }
 
-            // TOS is the value of the RHS
-            if(voidContext)
-                cs << BC::pop();
-            else if (Compiler::profile)
+            if (!voidContext && Compiler::profile) {
+                // TOS is the value of the RHS
                 cs << BC::recordType();
+            }
 
 
             return true;
@@ -1589,8 +1579,14 @@ SIMPLE_INSTRUCTIONS(V, _)
 }
 
 
-static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res)
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res, SEXP replacement_arg_ast)
 {
+    // Prepare argument arg for a function call.
+    // The bytecode generated will return the result either as a promise, an evaluated promise, a raw value,
+    // or both an evaluated promise and a raw value, depending on the value of arg_type. The argument
+    // replacement_arg_ast can optionnaly be used to populate the evaluated promise with a different AST than
+    // the one provided in the arg.
+
     CodeStream& cs = ctx.cs();
     int i = res.numArgs;
     res.numArgs += 1;
@@ -1635,7 +1631,12 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
 
     // Arguments are wrapped as Promises:
     //     create a new Code object for the promise
-    Code* prom = compilePromise(ctx, CAR(arg));
+    Code* prom;
+    if (replacement_arg_ast) {
+        prom = compilePromise(ctx, replacement_arg_ast);
+    } else {
+        prom = compilePromise(ctx, CAR(arg));
+    }
     size_t idx = cs.addPromise(prom);
 
     if (arg_type == ArgType::EAGER_PROMISE ) {
