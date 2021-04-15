@@ -1504,12 +1504,13 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                         res.assumptions.setSimpleInt(i);
                 }
                 cs << BC::push(known);
-                continue;
+            } else {
+                compileExpr(ctx, *arg, false);
+                res.assumptions.setEager(i);
             }
 
-            compileExpr(ctx, *arg, false);
-            res.assumptions.setEager(i);
-            continue;
+            if (!inlineAllProms)
+                continue;
         }
 
         // Arguments are wrapped as Promises:
@@ -1535,6 +1536,9 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
         } else {
             cs << BC::mkPromise(idx);
         }
+
+        if (inlineAllProms)
+            cs << BC::pop();
     }
 
     res.numArgs = i;
