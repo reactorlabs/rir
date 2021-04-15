@@ -28,6 +28,7 @@ extern "C" Rboolean R_Visible;
 
 extern "C" int CREATED_PROMISES;
 extern "C" int CREATED_PROMISES_AST;
+extern "C" double MKPROMISE_TIME;
 
 extern int INLINED_PROMISES;
 
@@ -578,6 +579,13 @@ REXPORT SEXP rirResetInlinedPromises() {
 }
 
 REXPORT SEXP rirInlinedPromises() { return Rf_ScalarInteger(INLINED_PROMISES); }
+
+REXPORT SEXP rirResetMkPromiseTime() {
+    MKPROMISE_TIME = 0;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirMkPromiseTime() { return Rf_ScalarReal(MKPROMISE_TIME); }
 
 bool startup() {
     initializeRuntime();
