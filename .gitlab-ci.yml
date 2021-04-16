@@ -263,7 +263,7 @@ test_benchmarks:
   needs:
     - benchmark_container
   script:
-    - INLINE_ALL_PROMS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
+    - MEASUREMENT_FILE=$CI_PROJECT_DIR/dummy.csv INLINE_ALL_PROMS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
 
 deploy:
   stage: Deploy
