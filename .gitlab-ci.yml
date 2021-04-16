@@ -315,6 +315,7 @@ benchmark_llvm:
   artifacts:
     paths:
     - benchmarks.data
+    - mkPromTimes.csv
     expire_in: 24 month
   retry: 2
 
