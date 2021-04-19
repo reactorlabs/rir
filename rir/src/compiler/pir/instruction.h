@@ -2078,6 +2078,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
          Value* fs, unsigned srcIdx);
 
     Value* cls() const { return arg(1).val(); }
+    void cls(Value * v) { arg(1).val() = v; }
 
     Value* tryGetClsArg() const override final {
         return cls()->followCastsAndForce();

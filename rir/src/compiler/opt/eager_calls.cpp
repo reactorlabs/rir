@@ -47,6 +47,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             ip = bb->insert(ip, given);
             ++ip;
         }
+        given->replaceUsesWith(expected);
 
         auto test = new Identical(given, expected, PirType::any());
         ip = bb->insert(ip, test);
@@ -144,13 +145,18 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     } else if (auto ldfun = LdFun::Cast(call->cls())) {
                         if (ldfun->hint) {
                             auto kind = TYPEOF(ldfun->hint);
-                            if (kind == BUILTINSXP) {
+                            // We also speculate on calls to CLOSXPs, these will
+                            // be picked up by MatchArgs opt pass and turned
+                            // into a static call
+                            if (kind == BUILTINSXP || kind == CLOSXP) {
                                 // We can only speculate if we have a checkpoint
                                 // at the ldfun position, since we want to deopt
                                 // before forcing arguments.
                                 if (auto cp = checkpoint.at(ldfun)) {
-                                    ip = replaceCallWithCallBuiltin(
-                                        bb, ip, call, ldfun->hint, true);
+                                    if (kind == BUILTINSXP) {
+                                        ip = replaceCallWithCallBuiltin(
+                                            bb, ip, call, ldfun->hint, true);
+                                    }
                                     needsGuard[ldfun] = {ldfun->hint, cp};
                                 }
                             }
@@ -164,7 +170,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     auto builtin = Rf_findVar(name, env->rho);
                                     if (TYPEOF(builtin) == PROMSXP)
                                         builtin = PRVALUE(builtin);
-                                    if (TYPEOF(builtin) == BUILTINSXP) {
+
+                                    auto kind = TYPEOF(ldfun->hint);
+                                    if (kind == BUILTINSXP || kind == CLOSXP) {
                                         auto rho = env->rho;
                                         bool inBase = false;
                                         if (rho == R_BaseEnv ||
@@ -178,8 +186,11 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                         auto cp = checkpoint.at(ldfun);
 
                                         if (inBase || cp) {
-                                            ip = replaceCallWithCallBuiltin(
-                                                bb, ip, call, builtin, !inBase);
+                                            if (kind == BUILTINSXP) {
+                                                ip = replaceCallWithCallBuiltin(
+                                                    bb, ip, call, builtin,
+                                                    !inBase);
+                                            }
                                             if (!inBase)
                                                 needsGuard[ldfun] = {builtin,
                                                                      cp};
