@@ -368,10 +368,12 @@ SEXP createPromiseEagerImpl(SEXP exp, SEXP env, SEXP value) {
 
 SEXP createClosureImpl(SEXP body, SEXP formals, SEXP env, SEXP srcref) {
     auto res = Rf_allocSExp(CLOSXP);
+    PROTECT(res);
     SET_FORMALS(res, formals);
     SET_BODY(res, body);
     SET_CLOENV(res, env);
     Rf_setAttrib(res, Rf_install("srcref"), srcref);
+    UNPROTECT(1);
     return res;
 }
 

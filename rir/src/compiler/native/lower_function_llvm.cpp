@@ -2872,7 +2872,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     }
-                    case blt("is.vector"):
+                    case blt("is.vector"): {
                         auto cnst = LdConst::Cast(b->arg(1).val());
                         if (!cnst)
                             break;
@@ -2935,6 +2935,9 @@ void LowerFunctionLLVM::compile() {
                             setVal(i, constant(R_TrueValue, orep));
                         }
                         fastcase = true;
+                        break;
+                    }
+                    default:
                         break;
                     }
                     if (fastcase) {
@@ -3289,6 +3292,7 @@ void LowerFunctionLLVM::compile() {
                              {parent, c((int)mkenv->nLocals()),
                               builder.CreateBitCast(namesStore, t::IntPtr),
                               c(mkenv->context)});
+                    protectTemp(env);
                     size_t pos = 0;
                     mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
                         auto vn = loadSxp(v);
@@ -3302,19 +3306,27 @@ void LowerFunctionLLVM::compile() {
                     break;
                 }
 
+                // Need to load these first, to avoid protect issues
+                std::vector<llvm::Value*> args;
+                mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
+                    args.push_back(loadSxp(v));
+                });
+
                 auto arglist = constant(R_NilValue, t::SEXP);
+                size_t pos = mkenv->nLocals() - 1;
                 mkenv->eachLocalVarRev([&](SEXP name, Value* v, bool miss) {
                     if (miss) {
                         arglist = call(
                             NativeBuiltins::get(
                                 NativeBuiltins::Id::createMissingBindingCell),
-                            {loadSxp(v), constant(name, t::SEXP), arglist});
+                            {args[pos], constant(name, t::SEXP), arglist});
                     } else {
-                        arglist = call(
-                            NativeBuiltins::get(
-                                NativeBuiltins::Id::createBindingCell),
-                            {loadSxp(v), constant(name, t::SEXP), arglist});
+                        arglist =
+                            call(NativeBuiltins::get(
+                                     NativeBuiltins::Id::createBindingCell),
+                                 {args[pos], constant(name, t::SEXP), arglist});
                     }
+                    pos--;
                 });
 
                 setVal(i, call(NativeBuiltins::get(

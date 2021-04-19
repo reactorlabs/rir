@@ -194,13 +194,14 @@ SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc) {
         SEXP val;
         if (PRSEEN(e)) {
             if (PRSEEN(e) == 1)
-                errorcall(NULL,
+                errorcall(R_NilValue,
                           "promise already under evaluation: recursive default "
                           "argument reference or earlier problems?");
             else {
                 /* set PRSEEN to 1 to avoid infinite recursion */
                 SET_PRSEEN(e, 1);
-                warningcall(NULL, "restarting interrupted promise evaluation");
+                warningcall(R_NilValue,
+                            "restarting interrupted promise evaluation");
             }
         }
         SET_PRSEEN(e, 1);
@@ -279,6 +280,7 @@ SEXP materialize(SEXP wrapper) {
     } else if (auto lazyEnv = LazyEnvironment::check(wrapper)) {
         assert(!lazyEnv->materialized());
 
+        PROTECT(wrapper);
         SEXP arglist = R_NilValue;
         auto names = lazyEnv->names;
         for (size_t i = 0; i < lazyEnv->nargs; ++i) {
@@ -305,6 +307,7 @@ SEXP materialize(SEXP wrapper) {
                 cur->sysparent = res;
             cur = cur->nextcontext;
         }
+        UNPROTECT(1);
     }
     assert(res);
     return res;
