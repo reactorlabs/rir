@@ -615,6 +615,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         }
 
         auto callee = at(nargs);
+
+        if (auto phi = Phi::Cast(callee)) {
+            if (phi->nargs() == 1)
+                callee = phi->arg(0).val();
+        }
         auto ti = checkCallTarget(callee, srcCode, callTargetFeedback);
 
         auto ldfun = LdFun::Cast(callee);
@@ -812,6 +817,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         given.remove(Assumption::NoExplicitlyMissingArgs);
                         i++;
                     } else {
+                        if (auto j = Instruction::Cast(arg))
+                            j->updateTypeAndEffects();
                         arg->callArgTypeToContext(given, i++);
                     }
                 }
