@@ -349,8 +349,8 @@ class VisitorNoDeoptBranch
 class BreadthFirstVisitor
     : public VisitorImplementation<Order::Breadth, VisitorHelpers::IDMarker> {};
 
-class DepthFirstVisitor
-    : public VisitorImplementation<Order::Depth, VisitorHelpers::IDMarker> {};
+template <class Marker = VisitorHelpers::IDMarker>
+class DepthFirstVisitor : public VisitorImplementation<Order::Depth, Marker> {};
 
 class LoweringVisitor
     : public VisitorImplementation<Order::Lowering, VisitorHelpers::IDMarker> {
