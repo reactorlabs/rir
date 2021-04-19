@@ -20,6 +20,7 @@
 
 #include <stack>
 
+
 namespace rir {
 
 namespace {
@@ -845,6 +846,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // prepare x, yk, z as promises
             LoadArgsResult load_arg_res;
 
+
             // load x as an evaluated promise
             // the value of the promise will be the value of x,
             // but the expr will be replace by `*tmp*` to allow
@@ -860,6 +862,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE, load_arg_res);
             }
 
+#define DONT_FIX_COMPLEX_ASSIGNMENT
+#ifndef DONT_FIX_COMPLEX_ASSIGNMENT
+            //TODO: fix me! this passes a promise when the right way would be evaluated promise
+            compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE, load_arg_res);
+            //TODO: also remove f<- dup later
+#else  // passing z as EAGER_PROMISE or RAW_VALUE fails, only PROMISE works for matrix_regression.r
             if (!voidContext) {
                 // load z as an evaluated promise AND keep its value
                 compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE_AND_RAW_VALUE, load_arg_res);
@@ -881,7 +889,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // load z only as an evaluated promise
                 compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE, load_arg_res);
             }
-
+#endif
             // rewrite the AST from
             //     <-(x, f<-(x,y,value=z))
             // to
@@ -893,6 +901,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // call f<- with the arguments
             cs << BC::call(load_arg_res.numArgs, load_arg_res.names, farrow_ast, load_arg_res.assumptions);
 
+
+#ifndef DONT_FIX_COMPLEX_ASSIGNMENT
+            //TODO: to remove
+            //TODO: bc needs to dup RHS and not result from f<-()
+            if(!voidContext) {
+                cs << BC::dup() << BC::invisible();
+            }
+#endif
 
             // Bind the result to x
             if (superAssign) {
@@ -909,7 +925,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // TOS is the value of the RHS
                 cs << BC::recordType();
             }
-
 
             return true;
         }
@@ -1617,11 +1632,13 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
     }
 
     if (arg_type == ArgType::EAGER_PROMISE) {
+        res.assumptions.setEager(i);
         compileExpr(ctx, CAR(arg), false);
         // leave the value on the stack for mkEagerPromise
     }
 
     if (arg_type == ArgType::EAGER_PROMISE_AND_RAW_VALUE) {
+        res.assumptions.setEager(i);
         compileExpr(ctx, CAR(arg), false);
         cs << BC::dup();
         // leave the value on the stack for mkEagerPromise
@@ -1670,8 +1687,6 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
         }
     }
 }
-
-
 
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                                       SEXP args, bool voidContext, int skipArgs,
