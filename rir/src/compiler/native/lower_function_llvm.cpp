@@ -246,7 +246,6 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
 }
 
 void LowerFunctionLLVM::setLocal(size_t i, llvm::Value* v) {
-    assert(i < numLocals);
     assert(v->getType() == t::SEXP);
     auto pos = builder.CreateGEP(basepointer, {c(i), c(1)});
     builder.CreateStore(v, pos, true);
@@ -291,9 +290,15 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
     auto fPtr = convertToPointer((void*)builtinFun, t::builtinFunctionPtr);
     auto f = FunctionCallee(t::builtinFunction, fPtr);
 
+    std::vector<llvm::Value*> loadedArgs;
+    for (auto v : args) {
+        loadedArgs.push_back(loadSxp(v));
+    }
+
     auto arglist = constant(R_NilValue, t::SEXP);
+    long pos = args.size() - 1;
     for (auto v = args.rbegin(); v != args.rend(); v++) {
-        auto a = loadSxp(*v);
+        auto a = loadedArgs[pos--];
 #ifdef ENABLE_SLOWASSERT
         insn_assert(builder.CreateICmpNE(sexptype(a), c(PROMSXP)),
                     "passing promise to builtin");
@@ -523,9 +528,9 @@ void LowerFunctionLLVM::compilePopContext(Instruction* i) {
     auto storeType = data.result->getType()->getPointerElementType();
     if (storeType != t::SEXP) {
         if (i->type.isA(PirType::test())) {
-            boxedRet = boxTst(ret, false);
+            boxedRet = boxTst(ret);
         } else if (i->type.isA(RType::logical)) {
-            boxedRet = boxLgl(ret, false);
+            boxedRet = boxLgl(ret);
         } else if (i->type.isA(RType::integer)) {
             boxedRet = boxInt(ret, false);
         } else if (i->type.isA(RType::real)) {
@@ -1330,15 +1335,14 @@ llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
     if (t.isA(PirType(RType::integer).notObject()))
         res = boxInt(v, protect);
     if (t.isA(PirType(RType::logical).notObject()))
-        res = boxLgl(v, protect);
+        res = boxLgl(v);
     if (t.isA(PirType(RType::real).notObject()))
         res = boxReal(v, protect);
     assert(res);
-    if (protect)
-        protectTemp(res);
     return res;
 }
 llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
+    llvm::Value* res = nullptr;
     if (v->getType() == t::Int) {
         // std::ostringstream dbg;
         // (*currentInstr)->printRecursive(dbg, 2);
@@ -1346,18 +1350,30 @@ llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
         // l->append(dbg.str());
         // return call(NativeBuiltins::get(NativeBuiltins::Id::newIntDebug),
         //             {v, c((unsigned long)l->data())});
-        return call(NativeBuiltins::get(NativeBuiltins::Id::newInt), {v});
+        res = call(NativeBuiltins::get(NativeBuiltins::Id::newInt), {v});
+    } else {
+        assert(v->getType() == t::Double);
+        res =
+            call(NativeBuiltins::get(NativeBuiltins::Id::newIntFromReal), {v});
     }
-    assert(v->getType() == t::Double);
-    return call(NativeBuiltins::get(NativeBuiltins::Id::newIntFromReal), {v});
+    if (protect)
+        protectTemp(res);
+    return res;
 }
-llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool potect) {
-    if (v->getType() == t::Double)
-        return call(NativeBuiltins::get(NativeBuiltins::Id::newReal), {v});
-    assert(v->getType() == t::Int);
-    return call(NativeBuiltins::get(NativeBuiltins::Id::newRealFromInt), {v});
+llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool protect) {
+    llvm::Value* res = nullptr;
+    if (v->getType() == t::Double) {
+        res = call(NativeBuiltins::get(NativeBuiltins::Id::newReal), {v});
+    } else {
+        assert(v->getType() == t::Int);
+        res =
+            call(NativeBuiltins::get(NativeBuiltins::Id::newRealFromInt), {v});
+    }
+    if (protect)
+        protectTemp(res);
+    return res;
 }
-llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v, bool protect) {
+llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v) {
     if (v->getType() == t::Int) {
         insn_assert(
             builder.CreateOr(
@@ -1378,7 +1394,7 @@ llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v, bool protect) {
                              constant(R_LogicalNAValue, t::SEXP),
                              constant(R_TrueValue, t::SEXP)));
 }
-llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v, bool protect) {
+llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v) {
     assert(v->getType() == t::Int);
     return builder.CreateSelect(builder.CreateICmpNE(v, c(0)),
                                 constant(R_TrueValue, t::SEXP),
@@ -1386,8 +1402,9 @@ llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v, bool protect) {
 }
 
 void LowerFunctionLLVM::protectTemp(llvm::Value* val) {
-    assert(numTemps < MAX_TEMPS);
-    setLocal(numLocals - 1 - numTemps++, val);
+    if (numTemps == maxTemps)
+        maxTemps++;
+    setLocal(numLocals + numTemps++, val);
 }
 
 llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
@@ -1494,7 +1511,7 @@ void LowerFunctionLLVM::compileRelop(
 
     builder.SetInsertPoint(done);
     if (rep == Representation::Sexp) {
-        setVal(i, boxLgl(res(), false));
+        setVal(i, boxLgl(res()));
     } else {
         setVal(i, res());
     }
@@ -1932,6 +1949,8 @@ void LowerFunctionLLVM::compile() {
         }
     }
 
+    std::vector<BasicBlock*> exitBlocks;
+
     std::unordered_map<BB*, BasicBlock*> blockMapping_;
     auto getBlock = [&](BB* bb) {
         auto b = blockMapping_.find(bb);
@@ -2070,10 +2089,6 @@ void LowerFunctionLLVM::compile() {
                 createVariable(i, false);
         });
     }
-
-    numLocals += MAX_TEMPS;
-    if (numLocals > 1)
-        incStack(numLocals - 1, true);
 
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
@@ -3501,7 +3516,7 @@ void LowerFunctionLLVM::compile() {
                 builder.SetInsertPoint(done);
 
                 if (resultRep == Representation::Sexp) {
-                    setVal(i, boxLgl(res(), true));
+                    setVal(i, boxLgl(res()));
                 } else {
                     setVal(i, res());
                 }
@@ -3821,8 +3836,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Return: {
                 auto res = loadSxp(Return::Cast(i)->arg<0>().val());
-                if (numLocals > 0)
-                    decStack(numLocals);
+                exitBlocks.push_back(builder.GetInsertBlock());
                 builder.CreateRet(res);
                 break;
             }
@@ -5545,7 +5559,15 @@ void LowerFunctionLLVM::compile() {
     // Delayed insertion of the branch, so we can still easily add instructions
     // to the entry block while compiling
     builder.SetInsertPoint(entryBlock);
+    incStack(numLocals - 1 + numTemps, true);
     builder.CreateBr(getBlock(code->entry));
+
+    for (auto bb : exitBlocks) {
+        auto pos = bb->end();
+        pos--;
+        builder.SetInsertPoint(bb, pos);
+        decStack(numLocals + numTemps);
+    }
 
     std::unordered_set<rir::Code*> codes;
     std::unordered_map<size_t, const pir::TypeFeedback&> variableMapping;

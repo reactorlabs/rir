@@ -38,7 +38,7 @@ class LowerFunctionLLVM {
     LivenessIntervals liveness;
     size_t numLocals;
     size_t numTemps;
-    constexpr static size_t MAX_TEMPS = 4;
+    size_t maxTemps;
     llvm::Value* basepointer = nullptr;
     llvm::Value* constantpool = nullptr;
     llvm::BasicBlock* entryBlock = nullptr;
@@ -95,7 +95,7 @@ class LowerFunctionLLVM {
           needsLdVarForUpdate(needsLdVarForUpdate),
           builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
           liveness(code, code->nextBBId), numLocals(0), numTemps(0),
-          branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
+          maxTemps(0), branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)),
@@ -390,8 +390,8 @@ class LowerFunctionLLVM {
     llvm::Value* box(llvm::Value* v, PirType t, bool protect = true);
     llvm::Value* boxInt(llvm::Value* v, bool protect = true);
     llvm::Value* boxReal(llvm::Value* v, bool protect = true);
-    llvm::Value* boxLgl(llvm::Value* v, bool protect = true);
-    llvm::Value* boxTst(llvm::Value* v, bool protect = true);
+    llvm::Value* boxLgl(llvm::Value* v);
+    llvm::Value* boxTst(llvm::Value* v);
     void insn_assert(llvm::Value* v, const char* msg, llvm::Value* p = nullptr);
     llvm::Value* depromise(llvm::Value* arg, const PirType& t);
     llvm::Value* depromise(Value* v);
