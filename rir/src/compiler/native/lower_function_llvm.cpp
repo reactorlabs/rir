@@ -2147,8 +2147,12 @@ void LowerFunctionLLVM::compile() {
             case Tag::DotsList: {
                 auto mk = DotsList::Cast(i);
                 auto arglist = constant(R_NilValue, t::SEXP);
+                std::stack<llvm::Value*> argsLoaded;
+                mk->eachElement(
+                    [&](SEXP name, Value* v) { argsLoaded.push(loadSxp(v)); });
                 mk->eachElementRev([&](SEXP name, Value* v) {
-                    auto val = loadSxp(v);
+                    auto val = argsLoaded.top();
+                    argsLoaded.pop();
                     incrementNamed(val);
                     arglist =
                         call(NativeBuiltins::get(NativeBuiltins::Id::consNr),
