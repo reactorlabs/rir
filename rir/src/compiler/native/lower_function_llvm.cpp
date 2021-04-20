@@ -234,7 +234,7 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
     auto stackptr = nodestackPtr();
     // set type tag to 0
     builder.CreateMemSet(builder.CreateGEP(stackptr, c(-args.size())), c(0, 8),
-                         args.size() * sizeof(R_bcstack_t), MaybeAlign(1));
+                         args.size() * sizeof(R_bcstack_t), MaybeAlign(8));
     auto pos = -args.size();
     for (auto arg = args.begin(); arg != args.end(); arg++) {
         // store the value
@@ -257,7 +257,7 @@ void LowerFunctionLLVM::incStack(int i, bool zero) {
     auto cur = nodestackPtr();
     auto offset = sizeof(R_bcstack_t) * i;
     if (zero)
-        builder.CreateMemSet(cur, c(0, 8), offset, MaybeAlign(1));
+        builder.CreateMemSet(cur, c(0, 8), offset, MaybeAlign(8));
     auto up = builder.CreateGEP(cur, c(i));
     builder.CreateStore(up, nodestackPtrAddr);
 }
@@ -1402,9 +1402,10 @@ llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v) {
 }
 
 void LowerFunctionLLVM::protectTemp(llvm::Value* val) {
-    if (numTemps == maxTemps)
-        maxTemps++;
-    setLocal(numLocals + numTemps++, val);
+    setLocal(numLocals + numTemps, val);
+    numTemps++;
+    if (numTemps > maxTemps)
+        maxTemps = numTemps;
 }
 
 llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
@@ -5533,7 +5534,6 @@ void LowerFunctionLLVM::compile() {
                 }
             }
 
-            numTemps = 0;
         }
 
         // Copy of phi input values
@@ -5549,6 +5549,16 @@ void LowerFunctionLLVM::compile() {
             }
         }
 
+#ifdef ENABLE_SLOWASSERT
+        // Clear the temp-protected space on the stack after every
+        // instruction to catch GC errors early
+        if (numTemps > 0 && !builder.GetInsertBlock()->back().isTerminator()) {
+            auto pos = builder.CreateGEP(basepointer, c(numLocals, 32));
+            builder.CreateMemSet(pos, c(0, 8), c(numTemps, 32), MaybeAlign(8));
+        }
+#endif
+        numTemps = 0;
+
         if (bb->isJmp())
             builder.CreateBr(getBlock(bb->next()));
 
@@ -5559,14 +5569,16 @@ void LowerFunctionLLVM::compile() {
     // Delayed insertion of the branch, so we can still easily add instructions
     // to the entry block while compiling
     builder.SetInsertPoint(entryBlock);
-    incStack(numLocals - 1 + numTemps, true);
+    int sz = numLocals + numTemps;
+    if (sz > 1)
+        incStack(sz - 1, true);
     builder.CreateBr(getBlock(code->entry));
 
     for (auto bb : exitBlocks) {
         auto pos = bb->end();
         pos--;
         builder.SetInsertPoint(bb, pos);
-        decStack(numLocals + numTemps);
+        decStack(sz);
     }
 
     std::unordered_set<rir::Code*> codes;
