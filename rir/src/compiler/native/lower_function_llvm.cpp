@@ -157,8 +157,8 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
     static std::unordered_set<SEXP> eternal = {
-        R_TrueValue,  R_NilValue,  R_FalseValue,     R_UnboundValue,
-        R_MissingArg, R_GlobalEnv, R_LogicalNAValue, R_EmptyEnv};
+        /*R_TrueValue,  R_NilValue,  R_FalseValue,     R_UnboundValue,
+        R_MissingArg, R_GlobalEnv, R_LogicalNAValue, R_EmptyEnv*/};
     if (needed == t::Int) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP)
