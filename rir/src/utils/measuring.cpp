@@ -60,6 +60,7 @@ struct MeasuringImpl {
         {
             std::map<double, std::tuple<std::string, size_t, size_t, double>>
                 orderedTimers;
+            double totalTimers = 0;
             for (auto& t : timers) {
                 auto& key = t.second.timer;
                 while (orderedTimers.count(key))
@@ -72,9 +73,12 @@ struct MeasuringImpl {
                 orderedTimers.emplace(
                     key, std::make_tuple(t.first, t.second.alreadyRunning,
                                          t.second.notStarted, notStopped));
+                totalTimers += key;
             }
             if (!orderedTimers.empty()) {
-                out << "  Timers:\n";
+                out << "  Timers (" << format(totalTimers) << " in total, or "
+                    << std::setprecision(2)
+                    << (totalTimers / duration.count() * 100) << "%):\n";
                 for (auto& t : orderedTimers) {
                     auto& name = std::get<0>(t.second);
                     out << "    " << std::setw(width) << name << "\t"
@@ -122,11 +126,11 @@ struct MeasuringImpl {
     static std::string format(double secs) {
         std::stringstream ss;
         if (secs < 60)
-            ss << secs << " s";
+            ss << secs << "s";
         else if (secs < 60 * 60)
-            ss << secs / 60 << " m";
+            ss << secs / 60 << "m";
         else
-            ss << secs / 60 / 60 << " h";
+            ss << secs / 60 / 60 << "h";
         return ss.str();
     }
 
