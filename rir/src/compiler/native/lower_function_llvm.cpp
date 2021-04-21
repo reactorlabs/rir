@@ -291,9 +291,9 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
     auto f = FunctionCallee(t::builtinFunction, fPtr);
 
     std::vector<llvm::Value*> loadedArgs;
-    for (auto v : args) {
+    auto n = numTemps;
+    for (auto v : args)
         loadedArgs.push_back(loadSxp(v));
-    }
 
     auto arglist = constant(R_NilValue, t::SEXP);
     long pos = args.size() - 1;
@@ -306,6 +306,9 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
         arglist =
             call(NativeBuiltins::get(NativeBuiltins::Id::consNr), {a, arglist});
     }
+    // Once we protect the list, the individual elements do not need protection
+    // anymory, thus we can reset the numTemps.
+    numTemps = n;
     if (args.size() > 0)
         protectTemp(arglist);
 
@@ -5586,7 +5589,7 @@ void LowerFunctionLLVM::compile() {
     // Delayed insertion of the branch, so we can still easily add instructions
     // to the entry block while compiling
     builder.SetInsertPoint(entryBlock);
-    int sz = numLocals + numTemps;
+    int sz = numLocals + maxTemps;
     if (sz > 1)
         incStack(sz - 1, true);
     builder.CreateBr(getBlock(code->entry));

@@ -27,6 +27,7 @@ typedef std::unordered_map<Code*, std::pair<unsigned, MkArg*>> PromMap;
 struct Representation;
 class LowerFunctionLLVM {
 
+    std::string name;
     Code* code;
     BB::Instrs::iterator currentInstr;
     BB* currentBB = nullptr;
@@ -91,7 +92,7 @@ class LowerFunctionLLVM {
         PirJitLLVM::DebugInfo* DI, llvm::DIBuilder* DIB
 #endif
         )
-        : code(code), promMap(promMap), refcount(refcount),
+        : name(name), code(code), promMap(promMap), refcount(refcount),
           needsLdVarForUpdate(needsLdVarForUpdate),
           builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
           liveness(code, code->nextBBId), numLocals(0), numTemps(0),
