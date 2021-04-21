@@ -202,14 +202,15 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp);
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
 
-// EAGER_PROMISE_AND_RAW_VALUE is for the special case when we want to get both
-// an eager promise and the value wrapped inside that promise on the stack.
+// EAGER_PROMISE_FROM_TOS is for the special case when the expression has already
+// been evaluated: wrap the value at TOS into a promise.
 // This is used in particular for the complex assignment: the expression
 //    f(x) <- z
-// returns z, and z must be passed as en eager promise to `f<-`.
-enum class ArgType { PROMISE, EAGER_PROMISE, RAW_VALUE, EAGER_PROMISE_AND_RAW_VALUE };
+// returns z, z must be evaluated first, and z must be passed as en eager promise to `f<-`
+// as its last argument.
+enum class ArgType { PROMISE, EAGER_PROMISE, RAW_VALUE, EAGER_PROMISE_FROM_TOS };
 
-static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res, SEXP fake_arg_ast = nullptr);
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res);
 
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                                       SEXP args, bool voidContext,
@@ -814,8 +815,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // We need to append "value = z" to the list of args for f
             // Let's create the corresponding cell
 
-            SEXP assignment_value = CAR(CDR(args_));
-            SEXP new_z_cell = Rf_cons(assignment_value, R_NilValue);
+            SEXP new_z_cell = Rf_cons(rhs, R_NilValue);
             SET_TAG(new_z_cell, Rf_install("value"));
 
             // Append this new cell to the LISTSXP
@@ -837,6 +837,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             //       compileSpecialCall(ctx, ast, fun, args_, voidContext);
 
 
+            // The RHS must be evaluated before the LHS
+            // Additionnaly, the value of the RHS must be returned after the
+            // assignment (in a non-void context). It will be kept on the stack
+            // before the call to `f<-`.
+            // A copy will be wrapped in an evaluated promise and passed to f<-.
+            compileExpr(ctx, rhs);
+
             // Prepare the call to f<-(x, y1, <...>, yn, z)
             cs << BC::ldfun(farrow_sym);
 
@@ -845,7 +852,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // prepare x, yk, z as promises
             LoadArgsResult load_arg_res;
-
 
             // load x as an evaluated promise
             // the value of the promise will be the value of x,
@@ -862,34 +868,29 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE, load_arg_res);
             }
 
-#define DONT_FIX_COMPLEX_ASSIGNMENT
-#ifndef DONT_FIX_COMPLEX_ASSIGNMENT
-            //TODO: fix me! this passes a promise when the right way would be evaluated promise
-            compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE, load_arg_res);
-            //TODO: also remove f<- dup later
-#else  // passing z as EAGER_PROMISE or RAW_VALUE fails, only PROMISE works for matrix_regression.r
-            if (!voidContext) {
-                // load z as an evaluated promise AND keep its value
-                compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE_AND_RAW_VALUE, load_arg_res);
+            // now, the value stack looks like this:
 
-                // after this call, the value stack looks like this:
-                //
-                // N+2,    N+1   N              2           1             0
-                //   ?,  `f<-`,  x, y1, <...>, yn, z(promise), z(raw_value)
-                //
-                // where N is the number of arguments passed to `f<-` (load_arg_res.numArgs)
+            // N+2      N+1       N   N-1                 0
+            //  ??, z (raw),  `f<-`,    x,   y1,  <...>, yn
 
-                cs << BC::put(load_arg_res.numArgs + 1);
-
-                // after this insn, the value stack is
-                // N+2,           N+1      N                  1           0
-                //   ?,  z(raw_value), `f<-`,  x, y1, <...>, yn, z(promise)
-
-            } else {
-                // load z only as an evaluated promise
-                compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE, load_arg_res);
+            // where N is the number of arguments already passed to `f<-` (load_arg_res.numArgs)
+            if(voidContext) {
+                cs << BC::pick(load_arg_res.numArgs+1);
             }
-#endif
+            else {
+                // keep the value, it will be returned
+                cs << BC::pull(load_arg_res.numArgs+1);
+            }
+
+            // after this instruction:
+
+            // N+2     N+1     N   N-1           1        0
+            //  ??,  `f<-`,    x,   y1,  <...>, yn, z (raw)
+
+            // Wrap the value argument in an evaluated promise:
+
+            compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE_FROM_TOS, load_arg_res);
+
             // rewrite the AST from
             //     <-(x, f<-(x,y,value=z))
             // to
@@ -900,15 +901,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // call f<- with the arguments
             cs << BC::call(load_arg_res.numArgs, load_arg_res.names, farrow_ast, load_arg_res.assumptions);
-
-
-#ifndef DONT_FIX_COMPLEX_ASSIGNMENT
-            //TODO: to remove
-            //TODO: bc needs to dup RHS and not result from f<-()
-            if(!voidContext) {
-                cs << BC::dup() << BC::invisible();
-            }
-#endif
 
             // Bind the result to x
             if (superAssign) {
@@ -921,9 +913,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     cs << BC::stvar(dest);
             }
 
-            if (!voidContext && Compiler::profile) {
-                // TOS is the value of the RHS
-                cs << BC::recordType();
+            if (!voidContext) {
+                // The return value, RHS, is TOS
+                cs << BC::invisible();
+                if (Compiler::profile) {
+                    cs << BC::recordType();
+                }
             }
 
             return true;
@@ -1594,13 +1589,10 @@ SIMPLE_INSTRUCTIONS(V, _)
 }
 
 
-static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res, SEXP replacement_arg_ast)
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res)
 {
     // Prepare argument arg for a function call.
-    // The bytecode generated will return the result either as a promise, an evaluated promise, a raw value,
-    // or both an evaluated promise and a raw value, depending on the value of arg_type. The argument
-    // replacement_arg_ast can optionnaly be used to populate the evaluated promise with a different AST than
-    // the one provided in the arg.
+    // The bytecode generated will return the result either as a promise, an evaluated promise, or a raw value.
 
     CodeStream& cs = ctx.cs();
     int i = res.numArgs;
@@ -1631,39 +1623,24 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
         return;
     }
 
-    if (arg_type == ArgType::EAGER_PROMISE) {
+    else if (arg_type == ArgType::EAGER_PROMISE) {
         res.assumptions.setEager(i);
         compileExpr(ctx, CAR(arg), false);
         // leave the value on the stack for mkEagerPromise
     }
 
-    if (arg_type == ArgType::EAGER_PROMISE_AND_RAW_VALUE) {
+    else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
         res.assumptions.setEager(i);
-        compileExpr(ctx, CAR(arg), false);
-        cs << BC::dup();
-        // leave the value on the stack for mkEagerPromise
-        // AND add one that will be kept as a raw value
+        // mkEagerPromise will use the value that is already TOS
     }
-
 
     // Arguments are wrapped as Promises:
     //     create a new Code object for the promise
-    Code* prom;
-    if (replacement_arg_ast) {
-        prom = compilePromise(ctx, replacement_arg_ast);
-    } else {
-        prom = compilePromise(ctx, CAR(arg));
-    }
+    Code* prom = compilePromise(ctx, CAR(arg));
     size_t idx = cs.addPromise(prom);
 
-    if (arg_type == ArgType::EAGER_PROMISE ) {
+    if (arg_type == ArgType::EAGER_PROMISE || arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
         cs << BC::mkEagerPromise(idx);
-    }
-    else if (arg_type == ArgType::EAGER_PROMISE_AND_RAW_VALUE)
-    {
-        cs << BC::mkEagerPromise(idx);
-        // put the raw value as tos, the promise just behind
-        cs << BC::swap();
     }
     else
     {
