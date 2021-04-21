@@ -576,15 +576,6 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             ip++;
                         }
                     }
-                    if (auto a = isConst(cl->arg(1).val())) {
-                        if (TYPEOF(a) == REALSXP && Rf_length(a) == 1 &&
-                            REAL(a)[0] == (double)(int)REAL(a)[0]) {
-                            iterAnyChange = true;
-                            ip = bb->insert(ip, new LdConst((int)REAL(a)[0]));
-                            cl->arg(1).val() = *ip;
-                            ip++;
-                        }
-                    }
                     next = ip + 1;
                 }
 
