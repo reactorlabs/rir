@@ -2242,8 +2242,21 @@ void LowerFunctionLLVM::compile() {
                        ai->getType() != t::Double);
 
                 auto res = builder.CreateICmpEQ(ai, bi);
-                if (a->type.maybe(PirType::closure()) ||
-                    b->type.maybe(PirType::closure())) {
+
+                if (Representation::Of(b) == t::SEXP) {
+                    if (a->type.maybeLazy()) {
+                        res = builder.CreateAnd(
+                            res, builder.CreateICmpNE(
+                                     ai, constant(R_UnboundValue, t::SEXP)));
+                    } else if (b->type.maybeLazy()) {
+                        res = builder.CreateAnd(
+                            res, builder.CreateICmpNE(
+                                     bi, constant(R_UnboundValue, t::SEXP)));
+                    }
+                }
+
+                if (a->type.maybe(RType::closure) ||
+                    b->type.maybe(RType::closure)) {
                     res = createSelect2(
                         res, [&]() { return builder.getTrue(); },
                         [&]() {
