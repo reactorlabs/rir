@@ -100,6 +100,7 @@ LowerFunctionLLVM::getBuiltin(const rir::pir::NativeBuiltin& b) {
 llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
                                                  llvm::Type* ty,
                                                  bool constant) {
+    assert(what);
     char name[17];
     sprintf(name, "ept_%lx", (uintptr_t)what);
     return getModule().getOrInsertGlobal(name, ty, [&]() {
@@ -113,6 +114,7 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
 
 llvm::FunctionCallee
 LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty) {
+    assert(what);
     char name[17];
     sprintf(name, "efn_%lx", (uintptr_t)what);
     return getModule().getOrInsertFunction(name, ty);
@@ -5578,11 +5580,14 @@ void LowerFunctionLLVM::compile() {
                         !LdConst::Cast(i)) {
                         static std::vector<std::string> leaky;
                         const char* msg = nullptr;
+                        static const char* defaultMsg = "";
                         if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
                             std::stringstream str;
                             i->printRecursive(str, 2);
                             leaky.push_back(str.str());
                             msg = leaky.back().c_str();
+                        } else {
+                            msg = defaultMsg;
                         }
                         call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
                              {load(i), c((unsigned long)i->type.serialize()),
