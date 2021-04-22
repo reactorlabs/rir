@@ -230,7 +230,7 @@ test_sanitize2:
     - schedules
   script:
     - cd /opt/rir/build/debugopt
-    - R_GCTORTURE=90 bin/tests
+    - R_GCTORTURE=70 bin/tests
 
 # Test with inlining big functions
 test_big_inline:

@@ -116,20 +116,10 @@ class LowerFunctionLLVM {
         }
     }
 
-    static llvm::Constant* convertToPointer(const void* what,
-                                            llvm::Type* ty = t::voidPtr) {
-        return llvm::ConstantExpr::getCast(
-            llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(PirJitLLVM::getContext(),
-                                   llvm::APInt(64, (std::uint64_t)what)),
-            ty);
-    }
-    static llvm::Constant* convertToPointer(SEXP what) {
-        return llvm::ConstantExpr::getCast(
-            llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(PirJitLLVM::getContext(),
-                                   llvm::APInt(64, (std::uint64_t)what)),
-            t::SEXP);
+    llvm::Value* convertToPointer(const void* what,
+                                  llvm::Type* ty = t::voidPtr);
+    llvm::Value* convertToPointer(SEXP what) {
+        return convertToPointer(what, t::SEXP);
     }
 
     struct Variable {

@@ -19,6 +19,7 @@
 #include "utils/Pool.h"
 
 #include "llvm/IR/Intrinsics.h"
+#include <llvm/IR/Constants.h>
 
 #include <algorithm>
 #include <cassert>
@@ -85,6 +86,15 @@ llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
         ty = init->getType();
     return new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init);
+}
+
+llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
+                                                 llvm::Type* ty) {
+    auto addr = llvm::ConstantInt::get(
+        PirJitLLVM::getContext(),
+        llvm::APInt(64, reinterpret_cast<uint64_t>(what), false));
+    auto a = builder.CreateIntToPtr(addr, t::i8ptr);
+    return builder.CreateBitCast(a, ty);
 }
 
 void LowerFunctionLLVM::setVisible(int i) {
@@ -157,8 +167,9 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
     static std::unordered_set<SEXP> eternal = {
-        /*R_TrueValue,  R_NilValue,  R_FalseValue,     R_UnboundValue,
-        R_MissingArg, R_GlobalEnv, R_LogicalNAValue, R_EmptyEnv*/};
+        R_TrueValue,      R_NilValue,   R_FalseValue,
+        R_UnboundValue,   R_MissingArg, R_GlobalEnv,
+        R_LogicalNAValue, R_EmptyEnv,   R_BaseEnv};
     if (needed == t::Int) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP)
@@ -645,7 +656,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         for (const auto& be : bindingsCache)
             for (const auto& b : be.second)
                 builder.CreateStore(
-                    convertToPointer(nullptr, t::SEXP),
+                    llvm::ConstantPointerNull::get(t::SEXP),
                     builder.CreateGEP(bindingsCacheBase, c(b.second)));
         builder.CreateBr(cont);
 
@@ -880,8 +891,9 @@ void LowerFunctionLLVM::checkIsSexp(llvm::Value* v, const std::string& msg) {
     checking = true;
     static std::vector<std::string> strings;
     strings.push_back(std::string("expected sexp got null ") + msg);
-    insn_assert(builder.CreateICmpNE(convertToPointer(nullptr, t::SEXP), v),
-                strings.back().c_str());
+    insn_assert(
+        builder.CreateICmpNE(llvm::ConstantPointerNull::get(t::SEXP), v),
+        strings.back().c_str());
     auto type = sexptype(v);
     auto validType =
         builder.CreateOr(builder.CreateICmpULE(type, c(EXTERNALSXP)),
@@ -2169,10 +2181,17 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::RecordDeoptReason: {
                 auto rec = RecordDeoptReason::Cast(i);
+                auto srcAddr = (Constant*)builder.CreateIntToPtr(
+                    llvm::ConstantInt::get(
+                        PirJitLLVM::getContext(),
+                        llvm::APInt(
+                            64, reinterpret_cast<uint64_t>(rec->reason.srcCode),
+                            false)),
+                    t::voidPtr);
                 auto reason = llvm::ConstantStruct::get(
                     t::DeoptReason, {
                                         c(rec->reason.reason, 32),
-                                        convertToPointer(rec->reason.srcCode),
+                                        srcAddr,
                                         c(rec->reason.originOffset),
                                     });
                 call(NativeBuiltins::get(NativeBuiltins::Id::recordDeopt),
@@ -3372,7 +3391,7 @@ void LowerFunctionLLVM::compile() {
                 if (bindingsCache.count(i))
                     for (auto b : bindingsCache.at(i))
                         builder.CreateStore(
-                            convertToPointer(nullptr, t::SEXP),
+                            llvm::ConstantPointerNull::get(t::SEXP),
                             builder.CreateGEP(bindingsCacheBase, c(b.second)));
                 break;
             }
@@ -3896,8 +3915,8 @@ void LowerFunctionLLVM::compile() {
                 builder.SetInsertPoint(isStub);
                 auto materialized = envStubGet(arg, -2, env->nLocals());
                 builder.CreateCondBr(
-                    builder.CreateICmpEQ(materialized,
-                                         convertToPointer(nullptr, t::SEXP)),
+                    builder.CreateICmpEQ(
+                        materialized, llvm::ConstantPointerNull::get(t::SEXP)),
                     isNotMaterialized, isNotStub, branchAlwaysTrue);
 
                 builder.SetInsertPoint(isNotMaterialized);
