@@ -5624,17 +5624,17 @@ void LowerFunctionLLVM::compile() {
             }
         }
 
-#ifdef ENABLE_SLOWASSERT
         // Clear the temp-protected space on the stack after every
         // instruction to catch GC errors early
-        if (numTemps > 0 &&
+        static bool CLEAR_TEMPS = getenv("PIR_TEST_CLEAR_TEMPS") &&
+                                  *getenv("PIR_TEST_CLEAR_TEMPS") == '1';
+        if (CLEAR_TEMPS && numTemps > 0 &&
             (builder.GetInsertBlock()->empty() ||
              !builder.GetInsertBlock()->back().isTerminator())) {
             auto pos = builder.CreateGEP(basepointer, c(numLocals, 32));
             builder.CreateMemSet(pos, c(0, 8), c(numTemps, 32),
                                  MaybeAlign(alignof(R_bcstack_t)));
         }
-#endif
         numTemps = 0;
 
         if (bb->isJmp())

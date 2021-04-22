@@ -229,8 +229,8 @@ test_sanitize2:
   except:
     - schedules
   script:
-    - cd /opt/rir/build/debugopt
-    - R_GCTORTURE=80 bin/tests
+    - cd /opt/rir/build/release
+    - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=50 bin/tests
 
 # Test with inlining big functions
 test_big_inline:
