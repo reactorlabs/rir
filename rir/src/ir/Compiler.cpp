@@ -785,16 +785,20 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             if (!voidContext)
                 cs << BC::invisible();
-        }
-        else // 3.b) Deal with all the other functions.
-        {
-
+        } else {
             /*
+                3.b) Deal with all the other functions:
                     f(x,y) <- z
-                Rewrite
+                i.e.
                     <-(f(x,y), value=z)
-                Into
+                will (almost) get rewritten into
                     <-( x, value=f<-(x,y,value=z) )
+
+                This rewriting is theoretical. Indeed, there are some
+               specificities to complex assignments:
+                    - z is evaluated eagerly, followed by x
+                    - the other arguments as passed as promises, as usual
+                    - the complex assignment returns the value of z
             */
 
             // We need to get the SEXP for `f<-` from the SEXP for `f`
@@ -802,13 +806,54 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             std::string const fun2_replacement_name = fun2name + "<-";
             SEXP farrow_sym = Rf_install(fun2_replacement_name.c_str());
 
+            // Exclude special functions
+            /*  TODO: Deal with special functions.
+             The issue with special functions is that they do not use the
+             arguments passed on the stack, but evaluate the arguments through
+             the AST. For normal functions, in the assignment
+                 f(x,a,b) <- z
+             we emit the bytecode that will lead to the evaluation of z and x,
+             and pass these values in evaluated promises on the object stack.
+
+             If we use the same strategy for special function, the arguments
+             will be evaluated a second time.
+
+             The solution would be to patch the AST passed to the special
+             function at runtime: we can replace in the AST the expression for
+             the arguments by evaluated promises containing the values
+             previously computed.
+
+             Doing so might require adding a special instruction. This is the
+             approach used in the GnuR BC compiler with the instruction
+             SETTER_CALL:
+                https://github.com/reactorlabs/gnur/blob/R-3-6-2-branch-rir-patch/src/main/eval.c#L7128
+
+             There are only a couple special assignment functions
+                - [[<-   (handled above)
+                - [ <-   (handled above)
+                - <-     (will not appear in a rewriting)
+                - <<-    (will not appear in a rewriting)
+                - @<-
+                - $<-
+             This leaves only two to deal with.
+
+             /!\ This only works for specials known at compile-time, and does
+             not handle where one of the special function name has been shadowed
+             or redefined.
+            */
+            std::string const at_assign = "@<-";
+            std::string const dollar_assign = "$<-";
+            if (fun2_replacement_name == at_assign ||
+                fun2_replacement_name == dollar_assign) {
+                return false;
+            }
+
             // Get the LISTSXP of args for f
             SEXP f_args = CDR(CAR(args_));
 
             // Make the ast for the call : f<-, x, y, value=z
+            // and protect it from GC
             SEXP farrow_ast = Rf_lcons(farrow_sym, R_NilValue);
-
-            // This AST will not be linked to the main AST
             Protect farrow_ast_protect(farrow_ast);
 
             SEXP last_farrow_cell = farrow_ast;
@@ -829,16 +874,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // Append this new cell to the LISTSXP
             CDR(last_farrow_cell) = new_z_cell;
 
-            // Simply rewriting the AST is not enough: we also want to make
-            // sure that x and z are evaluated, and return the value of z.
-            // This is why we will manually compile this call instead of simply
-            // using compileSpecialCall on the rewritten assignment:
-            //       compileSpecialCall(ctx, ast, fun, args_, voidContext);
-
-
             // The RHS must be evaluated before the LHS
             // Additionnaly, the value of the RHS must be returned after the
-            // assignment (in a non-void context). It will be kept on the stack
+            // assignment (in non-void contexts). It will be kept on the stack
             // before the call to `f<-`.
             // A copy will be wrapped in an evaluated promise and passed to f<-.
             compileExpr(ctx, rhs);
@@ -869,12 +907,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // N+2      N+1       N   N-1                 0
             //  ??, z (raw),  `f<-`,    x,   y1,  <...>, yn
 
-            // where N is the number of arguments already passed to `f<-` (load_arg_res.numArgs)
+            // where N is the number of arguments _already_ passed to `f<-`
+            // (load_arg_res.numArgs)
             if(voidContext) {
                 cs << BC::pick(load_arg_res.numArgs+1);
             }
             else {
-                // keep the value, it will be returned
                 cs << BC::pull(load_arg_res.numArgs+1);
             }
 
