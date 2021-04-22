@@ -15,7 +15,7 @@ def Settings( **kwargs ):
        '-I'+DirectoryOfThisScript()+'/rir/src',
        '-isystem'+DirectoryOfThisScript()+'/external/custom-r/include',
        '-isystem'+DirectoryOfThisScript()+'/external/llvm-11/include',
-       '-isystem'+DirectoryOfThisScript()+'/external/llvm-11.0.1rc2.src/include',
+       '-isystem'+DirectoryOfThisScript()+'/external/llvm-11.0.1.src/include',
        '-Wall',
        '-Wuninitialized',
        '-Wundef',

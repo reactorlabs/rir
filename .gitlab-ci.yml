@@ -223,16 +223,14 @@ test_sanitize2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_MAX_INPUT_SIZE: 10000
-    PIR_INLINER_MAX_SIZE: 10000
   stage: Run tests
   needs:
     - rir_container
   except:
     - schedules
   script:
-    - cd /opt/rir/build/sanitize
-    - R_GCTORTURE=300 bin/tests
+    - cd /opt/rir/build/release
+    - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=50 bin/tests
 
 # Test with inlining big functions
 test_big_inline:

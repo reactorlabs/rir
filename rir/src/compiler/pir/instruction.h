@@ -2497,6 +2497,10 @@ class VLI(DotsList, Effect::LeakArg) {
     void printArgs(std::ostream& out, bool tty) const override;
 
     typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
+    RIR_INLINE void eachElement(LocalVarIt it) const {
+        for (size_t i = 0; i < nargs(); ++i)
+            it(names[i], arg(i).val());
+    }
     RIR_INLINE void eachElementRev(LocalVarIt it) const {
         for (long i = nargs() - 1; i >= 0; --i)
             it(names[i], arg(i).val());

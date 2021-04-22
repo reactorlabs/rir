@@ -285,12 +285,13 @@ unsigned Code::addExtraPoolEntry(SEXP v) {
     unsigned curLen = cur == R_NilValue ? 0 : (unsigned)LENGTH(cur);
     if (curLen == extraPoolSize) {
         unsigned newCapacity = curLen ? curLen * 2 : 2;
+        PROTECT(v);
         SEXP newPool = PROTECT(Rf_allocVector(VECSXP, newCapacity));
         for (unsigned i = 0; i < curLen; ++i) {
             SET_VECTOR_ELT(newPool, i, VECTOR_ELT(cur, i));
         }
         setEntry(0, newPool);
-        UNPROTECT(1);
+        UNPROTECT(2);
         cur = newPool;
     }
     SET_VECTOR_ELT(cur, extraPoolSize, v);

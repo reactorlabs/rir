@@ -620,6 +620,13 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             iterAnyChange = true;
                             i->replaceUsesAndSwapWith(nargsC, ip);
                         }
+                    } else if (builtinId == blt("invisible") && nargs == 1) {
+                        i->replaceUsesWith(
+                            CallInstruction::CastCall(i)->callArg(0).val());
+                        bb->replace(ip, new Invisible());
+                    } else if (builtinId == blt("invisible") && nargs == 0) {
+                        i->replaceUsesWith(Nil::instance());
+                        bb->replace(ip, new Invisible());
                     } else if (builtinId == blt("length") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
                         if (t.isA(PirType::anySimpleScalar())) {
