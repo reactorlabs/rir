@@ -3,13 +3,12 @@
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/pass_schedule_llvm.h"
 #include "compiler/native/types_llvm.h"
-#include <memory>
+
 #ifdef PIR_GDB_SUPPORT
 #include "utils/filesystem.h"
 #endif
 
 #include "llvm/ExecutionEngine/JITSymbol.h"
-#include "llvm/ExecutionEngine/Orc/Core.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/Mangling.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
@@ -361,6 +360,10 @@ void PirJitLLVM::initializeLLVM() {
             [MainName = JIT->mangleAndIntern("main")](
                 const SymbolStringPtr& Name) { return Name != MainName; })));
 
+    // TODO this is a bit of a hack but it works: the address is stored in the
+    // name. symbols starting with "ept_" are external pointers, the ones
+    // starting with "efn_" are external function pointers. these must exist in
+    // the host process.
     class ExtSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator {
       public:
         Error tryToGenerate(LookupKind K, JITDylib& JD,
@@ -374,8 +377,6 @@ void PirJitLLVM::initializeLLVM() {
                 auto efn = n.substr(0, 4) == "efn_";
 
                 if (ept || efn) {
-                    // TODO this is a bit of a hack but it works: the address is
-                    // stored in the name
                     auto addrStr = n.substr(4);
                     auto addr = std::strtoul(addrStr.c_str(), nullptr, 16);
                     NewSymbols[Name] = JITEvaluatedSymbol(

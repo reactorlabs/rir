@@ -189,10 +189,6 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
 }
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
-    static std::unordered_set<SEXP> eternal = {
-        R_TrueValue,      R_NilValue,   R_FalseValue,
-        R_UnboundValue,   R_MissingArg, R_GlobalEnv,
-        R_LogicalNAValue, R_EmptyEnv,   R_BaseEnv};
     if (needed == t::Int) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP)
@@ -243,7 +239,17 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
             co = R_TrueValue;
         }
     }
+
+    static std::unordered_set<SEXP> eternal = {R_GlobalEnv, R_BaseEnv,
+                                               R_BaseNamespace};
     if (TYPEOF(co) == SYMSXP || eternal.count(co))
+        return convertToPointer(co);
+
+    static std::unordered_set<SEXP> eternalConst = {
+        R_TrueValue,  R_NilValue,       R_FalseValue, R_UnboundValue,
+        R_MissingArg, R_LogicalNAValue, R_EmptyEnv};
+    if (TYPEOF(co) == BUILTINSXP || TYPEOF(co) == SPECIALSXP ||
+        eternalConst.count(co))
         return convertToPointer(co, true);
 
     auto i = Pool::insert(co);
@@ -268,7 +274,8 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
     auto stackptr = nodestackPtr();
     // set type tag to 0
     builder.CreateMemSet(builder.CreateGEP(stackptr, c(-args.size())), c(0, 8),
-                         args.size() * sizeof(R_bcstack_t), MaybeAlign(8));
+                         args.size() * sizeof(R_bcstack_t),
+                         MaybeAlign(alignof(R_bcstack_t)));
     auto pos = -args.size();
     for (auto arg = args.begin(); arg != args.end(); arg++) {
         // store the value
@@ -291,7 +298,8 @@ void LowerFunctionLLVM::incStack(int i, bool zero) {
     auto cur = nodestackPtr();
     auto offset = sizeof(R_bcstack_t) * i;
     if (zero)
-        builder.CreateMemSet(cur, c(0, 8), offset, MaybeAlign(8));
+        builder.CreateMemSet(cur, c(0, 8), offset,
+                             MaybeAlign(alignof(R_bcstack_t)));
     auto up = builder.CreateGEP(cur, c(i));
     builder.CreateStore(up, nodestackPtrAddr);
 }
@@ -323,15 +331,15 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
 
     auto f = convertToFunction((void*)builtinFun, t::builtinFunction);
 
-    std::vector<llvm::Value*> loadedArgs;
+    std::stack<llvm::Value*> loadedArgs;
     auto n = numTemps;
     for (auto v : args)
-        loadedArgs.push_back(loadSxp(v));
+        loadedArgs.push(loadSxp(v));
 
     auto arglist = constant(R_NilValue, t::SEXP);
-    long pos = args.size() - 1;
     for (auto v = args.rbegin(); v != args.rend(); v++) {
-        auto a = loadedArgs[pos--];
+        auto a = loadedArgs.top();
+        loadedArgs.pop();
 #ifdef ENABLE_SLOWASSERT
         insn_assert(builder.CreateICmpNE(sexptype(a), c(PROMSXP)),
                     "passing promise to builtin");
@@ -3383,26 +3391,25 @@ void LowerFunctionLLVM::compile() {
                 }
 
                 // Need to load these first, to avoid protect issues
-                std::vector<llvm::Value*> args;
+                std::stack<llvm::Value*> args;
                 mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
-                    args.push_back(loadSxp(v));
+                    args.push(loadSxp(v));
                 });
 
                 auto arglist = constant(R_NilValue, t::SEXP);
-                size_t pos = mkenv->nLocals() - 1;
                 mkenv->eachLocalVarRev([&](SEXP name, Value* v, bool miss) {
                     if (miss) {
                         arglist = call(
                             NativeBuiltins::get(
                                 NativeBuiltins::Id::createMissingBindingCell),
-                            {args[pos], constant(name, t::SEXP), arglist});
+                            {args.top(), constant(name, t::SEXP), arglist});
                     } else {
-                        arglist =
-                            call(NativeBuiltins::get(
-                                     NativeBuiltins::Id::createBindingCell),
-                                 {args[pos], constant(name, t::SEXP), arglist});
+                        arglist = call(
+                            NativeBuiltins::get(
+                                NativeBuiltins::Id::createBindingCell),
+                            {args.top(), constant(name, t::SEXP), arglist});
                     }
-                    pos--;
+                    args.pop();
                 });
 
                 setVal(i, call(NativeBuiltins::get(
@@ -5624,7 +5631,8 @@ void LowerFunctionLLVM::compile() {
             (builder.GetInsertBlock()->empty() ||
              !builder.GetInsertBlock()->back().isTerminator())) {
             auto pos = builder.CreateGEP(basepointer, c(numLocals, 32));
-            builder.CreateMemSet(pos, c(0, 8), c(numTemps, 32), MaybeAlign(8));
+            builder.CreateMemSet(pos, c(0, 8), c(numTemps, 32),
+                                 MaybeAlign(alignof(R_bcstack_t)));
         }
 #endif
         numTemps = 0;
