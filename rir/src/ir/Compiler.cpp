@@ -805,30 +805,29 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // Get the LISTSXP of args for f
             SEXP f_args = CDR(CAR(args_));
 
-            // Get the last cell in the LISTSXP of args for f
-            SEXP last_f_arg_cell = f_args;
-            while( CDR(last_f_arg_cell) != R_NilValue ) {
-                last_f_arg_cell = CDR(last_f_arg_cell);
+            // Make the ast for the call : f<-, x, y, value=z
+            SEXP farrow_ast = Rf_lcons(farrow_sym, R_NilValue);
+
+            // This AST will not be linked to the main AST
+            Protect farrow_ast_protect(farrow_ast);
+
+            SEXP last_farrow_cell = farrow_ast;
+            // Copy the arguments of f into the call to f<- (with names)
+            for (SEXP cur_f_arg_cell = f_args; cur_f_arg_cell != R_NilValue;
+                 cur_f_arg_cell = CDR(cur_f_arg_cell)) {
+                SEXP new_cell = Rf_lcons(CAR(cur_f_arg_cell), R_NilValue);
+                SET_TAG(new_cell, TAG(cur_f_arg_cell));
+                CDR(last_farrow_cell) = new_cell;
+                last_farrow_cell = new_cell;
             }
 
-
-            // We need to append "value = z" to the list of args for f
+            // We need to append "value = z" to the list of args for f<-
             // Let's create the corresponding cell
-
-            SEXP new_z_cell = Rf_cons(rhs, R_NilValue);
+            SEXP new_z_cell = Rf_lcons(rhs, R_NilValue);
             SET_TAG(new_z_cell, Rf_install("value"));
 
             // Append this new cell to the LISTSXP
-            CDR(last_f_arg_cell) = new_z_cell;
-
-            // Make the ast for the call : f<-, x, y, value=z
-            SEXP farrow_ast = Rf_lcons(farrow_sym, f_args);
-
-            // Make x the assignment destination
-            CAR(args_) = dest;
-            // Make farrow_ast the assignment value
-            // The second cell in args is already tagged "value"
-            CAR(CDR(args_)) = farrow_ast;
+            CDR(last_farrow_cell) = new_z_cell;
 
             // Simply rewriting the AST is not enough: we also want to make
             // sure that x and z are evaluated, and return the value of z.
@@ -854,17 +853,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             LoadArgsResult load_arg_res;
 
             // load x as an evaluated promise
-            // the value of the promise will be the value of x,
-            // but the expr will be replace by `*tmp*` to allow
-            // reflective access
-            // SEXP tmp_sym = Rf_install("*tmp*");
-            // compileLoadOneArg(ctx, f_args, ArgType::EAGER_PROMISE, load_arg_res, tmp_sym);
-            compileLoadOneArg(ctx, f_args, ArgType::EAGER_PROMISE, load_arg_res);
+            SEXP farrow_args = CDR(farrow_ast);
+            compileLoadOneArg(ctx, farrow_args, ArgType::EAGER_PROMISE,
+                              load_arg_res);
 
             //load y1, <...>, yn
-            SEXP cur_arg_cell = CDR(f_args);
-            for(; cur_arg_cell != new_z_cell; cur_arg_cell = CDR(cur_arg_cell) )
-            {
+
+            for (SEXP cur_arg_cell = CDR(farrow_args);
+                 cur_arg_cell != new_z_cell; cur_arg_cell = CDR(cur_arg_cell)) {
                 compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE, load_arg_res);
             }
 
@@ -889,15 +885,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // Wrap the value argument in an evaluated promise:
 
-            compileLoadOneArg(ctx, cur_arg_cell, ArgType::EAGER_PROMISE_FROM_TOS, load_arg_res);
-
-            // rewrite the AST from
-            //     <-(x, f<-(x,y,value=z))
-            // to
-            //     <-(x, f<-(*tmp*,y,value=z))
-            // the arguments have already been prepared, so the value of
-            // x will effectively be passed to the call.
-            // CAR(f_args) = tmp_sym;
+            compileLoadOneArg(ctx, new_z_cell, ArgType::EAGER_PROMISE_FROM_TOS,
+                              load_arg_res);
 
             // call f<- with the arguments
             cs << BC::call(load_arg_res.numArgs, load_arg_res.names, farrow_ast, load_arg_res.assumptions);
