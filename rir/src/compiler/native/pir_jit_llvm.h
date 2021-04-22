@@ -69,7 +69,6 @@ class PirJitLLVM {
 
     // Directory of all functions and builtins
     std::unordered_map<Code*, llvm::Function*> funs;
-    std::unordered_map<std::string, std::pair<llvm::Function*, void*>> builtins;
 
     // We prepend `rsh_` to all user functions, as a mechanism to
     // differentiate them from builtins. We also append `.N` to all

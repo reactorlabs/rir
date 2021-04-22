@@ -24,6 +24,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/GlobalObject.h>
+#include <llvm/IR/GlobalValue.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <map>
 #include <memory>
 #include <string>
@@ -88,17 +92,34 @@ llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
                                     llvm::GlobalValue::PrivateLinkage, init);
 }
 
+llvm::FunctionCallee
+LowerFunctionLLVM::getBuiltin(const rir::pir::NativeBuiltin& b) {
+    return getModule().getOrInsertFunction(b.name, b.llvmSignature);
+}
+
 llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
-                                                 llvm::Type* ty) {
-    auto addr = llvm::ConstantInt::get(
-        PirJitLLVM::getContext(),
-        llvm::APInt(64, reinterpret_cast<uint64_t>(what), false));
-    auto a = builder.CreateIntToPtr(addr, t::i8ptr);
-    return builder.CreateBitCast(a, ty);
+                                                 llvm::Type* ty,
+                                                 bool constant) {
+    char name[17];
+    sprintf(name, "ept_%lx", (uintptr_t)what);
+    return getModule().getOrInsertGlobal(name, ty, [&]() {
+        return new llvm::GlobalVariable(
+            getModule(), ty, constant,
+            llvm::GlobalValue::LinkageTypes::AvailableExternallyLinkage,
+            nullptr, name, nullptr,
+            llvm::GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
+    });
+}
+
+llvm::FunctionCallee
+LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty) {
+    char name[17];
+    sprintf(name, "efn_%lx", (uintptr_t)what);
+    return getModule().getOrInsertFunction(name, ty);
 }
 
 void LowerFunctionLLVM::setVisible(int i) {
-    builder.CreateStore(c(i), convertToPointer(&R_Visible, t::IntPtr));
+    builder.CreateStore(c(i), convertToPointer(&R_Visible, t::Int));
 }
 
 llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
@@ -159,7 +180,7 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
     if (p)
         call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
     call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
-         {convertToPointer((void*)msg)});
+         {convertToPointer((void*)msg, t::i8, true)});
     builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
 
     builder.SetInsertPoint(ok);
@@ -221,7 +242,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
         }
     }
     if (TYPEOF(co) == SYMSXP || eternal.count(co))
-        return convertToPointer(co);
+        return convertToPointer(co, true);
 
     auto i = Pool::insert(co);
     llvm::Value* pos = builder.CreateLoad(constantpool);
@@ -298,8 +319,7 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
         });
     }
 
-    auto fPtr = convertToPointer((void*)builtinFun, t::builtinFunctionPtr);
-    auto f = FunctionCallee(t::builtinFunction, fPtr);
+    auto f = convertToFunction((void*)builtinFun, t::builtinFunction);
 
     std::vector<llvm::Value*> loadedArgs;
     auto n = numTemps;
@@ -396,7 +416,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
     } else if (val == OpaqueTrue::instance()) {
         static int one = 1;
         // Something that is always true, but llvm does not know about
-        res = builder.CreateLoad(convertToPointer(&one, t::IntPtr));
+        res = builder.CreateLoad(convertToPointer(&one, t::Int, true));
     } else if (auto ld = LdConst::Cast(val)) {
         res = constant(ld->c(), needed);
     } else {
@@ -1980,8 +2000,7 @@ void LowerFunctionLLVM::compile() {
     };
     entryBlock = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     builder.SetInsertPoint(entryBlock);
-    nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop,
-                                        PointerType::get(t::stackCellPtr, 0));
+    nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr);
     basepointer = nodestackPtr();
 
     numLocals++;
@@ -3319,7 +3338,7 @@ void LowerFunctionLLVM::compile() {
                 withCallFrame(args, [&]() {
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
                                {paramCode(), paramClosure(),
-                                convertToPointer(m), paramArgs()});
+                                convertToPointer(m, t::i8, true), paramArgs()});
                     return res;
                 });
                 builder.CreateUnreachable();
@@ -5566,8 +5585,8 @@ void LowerFunctionLLVM::compile() {
                             msg = leaky.back().c_str();
                         }
                         call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
-                             {load(i), c((unsigned long) i->type.serialize()),
-                              convertToPointer(msg)});
+                             {load(i), c((unsigned long)i->type.serialize()),
+                              convertToPointer(msg, t::i8, true)});
                     }
                 }
                 if (i->type.isA(PirType::test())) {
@@ -5596,7 +5615,9 @@ void LowerFunctionLLVM::compile() {
 #ifdef ENABLE_SLOWASSERT
         // Clear the temp-protected space on the stack after every
         // instruction to catch GC errors early
-        if (numTemps > 0 && !builder.GetInsertBlock()->back().isTerminator()) {
+        if (numTemps > 0 &&
+            (builder.GetInsertBlock()->empty() ||
+             !builder.GetInsertBlock()->back().isTerminator())) {
             auto pos = builder.CreateGEP(basepointer, c(numLocals, 32));
             builder.CreateMemSet(pos, c(0, 8), c(numTemps, 32), MaybeAlign(8));
         }

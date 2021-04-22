@@ -3,11 +3,13 @@
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/pass_schedule_llvm.h"
 #include "compiler/native/types_llvm.h"
+#include <memory>
 #ifdef PIR_GDB_SUPPORT
 #include "utils/filesystem.h"
 #endif
 
 #include "llvm/ExecutionEngine/JITSymbol.h"
+#include "llvm/ExecutionEngine/Orc/Core.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/Mangling.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
@@ -217,23 +219,6 @@ void PirJitLLVM::compile(
             if (r != funs.end())
                 return r->second;
             return nullptr;
-        },
-        // getBuiltin
-        [&](const rir::pir::NativeBuiltin& b) -> llvm::Function* {
-            auto l = builtins.find(b.name);
-            if (l != builtins.end()) {
-                assert(l->second.second == b.fun);
-                return l->second.first;
-            }
-
-            assert(b.llvmSignature);
-            auto f = llvm::Function::Create(
-                b.llvmSignature, llvm::Function::ExternalLinkage, b.name, *M);
-            for (auto a : b.attrs)
-                f->addFnAttr(a);
-
-            builtins[b.name] = {f, b.fun};
-            return f;
         }
 #ifdef PIR_GDB_SUPPORT
         ,
@@ -375,6 +360,42 @@ void PirJitLLVM::initializeLLVM() {
             // [](const SymbolStringPtr&) { return true; })));
             [MainName = JIT->mangleAndIntern("main")](
                 const SymbolStringPtr& Name) { return Name != MainName; })));
+
+    class ExtSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator {
+      public:
+        Error tryToGenerate(LookupKind K, JITDylib& JD,
+                            JITDylibLookupFlags JDLookupFlags,
+                            const SymbolLookupSet& LookupSet) override {
+            orc::SymbolMap NewSymbols;
+            for (auto s : LookupSet) {
+                auto& Name = s.first;
+                auto n = (*Name).str();
+                auto ept = n.substr(0, 4) == "ept_";
+                auto efn = n.substr(0, 4) == "efn_";
+
+                if (ept || efn) {
+                    // TODO this is a bit of a hack but it works: the address is
+                    // stored in the name
+                    auto addrStr = n.substr(4);
+                    auto addr = std::strtoul(addrStr.c_str(), nullptr, 16);
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(addr)),
+                        JITSymbolFlags::Exported |
+                            (efn ? JITSymbolFlags::Callable
+                                 : JITSymbolFlags::None));
+                } else {
+                    std::cout << "unknown symbol " << n << "\n";
+                }
+            }
+            if (NewSymbols.empty())
+                return Error::success();
+
+            return JD.define(absoluteSymbols(std::move(NewSymbols)));
+        };
+    };
+
+    builtinsDL.addGenerator(std::make_unique<ExtSymbolGenerator>());
 
 #ifdef PIR_GDB_SUPPORT
     clearOrCreateDirectory(dbgFolder.c_str());

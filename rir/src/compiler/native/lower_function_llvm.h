@@ -66,7 +66,6 @@ class LowerFunctionLLVM {
 
     PirJitLLVM::GetModule getModule;
     PirJitLLVM::GetFunction getFunction;
-    PirJitLLVM::GetBuiltin getBuiltin;
 
 #ifdef PIR_GDB_SUPPORT
     PirJitLLVM::DebugInfo* DI;
@@ -85,8 +84,7 @@ class LowerFunctionLLVM {
         const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         PirJitLLVM::Declare declare, const PirJitLLVM::GetModule& getModule,
-        const PirJitLLVM::GetFunction& getFunction,
-        const PirJitLLVM::GetBuiltin& getBuiltin
+        const PirJitLLVM::GetFunction& getFunction
 #ifdef PIR_GDB_SUPPORT
         ,
         PirJitLLVM::DebugInfo* DI, llvm::DIBuilder* DIB
@@ -100,7 +98,7 @@ class LowerFunctionLLVM {
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)),
-          getModule(getModule), getFunction(getFunction), getBuiltin(getBuiltin)
+          getModule(getModule), getFunction(getFunction)
 #ifdef PIR_GDB_SUPPORT
           ,
           DI(DI), DIB(DIB)
@@ -116,10 +114,14 @@ class LowerFunctionLLVM {
         }
     }
 
-    llvm::Value* convertToPointer(const void* what,
-                                  llvm::Type* ty = t::voidPtr);
-    llvm::Value* convertToPointer(SEXP what) {
-        return convertToPointer(what, t::SEXP);
+    llvm::FunctionCallee getBuiltin(const rir::pir::NativeBuiltin& b);
+
+    llvm::FunctionCallee convertToFunction(const void* what,
+                                           llvm::FunctionType* ty);
+    llvm::Value* convertToPointer(const void* what, llvm::Type* ty,
+                                  bool constant = false);
+    llvm::Value* convertToPointer(SEXP what, bool constant = false) {
+        return convertToPointer(what, t::SEXPREC, constant);
     }
 
     struct Variable {
