@@ -3526,8 +3526,13 @@ void LowerFunctionLLVM::compile() {
 
                 auto res = phiBuilder(t::Int);
 
-                res.addInput(builder.CreateZExt(
-                    builder.CreateICmpEQ(argumentNative, c(0)), t::Int));
+                if (argumentRep == Representation::Real) {
+                    res.addInput(builder.CreateZExt(
+                        builder.CreateFCmpUEQ(argumentNative, c(0.0)), t::Int));
+                } else {
+                    res.addInput(builder.CreateZExt(
+                        builder.CreateICmpEQ(argumentNative, c(0)), t::Int));
+                }
                 builder.CreateBr(done);
 
                 builder.SetInsertPoint(isNa);
