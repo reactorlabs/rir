@@ -1,12 +1,10 @@
 #include "pir_jit_llvm.h"
+#include "api.h"
 #include "compiler/native/builtins.h"
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/pass_schedule_llvm.h"
 #include "compiler/native/types_llvm.h"
-
-#ifdef PIR_GDB_SUPPORT
 #include "utils/filesystem.h"
-#endif
 
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
@@ -26,20 +24,22 @@ namespace pir {
 size_t PirJitLLVM::nModules = 1;
 bool PirJitLLVM::initialized = false;
 
+bool LLVMDebugInfo() {
+    return PirDebug.flags.contains(DebugFlag::LLVMDebugInfo);
+}
+
 namespace {
 
 llvm::ExitOnError ExitOnErr;
 std::unique_ptr<llvm::orc::LLJIT> JIT;
 llvm::orc::ThreadSafeContext TSC;
 
-#ifdef PIR_GDB_SUPPORT
+// TODO: put in /tmp
 std::string dbgFolder =
     getenv("PIR_GDB_FOLDER") ? getenv("PIR_GDB_FOLDER") : "pirgdb";
-#endif
 
 } // namespace
 
-#ifdef PIR_GDB_SUPPORT
 void PirJitLLVM::DebugInfo::addCode(Code* c) {
     assert(!codeLoc.count(c));
     codeLoc[c] = line++;
@@ -124,15 +124,8 @@ void PirJitLLVM::DebugInfo::emitLocation(llvm::IRBuilder<>& builder,
     builder.SetCurrentDebugLocation(
         llvm::DILocation::get(Scope->getContext(), line, 0, Scope));
 }
-#endif // PIR_GDB_SUPPORT
 
-#ifdef PIR_GDB_SUPPORT
-PirJitLLVM::PirJitLLVM(const std::string& name)
-    : DI(dbgFolder, name)
-#else
-PirJitLLVM::PirJitLLVM()
-#endif
-{
+PirJitLLVM::PirJitLLVM(const std::string& name) : name(name) {
     if (!initialized)
         initializeLLVM();
 }
@@ -142,9 +135,10 @@ PirJitLLVM::PirJitLLVM()
 // we need to fixup all the native pointers.
 PirJitLLVM::~PirJitLLVM() {
     if (M) {
-#ifdef PIR_GDB_SUPPORT
-        DIB->finalize(); // should this happen before addIRModule or after?
-#endif
+        // Should this happen before finalizeAndFixup or after?
+        if (LLVMDebugInfo()) {
+            DIB->finalize();
+        }
         finalizeAndFixup();
         nModules++;
     }
@@ -171,32 +165,35 @@ void PirJitLLVM::compile(
     if (!M.get()) {
         M = std::make_unique<llvm::Module>("", *TSC.getContext());
 
-#ifdef PIR_GDB_SUPPORT
-        // Create a file stream log for this module
-        DI.log = std::make_unique<FileLogStream>("./" + DI.Folder + "/" +
-                                                 DI.FileName);
+        if (LLVMDebugInfo()) {
+            DI = std::make_unique<DebugInfo>(dbgFolder, name);
 
-        // Add the current debug info version into the module.
-        M->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
-                         llvm::DEBUG_METADATA_VERSION);
+            // Create a file stream log for this module
+            DI->log = std::make_unique<FileLogStream>("./" + DI->Folder + "/" +
+                                                      DI->FileName);
 
-        // Darwin only supports dwarf2.
-        if (JIT->getTargetTriple().isOSDarwin())
-            M->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
+            // Add the current debug info version into the module.
+            M->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
+                             llvm::DEBUG_METADATA_VERSION);
 
-        // Construct the DIBuilder, we do this here because we need the module.
-        DIB = std::make_unique<llvm::DIBuilder>(*M);
+            // Darwin only supports dwarf2.
+            if (JIT->getTargetTriple().isOSDarwin())
+                M->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
 
-        // Create the compile unit for the module.
-        DI.File = DIB->createFile(DI.FileName, DI.Folder);
-        DI.CU = DIB->createCompileUnit(llvm::dwarf::DW_LANG_C, DI.File,
-                                       "PIR Compiler", false, "", 0);
-#endif // PIR_GDB_SUPPORT
+            // Construct the DIBuilder, we do this here because we need the
+            // module.
+            DIB = std::make_unique<llvm::DIBuilder>(*M);
+
+            // Create the compile unit for the module.
+            DI->File = DIB->createFile(DI->FileName, DI->Folder);
+            DI->CU = DIB->createCompileUnit(llvm::dwarf::DW_LANG_C, DI->File,
+                                            "PIR Compiler", false, "", 0);
+        }
     }
 
-#ifdef PIR_GDB_SUPPORT
-    DI.addCode(code);
-#endif
+    if (LLVMDebugInfo()) {
+        DI->addCode(code);
+    }
 
     std::string mangledName = JIT->mangle(makeName(code));
 
@@ -218,37 +215,34 @@ void PirJitLLVM::compile(
             if (r != funs.end())
                 return r->second;
             return nullptr;
-        }
-#ifdef PIR_GDB_SUPPORT
-        ,
-        &DI, DIB.get()
-#endif
-    );
+        },
+        DI.get(), DIB.get());
 
-#ifdef PIR_GDB_SUPPORT
-    llvm::DIScope* FContext = DI.File;
-    unsigned ScopeLine = 0;
-    llvm::DISubprogram* SP = DIB->createFunction(
-        FContext, makeName(code), mangledName, DI.File, DI.getCodeLoc(code),
-        DI.getNativeCodeType(DIB.get()), ScopeLine,
-        llvm::DINode::FlagPrototyped,
-        llvm::DISubprogram::toSPFlags(true /* isLocalToUnit */,
-                                      true /* isDefinition */,
-                                      false /* isOptimized */));
+    llvm::DISubprogram* SP = nullptr;
+    if (LLVMDebugInfo()) {
+        llvm::DIScope* FContext = DI->File;
+        unsigned ScopeLine = 0;
+        SP = DIB->createFunction(
+            FContext, makeName(code), mangledName, DI->File,
+            DI->getCodeLoc(code), DI->getNativeCodeType(DIB.get()), ScopeLine,
+            llvm::DINode::FlagPrototyped,
+            llvm::DISubprogram::toSPFlags(true /* isLocalToUnit */,
+                                          true /* isDefinition */,
+                                          false /* isOptimized */));
 
-    funCompiler.fun->setSubprogram(SP);
-    DI.LexicalBlocks.push_back(SP);
-#endif // PIR_GDB_SUPPORT
+        funCompiler.fun->setSubprogram(SP);
+        DI->LexicalBlocks.push_back(SP);
+    }
 
     funCompiler.compile();
 
     llvm::verifyFunction(*funCompiler.fun);
     assert(jitFixup.count(code) == 0);
 
-#ifdef PIR_GDB_SUPPORT
-    DI.LexicalBlocks.pop_back();
-    DIB->finalizeSubprogram(SP);
-#endif
+    if (LLVMDebugInfo()) {
+        DI->LexicalBlocks.pop_back();
+        DIB->finalizeSubprogram(SP);
+    }
 
     if (funCompiler.pirTypeFeedback)
         target->pirTypeFeedback(funCompiler.pirTypeFeedback);
@@ -295,7 +289,6 @@ void PirJitLLVM::initializeLLVM() {
     JIT = ExitOnErr(
         LLJITBuilder()
             .setJITTargetMachineBuilder(std::move(JTMB))
-#ifdef PIR_GDB_SUPPORT
             .setObjectLinkingLayerCreator(
                 [&](ExecutionSession& ES, const Triple& TT) {
                     auto GetMemMgr = []() {
@@ -305,16 +298,19 @@ void PirJitLLVM::initializeLLVM() {
                         std::make_unique<RTDyldObjectLinkingLayer>(
                             ES, std::move(GetMemMgr));
 
-                    // Register the event listener.
-                    ObjLinkingLayer->registerJITEventListener(
-                        *JITEventListener::createGDBRegistrationListener());
+                    if (LLVMDebugInfo()) {
+                        // Register the event debug listeners for gdb and perf.
+                        ObjLinkingLayer->registerJITEventListener(
+                            *JITEventListener::createGDBRegistrationListener());
+                        ObjLinkingLayer->registerJITEventListener(
+                            *JITEventListener::createPerfJITEventListener());
 
-                    // Make sure the debug info sections aren't stripped.
-                    ObjLinkingLayer->setProcessAllSections(true);
+                        // Make sure the debug info sections aren't stripped.
+                        ObjLinkingLayer->setProcessAllSections(true);
+                    }
 
                     return ObjLinkingLayer;
                 })
-#endif // PIR_GDB_SUPPORT
             .create());
 
     // Create one global ThreadSafeContext
@@ -356,7 +352,6 @@ void PirJitLLVM::initializeLLVM() {
     builtinsDL.addGenerator(
         ExitOnErr(DynamicLibrarySearchGenerator::GetForCurrentProcess(
             JIT->getDataLayout().getGlobalPrefix(),
-            // [](const SymbolStringPtr&) { return true; })));
             [MainName = JIT->mangleAndIntern("main")](
                 const SymbolStringPtr& Name) { return Name != MainName; })));
 
@@ -398,9 +393,9 @@ void PirJitLLVM::initializeLLVM() {
 
     builtinsDL.addGenerator(std::make_unique<ExtSymbolGenerator>());
 
-#ifdef PIR_GDB_SUPPORT
-    clearOrCreateDirectory(dbgFolder.c_str());
-#endif
+    if (LLVMDebugInfo()) {
+        clearOrCreateDirectory(dbgFolder.c_str());
+    }
 
     initialized = true;
 }

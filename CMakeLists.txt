@@ -13,7 +13,7 @@ set(R_COMMAND ${R_HOME}/bin/R)
 
 include(${LLVM_DIR}/lib/cmake/llvm/LLVMConfig.cmake OPTIONAL)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-set(LLVM_COMPONENTS_USED core orcjit native vectorize lto bitwriter)
+set(LLVM_COMPONENTS_USED core orcjit native vectorize lto bitwriter PerfJITEvents)
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 

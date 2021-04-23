@@ -32,6 +32,7 @@ completely disables the PIR optimizer. As follows are the different Options avai
         PrintInstructionIds        have instructions print out their memory addresses, to track them across compilation passes
         OmitDeoptBranches          don't print deopt branches in closures
         OnlyChanges                only print optimization passes/phases which actually change bytecode
+        LLVMDebugInfo              turn on generating debug info for jitted code
         PrintEarlyRir              print after initial rir2pir translation
         PrintOptimizationPasses    print after every pass
         PrintOptimizationPhases    print before/after every phase of the compiler
@@ -161,22 +162,23 @@ debugging:
 * `.printInvocation`: prints invocation during evaluation
 * `.int3`: breakpoint during evaluation
 
-## PIR & GDB (experimental!)
+## PIR & gdb (experimental)
 
-There is *WIP* support for debugging LLVM jitted PIR code. It is enabled by `#define PIR_GDB_SUPPORT` in `compiler/native/pir_debug_info.h`, currently set for debug builds.
+There is *EXPERIMENTAL* support for debugging LLVM jitted PIR code.
+It is enabled by setting the `PIR_DEBUG=LLVMDebugInfo` flag.
 
 Run your program, ideally with `rr`:
 ```
-***@***:~/rir/build/debug$ PIR_GDB_FOLDER=pirgdb bin/R -e "f <- function(x) { Sys.sleep(0.01); x + 123L }; f(4L); f(4L); f(4L); f(4L)" -d rr
+***@***:~/rir/build/debug$ bin/R -e "f <- function(x) { Sys.sleep(0.01); x + 123L }; f(4L); f(4L); f(4L); f(4L)" -d rr
 rr: Saving execution to trace directory `/home/***/.local/share/rr/R-402'.
 
 R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night"
 [...]
 ```
 
-This will produce PIR listing files for each PIR module compiled, named like `f.001` in the folder specified by `PIR_GDB_FOLDER` (defaults to `pirgdb`, this folder will be wiped if it already exists):
+This will produce PIR listing files for each PIR module compiled, named like `f.001` in the folder ???:
 ```
-***@***:~/rir/build/debug$ cat pirgdb/f.001
+***@***:~/rir/build/debug$ cat ???/f.001
 rsh_f[0x56500a98aa80].1
 BB0
   int$~"          %0.0  = LdArg                    0
@@ -209,7 +211,7 @@ BB0
   void                    Return                   %0.0
 ```
 
-Now, you can run the debugger and set a breakpoint in those files:
+Now you can run the debugger and set a breakpoint in those files:
 ```
 ***@***:~/rir/build/debug$ rr replay
 GNU gdb (Ubuntu 8.1.1-0ubuntu1) 8.1.1
