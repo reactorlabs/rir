@@ -78,22 +78,27 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             asmpt.remove(Assumption::NoExplicitlyMissingArgs);
                     asmpt.numMissing(Rf_length(formals) - matchedArgs.size());
 
-                    rir::DispatchTable* dt = nullptr;
-                    SEXP srcRef = nullptr;
                     if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
-                        dt = DispatchTable::check(BODY(cnst->c()));
-                        srcRef = Rf_getAttrib(cnst->c(), symbol::srcref);
+                        if (DispatchTable::check(BODY(cnst->c())))
+                            cmp.compileClosure(
+                                cnst->c(), "unknown--fromConstant", asmpt,
+                                false,
+                                [&](ClosureVersion* fun) { target = fun; },
+                                []() {}, {});
                     }
                     if (auto mk = MkFunCls::Cast(calli->tryGetClsArg())) {
-                        dt = mk->originalBody;
-                        srcRef = mk->srcRef;
+                        auto dt = mk->originalBody;
+                        auto srcRef = mk->srcRef;
                         assert(!mk->tryGetCls());
-                    }
-                    if (dt) {
-                        cmp.compileFunction(
-                            dt, "", formals, srcRef, asmpt,
-                            [&](ClosureVersion* fun) { target = fun; }, []() {},
-                            {});
+                        if (dt) {
+                            cmp.compileFunction(dt, "unknown--fromMkFunCls",
+                                                formals, srcRef, asmpt,
+                                                [&](ClosureVersion* fun) {
+                                                    mk->setCls(fun->owner());
+                                                    target = fun;
+                                                },
+                                                []() {}, {});
+                        }
                     }
                 }
 
