@@ -4417,13 +4417,38 @@ void LowerFunctionLLVM::compile() {
                         NativeBuiltins::get(NativeBuiltins::Id::ldvarGlobal),
                         {constant(varName, t::SEXP)});
                 } else {
-                    auto setter =
-                        needsLdVarForUpdate.count(i)
-                            ? NativeBuiltins::get(
-                                  NativeBuiltins::Id::ldvarForUpdate)
-                            : NativeBuiltins::get(NativeBuiltins::Id::ldvar);
-                    res = call(setter,
-                               {constant(varName, t::SEXP), loadSxp(i->env())});
+                    if (needsLdVarForUpdate.count(i)) {
+                        res = call(
+                            NativeBuiltins::get(
+                                NativeBuiltins::Id::ldvarForUpdate),
+                            {constant(varName, t::SEXP), loadSxp(i->env())});
+                    } else {
+                        res = nullptr;
+                        if (auto e = Env::Cast(i->env())) {
+                            if (e->rho == R_BaseNamespace ||
+                                e->rho == R_BaseEnv) {
+                                auto sym = constant(varName, t::SEXP);
+                                res = cdr(sym);
+                                res = createSelect2(
+                                    builder.CreateICmpNE(
+                                        res, constant(R_UnboundValue, t::SEXP)),
+                                    [&]() { return res; },
+                                    [&]() {
+                                        return call(
+                                            NativeBuiltins::get(
+                                                NativeBuiltins::Id::
+                                                    ldvarGlobal),
+                                            {constant(varName, t::SEXP)});
+                                    });
+                            }
+                        }
+                        if (!res) {
+                            res = call(
+                                NativeBuiltins::get(NativeBuiltins::Id::ldvar),
+                                {constant(varName, t::SEXP),
+                                 loadSxp(i->env())});
+                        }
+                    }
                 }
                 res->setName(CHAR(PRINTNAME(varName)));
 
