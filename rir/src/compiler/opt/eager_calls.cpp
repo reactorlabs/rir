@@ -31,6 +31,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         ++ip;
         Instruction* given = ldfun;
 
+        given->replaceUsesWith(expected);
         // We use ldvar instead of ldfun for the guard. The reason is that ldfun
         // can force promises, which is a pain for our optimizer to deal with.
         // Note that ldvar is conservative. If we find a non-function binding
@@ -47,7 +48,6 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             ip = bb->insert(ip, given);
             ++ip;
         }
-        given->replaceUsesWith(expected);
 
         auto test = new Identical(given, expected, PirType::any());
         ip = bb->insert(ip, test);
@@ -143,11 +143,12 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     Effect::DependsOnAssume));
                         }
                     } else if (auto ldfun = LdFun::Cast(call->cls())) {
-                        if (ldfun->hint) {
+                        if (ldfun->hint && !ldfun->hintIsInnerFunction) {
                             auto kind = TYPEOF(ldfun->hint);
                             // We also speculate on calls to CLOSXPs, these will
                             // be picked up by MatchArgs opt pass and turned
-                            // into a static call
+                            // into a static call. TODO, for inner functions we
+                            // need another kind of guard.
                             if (kind == BUILTINSXP || kind == CLOSXP) {
                                 // We can only speculate if we have a checkpoint
                                 // at the ldfun position, since we want to deopt
@@ -171,7 +172,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     if (TYPEOF(builtin) == PROMSXP)
                                         builtin = PRVALUE(builtin);
 
-                                    auto kind = TYPEOF(ldfun->hint);
+                                    auto kind = TYPEOF(builtin);
                                     if (kind == BUILTINSXP || kind == CLOSXP) {
                                         auto rho = env->rho;
                                         bool inBase = false;

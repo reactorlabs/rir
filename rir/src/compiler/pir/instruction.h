@@ -924,6 +924,7 @@ class FLIE(LdFun, 2, Effects::Any()) {
   public:
     SEXP varName;
     SEXP hint = nullptr;
+    bool hintIsInnerFunction = false;
 
     LdFun(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::closure(), {{PirType::any()}},
