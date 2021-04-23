@@ -426,7 +426,7 @@ static void findMerges(const RBCCode& bytecode, CompilerInfo& info) {
 
 struct BCCompiler {
     CompilerInfo& cmp;
-    BCCompiler(CompilerInfo& cmp) : cmp(cmp) {}
+    explicit BCCompiler(CompilerInfo& cmp) : cmp(cmp) {}
 
     void push(Value* v) { cmp.stack.push(v); }
 
@@ -447,29 +447,29 @@ struct BCCompiler {
     Value* env() { return cmp.insert.env; }
 
     template <RBC::Id BC>
-    void compile(RBC);
+    void compile(const RBC&);
 };
 
 // Start instructions translation
 
 template <>
-void BCCompiler::compile<RBC::GETVAR_OP>(RBC bc) {
+void BCCompiler::compile<RBC::GETVAR_OP>(const RBC& bc) {
     auto v = insert(new LdVar(cnst(bc.imm(0)), env()));
     insertPush(new Force(v, env(), Tombstone::framestate()));
 }
 
 template <>
-void BCCompiler::compile<RBC::RETURN_OP>(RBC bc) {
+void BCCompiler::compile<RBC::RETURN_OP>(const RBC& bc) {
     insert(new Return(pop()));
 }
 
 template <>
-void BCCompiler::compile<RBC::LDCONST_OP>(RBC bc) {
+void BCCompiler::compile<RBC::LDCONST_OP>(const RBC& bc) {
     push(insert(new LdConst(cnst(bc.imm(0)))));
 }
 
 template <>
-void BCCompiler::compile<RBC::ADD_OP>(RBC bc) {
+void BCCompiler::compile<RBC::ADD_OP>(const RBC& bc) {
     auto a = pop();
     auto b = pop();
     insertPush(new Add(a, b, env(), bc.imm(0)));

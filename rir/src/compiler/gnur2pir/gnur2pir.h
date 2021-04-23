@@ -14,7 +14,7 @@ class Gnur2Pir {
     Module& m;
 
   public:
-    Gnur2Pir(Module& m) : m(m){};
+    explicit Gnur2Pir(Module& m) : m(m){};
     pir::ClosureVersion* compile(SEXP src, const std::string& name);
 };
 
