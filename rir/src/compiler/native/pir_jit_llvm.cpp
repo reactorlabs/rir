@@ -302,8 +302,10 @@ void PirJitLLVM::initializeLLVM() {
                         // Register the event debug listeners for gdb and perf.
                         ObjLinkingLayer->registerJITEventListener(
                             *JITEventListener::createGDBRegistrationListener());
+#ifdef PIR_USE_PERF
                         ObjLinkingLayer->registerJITEventListener(
                             *JITEventListener::createPerfJITEventListener());
+#endif
 
                         // Make sure the debug info sections aren't stripped.
                         ObjLinkingLayer->setProcessAllSections(true);

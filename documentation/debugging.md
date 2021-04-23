@@ -284,3 +284,27 @@ Current limitations:
 * `continue` after setting a breakpoint breaks something in `rr` and kills the session
 * no variable information (can't do `p %0.1`)
 * sort of stepping into functions but not tested much
+
+## PIR and perf
+
+To get support for `perf` profiling:
+* Build LLVM from source with `perf` support enabled (eg., pass `-DLLVM_USE_PERF:BOOL=ON` to `cmake`, see `sync.sh` for details, don't forget to set the LLVM symlink in `external`)
+* Pass `-DLLVM_USE_PERF=1` to Ř `cmake`
+* Record: `PIR_DEBUG=LLVMDebugInfo perf record -k 1 bin/R -f test.r`
+* Inject jit info: `perf inject -j -i perf.data -o perf.data.jitted`
+* Browse: `perf report -i perf.data.jitted`
+
+Sample:
+```
+Samples: 12K of event 'cycles', Event count (approx.): 11323436187
+Overhead  Command   Shared Object         Symbol
+   4.17%  R         R                     [.] Rf_allocVector3
+   2.75%  R         libc-2.27.so          [.] malloc
+   1.32%  R         librir.so             [.] rir::pir::ForcedBy::merge
+   1.08%  R         R                     [.] do_subset_dflt
+   ...
+   0.46%  R         jitted-37428-112.so   [.] rsh_advance[0x558e2d448380].5
+   ...
+```
+
+See [https://lists.llvm.org/pipermail/llvm-dev/2019-January/129160.html](https://lists.llvm.org/pipermail/llvm-dev/2019-January/129160.html)
