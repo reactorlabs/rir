@@ -3,7 +3,6 @@
 
 #include "compiler/log/stream_logger.h"
 #include "compiler/native/builtins.h"
-#include "compiler/native/pir_debug_info.h"
 #include "compiler/pir/bb.h"
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/instruction.h"
@@ -11,9 +10,7 @@
 #include "compiler/pir/promise.h"
 #include "compiler/util/visitor.h"
 
-#ifdef PIR_GDB_SUPPORT
 #include "llvm/IR/DIBuilder.h"
-#endif
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
@@ -30,6 +27,8 @@ struct Code;
 
 namespace pir {
 
+bool LLVMDebugInfo();
+
 struct NeedsRefcountAdjustment;
 using PromMap = std::unordered_map<Code*, std::pair<unsigned, MkArg*>>;
 
@@ -41,11 +40,7 @@ using PromMap = std::unordered_map<Code*, std::pair<unsigned, MkArg*>>;
 // addresses for PIR builtins.
 class PirJitLLVM {
   public:
-#ifdef PIR_GDB_SUPPORT
     explicit PirJitLLVM(const std::string& name);
-#else
-    PirJitLLVM();
-#endif
     PirJitLLVM(const PirJitLLVM&) = delete;
     PirJitLLVM(PirJitLLVM&&) = delete;
     ~PirJitLLVM();
@@ -64,6 +59,8 @@ class PirJitLLVM {
     static llvm::LLVMContext& getContext();
 
   private:
+    std::string name;
+
     // Initialized on the first call to compile
     std::unique_ptr<llvm::Module> M;
 
@@ -96,7 +93,6 @@ class PirJitLLVM {
     static void initializeLLVM();
     static bool initialized;
 
-#ifdef PIR_GDB_SUPPORT
     // Support for debugging pir in gdb
   public:
     static std::string makeDbgFileName(const std::string& base) {
@@ -142,9 +138,8 @@ class PirJitLLVM {
         size_t getInstLoc(Instruction* i) const { return instLoc.at(i); }
         void emitLocation(llvm::IRBuilder<>&, size_t);
     };
-    DebugInfo DI;
+    std::unique_ptr<DebugInfo> DI;
     std::unique_ptr<llvm::DIBuilder> DIB;
-#endif
 };
 
 } // namespace pir

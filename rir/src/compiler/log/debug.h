@@ -32,6 +32,7 @@ namespace pir {
     V(PrintInstructionIds)                                                     \
     V(OmitDeoptBranches)                                                       \
     V(OnlyChanges)                                                             \
+    V(LLVMDebugInfo)                                                           \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
 
 #define LIST_OF_DEBUG_STYLES(V)                                                \
@@ -44,7 +45,7 @@ enum class DebugFlag {
     LIST_OF_PIR_DEBUGGING_FLAGS(V)
 #undef V
 
-        FIRST = ShowWarnings,
+    FIRST = ShowWarnings,
     LAST = PrintFinalRir
 };
 
