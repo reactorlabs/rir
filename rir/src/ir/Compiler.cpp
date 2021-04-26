@@ -200,7 +200,8 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp);
 // context, but `b` is not. In `while(...) {...}` all loop body expressions are
 // in a void context, since the loop as an expression is always nil.
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
-void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
+                 bool voidContext, bool do_compile_special_calls = true);
 
 // EAGER_PROMISE_FROM_TOS is for the special case when the expression has already
 // been evaluated: wrap the value at TOS into a promise.
@@ -841,12 +842,40 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
              not handle where one of the special function name has been shadowed
              or redefined.
             */
-            std::string const at_assign = "@<-";
-            std::string const dollar_assign = "$<-";
-            if (fun2_replacement_name == at_assign ||
-                fun2_replacement_name == dollar_assign) {
-                return false;
+
+            // Exclude special functions at runtime:
+            // call typeof on the function and fallback to generic GnuR
+            // assingment if the function is special
+            // FIXME: fails if typeof is redefined!
+            // FIXME: call through .Internal?
+            BC::Label const is_not_special_branch = cs.mkLabel();
+            BC::Label const next_branch = cs.mkLabel();
+            {
+                SEXP const typeof_sym = Rf_install("typeof");
+                SEXP const typeof_ast =
+                    Rf_lcons(typeof_sym, Rf_lcons(farrow_sym, R_NilValue));
+
+                SEXP const special = Rf_mkString("special");
+
+                SEXP const compare_sym = Rf_install("==");
+                SEXP const comparison_ast = Rf_lcons(
+                    compare_sym,
+                    Rf_lcons(typeof_ast, Rf_lcons(special, R_NilValue)));
+                Protect comparison_ast_protect(comparison_ast);
+
+                compileCall(ctx, comparison_ast, compare_sym,
+                            CDR(comparison_ast), false);
+
+                cs << BC::asbool();
+                cs << BC::brfalse(is_not_special_branch);
+
+                // FIXME: patch AST at runtime with evaluated promises
+                compileCall(ctx, ast, fun, args_, voidContext, false);
+                cs << BC::br(next_branch);
             }
+
+            // Compile non special complex assignments
+            cs << is_not_special_branch;
 
             // Get the LISTSXP of args for f
             SEXP f_args = CDR(CAR(args_));
@@ -947,6 +976,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     cs << BC::recordType();
                 }
             }
+
+            cs << next_branch;
 
             return true;
         }
@@ -1717,7 +1748,7 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
 
 // function application
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
-                 bool voidContext) {
+                 bool voidContext, bool do_compile_special_calls) {
     CodeStream& cs = ctx.cs();
 
     // application has the form:
@@ -1725,7 +1756,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
     // LHS can either be an identifier or an expression
     if (TYPEOF(fun) == SYMSXP) {
-        if (compileSpecialCall(ctx, ast, fun, args, voidContext))
+        if (do_compile_special_calls &&
+            compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
         cs << BC::ldfun(fun);
