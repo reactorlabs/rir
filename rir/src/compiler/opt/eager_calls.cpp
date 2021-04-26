@@ -344,19 +344,28 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 bool improved = false;
                 call->eachCallArg([&](InstrArg& arg) {
                     if (auto mk = preEval(arg.val(), i)) {
-                        improved = true;
-                        if (mk->isEager()) {
+                        if (mk->isEager() &&
+                            mk->eagerArg() != MissingArg::instance()) {
+                            improved = true;
                             arg.val() = mk->eagerArg();
                         } else {
+                            improved = true;
                             auto asArg =
                                 new CastType(mk, CastType::Upcast, RType::prom,
                                              PirType::valOrLazy());
                             auto forced = new Force(asArg, Env::elided(),
                                                     Tombstone::framestate());
-                            arg.val() = forced;
+                            if (forced->type.maybeMissing()) {
+                                auto upd = new UpdatePromise(mk, forced);
+                                ip = bb->insert(ip, upd);
+                            } else {
+                                arg.val() = forced;
+                            }
                             ip = bb->insert(ip, forced);
                             ip = bb->insert(ip, asArg);
-                            ip++;
+                            ip += 2;
+                            if (forced->type.maybeMissing())
+                                ip++;
                         }
                         eager.insert(i);
                         if (!newAssumptions.isEager(i))
