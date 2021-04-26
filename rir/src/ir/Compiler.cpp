@@ -824,11 +824,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
              the arguments by evaluated promises containing the values
              previously computed.
 
-             Doing so might require adding a special instruction. This is the
-             approach used in the GnuR BC compiler with the instruction
-             SETTER_CALL:
-                https://github.com/reactorlabs/gnur/blob/R-3-6-2-branch-rir-patch/src/main/eval.c#L7128
-
              There are only a couple special assignment functions
                 - [[<-   (handled above)
                 - [ <-   (handled above)
@@ -838,29 +833,35 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 - $<-
              This leaves only two to deal with.
 
-             /!\ This only works for specials known at compile-time, and does
-             not handle where one of the special function name has been shadowed
-             or redefined.
+
+             Note:  The approach used in the GnuR BC compiler is to add the
+             special instruction SETTER_CALL to deal with these situations:
+                https://github.com/reactorlabs/gnur/blob/R-3-6-2-branch-rir-patch/src/main/eval.c#L7128
             */
 
             // Exclude special functions at runtime:
             // call typeof on the function and fallback to generic GnuR
-            // assingment if the function is special
-            // FIXME: fails if typeof is redefined!
-            // FIXME: call through .Internal?
+            // assingment if the function is special (with pre-evaluated
+            // value and destination arguments)
+
             BC::Label const is_not_special_branch = cs.mkLabel();
             BC::Label const next_branch = cs.mkLabel();
             {
+
+                SEXP const internal_sym = Rf_install(".Internal");
                 SEXP const typeof_sym = Rf_install("typeof");
                 SEXP const typeof_ast =
                     Rf_lcons(typeof_sym, Rf_lcons(farrow_sym, R_NilValue));
+
+                SEXP const internal_typeof_ast =
+                    Rf_lcons(internal_sym, Rf_lcons(typeof_ast, R_NilValue));
 
                 SEXP const special = Rf_mkString("special");
 
                 SEXP const compare_sym = Rf_install("==");
                 SEXP const comparison_ast = Rf_lcons(
-                    compare_sym,
-                    Rf_lcons(typeof_ast, Rf_lcons(special, R_NilValue)));
+                    compare_sym, Rf_lcons(internal_typeof_ast,
+                                          Rf_lcons(special, R_NilValue)));
                 Protect comparison_ast_protect(comparison_ast);
 
                 compileCall(ctx, comparison_ast, compare_sym,
@@ -869,8 +870,51 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::asbool();
                 cs << BC::brfalse(is_not_special_branch);
 
-                // FIXME: patch AST at runtime with evaluated promises
-                compileCall(ctx, ast, fun, args_, voidContext, false);
+                // to avoid evaluating and the RHS in GnuR, pass it
+                // through a temporary variable
+
+                SEXP new_ast = Rf_duplicate(ast);
+                Protect new_ast_protect(new_ast);
+
+                // evaluate the RHS
+                SEXP rhs_expr_cell = CDR(new_ast);
+                while (CDR(rhs_expr_cell) != R_NilValue) {
+                    rhs_expr_cell = CDR(rhs_expr_cell);
+                }
+                compileExpr(ctx, CAR(rhs_expr_cell));
+
+                SEXP tmp_rhs = Rf_install("*tmp_rhs_complex_assignment*");
+                cs << BC::stvar(tmp_rhs);
+
+                // use this temporary variable holding the evaluated RHS value
+                // as the complex argument assignment value
+                CAR(rhs_expr_cell) = tmp_rhs;
+
+                // TODO: evaluate the destination
+                // as we do not allow nested complex assignments, the
+                // destination is either already a SYMSXP, or is a PROMSXP ;
+                // maybe we could force it when it is a promise? SEXP dest_cell
+                // = CDR(CAR(CDR(new_ast))); CAR(dest_cell) =
+                // rirForcePromise(CAR(dest_cell));
+
+                // compile the modified AST
+                // Make sure not to recurse into compileSpecialCall
+                compileCall(ctx, new_ast, CAR(new_ast), CDR(new_ast),
+                            voidContext, false);
+
+                // Remove the temporary binding
+                // TODO: do it without a function call to `rm`?
+
+                auto remove_var = [&](SEXP var) {
+                    SEXP const remove_ast = Rf_lcons(
+                        Rf_install("rm"), Rf_lcons(tmp_rhs, R_NilValue));
+                    Protect remove_ast_protect(remove_ast);
+                    compileCall(ctx, remove_ast, CAR(remove_ast),
+                                CDR(remove_ast), true);
+                };
+
+                remove_var(tmp_rhs);
+
                 cs << BC::br(next_branch);
             }
 
