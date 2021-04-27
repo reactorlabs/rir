@@ -85,12 +85,13 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 false,
                                 [&](ClosureVersion* fun) { target = fun; },
                                 []() {}, {});
-                    }
-                    if (auto mk = MkFunCls::Cast(calli->tryGetClsArg())) {
+                    } else if (auto mk =
+                                   MkFunCls::Cast(calli->tryGetClsArg())) {
+                        if (auto cls = mk->tryGetCls())
+                            target = cls->findCompatibleVersion(asmpt);
                         auto dt = mk->originalBody;
-                        auto srcRef = mk->srcRef;
-                        assert(!mk->tryGetCls());
-                        if (dt) {
+                        if (!target && dt) {
+                            auto srcRef = mk->srcRef;
                             cmp.compileFunction(dt, "unknown--fromMkFunCls",
                                                 formals, srcRef, asmpt,
                                                 [&](ClosureVersion* fun) {
