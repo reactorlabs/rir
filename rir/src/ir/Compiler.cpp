@@ -858,13 +858,16 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
                 SEXP const special = Rf_mkString("special");
 
-                SEXP const compare_sym = Rf_install("==");
+                SEXP const primitive_sym = Rf_install(".Primitive");
+                SEXP const compare_str = Rf_mkString("==");
+                // .Primitive("==")(typeof(fun), "special")
                 SEXP const comparison_ast = Rf_lcons(
-                    compare_sym, Rf_lcons(internal_typeof_ast,
-                                          Rf_lcons(special, R_NilValue)));
+                    Rf_lcons(primitive_sym, Rf_lcons(compare_str, R_NilValue)),
+                    Rf_lcons(internal_typeof_ast,
+                             Rf_lcons(special, R_NilValue)));
                 Protect comparison_ast_protect(comparison_ast);
 
-                compileCall(ctx, comparison_ast, compare_sym,
+                compileCall(ctx, comparison_ast, CAR(comparison_ast),
                             CDR(comparison_ast), false);
 
                 cs << BC::asbool();
