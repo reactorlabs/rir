@@ -1,4 +1,5 @@
 #include "../analysis/available_checkpoints.h"
+#include "../analysis/query.h"
 #include "../pir/pir_impl.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
@@ -249,10 +250,10 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             // some) arguments are eager. In this case we will compile an
             // special eager version of the function and call this one instead.
             if (auto call = StaticCall::Cast(*ip)) {
-                Closure* cls = call->cls();
+                Closure* target = call->cls();
                 ClosureVersion* version = call->tryDispatch();
 
-                if (!version || call->nCallArgs() != cls->nargs()) {
+                if (!version || call->nCallArgs() != target->nargs()) {
                     ip = next;
                     continue;
                 }
@@ -260,14 +261,14 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 auto availableAssumptions = call->inferAvailableAssumptions();
                 assert(version->context().numMissing() <=
                        availableAssumptions.numMissing());
-                cls->rirFunction()->clearDisabledAssumptions(
+                target->rirFunction()->clearDisabledAssumptions(
                     availableAssumptions);
 
                 // We picked up more assumptions, let's compile a better
                 // version. Maybe we should limit this at some point, to avoid
                 // version explosion.
                 if (availableAssumptions.isImproving(version)) {
-                    auto newVersion = cls->cloneWithAssumptions(
+                    auto newVersion = target->cloneWithAssumptions(
                         version, availableAssumptions,
                         [&](ClosureVersion* newCls) {
                             Visitor::run(newCls->entry, [&](Instruction* i) {
@@ -344,28 +345,29 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 bool improved = false;
                 call->eachCallArg([&](InstrArg& arg) {
                     if (auto mk = preEval(arg.val(), i)) {
-                        if (mk->isEager() &&
-                            mk->eagerArg() != MissingArg::instance()) {
-                            improved = true;
-                            arg.val() = mk->eagerArg();
+                        if (mk->isEager()) {
+                            if (!mk->eagerArg()->type.maybeMissing()) {
+                                improved = true;
+                                arg.val() = mk->eagerArg();
+                            }
                         } else {
                             improved = true;
-                            auto asArg =
-                                new CastType(mk, CastType::Upcast, RType::prom,
-                                             PirType::valOrLazy());
+                            auto asArg = new CastType(
+                                mk, CastType::Upcast, RType::prom,
+                                Query::returnType(mk->prom()).orLazy());
                             auto forced = new Force(asArg, Env::elided(),
                                                     Tombstone::framestate());
                             if (forced->type.maybeMissing()) {
-                                auto upd = new UpdatePromise(mk, forced);
+                                auto upd = new MkArg(mk->prom(), forced,
+                                                     Env::elided());
                                 ip = bb->insert(ip, upd);
+                                arg.val() = upd;
                             } else {
                                 arg.val() = forced;
                             }
                             ip = bb->insert(ip, forced);
                             ip = bb->insert(ip, asArg);
-                            ip += 2;
-                            if (forced->type.maybeMissing())
-                                ip++;
+                            ip += forced->type.maybeMissing() ? 3 : 2;
                         }
                         eager.insert(i);
                         if (!newAssumptions.isEager(i))
@@ -387,9 +389,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (!newAssumptions.isNotObj(i) &&
                         newAssumptions.isEager(i))
                         newAssumptions.setNotObj(i);
-                cls->rirFunction()->clearDisabledAssumptions(newAssumptions);
+                target->rirFunction()->clearDisabledAssumptions(newAssumptions);
 
-                auto newVersion = cls->cloneWithAssumptions(
+                auto newVersion = target->cloneWithAssumptions(
                     version, newAssumptions, [&](ClosureVersion* newCls) {
                         anyChange = true;
                         Visitor::run(newCls->entry, [&](Instruction* i) {
