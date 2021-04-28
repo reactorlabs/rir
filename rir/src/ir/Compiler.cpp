@@ -858,6 +858,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
                 SEXP const special = Rf_mkString("special");
 
+#if true
+                Protect typeof_ast_protect(internal_typeof_ast);
+                compileExpr(ctx, internal_typeof_ast);
+                cs << BC::push(special) << BC::identicalNoforce();
+#else
                 SEXP const primitive_sym = Rf_install(".Primitive");
                 SEXP const compare_str = Rf_mkString("==");
                 // .Primitive("==")(typeof(fun), "special")
@@ -866,13 +871,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     Rf_lcons(internal_typeof_ast,
                              Rf_lcons(special, R_NilValue)));
                 Protect comparison_ast_protect(comparison_ast);
-
                 compileCall(ctx, comparison_ast, CAR(comparison_ast),
                             CDR(comparison_ast), false);
+#endif
 
-                cs << BC::asbool();
-                cs << BC::brfalse(is_not_special_branch);
+                cs << BC::asbool() << BC::brfalse(is_not_special_branch);
 
+#if false
                 // to avoid evaluating and the RHS in GnuR, pass it
                 // through a temporary variable
 
@@ -917,6 +922,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 };
 
                 remove_var(tmp_rhs);
+#else
+                compileCall(ctx, ast, CAR(ast), CDR(ast), voidContext, false);
+#endif
 
                 cs << BC::br(next_branch);
             }
