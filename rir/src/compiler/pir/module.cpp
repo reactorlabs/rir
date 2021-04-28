@@ -49,6 +49,8 @@ void Module::eachPirClosureVersion(PirClosureVersionIterator it) {
 Env* Module::getEnv(SEXP rho) {
     if (rho == R_NilValue)
         return Env::nil();
+    if (rho == R_GlobalEnv)
+        return Env::global();
 
     if (environments.count(rho))
         return environments.at(rho);

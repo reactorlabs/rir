@@ -43,7 +43,8 @@ using namespace llvm;
 extern "C" size_t R_NSize;
 extern "C" size_t R_NodesInUse;
 
-static_assert(sizeof(unsigned long) == sizeof(uint64_t), "sizeof(unsigned long) and sizeof(uint64_t) should match"); 
+static_assert(sizeof(unsigned long) == sizeof(uint64_t),
+              "sizeof(unsigned long) and sizeof(uint64_t) should match");
 
 void LowerFunctionLLVM::PhiBuilder::addInput(llvm::Value* v) {
     addInput(v, builder.GetInsertBlock());
@@ -2138,19 +2139,18 @@ void LowerFunctionLLVM::compile() {
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
 
-#ifdef PIR_GDB_SUPPORT
     // For variable info, broken...
     // size_t ArgIdx = 0;
-#endif
+
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         currentBB = bb;
 
         builder.SetInsertPoint(getBlock(bb));
         inPushContext = blockInPushContext.at(bb);
 
-#ifdef PIR_GDB_SUPPORT
-        DI->emitLocation(builder, DI->getBBLoc(bb));
-#endif
+        if (LLVMDebugInfo()) {
+            DI->emitLocation(builder, DI->getBBLoc(bb));
+        }
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             currentInstr = it;
@@ -2175,10 +2175,10 @@ void LowerFunctionLLVM::compile() {
                 });
             }
 
-#ifdef PIR_GDB_SUPPORT
-            auto line = DI->getInstLoc(i);
-            DI->emitLocation(builder, line);
-#endif
+            if (LLVMDebugInfo()) {
+                auto line = DI->getInstLoc(i);
+                DI->emitLocation(builder, line);
+            }
 
             switch (i->tag) {
             case Tag::ExpandDots: {
@@ -3434,7 +3434,6 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Add: {
 
-#ifdef PIR_GDB_SUPPORT
                 // TODO: this is broken...
                 // auto decl = [&](llvm::Value* v) {
                 //     DILocalVariable* D = DIB->createParameterVariable(
@@ -3448,15 +3447,15 @@ void LowerFunctionLLVM::compile() {
                 //                         DI->getScope()),
                 //         builder.GetInsertBlock());
                 // };
-#endif
+
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
                                  // TODO: Check NA
                                  auto res =
                                      builder.CreateAdd(a, b, "", false, true);
-#ifdef PIR_GDB_SUPPORT
-                    //  decl(res);
-#endif
+
+                                 //  decl(res);
+
                                  return res;
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -4417,13 +4416,38 @@ void LowerFunctionLLVM::compile() {
                         NativeBuiltins::get(NativeBuiltins::Id::ldvarGlobal),
                         {constant(varName, t::SEXP)});
                 } else {
-                    auto setter =
-                        needsLdVarForUpdate.count(i)
-                            ? NativeBuiltins::get(
-                                  NativeBuiltins::Id::ldvarForUpdate)
-                            : NativeBuiltins::get(NativeBuiltins::Id::ldvar);
-                    res = call(setter,
-                               {constant(varName, t::SEXP), loadSxp(i->env())});
+                    if (needsLdVarForUpdate.count(i)) {
+                        res = call(
+                            NativeBuiltins::get(
+                                NativeBuiltins::Id::ldvarForUpdate),
+                            {constant(varName, t::SEXP), loadSxp(i->env())});
+                    } else {
+                        res = nullptr;
+                        if (auto e = Env::Cast(i->env())) {
+                            if (e->rho == R_BaseNamespace ||
+                                e->rho == R_BaseEnv) {
+                                auto sym = constant(varName, t::SEXP);
+                                res = cdr(sym);
+                                res = createSelect2(
+                                    builder.CreateICmpNE(
+                                        res, constant(R_UnboundValue, t::SEXP)),
+                                    [&]() { return res; },
+                                    [&]() {
+                                        return call(
+                                            NativeBuiltins::get(
+                                                NativeBuiltins::Id::
+                                                    ldvarGlobal),
+                                            {constant(varName, t::SEXP)});
+                                    });
+                            }
+                        }
+                        if (!res) {
+                            res = call(
+                                NativeBuiltins::get(NativeBuiltins::Id::ldvar),
+                                {constant(varName, t::SEXP),
+                                 loadSxp(i->env())});
+                        }
+                    }
                 }
                 res->setName(CHAR(PRINTNAME(varName)));
 

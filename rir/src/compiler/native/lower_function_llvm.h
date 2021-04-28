@@ -10,9 +10,7 @@
 #include "compiler/pir/pir.h"
 #include "runtime/Code.h"
 
-#ifdef PIR_GDB_SUPPORT
 #include "llvm/IR/DIBuilder.h"
-#endif
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/MDBuilder.h"
 
@@ -67,10 +65,8 @@ class LowerFunctionLLVM {
     PirJitLLVM::GetModule getModule;
     PirJitLLVM::GetFunction getFunction;
 
-#ifdef PIR_GDB_SUPPORT
     PirJitLLVM::DebugInfo* DI;
     llvm::DIBuilder* DIB;
-#endif
 
     Protect p_;
 
@@ -84,13 +80,9 @@ class LowerFunctionLLVM {
         const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         PirJitLLVM::Declare declare, const PirJitLLVM::GetModule& getModule,
-        const PirJitLLVM::GetFunction& getFunction
-#ifdef PIR_GDB_SUPPORT
-        ,
-        PirJitLLVM::DebugInfo* DI, llvm::DIBuilder* DIB
-#endif
-        )
-        : name(name), code(code), promMap(promMap), refcount(refcount),
+        const PirJitLLVM::GetFunction& getFunction, PirJitLLVM::DebugInfo* DI,
+        llvm::DIBuilder* DIB)
+        : code(code), promMap(promMap), refcount(refcount),
           needsLdVarForUpdate(needsLdVarForUpdate),
           builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
           liveness(code, code->nextBBId), numLocals(0), numTemps(0),
@@ -98,12 +90,7 @@ class LowerFunctionLLVM {
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)),
-          getModule(getModule), getFunction(getFunction)
-#ifdef PIR_GDB_SUPPORT
-          ,
-          DI(DI), DIB(DIB)
-#endif
-    {
+          getModule(getModule), getFunction(getFunction), DI(DI), DIB(DIB) {
 
         fun = declare(code, name, t::nativeFunction);
 
