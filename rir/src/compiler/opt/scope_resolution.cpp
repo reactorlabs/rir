@@ -331,60 +331,69 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                 // Constant fold "missing" if we can.
                 if (auto missing = Missing::Cast(i)) {
-                    auto res =
-                        analysis.load(before, missing->varName, missing->env());
-                    bool notMissing = false;
-                    if (res.result.isSingleValue()) {
-                        auto v =
-                            res.result.singleValue().val->followCastsAndForce();
-                        if (!v->type.maybePromiseWrapped() &&
-                            !v->type.maybeMissing() &&
-                            /* Warning: Forcing a (non-missing) promise can
-                                still return missing... */
-                            !MkArg::Cast(v)) {
+                    if (after.missing(missing)) {
+                        missing->replaceUsesWith(True::instance());
+                        replacedValue[missing] = True::instance();
+                        next = bb->remove(ip);
+                        anyChange = true;
+                    } else {
+                        auto res = analysis.load(before, missing->varName,
+                                                 missing->env());
+                        bool notMissing = false;
+                        if (res.result.isSingleValue()) {
+                            auto v = res.result.singleValue()
+                                         .val->followCastsAndForce();
+                            if (!v->type.maybePromiseWrapped() &&
+                                !v->type.maybeMissing() &&
+                                /* Warning: Forcing a (non-missing) promise can
+                                    still return missing... */
+                                !MkArg::Cast(v)) {
+                                notMissing = true;
+                            }
+                            // If we find the (eager) root promise, we know if
+                            // it is missing or not! Note this doesn't go
+                            // throught forces.
+                            if (auto mk =
+                                    MkArg::Cast(res.result.singleValue()
+                                                    .val->followCasts())) {
+                                if (mk->isEager() &&
+                                    mk->eagerArg() != MissingArg::instance())
+                                    notMissing = true;
+                            }
+                        }
+                        if (!res.result.type.maybeMissing() &&
+                            !res.result.type.maybePromiseWrapped()) {
                             notMissing = true;
                         }
-                        // If we find the (eager) root promise, we know if it is
-                        // missing or not! Note this doesn't go throught forces.
-                        if (auto mk = MkArg::Cast(
-                                res.result.singleValue().val->followCasts())) {
-                            if (mk->isEager() &&
-                                mk->eagerArg() != MissingArg::instance())
-                                notMissing = true;
-                        }
-                    }
-                    if (!res.result.type.maybeMissing() &&
-                        !res.result.type.maybePromiseWrapped()) {
-                        notMissing = true;
-                    }
 
-                    if (notMissing) {
-                        // Missing still returns TRUE, if the argument was
-                        // initially missing, but then overwritten by a default
-                        // argument.
-                        if (auto env = MkEnv::Cast(missing->env())) {
-                            bool initiallyMissing = false;
-                            env->eachLocalVar(
-                                [&](SEXP name, Value* val, bool m) {
-                                    if (name == missing->varName)
-                                        initiallyMissing = m;
-                                });
-                            if (!initiallyMissing) {
-                                missing->replaceUsesWith(False::instance());
-                                replacedValue[missing] = False::instance();
-                                next = bb->remove(ip);
-                                anyChange = true;
+                        if (notMissing) {
+                            // Missing still returns TRUE, if the argument was
+                            // initially missing, but then overwritten by a
+                            // default argument.
+                            if (auto env = MkEnv::Cast(missing->env())) {
+                                bool initiallyMissing = false;
+                                env->eachLocalVar(
+                                    [&](SEXP name, Value* val, bool m) {
+                                        if (name == missing->varName)
+                                            initiallyMissing = m;
+                                    });
+                                if (!initiallyMissing) {
+                                    missing->replaceUsesWith(False::instance());
+                                    replacedValue[missing] = False::instance();
+                                    next = bb->remove(ip);
+                                    anyChange = true;
+                                }
                             }
+                        } else {
+                            res.result.ifSingleValue([&](Value* v) {
+                                if (v == MissingArg::instance()) {
+                                    missing->replaceUsesWith(True::instance());
+                                    replacedValue[missing] = True::instance();
+                                    next = bb->remove(ip);
+                                    anyChange = true;
+                                }
+                            });
                         }
-                    } else {
-                        res.result.ifSingleValue([&](Value* v) {
-                            if (v == MissingArg::instance()) {
-                                missing->replaceUsesWith(True::instance());
-                                replacedValue[missing] = True::instance();
-                                next = bb->remove(ip);
-                                anyChange = true;
-                            }
-                        });
                     }
                 }
 
