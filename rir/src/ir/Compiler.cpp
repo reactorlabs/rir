@@ -1496,9 +1496,15 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     // LHS ( ARGS )
 
     // LHS can either be an identifier or an expression
+    bool likelyBuiltin = false;
+    BC::Label eager = 0;
+    BC::Label theCall = 0;
     if (TYPEOF(fun) == SYMSXP) {
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
+
+        // forces promises but should be okay when starting in the global env
+        likelyBuiltin = TYPEOF(Rf_findVar(fun, R_GlobalEnv)) == BUILTINSXP;
 
         cs << BC::ldfun(fun);
     } else {
@@ -1509,12 +1515,35 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (Compiler::profile)
         cs << BC::recordCall();
 
+    if (likelyBuiltin) {
+        eager = cs.mkLabel();
+        theCall = cs.mkLabel();
+        cs << BC::dup()
+           << BC::is(BC::RirTypecheck::isBUILTINSXP)
+           << BC::recordTest() << BC::brtrue(eager);
+    }
+
     LoadArgsResult info;
     if (fun == symbol::forceAndCall) {
         // First arg certainly eager
         info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0, 2);
     } else {
         info = compileLoadArgs(ctx, ast, fun, args, voidContext);
+    }
+
+    if (likelyBuiltin) {
+        cs << BC::br(theCall) << eager;
+
+        for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg) {
+            if (*arg == R_DotsSymbol)
+                cs << BC::push(R_DotsSymbol);
+            else if (*arg == R_MissingArg)
+                cs << BC::push(R_MissingArg);
+            else
+                compileExpr(ctx, *arg, false);
+        }
+
+        cs << theCall;
     }
 
     if (info.hasDots) {

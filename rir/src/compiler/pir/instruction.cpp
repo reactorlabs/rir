@@ -693,6 +693,8 @@ PirType Is::upperBound() const {
         return RType::str;
     case BC::RirTypecheck::isRAWSXP:
         return RType::raw;
+    case BC::RirTypecheck::isBUILTINSXP:
+        return RType::closure;
     case BC::RirTypecheck::isLISTSXP:
         return PirType(RType::list) | RType::nil;
     case BC::RirTypecheck::isVECSXP:

@@ -490,6 +490,7 @@ std::ostream& operator<<(std::ostream& out, BC::RirTypecheck t) {
     case BC::RirTypecheck::isEXPRSXP:
     case BC::RirTypecheck::isVECSXP:
     case BC::RirTypecheck::isLISTSXP:
+    case BC::RirTypecheck::isBUILTINSXP:
         out << type2char((int)t);
         break;
     }

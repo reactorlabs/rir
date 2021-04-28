@@ -2997,6 +2997,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             case BC::RirTypecheck::isCPLXSXP:
             case BC::RirTypecheck::isRAWSXP:
             case BC::RirTypecheck::isEXPRSXP:
+            case BC::RirTypecheck::isBUILTINSXP:
                 res = TYPEOF(val) == type;
                 break;
 
