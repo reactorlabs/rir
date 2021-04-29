@@ -649,7 +649,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             i->replaceUsesAndSwapWith(new LdConst(list), ip);
                         }
                     } else if (builtinId == blt("as.logical") && nargs == 1 &&
-                               !i->arg(0).val()->type.maybeObj()) {
+                               !i->arg(0).val()->type.maybeHasAttrs()) {
                         i->replaceUsesAndSwapWith(
                             new AsLogical(i->arg(0).val(), i->srcIdx), ip);
                         iterAnyChange = true;
