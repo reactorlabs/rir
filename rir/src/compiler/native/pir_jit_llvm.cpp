@@ -34,9 +34,7 @@ llvm::ExitOnError ExitOnErr;
 std::unique_ptr<llvm::orc::LLJIT> JIT;
 llvm::orc::ThreadSafeContext TSC;
 
-// TODO: put in /tmp
-std::string dbgFolder =
-    getenv("PIR_GDB_FOLDER") ? getenv("PIR_GDB_FOLDER") : "pirgdb";
+std::string dbgFolder;
 
 } // namespace
 
@@ -169,7 +167,7 @@ void PirJitLLVM::compile(
             DI = std::make_unique<DebugInfo>(dbgFolder, name);
 
             // Create a file stream log for this module
-            DI->log = std::make_unique<FileLogStream>("./" + DI->Folder + "/" +
+            DI->log = std::make_unique<FileLogStream>(DI->Folder + "/" +
                                                       DI->FileName);
 
             // Add the current debug info version into the module.
@@ -396,7 +394,14 @@ void PirJitLLVM::initializeLLVM() {
     builtinsDL.addGenerator(std::make_unique<ExtSymbolGenerator>());
 
     if (LLVMDebugInfo()) {
-        clearOrCreateDirectory(dbgFolder.c_str());
+        if (getenv("PIR_GDB_FOLDER")) {
+            dbgFolder = getenv("PIR_GDB_FOLDER");
+            clearOrCreateDirectory(dbgFolder.c_str());
+        } else {
+            dbgFolder = createTmpDirectory();
+            std::ofstream of("./PIR_GDB_FOLDER");
+            of << dbgFolder << "\n";
+        }
     }
 
     initialized = true;
