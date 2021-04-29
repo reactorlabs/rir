@@ -420,7 +420,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                    ClosureVersion::Property::NoReflection)) {
                     call->eachCallArg([&](InstrArg& arg) {
                         if (auto mk = MkArg::Cast(arg.val())) {
-                            if (mk->isEager()) {
+                            if (mk->isEager() &&
+                                !mk->eagerArg()->type.maybeMissing()) {
+                                anyChange = true;
                                 arg.val() = mk->eagerArg();
                             }
                         }
