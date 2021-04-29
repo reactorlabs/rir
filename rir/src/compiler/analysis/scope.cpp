@@ -223,29 +223,6 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         auto res = load(state, missing->varName, missing->env());
         if (!res.result.isUnknown()) {
             handled = true;
-            res.result.ifSingleValue([&](Value* v) {
-                if (auto mk = MkArg::Cast(v->followCasts())) {
-                    if (mk->isEager() &&
-                        mk->eagerArg() == MissingArg::instance()) {
-                        state.missing_.insert(missing);
-                    }
-                    if (!mk->isEager() && depth < MAX_DEPTH) {
-                        auto stateCopy = state;
-                        stateCopy.mayUseReflection = false;
-                        ScopeAnalysis prom(closure, mk->prom(), mk->env(),
-                                           stateCopy, globalState, depth + 1,
-                                           log);
-                        prom();
-                        auto res = prom.result();
-                        if (res.noReflection())
-                            res.returnValue.ifSingleValue([&](Value* v) {
-                                if (v == MissingArg::instance()) {
-                                    state.missing_.insert(missing);
-                                }
-                            });
-                    }
-                }
-            });
         }
     } else if (auto up = UpdatePromise::Cast(i)) {
         effect.max(state.forcedPromise[up->mkarg()].merge(

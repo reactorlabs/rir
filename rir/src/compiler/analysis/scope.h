@@ -32,7 +32,6 @@ class ScopeAnalysisState {
     AbstractREnvironmentHierarchy envs;
     AbstractPirValue returnValue;
     std::unordered_map<MkArg*, AbstractPirValue> forcedPromise;
-    std::unordered_set<Missing*> missing_;
 
     bool mayUseReflection = false;
 
@@ -72,8 +71,6 @@ class ScopeAnalysisState {
             res.lostPrecision();
         }
 
-        missing_.insert(other.missing_.begin(), other.missing_.end());
-
         return res.max(envs.merge(other.envs));
     }
 
@@ -93,8 +90,6 @@ class ScopeAnalysisState {
     }
 
     bool noReflection() const { return !mayUseReflection; };
-
-    bool missing(Missing* m) const { return missing_.count(m); }
 
     void print(std::ostream& out, bool tty) const {
         envs.print(out, tty);
@@ -175,7 +170,7 @@ class ScopeAnalysis
 
   public:
     // Lookup what the analysis knows about the result of executing
-    // instruction i. This recursively queries all available resources,
+    // instruction i. This recursively queries all available ressources,
     // such as binding structure, inter-procedural return values, function
     // arguments and so on.
     void lookup(Value*, const LoadMaybe&,
