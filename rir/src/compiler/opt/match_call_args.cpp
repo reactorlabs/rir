@@ -64,9 +64,13 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         matchedArgs, argOrderOrig);
                 }
 
-                auto asmpt = calli->inferAvailableAssumptions();
+                Context asmpt;
 
-                if (staticallyArgmatched && !target) {
+                if (staticallyArgmatched) {
+                    Call fake((*ip)->env(), calli->tryGetClsArg(), matchedArgs,
+                              Tombstone::framestate(), (*ip)->srcIdx);
+                    asmpt = fake.inferAvailableAssumptions();
+
                     // We can add these because arguments will be statically
                     // matched
                     asmpt.add(Assumption::StaticallyArgmatched);
