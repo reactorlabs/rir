@@ -46,22 +46,24 @@ bool Query::pureExceptDeopt(Code* c) {
 }
 
 PirType Query::returnType(Code* c) {
-    PirType ret = PirType::bottom();
-    bool first = false;
+    struct {
+        PirType t = PirType::bottom();
+        bool seen = false;
+    } ret;
     Visitor::run(c->entry, [&](BB* bb) {
         if (bb->isExit()) {
             if (auto r = Return::Cast(bb->last())) {
                 auto t = r->arg(0).val()->type;
-                if (first) {
-                    first = false;
-                    ret = t;
+                if (!ret.seen) {
+                    ret.seen = true;
+                    ret.t = t;
                 } else {
-                    ret = ret | t;
+                    ret.t = ret.t | t;
                 }
             }
         }
     });
-    return ret;
+    return ret.t;
 }
 
 std::unordered_set<Value*> Query::returned(Code* c) {
