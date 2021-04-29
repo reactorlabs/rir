@@ -18,6 +18,7 @@
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
 
+#include <initializer_list>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
@@ -333,6 +334,10 @@ class RBCCode {
         bool operator==(const Iterator& other) const {
             return pos == other.pos;
         }
+        size_t operator-(const Iterator& other) const {
+            assert(pos >= other.pos);
+            return pos - other.pos;
+        }
 
         size_t label(const Iterator& begin) const {
             return pos - begin.pos + 1;
@@ -370,26 +375,67 @@ class RBCCode {
 
 struct Stack {
   private:
-    std::stack<Value*> stack;
+    std::vector<Value*> stack;
 
   public:
-    void push(Value* v) { stack.push(v); }
+    void push(Value* v) { stack.push_back(v); }
     Value* pop() {
-        auto v = stack.top();
-        stack.pop();
+        auto v = stack.back();
+        stack.pop_back();
         return v;
     }
-    ~Stack() { assert(stack.empty()); }
+    bool isEmpty() const { return stack.empty(); }
+    friend struct CompilerInfo;
 };
 
 struct CompilerInfo {
     CompilerInfo(SEXP src, Stack& stack, Builder& insert)
-        : src(src), stack(stack), insert(insert) {}
+        : src(src), stack(stack), insert(insert) {
+        basicBlocks[1] = insert.getCurrentBB();
+    }
+    BB* getBB(size_t pos) {
+        auto f = basicBlocks.find(pos);
+        if (f != basicBlocks.end())
+            return f->second;
+        return basicBlocks
+            .emplace(pos, new BB(insert.code, insert.code->nextBBId++))
+            .first->second;
+    }
     SEXP src;
     Stack& stack;
     Builder& insert;
     std::unordered_set<size_t> mergepoints;
+    std::unordered_map<BB*, Stack> bbState;
+    std::unordered_map<size_t, BB*> basicBlocks;
     std::unordered_map<size_t, size_t> jumps;
+
+    void merge(std::initializer_list<size_t> trgs) {
+        for (auto trg : trgs) {
+            auto bb = getBB(trg);
+            if (!mergepoints.count(trg)) {
+                assert(!bbState.count(bb));
+                bbState[bb] = stack;
+                continue;
+            }
+
+            auto state = bbState.find(bb);
+            if (state == bbState.end()) {
+                Stack trgStack;
+                for (auto v : stack.stack) {
+                    trgStack.push(*bb->insert(
+                        bb->end(), new Phi({{insert.getCurrentBB(), v}})));
+                }
+                bbState.emplace(bb, trgStack);
+            } else {
+                Stack& trgStack = state->second;
+                for (size_t pos = 0; pos < trgStack.stack.size(); ++pos) {
+                    Phi::Cast(trgStack.stack[pos])
+                        ->addInput(insert.getCurrentBB(), stack.stack[pos]);
+                }
+            }
+        }
+        stack.stack.clear();
+    }
 };
 
 static void findMerges(const RBCCode& bytecode, CompilerInfo& info) {
@@ -430,6 +476,7 @@ struct BCCompiler {
 
     void push(Value* v) { cmp.stack.push(v); }
 
+    bool stackEmpty() { return cmp.stack.isEmpty(); }
     Value* pop() { return cmp.stack.pop(); }
 
     Instruction* insertPush(Instruction* i) {
@@ -447,32 +494,72 @@ struct BCCompiler {
     Value* env() { return cmp.insert.env; }
 
     template <RBC::Id BC>
-    void compile(const RBC&);
+    void compile(const RBC&, size_t pos);
 };
 
 // Start instructions translation
 
 template <>
-void BCCompiler::compile<RBC::GETVAR_OP>(const RBC& bc) {
+void BCCompiler::compile<RBC::GETVAR_OP>(const RBC& bc, size_t pos) {
     auto v = insert(new LdVar(cnst(bc.imm(0)), env()));
     insertPush(new Force(v, env(), Tombstone::framestate()));
 }
 
 template <>
-void BCCompiler::compile<RBC::RETURN_OP>(const RBC& bc) {
+void BCCompiler::compile<RBC::RETURN_OP>(const RBC& bc, size_t pos) {
     insert(new Return(pop()));
 }
 
 template <>
-void BCCompiler::compile<RBC::LDCONST_OP>(const RBC& bc) {
+void BCCompiler::compile<RBC::LDCONST_OP>(const RBC& bc, size_t pos) {
     push(insert(new LdConst(cnst(bc.imm(0)))));
 }
 
 template <>
-void BCCompiler::compile<RBC::ADD_OP>(const RBC& bc) {
+void BCCompiler::compile<RBC::ADD_OP>(const RBC& bc, size_t pos) {
     auto a = pop();
     auto b = pop();
     insertPush(new Add(a, b, env(), bc.imm(0)));
+}
+
+template <>
+void BCCompiler::compile<RBC::BRIFNOT_OP>(const RBC& bc, size_t pos) {
+    auto t = insert(new CheckTrueFalse(pop()));
+    auto label = bc.imm(1);
+    insert(new Branch(t));
+    auto fallPos = pos + bc.imm() + 1;
+    auto fall = cmp.getBB(fallPos);
+    auto trg = cmp.getBB(label);
+    cmp.insert.setBranch(fall, trg);
+    cmp.merge({fallPos, (size_t)label});
+}
+
+template <>
+void BCCompiler::compile<RBC::GOTO_OP>(const RBC& bc, size_t pos) {
+    auto label = bc.imm(0);
+    auto trg = cmp.getBB(label);
+    cmp.insert.setNext(trg);
+    cmp.merge({(size_t)label});
+}
+
+template <>
+void BCCompiler::compile<RBC::LDNULL_OP>(const RBC& bc, size_t pos) {
+    push(Nil::instance());
+}
+
+template <>
+void BCCompiler::compile<RBC::INVISIBLE_OP>(const RBC& bc, size_t pos) {
+    insert(new Invisible());
+}
+
+template <>
+void BCCompiler::compile<RBC::INCLNK_OP>(const RBC& bc, size_t pos) {
+    insert(new Invisible());
+}
+
+template <>
+void BCCompiler::compile<RBC::DECLNK_OP>(const RBC& bc, size_t pos) {
+    insert(new Invisible());
 }
 
 // End instructions translation
@@ -502,25 +589,169 @@ pir::ClosureVersion* Gnur2Pir::compile(SEXP src, const std::string& name) {
     BCCompiler bccompiler(info);
 
 #define SUPPORTED_INSTRUCTIONS(V)                                              \
+    V(RBC::GOTO_OP)                                                            \
     V(RBC::GETVAR_OP)                                                          \
     V(RBC::RETURN_OP)                                                          \
     V(RBC::LDCONST_OP)                                                         \
-    V(RBC::ADD_OP)
+    V(RBC::ADD_OP)                                                             \
+    V(RBC::LDNULL_OP)                                                          \
+    V(RBC::INVISIBLE_OP)                                                       \
+    V(RBC::INCLNK_OP)                                                          \
+    V(RBC::DECLNK_OP)                                                          \
+    V(RBC::BRIFNOT_OP)
+
+#define UNSUPPORTED_INSTRUCTIONS(V)                                            \
+    V(RBC::BCMISMATCH_OP)                                                      \
+    V(RBC::POP_OP)                                                             \
+    V(RBC::DUP_OP)                                                             \
+    V(RBC::PRINTVALUE_OP)                                                      \
+    V(RBC::STARTLOOPCNTXT_OP)                                                  \
+    V(RBC::ENDLOOPCNTXT_OP)                                                    \
+    V(RBC::DOLOOPNEXT_OP)                                                      \
+    V(RBC::DOLOOPBREAK_OP)                                                     \
+    V(RBC::STARTFOR_OP)                                                        \
+    V(RBC::STEPFOR_OP)                                                         \
+    V(RBC::ENDFOR_OP)                                                          \
+    V(RBC::SETLOOPVAL_OP)                                                      \
+    V(RBC::LDTRUE_OP)                                                          \
+    V(RBC::LDFALSE_OP)                                                         \
+    V(RBC::DDVAL_OP)                                                           \
+    V(RBC::SETVAR_OP)                                                          \
+    V(RBC::GETFUN_OP)                                                          \
+    V(RBC::GETGLOBFUN_OP)                                                      \
+    V(RBC::GETSYMFUN_OP)                                                       \
+    V(RBC::GETBUILTIN_OP)                                                      \
+    V(RBC::GETINTLBUILTIN_OP)                                                  \
+    V(RBC::CHECKFUN_OP)                                                        \
+    V(RBC::MAKEPROM_OP)                                                        \
+    V(RBC::DOMISSING_OP)                                                       \
+    V(RBC::SETTAG_OP)                                                          \
+    V(RBC::DODOTS_OP)                                                          \
+    V(RBC::PUSHARG_OP)                                                         \
+    V(RBC::PUSHCONSTARG_OP)                                                    \
+    V(RBC::PUSHNULLARG_OP)                                                     \
+    V(RBC::PUSHTRUEARG_OP)                                                     \
+    V(RBC::PUSHFALSEARG_OP)                                                    \
+    V(RBC::CALL_OP)                                                            \
+    V(RBC::CALLBUILTIN_OP)                                                     \
+    V(RBC::CALLSPECIAL_OP)                                                     \
+    V(RBC::MAKECLOSURE_OP)                                                     \
+    V(RBC::UMINUS_OP)                                                          \
+    V(RBC::UPLUS_OP)                                                           \
+    V(RBC::SUB_OP)                                                             \
+    V(RBC::MUL_OP)                                                             \
+    V(RBC::DIV_OP)                                                             \
+    V(RBC::EXPT_OP)                                                            \
+    V(RBC::SQRT_OP)                                                            \
+    V(RBC::EXP_OP)                                                             \
+    V(RBC::EQ_OP)                                                              \
+    V(RBC::NE_OP)                                                              \
+    V(RBC::LT_OP)                                                              \
+    V(RBC::LE_OP)                                                              \
+    V(RBC::GE_OP)                                                              \
+    V(RBC::GT_OP)                                                              \
+    V(RBC::AND_OP)                                                             \
+    V(RBC::OR_OP)                                                              \
+    V(RBC::NOT_OP)                                                             \
+    V(RBC::DOTSERR_OP)                                                         \
+    V(RBC::STARTASSIGN_OP)                                                     \
+    V(RBC::ENDASSIGN_OP)                                                       \
+    V(RBC::STARTSUBSET_OP)                                                     \
+    V(RBC::DFLTSUBSET_OP)                                                      \
+    V(RBC::STARTSUBASSIGN_OP)                                                  \
+    V(RBC::DFLTSUBASSIGN_OP)                                                   \
+    V(RBC::STARTC_OP)                                                          \
+    V(RBC::DFLTC_OP)                                                           \
+    V(RBC::STARTSUBSET2_OP)                                                    \
+    V(RBC::DFLTSUBSET2_OP)                                                     \
+    V(RBC::STARTSUBASSIGN2_OP)                                                 \
+    V(RBC::DFLTSUBASSIGN2_OP)                                                  \
+    V(RBC::DOLLAR_OP)                                                          \
+    V(RBC::DOLLARGETS_OP)                                                      \
+    V(RBC::ISNULL_OP)                                                          \
+    V(RBC::ISLOGICAL_OP)                                                       \
+    V(RBC::ISINTEGER_OP)                                                       \
+    V(RBC::ISDOUBLE_OP)                                                        \
+    V(RBC::ISCOMPLEX_OP)                                                       \
+    V(RBC::ISCHARACTER_OP)                                                     \
+    V(RBC::ISSYMBOL_OP)                                                        \
+    V(RBC::ISOBJECT_OP)                                                        \
+    V(RBC::ISNUMERIC_OP)                                                       \
+    V(RBC::VECSUBSET_OP)                                                       \
+    V(RBC::MATSUBSET_OP)                                                       \
+    V(RBC::VECSUBASSIGN_OP)                                                    \
+    V(RBC::MATSUBASSIGN_OP)                                                    \
+    V(RBC::AND1ST_OP)                                                          \
+    V(RBC::AND2ND_OP)                                                          \
+    V(RBC::OR1ST_OP)                                                           \
+    V(RBC::OR2ND_OP)                                                           \
+    V(RBC::GETVAR_MISSOK_OP)                                                   \
+    V(RBC::DDVAL_MISSOK_OP)                                                    \
+    V(RBC::VISIBLE_OP)                                                         \
+    V(RBC::SETVAR2_OP)                                                         \
+    V(RBC::STARTASSIGN2_OP)                                                    \
+    V(RBC::ENDASSIGN2_OP)                                                      \
+    V(RBC::SETTER_CALL_OP)                                                     \
+    V(RBC::GETTER_CALL_OP)                                                     \
+    V(RBC::SWAP_OP)                                                            \
+    V(RBC::DUP2ND_OP)                                                          \
+    V(RBC::SWITCH_OP)                                                          \
+    V(RBC::RETURNJMP_OP)                                                       \
+    V(RBC::STARTSUBSET_N_OP)                                                   \
+    V(RBC::STARTSUBASSIGN_N_OP)                                                \
+    V(RBC::VECSUBSET2_OP)                                                      \
+    V(RBC::MATSUBSET2_OP)                                                      \
+    V(RBC::VECSUBASSIGN2_OP)                                                   \
+    V(RBC::MATSUBASSIGN2_OP)                                                   \
+    V(RBC::STARTSUBSET2_N_OP)                                                  \
+    V(RBC::STARTSUBASSIGN2_N_OP)                                               \
+    V(RBC::SUBSET_N_OP)                                                        \
+    V(RBC::SUBSET2_N_OP)                                                       \
+    V(RBC::SUBASSIGN_N_OP)                                                     \
+    V(RBC::SUBASSIGN2_N_OP)                                                    \
+    V(RBC::LOG_OP)                                                             \
+    V(RBC::LOGBASE_OP)                                                         \
+    V(RBC::MATH1_OP)                                                           \
+    V(RBC::DOTCALL_OP)                                                         \
+    V(RBC::COLON_OP)                                                           \
+    V(RBC::SEQALONG_OP)                                                        \
+    V(RBC::SEQLEN_OP)                                                          \
+    V(RBC::BASEGUARD_OP)                                                       \
+    V(RBC::DECLNK_N_OP)
 
     for (auto pc = bytecode.begin(); pc != bytecode.end(); ++pc) {
         auto bc = *pc;
+        auto pos = (pc - bytecode.begin()) + 1;
+        auto hasBB = info.basicBlocks.find(pos);
+        if (hasBB != info.basicBlocks.end()) {
+            info.insert.reenterBB(hasBB->second);
+            auto state = info.bbState.find(hasBB->second);
+            if (state != info.bbState.end())
+                info.stack = state->second;
+        }
+
         switch (bc.id) {
 #define V(BC)                                                                  \
     case BC:                                                                   \
-        bccompiler.compile<BC>(bc);                                            \
+        bccompiler.compile<BC>(bc, pos);                                       \
         break;
             SUPPORTED_INSTRUCTIONS(V)
 #undef V
 
-        default:
-            std::cerr << "Could not compile " << *pc << "\n";
-            assert(false);
-            return nullptr;
+#define V(BC)                                                                  \
+    case BC:                                                                   \
+        std::cerr << "Could not compile " << *pc << "\n";                      \
+        assert(false);                                                         \
+        return nullptr;
+            UNSUPPORTED_INSTRUCTIONS(V)
+#undef V
+        }
+
+        auto next = pos + 1 + bc.imm();
+        if (bc.falls() && info.mergepoints.count(next) &&
+            !info.stack.isEmpty()) {
+            info.merge({next});
+            info.insert.getCurrentBB()->setNext(info.getBB(next));
         }
     }
     return v;
