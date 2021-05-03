@@ -75,13 +75,7 @@ class PirJitLLVM {
     static std::string makeName(Code* c) {
         std::stringstream ss;
         ss << "rsh_";
-        if (auto cls = ClosureVersion::Cast(c)) {
-            ss << cls->name();
-        } else if (auto p = Promise::Cast(c)) {
-            ss << p->owner->name() << "_" << *p;
-        } else {
-            assert(false);
-        }
+        c->printName(ss);
         ss << "." << nModules;
         return ss.str();
     }

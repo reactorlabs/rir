@@ -144,9 +144,9 @@ Rir2Pir::Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
                  const std::list<PirTypeFeedback*>& outerFeedback)
     : compiler(cmp), cls(cls), log(log), name(name),
       outerFeedback(outerFeedback) {
-    if (cls->optFunction && cls->optFunction->body()->pirTypeFeedback())
-        this->outerFeedback.push_back(
-            cls->optFunction->body()->pirTypeFeedback());
+    if (cls->pirTypeFeedback()) {
+        this->outerFeedback.push_back(cls->pirTypeFeedback());
+    }
 }
 
 Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
@@ -158,8 +158,9 @@ Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
 }
 
 Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
-                             bool eager) {
-    Promise* prom = insert.function->createProm(promiseCode);
+                             bool eager, size_t originalIdx) {
+    Promise* prom = insert.function->createProm(
+        src_pool_at(globalContext(), promiseCode->src));
     {
         Builder promiseBuilder(insert.function, prom);
         if (!tryCompilePromise(promiseCode, promiseBuilder)) {
@@ -182,7 +183,7 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
         return eagerVal;
     }
 
-    return insert(new MkArg(prom, eagerVal, insert.env));
+    return insert(new MkArg(prom, eagerVal, insert.env, originalIdx));
 }
 
 struct TargetInfo {
@@ -566,7 +567,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* val = UnboundValue::instance();
         if (bc.bc == Opcode::mk_eager_promise_)
             val = pop();
-        Promise* prom = insert.function->createProm(promiseCode);
+        Promise* prom = insert.function->createProm(
+            src_pool_at(globalContext(), promiseCode->src));
         {
             Builder promiseBuilder(insert.function, prom);
             if (!tryCompilePromise(promiseCode, promiseBuilder)) {
@@ -581,7 +583,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 return false;
             }
         }
-        push(insert(new MkArg(prom, val, env)));
+        push(insert(new MkArg(prom, val, env, promi)));
         break;
     }
 
@@ -689,8 +691,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         args[i] = mk->eagerArg();
                     } else {
                         assert(at(nargs - 1 - i) == args[i]);
-                        args[i] =
-                            tryCreateArg(mk->prom()->rirSrc(), insert, true);
+                        rir::Code* promiseCode =
+                            srcCode->getPromise(mk->originalIdx);
+                        args[i] = tryCreateArg(promiseCode, insert, true,
+                                               mk->originalIdx);
                         if (!args[i]) {
                             log.warn("Failed to compile a promise");
                             return false;
@@ -698,8 +702,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         // Inlined argument evaluation might have side effects.
                         // Let's have a checkpoint here. This checkpoint needs
                         // to capture the so far evaluated promises.
-                        stack.at(nargs - 1 - i) =
-                            insert(new MkArg(mk->prom(), args[i], mk->env()));
+                        stack.at(nargs - 1 - i) = insert(new MkArg(
+                            mk->prom(), args[i], mk->env(), mk->originalIdx));
                         addCheckpoint(srcCode, pos, stack, insert);
                     }
                 }
@@ -760,7 +764,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 Rf_findFun(Rf_install("match.arg"), R_BaseNamespace);
             if (ti.monomorphic == argmatchFun && matchedArgs.size() == 1) {
                 if (auto mk = MkArg::Cast(matchedArgs[0])) {
-                    auto varName = mk->prom()->rirSrc()->trivialExpr;
+                    auto varName =
+                        srcCode->getPromise(mk->originalIdx)->trivialExpr;
                     if (TYPEOF(varName) == SYMSXP) {
                         auto& formals = cls->owner()->formals();
                         auto f = std::find(formals.names().begin(),
@@ -1197,10 +1202,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     return true;
 } // namespace pir
 
-bool Rir2Pir::tryCompile(Builder& insert) {
-    return tryCompile(cls->owner()->rirFunction()->body(), insert);
-}
-
 bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
     if (auto mk = MkEnv::Cast(insert.env)) {
         mk->eachLocalVar([&](SEXP name, Value*, bool) {
@@ -1454,15 +1455,13 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 }
             }
             inner << "@";
-            if (srcCode != cls->owner()->rirFunction()->body()) {
-                size_t i = 0;
-                for (auto c : insert.function->promises()) {
-                    if (c == insert.code) {
-                        inner << "Prom(" << i << ")";
-                        break;
-                    }
-                    i++;
+            size_t i = 0;
+            for (auto c : insert.function->promises()) {
+                if (c == insert.code) {
+                    inner << "_" << i;
+                    break;
                 }
+                i++;
             }
             inner << (pos - srcCode->code());
 

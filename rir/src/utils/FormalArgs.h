@@ -26,6 +26,11 @@ class FormalArgs {
             if (it.tag() == R_DotsSymbol)
                 hasDots_ = true;
 
+            if (!function) {
+                defaultArgs_.push_back(*it);
+                continue;
+            }
+
             auto arg = function->defaultArg(i);
             if (*it != R_MissingArg) {
                 assert(arg != nullptr && "Rir compiled function is missing a "

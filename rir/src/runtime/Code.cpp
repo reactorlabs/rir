@@ -42,7 +42,7 @@ Code* Code::New(Immediate ast, size_t codeSize, size_t sources, size_t locals,
                               codeSize, sources, locals, bindingCache);
 }
 
-Code* Code::New(Immediate ast) { return New(ast, 0, 0, 0, 0); }
+Code* Code::New(SEXP ast) { return New(ast, 0, 0, 0, 0); }
 
 Code::~Code() {
     // TODO: Not sure if this is actually called

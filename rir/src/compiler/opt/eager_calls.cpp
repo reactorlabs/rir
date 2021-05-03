@@ -248,8 +248,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 auto availableAssumptions = call->inferAvailableAssumptions();
                 assert(version->context().numMissing() <=
                        availableAssumptions.numMissing());
-                cls->rirFunction()->clearDisabledAssumptions(
-                    availableAssumptions);
+                cls->rirFunction([&](rir::Function* f) {
+                    f->clearDisabledAssumptions(availableAssumptions);
+                });
 
                 // We picked up more assumptions, let's compile a better
                 // version. Maybe we should limit this at some point, to avoid
@@ -366,7 +367,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (!newAssumptions.isNotObj(i) &&
                         newAssumptions.isEager(i))
                         newAssumptions.setNotObj(i);
-                cls->rirFunction()->clearDisabledAssumptions(newAssumptions);
+                cls->rirFunction([&](rir::Function* f) {
+                    f->clearDisabledAssumptions(newAssumptions);
+                });
 
                 auto newVersion = cls->cloneWithAssumptions(
                     version, newAssumptions, [&](ClosureVersion* newCls) {

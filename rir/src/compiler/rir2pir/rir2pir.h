@@ -19,10 +19,13 @@ class Rir2Pir {
             const std::string& name,
             const std::list<PirTypeFeedback*>& outerFeedback);
 
-    bool tryCompile(Builder& insert) __attribute__((warn_unused_result));
-
-    Value* tryCreateArg(rir::Code* prom, Builder& insert, bool eager)
+    // Tries to compile the srcCode. Return value indicates failure. Builder
+    // has to be discarded, if compilation fails!
+    bool tryCompile(rir::Code* srcCode, Builder& insert)
         __attribute__((warn_unused_result));
+
+    Value* tryCreateArg(rir::Code* prom, Builder& insert, bool eager,
+                        size_t originalIdx) __attribute__((warn_unused_result));
 
     typedef std::unordered_map<
         Value*, std::tuple<Checkpoint*, ObservedCallees, Opcode*>>
@@ -32,10 +35,6 @@ class Rir2Pir {
     Value* tryInlinePromise(rir::Code* srcCode, Builder& insert)
         __attribute__((warn_unused_result));
 
-    // Tries to compile the srcCode. Return value indicates failure. Builder
-    // has to be discarded, if compilation fails!
-    bool tryCompile(rir::Code* srcCode, Builder& insert)
-        __attribute__((warn_unused_result));
     bool tryCompilePromise(rir::Code* prom, Builder& insert)
         __attribute__((warn_unused_result));
 

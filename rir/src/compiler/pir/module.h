@@ -27,6 +27,8 @@ class Module {
                                      Context userContext);
     Closure* getOrDeclareRirClosure(const std::string& name, SEXP closure,
                                     rir::Function* f, Context userContext);
+    Closure* getOrDeclareGnurClosure(const std::string& name, SEXP closure,
+                                     Context userContext);
 
     typedef std::function<void(pir::Closure*)> PirClosureIterator;
     typedef std::function<void(pir::ClosureVersion*)> PirClosureVersionIterator;
@@ -35,7 +37,7 @@ class Module {
 
     ~Module();
   private:
-    typedef std::pair<Function*, Env*> Idx;
+    typedef std::pair<void*, Env*> Idx;
     std::map<Idx, Closure*> closures;
 };
 

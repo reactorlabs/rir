@@ -11,6 +11,18 @@ void Module::print(std::ostream& out, bool tty) {
     });
 }
 
+Closure* Module::getOrDeclareGnurClosure(const std::string& name, SEXP closure,
+                                         Context userContext) {
+    // For Identification we use the real env, but for optimization we only use
+    // the real environment if this is not an inner function. When it is an
+    // inner function, then the env is expected to change over time.
+    auto env = getEnv(CLOENV(closure));
+    auto id = Idx(BODY(closure), env);
+    if (!closures.count(id))
+        closures[id] = new Closure(name, closure, nullptr, env, userContext);
+    return closures.at(id);
+}
+
 Closure* Module::getOrDeclareRirFunction(const std::string& name,
                                          rir::Function* f, SEXP formals,
                                          SEXP src, Context userContext) {

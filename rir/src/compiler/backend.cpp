@@ -348,7 +348,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         approximateRefcount(cls, c, refcount, log);
         std::unordered_set<Instruction*> needsLdVarForUpdate;
         approximateNeedsLdVarForUpdate(c, needsLdVarForUpdate);
-        auto res = done[c] = rir::Code::New(c->rirSrc()->src);
+        auto res = done[c] = rir::Code::New(c->expression());
         // Can we do better?
         preserve(res->container());
         jit.compile(res, c, promMap.at(c), refcount, needsLdVarForUpdate, log);
@@ -375,7 +375,8 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     log.finalPIR(cls);
     function.finalize(body, signature, cls->context());
 
-    function.function()->inheritFlags(cls->owner()->rirFunction());
+    cls->owner()->rirFunction(
+        [&](rir::Function* f) { function.function()->inheritFlags(f); });
     return function.function();
 }
 

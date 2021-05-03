@@ -1,6 +1,7 @@
 #include "closure.h"
 #include "closure_version.h"
 #include "env.h"
+#include "interpreter/instance.h"
 #include "runtime/DispatchTable.h"
 
 namespace rir {
@@ -8,16 +9,18 @@ namespace pir {
 
 Closure::Closure(const std::string& name, rir::Function* function, SEXP formals,
                  SEXP srcRef, Context userContext)
-    : origin_(nullptr), function(function), env(Env::notClosed()),
-      srcRef_(srcRef), name_(name), formals_(function, formals),
-      userContext_(userContext) {
+    : origin_(nullptr),
+      expression_(src_pool_at(globalContext(), function->body()->src)),
+      function(function), env(Env::notClosed()), srcRef_(srcRef), name_(name),
+      formals_(function, formals), userContext_(userContext) {
     invariant();
 }
 
 Closure::Closure(const std::string& name, SEXP closure, rir::Function* f,
                  Env* env, Context userContext)
-    : origin_(closure), function(f), env(env), name_(name),
-      formals_(f, FORMALS(closure)), userContext_(userContext) {
+    : origin_(closure), expression_(R_ClosureExpr(closure)), function(f),
+      env(env), name_(name), formals_(f, FORMALS(closure)),
+      userContext_(userContext) {
 
     static SEXP srcRefSymbol = Rf_install("srcref");
     srcRef_ = Rf_getAttrib(closure, srcRefSymbol);
@@ -76,6 +79,15 @@ void Closure::print(std::ostream& out, bool tty) const {
         v->print(out, tty);
         out << "-------------------------------\n";
     });
+}
+
+size_t Closure::bodySize() const {
+    if (function)
+        return function->body()->codeSize;
+    if (origin_ && TYPEOF(BODY(origin_)) == BCODESXP)
+        return XLENGTH(BCODE_CODE(BODY(origin_)));
+    assert(false);
+    return 0;
 }
 
 } // namespace pir

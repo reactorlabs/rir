@@ -37,6 +37,7 @@ class Closure {
     void invariant() const;
 
     SEXP origin_;
+    SEXP expression_;
     rir::Function* function;
     Env* env;
     SEXP srcRef_;
@@ -51,17 +52,23 @@ class Closure {
         return c.smaller(this->userContext_);
     }
 
+    SEXP expression() const { return expression_; }
+
     SEXP rirClosure() const {
         assert(origin_ && "Inner function does not have a source rir closure");
         return origin_;
     }
     bool hasOriginClosure() const { return origin_; }
 
-    rir::Function* rirFunction() const { return function; }
+    void rirFunction(const std::function<void(rir::Function*)>& apply) const {
+        if (function)
+            apply(function);
+    }
     SEXP srcRef() { return srcRef_; }
     Env* closureEnv() const { return env; }
     const std::string& name() const { return name_; }
     size_t nargs() const { return formals_.nargs(); }
+    size_t bodySize() const;
     const FormalArgs& formals() const { return formals_; }
 
     void print(std::ostream& out, bool tty) const;

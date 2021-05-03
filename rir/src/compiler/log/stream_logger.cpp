@@ -93,7 +93,8 @@ ClosureStreamLogger& StreamLogger::begin(ClosureVersion* cls) {
     if (options.includes(DebugFlag::PrintEarlyRir)) {
         logger.preparePrint();
         logger.section("Original version");
-        cls->owner()->rirFunction()->disassemble(logger.out().out);
+        cls->owner()->rirFunction(
+            [&](rir::Function* f) { f->disassemble(logger.out().out); });
         logger.out() << "\n";
     }
 

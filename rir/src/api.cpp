@@ -7,6 +7,7 @@
 #include "R/Serialize.h"
 #include "compiler/backend.h"
 #include "compiler/compiler.h"
+#include "compiler/gnur2pir/gnur2pir.h"
 #include "compiler/log/debug.h"
 #include "compiler/parameter.h"
 #include "compiler/test/PirCheck.h"
@@ -286,15 +287,7 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug) {
-    if (!isValidClosureSEXP(what)) {
-        Rf_error("not a compiled closure");
-    }
-    if (!DispatchTable::check(BODY(what))) {
-        Rf_error("Cannot optimize compiled expression, only closure");
-    }
-
     PROTECT(what);
-
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
     // compile to pir
     pir::Module* m = new pir::Module;
@@ -363,6 +356,30 @@ REXPORT SEXP pirCompileWrapper(SEXP what, SEXP name, SEXP debugFlags,
         }
     }
     return pirCompile(what, rir::pir::Compiler::defaultContext, n, opts);
+}
+
+REXPORT SEXP gnur2pir(SEXP what) {
+    // compile to pir
+    pir::StreamLogger logger(PirDebug);
+    pir::Module m;
+    pir::Gnur2Pir g2p(m);
+    pir::ClosureVersion* c = g2p.compile(what, "");
+    if (!c)
+        return R_NilValue;
+
+    c->printCode(std::cout, true, false);
+    pir::Compiler cmp(&m, logger);
+    pir::Backend backend(logger, "");
+    auto f = backend.getOrCompile(c);
+
+    // TODO the rest of the system really wants the dispatch table to only
+    // contain rir::Functions... So we need to compile the baseline anyway to be
+    // able to call the opt version...
+    what = rirCompile(what, nullptr);
+    auto dt = DispatchTable::unpack(BODY(what));
+    dt->insert(f);
+
+    return what;
 }
 
 REXPORT SEXP pirTests() {

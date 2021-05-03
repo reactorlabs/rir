@@ -299,7 +299,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                         auto pos = split->begin();
                         MkArg* fixedMkArg =
-                            new MkArg(mkarg->prom(), promRes, mkarg->promEnv());
+                            new MkArg(mkarg->prom(), promRes, mkarg->promEnv(),
+                                      mkarg->originalIdx);
                         pos = split->insert(pos, fixedMkArg);
                         pos++;
                         CastType* upcast = new CastType(
