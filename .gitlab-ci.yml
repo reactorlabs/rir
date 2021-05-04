@@ -5,6 +5,8 @@ stages:
   - Deploy
   - Cleanup
   - Benchmark
+  - Report
+
 variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
@@ -298,6 +300,13 @@ cleanup_registry:
   before_script: []
   script:
     - echo -n "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
+
+report_results:
+  stage: Report
+  image: ruby:2.5
+  before_script: []
+  script:
+    - ruby tools/report_ci_results.rb
 
 benchmark_llvm:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
