@@ -1498,13 +1498,23 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     // LHS can either be an identifier or an expression
     bool likelyBuiltin = false;
     BC::Label eager = 0;
-    BC::Label theCall = 0;
+    BC::Label theEnd = 0;
     if (TYPEOF(fun) == SYMSXP) {
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
         // forces promises but should be okay when starting in the global env
         likelyBuiltin = TYPEOF(Rf_findVar(fun, R_GlobalEnv)) == BUILTINSXP;
+
+        if (likelyBuiltin) {
+            eager = cs.mkLabel();
+            theEnd = cs.mkLabel();
+            cs << BC::ldvar(fun) << BC::dup()
+               << BC::is(BC::RirTypecheck::isBUILTINSXP) << BC::recordTest()
+               << BC::brtrue(eager);
+
+            cs << BC::pop();
+        }
 
         cs << BC::ldfun(fun);
     } else {
@@ -1515,15 +1525,18 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (Compiler::profile)
         cs << BC::recordCall();
 
-    if (likelyBuiltin) {
-        eager = cs.mkLabel();
-        theCall = cs.mkLabel();
-        cs << BC::dup()
-           << BC::is(BC::RirTypecheck::isBUILTINSXP)
-           << BC::recordTest() << BC::brtrue(eager);
-    }
-
     LoadArgsResult info;
+    auto compileCall = [&]() {
+        if (info.hasDots) {
+            cs << BC::callDots(info.numArgs, info.names, ast, info.assumptions);
+        } else if (info.hasNames) {
+            cs << BC::call(info.numArgs, info.names, ast, info.assumptions);
+        } else {
+            info.assumptions.add(Assumption::CorrectOrderOfArguments);
+            cs << BC::call(info.numArgs, ast, info.assumptions);
+        }
+    };
+
     if (fun == symbol::forceAndCall) {
         // First arg certainly eager
         info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0, 2);
@@ -1531,29 +1544,28 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         info = compileLoadArgs(ctx, ast, fun, args, voidContext);
     }
 
+    compileCall();
+
     if (likelyBuiltin) {
-        cs << BC::br(theCall) << eager;
+        cs << BC::br(theEnd) << eager;
 
-        for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg) {
-            if (*arg == R_DotsSymbol)
-                cs << BC::push(R_DotsSymbol);
-            else if (*arg == R_MissingArg)
-                cs << BC::push(R_MissingArg);
-            else
-                compileExpr(ctx, *arg, false);
-        }
+        info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0,
+                               RList(args).length());
+        compileCall();
 
-        cs << theCall;
+        // for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg)
+        // {
+        //     if (*arg == R_DotsSymbol)
+        //         cs << BC::push(R_DotsSymbol);
+        //     else if (*arg == R_MissingArg)
+        //         cs << BC::push(R_MissingArg);
+        //     else
+        //         compileExpr(ctx, *arg, false);
+        // }
+
+        cs << theEnd;
     }
 
-    if (info.hasDots) {
-        cs << BC::callDots(info.numArgs, info.names, ast, info.assumptions);
-    } else if (info.hasNames) {
-        cs << BC::call(info.numArgs, info.names, ast, info.assumptions);
-    } else {
-        info.assumptions.add(Assumption::CorrectOrderOfArguments);
-        cs << BC::call(info.numArgs, ast, info.assumptions);
-    }
     if (voidContext)
         cs << BC::pop();
     else if (Compiler::profile)
