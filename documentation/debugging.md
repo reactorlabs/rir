@@ -166,6 +166,9 @@ debugging:
 
 There is *EXPERIMENTAL* support for debugging LLVM jitted PIR code.
 It is enabled by setting the `PIR_DEBUG=LLVMDebugInfo` flag.
+Optionally, you can specify where PIR sources for gdb should be stored by setting an environment variable `PIR_GDB_FOLDER`. If not set, a new folder in `/tmp` named `rsh.XXXXXX` is created and these files stored there.
+The name of this folder is then written to the file `./PIR_GDB_FOLDER`.
+This is handy when you need to set a breakpoint in PIR: you can eg. `ls \`cat PIR_GDB_FOLDER\`` to see the files.
 
 Run your program, ideally with `rr`:
 ```
@@ -176,9 +179,13 @@ R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night"
 [...]
 ```
 
-This will produce PIR listing files for each PIR module compiled, named like `f.001` in the folder ???:
+This will produce PIR listing files for each PIR module compiled, named like `f.001` in the folder `/tmp/rsh.XXXXXX`:
 ```
-***@***:~/rir/build/debug$ cat ???/f.001
+***@***:~/rir/build/debug$ cat PIR_GDB_FOLDER
+/tmp/rsh.6icTYj
+***@***:~/rir/build/debug$ ls `cat PIR_GDB_FOLDER`
+f.001
+***@***:~/rir/build/debug$ cat `cat PIR_GDB_FOLDER`/f.001
 rsh_f[0x56500a98aa80].1
 BB0
   int$~"          %0.0  = LdArg                    0
