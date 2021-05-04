@@ -2079,8 +2079,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (res != R_NilValue) {
                 if (isLocal)
                     ENSURE_NAMED(res);
-                else if (NAMED(res) < 2)
-                    SET_NAMED(res, 2);
+                else
+                    res = Rf_shallow_duplicate(res);
             }
 
             ostack_push(ctx, res);
@@ -2121,8 +2121,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (res != R_NilValue) {
                 if (isLocal)
                     ENSURE_NAMED(res);
-                else if (NAMED(res) < 2)
-                    SET_NAMED(res, 2);
+                else
+                    res = Rf_shallow_duplicate(res);
             }
 
             ostack_push(ctx, res);

@@ -104,8 +104,8 @@ SEXP ldvarForUpdateImpl(SEXP sym, SEXP env) {
     if (res != R_NilValue) {
         if (isLocal)
             ENSURE_NAMED(res);
-        else if (NAMED(res) < 2)
-            SET_NAMED(res, 2);
+        else
+            res = Rf_shallow_duplicate(res);
     }
     return res;
 }
