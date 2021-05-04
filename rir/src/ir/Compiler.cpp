@@ -202,6 +202,7 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp);
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext, bool do_compile_special_calls = true);
+void compileGetvar(CompilerContext& ctx, SEXP name, bool for_update = false);
 
 // EAGER_PROMISE_FROM_TOS is for the special case when the expression has already
 // been evaluated: wrap the value at TOS into a promise.
@@ -796,7 +797,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     <-( x, value=f<-(x,y,value=z) )
 
                 This rewriting is theoretical. Indeed, there are some
-               specificities to complex assignments:
+                specificities to complex assignments:
                     - z is evaluated eagerly, followed by x
                     - the other arguments as passed as promises, as usual
                     - the complex assignment returns the value of z
@@ -807,8 +808,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             std::string const fun2_replacement_name = fun2name + "<-";
             SEXP farrow_sym = Rf_install(fun2_replacement_name.c_str());
 
-            // Exclude special functions
-            /*  TODO: Deal with special functions.
+            /* Deal with special functions.
              The issue with special functions is that they do not use the
              arguments passed on the stack, but evaluate the arguments through
              the AST. For normal functions, in the assignment
@@ -833,21 +833,17 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 - $<-
              This leaves only two to deal with.
 
-
              Note:  The approach used in the GnuR BC compiler is to add the
              special instruction SETTER_CALL to deal with these situations:
                 https://github.com/reactorlabs/gnur/blob/R-3-6-2-branch-rir-patch/src/main/eval.c#L7128
             */
 
-            // Exclude special functions at runtime:
-            // call typeof on the function and fallback to generic GnuR
-            // assingment if the function is special (with pre-evaluated
-            // value and destination arguments)
-
             BC::Label const is_not_special_branch = cs.mkLabel();
             BC::Label const next_branch = cs.mkLabel();
             {
-
+                // Branch at runtime between the special and the non-special
+                // case Build and compile the AST for
+                //    .Internal(typeof(`f<-`))
                 SEXP const internal_sym = Rf_install(".Internal");
                 SEXP const typeof_sym = Rf_install("typeof");
                 SEXP const typeof_ast =
@@ -856,41 +852,33 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 SEXP const internal_typeof_ast =
                     Rf_lcons(internal_sym, Rf_lcons(typeof_ast, R_NilValue));
 
-                SEXP const special = Rf_mkString("special");
 
-#if true
                 Protect typeof_ast_protect(internal_typeof_ast);
                 compileExpr(ctx, internal_typeof_ast);
-                cs << BC::push(special) << BC::identicalNoforce();
-#else
-                SEXP const primitive_sym = Rf_install(".Primitive");
-                SEXP const compare_str = Rf_mkString("==");
-                // .Primitive("==")(typeof(fun), "special")
-                SEXP const comparison_ast = Rf_lcons(
-                    Rf_lcons(primitive_sym, Rf_lcons(compare_str, R_NilValue)),
-                    Rf_lcons(internal_typeof_ast,
-                             Rf_lcons(special, R_NilValue)));
-                Protect comparison_ast_protect(comparison_ast);
-                compileCall(ctx, comparison_ast, CAR(comparison_ast),
-                            CDR(comparison_ast), false);
-#endif
 
-                cs << BC::asbool() << BC::brfalse(is_not_special_branch);
+                // and branch based on a comparison to the string "special"
+                SEXP const special = Rf_mkString("special");
+                cs << BC::push(special) << BC::identicalNoforce()
+                   << BC::asbool() << BC::brfalse(is_not_special_branch);
 
 #if false
-                // to avoid evaluating and the RHS in GnuR, pass it
-                // through a temporary variable
+                // To avoid evaluating the RHS in GnuR, compile and evaluate
+                // it here, and pass the resulting value through a variable
+                // (this preserves the semantics: the RHS is evaluated eagerly
+                //  in the assignment)
 
                 SEXP new_ast = Rf_duplicate(ast);
                 Protect new_ast_protect(new_ast);
 
-                // evaluate the RHS
+                // find the cell containing the RHS
                 SEXP rhs_expr_cell = CDR(new_ast);
                 while (CDR(rhs_expr_cell) != R_NilValue) {
                     rhs_expr_cell = CDR(rhs_expr_cell);
                 }
+                // compile the RHS
                 compileExpr(ctx, CAR(rhs_expr_cell));
 
+                // and keep the resulting value in a temporary variable
                 SEXP tmp_rhs = Rf_install("*tmp_rhs_complex_assignment*");
                 cs << BC::stvar(tmp_rhs);
 
@@ -901,9 +889,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // TODO: evaluate the destination
                 // as we do not allow nested complex assignments, the
                 // destination is either already a SYMSXP, or is a PROMSXP ;
-                // maybe we could force it when it is a promise? SEXP dest_cell
-                // = CDR(CAR(CDR(new_ast))); CAR(dest_cell) =
-                // rirForcePromise(CAR(dest_cell));
+                // maybe we could force it when it is a promise?
+
+                // SEXP dest_cell = CDR(CAR(CDR(new_ast)));
+                // CAR(dest_cell) = rirForcePromise(CAR(dest_cell));
 
                 // compile the modified AST
                 // Make sure not to recurse into compileSpecialCall
@@ -913,9 +902,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // Remove the temporary binding
                 // TODO: do it without a function call to `rm`?
 
-                auto remove_var = [&](SEXP var) {
+                auto remove_var = [&ctx](SEXP var) {
                     SEXP const remove_ast = Rf_lcons(
-                        Rf_install("rm"), Rf_lcons(tmp_rhs, R_NilValue));
+                        Rf_install("rm"), Rf_lcons(var, R_NilValue));
                     Protect remove_ast_protect(remove_ast);
                     compileCall(ctx, remove_ast, CAR(remove_ast),
                                 CDR(remove_ast), true);
@@ -973,10 +962,23 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // prepare x, yk, z as promises
             LoadArgsResult load_arg_res;
-
-            // load x as an evaluated promise
             SEXP farrow_args = CDR(farrow_ast);
-            compileLoadOneArg(ctx, farrow_args, ArgType::EAGER_PROMISE,
+
+            // Load the value of x using ldvar_for_update
+            // (instead of relying on compileExpr which would end up using
+            // ldvar) This prevents in-place overwrite of local variables with a
+            // refcount <= 1: this is necessary for situations when the variable
+            // is not local, but the assignment should create a local variable:
+            //     p <- ....
+            //     function() {
+            //        f(p) <- ...
+            //     }
+            // Here p in the outer scope would get modified in-place since the
+            // local variable p does not exist yet, so that p only has a
+            // refcount of 1. `ldvar_for_update` shallow-copies the object when
+            // it is loaded from the outer scope.
+            compileGetvar(ctx, dest, true);
+            compileLoadOneArg(ctx, farrow_args, ArgType::EAGER_PROMISE_FROM_TOS,
                               load_arg_res);
 
             //load y1, <...>, yn
@@ -994,9 +996,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // where N is the number of arguments _already_ passed to `f<-`
             // (load_arg_res.numArgs)
             if(voidContext) {
+                // move the value of z to TOS
                 cs << BC::pick(load_arg_res.numArgs+1);
             }
             else {
+                // keep a copy before `f<-` to return after the assignment
                 cs << BC::pull(load_arg_res.numArgs+1);
             }
 
@@ -1847,17 +1851,27 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 }
 
 // Lookup
-void compileGetvar(CompilerContext& ctx, SEXP name) {
+void compileGetvar(CompilerContext& ctx, SEXP name, bool for_update) {
     CodeStream& cs = ctx.cs();
     if (DDVAL(name)) {
         cs << BC::ldddvar(name);
     } else if (name == R_MissingArg) {
         cs << BC::push(R_MissingArg);
     } else {
-        if (ctx.code.top()->isCached(name))
-            cs << BC::ldvarCached(name, ctx.code.top()->cacheSlotFor(name));
-        else
-            cs << BC::ldvar(name);
+        if (ctx.code.top()->isCached(name)) {
+            auto const cache_slot = ctx.code.top()->cacheSlotFor(name);
+            if (!for_update) {
+                cs << BC::ldvarCached(name, cache_slot);
+            } else {
+                cs << BC::ldvarForUpdateCached(name, cache_slot);
+            }
+        } else {
+            if (!for_update) {
+                cs << BC::ldvar(name);
+            } else {
+                cs << BC::ldvarForUpdate(name);
+            }
+        }
         if (Compiler::profile)
             cs << BC::recordType();
     }
