@@ -924,6 +924,7 @@ class FLIE(LdFun, 2, Effects::Any()) {
   public:
     SEXP varName;
     SEXP hint = nullptr;
+    bool hintIsInnerFunction = false;
 
     LdFun(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::closure(), {{PirType::any()}},
@@ -2078,6 +2079,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
          Value* fs, unsigned srcIdx);
 
     Value* cls() const { return arg(1).val(); }
+    void cls(Value * v) { arg(1).val() = v; }
 
     Value* tryGetClsArg() const override final {
         return cls()->followCastsAndForce();

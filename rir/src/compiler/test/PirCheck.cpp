@@ -95,7 +95,7 @@ static bool testNoExternalCalls(ClosureVersion* f) {
 }
 
 static bool testReturns42L(ClosureVersion* f) {
-    if (!Query::noEnv(f))
+    if (!Query::noEnvSpec(f))
         return false;
     auto r = Query::returned(f);
     if (r.size() != 1)

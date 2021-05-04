@@ -648,6 +648,12 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             iterAnyChange = true;
                             i->replaceUsesAndSwapWith(new LdConst(list), ip);
                         }
+                    } else if (builtinId == blt("as.logical") && nargs == 1 &&
+                               !i->arg(0).val()->type.maybeObj() &&
+                               i->arg(0).val()->type.isScalar()) {
+                        i->replaceUsesAndSwapWith(
+                            new AsLogical(i->arg(0).val(), i->srcIdx), ip);
+                        iterAnyChange = true;
                     } else if (builtinId == blt("as.character") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
                         if (t.isA(PirType(RType::str)

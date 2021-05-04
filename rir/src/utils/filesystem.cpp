@@ -26,3 +26,13 @@ int clearOrCreateDirectory(const char* path) {
         return rv;
     return mkdir(path, 0777);
 }
+
+// From
+// https://stackoverflow.com/questions/18792489/how-to-create-a-temporary-directory-in-c
+std::string createTmpDirectory() {
+    char pattern[] = "/tmp/rsh.XXXXXX";
+    auto dir = mkdtemp(pattern);
+    if (dir == NULL)
+        perror("mkdtemp failed: ");
+    return dir;
+}
