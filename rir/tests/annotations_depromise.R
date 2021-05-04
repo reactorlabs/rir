@@ -1,8 +1,3 @@
-jitOn <-  (Sys.getenv("PIR_ENABLE", unset="on") == "on")
-if (!jitOn)
-  quit()
-
-
 if (Sys.getenv("PIR_DISABLE_ANNOTATIONS") == "1") {
   print("test only works with annotations enabled")
   q()
