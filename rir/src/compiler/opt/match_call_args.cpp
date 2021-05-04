@@ -64,9 +64,13 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         matchedArgs, argOrderOrig);
                 }
 
-                auto asmpt = calli->inferAvailableAssumptions();
+                Context asmpt;
 
-                if (staticallyArgmatched && !target) {
+                if (staticallyArgmatched) {
+                    Call fake((*ip)->env(), calli->tryGetClsArg(), matchedArgs,
+                              Tombstone::framestate(), (*ip)->srcIdx);
+                    asmpt = fake.inferAvailableAssumptions();
+
                     // We can add these because arguments will be statically
                     // matched
                     asmpt.add(Assumption::StaticallyArgmatched);
@@ -78,22 +82,28 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             asmpt.remove(Assumption::NoExplicitlyMissingArgs);
                     asmpt.numMissing(Rf_length(formals) - matchedArgs.size());
 
-                    rir::DispatchTable* dt = nullptr;
-                    SEXP srcRef = nullptr;
                     if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
-                        dt = DispatchTable::check(BODY(cnst->c()));
-                        srcRef = Rf_getAttrib(cnst->c(), symbol::srcref);
-                    }
-                    if (auto mk = MkFunCls::Cast(calli->tryGetClsArg())) {
-                        dt = mk->originalBody;
-                        srcRef = mk->srcRef;
-                        assert(!mk->tryGetCls());
-                    }
-                    if (dt) {
-                        cmp.compileFunction(
-                            dt, "", formals, srcRef, asmpt,
-                            [&](ClosureVersion* fun) { target = fun; }, []() {},
-                            {});
+                        if (DispatchTable::check(BODY(cnst->c())))
+                            cmp.compileClosure(
+                                cnst->c(), "unknown--fromConstant", asmpt,
+                                false,
+                                [&](ClosureVersion* fun) { target = fun; },
+                                []() {}, {});
+                    } else if (auto mk =
+                                   MkFunCls::Cast(calli->tryGetClsArg())) {
+                        if (auto cls = mk->tryGetCls())
+                            target = cls->findCompatibleVersion(asmpt);
+                        auto dt = mk->originalBody;
+                        if (!target && dt) {
+                            auto srcRef = mk->srcRef;
+                            cmp.compileFunction(dt, "unknown--fromMkFunCls",
+                                                formals, srcRef, asmpt,
+                                                [&](ClosureVersion* fun) {
+                                                    mk->setCls(fun->owner());
+                                                    target = fun;
+                                                },
+                                                []() {}, {});
+                        }
                     }
                 }
 

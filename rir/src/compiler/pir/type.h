@@ -518,8 +518,6 @@ struct PirType {
     PirType constexpr forced() const {
         if (!maybePromiseWrapped())
             return *this;
-        if (!maybeLazy())
-            return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::promiseWrapped));
         return PirType(
             // forcing can return the missing marker value
             t_.r | RType::missing,

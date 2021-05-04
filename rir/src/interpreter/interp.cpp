@@ -860,26 +860,21 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
             given.setNonRefl(i);
         }
 
-        // Eager in the context translates to the notLazy().notMissing()
-        // type in pir. Thus we need to ensure that we don't set it for
-        // wrapped missings.
-        if (arg != R_MissingArg) {
-            if (isEager) {
-                given.setEager(i);
-                SLOWASSERT(TYPEOF(call.stackArg(i)) != PROMSXP ||
-                           PRVALUE(call.stackArg(i)) != R_UnboundValue);
-            }
+        if (isEager) {
+            given.setEager(i);
+            SLOWASSERT(TYPEOF(call.stackArg(i)) != PROMSXP ||
+                       PRVALUE(call.stackArg(i)) != R_UnboundValue);
+        }
 
-            // Without isEager, these are the results of executing a trivial
-            // expression, given no reflective change happens.
-            if (arg != R_UnboundValue) {
-                if (!isObject(arg))
-                    given.setNotObj(i);
-                if (IS_SIMPLE_SCALAR(arg, REALSXP))
-                    given.setSimpleReal(i);
-                if (IS_SIMPLE_SCALAR(arg, INTSXP))
-                    given.setSimpleInt(i);
-            }
+        // Without isEager, these are the results of executing a trivial
+        // expression, given no reflective change happens.
+        if (arg != R_UnboundValue && arg != R_MissingArg) {
+            if (!isObject(arg))
+                given.setNotObj(i);
+            if (IS_SIMPLE_SCALAR(arg, REALSXP))
+                given.setSimpleReal(i);
+            if (IS_SIMPLE_SCALAR(arg, INTSXP))
+                given.setSimpleInt(i);
         }
     };
 
