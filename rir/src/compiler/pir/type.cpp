@@ -228,7 +228,7 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         type = type.notLazy();
 
     if (afterForce)
-        type = type.notPromiseWrapped();
+        type = type.forced();
 
     if (assumptions.isEager(i) || afterForce) {
         type = type.notLazy();

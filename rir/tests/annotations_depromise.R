@@ -30,6 +30,7 @@ g <- function() {
 
     result <- f({  performStep(2);  6L })
     stopifnot(result == 7L)
+    print(steps)
     stopifnot(steps == c(1, 2, 3,4))
 
 }

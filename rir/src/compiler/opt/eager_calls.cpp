@@ -1,4 +1,5 @@
 #include "../analysis/available_checkpoints.h"
+#include "../analysis/query.h"
 #include "../pir/pir_impl.h"
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
@@ -31,6 +32,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         ++ip;
         Instruction* given = ldfun;
 
+        given->replaceUsesWith(expected);
         // We use ldvar instead of ldfun for the guard. The reason is that ldfun
         // can force promises, which is a pain for our optimizer to deal with.
         // Note that ldvar is conservative. If we find a non-function binding
@@ -142,15 +144,21 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     Effect::DependsOnAssume));
                         }
                     } else if (auto ldfun = LdFun::Cast(call->cls())) {
-                        if (ldfun->hint) {
+                        if (ldfun->hint && !ldfun->hintIsInnerFunction) {
                             auto kind = TYPEOF(ldfun->hint);
-                            if (kind == BUILTINSXP) {
+                            // We also speculate on calls to CLOSXPs, these will
+                            // be picked up by MatchArgs opt pass and turned
+                            // into a static call. TODO, for inner functions we
+                            // need another kind of guard.
+                            if (kind == BUILTINSXP || kind == CLOSXP) {
                                 // We can only speculate if we have a checkpoint
                                 // at the ldfun position, since we want to deopt
                                 // before forcing arguments.
                                 if (auto cp = checkpoint.at(ldfun)) {
-                                    ip = replaceCallWithCallBuiltin(
-                                        bb, ip, call, ldfun->hint, true);
+                                    if (kind == BUILTINSXP) {
+                                        ip = replaceCallWithCallBuiltin(
+                                            bb, ip, call, ldfun->hint, true);
+                                    }
                                     needsGuard[ldfun] = {ldfun->hint, cp};
                                 }
                             }
@@ -164,7 +172,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     auto builtin = Rf_findVar(name, env->rho);
                                     if (TYPEOF(builtin) == PROMSXP)
                                         builtin = PRVALUE(builtin);
-                                    if (TYPEOF(builtin) == BUILTINSXP) {
+
+                                    auto kind = TYPEOF(builtin);
+                                    if (kind == BUILTINSXP || kind == CLOSXP) {
                                         auto rho = env->rho;
                                         bool inBase = false;
                                         if (rho == R_BaseEnv ||
@@ -178,8 +188,11 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                         auto cp = checkpoint.at(ldfun);
 
                                         if (inBase || cp) {
-                                            ip = replaceCallWithCallBuiltin(
-                                                bb, ip, call, builtin, !inBase);
+                                            if (kind == BUILTINSXP) {
+                                                ip = replaceCallWithCallBuiltin(
+                                                    bb, ip, call, builtin,
+                                                    !inBase);
+                                            }
                                             if (!inBase)
                                                 needsGuard[ldfun] = {builtin,
                                                                      cp};
@@ -237,10 +250,10 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             // some) arguments are eager. In this case we will compile an
             // special eager version of the function and call this one instead.
             if (auto call = StaticCall::Cast(*ip)) {
-                Closure* cls = call->cls();
+                Closure* target = call->cls();
                 ClosureVersion* version = call->tryDispatch();
 
-                if (!version || call->nCallArgs() != cls->nargs()) {
+                if (!version || call->nCallArgs() != target->nargs()) {
                     ip = next;
                     continue;
                 }
@@ -248,14 +261,14 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 auto availableAssumptions = call->inferAvailableAssumptions();
                 assert(version->context().numMissing() <=
                        availableAssumptions.numMissing());
-                cls->rirFunction()->clearDisabledAssumptions(
+                target->rirFunction()->clearDisabledAssumptions(
                     availableAssumptions);
 
                 // We picked up more assumptions, let's compile a better
                 // version. Maybe we should limit this at some point, to avoid
                 // version explosion.
                 if (availableAssumptions.isImproving(version)) {
-                    auto newVersion = cls->cloneWithAssumptions(
+                    auto newVersion = target->cloneWithAssumptions(
                         version, availableAssumptions,
                         [&](ClosureVersion* newCls) {
                             Visitor::run(newCls->entry, [&](Instruction* i) {
@@ -332,19 +345,29 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 bool improved = false;
                 call->eachCallArg([&](InstrArg& arg) {
                     if (auto mk = preEval(arg.val(), i)) {
-                        improved = true;
                         if (mk->isEager()) {
-                            arg.val() = mk->eagerArg();
+                            if (!mk->eagerArg()->type.maybeMissing()) {
+                                improved = true;
+                                arg.val() = mk->eagerArg();
+                            }
                         } else {
-                            auto asArg =
-                                new CastType(mk, CastType::Upcast, RType::prom,
-                                             PirType::valOrLazy());
+                            improved = true;
+                            auto asArg = new CastType(
+                                mk, CastType::Upcast, RType::prom,
+                                Query::returnType(mk->prom()).orLazy());
                             auto forced = new Force(asArg, Env::elided(),
                                                     Tombstone::framestate());
-                            arg.val() = forced;
+                            if (forced->type.maybeMissing()) {
+                                auto upd = new MkArg(mk->prom(), forced,
+                                                     Env::elided());
+                                ip = bb->insert(ip, upd);
+                                arg.val() = upd;
+                            } else {
+                                arg.val() = forced;
+                            }
                             ip = bb->insert(ip, forced);
                             ip = bb->insert(ip, asArg);
-                            ip++;
+                            ip += forced->type.maybeMissing() ? 3 : 2;
                         }
                         eager.insert(i);
                         if (!newAssumptions.isEager(i))
@@ -366,9 +389,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (!newAssumptions.isNotObj(i) &&
                         newAssumptions.isEager(i))
                         newAssumptions.setNotObj(i);
-                cls->rirFunction()->clearDisabledAssumptions(newAssumptions);
+                target->rirFunction()->clearDisabledAssumptions(newAssumptions);
 
-                auto newVersion = cls->cloneWithAssumptions(
+                auto newVersion = target->cloneWithAssumptions(
                     version, newAssumptions, [&](ClosureVersion* newCls) {
                         anyChange = true;
                         Visitor::run(newCls->entry, [&](Instruction* i) {
@@ -397,7 +420,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                    ClosureVersion::Property::NoReflection)) {
                     call->eachCallArg([&](InstrArg& arg) {
                         if (auto mk = MkArg::Cast(arg.val())) {
-                            if (mk->isEager()) {
+                            if (mk->isEager() &&
+                                !mk->eagerArg()->type.maybeMissing()) {
+                                anyChange = true;
                                 arg.val() = mk->eagerArg();
                             }
                         }

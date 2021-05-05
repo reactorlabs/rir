@@ -9,6 +9,7 @@
 #include "compiler/native/types_llvm.h"
 #include "compiler/pir/pir.h"
 #include "runtime/Code.h"
+#include <llvm/IR/Instructions.h>
 
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
@@ -144,6 +145,7 @@ class LowerFunctionLLVM {
     class PhiBuilder {
         std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> inputs;
 
+        llvm::PHINode* phi_ = nullptr;
         llvm::Type* type;
         llvm::IRBuilder<>& builder;
         bool created = false;
@@ -154,15 +156,22 @@ class LowerFunctionLLVM {
 
         void addInput(llvm::Value* v);
         void addInput(llvm::Value* v, llvm::BasicBlock* b) {
-            assert(!created);
-
             assert(v->getType() == type);
             inputs.push_back({v, b});
         }
 
-        llvm::Value* operator()();
+        llvm::Value* operator()(size_t numInputs = 0);
 
-        ~PhiBuilder() { assert(created && "dangling PhiBuilder"); }
+        ~PhiBuilder() {
+            if (!created && inputs.size() == 0)
+                return;
+            assert(created && "dangling PhiBuilder");
+            if (!phi_ && inputs.size() == 1)
+                return;
+            assert(phi_);
+            for (auto& in : inputs)
+                phi_->addIncoming(in.first, in.second);
+        }
     };
 
     PhiBuilder phiBuilder(llvm::Type* type) {
