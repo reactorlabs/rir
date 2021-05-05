@@ -161,3 +161,15 @@ f18 <- rir.compile(function() {
   stopifnot(x[, 2] == c(5,6,7))
 })
 f18()
+
+
+p <- defaultPrototype()
+f = function() {
+  slot(p, "a", FALSE) <- "a"
+}
+
+for (i in 1:10) {
+  f()
+  stopifnot(length(attributes(p)) == 0)
+}
+
