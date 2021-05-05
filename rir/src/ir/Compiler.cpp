@@ -202,7 +202,6 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp);
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext, bool do_compile_special_calls = true);
-void compileGetvar(CompilerContext& ctx, SEXP name, bool for_update = false);
 
 // EAGER_PROMISE_FROM_TOS is for the special case when the expression has already
 // been evaluated: wrap the value at TOS into a promise.
@@ -803,14 +802,17 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     - the complex assignment returns the value of z
             */
 
-            // We need to get the SEXP for `f<-` from the SEXP for `f`
             std::string const fun2name = CHAR(PRINTNAME(fun2));
-            std::string const fun2_replacement_name = fun2name + "<-";
-            SEXP farrow_sym = Rf_install(fun2_replacement_name.c_str());
 
-            if (fun2_replacement_name == "slot<-") {
+            // "slot<-" ignores value semantics and modifies shared objects
+            // in-place, our implementation does not deal with this case.
+            if (fun2name == "slot") {
                 return false;
             }
+
+            // We need to get the SEXP for `f<-` from the SEXP for `f`
+            std::string const fun2_replacement_name = fun2name + "<-";
+            SEXP farrow_sym = Rf_install(fun2_replacement_name.c_str());
 
             /* Deal with special functions.
              The issue with special functions is that they do not use the
@@ -968,12 +970,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             LoadArgsResult load_arg_res;
             SEXP farrow_args = CDR(farrow_ast);
 
-            // Load the value of x using ldvar_for_update
-            // (instead of relying on compileExpr which would end up using
-            // ldvar) This prevents in-place overwrite of local variables: this
-            // is necessary because some functions (like `slots<-`) overwrite
-            // the object in-place, even if it is shared.
-            // compileGetvar(ctx, dest, true);
+            // Load the value of x as an eager promise
 
             compileLoadOneArg(ctx, farrow_args, ArgType::EAGER_PROMISE,
                               load_arg_res);
@@ -1848,7 +1845,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 }
 
 // Lookup
-void compileGetvar(CompilerContext& ctx, SEXP name, bool for_update) {
+void compileGetvar(CompilerContext& ctx, SEXP name) {
     CodeStream& cs = ctx.cs();
     if (DDVAL(name)) {
         cs << BC::ldddvar(name);
@@ -1857,17 +1854,9 @@ void compileGetvar(CompilerContext& ctx, SEXP name, bool for_update) {
     } else {
         if (ctx.code.top()->isCached(name)) {
             auto const cache_slot = ctx.code.top()->cacheSlotFor(name);
-            if (!for_update) {
-                cs << BC::ldvarCached(name, cache_slot);
-            } else {
-                cs << BC::ldvarForUpdateCached(name, cache_slot);
-            }
+            cs << BC::ldvarCached(name, cache_slot);
         } else {
-            if (!for_update) {
-                cs << BC::ldvar(name);
-            } else {
-                cs << BC::ldvarForUpdate(name);
-            }
+            cs << BC::ldvar(name);
         }
         if (Compiler::profile)
             cs << BC::recordType();
