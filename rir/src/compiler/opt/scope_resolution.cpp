@@ -329,8 +329,7 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                     continue;
                 }
 
-                // Constant fold "missing" if we can. Warning: forcing a
-                // (non-missing) promise can still return missing...
+                // Constant fold "missing" if we can.
                 if (auto missing = Missing::Cast(i)) {
                     auto res =
                         analysis.load(before, missing->varName, missing->env());
@@ -339,18 +338,19 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                         auto v =
                             res.result.singleValue().val->followCastsAndForce();
                         if (!v->type.maybePromiseWrapped() &&
-                            !v->type.maybeMissing()) {
+                            !v->type.maybeMissing() &&
+                            /* Warning: Forcing a (non-missing) promise can
+                                still return missing... */
+                            !MkArg::Cast(v)) {
                             notMissing = true;
-                        } else {
-                            // If we find the root promise, we know if it is
-                            // missing or not!
-                            if (auto mk =
-                                    MkArg::Cast(res.result.singleValue()
-                                                    .val->followCasts())) {
-                                if (mk->isEager() &&
-                                    mk->eagerArg() != MissingArg::instance())
-                                    notMissing = true;
-                            }
+                        }
+                        // If we find the (eager) root promise, we know if it is
+                        // missing or not! Note this doesn't go throught forces.
+                        if (auto mk = MkArg::Cast(
+                                res.result.singleValue().val->followCasts())) {
+                            if (mk->isEager() &&
+                                mk->eagerArg() != MissingArg::instance())
+                                notMissing = true;
                         }
                     }
                     if (!res.result.type.maybeMissing() &&
@@ -372,7 +372,6 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                             if (!initiallyMissing) {
                                 missing->replaceUsesWith(False::instance());
                                 replacedValue[missing] = False::instance();
-                                ;
                                 next = bb->remove(ip);
                                 anyChange = true;
                             }

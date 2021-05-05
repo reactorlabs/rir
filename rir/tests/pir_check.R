@@ -491,3 +491,10 @@ h <- function(r,s,t) {
   forceAndCall(3, x, r,s,t)
 }
 stopifnot(pir.check(f, NoExternalCalls, warmup=function(f) {f();f()}))
+
+f <- function() 1L
+g <- function(x) x
+h <- function() {
+  g(g(g(f()) + g(g(f()))) + g(40L))
+}
+stopifnot(pir.check(h, NoExternalCalls, Returns42L, warmup=function(h) {h();h()}))

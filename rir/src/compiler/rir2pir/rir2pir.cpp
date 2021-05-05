@@ -623,9 +623,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ti = checkCallTarget(callee, srcCode, callTargetFeedback);
 
         auto ldfun = LdFun::Cast(callee);
-        if (ldfun)
-            ldfun->hint =
-                ti.monomorphic ? ti.monomorphic : symbol::ambiguousCallTarget;
+        if (ldfun) {
+            if (ti.monomorphic) {
+                ldfun->hint = ti.monomorphic;
+                if (!ti.stableEnv)
+                    ldfun->hintIsInnerFunction = true;
+            } else {
+                ldfun->hint = symbol::ambiguousCallTarget;
+            }
+        }
 
         // Deopt in promise not possible
         if (inPromise())
