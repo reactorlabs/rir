@@ -966,17 +966,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // Load the value of x using ldvar_for_update
             // (instead of relying on compileExpr which would end up using
-            // ldvar) This prevents in-place overwrite of local variables with a
-            // refcount <= 1: this is necessary for situations when the variable
-            // is not local, but the assignment should create a local variable:
-            //     p <- ....
-            //     function() {
-            //        f(p) <- ...
-            //     }
-            // Here p in the outer scope would get modified in-place since the
-            // local variable p does not exist yet, so that p only has a
-            // refcount of 1. `ldvar_for_update` shallow-copies the object when
-            // it is loaded from the outer scope.
+            // ldvar) This prevents in-place overwrite of local variables: this
+            // is necessary because some functions (like `slots<-`) overwrite
+            // the object in-place, even if it is shared.
             compileGetvar(ctx, dest, true);
             compileLoadOneArg(ctx, farrow_args, ArgType::EAGER_PROMISE_FROM_TOS,
                               load_arg_res);
