@@ -808,6 +808,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             std::string const fun2_replacement_name = fun2name + "<-";
             SEXP farrow_sym = Rf_install(fun2_replacement_name.c_str());
 
+            if (fun2_replacement_name == "slot<-") {
+                return false;
+            }
+
             /* Deal with special functions.
              The issue with special functions is that they do not use the
              arguments passed on the stack, but evaluate the arguments through
@@ -969,8 +973,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // ldvar) This prevents in-place overwrite of local variables: this
             // is necessary because some functions (like `slots<-`) overwrite
             // the object in-place, even if it is shared.
-            compileGetvar(ctx, dest, true);
-            compileLoadOneArg(ctx, farrow_args, ArgType::EAGER_PROMISE_FROM_TOS,
+            // compileGetvar(ctx, dest, true);
+
+            compileLoadOneArg(ctx, farrow_args, ArgType::EAGER_PROMISE,
                               load_arg_res);
 
             //load y1, <...>, yn
