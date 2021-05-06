@@ -72,7 +72,7 @@ bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                     bool nodots = true;
                     for (unsigned i = 2;
-                         i < call->nCallArgs() && i <= nForce + 2; ++i) {
+                         i < call->nCallArgs() && i < nForce + 2; ++i) {
                         if (call->callArg(i).val()->type.isA(
                                 RType::expandedDots)) {
                             nodots = false;
@@ -87,7 +87,7 @@ bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
                         ip++;
                         std::vector<Value*> args;
                         for (unsigned i = 2; i < call->nCallArgs(); ++i) {
-                            if (i - 2 <= nForce) {
+                            if (i - 2 < nForce) {
                                 ip = bb->insert(
                                     ip,
                                     new CastType(call->callArg(i).val(),

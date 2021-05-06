@@ -152,7 +152,10 @@ static bool isStaticallyNA(Value* i) {
 }
 
 bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                         LogStream&) const {
+                         LogStream& log) const {
+    EarlyConstantfold cf;
+    cf.apply(cmp, cls, code, log);
+
     bool anyChange = false;
 
     std::unordered_map<BB*, bool> branchRemoval;
