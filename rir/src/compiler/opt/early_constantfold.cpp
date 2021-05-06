@@ -87,20 +87,26 @@ bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
                         ip++;
                         std::vector<Value*> args;
                         for (unsigned i = 2; i < call->nCallArgs(); ++i) {
+                            auto a = call->callArg(i).val();
                             if (i - 2 < nForce) {
-                                ip = bb->insert(
-                                    ip,
-                                    new CastType(call->callArg(i).val(),
-                                                 CastType::Upcast, RType::prom,
-                                                 PirType::any()));
-                                ip = bb->insert(
-                                    ip + 1, new Force(*ip, call->env(),
+                                if (a->type.isA(RType::prom)) {
+                                    ip = bb->insert(
+                                        ip, new CastType(a, CastType::Upcast,
+                                                         RType::prom,
+                                                         PirType::any()));
+                                    a = *ip;
+                                    ip++;
+                                }
+                                if (a->type.isA(RType::prom) ||
+                                    a->type.maybePromiseWrapped()) {
+                                    ip = bb->insert(
+                                        ip, new Force(a, call->env(),
                                                       Tombstone::framestate()));
-                                args.push_back(*ip);
-                                ip++;
-                            } else {
-                                args.push_back(call->callArg(i).val());
+                                    a = *ip;
+                                    ip++;
+                                }
                             }
+                            args.push_back(a);
                         }
                         auto newCall =
                             new Call(call->env(), callee, args,
