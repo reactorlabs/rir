@@ -77,14 +77,15 @@ test_release_1:
   except:
     - schedules
   script:
+    - ln -s /opt/rir/external/custom-r/tests/
     - cd /opt/rir/build/release
     - RIR_CHECK_PIR_TYPES=1 bin/tests
     - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-devel
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - "../../external/custom-r/tests/*.log"
-    - "../../external/custom-r/tests/*/*check.log"
+    - "tests/*.log"
+    - "tests/*/*check.log"
     when: on_failure
     expire_in: 1 week
 
@@ -101,13 +102,14 @@ test_release_2:
   except:
     - schedules
   script:
+    - ln -s /opt/rir/external/custom-r/tests/
     - cd /opt/rir/build/release
     - bin/gnur-make-tests check-recommended
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - "../../external/custom-r/tests/*.log"
-    - "../../external/custom-r/tests/*/*check.log"
+    - "tests/*.log"
+    - "tests/*/*check.log"
     when: on_failure
     expire_in: 1 week
 
@@ -141,13 +143,14 @@ tests_debug2:
   except:
     - schedules
   script:
+    - ln -s /opt/rir/external/custom-r/tests/
     - cd /opt/rir/build/debugopt
     - ./bin/gnur-make-tests check-devel
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - "../../external/custom-r/tests/*.log"
-    - "../../external/custom-r/tests/*/*check.log"
+    - "tests/*.log"
+    - "tests/*/*check.log"
     when: on_failure
     expire_in: 1 week
 
