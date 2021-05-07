@@ -690,13 +690,14 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
         hashed.  */
     SEXP newrho, a, f;
 
-    SEXP actuals = Rf_matchArgs(FORMALS(op), arglist, call.ast);
-    PROTECT(newrho = Rf_NewEnvironment(FORMALS(op), actuals, CLOENV(op)));
+    SEXP actuals = arglist;
 
-    /* Turn on reference counting for the binding cells so local
-       assignments arguments increment REFCNT values */
-    for (a = actuals; a != R_NilValue; a = CDR(a))
-        ENABLE_REFCNT(a);
+    bool noArgmatchNeeded =
+        call.givenContext.includes(Assumption::StaticallyArgmatched);
+    if (!noArgmatchNeeded)
+        actuals = Rf_matchArgs(FORMALS(op), actuals, call.ast);
+
+    PROTECT(newrho = Rf_NewEnvironment(FORMALS(op), actuals, CLOENV(op)));
 
     /*  Use the default code for unbound formals.  FIXME: It looks like
         this code should preceed the building of the environment so that
@@ -717,6 +718,10 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     Function* fun = DispatchTable::unpack(BODY(op))->baseline();
     size_t pos = 0;
     while (f != R_NilValue) {
+        /* Turn on reference counting for the binding cells so local
+           assignments arguments increment REFCNT values */
+        ENABLE_REFCNT(a);
+
         Code* c = fun->defaultArg(pos++);
         if (CAR(f) != R_MissingArg) {
             if (CAR(a) == R_MissingArg) {
@@ -729,7 +734,16 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
         }
         assert(CAR(f) != R_DotsSymbol || TYPEOF(CAR(a)) == DOTSXP);
         f = CDR(f);
-        a = CDR(a);
+
+        // Statically matched arglist can have trailing missings, lets
+        // dyanmically match the length of actuals and formals.
+        if (noArgmatchNeeded && f != R_NilValue && CDR(a) == R_NilValue) {
+            SETCDR(a, CONS_NR(R_MissingArg, R_NilValue));
+            a = CDR(a);
+            SET_TAG(a, TAG(f));
+        } else {
+            a = CDR(a);
+        }
     }
 
     /*  Fix up any extras that were supplied by usemethod. */
