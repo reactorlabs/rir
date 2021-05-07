@@ -2150,6 +2150,46 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(ldvar_noforce_) {
+            SEXP sym = readConst(ctx, readImmediate());
+            advanceImmediate();
+            assert(!LazyEnvironment::check(env));
+            res = Rf_findVar(sym, env);
+            R_Visible = TRUE;
+
+            // recordForceBehavior(res);
+
+            if (res == R_UnboundValue) {
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            }
+
+            if (res != R_NilValue)
+                ENSURE_NAMED(res);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        //  INSTRUCTION(ldvar_noforce_) {
+        //     Immediate id = readImmediate();
+        //     advanceImmediate();
+        //     res = cachedGetVar(ep->env(), id, ctx, bindingCache);
+        //     R_Visible = TRUE;
+
+        //     if (res == R_UnboundValue) {
+        //         Rf_error("object not found");
+        //     }
+
+        //     if (NAMED(res) == 0 && res != R_NilValue)
+        //         SET_NAMED(res, 1);
+
+        //     ostack_push(ctx, res);
+        //     NEXT();
+        // }
+
         INSTRUCTION(ldvar_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();

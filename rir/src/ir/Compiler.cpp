@@ -1504,13 +1504,13 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             return;
 
         // forces promises but should be okay when starting in the global env
-        likelyBuiltin = TYPEOF(Rf_findVar(fun, R_GlobalEnv)) == BUILTINSXP;
-
+        auto builtin = Rf_findVar(fun, R_GlobalEnv);
+        likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
         if (likelyBuiltin) {
             eager = cs.mkLabel();
             theEnd = cs.mkLabel();
-            cs << BC::ldvar(fun) << BC::dup()
-               << BC::is(BC::RirTypecheck::isBUILTINSXP) << BC::recordTest()
+            cs << BC::ldvarNoForce(fun) << BC::dup() << BC::push(builtin)
+               << BC::identicalNoforce() << BC::recordTest()
                << BC::brtrue(eager);
 
             cs << BC::pop();
@@ -1537,6 +1537,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         }
     };
 
+    // IS THIS SOUND? We could have an assume method C++ and reuse that ********
     if (fun == symbol::forceAndCall) {
         // First arg certainly eager
         info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0, 2);
@@ -1544,14 +1545,18 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         info = compileLoadArgs(ctx, ast, fun, args, voidContext);
     }
 
+    // info = compileLoadArgs(ctx, ast, fun, args, voidContext);
+
     compileCall();
 
     if (likelyBuiltin) {
         cs << BC::br(theEnd) << eager;
 
+        if (Compiler::profile)
+            cs << BC::recordCall();
+
         info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0,
                                RList(args).length());
-        compileCall();
 
         // for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg)
         // {
@@ -1562,6 +1567,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         //     else
         //         compileExpr(ctx, *arg, false);
         // }
+
+        compileCall();
 
         cs << theEnd;
     }
