@@ -998,8 +998,11 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
                         SET_MISSING(a, 2);
                     }
                 } else if (CAR(a) == R_MissingArg) {
-                    if (auto dflt = fun->defaultArg(pos))
+                    SET_MISSING(a, 1);
+                    if (auto dflt = fun->defaultArg(pos)) {
+                        SET_MISSING(a, 2);
                         SETCAR(a, createPromise(dflt, env));
+                    }
                 }
 
                 f = CDR(f);
