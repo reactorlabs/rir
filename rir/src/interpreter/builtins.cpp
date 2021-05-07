@@ -145,8 +145,34 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
         auto ast = LCONS(CADDR(call.ast), CDDDR(call.ast));
         PROTECT(ast);
         Context innerCtxt;
+        auto nargs = call.suppliedArgs - 2;
+        if (TYPEOF(fun) == CLOSXP) {
+            for (size_t i = 0; i < nargs && i < Context::NUM_TYPED_ARGS; ++i) {
+                if (call.givenContext.isEager(i + 2))
+                    innerCtxt.setEager(i);
+                if (call.givenContext.isSimpleInt(i + 2))
+                    innerCtxt.setSimpleInt(i);
+                if (call.givenContext.isSimpleReal(i + 2))
+                    innerCtxt.setSimpleReal(i);
+                if (call.givenContext.isNotObj(i + 2))
+                    innerCtxt.setNotObj(i);
+                if (call.givenContext.isNonRefl(i + 2))
+                    innerCtxt.setNonRefl(i);
+            }
+            if (call.givenContext.includes(Assumption::NoExplicitlyMissingArgs))
+                innerCtxt.add(Assumption::NoExplicitlyMissingArgs);
+            if (call.givenContext.includes(Assumption::CorrectOrderOfArguments))
+                innerCtxt.add(Assumption::CorrectOrderOfArguments);
+            if (auto dt = DispatchTable::check(BODY(fun))) {
+                auto f = dt->baseline();
+                if (f->nargs() >= nargs) {
+                    innerCtxt.add(Assumption::NotTooManyArguments);
+                    innerCtxt.numMissing(f->nargs() - nargs);
+                }
+            }
+        }
         CallContext innerCall(ArglistOrder::NOT_REORDERED, call.caller, fun,
-                              call.suppliedArgs - 2, ast, call.stackArgs + 2,
+                              nargs, ast, call.stackArgs + 2,
                               call.names ? call.names + 2 : nullptr,
                               call.callerEnv, innerCtxt, ctx);
 
