@@ -142,7 +142,7 @@ if [ ! -d $LLVM_DIR ]; then
           fi
           tar xf $F.tar.xz
           mkdir llvm-11-build && cd llvm-11-build
-          cmake -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_ENABLE_ASSERTIONS=1 -DLLVM_OPTIMIZED_TABLEGEN=1 -DLLVM_TARGETS_TO_BUILD="X86" ../$F
+          cmake -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_ENABLE_ASSERTIONS=1 -DLLVM_OPTIMIZED_TABLEGEN=1 -DLLVM_USE_PERF=1 -DLLVM_TARGETS_TO_BUILD="X86" ../$F
           ninja
           cd ..
           ln -s llvm-11-build llvm-11
