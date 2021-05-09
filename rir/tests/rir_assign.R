@@ -164,12 +164,22 @@ f18()
 
 
 p <- defaultPrototype()
-f = function() {
+f19 <- function() {
   slot(p, "a", FALSE) <- "a"
 }
 
 for (i in 1:10) {
-  f()
+  f19()
   stopifnot(length(attributes(p)) == 0)
 }
 
+
+f20 <- function() {
+  q <- defaultPrototype()
+  slot(q, "a", FALSE) <- "a"
+}
+
+for (i in 1:10) {
+  f20()
+  stopifnot(length(attributes(defaultPrototype())) == 0)
+}
