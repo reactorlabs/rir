@@ -844,88 +844,96 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 https://github.com/reactorlabs/gnur/blob/R-3-6-2-branch-rir-patch/src/main/eval.c#L7128
             */
 
+            bool const maybe_special = (fun2name == "$" || fun2name == "@");
             BC::Label const is_not_special_branch = cs.mkLabel();
             BC::Label const next_branch = cs.mkLabel();
-            {
-                // Branch at runtime between the special and the non-special
-                // case Build and compile the AST for
-                //    .Internal(typeof(`f<-`))
-                SEXP const internal_sym = Rf_install(".Internal");
-                SEXP const typeof_sym = Rf_install("typeof");
-                SEXP const typeof_ast =
-                    Rf_lcons(typeof_sym, Rf_lcons(farrow_sym, R_NilValue));
 
-                SEXP const internal_typeof_ast =
-                    Rf_lcons(internal_sym, Rf_lcons(typeof_ast, R_NilValue));
+            if (maybe_special) {
+                {
+                    // Branch at runtime between the special and the non-special
+                    // case Build and compile the AST for
+                    //    .Internal(typeof(`f<-`))
+                    SEXP const internal_sym = Rf_install(".Internal");
+                    SEXP const typeof_sym = Rf_install("typeof");
+                    SEXP const typeof_ast =
+                        Rf_lcons(typeof_sym, Rf_lcons(farrow_sym, R_NilValue));
 
+                    SEXP const internal_typeof_ast = Rf_lcons(
+                        internal_sym, Rf_lcons(typeof_ast, R_NilValue));
 
-                Protect typeof_ast_protect(internal_typeof_ast);
-                compileExpr(ctx, internal_typeof_ast);
+                    SEXP const primitive_sym = Rf_install(".Primitive");
+                    SEXP const equality_str = Rf_mkString("==");
+                    SEXP const special_str = Rf_mkString("special");
+                    // .Primitive("==")(typeof(fun), "special")
+                    SEXP const equality_ast =
+                        Rf_lcons(Rf_lcons(primitive_sym,
+                                          Rf_lcons(equality_str, R_NilValue)),
+                                 Rf_lcons(internal_typeof_ast,
+                                          Rf_lcons(special_str, R_NilValue)));
 
-                // and branch based on a comparison to the string "special"
-                SEXP const special = Rf_mkString("special");
-                cs << BC::push(special) << BC::identicalNoforce()
-                   << BC::asbool() << BC::brfalse(is_not_special_branch);
+                    Protect equality_ast_protect(equality_ast);
 
-#if false
-                // To avoid evaluating the RHS in GnuR, compile and evaluate
-                // it here, and pass the resulting value through a variable
-                // (this preserves the semantics: the RHS is evaluated eagerly
-                //  in the assignment)
+                    compileCall(ctx, equality_ast, CAR(equality_ast),
+                                CDR(equality_ast), false);
 
-                SEXP new_ast = Rf_duplicate(ast);
-                Protect new_ast_protect(new_ast);
+                    cs << BC::brfalse(is_not_special_branch);
 
-                // find the cell containing the RHS
-                SEXP rhs_expr_cell = CDR(new_ast);
-                while (CDR(rhs_expr_cell) != R_NilValue) {
-                    rhs_expr_cell = CDR(rhs_expr_cell);
+                    // To avoid evaluating the RHS in GnuR, compile and evaluate
+                    // it here, and pass the resulting value through a variable
+                    // (this preserves the semantics: the RHS is evaluated
+                    // eagerly
+                    //  in the assignment)
+
+                    SEXP new_ast = Rf_duplicate(ast);
+                    Protect new_ast_protect(new_ast);
+
+                    // find the cell containing the RHS
+                    SEXP rhs_expr_cell = CDR(new_ast);
+                    while (CDR(rhs_expr_cell) != R_NilValue) {
+                        rhs_expr_cell = CDR(rhs_expr_cell);
+                    }
+                    // compile the RHS
+                    compileExpr(ctx, CAR(rhs_expr_cell));
+
+                    // and keep the resulting value in a temporary variable
+                    SEXP tmp_rhs = Rf_install("*tmp_rhs_complex_assignment*");
+                    cs << BC::stvar(tmp_rhs);
+
+                    // use this temporary variable holding the evaluated RHS
+                    // value as the complex argument assignment value
+                    CAR(rhs_expr_cell) = tmp_rhs;
+
+                    // Evaluate the destination
+                    //    x <- x
+
+                    SEXP dest_cell = CDR(CAR(CDR(new_ast)));
+                    compileExpr(ctx, CAR(dest_cell));
+                    cs << BC::stvar(CAR(dest_cell));
+
+                    // compile the modified AST
+                    // Make sure not to recurse into compileSpecialCall
+                    compileCall(ctx, new_ast, CAR(new_ast), CDR(new_ast),
+                                voidContext, false);
+
+                    // Remove the temporary binding
+                    // TODO: do it without a function call to `rm`?
+
+                    auto remove_var = [&ctx](SEXP var) {
+                        SEXP const remove_ast = Rf_lcons(
+                            Rf_install("rm"), Rf_lcons(var, R_NilValue));
+                        Protect remove_ast_protect(remove_ast);
+                        compileCall(ctx, remove_ast, CAR(remove_ast),
+                                    CDR(remove_ast), true);
+                    };
+
+                    remove_var(tmp_rhs);
+
+                    cs << BC::br(next_branch);
                 }
-                // compile the RHS
-                compileExpr(ctx, CAR(rhs_expr_cell));
 
-                // and keep the resulting value in a temporary variable
-                SEXP tmp_rhs = Rf_install("*tmp_rhs_complex_assignment*");
-                cs << BC::stvar(tmp_rhs);
-
-                // use this temporary variable holding the evaluated RHS value
-                // as the complex argument assignment value
-                CAR(rhs_expr_cell) = tmp_rhs;
-
-                // TODO: evaluate the destination
-                // as we do not allow nested complex assignments, the
-                // destination is either already a SYMSXP, or is a PROMSXP ;
-                // maybe we could force it when it is a promise?
-
-                // SEXP dest_cell = CDR(CAR(CDR(new_ast)));
-                // CAR(dest_cell) = rirForcePromise(CAR(dest_cell));
-
-                // compile the modified AST
-                // Make sure not to recurse into compileSpecialCall
-                compileCall(ctx, new_ast, CAR(new_ast), CDR(new_ast),
-                            voidContext, false);
-
-                // Remove the temporary binding
-                // TODO: do it without a function call to `rm`?
-
-                auto remove_var = [&ctx](SEXP var) {
-                    SEXP const remove_ast = Rf_lcons(
-                        Rf_install("rm"), Rf_lcons(var, R_NilValue));
-                    Protect remove_ast_protect(remove_ast);
-                    compileCall(ctx, remove_ast, CAR(remove_ast),
-                                CDR(remove_ast), true);
-                };
-
-                remove_var(tmp_rhs);
-#else
-                compileCall(ctx, ast, CAR(ast), CDR(ast), voidContext, false);
-#endif
-
-                cs << BC::br(next_branch);
+                // Compile non special complex assignments
+                cs << is_not_special_branch;
             }
-
-            // Compile non special complex assignments
-            cs << is_not_special_branch;
 
             // Get the LISTSXP of args for f
             SEXP f_args = CDR(CAR(args_));
@@ -1030,7 +1038,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 }
             }
 
-            cs << next_branch;
+            if (maybe_special) {
+                cs << next_branch;
+            }
 
             return true;
         }
