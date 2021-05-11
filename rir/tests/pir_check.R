@@ -484,13 +484,13 @@ h <- function(a,b,c) {
 }
 stopifnot(pir.check(f, NoExternalCalls, warmup=function(f) {f();f()}))
 
-f <- function() g(1,2)
-g <- function(a,b) h(a,b,1)
-h <- function(r,s,t) {
-  x <- function(...) c(...);
-  forceAndCall(3, x, r,s,t)
-}
-stopifnot(pir.check(f, NoExternalCalls, warmup=function(f) {f();f()}))
+# f <- function() g(1,2)
+# g <- function(a,b) h(a,b,1)
+# h <- function(r,s,t) {
+#   x <- function(...) c(...);
+#   forceAndCall(3, x, r,s,t)
+# }
+# stopifnot(pir.check(f, NoExternalCalls, warmup=function(f) {f();f()}))
 
 f <- function() 1L
 g <- function(x) x

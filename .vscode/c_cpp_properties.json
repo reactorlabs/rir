@@ -8,11 +8,14 @@
                 "${workspaceFolder}/external/llvm-11/include/**",
                 "${workspaceFolder}/external/llvm-11.0.1.src/include/**"
             ],
-            "defines": ["ENABLE_SLOWASSERT"],
+            "defines": [
+                "ENABLE_SLOWASSERT"
+            ],
             "compilerPath": "/usr/bin/g++-8",
             "cStandard": "c11",
             "cppStandard": "c++14",
-            "intelliSenseMode": "gcc-x64"
+            "intelliSenseMode": "gcc-x64",
+            "compileCommands": "${workspaceFolder}/build/debug/compile_commands.json"
         }
     ],
     "version": 4
