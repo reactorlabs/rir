@@ -1513,7 +1513,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
                 eager = cs.mkLabel();
                 theEnd = cs.mkLabel();
-                cs << BC::ldvarNoForce(fun) << BC::dup() << BC::push(builtin)
+                cs << BC::push(builtin) << BC::dup() << BC::ldvarNoForce(fun)
                    << BC::identicalNoforce() << BC::recordTest()
                    << BC::brtrue(eager);
 
@@ -1557,8 +1557,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (likelyBuiltin) {
         cs << BC::br(theEnd) << eager;
 
-        if (Compiler::profile)
-            cs << BC::recordCall();
+        // if (Compiler::profile)
+        //     cs << BC::recordCall();
 
         info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0,
                                RList(args).length());
