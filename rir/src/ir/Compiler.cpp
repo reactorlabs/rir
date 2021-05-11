@@ -1503,15 +1503,14 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
-        if (Rf_install(".Primitive") != fun && Rf_install(".Internal") != fun &&
-            Rf_install("length") != fun && Rf_install("list") != fun) {
+        if (Rf_install(".Primitive") != fun && Rf_install(".Internal") != fun) {
             // forces promises but should be okay when starting in the global
             // env
             auto builtin = Rf_findVar(fun, R_GlobalEnv);
             likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
 
             if (likelyBuiltin) {
-                Rf_PrintValue(fun);
+
                 eager = cs.mkLabel();
                 theEnd = cs.mkLabel();
                 cs << BC::ldvarNoForce(fun) << BC::dup() << BC::push(builtin)
