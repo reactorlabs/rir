@@ -175,6 +175,7 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
 
 void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
                                     llvm::Value* p) {
+    return;
     auto nok = BasicBlock::Create(PirJitLLVM::getContext(), "assertFail", fun);
     auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "assertOk", fun);
 
@@ -1989,10 +1990,31 @@ llvm::Value* LowerFunctionLLVM::createSelect2(
 void LowerFunctionLLVM::compile() {
 
     {
+        // std::array<llvm::Type*, 4> argTypes = {t::voidPtr, t::voidPtr,
+        // t::SEXP,
+        //                                        t::SEXP};
+        // std::array<llvm::DIType*, 4> argDITypes;
+        // if (LLVMDebugInfo()) {
+        //     argDITypes = {DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType,
+        //                   DI->SEXPType};
+        // }
         auto arg = fun->arg_begin();
         for (size_t i = 0; i < argNames.size(); ++i) {
             args.push_back(arg);
             args.back()->setName(argNames[i]);
+
+            // if (LLVMDebugInfo()) {
+            //     AllocaInst* Alloca =
+            //         builder.CreateAlloca(argTypes[i], nullptr, argNames[i]);
+            //     builder.CreateStore(arg, Alloca);
+            //     DILocalVariable* D = DIB->createParameterVariable(
+            //         DI->getScope(), argNames[i], i + 1, DI->File, 0,
+            //         argDITypes[i], true);
+            //     DIB->insertDeclare(Alloca, D, DIB->createExpression(),
+            //                        builder.getCurrentDebugLocation(),
+            //                        builder.GetInsertBlock());
+            // }
+
             arg++;
         }
     }
@@ -2140,9 +2162,6 @@ void LowerFunctionLLVM::compile() {
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
 
-    // For variable info, broken...
-    // size_t ArgIdx = 0;
-
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         currentBB = bb;
 
@@ -2253,9 +2272,6 @@ void LowerFunctionLLVM::compile() {
                     setVal(i, load(in, Representation::Of(i)));
                 break;
             }
-
-            case Tag::Phi:
-                break;
 
             case Tag::LdArg:
                 setVal(i, argument(LdArg::Cast(i)->id));
@@ -3373,6 +3389,7 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            case Tag::Phi:
             case Tag::LdConst:
             case Tag::Nop:
                 break;
@@ -3519,30 +3536,12 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::Add: {
-
-                // TODO: this is broken...
-                // auto decl = [&](llvm::Value* v) {
-                //     DILocalVariable* D = DIB->createParameterVariable(
-                //         DI->getScope(), "i", ++ArgIdx, DI->File, line,
-                //         DI->getInstrType(DIB, i->type), true);
-
-                //     DIB->insertDeclare(
-                //         v, D, DIB->createExpression(),
-                //         DILocation::get(DI->getScope()->getContext(), line,
-                //         0,
-                //                         DI->getScope()),
-                //         builder.GetInsertBlock());
-                // };
-
+            case Tag::Add:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
                                  // TODO: Check NA
                                  auto res =
                                      builder.CreateAdd(a, b, "", false, true);
-
-                                 //  decl(res);
-
                                  return res;
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3550,7 +3549,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::ADD);
                 break;
-            }
+
             case Tag::Sub:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3563,6 +3562,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::SUB);
                 break;
+
             case Tag::Mul:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3575,6 +3575,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::MUL);
                 break;
+
             case Tag::Div:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3586,6 +3587,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::DIV);
                 break;
+
             case Tag::Pow:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3703,6 +3705,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::LTE);
                 break;
+
             case Tag::Lt:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3713,6 +3716,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::LT);
                 break;
+
             case Tag::Gte:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3723,6 +3727,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::GTE);
                 break;
+
             case Tag::Gt:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3733,6 +3738,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::GT);
                 break;
+
             case Tag::LAnd:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3769,6 +3775,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::LAND, false);
                 break;
+
             case Tag::LOr:
                 compileRelop(
                     i,
@@ -3812,6 +3819,7 @@ void LowerFunctionLLVM::compile() {
                     },
                     BinopKind::LOR, false);
                 break;
+
             case Tag::IDiv:
                 compileBinop(
                     i,
@@ -3877,6 +3885,7 @@ void LowerFunctionLLVM::compile() {
                     },
                     BinopKind::IDIV);
                 break;
+
             case Tag::Mod: {
                 auto myfmod = [&](llvm::Value* a, llvm::Value* b) {
                     // from myfmod
@@ -3969,6 +3978,7 @@ void LowerFunctionLLVM::compile() {
                     myfmod, BinopKind::MOD);
                 break;
             }
+
             case Tag::Colon: {
                 assert(Representation::Of(i) == t::SEXP);
                 auto a = i->arg(0).val();
@@ -5681,9 +5691,43 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            if (LLVMDebugInfo()) {
+                if (auto v = tryGetVariable(i)) {
+                    auto makeName = [&](Instruction* i) {
+                        std::stringstream n;
+                        auto id = i->id();
+                        char sep = '_';
+                        n << "pir" << sep << id.bb() << sep << id.idx();
+                        return n.str();
+                    };
+                    auto store = v->slot;
+                    auto rep = Representation::Of(i);
+                    auto ditype = (rep == Representation::Sexp
+                                       ? DI->SEXPType
+                                       : (rep == Representation::Integer
+                                              ? DI->IntType
+                                              : (rep == Representation::Real
+                                                     ? DI->DoubleType
+                                                     : DI->UnspecifiedType)));
+                    DILocalVariable* D = DIB->createAutoVariable(
+                        DI->getScope(), makeName(i), DI->File,
+                        builder.getCurrentDebugLocation().getLine(), ditype,
+                        true);
+                    if (rep == Representation::Sexp)
+                        DIB->insertDeclare(store, D, DIB->createExpression(),
+                                           builder.getCurrentDebugLocation(),
+                                           builder.GetInsertBlock());
+                    else
+                        DIB->insertDbgValueIntrinsic(
+                            store, D, DIB->createExpression(),
+                            builder.getCurrentDebugLocation(),
+                            builder.GetInsertBlock());
+                }
+            }
+
             // Here we directly access the variable to bypass liveness
             // checks when loading the variable. This is ok, since this is
-            // the current instructoin and we have already written to it...
+            // the current instruction and we have already written to it...
             assert(*currentInstr == i);
             assert(!variables_.count(i) || variables_.at(i).initialized);
             ++currentInstr;

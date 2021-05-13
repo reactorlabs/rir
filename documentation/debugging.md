@@ -288,7 +288,7 @@ Breakpoint 1, rsh_f[0x56500a98aa80].1 () at f.001:3
 ```
 
 Current limitations:
-* `continue` after setting a breakpoint breaks something in `rr` and kills the session
+* `continue` after setting a breakpoint breaks something in `rr` and kills the session: use `hbreak` instead of `break` (creates a hw breakpoint, see [https://github.com/rr-debugger/rr/issues/2163#issuecomment-363230091](https://github.com/rr-debugger/rr/issues/2163#issuecomment-363230091))
 * no variable information (can't do `p %0.1`)
 * sort of stepping into functions but not tested much
 

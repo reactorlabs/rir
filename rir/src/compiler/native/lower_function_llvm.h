@@ -222,6 +222,11 @@ class LowerFunctionLLVM {
         }
         return variables_.at(variable).get(builder);
     }
+    Variable* tryGetVariable(Instruction* variable) {
+        if (variables_.count(variable))
+            return &variables_.at(variable);
+        return nullptr;
+    }
 
     llvm::Value* constant(SEXP co, llvm::Type* needed);
     llvm::Value* nodestackPtr();
@@ -261,7 +266,7 @@ class LowerFunctionLLVM {
 
     void setVisible(int i);
 
-    std::array<std::string, 4> argNames = {{"code", "args", "env", "closure"}};
+    std::array<std::string, 4> argNames = {"code", "args", "env", "closure"};
     std::vector<llvm::Value*> args;
     llvm::Value* paramCode() { return args[0]; }
     llvm::Value* paramArgs() { return args[1]; }

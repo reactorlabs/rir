@@ -36,12 +36,13 @@ void BB::printPrologue(std::ostream& out, bool tty) {
     out << "\n";
 }
 
-bool BB::printEpilogue(std::ostream& out, bool tty) {
+void BB::printEpilogue(std::ostream& out, bool tty, bool nl = false) {
+    // nl causes newline in all cases
     if (isJmp()) {
         out << "  goto BB" << next0->id << "\n";
-        return true;
+    } else if (nl) {
+        out << "\n";
     }
-    return false;
 }
 
 void BB::print(std::ostream& out, bool tty) {
