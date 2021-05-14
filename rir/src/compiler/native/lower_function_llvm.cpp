@@ -187,6 +187,7 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
          {convertToPointer((void*)msg, t::i8, true)});
 
     // builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
+
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
