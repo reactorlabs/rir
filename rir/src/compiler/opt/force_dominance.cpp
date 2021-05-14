@@ -51,8 +51,14 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (c->kind == CastType::Upcast) {
                 if (auto mk = MkArg::Cast(c->arg(0).val())) {
                     if (mk->isEager() && mk->prom()->trivial()) {
-                        c->replaceUsesWith(mk->eagerArg());
-                        anyChange = true;
+                        auto eager = mk->eagerArg();
+                        // Do not depromise trivial MissingArg promises,
+                        // as promised and depromised missing do not
+                        // behave the same (see comment below)
+                        if (eager != MissingArg::instance()) {
+                            c->replaceUsesWith(eager);
+                            anyChange = true;
+                        }
                     }
                 }
             }
