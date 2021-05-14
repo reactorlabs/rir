@@ -185,9 +185,32 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
         call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
     call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
          {convertToPointer((void*)msg, t::i8, true)});
-    builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
+
+    // builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
+    builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
+
+    // ************
+
+    // auto nok = BasicBlock::Create(PirJitLLVM::getContext(), "assertFail",
+    // fun); auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "assertOk",
+    // fun);
+
+    // builder.CreateCondBr(v, ok, nok, branchAlwaysTrue);
+
+    // builder.SetInsertPoint(nok);
+
+    // if (p)
+    //     call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
+
+    // call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
+    //      {convertToPointer((void*)msg, t::i8, true)});
+
+    // //builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
+    // builder.CreateBr(ok);
+
+    // builder.SetInsertPoint(ok);
 }
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
@@ -894,6 +917,7 @@ void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
 llvm::Value* LowerFunctionLLVM::isExternalsxp(llvm::Value* v, uint32_t magic) {
     assert(v->getType() == t::SEXP);
     auto isExternalsxp = builder.CreateICmpEQ(c(EXTERNALSXP), sexptype(v));
+
     auto es = builder.CreateBitCast(dataPtr(v, false),
                                     PointerType::get(t::RirRuntimeObject, 0));
     auto magicVal = builder.CreateLoad(builder.CreateGEP(es, {c(0), c(2)}));
@@ -923,9 +947,11 @@ void LowerFunctionLLVM::checkIsSexp(llvm::Value* v, const std::string& msg) {
     checking = true;
     static std::vector<std::string> strings;
     strings.push_back(std::string("expected sexp got null ") + msg);
+
     insn_assert(
         builder.CreateICmpNE(llvm::ConstantPointerNull::get(t::SEXP), v),
         strings.back().c_str());
+
     auto type = sexptype(v);
     auto validType =
         builder.CreateOr(builder.CreateICmpULE(type, c(EXTERNALSXP)),
@@ -1867,6 +1893,7 @@ void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y,
 #ifdef ENABLE_SLOWASSERT
             insn_assert(isExternalsxp(x, LAZY_ENVIRONMENT_MAGIC),
                         "envStubGet on something which is not an env stub");
+
 #endif
             auto le = builder.CreateBitCast(
                 dataPtr(x, false), PointerType::get(t::LazyEnvironment, 0));
