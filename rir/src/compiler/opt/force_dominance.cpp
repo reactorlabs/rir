@@ -44,6 +44,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     bool anyChange = false;
 
     // Do this first so dead code elimination will remove the dependencies
+    // Do not depromise trivial MissingArg promises, as promised and depromised
+    // missing do not behave the same (see comment below)
     Visitor::run(code->entry, [&](Instruction* i) {
         // these are their own ast-expression, so substitute and
         // similar will not give us trouble
@@ -52,9 +54,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (auto mk = MkArg::Cast(c->arg(0).val())) {
                     if (mk->isEager() && mk->prom()->trivial()) {
                         auto eager = mk->eagerArg();
-                        // Do not depromise trivial MissingArg promises,
-                        // as promised and depromised missing do not
-                        // behave the same (see comment below)
                         if (eager != MissingArg::instance()) {
                             c->replaceUsesWith(eager);
                             anyChange = true;
@@ -65,14 +64,17 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
         if (auto mk = MkArg::Cast(i)) {
             if (mk->isEager() && mk->prom()->trivial()) {
-                i->replaceUsesWith(
-                    mk->eagerArg(),
-                    [&](Instruction* j, size_t a) {
-                        if (j->arg(a).type().isA(RType::prom))
-                            j->arg(a).type() = mk->eagerArg()->type;
-                    },
-                    [&](Instruction* j) { return j->tag != Tag::CastType; });
-                anyChange = true;
+                auto eager = mk->eagerArg();
+                if (eager != MissingArg::instance()) {
+                    i->replaceUsesWith(
+                        eager,
+                        [&](Instruction* j, size_t a) {
+                            if (j->arg(a).type().isA(RType::prom))
+                                j->arg(a).type() = eager->type;
+                        },
+                        [&](Instruction* j) { return j->tag != Tag::CastType; });
+                    anyChange = true;
+                }
             }
         }
     });
