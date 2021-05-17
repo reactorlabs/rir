@@ -1212,7 +1212,12 @@ class FLIE(MkFunCls, 1, Effects::None()) {
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
-    size_t gvnBase() const override { return hash_combine(tagHash(), cls); }
+    size_t gvnBase() const override {
+        // Lazyly compiled cls might be still missing
+        if (!cls)
+            return 0;
+        return hash_combine(tagHash(), cls);
+    }
 };
 
 class FLIE(Force, 3, Effects::Any()) {
