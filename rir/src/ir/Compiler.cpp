@@ -1496,20 +1496,32 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     // LHS ( ARGS )
 
     // LHS can either be an identifier or an expression
-    bool likelyBuiltin = false;
+    bool speculateOnBuiltins = false;
     BC::Label eager = 0;
     BC::Label theEnd = 0;
+
     if (TYPEOF(fun) == SYMSXP) {
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
-        if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun) {
+        auto callHasDots = false;
+        for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg) {
+
+            if (*arg == R_DotsSymbol) {
+                callHasDots = true;
+                break;
+            }
+        }
+
+        // test_mark_function fails is this if is not here *******
+        if (/*Rf_install(".Primitive") != fun &&*/ Rf_install(".Call") != fun) {
             // forces promises but should be okay when starting in the global
             // env
             auto builtin = Rf_findVar(fun, R_GlobalEnv);
-            likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
-
-            if (likelyBuiltin) {
+            auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
+            speculateOnBuiltins = !callHasDots & likelyBuiltin;
+            // speculateOnBuiltins=false;
+            if (speculateOnBuiltins) {
 
                 eager = cs.mkLabel();
                 theEnd = cs.mkLabel();
@@ -1552,7 +1564,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
     compileCall();
 
-    if (likelyBuiltin) {
+    if (speculateOnBuiltins) {
         cs << BC::br(theEnd) << eager;
 
         // if (Compiler::profile)

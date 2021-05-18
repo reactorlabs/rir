@@ -187,31 +187,13 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
          {convertToPointer((void*)msg, t::i8, true)});
 
     // builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
+    builder.CreateUnreachable();
 
-    builder.CreateBr(ok);
+    // builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
 
-    // ************
 
-    // auto nok = BasicBlock::Create(PirJitLLVM::getContext(), "assertFail",
-    // fun); auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "assertOk",
-    // fun);
-
-    // builder.CreateCondBr(v, ok, nok, branchAlwaysTrue);
-
-    // builder.SetInsertPoint(nok);
-
-    // if (p)
-    //     call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
-
-    // call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
-    //      {convertToPointer((void*)msg, t::i8, true)});
-
-    // //builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
-    // builder.CreateBr(ok);
-
-    // builder.SetInsertPoint(ok);
 }
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
